@@ -24,6 +24,8 @@ typedef enum {
 typedef enum {
     INST_NULL,
     INST_NOP,
+    INST_CALL,
+    INST_RETURN,
 } type_t;
 
 typedef union {
@@ -62,6 +64,30 @@ typedef union {
 } mem_t;
 
 mem_t mem;
+
+bool_t vec_iseq(vec_t* vec1, vec_t* vec2) {
+    if (vec1 == NULL || vec2 == NULL) {
+        return FALSE;
+    }
+    if (vec1->size != vec2->size) {
+        return FALSE;
+    }
+    for (int64_t i = 0; i < vec1->size; i++) {
+        if (vec1->data[i] != vec2->data[i]) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+bool_t vec_iseqstr(vec_t* vec, const char* str) {
+    int64_t str_size = 0;
+    while (str[str_size] != '\0') {
+        str_size++;
+    }
+    vec_t vec2 = (vec_t){.data = str, .size = str_size};
+    return vec_iseq(vec, &vec2);
+}
 
 result_t compile_readsrc() {
     FILE* fp = fopen(SRC_PATH, "r");
@@ -125,7 +151,43 @@ result_t compile_tokenize() {
     return OK;
 }
 
+result_t compile_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_count, int64_t label_continue, int64_t label_break) {
+    if (vec_iseqstr(*token_itr, "{")) {
+        (*token_itr)++;
+        while (vec_iseqstr(*token_itr, "}")) {
+            if (compile_stat(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+        }
+        (*token_itr)++;
+    } else if (vec_iseqstr(*token_itr, "fn")) {
+    } else if (vec_iseqstr(*token_itr, "if")) {
+    } else if (vec_iseqstr(*token_itr, "loop")) {
+    } else if (vec_iseqstr(*token_itr, "continue")) {
+    } else if (vec_iseqstr(*token_itr, "break")) {
+    } else if (vec_iseqstr(*token_itr, "return")) {
+        (*token_itr)++;
+        if (compile_expr(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
+    } else {
+        if (compile_expr(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+    }
+    return OK;
+}
+
 result_t compile_parse() {
+    vec_t* token_itr = mem.compile.token;
+    node_t* node_itr = mem.compile.node;
+    int64_t label_count = 0;
+    while (token_itr->data != NULL) {
+        if (compile_stat(&token_itr, &node_itr, &label_count, -1, -1) == ERR) {
+            return ERR;
+        }
+    }
     return OK;
 }
 
@@ -134,14 +196,14 @@ result_t execute() {
 }
 
 result_t compile() {
-    if (compile_readsrc() != OK) {
+    if (compile_readsrc() == ERR) {
         puts("Failed to readsrc");
         return ERR;
     }
-    if (compile_tokenize() != OK) {
+    if (compile_tokenize() == ERR) {
         puts("Failed to tokenize");
     }
-    if (compile_parse() != OK) {
+    if (compile_parse() == ERR) {
         puts("Failed to parse");
         return ERR;
     }
@@ -149,11 +211,11 @@ result_t compile() {
 }
 
 int main() {
-    if (compile() != OK) {
+    if (compile() == ERR) {
         puts("Failed to compile");
         return 1;
     }
-    if (execute() != OK) {
+    if (execute() == ERR) {
         puts("Failed to execute");
     }
     puts(mem.compile.src);
