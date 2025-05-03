@@ -191,7 +191,28 @@ result_t compile_tokenize() {
     return OK;
 }
 
+result_t compile_parse_assign(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    return OK;
+}
+
 result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    if (vec_iseqstr(*token_itr, "(")) {
+        (*token_itr)++;
+        while (vec_iseqstr(*token_itr, ")")) {
+            if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            while (vec_iseqstr(*token_itr, ",")) {
+                (*token_itr)++;
+            }
+        }
+        (*token_itr)++;
+    } else {
+        if (compile_parse_assign(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+    }
+    return OK;
 }
 
 result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
