@@ -23,37 +23,39 @@ typedef enum {
 
 typedef enum {
 
-    INST_NULL,
-    INST_NOP,
-    INST_LABEL,
-    INST_JMP,
-    INST_JZ,
-    INST_JNZ,
-    INST_CALL,
-    INST_RETURN,
-    INST_PUSH_I64,
+    TY_INST_NULL,
+    TY_INST_NOP,
+    TY_INST_LABEL,
+    TY_INST_JMP,
+    TY_INST_JZ,
+    TY_INST_CALL,
+    TY_INST_RETURN,
+    TY_INST_PUSH_LOCAL_VAL,
+    TY_INST_PUSH_LOCAL_ADDR,
+    TY_INST_PUSH_CONST,
 
-    INST_ASSIGN1,
-    INST_ASSIGN2,
-    INST_ASSIGN3,
-    INST_ASSIGN4,
+    TY_INST_ASSIGN1,
+    TY_INST_ASSIGN2,
+    TY_INST_ASSIGN3,
+    TY_INST_ASSIGN4,
 
-    INST_ADD_I64,
-    INST_SUB_I64,
-    INST_MUL_I64,
-    INST_DIV_I64,
-    INST_MOD_I64,
-    INST_NEG_I64,
-    INST_EQ_I64,
-    INST_NE_I64,
-    INST_LT_I64,
-    INST_LE_I64,
-    INST_GT_I64,
-    INST_GE_I64,
-    INST_NOT,
+    TY_INST_ADD,
+    TY_INST_SUB,
+    TY_INST_MUL,
+    TY_INST_DIV,
+    TY_INST_MOD,
+    TY_INST_NEG,
+    TY_INST_EQ,
+    TY_INST_NE,
+    TY_INST_LT,
+    TY_INST_LE,
+    TY_INST_GT,
+    TY_INST_GE,
+    TY_INST_NOT,
 
-    LABEL_SCOPE_OPEN,
-    LABEL_SCOPE_CLOSE,
+    TY_LABEL,
+    TY_LABEL_SCOPE_OPEN,
+    TY_LABEL_SCOPE_CLOSE,
 
 } type_t;
 
@@ -180,47 +182,84 @@ result_t compile_tokenize() {
     return OK;
 }
 
-result_t compile_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_count, int64_t label_continue, int64_t label_break) {
+result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
 }
 
-result_t compile_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_count, int64_t label_continue, int64_t label_break) {
+result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (vec_iseqstr(*token_itr, "{")) {
         (*token_itr)++;
         while (vec_iseqstr(*token_itr, "}")) {
-            if (compile_stat(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
+            if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
         }
         (*token_itr)++;
-    } else if (vec_iseqstr(*token_itr, "fn")) {
     } else if (vec_iseqstr(*token_itr, "if")) {
-    } else if (vec_iseqstr(*token_itr, "loop")) {
-    } else if (vec_iseqstr(*token_itr, "continue")) {
+        int64_t label_if = (*label_cnt)++;
+        int64_t label_else = (*label_cnt)++;
         (*token_itr)++;
-        *((*node_itr)++) = (node_t){.type = INST_JMP, .token = NULL, .val = label_continue, .bin = NULL};
-    } else if (vec_iseqstr(*token_itr, "break")) {
-        (*token_itr)++;
-        *((*node_itr)++) = (node_t){.type = INST_JMP, .token = NULL, .val = label_break, .bin = NULL};
-    } else if (vec_iseqstr(*token_itr, "return")) {
-        (*token_itr)++;
-        if (compile_expr(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
+        if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_JZ, .token = NULL, .val = label_if, .bin = NULL};
+        if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+        if (vec_iseqstr(*token_itr, "else")) {
+            (*token_itr)++;
+            *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_else, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if, .bin = NULL};
+            if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_else, .bin = NULL};
+        } else {
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if, .bin = NULL};
+        }
+    } else if (vec_iseqstr(*token_itr, "loop")) {
+        int64_t label_start = (*label_cnt)++;
+        int64_t label_end = (*label_cnt)++;
+        (*token_itr)++;
+        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_start, .bin = NULL};
+        if (compile_parse_stat(token_itr, node_itr, label_cnt, label_start, label_end) == ERR) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_start, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_end, .bin = NULL};
+    } else if (vec_iseqstr(*token_itr, "continue")) {
+        (*token_itr)++;
+        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_continue, .bin = NULL};
+    } else if (vec_iseqstr(*token_itr, "break")) {
+        (*token_itr)++;
+        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_break, .bin = NULL};
+    } else if (vec_iseqstr(*token_itr, "return")) {
+        (*token_itr)++;
+        if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
     } else {
-        if (compile_expr(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
+        if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
     }
     return OK;
 }
 
+result_t compile_parse_fn(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+}
+
 result_t compile_parse() {
     vec_t* token_itr = mem.compile.token;
     node_t* node_itr = mem.compile.node;
-    int64_t label_count = 0;
+    int64_t label_cnt = 0;
+    while (vec_iseqstr(token_itr, "fn")) {
+        if (compile_parse_fn(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
+            return ERR;
+        }
+    }
     while (token_itr->data != NULL) {
-        if (compile_stat(&token_itr, &node_itr, &label_count, -1, -1) == ERR) {
+        if (compile_parse_stat(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
             return ERR;
         }
     }
