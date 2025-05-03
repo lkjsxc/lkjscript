@@ -22,10 +22,39 @@ typedef enum {
 } globaladdr_t;
 
 typedef enum {
+
     INST_NULL,
     INST_NOP,
+    INST_LABEL,
+    INST_JMP,
+    INST_JZ,
+    INST_JNZ,
     INST_CALL,
     INST_RETURN,
+    INST_PUSH_I64,
+
+    INST_ASSIGN1,
+    INST_ASSIGN2,
+    INST_ASSIGN3,
+    INST_ASSIGN4,
+
+    INST_ADD_I64,
+    INST_SUB_I64,
+    INST_MUL_I64,
+    INST_DIV_I64,
+    INST_MOD_I64,
+    INST_NEG_I64,
+    INST_EQ_I64,
+    INST_NE_I64,
+    INST_LT_I64,
+    INST_LE_I64,
+    INST_GT_I64,
+    INST_GE_I64,
+    INST_NOT,
+
+    LABEL_SCOPE_OPEN,
+    LABEL_SCOPE_CLOSE,
+
 } type_t;
 
 typedef union {
@@ -151,6 +180,9 @@ result_t compile_tokenize() {
     return OK;
 }
 
+result_t compile_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_count, int64_t label_continue, int64_t label_break) {
+}
+
 result_t compile_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_count, int64_t label_continue, int64_t label_break) {
     if (vec_iseqstr(*token_itr, "{")) {
         (*token_itr)++;
@@ -164,7 +196,11 @@ result_t compile_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_count
     } else if (vec_iseqstr(*token_itr, "if")) {
     } else if (vec_iseqstr(*token_itr, "loop")) {
     } else if (vec_iseqstr(*token_itr, "continue")) {
+        (*token_itr)++;
+        *((*node_itr)++) = (node_t){.type = INST_JMP, .token = NULL, .val = label_continue, .bin = NULL};
     } else if (vec_iseqstr(*token_itr, "break")) {
+        (*token_itr)++;
+        *((*node_itr)++) = (node_t){.type = INST_JMP, .token = NULL, .val = label_break, .bin = NULL};
     } else if (vec_iseqstr(*token_itr, "return")) {
         (*token_itr)++;
         if (compile_expr(token_itr, node_itr, label_count, label_continue, label_break) == ERR) {
