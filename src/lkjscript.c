@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #define SRC_PATH "./lkjscriptsrc"
-#define MEM_SIZE (1024 * 1024 * 16)
+#define MEM_SIZE (1024 * 1024 * 2)
 
 typedef enum {
     FALSE = 0,
@@ -44,7 +44,7 @@ typedef struct {
 } node_t;
 
 typedef struct {
-    vec_t key;
+    vec_t* key;
     int64_t val;
 } pair_t;
 
@@ -69,16 +69,80 @@ result_t compile_readsrc() {
         puts("Failed to open lkjscriptsrc");
         return ERR;
     }
-    size_t n = fread(mem.compile.src, 1, sizeof(mem.compile.src) - 2, fp);
-    mem.compile.src[n] = '\n';
+    size_t n = fread(mem.compile.src, 1, sizeof(mem.compile.src) - 3, fp);
+    mem.compile.src[n + 0] = '\n';
     mem.compile.src[n + 1] = '\0';
+    mem.compile.src[n + 2] = '\0';
     fclose(fp);
+    return OK;
+}
+
+result_t compile_tokenize() {
+    vec_t* token_itr = mem.compile.token;
+    const char* base_itr = mem.compile.src;
+    const char* corrent_itr = mem.compile.src;
+    while (1) {
+        char ch1 = *(corrent_itr + 0);
+        char ch2 = *(corrent_itr + 1);
+        if (ch1 == '\0') {
+            break;
+        } else if (ch1 == '\n' || ch1 == ' ') {
+            if (base_itr != corrent_itr) {
+                *(token_itr++) = (vec_t){.data = base_itr, .size = corrent_itr - base_itr};
+            }
+            corrent_itr += 1;
+            base_itr = corrent_itr;
+        } else if (
+            (ch1 == '<' && ch2 == '<') ||
+            (ch1 == '>' && ch2 == '>') ||
+            (ch1 == '<' && ch2 == '=') ||
+            (ch1 == '>' && ch2 == '=') ||
+            (ch1 == '=' && ch2 == '=') ||
+            (ch1 == '!' && ch2 == '=') ||
+            (ch1 == '&' && ch2 == '&') ||
+            (ch1 == '|' && ch2 == '|')) {
+            if (base_itr != corrent_itr) {
+                *(token_itr++) = (vec_t){.data = base_itr, .size = corrent_itr - base_itr};
+            }
+            *(token_itr++) = (vec_t){.data = corrent_itr, .size = 2};
+            corrent_itr += 2;
+            base_itr = corrent_itr;
+        } else if (ch1 == '(' || ch1 == ')' || ch1 == '{' || ch1 == '}' || ch1 == ';' || ch1 == ',' ||
+                   ch1 == ':' || ch1 == '.' || ch1 == '+' || ch1 == '-' || ch1 == '*' || ch1 == '/' ||
+                   ch1 == '%' || ch1 == '&' || ch1 == '|' || ch1 == '^' || ch1 == '~' || ch1 == '<' ||
+                   ch1 == '>' || ch1 == '!' || ch1 == '=') {
+            if (base_itr != corrent_itr) {
+                *(token_itr++) = (vec_t){.data = base_itr, .size = corrent_itr - base_itr};
+            }
+            *(token_itr++) = (vec_t){.data = corrent_itr, .size = 1};
+            corrent_itr += 1;
+            base_itr = corrent_itr;
+        } else {
+            corrent_itr += 1;
+        }
+    }
+    *(token_itr++) = (vec_t){.data = NULL, .size = 0};
+    return OK;
+}
+
+result_t compile_parse() {
+    return OK;
+}
+
+result_t execute() {
     return OK;
 }
 
 result_t compile() {
     if (compile_readsrc() != OK) {
-        puts("Failed to compile_readsrc");
+        puts("Failed to readsrc");
+        return ERR;
+    }
+    if (compile_tokenize() != OK) {
+        puts("Failed to tokenize");
+    }
+    if (compile_parse() != OK) {
+        puts("Failed to parse");
         return ERR;
     }
     return OK;
@@ -88,6 +152,9 @@ int main() {
     if (compile() != OK) {
         puts("Failed to compile");
         return 1;
+    }
+    if (execute() != OK) {
+        puts("Failed to execute");
     }
     puts(mem.compile.src);
     return 0;
