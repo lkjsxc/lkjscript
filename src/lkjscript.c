@@ -38,9 +38,9 @@ typedef struct {
 
 typedef struct {
     type_t type;
-    vec_t token;
+    const vec_t* token;
     int64_t val;
-    uni64_t bin;
+    uni64_t* bin;
 } node_t;
 
 typedef struct {
@@ -69,7 +69,7 @@ result_t compile_readsrc() {
         puts("Failed to open lkjscriptsrc");
         return ERR;
     }
-    size_t n = fread(mem.compile.src, 1, sizeof(mem.compile.src), fp);
+    size_t n = fread(mem.compile.src, 1, sizeof(mem.compile.src) - 2, fp);
     mem.compile.src[n] = '\n';
     mem.compile.src[n + 1] = '\0';
     fclose(fp);
@@ -77,7 +77,7 @@ result_t compile_readsrc() {
 }
 
 result_t compile() {
-    if(compile_readsrc() != OK) {
+    if (compile_readsrc() != OK) {
         puts("Failed to compile_readsrc");
         return ERR;
     }
@@ -85,7 +85,7 @@ result_t compile() {
 }
 
 int main() {
-    if(compile() != OK) {
+    if (compile() != OK) {
         puts("Failed to compile");
         return 1;
     }
