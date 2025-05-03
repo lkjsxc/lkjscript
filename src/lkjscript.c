@@ -26,25 +26,21 @@ typedef enum {
     TY_INST_NULL,
     TY_INST_NOP,
     TY_INST_LABEL,
+    TY_INST_PUSH_LOCAL_VAL,
+    TY_INST_PUSH_LOCAL_ADDR,
+    TY_INST_PUSH_CONST,
     TY_INST_JMP,
     TY_INST_JZ,
     TY_INST_CALL,
     TY_INST_RETURN,
-    TY_INST_PUSH_LOCAL_VAL,
-    TY_INST_PUSH_LOCAL_ADDR,
-    TY_INST_PUSH_CONST,
 
     TY_INST_ASSIGN1,
     TY_INST_ASSIGN2,
     TY_INST_ASSIGN3,
     TY_INST_ASSIGN4,
 
-    TY_INST_ADD,
-    TY_INST_SUB,
-    TY_INST_MUL,
-    TY_INST_DIV,
-    TY_INST_MOD,
-    TY_INST_NEG,
+    TY_INST_OR,
+    TY_INST_AND,
     TY_INST_EQ,
     TY_INST_NE,
     TY_INST_LT,
@@ -52,6 +48,19 @@ typedef enum {
     TY_INST_GT,
     TY_INST_GE,
     TY_INST_NOT,
+    TY_INST_ADD,
+    TY_INST_SUB,
+    TY_INST_MUL,
+    TY_INST_DIV,
+    TY_INST_MOD,
+    INST_SHL,
+    INST_SHR,
+    INST_BITOR,
+    INST_BITAND,
+    INST_BITXOR,
+
+    TY_INST_NEG,
+    INST_BITNOT,
 
     TY_LABEL,
     TY_LABEL_SCOPE_OPEN,
@@ -191,7 +200,31 @@ result_t compile_tokenize() {
     return OK;
 }
 
+result_t compile_parse_logical_or(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    if (compile_parse_logical_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+        return ERR;
+    }
+    while(vec_iseqstr(*token_itr, "||")) {
+        (*token_itr)++;
+        if (compile_parse_logical_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = TY_INST_OR, .token = NULL, .val = 0, .bin = NULL};
+    }
+    return OK;
+}
+
 result_t compile_parse_assign(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    if (compile_parse_logical_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+        return ERR;
+    }
+    if(vec_iseqstr(*token_itr, "=")) {
+        (*token_itr)++;
+        if (compile_parse_logical_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0, .bin = NULL};
+    }
     return OK;
 }
 
