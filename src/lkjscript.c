@@ -247,6 +247,45 @@ result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label
 }
 
 result_t compile_parse_fn(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    int64_t label_open = (*label_cnt)++;
+    int64_t label_close = (*label_cnt)++;
+    int64_t arg_cnt = 0;
+    (*token_itr)++;
+    vec_t* fn_name = *token_itr;
+    mem.compile.pair[label_open] = (pair_t){.key = fn_name, .val = 0};
+    (*token_itr) += 2;
+    while (!vec_iseqstr(*token_itr, ")")) {
+        if ((*token_itr)->data == NULL) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0, .bin = NULL};
+        (*token_itr)++;
+        while (vec_iseqstr(*token_itr, ",")) {
+            (*token_itr)++;
+        }
+    }
+    node_t* arg_itr = *node_itr - 1;
+    for (int64_t i = 0; i < arg_cnt; i++) {
+        arg_itr->val = -i - 4;
+        arg_itr--;
+    }
+    (*token_itr)++;
+    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_OPEN, .token = NULL, .val = 0, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = label_open, .bin = NULL};
+    if (arg_cnt > 0) {
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = NULL, .val = -2, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = NULL, .val = -2, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = arg_cnt, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0, .bin = NULL};
+    }
+    if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+        return ERR;
+    }
+    *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_CLOSE, .token = NULL, .val = 0, .bin = NULL};
+    return OK;
 }
 
 result_t compile_parse() {
