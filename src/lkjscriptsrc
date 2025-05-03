@@ -1,12 +1,12 @@
 // lkjscriptsrc
 fn main() {
     if (10 > 5) {
-        return 1 + 2 * 3; // Should return 7
+        return 1 + 2 * 3 // Should return 7
     } else {
-        return 0;
+        return 0
     }
-    return 99; // Unreachable
+    return 99 // Unreachable
 }
 
 // Call the main function (not really possible without VM)
-main();
+main()

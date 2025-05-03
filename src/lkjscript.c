@@ -138,17 +138,26 @@ result_t compile_tokenize() {
     vec_t* token_itr = mem.compile.token;
     const char* base_itr = mem.compile.src;
     const char* corrent_itr = mem.compile.src;
+    bool_t iscomment = FALSE;
     while (1) {
         char ch1 = *(corrent_itr + 0);
         char ch2 = *(corrent_itr + 1);
         if (ch1 == '\0') {
             break;
         } else if (ch1 == '\n' || ch1 == ' ') {
-            if (base_itr != corrent_itr) {
+            if (!iscomment && base_itr != corrent_itr) {
                 *(token_itr++) = (vec_t){.data = base_itr, .size = corrent_itr - base_itr};
+            }
+            if (ch1 == '\n') {
+                iscomment = FALSE;
             }
             corrent_itr += 1;
             base_itr = corrent_itr;
+        } else if (ch1 == '/' && ch2 == '/') {
+            iscomment = TRUE;
+            corrent_itr += 1;
+        } else if (iscomment) {
+            corrent_itr += 1;
         } else if (
             (ch1 == '<' && ch2 == '<') ||
             (ch1 == '>' && ch2 == '>') ||
