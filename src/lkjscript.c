@@ -66,6 +66,7 @@ typedef enum {
     TY_LABEL,
     TY_LABEL_SCOPE_OPEN,
     TY_LABEL_SCOPE_CLOSE,
+    TY_LABEL_STARTSCRIPT,
 
 } type_t;
 
@@ -650,6 +651,7 @@ result_t compile_parse() {
             return ERR;
         }
     }
+    *(node_itr++) = (node_t){.type = TY_LABEL_STARTSCRIPT, .token = NULL, .val = 0, .bin = NULL};
     while (token_itr->data != NULL) {
         if (compile_parse_stat(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
             return ERR;
