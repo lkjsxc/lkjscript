@@ -26,10 +26,9 @@ typedef enum {
 
     TY_NULL,
     TY_INST_NOP,
-    TY_INST_LABEL,
+    TY_INST_PUSH_CONST,
     TY_INST_PUSH_LOCAL_VAL,
     TY_INST_PUSH_LOCAL_ADDR,
-    TY_INST_PUSH_CONST,
     TY_INST_JMP,
     TY_INST_JZ,
     TY_INST_CALL,
@@ -85,7 +84,6 @@ typedef struct {
     type_t type;
     const token_t* token;
     int64_t val;
-    uni64_t* bin;
 } node_t;
 
 typedef struct {
@@ -142,6 +140,20 @@ bool_t token_isnum(token_t* token) {
 bool_t token_isvar(token_t* token) {
     char ch = token->data[0];
     return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_';
+}
+
+int64_t token_toint(token_t* token) {
+    int64_t result = 0;
+    int64_t sign = 1;
+    int64_t i = 0;
+    if (token->data[0] == '-') {
+        sign = -1;
+        i = 1;
+    }
+    for (; i < token->size; i++) {
+        result = result * 10 + (token->data[i] - '0');
+    }
+    return result * sign;
 }
 
 pair_t* map_find(token_t* token) {
@@ -244,7 +256,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
             return ERR;
         }
     } else if (token_isnum(*token_itr)) {
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = *token_itr, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = *token_itr, .val = 0};
         (*token_itr)++;
     } else if (token_isvar(*token_itr)) {
         if (token_iseqstr(*token_itr, "if")) {
@@ -269,7 +281,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
             puts("error: primary observed return");
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = *token_itr, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = *token_itr, .val = 0};
         (*token_itr)++;
     } else {
         return ERR;
@@ -284,7 +296,7 @@ result_t compile_parse_postfix(token_t** token_itr, node_t** node_itr, int64_t* 
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_CALL, .token = fn_name, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_CALL, .token = fn_name, .val = 0};
     } else {
         if (compile_parse_primary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
@@ -300,7 +312,7 @@ result_t compile_parse_unary(token_t** token_itr, node_t** node_itr, int64_t* la
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_DEREF, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_DEREF, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "+")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
@@ -308,26 +320,26 @@ result_t compile_parse_unary(token_t** token_itr, node_t** node_itr, int64_t* la
             }
         } else if (token_iseqstr(*token_itr, "-")) {
             (*token_itr)++;
-            *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0};
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "~")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_BITNOT, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_BITNOT, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "!")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_NOT, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_NOT, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "&")) {
             (*token_itr)++;
-            *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0};
             return OK;
         } else {
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
@@ -348,19 +360,19 @@ result_t compile_parse_mul(token_t** token_itr, node_t** node_itr, int64_t* labe
             if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_MUL, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_MUL, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "/")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_DIV, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_DIV, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "%")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_MOD, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_MOD, .token = NULL, .val = 0};
         } else {
             return OK;
         }
@@ -377,13 +389,13 @@ result_t compile_parse_add(token_t** token_itr, node_t** node_itr, int64_t* labe
             if (compile_parse_mul(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_ADD, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_ADD, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "-")) {
             (*token_itr)++;
             if (compile_parse_mul(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0};
         } else {
             return OK;
         }
@@ -400,13 +412,13 @@ result_t compile_parse_shift(token_t** token_itr, node_t** node_itr, int64_t* la
             if (compile_parse_add(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_SHL, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_SHL, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, ">>")) {
             (*token_itr)++;
             if (compile_parse_add(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_SHR, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_SHR, .token = NULL, .val = 0};
         } else {
             return OK;
         }
@@ -423,25 +435,25 @@ result_t compile_parse_rel(token_t** token_itr, node_t** node_itr, int64_t* labe
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_LT, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_LT, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, ">")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_GT, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_GT, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "<=")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_LE, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_LE, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, ">=")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_GE, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_GE, .token = NULL, .val = 0};
         } else {
             return OK;
         }
@@ -458,13 +470,13 @@ result_t compile_parse_eq(token_t** token_itr, node_t** node_itr, int64_t* label
             if (compile_parse_rel(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_EQ, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_EQ, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "!=")) {
             (*token_itr)++;
             if (compile_parse_rel(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_INST_NE, .token = NULL, .val = 0, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_NE, .token = NULL, .val = 0};
         } else {
             return OK;
         }
@@ -480,7 +492,7 @@ result_t compile_parse_bit_and(token_t** token_itr, node_t** node_itr, int64_t* 
         if (compile_parse_eq(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_BITAND, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_BITAND, .token = NULL, .val = 0};
     }
     return OK;
 }
@@ -494,7 +506,7 @@ result_t compile_parse_bit_xor(token_t** token_itr, node_t** node_itr, int64_t* 
         if (compile_parse_bit_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_BITXOR, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_BITXOR, .token = NULL, .val = 0};
     }
     return OK;
 }
@@ -508,7 +520,7 @@ result_t compile_parse_bit_or(token_t** token_itr, node_t** node_itr, int64_t* l
         if (compile_parse_bit_xor(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_BITOR, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_BITOR, .token = NULL, .val = 0};
     }
     return OK;
 }
@@ -522,7 +534,7 @@ result_t compile_parse_and(token_t** token_itr, node_t** node_itr, int64_t* labe
         if (compile_parse_bit_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_AND, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_AND, .token = NULL, .val = 0};
     }
     return OK;
 }
@@ -536,7 +548,7 @@ result_t compile_parse_or(token_t** token_itr, node_t** node_itr, int64_t* label
         if (compile_parse_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_OR, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_OR, .token = NULL, .val = 0};
     }
     return OK;
 }
@@ -550,7 +562,7 @@ result_t compile_parse_assign(token_t** token_itr, node_t** node_itr, int64_t* l
         if (compile_parse_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0};
     }
     return OK;
 }
@@ -596,43 +608,43 @@ result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* lab
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_JZ, .token = NULL, .val = label_if, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_JZ, .token = NULL, .val = label_if};
         if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
         if (token_iseqstr(*token_itr, "else")) {
             (*token_itr)++;
-            *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_else, .bin = NULL};
-            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_else};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if};
             if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_else, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_else};
         } else {
-            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if, .bin = NULL};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if};
         }
     } else if (token_iseqstr(*token_itr, "loop")) {
         int64_t label_start = (*label_cnt)++;
         int64_t label_end = (*label_cnt)++;
         (*token_itr)++;
-        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_start, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_start};
         if (compile_parse_stat(token_itr, node_itr, label_cnt, label_start, label_end) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_start, .bin = NULL};
-        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_end, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_start};
+        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_end};
     } else if (token_iseqstr(*token_itr, "continue")) {
         (*token_itr)++;
-        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_continue, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_continue};
     } else if (token_iseqstr(*token_itr, "break")) {
         (*token_itr)++;
-        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_break, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_break};
     } else if (token_iseqstr(*token_itr, "return")) {
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0};
     } else {
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
             return ERR;
@@ -643,23 +655,22 @@ result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* lab
 }
 
 result_t compile_parse_fn(token_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
-    int64_t label_open = (*label_cnt)++;
-    int64_t label_close = (*label_cnt)++;
-    int64_t arg_cnt = 0;
+    int64_t fn_label = (*label_cnt)++;
     token_t* fn_name = *token_itr + 1;
     pair_t* fn_map = map_find(fn_name);
+    int64_t arg_cnt = 0;
 
     if (fn_map->key == NULL) {
         return ERR;
     }
-    fn_map->val = label_open;
+    fn_map->val = fn_label;
 
     (*token_itr) += 3;
     while (!token_iseqstr(*token_itr, ")")) {
         if ((*token_itr)->data == NULL) {
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0};
         (*token_itr)++;
         if (token_iseqstr(*token_itr, ",")) {
             (*token_itr)++;
@@ -673,21 +684,21 @@ result_t compile_parse_fn(token_t** token_itr, node_t** node_itr, int64_t* label
         arg_itr--;
     }
 
-    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_OPEN, .token = NULL, .val = label_open, .bin = NULL};
-    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = 0, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_OPEN, .token = NULL, .val = 0};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = 0};
     if (arg_cnt > 0) {
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = NULL, .val = -2, .bin = NULL};
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = NULL, .val = -2, .bin = NULL};
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = arg_cnt, .bin = NULL};
-        *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
-        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = NULL, .val = -2};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = NULL, .val = -2};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = arg_cnt};
+        *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0};
+        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0};
     }
     if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
         return ERR;
     }
-    *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
-    *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
-    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_CLOSE, .token = NULL, .val = label_close, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0};
+    *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_CLOSE, .token = NULL, .val = 0};
     return OK;
 }
 
@@ -709,25 +720,32 @@ result_t compile_parse() {
             return ERR;
         }
     }
-    *(node_itr++) = (node_t){.type = TY_LABEL_STARTSCRIPT, .token = NULL, .val = 0, .bin = NULL};
+    *(node_itr++) = (node_t){.type = TY_LABEL_STARTSCRIPT, .token = NULL, .val = 0};
     while (token_itr->data != NULL) {
         if (compile_parse_stat(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
             return ERR;
         }
     }
-    *node_itr = (node_t){.type = TY_NULL, .token = NULL, .val = 0, .bin = NULL};
+    *node_itr = (node_t){.type = TY_NULL, .token = NULL, .val = 0};
+    return OK;
+}
+
+result_t compile_analyze() {
+    node_t* node_itr = mem.compile.node;
+    int64_t offset = 0;
+    while(node_itr->type == TY_NULL) {
+        if(node_itr->type == TY_INST_PUSH_CONST) {
+            node_itr->val = token_toint(node_itr->token);
+        }
+        else if(node_itr->type == TY_INST_PUSH_LOCAL_VAL || node_itr->type == TY_INST_PUSH_LOCAL_ADDR) {
+            
+        }
+        node_itr++;
+    }
     return OK;
 }
 
 result_t compile_bingen() {
-    uni64_t* bin_begin = mem.compile.bin + (MEM_GLOBAL_SIZE / sizeof(uni64_t));
-    uni64_t* bin_itr = bin_begin;
-    node_t* node_itr = mem.compile.node;
-    int64_t localval_offset = 0;
-    pair_t* map_itr = mem.compile.map;
-    while (map_itr->key != NULL) {
-        map_itr++;
-    }
     return OK;
 }
 
@@ -742,9 +760,14 @@ result_t compile() {
     }
     if (compile_tokenize() == ERR) {
         puts("Failed to tokenize");
+        return ERR;
     }
     if (compile_parse() == ERR) {
         puts("Failed to parse");
+        return ERR;
+    }
+    if (compile_analyze() == ERR) {
+        puts("Failed to analyze");
         return ERR;
     }
     if (compile_bingen() == ERR) {
