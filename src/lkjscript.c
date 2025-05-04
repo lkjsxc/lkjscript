@@ -3,6 +3,7 @@
 
 #define SRC_PATH "./lkjscriptsrc"
 #define MEM_SIZE (1024 * 1024 * 2)
+#define MEM_GLOBAL_SIZE 1024
 
 typedef enum {
     FALSE = 0,
@@ -661,7 +662,11 @@ result_t compile_parse() {
     return OK;
 }
 
-result_t compile_codegen() {
+result_t compile_bingen() {
+    uni64_t* bin_begin = mem.compile.bin + (MEM_GLOBAL_SIZE / sizeof(uni64_t));
+    uni64_t* bin_itr = bin_begin;
+    node_t* node_itr = mem.compile.node;
+    int64_t localval_offset = 0;
     return OK;
 }
 
