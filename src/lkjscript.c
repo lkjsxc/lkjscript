@@ -201,7 +201,22 @@ result_t compile_tokenize() {
     return OK;
 }
 
+result_t compile_parse_primary(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+}
+
 result_t compile_parse_postfix(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    if (!vec_iseqstr(*token_itr, "(") && vec_iseqstr(*token_itr + 1, "(")) {  // Add name resolution later
+        vec_t* fn_name = *token_itr;
+        (*token_itr)++;
+        if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+        *((*node_itr)++) = (node_t){.type = TY_INST_CALL, .token = fn_name, .val = 0, .bin = NULL};
+    } else {
+        if (compile_parse_primary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+    }
 }
 
 result_t compile_parse_unary(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
