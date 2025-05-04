@@ -82,7 +82,7 @@ typedef struct {
 
 typedef struct {
     type_t type;
-    const token_t* token;
+    token_t* token;
     int64_t val;
 } node_t;
 
@@ -256,7 +256,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
             return ERR;
         }
     } else if (token_isnum(*token_itr)) {
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = *token_itr, .val = 0};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = *token_itr, .val = token_toint(*token_itr)};
         (*token_itr)++;
     } else if (token_isvar(*token_itr)) {
         if (token_iseqstr(*token_itr, "if")) {
@@ -732,13 +732,26 @@ result_t compile_parse() {
 
 result_t compile_analyze() {
     node_t* node_itr = mem.compile.node;
+    pair_t* map_itr = mem.compile.map;
+    pair_t* map_base;
     int64_t offset = 0;
-    while(node_itr->type == TY_NULL) {
-        if(node_itr->type == TY_INST_PUSH_CONST) {
-            node_itr->val = token_toint(node_itr->token);
-        }
-        else if(node_itr->type == TY_INST_PUSH_LOCAL_VAL || node_itr->type == TY_INST_PUSH_LOCAL_ADDR) {
-            
+
+    while (map_itr->key == NULL) {
+        map_itr++;
+    }
+    map_base = map_itr;
+
+    while (node_itr->type != TY_NULL) {
+        if ((node_itr->type == TY_INST_PUSH_LOCAL_VAL || node_itr->type == TY_INST_PUSH_LOCAL_ADDR) && node_itr->val == 0) {
+            pair_t* map_result = map_find(node_itr->token);
+            if (map_result->key == NULL) {
+                *(map_itr++) = (pair_t){.key = node_itr->token, .val = offset++};
+                *map_itr = (pair_t){.key = NULL, .val = 0};
+            }
+            node_itr->val = map_result->val;
+        } else if (node_itr->type == TY_LABEL_SCOPE_CLOSE) {
+            map_itr = map_base;
+            offset = 0;
         }
         node_itr++;
     }
