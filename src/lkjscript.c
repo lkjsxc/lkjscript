@@ -23,7 +23,7 @@ typedef enum {
 
 typedef enum {
 
-    TY_INST_NULL,
+    TY_NULL,
     TY_INST_NOP,
     TY_INST_LABEL,
     TY_INST_PUSH_LOCAL_VAL,
@@ -657,6 +657,11 @@ result_t compile_parse() {
             return ERR;
         }
     }
+    *node_itr = (node_t){.type = TY_NULL, .token = NULL, .val = 0, .bin = NULL};
+    return OK;
+}
+
+result_t compile_codegen() {
     return OK;
 }
 
@@ -674,6 +679,10 @@ result_t compile() {
     }
     if (compile_parse() == ERR) {
         puts("Failed to parse");
+        return ERR;
+    }
+    if (compile_codegen() == ERR) {
+        puts("Failed to codegen");
         return ERR;
     }
     return OK;
