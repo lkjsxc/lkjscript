@@ -59,6 +59,7 @@ typedef enum {
     TY_INST_BITXOR,
     TY_INST_BITAND,
 
+    TY_INST_DEREF,
     TY_INST_NEG,
     TY_INST_BITNOT,
 
@@ -200,7 +201,52 @@ result_t compile_tokenize() {
     return OK;
 }
 
+result_t compile_parse_postfix(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+}
+
 result_t compile_parse_unary(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    while (1) {
+        if (vec_iseqstr(*token_itr, "*")) {
+            (*token_itr)++;
+            if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            *((*node_itr)++) = (node_t){.type = TY_INST_DEREF, .token = NULL, .val = 0, .bin = NULL};
+        } else if (vec_iseqstr(*token_itr, "+")) {
+            (*token_itr)++;
+            if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+        } else if (vec_iseqstr(*token_itr, "-")) {
+            (*token_itr)++;
+            *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
+            if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
+        } else if (vec_iseqstr(*token_itr, "~")) {
+            (*token_itr)++;
+            if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            *((*node_itr)++) = (node_t){.type = TY_INST_BITNOT, .token = NULL, .val = 0, .bin = NULL};
+        } else if (vec_iseqstr(*token_itr, "!")) {
+            (*token_itr)++;
+            if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            *((*node_itr)++) = (node_t){.type = TY_INST_NOT, .token = NULL, .val = 0, .bin = NULL};
+        } else if (vec_iseqstr(*token_itr, "&")) {
+            (*token_itr)++;
+            *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0, .bin = NULL};
+            return OK;
+        } else {
+            if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+                return ERR;
+            }
+            return OK;
+        }
+    }
 }
 
 result_t compile_parse_mul(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
@@ -423,7 +469,7 @@ result_t compile_parse_assign(vec_t** token_itr, node_t** node_itr, int64_t* lab
 result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (vec_iseqstr(*token_itr, "(")) {
         (*token_itr)++;
-        while (vec_iseqstr(*token_itr, ")")) {
+        while (!vec_iseqstr(*token_itr, ")")) {
             if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
@@ -443,7 +489,7 @@ result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label
 result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (vec_iseqstr(*token_itr, "{")) {
         (*token_itr)++;
-        while (vec_iseqstr(*token_itr, "}")) {
+        while (!vec_iseqstr(*token_itr, "}")) {
             if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
