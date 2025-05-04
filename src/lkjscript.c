@@ -106,6 +106,8 @@ typedef union {
 
 mem_t mem;
 
+result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break);
+
 bool_t vec_iseq(vec_t* vec1, vec_t* vec2) {
     if (vec1 == NULL || vec2 == NULL) {
         return FALSE;
@@ -128,6 +130,26 @@ bool_t vec_iseqstr(vec_t* vec, const char* str) {
     }
     vec_t vec2 = (vec_t){.data = str, .size = str_size};
     return vec_iseq(vec, &vec2);
+}
+
+bool_t vec_isnum(vec_t* vec) {
+    char ch = vec->data[0];
+    return '0' <= ch && ch <= '9';
+}
+
+bool_t vec_isvar(vec_t* vec) {
+    char ch = vec->data[0];
+    return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_';
+}
+
+bool_t vec_isfn(vec_t* vec, int64_t fn_cnt) {
+    for(int64_t i = 0; i < fn_cnt; i++) {
+        pair_t* corrent_pair = mem.compile.pair;
+        if(vec_iseq(vec, corrent_pair->key)) {
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 result_t compile_readsrc() {
@@ -202,6 +224,21 @@ result_t compile_tokenize() {
 }
 
 result_t compile_parse_primary(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    if ((*token_itr)->data == NULL) {
+        return ERR;
+    } else if (vec_iseqstr(*token_itr, "(")) {
+        if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
+    } else if (vec_isnum(*token_itr)) {
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = *token_itr, .val = 0, .bin = NULL};
+        (*token_itr)++;
+    } else if (vec_isvar(*token_itr)) {
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = *token_itr, .val = 0, .bin = NULL};
+        (*token_itr)++;
+    } else {
+        return ERR;
+    }
 }
 
 result_t compile_parse_postfix(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
