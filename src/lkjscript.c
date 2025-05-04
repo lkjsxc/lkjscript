@@ -230,13 +230,17 @@ result_t compile_tokenize() {
     return OK;
 }
 
+void compile_parse_skiplinebreak(vec_t** token_itr) {
+    while (vec_iseqstr(*token_itr, "\n")) {
+        (*token_itr)++;
+    }
+}
+
 result_t compile_parse_primary(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if ((*token_itr)->data == NULL) {
-        puts("Error: Unexpected end of input in primary expression.");
         return ERR;
     } else if (vec_iseqstr(*token_itr, "(")) {
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse expression inside parentheses.");
             return ERR;
         }
     } else if (vec_isnum(*token_itr)) {
@@ -246,10 +250,8 @@ result_t compile_parse_primary(vec_t** token_itr, node_t** node_itr, int64_t* la
         *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = *token_itr, .val = 0, .bin = NULL};
         (*token_itr)++;
     } else {
-        puts("Error: Unexpected token in primary expression.");
         return ERR;
     }
-    return OK;
 }
 
 result_t compile_parse_postfix(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
@@ -257,17 +259,14 @@ result_t compile_parse_postfix(vec_t** token_itr, node_t** node_itr, int64_t* la
         vec_t* fn_name = *token_itr;
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse function call arguments.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_CALL, .token = fn_name, .val = 0, .bin = NULL};
     } else {
         if (compile_parse_primary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse primary expression in postfix.");
             return ERR;
         }
     }
-    return OK;
 }
 
 result_t compile_parse_unary(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
@@ -275,51 +274,39 @@ result_t compile_parse_unary(vec_t** token_itr, node_t** node_itr, int64_t* labe
         if (vec_iseqstr(*token_itr, "*")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse operand for dereference operator '*'.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_DEREF, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "+")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse operand for unary plus operator '+'.");
                 return ERR;
             }
         } else if (vec_iseqstr(*token_itr, "-")) {
             (*token_itr)++;
             *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse operand for unary minus operator '-'.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "~")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse operand for bitwise not operator '~'.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_BITNOT, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "!")) {
             (*token_itr)++;
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse operand for logical not operator '!'.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_NOT, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "&")) {
             (*token_itr)++;
-
-            if (!vec_isvar(*token_itr)) {
-                puts("Error: Expected variable after address-of operator '&'.");
-                return ERR;
-            }
             *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0, .bin = NULL};
-            (*token_itr)++;
             return OK;
         } else {
             if (compile_parse_postfix(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse postfix expression in unary.");
                 return ERR;
             }
             return OK;
@@ -329,28 +316,24 @@ result_t compile_parse_unary(vec_t** token_itr, node_t** node_itr, int64_t* labe
 
 result_t compile_parse_mul(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for multiplicative expression.");
         return ERR;
     }
     while (1) {
         if (vec_iseqstr(*token_itr, "*")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '*' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_MUL, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "/")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '/' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_DIV, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "%")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '%' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_MOD, .token = NULL, .val = 0, .bin = NULL};
@@ -362,21 +345,18 @@ result_t compile_parse_mul(vec_t** token_itr, node_t** node_itr, int64_t* label_
 
 result_t compile_parse_add(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_mul(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for additive expression.");
         return ERR;
     }
     while (1) {
         if (vec_iseqstr(*token_itr, "+")) {
             (*token_itr)++;
             if (compile_parse_mul(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '+' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_ADD, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "-")) {
             (*token_itr)++;
             if (compile_parse_mul(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '-' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
@@ -388,21 +368,18 @@ result_t compile_parse_add(vec_t** token_itr, node_t** node_itr, int64_t* label_
 
 result_t compile_parse_shift(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_add(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for shift expression.");
         return ERR;
     }
     while (1) {
         if (vec_iseqstr(*token_itr, "<<")) {
             (*token_itr)++;
             if (compile_parse_add(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '<<' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SHL, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, ">>")) {
             (*token_itr)++;
             if (compile_parse_add(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '>>' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SHR, .token = NULL, .val = 0, .bin = NULL};
@@ -414,35 +391,30 @@ result_t compile_parse_shift(vec_t** token_itr, node_t** node_itr, int64_t* labe
 
 result_t compile_parse_rel(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for relational expression.");
         return ERR;
     }
     while (1) {
         if (vec_iseqstr(*token_itr, "<")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '<' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_LT, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, ">")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '>' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_GT, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "<=")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '<=' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_LE, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, ">=")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '>=' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_GE, .token = NULL, .val = 0, .bin = NULL};
@@ -454,21 +426,18 @@ result_t compile_parse_rel(vec_t** token_itr, node_t** node_itr, int64_t* label_
 
 result_t compile_parse_eq(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_rel(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for equality expression.");
         return ERR;
     }
     while (1) {
         if (vec_iseqstr(*token_itr, "==")) {
             (*token_itr)++;
             if (compile_parse_rel(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '==' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_EQ, .token = NULL, .val = 0, .bin = NULL};
         } else if (vec_iseqstr(*token_itr, "!=")) {
             (*token_itr)++;
             if (compile_parse_rel(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse right operand for '!=' operator.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_NE, .token = NULL, .val = 0, .bin = NULL};
@@ -480,13 +449,11 @@ result_t compile_parse_eq(vec_t** token_itr, node_t** node_itr, int64_t* label_c
 
 result_t compile_parse_bit_and(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_eq(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for bitwise AND expression.");
         return ERR;
     }
     while (vec_iseqstr(*token_itr, "&")) {
         (*token_itr)++;
         if (compile_parse_eq(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse right operand for '&' operator.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITAND, .token = NULL, .val = 0, .bin = NULL};
@@ -496,13 +463,11 @@ result_t compile_parse_bit_and(vec_t** token_itr, node_t** node_itr, int64_t* la
 
 result_t compile_parse_bit_xor(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_bit_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for bitwise XOR expression.");
         return ERR;
     }
     while (vec_iseqstr(*token_itr, "^")) {
         (*token_itr)++;
         if (compile_parse_bit_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse right operand for '^' operator.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITXOR, .token = NULL, .val = 0, .bin = NULL};
@@ -512,13 +477,11 @@ result_t compile_parse_bit_xor(vec_t** token_itr, node_t** node_itr, int64_t* la
 
 result_t compile_parse_bit_or(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_bit_xor(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for bitwise OR expression.");
         return ERR;
     }
     while (vec_iseqstr(*token_itr, "|")) {
         (*token_itr)++;
         if (compile_parse_bit_xor(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse right operand for '|' operator.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITOR, .token = NULL, .val = 0, .bin = NULL};
@@ -528,13 +491,11 @@ result_t compile_parse_bit_or(vec_t** token_itr, node_t** node_itr, int64_t* lab
 
 result_t compile_parse_and(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_bit_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for logical AND expression.");
         return ERR;
     }
     while (vec_iseqstr(*token_itr, "&&")) {
         (*token_itr)++;
         if (compile_parse_bit_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse right operand for '&&' operator.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_AND, .token = NULL, .val = 0, .bin = NULL};
@@ -544,13 +505,11 @@ result_t compile_parse_and(vec_t** token_itr, node_t** node_itr, int64_t* label_
 
 result_t compile_parse_or(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for logical OR expression.");
         return ERR;
     }
     while (vec_iseqstr(*token_itr, "||")) {
         (*token_itr)++;
         if (compile_parse_and(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse right operand for '||' operator.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_OR, .token = NULL, .val = 0, .bin = NULL};
@@ -560,20 +519,11 @@ result_t compile_parse_or(vec_t** token_itr, node_t** node_itr, int64_t* label_c
 
 result_t compile_parse_assign(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-        puts("Error: Failed to parse left operand for assignment.");
         return ERR;
     }
     if (vec_iseqstr(*token_itr, "=")) {
-        node_t* lval_node = (*node_itr) - 1;
-        if (lval_node < mem.compile.node ||
-            (lval_node->type != TY_INST_PUSH_LOCAL_ADDR && lval_node->type != TY_INST_DEREF)) {
-            puts("Error: Invalid left-hand side in assignment.");
-            return ERR;
-        }
-
         (*token_itr)++;
         if (compile_parse_or(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse right operand for '=' operator.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0, .bin = NULL};
@@ -582,25 +532,22 @@ result_t compile_parse_assign(vec_t** token_itr, node_t** node_itr, int64_t* lab
 }
 
 result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    while (vec_iseqstr(*token_itr, ",")) {
+        (*token_itr)++;
+    }
     if (vec_iseqstr(*token_itr, "(")) {
         (*token_itr)++;
         while (!vec_iseqstr(*token_itr, ")")) {
-            if ((*token_itr)->data == NULL) {
-                puts("Error: Unterminated parenthesized expression or argument list.");
-                return ERR;
-            }
             if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse expression within parentheses or argument list.");
                 return ERR;
             }
-            while (vec_iseqstr(*token_itr, ",") || vec_iseqstr(*token_itr, "\n")) {
+            if (vec_iseqstr(*token_itr, ",")) {
                 (*token_itr)++;
             }
         }
         (*token_itr)++;
     } else {
         if (compile_parse_assign(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse assignment or lower precedence expression.");
             return ERR;
         }
     }
@@ -608,22 +555,13 @@ result_t compile_parse_expr(vec_t** token_itr, node_t** node_itr, int64_t* label
 }
 
 result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
+    compile_parse_skiplinebreak(token_itr);
     if (vec_iseqstr(*token_itr, "{")) {
         (*token_itr)++;
-        while (vec_iseqstr(*token_itr, "\n")) {
-            (*token_itr)++;
-        }
+        compile_parse_skiplinebreak(token_itr);
         while (!vec_iseqstr(*token_itr, "}")) {
-            if ((*token_itr)->data == NULL) {
-                puts("Error: Unterminated block statement.");
-                return ERR;
-            }
             if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse statement within block.");
                 return ERR;
-            }
-            while (vec_iseqstr(*token_itr, "\n")) {
-                (*token_itr)++;
             }
         }
         (*token_itr)++;
@@ -632,12 +570,10 @@ result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label
         int64_t label_else = (*label_cnt)++;
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse condition for 'if' statement.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_JZ, .token = NULL, .val = label_if, .bin = NULL};
         if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse body for 'if' statement.");
             return ERR;
         }
         if (vec_iseqstr(*token_itr, "else")) {
@@ -645,7 +581,6 @@ result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label
             *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_else, .bin = NULL};
             *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if, .bin = NULL};
             if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-                puts("Error: Failed to parse body for 'else' statement.");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_else, .bin = NULL};
@@ -658,42 +593,28 @@ result_t compile_parse_stat(vec_t** token_itr, node_t** node_itr, int64_t* label
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_start, .bin = NULL};
         if (compile_parse_stat(token_itr, node_itr, label_cnt, label_start, label_end) == ERR) {
-            puts("Error: Failed to parse body for 'loop' statement.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_start, .bin = NULL};
         *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_end, .bin = NULL};
     } else if (vec_iseqstr(*token_itr, "continue")) {
-        if (label_continue == -1) {
-            puts("Error: 'continue' statement outside of loop.");
-            return ERR;
-        }
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_continue, .bin = NULL};
     } else if (vec_iseqstr(*token_itr, "break")) {
-        if (label_break == -1) {
-            puts("Error: 'break' statement outside of loop.");
-            return ERR;
-        }
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_break, .bin = NULL};
     } else if (vec_iseqstr(*token_itr, "return")) {
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse return value expression.");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
     } else {
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse expression statement.");
             return ERR;
         }
-
-        if (vec_iseqstr(*token_itr, ";")) {
-            (*token_itr)++;
-        }
     }
+    compile_parse_skiplinebreak(token_itr);
     return OK;
 }
 
@@ -701,65 +622,45 @@ result_t compile_parse_fn(vec_t** token_itr, node_t** node_itr, int64_t* label_c
     int64_t label_open = (*label_cnt)++;
     int64_t label_close = (*label_cnt)++;
     int64_t arg_cnt = 0;
-
-    if (!vec_isvar(*token_itr + 1) || !vec_iseqstr(*token_itr + 2, "(")) {
-        puts("Error: Invalid function definition syntax. Expected 'fn name(...)'.");
-        return ERR;
-    }
     vec_t* fn_name = *token_itr + 1;
     pair_t* fn_map = map_find(fn_name);
 
     if (fn_map->key == NULL) {
-        puts("Error: Function name not found in pre-scan map during definition parsing.");
         return ERR;
     }
     fn_map->val = label_open;
 
     (*token_itr) += 3;
-
-    node_t* arg_list_start = *node_itr;
     while (!vec_iseqstr(*token_itr, ")")) {
         if ((*token_itr)->data == NULL) {
-            puts("Error: Unexpected end of input while parsing function arguments.");
             return ERR;
         }
-        if (!vec_isvar(*token_itr)) {
-            puts("Error: Expected identifier for function argument name.");
-            return ERR;
-        }
-
-        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0 /* Placeholder */, .bin = NULL};
-        arg_cnt++;
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0, .bin = NULL};
         (*token_itr)++;
         if (vec_iseqstr(*token_itr, ",")) {
-            (*token_itr)++;
-            while (vec_iseqstr(*token_itr, "\n")) {
-                (*token_itr)++;
-            }
-        } else if (!vec_iseqstr(*token_itr, ")")) {
-            puts("Error: Expected ',' or ')' after function argument.");
-            return ERR;
-        }
-        while (vec_iseqstr(*token_itr, "\n")) {
             (*token_itr)++;
         }
     }
     (*token_itr)++;
 
-    node_t* arg_node_itr = arg_list_start;
+    node_t* arg_itr = *node_itr - 1;
     for (int64_t i = 0; i < arg_cnt; i++) {
-        arg_node_itr->val = -i - 3;
-        arg_node_itr++;
+        arg_itr->val = -i - 4;
+        arg_itr--;
     }
 
     *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_OPEN, .token = NULL, .val = label_open, .bin = NULL};
-    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = label_open /* Store label again? */, .bin = NULL};
-
-    if (compile_parse_stat(token_itr, node_itr, label_cnt, -1, -1) == ERR) {
-        puts("Error: Failed to parse function body.");
+    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = 0, .bin = NULL};
+    if (arg_cnt > 0) {
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = NULL, .val = -2, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = NULL, .val = -2, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = arg_cnt, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0, .bin = NULL};
+        *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0, .bin = NULL};
+    }
+    if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
         return ERR;
     }
-
     *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
     *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
     *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_CLOSE, .token = NULL, .val = label_close, .bin = NULL};
@@ -771,57 +672,23 @@ result_t compile_parse() {
     node_t* node_itr = mem.compile.node;
     pair_t* map_itr = mem.compile.map;
     int64_t label_cnt = 0;
-
-    vec_t* scan_itr = mem.compile.token;
-    while (scan_itr->data != NULL) {
-        if (vec_iseqstr(scan_itr, "fn")) {
-            if (scan_itr[1].data != NULL && vec_isvar(&scan_itr[1])) {
-                pair_t* existing = map_find(&scan_itr[1]);
-                if (existing->key != NULL) {
-                    puts("Error: Duplicate function definition.");
-                    return ERR;
-                }
-                *(map_itr++) = (pair_t){.key = &scan_itr[1], .val = 0};
-            } else {
-                puts("Error: Expected identifier after 'fn'.");
-                return ERR;
-            }
+    while (token_itr->data != NULL) {
+        if (vec_iseqstr(token_itr, "fn")) {
+            *(map_itr++) = (pair_t){.key = token_itr + 1, .val = 0};
         }
-
-        while (scan_itr->data != NULL && !vec_iseqstr(scan_itr, "\n"))
-            scan_itr++;
-        if (scan_itr->data != NULL)
-            scan_itr++;
-    }
-    *(map_itr) = (pair_t){.key = NULL, .val = 0};
-
-    token_itr = mem.compile.token;
-    node_itr = mem.compile.node;
-    map_itr = mem.compile.map;
-
-    while (vec_iseqstr(token_itr, "\n")) {
         token_itr++;
     }
+    token_itr = mem.compile.token;
+    compile_parse_skiplinebreak(&token_itr);
     while (vec_iseqstr(token_itr, "fn")) {
         if (compile_parse_fn(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
-            puts("Error: Failed during function definition parsing.");
             return ERR;
-        }
-        while (vec_iseqstr(token_itr, "\n")) {
-            token_itr++;
         }
     }
     *(node_itr++) = (node_t){.type = TY_LABEL_STARTSCRIPT, .token = NULL, .val = 0, .bin = NULL};
-    while (vec_iseqstr(token_itr, "\n")) {
-        token_itr++;
-    }
     while (token_itr->data != NULL) {
         if (compile_parse_stat(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
-            puts("Error: Failed to parse after define function.");
             return ERR;
-        }
-        while (vec_iseqstr(token_itr, "\n")) {
-            token_itr++;
         }
     }
     *node_itr = (node_t){.type = TY_NULL, .token = NULL, .val = 0, .bin = NULL};
@@ -837,7 +704,6 @@ result_t compile_bingen() {
     while (map_itr->key != NULL) {
         map_itr++;
     }
-
     return OK;
 }
 
@@ -847,13 +713,14 @@ result_t execute() {
 
 result_t compile() {
     if (compile_readsrc() == ERR) {
+        puts("Failed to readsrc");
         return ERR;
     }
     if (compile_tokenize() == ERR) {
         puts("Failed to tokenize");
-        return ERR;
     }
     if (compile_parse() == ERR) {
+        puts("Failed to parse");
         return ERR;
     }
     if (compile_bingen() == ERR) {
@@ -872,7 +739,5 @@ int main() {
         puts("Failed to execute");
         return 1;
     }
-
-    puts("Execution finished successfully.");
     return 0;
 }
