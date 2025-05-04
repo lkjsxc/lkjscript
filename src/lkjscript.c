@@ -615,24 +615,24 @@ result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* lab
         if (token_iseqstr(*token_itr, "else")) {
             (*token_itr)++;
             *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_else};
-            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = "\0", .val = label_if};
             if (compile_parse_stat(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
-            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_else};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = "\0", .val = label_else};
         } else {
-            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if};
+            *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = "\0", .val = label_if};
         }
     } else if (token_iseqstr(*token_itr, "loop")) {
         int64_t label_start = (*label_cnt)++;
         int64_t label_end = (*label_cnt)++;
         (*token_itr)++;
-        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_start};
+        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = "\0", .val = label_start};
         if (compile_parse_stat(token_itr, node_itr, label_cnt, label_start, label_end) == ERR) {
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_start};
-        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_end};
+        *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = "\0", .val = label_end};
     } else if (token_iseqstr(*token_itr, "continue")) {
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_continue};
@@ -672,6 +672,7 @@ result_t compile_parse_fn(token_t** token_itr, node_t** node_itr, int64_t* label
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = *token_itr, .val = 0};
         (*token_itr)++;
+        arg_cnt++;
         if (token_iseqstr(*token_itr, ",")) {
             (*token_itr)++;
         }
@@ -731,21 +732,25 @@ result_t compile_parse() {
 }
 
 result_t compile_analyze() {
-    node_t* node_itr = mem.compile.node;
-    pair_t* map_itr = mem.compile.map;
     pair_t* map_base;
+    pair_t* map_itr = mem.compile.map;
+    node_t* node_itr = mem.compile.node;
     int64_t offset = 0;
 
-    while (map_itr->key == NULL) {
+    while(map_itr->key != NULL) {
         map_itr++;
     }
     map_base = map_itr;
 
     while (node_itr->type != TY_NULL) {
-        if ((node_itr->type == TY_INST_PUSH_LOCAL_VAL || node_itr->type == TY_INST_PUSH_LOCAL_ADDR) && node_itr->val == 0) {
+        if ((node_itr->type == TY_INST_PUSH_LOCAL_VAL || node_itr->type == TY_INST_PUSH_LOCAL_ADDR) && node_itr->token != NULL) {
             pair_t* map_result = map_find(node_itr->token);
             if (map_result->key == NULL) {
-                *(map_itr++) = (pair_t){.key = node_itr->token, .val = offset++};
+                if (node_itr->val != 0) {
+                    *(map_itr++) = (pair_t){.key = node_itr->token, .val = node_itr->val};
+                } else {
+                    *(map_itr++) = (pair_t){.key = node_itr->token, .val = offset++};
+                }
                 *map_itr = (pair_t){.key = NULL, .val = 0};
             }
             node_itr->val = map_result->val;
@@ -753,6 +758,7 @@ result_t compile_analyze() {
             node_itr->val = map_find(node_itr->token) - mem.compile.map;
         } else if (node_itr->type == TY_LABEL_SCOPE_CLOSE) {
             map_itr = map_base;
+            *map_itr = (pair_t){.key = NULL, .val = 0};
             offset = 0;
         }
         node_itr++;
@@ -779,7 +785,7 @@ result_t compile_tobin() {
             node_itr++;
         } else if (node_itr->type == TY_INST_JMP || node_itr->type == TY_INST_JZ || node_itr->type == TY_INST_CALL) {
             *(bin_itr++) = node_itr->type;
-            *(bin_itr++) = 0;
+            *(bin_itr++) = node_itr->val;
             node_itr++;
         } else {
             *(bin_itr++) = node_itr->type;
@@ -788,13 +794,17 @@ result_t compile_tobin() {
     }
     mem.bin[GLOBALADDR_BP] = bin_itr - mem.compile.bin;
     mem.bin[GLOBALADDR_SP] = mem.bin[GLOBALADDR_BP] + MEM_STACK_SIZE;
+    return OK;
+}
 
-    bin_itr = bin_base;
+result_t compile_link() {
+    int64_t* bin_base = mem.compile.bin + MEM_GLOBAL_SIZE;
+    int64_t* bin_itr = bin_base;
     while (*bin_itr != TY_NULL) {
         if (*bin_itr == TY_INST_PUSH_CONST || *bin_itr == TY_INST_PUSH_LOCAL_VAL || *bin_itr == TY_INST_PUSH_LOCAL_ADDR) {
             bin_itr += 2;
         } else if (*bin_itr == TY_INST_JMP || *bin_itr == TY_INST_JZ || *bin_itr == TY_INST_CALL) {
-            *(bin_itr + 1) = mem.compile.map[*bin_itr + 1].val;
+            *(bin_itr + 1) = mem.compile.map[*(bin_itr + 1)].val;
             bin_itr += 2;
         } else {
             bin_itr += 1;
