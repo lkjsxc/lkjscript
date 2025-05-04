@@ -98,7 +98,7 @@ typedef struct {
     char src[MEM_SIZE / sizeof(char) / 6];
     vec_t token[MEM_SIZE / sizeof(vec_t) / 6];
     node_t node[MEM_SIZE / sizeof(node_t) / 6];
-    pair_t pair[MEM_SIZE / sizeof(pair_t) / 6];
+    pair_t map[MEM_SIZE / sizeof(pair_t) / 6];
 } compile_t;
 
 typedef union {
@@ -144,14 +144,14 @@ bool_t vec_isvar(vec_t* vec) {
     return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_';
 }
 
-bool_t vec_isfn(vec_t* vec, int64_t fn_cnt) {
-    for(int64_t i = 0; i < fn_cnt; i++) {
-        pair_t* corrent_pair = mem.compile.pair;
-        if(vec_iseq(vec, corrent_pair->key)) {
-            return TRUE;
+pair_t* map_find(vec_t* vec) {
+    pair_t* itr;
+    for (itr = mem.compile.map; itr->key != NULL; itr++) {
+        if (vec_iseq(vec, itr->key)) {
+            return itr;
         }
     }
-    return FALSE;
+    return itr;
 }
 
 result_t compile_readsrc() {
@@ -244,7 +244,7 @@ result_t compile_parse_primary(vec_t** token_itr, node_t** node_itr, int64_t* la
 }
 
 result_t compile_parse_postfix(vec_t** token_itr, node_t** node_itr, int64_t* label_cnt, int64_t label_continue, int64_t label_break) {
-    if (!vec_iseqstr(*token_itr, "(") && vec_iseqstr(*token_itr + 1, "(")) {  // Add name resolution later
+    if ((map_find(*token_itr)->key != NULL) && vec_iseqstr(*token_itr + 1, "(")) {
         vec_t* fn_name = *token_itr;
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, label_cnt, label_continue, label_break) == ERR) {
@@ -605,10 +605,15 @@ result_t compile_parse_fn(vec_t** token_itr, node_t** node_itr, int64_t* label_c
     int64_t label_open = (*label_cnt)++;
     int64_t label_close = (*label_cnt)++;
     int64_t arg_cnt = 0;
-    (*token_itr)++;
-    vec_t* fn_name = *token_itr;
-    mem.compile.pair[label_open] = (pair_t){.key = fn_name, .val = 0};
-    (*token_itr) += 2;
+    vec_t* fn_name = *token_itr + 1;
+    pair_t* fn_map = map_find(fn_name);
+
+    if (fn_map->key == NULL) {
+        return ERR;
+    }
+    fn_map->val = label_open;
+
+    (*token_itr) += 3;
     while (!vec_iseqstr(*token_itr, ")")) {
         if ((*token_itr)->data == NULL) {
             return ERR;
@@ -619,14 +624,16 @@ result_t compile_parse_fn(vec_t** token_itr, node_t** node_itr, int64_t* label_c
             (*token_itr)++;
         }
     }
+    (*token_itr)++;
+
     node_t* arg_itr = *node_itr - 1;
     for (int64_t i = 0; i < arg_cnt; i++) {
         arg_itr->val = -i - 4;
         arg_itr--;
     }
-    (*token_itr)++;
-    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_OPEN, .token = NULL, .val = 0, .bin = NULL};
-    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = label_open, .bin = NULL};
+
+    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_OPEN, .token = NULL, .val = label_open, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = fn_name, .val = 0, .bin = NULL};
     if (arg_cnt > 0) {
         *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_ADDR, .token = NULL, .val = -2, .bin = NULL};
         *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = NULL, .val = -2, .bin = NULL};
@@ -639,14 +646,22 @@ result_t compile_parse_fn(vec_t** token_itr, node_t** node_itr, int64_t* label_c
     }
     *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0, .bin = NULL};
     *((*node_itr)++) = (node_t){.type = TY_INST_RETURN, .token = NULL, .val = 0, .bin = NULL};
-    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_CLOSE, .token = NULL, .val = 0, .bin = NULL};
+    *((*node_itr)++) = (node_t){.type = TY_LABEL_SCOPE_CLOSE, .token = NULL, .val = label_close, .bin = NULL};
     return OK;
 }
 
 result_t compile_parse() {
     vec_t* token_itr = mem.compile.token;
     node_t* node_itr = mem.compile.node;
+    pair_t* map_itr = mem.compile.map;
     int64_t label_cnt = 0;
+    while (token_itr->data != NULL) {
+        if (vec_iseqstr(token_itr, "fn")) {
+            *(map_itr++) = (pair_t){.key = token_itr + 1, .val = 0};
+        }
+        token_itr++;
+    }
+    token_itr = mem.compile.token;
     while (vec_iseqstr(token_itr, "fn")) {
         if (compile_parse_fn(&token_itr, &node_itr, &label_cnt, -1, -1) == ERR) {
             return ERR;
@@ -667,6 +682,10 @@ result_t compile_bingen() {
     uni64_t* bin_itr = bin_begin;
     node_t* node_itr = mem.compile.node;
     int64_t localval_offset = 0;
+    pair_t* map_itr = mem.compile.map;
+    while (map_itr->key != NULL) {
+        map_itr++;
+    }
     return OK;
 }
 
@@ -686,8 +705,8 @@ result_t compile() {
         puts("Failed to parse");
         return ERR;
     }
-    if (compile_codegen() == ERR) {
-        puts("Failed to codegen");
+    if (compile_bingen() == ERR) {
+        puts("Failed to bingen");
         return ERR;
     }
     return OK;

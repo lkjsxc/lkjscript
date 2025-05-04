@@ -1,11 +1,17 @@
 // lkjscriptsrc
 fn main() {
     if (10 > 5) {
-        return 1 + 2 * 3 // Should return 7
+        &a = 1 + 2 * 3 // Should return 7
+        &b = 5
+        return sum3(a, b, 6) // 7 + 5 + 6 = 18
     } else {
         return 0
     }
     return 99 // Unreachable
+}
+
+fn sum3(a, b, c) {
+    return a + b + c
 }
 
 // Call the main function (not really possible without VM)
