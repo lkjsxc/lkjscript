@@ -1,131 +1,148 @@
 // Function to write a single character (given its ASCII code)
-// We don't need print_int for the visual output, just write.
-// fn print_int(x) { ... } // Assuming print_int exists if needed elsewhere
+// We assume write(1, char_code) writes to standard output.
 
-// --- Constants ---
-&ok = 0
-&err = 1
+// --- Function Definitions ---
 
-// Fixed-point math scale factor
-&SCALE = 1000 // Represents 1.0 as 1000
+// Function to map a pixel X coordinate to a scaled complex C_x coordinate
+// Needs: ix, min_cx, range_x, width
+fn map_pixel_x_to_cx(ix, current_min_cx, current_range_x, image_width) {
+    // cx = min_cx + (ix * range_x) / width
+    &term_x = ix * current_range_x
+    &result_cx = current_min_cx + term_x / image_width
+    return result_cx
+}
 
-// Image dimensions
-&width = 78 // characters wide
-&height = 40 // characters high
+// Function to map a pixel Y coordinate to a scaled complex C_y coordinate
+// Needs: iy, min_cy, range_y, height
+fn map_pixel_y_to_cy(iy, current_min_cy, current_range_y, image_height) {
+    // cy = min_cy + (iy * range_y) / height
+    &term_y = iy * current_range_y
+    &result_cy = current_min_cy + term_y / image_height
+    return result_cy
+}
 
-// Max iterations per point
-&max_iter = 30
+// Function to calculate Mandelbrot iterations for a given point (cx, cy)
+// Needs: cx, cy, max_iter, SCALE, radius_sq
+fn calculate_mandelbrot_iterations(cx, cy, current_max_iter, current_scale, current_radius_sq) {
+    &zx = 0
+    &zy = 0
+    &iter = 0
 
-// Mandelbrot calculation bounds (scaled)
-// Corresponds to roughly -2.1 to 0.7 for x, -1.2 to 1.2 for y
-&min_cx = -2100 // -2.1 * SCALE
-&max_cx = 700   // 0.7 * SCALE
-&min_cy = -1200 // -1.2 * SCALE
-&max_cy = 1200  // 1.2 * SCALE
+    &result_loop = loop {
+        // Check iteration limit first
+        if iter == current_max_iter {
+            break 0 // Reached limit
+        }
 
-// Escape radius squared (scaled)
-// (2.0 * SCALE)^2 = 4 * SCALE * SCALE
-&radius_sq = 4 * SCALE * SCALE // 4 * 1000 * 1000 = 4000000
+        // Calculate squared magnitudes (scaled by SCALE*SCALE)
+        &zx_sq = zx * zx
+        &zy_sq = zy * zy
 
-// Calculate range spans (scaled)
-&range_x = max_cx - min_cx // 700 - (-2100) = 2800
-&range_y = max_cy - min_cy // 1200 - (-1200) = 2400
+        // Check escape condition (scaled)
+        if (zx_sq + zy_sq) > current_radius_sq {
+             break 1 // Escaped
+        }
 
-// --- Main Mandelbrot Loop ---
+        // Calculate next iteration z_{n+1} = z_n^2 + c (fixed-point)
+        &two_zx_zy = zx * zy * 2
+        // Note: Division by SCALE is needed here
+        &temp_zx = (zx_sq - zy_sq) / current_scale + cx
+        &temp_zy = two_zx_zy / current_scale + cy
 
-&iy = 0 // Current row (y pixel coordinate)
+        // Update zx and zy
+        &zx = temp_zx
+        &zy = temp_zy
+
+        // Increment iteration count
+        &iter = iter + 1
+    } // End of iteration loop
+
+    // Return the final iteration count
+    return iter
+}
+
+// Function to get the character code based on the iteration count
+// Needs: iter, max_iter, inside_char_code, palette_size
+fn get_char_for_iteration(iter, current_max_iter, current_inside_char, current_palette_size) {
+    &char_code = 0 // Default/fallback
+
+    if iter == current_max_iter {
+        // Point did not escape (likely inside the set)
+        &char_code = current_inside_char
+    } else {
+        // Point escaped, choose character based on iteration count modulo palette size
+        &palette_index = iter % current_palette_size
+
+        // Select character based on index
+        if palette_index == 0 { &char_code = 46 } // '.'
+        else if palette_index == 1 { &char_code = 44 } // ','
+        else if palette_index == 2 { &char_code = 45 } // '-'
+        else if palette_index == 3 { &char_code = 126 } // '~'
+        else if palette_index == 4 { &char_code = 58 } // ':'
+        else if palette_index == 5 { &char_code = 61 } // '='
+        else if palette_index == 6 { &char_code = 43 } // '+'
+        else if palette_index == 7 { &char_code = 35 } // '#'
+        else { &char_code = 63 } // '?' as fallback
+    }
+    return char_code
+}
+
+
+// --- Main Program ---
+
+// Define constants and configurations *locally* in the main scope
+&scale_factor = 1000
+&image_width = 78
+&image_height = 40
+&iteration_limit = 30
+&coord_min_cx = -2100
+&coord_max_cx = 700
+&coord_min_cy = -1200
+&coord_max_cy = 1200
+&escape_radius_sq = 4 * scale_factor * scale_factor // 4000000
+&palette_s = 8
+&char_inside = 32 // Space ' '
+
+// Calculate ranges - these are also local to the main scope
+&coord_range_x = coord_max_cx - coord_min_cx
+&coord_range_y = coord_max_cy - coord_min_cy
+
+// --- Main Loop ---
+&iy = 0 // Current row
 &result_outer = loop {
-
-    // Check if we finished all rows
-    if iy == height {
-        break ok
+    if iy == image_height {
+        break 0 // Finished all rows
     }
 
-    &ix = 0 // Current column (x pixel coordinate)
+    &ix = 0 // Current column
     &result_inner = loop {
-
-        // Check if we finished this row
-        if ix == width {
-            break ok
+        if ix == image_width {
+            break 0 // Finished this row
         }
 
-        // Map pixel coordinate (ix, iy) to complex plane coordinate (cx, cy) (scaled)
-        // cx = min_cx + ix * range_x / width
-        &cx = min_cx + ix * range_x / width
-        // cy = min_cy + iy * range_y / height
-        &cy = min_cy + iy * range_y / height
+        // 1. Map pixel coordinates, passing necessary parameters
+        &cx = map_pixel_x_to_cx(ix, coord_min_cx, coord_range_x, image_width)
+        &cy = map_pixel_y_to_cy(iy, coord_min_cy, coord_range_y, image_height)
 
-        // Initialize Mandelbrot iteration variables (scaled)
-        &zx = 0
-        &zy = 0
-        &iter = 0
+        // 2. Calculate iterations, passing necessary parameters
+        &iterations = calculate_mandelbrot_iterations(cx, cy, iteration_limit, scale_factor, escape_radius_sq)
 
-        // Start the iteration loop for this point
-        &result_iter = loop {
+        // 3. Get the character code, passing necessary parameters
+        &char_code = get_char_for_iteration(iterations, iteration_limit, char_inside, palette_s)
 
-            // Check iteration limit
-            if iter == max_iter {
-                break ok // Point is likely in the set
-            }
-
-            // Check escape condition: zx*zx + zy*zy > radius_sq (scaled)
-            // Be careful with potential overflow during multiplication before division by SCALE
-            &zx_sq = zx * zx
-            &zy_sq = zy * zy
-
-            // Check if magnitude squared (scaled by SCALE*SCALE) exceeds limit
-            if (zx_sq + zy_sq) > radius_sq {
-                 break err // Point escaped
-            }
-
-            // Calculate next iteration z_{n+1} = z_n^2 + c (using fixed-point math)
-            // zx_new = (zx*zx - zy*zy) / SCALE + cx
-            // zy_new = (2*zx*zy) / SCALE + cy
-
-            // Calculate 2*zx*zy term (scaled by SCALE*SCALE)
-            // Need temporary variable to avoid modifying zx before zy is calculated
-            &temp_zy_term = 2 * zx / SCALE // Intermediate division might lose precision
-            // Better: &temp_zy_term = (2 * zx * zy) / SCALE
-            // But (2*zx*zy) might overflow first. Let's try carefully:
-             &two_zx_zy = zx * zy * 2 // Calculate numerator first (potential overflow)
-
-            // Calculate new zx (scaled)
-             &temp_zx = (zx_sq / SCALE) - (zy_sq / SCALE) + cx
-
-            // Calculate new zy (scaled)
-             &temp_zy = (two_zx_zy / SCALE) + cy
-
-            // Update zx and zy
-            &zx = temp_zx
-            &zy = temp_zy
-
-            // Increment iteration count
-            &iter = iter + 1
-        } // End of iteration loop
-
-        // Choose character based on whether it escaped (result_iter == err) or not
-        &char_code = if result_iter == ok {
-            42 // '*' for points in the set (or likely in)
-        } else {
-            32 // ' ' (space) for points outside the set
-        }
-
-        // Write the character
+        // 4. Write the character
         &write_res = write(1, char_code)
-        // We might want error checking for write_res here if needed
 
         // Move to next column
         &ix = ix + 1
-
     } // End of inner loop (columns)
 
     // After finishing a row, print a newline
-    &write_res = write(1, 10) // ASCII 10 is newline
+    &write_res = write(1, 10) // ASCII 10
 
     // Move to next row
     &iy = iy + 1
-
 } // End of outer loop (rows)
 
-// Final status (optional, depends on how the language runtime handles the end)
+// Final status
 &final_status = result_outer

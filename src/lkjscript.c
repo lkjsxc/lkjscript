@@ -176,7 +176,7 @@ pair_t* map_end(int64_t map_cnt) {
 result_t compile_readsrc() {
     FILE* fp = fopen(SRC_PATH, "r");
     if (fp == NULL) {
-        puts("Failed to open lkjscriptsrc");
+        puts("Error: Failed to open lkjscriptsrc");
         return ERR;
     }
     size_t n = fread(mem.compile.src, 1, sizeof(mem.compile.src) - 3, fp);
@@ -257,19 +257,23 @@ void compile_parse_skiplinebreak(token_t** token_itr) {
 
 result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if ((*token_itr)->data == NULL) {
+        puts("Error: Unexpected end of input in compile_parse_primary");
         return ERR;
     } else if (token_iseqstr(*token_itr, "(")) {
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse expression in compile_parse_primary");
             return ERR;
         }
         if (!token_iseqstr(*token_itr, ")")) {
+            puts("Error: Expected ')' in compile_parse_primary");
             return ERR;
         }
         (*token_itr)++;
     } else if (token_iseqstr(*token_itr, "write")) {
         (*token_itr)++;
         if (compile_parse_primary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse primary in compile_parse_primary (write)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_WRITE, .token = NULL, .val = 0};
@@ -278,10 +282,12 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
         int64_t label_else = (*map_cnt)++;
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse expression in compile_parse_primary (if)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_JZ, .token = NULL, .val = label_if};
         if (compile_parse_stat(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse statement in compile_parse_primary (if)");
             return ERR;
         }
         if (token_iseqstr(*token_itr, "else")) {
@@ -289,6 +295,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
             *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_else};
             *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_if};
             if (compile_parse_stat(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse statement in compile_parse_primary (else)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_else};
@@ -301,6 +308,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_LABEL, .token = NULL, .val = label_start};
         if (compile_parse_stat(token_itr, node_itr, map_cnt, label_start, label_end) == ERR) {
+            puts("Error: Failed to parse statement in compile_parse_primary (loop)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_start};
@@ -312,6 +320,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
         *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_LOCAL_VAL, .token = *token_itr, .val = 0};
         (*token_itr)++;
     } else {
+        puts("Error: Unexpected token in compile_parse_primary");
         return ERR;
     }
     return OK;
@@ -321,16 +330,19 @@ result_t compile_parse_postfix(token_t** token_itr, node_t** node_itr, int64_t* 
     if ((map_find(*token_itr, *map_cnt) != map_end(*map_cnt)) && token_iseqstr(*token_itr + 1, "(")) {
         token_t* fn_name = *token_itr;
         *token_itr += 2;
-        if (compile_parse_or(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse expression in compile_parse_postfix (call)");
             return ERR;
         }
         if (!token_iseqstr(*token_itr, ")")) {
+            puts("Error: Expected ')' in compile_parse_postfix (call)");
             return ERR;
         }
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_INST_CALL, .token = fn_name, .val = 0};
     } else {
         if (compile_parse_primary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse primary in compile_parse_postfix");
             return ERR;
         }
     }
@@ -341,30 +353,35 @@ result_t compile_parse_unary(token_t** token_itr, node_t** node_itr, int64_t* ma
     if (token_iseqstr(*token_itr, "*")) {
         (*token_itr)++;
         if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse unary in compile_parse_unary (deref)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_DEREF, .token = NULL, .val = 0};
     } else if (token_iseqstr(*token_itr, "+")) {
         (*token_itr)++;
         if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse unary in compile_parse_unary (plus)");
             return ERR;
         }
     } else if (token_iseqstr(*token_itr, "-")) {
         (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_INST_PUSH_CONST, .token = NULL, .val = 0};
         if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse unary in compile_parse_unary (minus)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0};
     } else if (token_iseqstr(*token_itr, "~")) {
         (*token_itr)++;
         if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse unary in compile_parse_unary (bitnot)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITNOT, .token = NULL, .val = 0};
     } else if (token_iseqstr(*token_itr, "!")) {
         (*token_itr)++;
         if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse unary in compile_parse_unary (not)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_NOT, .token = NULL, .val = 0};
@@ -374,6 +391,7 @@ result_t compile_parse_unary(token_t** token_itr, node_t** node_itr, int64_t* ma
         (*token_itr)++;
     } else {
         if (compile_parse_postfix(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse postfix in compile_parse_unary");
             return ERR;
         }
     }
@@ -382,24 +400,28 @@ result_t compile_parse_unary(token_t** token_itr, node_t** node_itr, int64_t* ma
 
 result_t compile_parse_mul(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse unary in compile_parse_mul");
         return ERR;
     }
     while (1) {
         if (token_iseqstr(*token_itr, "*")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse unary in compile_parse_mul (mul)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_MUL, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "/")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse unary in compile_parse_mul (div)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_DIV, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "%")) {
             (*token_itr)++;
             if (compile_parse_unary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse unary in compile_parse_mul (mod)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_MOD, .token = NULL, .val = 0};
@@ -411,18 +433,21 @@ result_t compile_parse_mul(token_t** token_itr, node_t** node_itr, int64_t* map_
 
 result_t compile_parse_add(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_mul(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse mul in compile_parse_add");
         return ERR;
     }
     while (1) {
         if (token_iseqstr(*token_itr, "+")) {
             (*token_itr)++;
             if (compile_parse_mul(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse mul in compile_parse_add (add)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_ADD, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "-")) {
             (*token_itr)++;
             if (compile_parse_mul(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse mul in compile_parse_add (sub)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SUB, .token = NULL, .val = 0};
@@ -434,18 +459,21 @@ result_t compile_parse_add(token_t** token_itr, node_t** node_itr, int64_t* map_
 
 result_t compile_parse_shift(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_add(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse add in compile_parse_shift");
         return ERR;
     }
     while (1) {
         if (token_iseqstr(*token_itr, "<<")) {
             (*token_itr)++;
             if (compile_parse_add(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse add in compile_parse_shift (shl)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SHL, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, ">>")) {
             (*token_itr)++;
             if (compile_parse_add(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse add in compile_parse_shift (shr)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_SHR, .token = NULL, .val = 0};
@@ -457,30 +485,35 @@ result_t compile_parse_shift(token_t** token_itr, node_t** node_itr, int64_t* ma
 
 result_t compile_parse_rel(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_shift(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse shift in compile_parse_rel");
         return ERR;
     }
     while (1) {
         if (token_iseqstr(*token_itr, "<")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse shift in compile_parse_rel (lt)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_LT, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, ">")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse shift in compile_parse_rel (gt)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_GT, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "<=")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse shift in compile_parse_rel (le)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_LE, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, ">=")) {
             (*token_itr)++;
             if (compile_parse_shift(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse shift in compile_parse_rel (ge)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_GE, .token = NULL, .val = 0};
@@ -492,18 +525,21 @@ result_t compile_parse_rel(token_t** token_itr, node_t** node_itr, int64_t* map_
 
 result_t compile_parse_eq(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_rel(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse rel in compile_parse_eq");
         return ERR;
     }
     while (1) {
         if (token_iseqstr(*token_itr, "==")) {
             (*token_itr)++;
             if (compile_parse_rel(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse rel in compile_parse_eq (eq)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_EQ, .token = NULL, .val = 0};
         } else if (token_iseqstr(*token_itr, "!=")) {
             (*token_itr)++;
             if (compile_parse_rel(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+                puts("Error: Failed to parse rel in compile_parse_eq (ne)");
                 return ERR;
             }
             *((*node_itr)++) = (node_t){.type = TY_INST_NE, .token = NULL, .val = 0};
@@ -515,11 +551,13 @@ result_t compile_parse_eq(token_t** token_itr, node_t** node_itr, int64_t* map_c
 
 result_t compile_parse_bit_and(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_eq(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse eq in compile_parse_bit_and");
         return ERR;
     }
     while (token_iseqstr(*token_itr, "&")) {
         (*token_itr)++;
         if (compile_parse_eq(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse eq in compile_parse_bit_and (bitand)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITAND, .token = NULL, .val = 0};
@@ -529,11 +567,13 @@ result_t compile_parse_bit_and(token_t** token_itr, node_t** node_itr, int64_t* 
 
 result_t compile_parse_bit_xor(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_bit_and(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse bit_and in compile_parse_bit_xor");
         return ERR;
     }
     while (token_iseqstr(*token_itr, "^")) {
         (*token_itr)++;
         if (compile_parse_bit_and(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse bit_and in compile_parse_bit_xor (bitxor)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITXOR, .token = NULL, .val = 0};
@@ -543,11 +583,13 @@ result_t compile_parse_bit_xor(token_t** token_itr, node_t** node_itr, int64_t* 
 
 result_t compile_parse_bit_or(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_bit_xor(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse bit_xor in compile_parse_bit_or");
         return ERR;
     }
     while (token_iseqstr(*token_itr, "|")) {
         (*token_itr)++;
         if (compile_parse_bit_xor(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse bit_xor in compile_parse_bit_or (bitor)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_BITOR, .token = NULL, .val = 0};
@@ -557,11 +599,13 @@ result_t compile_parse_bit_or(token_t** token_itr, node_t** node_itr, int64_t* m
 
 result_t compile_parse_and(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_bit_or(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse bit_or in compile_parse_and");
         return ERR;
     }
     while (token_iseqstr(*token_itr, "&&")) {
         (*token_itr)++;
         if (compile_parse_bit_or(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse bit_or in compile_parse_and (and)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_AND, .token = NULL, .val = 0};
@@ -571,11 +615,13 @@ result_t compile_parse_and(token_t** token_itr, node_t** node_itr, int64_t* map_
 
 result_t compile_parse_or(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_and(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse and in compile_parse_or");
         return ERR;
     }
     while (token_iseqstr(*token_itr, "||")) {
         (*token_itr)++;
         if (compile_parse_and(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse and in compile_parse_or (or)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_OR, .token = NULL, .val = 0};
@@ -585,11 +631,13 @@ result_t compile_parse_or(token_t** token_itr, node_t** node_itr, int64_t* map_c
 
 result_t compile_parse_assign(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_or(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse or in compile_parse_assign");
         return ERR;
     }
     if (token_iseqstr(*token_itr, "=")) {
         (*token_itr)++;
         if (compile_parse_or(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse or in compile_parse_assign (assign)");
             return ERR;
         }
         *((*node_itr)++) = (node_t){.type = TY_INST_ASSIGN1, .token = NULL, .val = 0};
@@ -599,11 +647,13 @@ result_t compile_parse_assign(token_t** token_itr, node_t** node_itr, int64_t* m
 
 result_t compile_parse_expr(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if (compile_parse_assign(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        puts("Error: Failed to parse assign in compile_parse_expr");
         return ERR;
     }
     while (token_iseqstr(*token_itr, ",")) {
         (*token_itr)++;
         if (compile_parse_assign(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            puts("Error: Failed to parse assign in compile_parse_expr (comma)");
             return ERR;
         }
     }
