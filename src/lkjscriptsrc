@@ -1,15 +1,15 @@
-fn print_int ( x ) {
+fn print_int(x) {
 
     // zero
     if x == 0 {
-        &result = write ( 1,  48 )
-        &result = write ( 1,  10 )
+        &result = write(1, 48)
+        &result = write(1, 10)
         return 0
     }
 
     // negative
     if x < 0 {
-        &result = write ( 1,  45 )
+        &result = write(1, 45)
         &x = - x
     }
 
@@ -26,7 +26,7 @@ fn print_int ( x ) {
     // output numbers
     &result = loop {
         &b = x / a % 10
-        &result = write ( 1,  b + 48 )
+        &result = write(1, b + 48)
         if a == 1 {
             break 0
         }
@@ -34,7 +34,7 @@ fn print_int ( x ) {
     }
 
     // line break
-    &result = write ( 1,  10 )
+    &result = write(1, 10)
     return 0
 }
 
@@ -60,7 +60,9 @@ fn fibonacci(x) {
         break ok
     }
 
-    if print_int(fibonacci(i)) != ok {
+    &x = fibonacci(i)
+
+    if print_int(x) != ok {
         break err
     }
     &i = i + 1
