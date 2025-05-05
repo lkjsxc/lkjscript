@@ -108,6 +108,7 @@ typedef union {
 
 mem_t mem;
 
+result_t compile_parse_or(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break);
 result_t compile_parse_expr(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break);
 result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break);
 
@@ -262,6 +263,9 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
+        if (!token_iseqstr(*token_itr, ")")) {
+            return ERR;
+        }
         (*token_itr)++;
     } else if (token_iseqstr(*token_itr, "write")) {
         (*token_itr)++;
@@ -316,10 +320,11 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
 result_t compile_parse_postfix(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
     if ((map_find(*token_itr, *map_cnt) != map_end(*map_cnt)) && token_iseqstr(*token_itr + 1, "(")) {
         token_t* fn_name = *token_itr;
-        (*token_itr)++;
+        *token_itr += 2;
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
+        (*token_itr)++;
         *((*node_itr)++) = (node_t){.type = TY_INST_CALL, .token = fn_name, .val = 0};
     } else {
         if (compile_parse_primary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
