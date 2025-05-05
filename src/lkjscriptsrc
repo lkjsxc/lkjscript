@@ -1,69 +1,131 @@
-fn print_int(x) {
+// Function to write a single character (given its ASCII code)
+// We don't need print_int for the visual output, just write.
+// fn print_int(x) { ... } // Assuming print_int exists if needed elsewhere
 
-    // zero
-    if x == 0 {
-        &result = write(1, 48)
-        &result = write(1, 10)
-        return 0
-    }
-
-    // negative
-    if x < 0 {
-        &result = write(1, 45)
-        &x = - x
-    }
-
-    // align Largest digit
-    &a = 1000000000
-    &result = loop {
-        &b = x / a
-        if b != 0 {
-            break 0
-        }
-        &a = a / 10
-    }
-
-    // output numbers
-    &result = loop {
-        &b = x / a % 10
-        &result = write(1, b + 48)
-        if a == 1 {
-            break 0
-        }
-        &a = a / 10
-    }
-
-    // line break
-    &result = write(1, 10)
-    return 0
-}
-
-fn fibonacci(x) {
-    return if x == 0 {
-        0
-    } else if x == 1 {
-        1
-    } else {
-        fibonacci(x - 1) + fibonacci(x - 2)
-    }
-}
-
+// --- Constants ---
 &ok = 0
 &err = 1
 
-&loop_cnt = 32
+// Fixed-point math scale factor
+&SCALE = 1000 // Represents 1.0 as 1000
 
-&i = 0
-&result = loop {
+// Image dimensions
+&width = 78 // characters wide
+&height = 40 // characters high
 
-    if i == loop_cnt {
+// Max iterations per point
+&max_iter = 30
+
+// Mandelbrot calculation bounds (scaled)
+// Corresponds to roughly -2.1 to 0.7 for x, -1.2 to 1.2 for y
+&min_cx = -2100 // -2.1 * SCALE
+&max_cx = 700   // 0.7 * SCALE
+&min_cy = -1200 // -1.2 * SCALE
+&max_cy = 1200  // 1.2 * SCALE
+
+// Escape radius squared (scaled)
+// (2.0 * SCALE)^2 = 4 * SCALE * SCALE
+&radius_sq = 4 * SCALE * SCALE // 4 * 1000 * 1000 = 4000000
+
+// Calculate range spans (scaled)
+&range_x = max_cx - min_cx // 700 - (-2100) = 2800
+&range_y = max_cy - min_cy // 1200 - (-1200) = 2400
+
+// --- Main Mandelbrot Loop ---
+
+&iy = 0 // Current row (y pixel coordinate)
+&result_outer = loop {
+
+    // Check if we finished all rows
+    if iy == height {
         break ok
     }
 
-    &x = fibonacci(i)
+    &ix = 0 // Current column (x pixel coordinate)
+    &result_inner = loop {
 
-    if print_int(x) != ok {
-        break err
-    }
-    &i = i + 1
-}
+        // Check if we finished this row
+        if ix == width {
+            break ok
+        }
+
+        // Map pixel coordinate (ix, iy) to complex plane coordinate (cx, cy) (scaled)
+        // cx = min_cx + ix * range_x / width
+        &cx = min_cx + (ix * range_x / width)
+        // cy = min_cy + iy * range_y / height
+        &cy = min_cy + (iy * range_y / height)
+
+        // Initialize Mandelbrot iteration variables (scaled)
+        &zx = 0
+        &zy = 0
+        &iter = 0
+
+        // Start the iteration loop for this point
+        &result_iter = loop {
+
+            // Check iteration limit
+            if iter == max_iter {
+                break ok // Point is likely in the set
+            }
+
+            // Check escape condition: zx*zx + zy*zy > radius_sq (scaled)
+            // Be careful with potential overflow during multiplication before division by SCALE
+            &zx_sq = zx * zx
+            &zy_sq = zy * zy
+
+            // Check if magnitude squared (scaled by SCALE*SCALE) exceeds limit
+            if (zx_sq + zy_sq) > radius_sq {
+                 break err // Point escaped
+            }
+
+            // Calculate next iteration z_{n+1} = z_n^2 + c (using fixed-point math)
+            // zx_new = (zx*zx - zy*zy) / SCALE + cx
+            // zy_new = (2*zx*zy) / SCALE + cy
+
+            // Calculate 2*zx*zy term (scaled by SCALE*SCALE)
+            // Need temporary variable to avoid modifying zx before zy is calculated
+            &temp_zy_term = 2 * zx / SCALE // Intermediate division might lose precision
+            // Better: &temp_zy_term = (2 * zx * zy) / SCALE
+            // But (2*zx*zy) might overflow first. Let's try carefully:
+             &two_zx_zy = zx * zy * 2 // Calculate numerator first (potential overflow)
+
+            // Calculate new zx (scaled)
+             &temp_zx = (zx_sq / SCALE) - (zy_sq / SCALE) + cx
+
+            // Calculate new zy (scaled)
+             &temp_zy = (two_zx_zy / SCALE) + cy
+
+            // Update zx and zy
+            &zx = temp_zx
+            &zy = temp_zy
+
+            // Increment iteration count
+            &iter = iter + 1
+        } // End of iteration loop
+
+        // Choose character based on whether it escaped (result_iter == err) or not
+        &char_code = if result_iter == ok {
+            42 // '*' for points in the set (or likely in)
+        } else {
+            32 // ' ' (space) for points outside the set
+        }
+
+        // Write the character
+        &write_res = write(1, char_code)
+        // We might want error checking for write_res here if needed
+
+        // Move to next column
+        &ix = ix + 1
+
+    } // End of inner loop (columns)
+
+    // After finishing a row, print a newline
+    &write_res = write(1, 10) // ASCII 10 is newline
+
+    // Move to next row
+    &iy = iy + 1
+
+} // End of outer loop (rows)
+
+// Final status (optional, depends on how the language runtime handles the end)
+&final_status = result_outer

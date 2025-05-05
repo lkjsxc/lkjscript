@@ -258,9 +258,11 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
     if ((*token_itr)->data == NULL) {
         return ERR;
     } else if (token_iseqstr(*token_itr, "(")) {
+        (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
+        (*token_itr)++;
     } else if (token_iseqstr(*token_itr, "write")) {
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
@@ -588,21 +590,11 @@ result_t compile_parse_assign(token_t** token_itr, node_t** node_itr, int64_t* m
 }
 
 result_t compile_parse_expr(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
+    if (compile_parse_assign(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+        return ERR;
+    }
     while (token_iseqstr(*token_itr, ",")) {
         (*token_itr)++;
-    }
-    if (token_iseqstr(*token_itr, "(")) {
-        (*token_itr)++;
-        while (!token_iseqstr(*token_itr, ")")) {
-            if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
-                return ERR;
-            }
-            if (token_iseqstr(*token_itr, ",")) {
-                (*token_itr)++;
-            }
-        }
-        (*token_itr)++;
-    } else {
         if (compile_parse_assign(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
             return ERR;
         }
@@ -741,7 +733,7 @@ result_t compile_analyze(int64_t* map_cnt) {
             node_itr->val = map_result->val;
         } else if (node_itr->type == TY_INST_CALL) {
             pair_t* map_result = map_find(node_itr->token, *map_cnt);
-            if(map_result == map_end(*map_cnt)) {
+            if (map_result == map_end(*map_cnt)) {
                 return ERR;
             }
             node_itr->val = map_result - mem.compile.map;
