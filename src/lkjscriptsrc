@@ -51,9 +51,9 @@
 
         // Map pixel coordinate (ix, iy) to complex plane coordinate (cx, cy) (scaled)
         // cx = min_cx + ix * range_x / width
-        &cx = min_cx + (ix * range_x / width)
+        &cx = min_cx + ix * range_x / width
         // cy = min_cy + iy * range_y / height
-        &cy = min_cy + (iy * range_y / height)
+        &cy = min_cy + iy * range_y / height
 
         // Initialize Mandelbrot iteration variables (scaled)
         &zx = 0
