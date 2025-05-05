@@ -3,7 +3,7 @@
 #include <unistd.h>
 
 #define SRC_PATH "./lkjscriptsrc"
-#define MEM_SIZE (1024 * 256)
+#define MEM_SIZE (1024 * 512)
 #define MEM_GLOBAL_SIZE 32
 #define MEM_STACK_SIZE 256
 
@@ -168,6 +168,10 @@ pair_t* map_find(token_t* token, int64_t map_cnt) {
     return &mem.compile.map[map_cnt];
 }
 
+pair_t* map_end(int64_t map_cnt) {
+    return &mem.compile.map[map_cnt];
+}
+
 result_t compile_readsrc() {
     FILE* fp = fopen(SRC_PATH, "r");
     if (fp == NULL) {
@@ -308,7 +312,7 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
 }
 
 result_t compile_parse_postfix(token_t** token_itr, node_t** node_itr, int64_t* map_cnt, int64_t label_continue, int64_t label_break) {
-    if ((map_find(*token_itr, *map_cnt)->key != NULL) && token_iseqstr(*token_itr + 1, "(")) {
+    if ((map_find(*token_itr, *map_cnt) != map_end(*map_cnt)) && token_iseqstr(*token_itr + 1, "(")) {
         token_t* fn_name = *token_itr;
         (*token_itr)++;
         if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
@@ -615,6 +619,7 @@ result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* map
             if (compile_parse_stat(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
                 return ERR;
             }
+            compile_parse_skiplinebreak(token_itr);
         }
         (*token_itr)++;
     } else if (token_iseqstr(*token_itr, "continue")) {
@@ -622,6 +627,9 @@ result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* map
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_continue};
     } else if (token_iseqstr(*token_itr, "break")) {
         (*token_itr)++;
+        if (compile_parse_expr(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
+            return ERR;
+        }
         *((*node_itr)++) = (node_t){.type = TY_INST_JMP, .token = NULL, .val = label_break};
     } else if (token_iseqstr(*token_itr, "return")) {
         (*token_itr)++;
@@ -634,7 +642,6 @@ result_t compile_parse_stat(token_t** token_itr, node_t** node_itr, int64_t* map
             return ERR;
         }
     }
-    compile_parse_skiplinebreak(token_itr);
     return OK;
 }
 
@@ -643,7 +650,7 @@ result_t compile_parse_fn(token_t** token_itr, node_t** node_itr, int64_t* map_c
     pair_t* fn_map = map_find(fn_name, *map_cnt);
     int64_t arg_cnt = 0;
 
-    if (fn_map->key == NULL) {
+    if (fn_map == map_end(*map_cnt)) {
         return ERR;
     }
 
@@ -702,12 +709,14 @@ result_t compile_parse(int64_t* map_cnt) {
         if (compile_parse_fn(&token_itr, &node_itr, map_cnt, -1, -1) == ERR) {
             return ERR;
         }
+        compile_parse_skiplinebreak(&token_itr);
     }
     *(node_itr++) = (node_t){.type = TY_LABEL, .token = NULL, .val = firstjmp};
     while (token_itr->data != NULL) {
         if (compile_parse_stat(&token_itr, &node_itr, map_cnt, -1, -1) == ERR) {
             return ERR;
         }
+        compile_parse_skiplinebreak(&token_itr);
     }
     *(node_itr++) = (node_t){.type = TY_INST_END, .token = NULL, .val = 0};
     *(node_itr++) = (node_t){.type = TY_NULL, .token = NULL, .val = 0};
@@ -722,7 +731,7 @@ result_t compile_analyze(int64_t* map_cnt) {
     while (node_itr->type != TY_NULL) {
         if ((node_itr->type == TY_INST_PUSH_LOCAL_VAL || node_itr->type == TY_INST_PUSH_LOCAL_ADDR) && node_itr->token != NULL) {
             pair_t* map_result = map_find(node_itr->token, *map_cnt);
-            if (map_result->key == NULL) {
+            if (map_result == map_end(*map_cnt)) {
                 if (node_itr->val != 0) {
                     mem.compile.map[(*map_cnt)++] = (pair_t){.key = node_itr->token, .val = node_itr->val};
                 } else {
@@ -731,7 +740,11 @@ result_t compile_analyze(int64_t* map_cnt) {
             }
             node_itr->val = map_result->val;
         } else if (node_itr->type == TY_INST_CALL) {
-            node_itr->val = map_find(node_itr->token, *map_cnt) - mem.compile.map;
+            pair_t* map_result = map_find(node_itr->token, *map_cnt);
+            if(map_result == map_end(*map_cnt)) {
+                return ERR;
+            }
+            node_itr->val = map_result - mem.compile.map;
         } else if (node_itr->type == TY_LABEL_SCOPE_CLOSE) {
             (*map_cnt) = map_base;
             offset = 0;
@@ -977,7 +990,7 @@ result_t execute() {
             case TY_INST_WRITE: {
                 int32_t ch = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 int32_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                write(fd, &ch, 1);
+                mem.bin[mem.bin[GLOBALADDR_SP]++] = write(fd, &ch, 1);
             } break;
             default:
                 return ERR;
