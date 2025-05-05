@@ -1,18 +1,71 @@
-// lkjscriptsrc
-fn main() {
-    if (10 > 5) {
-        &a = 1 + 2 * 3 // Should return 7
-        &b = 5
-        return sum3(a, b, 6) // 7 + 5 + 6 = 18
-    } else {
+
+// Optimized Fibonacci
+// ( Array example )
+
+fn print_int ( x ) {
+
+    // zero
+    if x == 0 {
+        write ( 1, 48 )
+        write ( 1, 10 )
         return 0
     }
-    return 99 // Unreachable
+
+    // negative
+    if x < 0 {
+        write ( 1, 45 )
+        &x = -x
+    }
+
+    // align Largest digit
+    &a = 1000000000
+    loop {
+        &b = x / a
+        if b != 0 {
+            break
+        }
+        &a = a / 10
+    }
+
+    // output numbers
+    loop {
+        &b = x / a % 10
+        write ( 1, b + 48 )
+        if a == 1 {
+            break
+        }
+        &a = a / 10
+    }
+
+    // line break
+    write ( 1, 10 )
+    return 0
 }
 
-fn sum3(a, b, c) {
-    return a + b + c
+// f(0) = 0
+// f(1) = 1
+// f(n) = f(n-1) + f(n-2)
+fn fibonacci ( x ) {
+    return if x == 0 {
+        0
+    } else if x == 1 {
+        1
+    } else {
+        fibonacci ( x - 1 ) + fibonacci ( x - 2 )
+    }
 }
 
-// Call the main function (not really possible without VM)
-main()
+
+&i = 0
+
+&status = loop {
+
+    if i == 32 {
+        break 0
+    }
+
+    // issue: Status address does not push first
+    &status = print_int ( fibonacci ( i ) )
+
+    &i = i + 1
+}
