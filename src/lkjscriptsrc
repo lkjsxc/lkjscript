@@ -1,5 +1,5 @@
 // Function to write a single character (given its ASCII code)
-// We assume write(1, char_code) writes to standard output.
+// We assume _write(1, char_code) writes to standard output.
 
 // --- Function Definitions ---
 
@@ -131,14 +131,14 @@ fn get_char_for_iteration(iter, current_max_iter, current_inside_char, current_p
         &char_code = get_char_for_iteration(iterations, iteration_limit, char_inside, palette_s)
 
         // 4. Write the character
-        &write_res = write(1, char_code)
+        &write_res = _write(1, char_code)
 
         // Move to next column
         &ix = ix + 1
     } // End of inner loop (columns)
 
     // After finishing a row, print a newline
-    &write_res = write(1, 10) // ASCII 10
+    &write_res = _write(1, 10) // ASCII 10
 
     // Move to next row
     &iy = iy + 1
@@ -146,3 +146,7 @@ fn get_char_for_iteration(iter, current_max_iter, current_inside_char, current_p
 
 // Final status
 &final_status = result_outer
+
+&result = loop {
+    &usleep_res = _usleep(10000)
+}

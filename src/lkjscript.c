@@ -70,6 +70,7 @@ typedef enum {
 
     TY_INST_READ,
     TY_INST_WRITE,
+    TY_INST_USLEEP,
 
     TY_LABEL,
     TY_LABEL_SCOPE_OPEN,
@@ -270,13 +271,19 @@ result_t compile_parse_primary(token_t** token_itr, node_t** node_itr, int64_t* 
             return ERR;
         }
         (*token_itr)++;
-    } else if (token_iseqstr(*token_itr, "write")) {
-        (*token_itr)++;
+    } else if (token_iseqstr(*token_itr, "_read") || token_iseqstr(*token_itr, "_write") || token_iseqstr(*token_itr, "_usleep")) {
+        token_t* token = (*token_itr)++;
         if (compile_parse_primary(token_itr, node_itr, map_cnt, label_continue, label_break) == ERR) {
-            puts("Error: Failed to parse primary in compile_parse_primary (write)");
+            puts("Error: Failed to parse primary in compile_parse_primary (_read, _write, _usleep)");
             return ERR;
         }
-        *((*node_itr)++) = (node_t){.type = TY_INST_WRITE, .token = NULL, .val = 0};
+        if (token_iseqstr(token, "_read")) {
+            *((*node_itr)++) = (node_t){.type = TY_INST_READ, .token = NULL, .val = 0};
+        } else if (token_iseqstr(token, "_write")) {
+            *((*node_itr)++) = (node_t){.type = TY_INST_WRITE, .token = NULL, .val = 0};
+        } else if (token_iseqstr(token, "_usleep")) {
+            *((*node_itr)++) = (node_t){.type = TY_INST_USLEEP, .token = NULL, .val = 0};
+        }
     } else if (token_iseqstr(*token_itr, "if")) {
         int64_t label_if = (*map_cnt)++;
         int64_t label_else = (*map_cnt)++;
@@ -1041,6 +1048,10 @@ result_t execute() {
                 int32_t ch = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 int32_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = write(fd, &ch, 1);
+            } break;
+            case TY_INST_USLEEP: {
+                int32_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                mem.bin[mem.bin[GLOBALADDR_SP]++] = usleep(val);
             } break;
             default:
                 return ERR;
