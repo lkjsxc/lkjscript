@@ -1010,7 +1010,11 @@ result_t execute() {
             case TY_INST_MOD: {
                 int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 % val2;
+                if (val2 == 0) {
+                    mem.bin[mem.bin[GLOBALADDR_SP]++] = INT64_MAX;
+                } else {
+                    mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 % val2;
+                }
             } break;
             case TY_INST_SHL: {
                 int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
