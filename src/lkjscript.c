@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -6,6 +5,10 @@
 #define MEM_SIZE (1024 * 512)
 #define MEM_GLOBAL_SIZE 32
 #define MEM_STACK_SIZE 256
+
+#define INT64_MAX 9223372036854775807
+
+typedef long long int64_t;
 
 typedef enum {
     FALSE = 0,
@@ -891,27 +894,27 @@ result_t execute() {
                 return OK;
             } break;
             case TY_INST_PUSH_LOCAL_VAL: {
-                int32_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++] + mem.bin[GLOBALADDR_BP];
+                int64_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++] + mem.bin[GLOBALADDR_BP];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = mem.bin[addr];
             } break;
             case TY_INST_PUSH_LOCAL_ADDR: {
-                int32_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++] + mem.bin[GLOBALADDR_BP];
+                int64_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++] + mem.bin[GLOBALADDR_BP];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = addr;
             } break;
             case TY_INST_PUSH_CONST: {
-                int32_t val = mem.bin[mem.bin[GLOBALADDR_IP]++];
+                int64_t val = mem.bin[mem.bin[GLOBALADDR_IP]++];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val;
             } break;
             case TY_INST_DEREF: {
-                int32_t addr = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t addr = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = mem.bin[addr];
             } break;
             case TY_INST_ASSIGN1:
             case TY_INST_ASSIGN2:
             case TY_INST_ASSIGN3:
             case TY_INST_ASSIGN4: {
-                int32_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t addr = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t addr = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[addr] = val;
             } break;
             case TY_INST_CALL: {
@@ -923,81 +926,81 @@ result_t execute() {
                 mem.bin[GLOBALADDR_SP] += MEM_STACK_SIZE;
             } break;
             case TY_INST_RETURN: {
-                int32_t ret_val = mem.bin[mem.bin[GLOBALADDR_SP] - 1];
+                int64_t ret_val = mem.bin[mem.bin[GLOBALADDR_SP] - 1];
                 mem.bin[GLOBALADDR_IP] = mem.bin[mem.bin[GLOBALADDR_BP] - 3];
                 mem.bin[GLOBALADDR_SP] = mem.bin[mem.bin[GLOBALADDR_BP] - 2];
                 mem.bin[GLOBALADDR_BP] = mem.bin[mem.bin[GLOBALADDR_BP] - 1];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = ret_val;
             } break;
             case TY_INST_JMP: {
-                int32_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++];
+                int64_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++];
                 mem.bin[GLOBALADDR_IP] = addr;
             } break;
             case TY_INST_JZ: {
-                int32_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++];
-                int32_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t addr = mem.bin[mem.bin[GLOBALADDR_IP]++];
+                int64_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 if (val == 0) {
                     mem.bin[GLOBALADDR_IP] = addr;
                 }
             } break;
             case TY_INST_OR: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 | val2;
             } break;
             case TY_INST_AND: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 & val2;
             } break;
             case TY_INST_EQ: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 == val2;
             } break;
             case TY_INST_NE: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 != val2;
             } break;
             case TY_INST_LT: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 < val2;
             } break;
             case TY_INST_LE: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 <= val2;
             } break;
             case TY_INST_GT: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 > val2;
             } break;
             case TY_INST_GE: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 >= val2;
             } break;
             case TY_INST_ADD: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 + val2;
             } break;
             case TY_INST_SUB: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 - val2;
             } break;
             case TY_INST_MUL: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 * val2;
             } break;
             case TY_INST_DIV: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 if (val2 == 0) {
                     mem.bin[mem.bin[GLOBALADDR_SP]++] = INT64_MAX;
                 } else {
@@ -1005,52 +1008,52 @@ result_t execute() {
                 }
             } break;
             case TY_INST_MOD: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 % val2;
             } break;
             case TY_INST_SHL: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 << val2;
             } break;
             case TY_INST_SHR: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 >> val2;
             } break;
             case TY_INST_BITAND: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 & val2;
             } break;
             case TY_INST_BITOR: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 | val2;
             } break;
             case TY_INST_BITXOR: {
-                int32_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val2 = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val1 = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = val1 ^ val2;
             } break;
             case TY_INST_BITNOT: {
-                int32_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = ~val;
             } break;
             case TY_INST_READ: {
-                int32_t ch = 0;
-                int32_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t ch = 0;
+                int64_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 read(fd, &ch, 1);
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = ch;
             } break;
             case TY_INST_WRITE: {
-                int32_t ch = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                int32_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t ch = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = write(fd, &ch, 1);
             } break;
             case TY_INST_USLEEP: {
-                int32_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = usleep(val);
             } break;
             default:
