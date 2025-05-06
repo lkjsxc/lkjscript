@@ -87,66 +87,82 @@ fn get_char_for_iteration(iter, current_max_iter, current_inside_char, current_p
     return char_code
 }
 
+fn mandelbrot(scale) {
+
+    // Define constants and configurations *locally* in the main scope
+    &char_linebreak = 10
+    &scale_factor = 1000
+    &image_width = 13
+    &image_height = 7
+    &iteration_limit = 30
+    &coord_min_cx = -2100
+    &coord_max_cx = 700
+    &coord_min_cy = -1200
+    &coord_max_cy = 1200
+    &escape_radius_sq = 4 * scale_factor * scale_factor // 4000000
+    &palette_s = 8
+    &char_inside = 32 // Space ' '
+
+    // Calculate ranges - these are also local to the main scope
+    &coord_range_x = coord_max_cx - coord_min_cx
+    &coord_range_y = coord_max_cy - coord_min_cy
+
+    // scale
+    &image_width = image_width * scale
+    &image_height = image_height * scale
+
+    // --- Main Loop ---
+    &iy = 0 // Current row
+    &result_outer = loop {
+        if iy == image_height {
+            break 0 // Finished all rows
+        }
+
+        &ix = 0 // Current column
+        &result_inner = loop {
+            if ix == image_width {
+                break 0 // Finished this row
+            }
+
+            // 1. Map pixel coordinates, passing necessary parameters
+            &cx = map_pixel_x_to_cx(ix, coord_min_cx, coord_range_x, image_width)
+            &cy = map_pixel_y_to_cy(iy, coord_min_cy, coord_range_y, image_height)
+
+            // 2. Calculate iterations, passing necessary parameters
+            &iterations = calculate_mandelbrot_iterations(cx, cy, iteration_limit, scale_factor, escape_radius_sq)
+
+            // 3. Get the character code, passing necessary parameters
+            &char_code = get_char_for_iteration(iterations, iteration_limit, char_inside, palette_s)
+
+            // 4. Write the character
+            &write_res = _write(1, &char_code, 1)
+
+            // Move to next column
+            &ix = ix + 1
+        } // End of inner loop (columns)
+
+        // After finishing a row, print a newline
+        &write_res = _write(1, &char_linebreak, 1) // ASCII 10
+
+        // Move to next row
+        &iy = iy + 1
+    } // End of outer loop (rows)
+
+    // Final status
+    &final_status = result_outer
+    return final_status
+}
 
 // --- Main Program ---
 
-// Define constants and configurations *locally* in the main scope
-&scale_factor = 1000
-&image_width = 78
-&image_height = 40
-&iteration_limit = 30
-&coord_min_cx = -2100
-&coord_max_cx = 700
-&coord_min_cy = -1200
-&coord_max_cy = 1200
-&escape_radius_sq = 4 * scale_factor * scale_factor // 4000000
-&palette_s = 8
-&char_inside = 32 // Space ' '
-
-// Calculate ranges - these are also local to the main scope
-&coord_range_x = coord_max_cx - coord_min_cx
-&coord_range_y = coord_max_cy - coord_min_cy
-
-// --- Main Loop ---
-&iy = 0 // Current row
-&result_outer = loop {
-    if iy == image_height {
-        break 0 // Finished all rows
-    }
-
-    &ix = 0 // Current column
-    &result_inner = loop {
-        if ix == image_width {
-            break 0 // Finished this row
-        }
-
-        // 1. Map pixel coordinates, passing necessary parameters
-        &cx = map_pixel_x_to_cx(ix, coord_min_cx, coord_range_x, image_width)
-        &cy = map_pixel_y_to_cy(iy, coord_min_cy, coord_range_y, image_height)
-
-        // 2. Calculate iterations, passing necessary parameters
-        &iterations = calculate_mandelbrot_iterations(cx, cy, iteration_limit, scale_factor, escape_radius_sq)
-
-        // 3. Get the character code, passing necessary parameters
-        &char_code = get_char_for_iteration(iterations, iteration_limit, char_inside, palette_s)
-
-        // 4. Write the character
-        &write_res = _write(1, char_code)
-
-        // Move to next column
-        &ix = ix + 1
-    } // End of inner loop (columns)
-
-    // After finishing a row, print a newline
-    &write_res = _write(1, 10) // ASCII 10
-
-    // Move to next row
-    &iy = iy + 1
-} // End of outer loop (rows)
-
-// Final status
-&final_status = result_outer
-
 &result = loop {
-    &usleep_res = _usleep(10000)
+    &read_result = _read(0, &read_int, 1)
+    if read_result <= 0 {
+        continue
+    }
+    if read_int == 10 {
+        continue
+    }
+    &read_int = read_int - 48   // minus ASCII '0'
+    &result_mandelbrot = mandelbrot(read_int)
 }

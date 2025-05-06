@@ -1046,15 +1046,16 @@ result_t execute() {
                 mem.bin[mem.bin[GLOBALADDR_SP]++] = ~val;
             } break;
             case TY_INST_READ: {
-                int64_t ch = 0;
+                int64_t n = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t addr = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 int64_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                read(fd, &ch, 1);
-                mem.bin[mem.bin[GLOBALADDR_SP]++] = ch;
+                mem.bin[mem.bin[GLOBALADDR_SP]++] = read(fd, &mem.bin[addr], n);
             } break;
             case TY_INST_WRITE: {
-                int64_t ch = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t n = mem.bin[--mem.bin[GLOBALADDR_SP]];
+                int64_t addr = mem.bin[--mem.bin[GLOBALADDR_SP]];
                 int64_t fd = mem.bin[--mem.bin[GLOBALADDR_SP]];
-                mem.bin[mem.bin[GLOBALADDR_SP]++] = write(fd, &ch, 1);
+                mem.bin[mem.bin[GLOBALADDR_SP]++] = write(fd, &mem.bin[addr], n);
             } break;
             case TY_INST_USLEEP: {
                 int64_t val = mem.bin[--mem.bin[GLOBALADDR_SP]];
