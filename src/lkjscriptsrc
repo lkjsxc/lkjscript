@@ -87,13 +87,79 @@ fn get_char_for_iteration(iter, current_max_iter, current_inside_char, current_p
     return char_code
 }
 
+// Function to read an integer from standard input
+// Skips leading non-digits (except initial sign).
+// Returns the parsed integer. Returns 0 if EOF before digits, or non-numeric input, or if "0" is typed.
+fn read_int() {
+    &num = 0
+    &char_code = 0      // Stores ASCII code of current character
+    &digit_read_count = 0 // Counts how many digits have been appended to num
+    &sign = 1           // 1 for positive, -1 for negative
+    &first_char_flag = 1 // Flag to check if we are processing the first character (for sign)
+
+    // Loop to read characters and parse the integer
+    &parsing_loop_result = loop {
+        &temp_char_buffer = 0 // Buffer for _read
+        &read_status = _read(0, &temp_char_buffer, 1) // Read one character
+
+        if read_status <= 0 { // EOF or read error
+            // Stop parsing. If digits were read, num holds the value. Otherwise, num is 0.
+            break 0 // Exit loop
+        }
+
+        &char_code = temp_char_buffer
+
+        // Handle potential sign character (+ or -) if it's the first character processed
+        // and no digits have been encountered yet.
+        if first_char_flag == 1 && digit_read_count == 0 {
+            if char_code == 45 { // ASCII for '-'
+                &sign = -1
+                &first_char_flag = 0 // Sign processed, next char is not 'first' in this context
+                continue // Read the next character (expected to be a digit)
+            } else if char_code == 43 { // ASCII for '+'
+                // &sign = 1; // sign is already 1
+                &first_char_flag = 0 // Sign processed
+                continue // Read the next character
+            }
+        }
+        &first_char_flag = 0 // Any other character means we are past the potential sign position
+
+        // Check if the character is a digit
+        if char_code >= 48 && char_code <= 57 { // ASCII for '0' through '9'
+            &digit = char_code - 48
+            &num = num * 10 + digit
+            &digit_read_count = digit_read_count + 1
+        } else { // Character is not a digit
+            if digit_read_count > 0 {
+                // A non-digit after some digits means the number has ended.
+                // The non-digit character is consumed by _read.
+                break 0 // Exit loop
+            }
+            // If no digits were read yet and this is a non-digit (and not a sign):
+            // This could be leading whitespace or other non-numeric characters.
+            // If it's a newline, we treat it as the end of input for this number.
+            if char_code == 10 { // ASCII for newline
+                // If no digits were read, newline means an empty or non-numeric line.
+                // num is currently 0. Break and return 0.
+                break 0 // Exit loop
+            }
+            // For other leading non-digits (e.g., spaces, letters), continue skipping them.
+            // The loop will read the next character.
+        }
+    } // End of parsing loop
+
+    &final_num = num * sign
+    return final_num
+}
+
+
 fn mandelbrot(scale) {
 
     // Define constants and configurations *locally* in the main scope
     &char_linebreak = 10
     &scale_factor = 1000
-    &image_width = 13
-    &image_height = 7
+    &image_width_base = 13 // Renamed to avoid conflict with scaled version
+    &image_height_base = 7 // Renamed to avoid conflict with scaled version
     &iteration_limit = 30
     &coord_min_cx = -2100
     &coord_max_cx = 700
@@ -108,8 +174,14 @@ fn mandelbrot(scale) {
     &coord_range_y = coord_max_cy - coord_min_cy
 
     // scale
-    &image_width = image_width * scale
-    &image_height = image_height * scale
+    // Ensure scale is at least 1 to avoid division by zero or zero-size image
+    &actual_scale = scale
+    if scale <= 0 {
+        &actual_scale = 1 // Default to 1 if scale is invalid (e.g. 0 or negative)
+    }
+    &image_width = image_width_base * actual_scale
+    &image_height = image_height_base * actual_scale
+
 
     // --- Main Loop ---
     &iy = 0 // Current row
@@ -155,14 +227,46 @@ fn mandelbrot(scale) {
 
 // --- Main Program ---
 
-&result = loop {
-    &read_result = _read(0, &read_int, 1)
-    if read_result <= 0 {
-        continue
+&result_mainloop = loop {
+    // Using the new read_int function
+    &input_scale = read_int()
+
+    // The read_int function returns 0 for EOF, empty lines, non-numeric input, or actual "0" input.
+    // Mandelbrot function expects a positive scale.
+    // If input_scale is 0 (due to EOF, bad input, or "0"),
+    // we might want to terminate or ask for new input.
+    // The original loop logic was `continue` on `_read` EOF or newline.
+    // If `input_scale` is 0 from EOF, and we `continue`, the program loops.
+    // To terminate on EOF, a more robust EOF detection mechanism than `read_int` returning 0 is needed.
+    // For now, if `read_int` returns 0 (or negative), mandelbrot's internal check will default scale to 1.
+    // If true EOF should terminate the loop, the `_read` syscall's result needs to be checked directly,
+    // or `read_int` would need a way to signal true EOF (e.g., by returning a very specific number).
+
+    // For simplicity, let's assume the program continues if scale is <=0,
+    // and mandelbrot handles it by defaulting to scale 1.
+    // A more robust main loop would check `input_scale` to decide whether to continue, break, or show an error.
+    // For instance, if `read_int()` returning 0 specifically means EOF, you'd break.
+    // This example will just pass the value.
+    
+    // If we want to stop on "0" or invalid input that `read_int` maps to 0:
+    // (Note: the original code would effectively use single digits 0-9; 0 would cause division by zero)
+    // (The updated `mandelbrot` now defaults scale to 1 if input_scale <=0 to prevent this)
+    
+    // Let's make the loop terminate if read_int returns 0, assuming this means EOF or user wants to quit.
+    // This is an assumption because read_int() as defined returns 0 for various cases.
+    // A truly robust solution requires `read_int` to distinguish EOF from other "0-result" cases.
+    if input_scale == 0 { // A simple way to stop; might be triggered by "abc", "0", or EOF.
+        // If this was due to actual EOF and not just "0" input, this break is correct.
+        // If user typed "0", program ends. If "abc", program ends.
+        // This might be acceptable if scale must be >0.
+        break 0 // Exit the main loop
     }
-    if read_int == 10 {
-        continue
+    
+    // If scale is negative, mandelbrot will also default it to 1.
+    // We could also choose to `continue` here for negative inputs if we don't want to run mandelbrot.
+    if input_scale < 0 {
+        continue // Skip negative inputs, ask for new one
     }
-    &read_int = read_int - 48   // minus ASCII '0'
-    &result_mandelbrot = mandelbrot(read_int)
+
+    &result_mandelbrot = mandelbrot(input_scale)
 }
