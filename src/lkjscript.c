@@ -2,7 +2,7 @@
 #include <unistd.h>
 
 #define SRC_PATH "./lkjscriptsrc"
-#define MEM_SIZE (1024 * 512)
+#define MEM_SIZE (1024 * 1024 * 16)
 #define MEM_GLOBAL_SIZE 32
 #define MEM_STACK_SIZE 256
 
