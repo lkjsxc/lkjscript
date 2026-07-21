@@ -1,0 +1,16 @@
+<import>std/ansi/clear.lkjsxc</import>
+<import>std/ansi/home.lkjsxc</import>
+<import>std/io/put-byte.lkjsxc</import>
+<def>
+  <name>banner</name>
+  <fn>
+    <params></params>
+    <do>
+      <clear-screen></clear-screen>
+      <home></home>
+      <put-byte><72/></put-byte>
+      <put-byte><105/></put-byte>
+      <put-byte><10/></put-byte>
+    </do>
+  </fn>
+</def>

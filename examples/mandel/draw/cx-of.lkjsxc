@@ -1,0 +1,7 @@
+<def>
+  <name>cx-of</name>
+  <fn>
+    <params><x/></params>
+    <+><-2.0/><*><x/><0.08/></*></+>
+  </fn>
+</def>

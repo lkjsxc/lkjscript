@@ -1,0 +1,53 @@
+services:
+  lkjscript2026:
+    profiles: ["run"]
+    build:
+      context: ..
+      dockerfile: meta/Dockerfile
+      target: runtime
+    command: ["run", "examples/hello/main.lkjsxc"]
+    working_dir: /work
+    stdin_open: true
+    tty: true
+
+  mandelbrot:
+    profiles: ["run"]
+    build:
+      context: ..
+      dockerfile: meta/Dockerfile
+      target: runtime
+    command: ["run", "examples/mandel/main.lkjsxc"]
+    working_dir: /work
+    stdin_open: true
+    tty: true
+
+  texteditor:
+    profiles: ["run"]
+    build:
+      context: ..
+      dockerfile: meta/Dockerfile
+      target: runtime
+    command: ["run", "examples/texteditor/main.lkjsxc"]
+    working_dir: /work
+    stdin_open: true
+    tty: true
+
+  http:
+    profiles: ["run"]
+    build:
+      context: ..
+      dockerfile: meta/Dockerfile
+      target: runtime
+    command: ["run", "examples/http/hello.lkjsxc"]
+    working_dir: /work
+    ports:
+      - "8080:8080"
+
+  verify:
+    profiles: ["verify"]
+    build:
+      context: ..
+      dockerfile: meta/Dockerfile
+      target: verified
+    entrypoint: ["cat"]
+    command: ["/tmp/lkjscript2026-verification-result"]

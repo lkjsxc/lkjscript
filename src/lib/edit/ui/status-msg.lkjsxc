@@ -1,0 +1,12 @@
+<import>std/term/puts.lkjsxc</import>
+<import>std/io/put-byte.lkjsxc</import>
+<def>
+  <name>show-msg</name>
+  <fn>
+    <params></params>
+    <do>
+      <put-byte><32/></put-byte>
+      <puts><ed-msg/></puts>
+    </do>
+  </fn>
+</def>

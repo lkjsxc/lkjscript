@@ -1,0 +1,12 @@
+<import>lib/edit/buf/load.lkjsxc</import>
+<def>
+  <name>maybe-load</name>
+  <fn>
+    <params></params>
+    <if>
+      <gt><argc></argc><0/></gt>
+      <ed-load><arg><0/></arg></ed-load>
+      <nil/>
+    </if>
+  </fn>
+</def>

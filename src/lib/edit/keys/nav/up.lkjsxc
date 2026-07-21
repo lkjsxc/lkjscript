@@ -1,0 +1,11 @@
+<def>
+  <name>move-up</name>
+  <fn>
+    <params></params>
+    <if>
+      <gt><ed-row/><0/></gt>
+      <set><ed-row/><-><ed-row/><1/></-></set>
+      <nil/>
+    </if>
+  </fn>
+</def>

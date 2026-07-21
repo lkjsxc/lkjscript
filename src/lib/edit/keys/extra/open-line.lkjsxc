@@ -1,0 +1,40 @@
+<import>std/list/insert.lkjsxc</import>
+<def>
+  <name>open-below</name>
+  <fn>
+    <params></params>
+    <do>
+      <set>
+        <ed-buf/>
+        <list-insert>
+          <ed-buf/>
+          <+><ed-row/><1/></+>
+          <empty-str></empty-str>
+        </list-insert>
+      </set>
+      <set><ed-row/><+><ed-row/><1/></+></set>
+      <set><ed-col/><0/></set>
+      <set><ed-mode/><1/></set>
+      <set><ed-dirty/><1/></set>
+    </do>
+  </fn>
+</def>
+<def>
+  <name>open-above</name>
+  <fn>
+    <params></params>
+    <do>
+      <set>
+        <ed-buf/>
+        <list-insert>
+          <ed-buf/>
+          <ed-row/>
+          <empty-str></empty-str>
+        </list-insert>
+      </set>
+      <set><ed-col/><0/></set>
+      <set><ed-mode/><1/></set>
+      <set><ed-dirty/><1/></set>
+    </do>
+  </fn>
+</def>

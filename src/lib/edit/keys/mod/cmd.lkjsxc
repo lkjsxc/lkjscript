@@ -1,0 +1,27 @@
+<import>lib/edit/keys/mod/run-cmd.lkjsxc</import>
+<import>std/buffer/insert-at.lkjsxc</import>
+<def>
+  <name>handle-cmd</name>
+  <fn>
+    <params><k/></params>
+    <if>
+      <eq><k/><27/></eq>
+      <set><ed-mode/><0/></set>
+      <if>
+        <or>
+          <eq><k/><10/></eq>
+          <eq><k/><13/></eq>
+        </or>
+        <run-cmd></run-cmd>
+        <set>
+          <ed-cmd/>
+          <insert-at>
+            <ed-cmd/>
+            <str-len><ed-cmd/></str-len>
+            <k/>
+          </insert-at>
+        </set>
+      </if>
+    </if>
+  </fn>
+</def>

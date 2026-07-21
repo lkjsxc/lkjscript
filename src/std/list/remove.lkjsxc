@@ -1,0 +1,18 @@
+<def>
+  <name>list-remove</name>
+  <fn>
+    <params><xs/><i/></params>
+    <if>
+      <eq><xs/><nil/></eq>
+      <nil/>
+      <if>
+        <lte><i/><0/></lte>
+        <cdr><xs/></cdr>
+        <cons>
+          <car><xs/></car>
+          <list-remove><cdr><xs/></cdr><-><i/><1/></-></list-remove>
+        </cons>
+      </if>
+    </if>
+  </fn>
+</def>

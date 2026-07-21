@@ -1,0 +1,8 @@
+<def><name>ed-buf</name><cons><empty-str></empty-str><nil/></cons></def>
+<def><name>ed-row</name><0/></def>
+<def><name>ed-col</name><0/></def>
+<def><name>ed-mode</name><0/></def>
+<def><name>ed-cmd</name><empty-str></empty-str></def>
+<def><name>ed-dirty</name><0/></def>
+<def><name>ed-path</name><empty-str></empty-str></def>
+<def><name>ed-quit</name><0/></def>

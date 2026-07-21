@@ -1,0 +1,7 @@
+<def>
+  <name>line-len</name>
+  <fn>
+    <params><s/></params>
+    <str-len><s/></str-len>
+  </fn>
+</def>

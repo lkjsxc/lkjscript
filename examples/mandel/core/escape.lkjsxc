@@ -1,0 +1,10 @@
+<def>
+  <name>escape?</name>
+  <fn>
+    <params><x/><y/><i/><max/></params>
+    <or>
+      <gte><i/><max/></gte>
+      <gt><+><*><x/><x/></*><*><y/><y/></*></+><4.0/></gt>
+    </or>
+  </fn>
+</def>

@@ -1,0 +1,7 @@
+<def>
+  <name>nl</name>
+  <fn>
+    <params></params>
+    <write-byte><10/></write-byte>
+  </fn>
+</def>

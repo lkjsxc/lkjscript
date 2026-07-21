@@ -1,0 +1,13 @@
+<import>lib/edit/buf/cur-line.lkjsxc</import>
+<import>std/buffer/line-len.lkjsxc</import>
+<def>
+  <name>move-right</name>
+  <fn>
+    <params></params>
+    <if>
+      <lt><ed-col/><line-len><cur-line></cur-line></line-len></lt>
+      <set><ed-col/><+><ed-col/><1/></+></set>
+      <nil/>
+    </if>
+  </fn>
+</def>

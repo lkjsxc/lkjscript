@@ -1,0 +1,7 @@
+<def>
+  <name>step-x</name>
+  <fn>
+    <params><x/><y/><cx/></params>
+    <+><-><*><x/><x/></*><*><y/><y/></*></-><cx/></+>
+  </fn>
+</def>

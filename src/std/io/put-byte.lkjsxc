@@ -1,0 +1,7 @@
+<def>
+  <name>put-byte</name>
+  <fn>
+    <params><b/></params>
+    <write-byte><b/></write-byte>
+  </fn>
+</def>

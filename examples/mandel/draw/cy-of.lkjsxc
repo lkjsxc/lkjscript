@@ -1,0 +1,7 @@
+<def>
+  <name>cy-of</name>
+  <fn>
+    <params><y/></params>
+    <-><1.2/><*><y/><0.1/></*></->
+  </fn>
+</def>

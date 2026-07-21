@@ -1,0 +1,52 @@
+<import>lib/edit/view/redraw.lkjsxc</import>
+<import>lib/edit/handle.lkjsxc</import>
+<def>
+  <name>edit-loop</name>
+  <fn>
+    <params></params>
+    <do>
+      <term-raw></term-raw>
+      <redraw-ed></redraw-ed>
+      <if>
+        <eq><ed-quit/><1/></eq>
+        <term-cooked></term-cooked>
+        <edit-step></edit-step>
+      </if>
+    </do>
+  </fn>
+</def>
+<def>
+  <name>edit-step</name>
+  <fn>
+    <params></params>
+    <let>
+      <bind><k/><poll-byte></poll-byte></bind>
+      <edit-on-key><k/></edit-on-key>
+    </let>
+  </fn>
+</def>
+<def>
+  <name>edit-on-key</name>
+  <fn>
+    <params><k/></params>
+    <if>
+      <eq><k/><-2/></eq>
+      <do>
+        <set><ed-quit/><1/></set>
+        <term-cooked></term-cooked>
+      </do>
+      <if>
+        <eq><k/><-1/></eq>
+        <do>
+          <wait-ms><16/></wait-ms>
+          <edit-loop></edit-loop>
+        </do>
+        <do>
+          <set><ed-msg/><empty-str></empty-str></set>
+          <handle-key><k/></handle-key>
+          <edit-loop></edit-loop>
+        </do>
+      </if>
+    </if>
+  </fn>
+</def>

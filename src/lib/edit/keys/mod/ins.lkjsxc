@@ -1,0 +1,16 @@
+<import>lib/edit/buf/cur-line.lkjsxc</import>
+<import>lib/edit/buf/set-cur-line.lkjsxc</import>
+<import>std/buffer/insert-at.lkjsxc</import>
+<def>
+  <name>insert-char</name>
+  <fn>
+    <params><ch/></params>
+    <do>
+      <set-cur-line>
+        <insert-at><cur-line></cur-line><ed-col/><ch/></insert-at>
+      </set-cur-line>
+      <set><ed-col/><+><ed-col/><1/></+></set>
+      <set><ed-dirty/><1/></set>
+    </do>
+  </fn>
+</def>

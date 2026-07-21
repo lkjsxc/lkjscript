@@ -1,0 +1,14 @@
+<import>std/fs/write-all.lkjsxc</import>
+<def>
+  <name>write-file</name>
+  <fn>
+    <params><path/><s/></params>
+    <let>
+      <bind><fd/><open-write><path/></open-write></bind>
+      <do>
+        <write-all><fd/><s/><0/></write-all>
+        <close><fd/></close>
+      </do>
+    </let>
+  </fn>
+</def>

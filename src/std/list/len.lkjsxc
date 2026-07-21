@@ -1,0 +1,11 @@
+<def>
+  <name>list-len</name>
+  <fn>
+    <params><xs/></params>
+    <if>
+      <null?><xs/></null?>
+      <0/>
+      <+><1/><list-len><cdr><xs/></cdr></list-len></+>
+    </if>
+  </fn>
+</def>

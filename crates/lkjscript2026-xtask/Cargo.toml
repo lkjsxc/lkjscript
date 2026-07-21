@@ -1,0 +1,13 @@
+[package]
+name = "lkjscript2026-xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "lkjscript2026-xtask"
+path = "src/main.rs"
+
+[lints]
+workspace = true

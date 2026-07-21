@@ -1,0 +1,14 @@
+<def>
+  <name>enter-raw</name>
+  <fn>
+    <params></params>
+    <term-raw></term-raw>
+  </fn>
+</def>
+<def>
+  <name>leave-raw</name>
+  <fn>
+    <params></params>
+    <term-cooked></term-cooked>
+  </fn>
+</def>

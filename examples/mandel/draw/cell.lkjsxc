@@ -1,0 +1,17 @@
+<import>examples/mandel/core/mandel.lkjsxc</import>
+<import>examples/mandel/draw/shade.lkjsxc</import>
+<import>examples/mandel/draw/nl.lkjsxc</import>
+<import>examples/mandel/draw/cx-of.lkjsxc</import>
+<import>examples/mandel/draw/cy-of.lkjsxc</import>
+<def>
+  <name>cell</name>
+  <fn>
+    <params><x/><y/></params>
+    <shade>
+      <mandel>
+        <cx-of><x/></cx-of>
+        <cy-of><y/></cy-of>
+      </mandel>
+    </shade>
+  </fn>
+</def>

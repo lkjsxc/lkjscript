@@ -1,0 +1,17 @@
+<def>
+  <name>ed-load-new</name>
+  <fn>
+    <params><path/></params>
+    <do>
+      <set><ed-path/><path/></set>
+      <set>
+        <ed-buf/>
+        <cons><empty-str></empty-str><nil/></cons>
+      </set>
+      <set><ed-row/><0/></set>
+      <set><ed-col/><0/></set>
+      <set><ed-dirty/><0/></set>
+      <set><ed-msg/>new file</set>
+    </do>
+  </fn>
+</def>

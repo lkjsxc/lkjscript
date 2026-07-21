@@ -1,0 +1,35 @@
+<import>std/list/remove.lkjsxc</import>
+<import>std/list/len.lkjsxc</import>
+<def>
+  <name>del-line</name>
+  <fn>
+    <params></params>
+    <do>
+      <set>
+        <ed-buf/>
+        <list-remove><ed-buf/><ed-row/></list-remove>
+      </set>
+      <if>
+        <eq><ed-buf/><nil/></eq>
+        <set>
+          <ed-buf/>
+          <cons><empty-str></empty-str><nil/></cons>
+        </set>
+        <nil/>
+      </if>
+      <if>
+        <gte>
+          <ed-row/>
+          <list-len><ed-buf/></list-len>
+        </gte>
+        <set>
+          <ed-row/>
+          <-><list-len><ed-buf/></list-len><1/></->
+        </set>
+        <nil/>
+      </if>
+      <set><ed-col/><0/></set>
+      <set><ed-dirty/><1/></set>
+    </do>
+  </fn>
+</def>

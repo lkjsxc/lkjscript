@@ -1,0 +1,30 @@
+[workspace]
+members = [
+    "crates/lkjscript2026-core",
+    "crates/lkjscript2026-compiler",
+    "crates/lkjscript2026-vm",
+    "crates/lkjscript2026-app",
+    "crates/lkjscript2026-xtask",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+version = "0.1.0"
+publish = false
+
+[workspace.lints.clippy]
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = "symbols"

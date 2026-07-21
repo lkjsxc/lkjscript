@@ -1,0 +1,7 @@
+<def>
+  <name>io-wait</name>
+  <fn>
+    <params><ms/></params>
+    <wait-ms><ms/></wait-ms>
+  </fn>
+</def>

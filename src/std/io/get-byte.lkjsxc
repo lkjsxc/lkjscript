@@ -1,0 +1,7 @@
+<def>
+  <name>get-byte</name>
+  <fn>
+    <params></params>
+    <read-byte></read-byte>
+  </fn>
+</def>

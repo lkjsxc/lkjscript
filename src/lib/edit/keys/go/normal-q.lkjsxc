@@ -1,0 +1,17 @@
+<def>
+  <name>go-cmd</name>
+  <fn>
+    <params></params>
+    <do>
+      <set><ed-mode/><2/></set>
+      <set><ed-cmd/><empty-str></empty-str></set>
+    </do>
+  </fn>
+</def>
+<def>
+  <name>go-quit</name>
+  <fn>
+    <params></params>
+    <set><ed-quit/><1/></set>
+  </fn>
+</def>

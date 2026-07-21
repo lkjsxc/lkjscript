@@ -1,0 +1,57 @@
+<import>std/term/puts.lkjsxc</import>
+<import>std/io/put-byte.lkjsxc</import>
+<import>std/io/crlf.lkjsxc</import>
+<import>lib/edit/ui/status-msg.lkjsxc</import>
+<def>
+  <name>show-mode</name>
+  <fn>
+    <params></params>
+    <if>
+      <eq><ed-mode/><0/></eq>
+      <puts>NORMAL</puts>
+      <if>
+        <eq><ed-mode/><1/></eq>
+        <puts>INSERT</puts>
+        <puts>:</puts>
+      </if>
+    </if>
+  </fn>
+</def>
+<def>
+  <name>show-pos</name>
+  <fn>
+    <params></params>
+    <do>
+      <put-byte><32/></put-byte>
+      <print><ed-row/></print>
+      <puts>,</puts>
+      <print><ed-col/></print>
+      <crlf></crlf>
+    </do>
+  </fn>
+</def>
+<def>
+  <name>show-dirty</name>
+  <fn>
+    <params></params>
+    <if>
+      <eq><ed-dirty/><1/></eq>
+      <puts>*</puts>
+      <nil/>
+    </if>
+  </fn>
+</def>
+<def>
+  <name>show-status</name>
+  <fn>
+    <params></params>
+    <do>
+      <show-mode></show-mode>
+      <put-byte><32/></put-byte>
+      <puts><ed-path/></puts>
+      <show-dirty></show-dirty>
+      <show-msg></show-msg>
+      <show-pos></show-pos>
+    </do>
+  </fn>
+</def>

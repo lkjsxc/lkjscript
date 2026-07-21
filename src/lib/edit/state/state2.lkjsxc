@@ -1,0 +1,5 @@
+<def><name>ed-pending</name><0/></def>
+<def><name>ed-msg</name><empty-str></empty-str></def>
+<def><name>ed-yank</name><empty-str></empty-str></def>
+<def><name>ed-top</name><0/></def>
+<def><name>ed-rows</name><20/></def>

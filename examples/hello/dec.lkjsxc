@@ -1,0 +1,7 @@
+<def>
+  <name>dec</name>
+  <fn>
+    <params><n/></params>
+    <-><n/><1/></->
+  </fn>
+</def>

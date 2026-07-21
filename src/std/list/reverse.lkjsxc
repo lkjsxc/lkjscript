@@ -1,0 +1,14 @@
+<def>
+  <name>reverse</name>
+  <fn>
+    <params><xs/><acc/></params>
+    <if>
+      <null?><xs/></null?>
+      <acc/>
+      <reverse>
+        <cdr><xs/></cdr>
+        <cons><car><xs/></car><acc/></cons>
+      </reverse>
+    </if>
+  </fn>
+</def>

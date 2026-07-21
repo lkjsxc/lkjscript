@@ -1,0 +1,7 @@
+<import>lib/edit/init.lkjsxc</import>
+<import>lib/edit/buf/maybe-load.lkjsxc</import>
+<import>lib/edit/loop.lkjsxc</import>
+<do>
+  <maybe-load></maybe-load>
+  <edit-loop></edit-loop>
+</do>

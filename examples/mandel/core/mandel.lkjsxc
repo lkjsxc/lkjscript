@@ -1,0 +1,8 @@
+<import>examples/mandel/core/iter.lkjsxc</import>
+<def>
+  <name>mandel</name>
+  <fn>
+    <params><cx/><cy/></params>
+    <iter><0.0/><0.0/><cx/><cy/><0/><20/></iter>
+  </fn>
+</def>

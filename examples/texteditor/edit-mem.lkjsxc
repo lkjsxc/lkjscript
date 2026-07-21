@@ -1,0 +1,12 @@
+<import>lib/edit/init.lkjsxc</import>
+<import>lib/edit/loop.lkjsxc</import>
+<do>
+  <set>
+    <ed-buf/>
+    <cons>
+      hello
+      <cons>world<nil/></cons>
+    </cons>
+  </set>
+  <edit-loop></edit-loop>
+</do>

@@ -1,0 +1,13 @@
+<def>
+  <name>insert-at</name>
+  <fn>
+    <params><s/><i/><ch/></params>
+    <str-append>
+      <str-append>
+        <str-slice><s/><0/><i/></str-slice>
+        <str-from-byte><ch/></str-from-byte>
+      </str-append>
+      <str-slice><s/><i/><str-len><s/></str-len></str-slice>
+    </str-append>
+  </fn>
+</def>
