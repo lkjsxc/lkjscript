@@ -1,0 +1,55 @@
+<import>std/io/put-byte.lkjscript</import>
+<def>
+  <name>pad-num</name>
+  <fn>
+    <params><n/></params>
+    <if>
+      <lt><n/><10/></lt>
+      <do>
+        <spaces3></spaces3>
+        <print><n/></print>
+      </do>
+      <pad-num2><n/></pad-num2>
+    </if>
+  </fn>
+</def>
+<def>
+  <name>spaces3</name>
+  <fn>
+    <params></params>
+    <do>
+      <put-byte><32/></put-byte>
+      <put-byte><32/></put-byte>
+      <put-byte><32/></put-byte>
+    </do>
+  </fn>
+</def>
+<def>
+  <name>pad-num2</name>
+  <fn>
+    <params><n/></params>
+    <if>
+      <lt><n/><100/></lt>
+      <do>
+        <put-byte><32/></put-byte>
+        <put-byte><32/></put-byte>
+        <print><n/></print>
+      </do>
+      <pad-num3><n/></pad-num3>
+    </if>
+  </fn>
+</def>
+<def>
+  <name>pad-num3</name>
+  <fn>
+    <params><n/></params>
+    <if>
+      <lt><n/><1000/></lt>
+      <do>
+        <put-byte><32/></put-byte>
+        <print><n/></print>
+      </do>
+      <print><n/></print>
+    </if>
+  </fn>
+</def>

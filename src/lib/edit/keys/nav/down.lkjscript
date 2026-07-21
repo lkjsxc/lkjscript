@@ -1,0 +1,12 @@
+<import>std/list/len.lkjscript</import>
+<def>
+  <name>move-down</name>
+  <fn>
+    <params></params>
+    <if>
+      <lt><ed-row/><-><list-len><ed-buf/></list-len><1/></-></lt>
+      <set><ed-row/><+><ed-row/><1/></+></set>
+      <nil/>
+    </if>
+  </fn>
+</def>

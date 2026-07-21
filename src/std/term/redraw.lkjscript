@@ -1,0 +1,14 @@
+<import>std/term/redraw-lines.lkjscript</import>
+<def>
+  <name>redraw</name>
+  <fn>
+    <params><lines/></params>
+    <do>
+      <clear-screen></clear-screen>
+      <home></home>
+      <draw-line>
+        <lines/><0/><list-len><lines/></list-len>
+      </draw-line>
+    </do>
+  </fn>
+</def>

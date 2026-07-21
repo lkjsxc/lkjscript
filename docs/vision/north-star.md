@@ -8,4 +8,4 @@ State the mission for the `lkjscript2026` runtime.
 
 Ship a tiny, cache-friendly functional language that weak AI models can author
 reliably, with a real bytecode VM ready for later JIT, and an ecosystem grown
-in `.lkjsxc` rather than host frameworks.
+in `.lkjscript` rather than host frameworks.

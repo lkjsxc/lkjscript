@@ -15,6 +15,6 @@ Define the attribute-less XML-like surface.
 - Top-level forms must be `def`, `do`, or `import`.
 - At most `MAX_TOPLEVEL_FORMS` top-level forms per file (default 8).
 - Imports: package-root if the path does not start with `.`
-  (`std/list/nth.lkjsxc`, `lib/edit/loop.lkjsxc`, `examples/...`);
+  (`std/list/nth.lkjscript`, `lib/edit/loop.lkjscript`, `examples/...`);
   `./relative` for file-local; `..` climbs are banned.
   Prefixes `std/` and `lib/` map under `src/std/` and `src/lib/`.

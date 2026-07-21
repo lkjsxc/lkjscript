@@ -1,4 +1,4 @@
-//! Load a root `.lkjsxc` file and follow package-root / relative imports.
+//! Load a root `.lkjscript` file and follow package-root / relative imports.
 
 use std::collections::HashSet;
 use std::fs;
@@ -163,32 +163,32 @@ mod tests {
 
     #[test]
     fn rejects_climb() {
-        let err = resolve_import("../x.lkjsxc", Path::new("/a"), Path::new("/pkg")).unwrap_err();
+        let err = resolve_import("../x.lkjscript", Path::new("/a"), Path::new("/pkg")).unwrap_err();
         assert!(err.as_str().contains("climb"));
     }
 
     #[test]
     fn std_prefix() {
-        let p = resolve_import("std/list/nth.lkjsxc", Path::new("/a/b"), Path::new("/pkg")).unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/src/std/list/nth.lkjsxc"));
+        let p = resolve_import("std/list/nth.lkjscript", Path::new("/a/b"), Path::new("/pkg")).unwrap();
+        assert_eq!(p, PathBuf::from("/pkg/src/std/list/nth.lkjscript"));
     }
 
     #[test]
     fn lib_prefix() {
-        let p = resolve_import("lib/edit/loop.lkjsxc", Path::new("/a/b"), Path::new("/pkg")).unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/src/lib/edit/loop.lkjsxc"));
+        let p = resolve_import("lib/edit/loop.lkjscript", Path::new("/a/b"), Path::new("/pkg")).unwrap();
+        assert_eq!(p, PathBuf::from("/pkg/src/lib/edit/loop.lkjscript"));
     }
 
     #[test]
     fn examples_join() {
-        let p = resolve_import("examples/hello/main.lkjsxc", Path::new("/a/b"), Path::new("/pkg"))
+        let p = resolve_import("examples/hello/main.lkjscript", Path::new("/a/b"), Path::new("/pkg"))
             .unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/examples/hello/main.lkjsxc"));
+        assert_eq!(p, PathBuf::from("/pkg/examples/hello/main.lkjscript"));
     }
 
     #[test]
     fn dot_relative() {
-        let p = resolve_import("./sib.lkjsxc", Path::new("/a/b"), Path::new("/pkg")).unwrap();
-        assert_eq!(p, PathBuf::from("/a/b/sib.lkjsxc"));
+        let p = resolve_import("./sib.lkjscript", Path::new("/a/b"), Path::new("/pkg")).unwrap();
+        assert_eq!(p, PathBuf::from("/a/b/sib.lkjscript"));
     }
 }

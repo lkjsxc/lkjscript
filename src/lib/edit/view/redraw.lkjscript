@@ -1,0 +1,18 @@
+<import>lib/edit/view/view.lkjscript</import>
+<import>lib/edit/view/draw-rows.lkjscript</import>
+<import>lib/edit/view/place-ui.lkjscript</import>
+<import>std/ansi/clear.lkjscript</import>
+<import>std/ansi/home.lkjscript</import>
+<def>
+  <name>redraw-ed</name>
+  <fn>
+    <params></params>
+    <do>
+      <clamp-view></clamp-view>
+      <clear-screen></clear-screen>
+      <home></home>
+      <draw-rows><ed-top/><0/></draw-rows>
+      <place-ui></place-ui>
+    </do>
+  </fn>
+</def>

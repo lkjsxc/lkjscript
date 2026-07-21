@@ -1,0 +1,12 @@
+<import>std/term/redraw.lkjscript</import>
+<do>
+  <redraw>
+    <cons>
+      hello
+      <cons>
+        buffer
+        <cons>demo<nil/></cons>
+      </cons>
+    </cons>
+  </redraw>
+</do>

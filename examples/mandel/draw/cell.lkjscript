@@ -1,0 +1,17 @@
+<import>examples/mandel/core/mandel.lkjscript</import>
+<import>examples/mandel/draw/shade.lkjscript</import>
+<import>examples/mandel/draw/nl.lkjscript</import>
+<import>examples/mandel/draw/cx-of.lkjscript</import>
+<import>examples/mandel/draw/cy-of.lkjscript</import>
+<def>
+  <name>cell</name>
+  <fn>
+    <params><x/><y/></params>
+    <shade>
+      <mandel>
+        <cx-of><x/></cx-of>
+        <cy-of><y/></cy-of>
+      </mandel>
+    </shade>
+  </fn>
+</def>

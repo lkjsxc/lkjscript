@@ -1,0 +1,4 @@
+<import>examples/hello/fact.lkjscript</import>
+<do>
+  <print><fact><10/></fact></print>
+</do>

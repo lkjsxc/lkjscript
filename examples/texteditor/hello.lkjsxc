@@ -1,6 +1,0 @@
-<import>std/term/banner.lkjsxc</import>
-<import>std/io/get-byte.lkjsxc</import>
-<do>
-  <banner></banner>
-  <get-byte></get-byte>
-</do>

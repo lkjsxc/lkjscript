@@ -14,7 +14,7 @@ all passed on this checkout.
 ## Current Implementation
 
 - Standalone repo: `https://github.com/lkjsxc/lkjscript2026`
-- Language name: **lkjscript2026**; sources use **`.lkjsxc`**
+- Language name: **lkjscript2026**; sources use **`.lkjscript`**
 - Layout: `src/std` (primitives), `src/lib/edit` (editor package), `examples/`
 - Imports: `std/...`, `lib/...`, `examples/...` (package-root; no `../`)
 - Hardcoded limit constants (no user-facing JSON limits)
@@ -34,7 +34,7 @@ static types, advanced GC, baseline JIT, adaptive PGO-style opts.
 | Area | Status |
 | --- | --- |
 | Editor display / new-file | done |
-| Rebrand + `.lkjsxc` | done |
+| Rebrand + `.lkjscript` extension | done |
 | Hardcoded limits | done |
 | Minimal HTTP + bench vs C | done |
 | Rust-like `src/std` + `src/lib` | done |

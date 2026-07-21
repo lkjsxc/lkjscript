@@ -1,0 +1,22 @@
+<import>lib/edit/buf/cur-line.lkjscript</import>
+<def>
+  <name>move-bol</name>
+  <fn>
+    <params></params>
+    <set><ed-col/><0/></set>
+  </fn>
+</def>
+<def>
+  <name>move-eol</name>
+  <fn>
+    <params></params>
+    <if>
+      <lte><str-len><cur-line></cur-line></str-len><0/></lte>
+      <set><ed-col/><0/></set>
+      <set>
+        <ed-col/>
+        <-><str-len><cur-line></cur-line></str-len><1/></->
+      </set>
+    </if>
+  </fn>
+</def>

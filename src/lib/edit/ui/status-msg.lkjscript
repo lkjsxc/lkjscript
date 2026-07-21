@@ -1,0 +1,12 @@
+<import>std/term/puts.lkjscript</import>
+<import>std/io/put-byte.lkjscript</import>
+<def>
+  <name>show-msg</name>
+  <fn>
+    <params></params>
+    <do>
+      <put-byte><32/></put-byte>
+      <puts><ed-msg/></puts>
+    </do>
+  </fn>
+</def>

@@ -7,7 +7,7 @@ can continue without rediscovering recent pain.
 
 ## Product Intent
 
-- Thin Rust host; grow capability in `.lkjsxc`, not in host frameworks.
+- Thin Rust host; grow capability in `.lkjscript`, not in host frameworks.
 - Docker and `quiet verify` are the honesty gates for claimed completion.
 - AI-friendly sources: many small files, fan-out at most eight visible children.
 - Package-root imports only: `std/...`, `lib/...`, `examples/...`, or `./...`.

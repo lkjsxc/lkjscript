@@ -17,9 +17,9 @@ fan-out.
 
 Examples:
 
-- `<import>std/list/nth.lkjsxc</import>`
-- `<import>lib/edit/loop.lkjsxc</import>`
-- `<import>examples/hello/fact.lkjsxc</import>`
+- `<import>std/list/nth.lkjscript</import>`
+- `<import>lib/edit/loop.lkjscript</import>`
+- `<import>examples/hello/fact.lkjscript</import>`
 
 ## Consequences
 

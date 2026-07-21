@@ -1,0 +1,15 @@
+<import>examples/mandel/draw/row.lkjscript</import>
+<def>
+  <name>grid</name>
+  <fn>
+    <params><y/><h/><w/></params>
+    <if>
+      <gte><y/><h/></gte>
+      <nil/>
+      <do>
+        <row><0/><y/><w/></row>
+        <grid><+><y/><1/></+><h/><w/></grid>
+      </do>
+    </if>
+  </fn>
+</def>

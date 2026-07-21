@@ -1,0 +1,8 @@
+<import>std/list/set-nth.lkjscript</import>
+<def>
+  <name>set-cur-line</name>
+  <fn>
+    <params><s/></params>
+    <set><ed-buf/><set-nth><ed-buf/><ed-row/><s/></set-nth></set>
+  </fn>
+</def>

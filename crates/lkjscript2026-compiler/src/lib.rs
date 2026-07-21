@@ -1,4 +1,4 @@
-//! Compile attribute-less XML-like `.lkjsxc` into bytecode.
+//! Compile attribute-less XML-like `.lkjscript` into bytecode.
 
 mod ast;
 mod codegen;

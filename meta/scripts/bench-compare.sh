@@ -12,10 +12,10 @@ CC="${CC:-cc}"
 OUT="$ROOT/target/bench-leibniz-c"
 mkdir -p "$ROOT/target"
 "$CC" -O2 -o "$OUT" "$ROOT/meta/bench/c/leibniz.c"
-TMP="$(mktemp --suffix=.lkjsxc)"
+TMP="$(mktemp --suffix=.lkjscript)"
 trap 'rm -f "$TMP"' EXIT
 cat > "$TMP" <<EOF
-<import>examples/bench/leibniz-loop.lkjsxc</import>
+<import>examples/bench/leibniz-loop.lkjscript</import>
 <do>
   <print><leibniz><${N}/></leibniz></print>
 </do>

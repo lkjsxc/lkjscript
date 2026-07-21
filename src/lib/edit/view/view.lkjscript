@@ -1,0 +1,25 @@
+<import>std/list/nth.lkjscript</import>
+<import>std/list/len.lkjscript</import>
+<import>std/term/puts.lkjscript</import>
+<import>std/io/put-byte.lkjscript</import>
+<def>
+  <name>clamp-view</name>
+  <fn>
+    <params></params>
+    <if>
+      <lt><ed-row/><ed-top/></lt>
+      <set><ed-top/><ed-row/></set>
+      <if>
+        <gte>
+          <ed-row/>
+          <+><ed-top/><ed-rows/></+>
+        </gte>
+        <set>
+          <ed-top/>
+          <-><+><ed-row/><1/></+><ed-rows/></->
+        </set>
+        <nil/>
+      </if>
+    </if>
+  </fn>
+</def>

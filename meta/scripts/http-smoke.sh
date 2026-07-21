@@ -10,7 +10,7 @@ if ss -ltn 2>/dev/null | grep -q ':8080 '; then
   echo "http-smoke skip: :8080 busy"
   exit 0
 fi
-"$BIN" run "$ROOT/examples/http/hello.lkjsxc" &
+"$BIN" run "$ROOT/examples/http/hello.lkjscript" &
 PID=$!
 trap 'kill $PID 2>/dev/null || true' EXIT
 for i in 1 2 3 4 5 6 7 8 9 10; do

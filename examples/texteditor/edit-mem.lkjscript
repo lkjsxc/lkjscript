@@ -1,0 +1,12 @@
+<import>lib/edit/init.lkjscript</import>
+<import>lib/edit/loop.lkjscript</import>
+<do>
+  <set>
+    <ed-buf/>
+    <cons>
+      hello
+      <cons>world<nil/></cons>
+    </cons>
+  </set>
+  <edit-loop></edit-loop>
+</do>

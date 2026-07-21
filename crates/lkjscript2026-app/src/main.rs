@@ -30,7 +30,7 @@ fn real_main() -> Result<(), String> {
         "run" => {
             let file = args
                 .get(1)
-                .ok_or_else(|| "run needs a .lkjsxc path".to_string())?
+                .ok_or_else(|| "run needs a .lkjscript path".to_string())?
                 .clone();
             let script_args: Vec<String> = args.iter().skip(2).cloned().collect();
             let path = PathBuf::from(&file);
@@ -41,7 +41,7 @@ fn real_main() -> Result<(), String> {
         "disasm" => {
             let file = args
                 .get(1)
-                .ok_or_else(|| "disasm needs a .lkjsxc path".to_string())?;
+                .ok_or_else(|| "disasm needs a .lkjscript path".to_string())?;
             let path = PathBuf::from(file);
             let chunk = compile_path(&path, &limits).map_err(|e| e.to_string())?;
             println!("globals: {:?}", chunk.global_names);
@@ -57,7 +57,7 @@ fn print_help() {
     println!("lkjscript2026 — attribute-less XML-like language runtime");
     println!();
     println!("Usage:");
-    println!("  lkjscript2026 run <file.lkjsxc> [script-args…]");
-    println!("  lkjscript2026 disasm <file.lkjsxc>");
+    println!("  lkjscript2026 run <file.lkjscript> [script-args…]");
+    println!("  lkjscript2026 disasm <file.lkjscript>");
     println!("  lkjscript2026 --help");
 }

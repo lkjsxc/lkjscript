@@ -1,0 +1,8 @@
+<import>std/term/write-str.lkjscript</import>
+<def>
+  <name>puts</name>
+  <fn>
+    <params><s/></params>
+    <write-str><s/><0/></write-str>
+  </fn>
+</def>

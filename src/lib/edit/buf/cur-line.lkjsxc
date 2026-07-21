@@ -1,8 +1,0 @@
-<import>std/list/nth.lkjsxc</import>
-<def>
-  <name>cur-line</name>
-  <fn>
-    <params></params>
-    <nth><ed-buf/><ed-row/></nth>
-  </fn>
-</def>

@@ -1,0 +1,18 @@
+<import>examples/mandel/core/escape.lkjscript</import>
+<import>examples/mandel/core/step-x.lkjscript</import>
+<import>examples/mandel/core/step-y.lkjscript</import>
+<def>
+  <name>iter</name>
+  <fn>
+    <params><x/><y/><cx/><cy/><i/><max/></params>
+    <if>
+      <escape?><x/><y/><i/><max/></escape?>
+      <i/>
+      <iter>
+        <step-x><x/><y/><cx/></step-x>
+        <step-y><x/><y/><cy/></step-y>
+        <cx/><cy/><+><i/><1/></+><max/>
+      </iter>
+    </if>
+  </fn>
+</def>

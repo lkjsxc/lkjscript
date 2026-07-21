@@ -71,7 +71,7 @@ mod tests {
             ..Limits::default()
         };
         let tokens = lex("<a/><b/><c/>").expect("lex");
-        let err = check_file_limits(&tokens, &lim, "t.lkjsxc").expect_err("budget");
+        let err = check_file_limits(&tokens, &lim, "t.lkjscript").expect_err("budget");
         assert!(err.as_str().contains("split via import"));
     }
 }
