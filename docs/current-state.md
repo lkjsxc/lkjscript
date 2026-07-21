@@ -7,6 +7,9 @@ Separate observed behavior in this checkout from remaining work.
 ## Evidence Boundary
 
 Docker verification is the acceptance path for claimed completion.
+Local `quiet verify`, editor/http smokes, and
+`docker compose -f meta/docker-compose.yml --profile verify run --rm verify`
+all passed on this checkout.
 
 ## Current Implementation
 
