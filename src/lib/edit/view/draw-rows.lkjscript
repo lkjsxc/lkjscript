@@ -7,8 +7,8 @@ import/ "lib/edit/view/view-draw.lkjscript" /import
  def/
  name/ "draw-rows" /name
  fn/
- sig/ Any Any -> Any /sig
- params/ i Any n Any /params
+ sig/ I64 I64 -> I64 /sig
+ params/ i I64 n I64 /params
  if/
  gte/ n ed-rows /gte
  nil
@@ -19,8 +19,8 @@ import/ "lib/edit/view/view-draw.lkjscript" /import
  def/
  name/ "draw-one" /name
  fn/
- sig/ Any Any -> Any /sig
- params/ i Any n Any /params
+ sig/ I64 I64 -> I64 /sig
+ params/ i I64 n I64 /params
  do/
  if/
  gte/ i list-len/ ed-buf /list-len /gte

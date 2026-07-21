@@ -1,8 +1,8 @@
-def/ name/ "ed-buf" /name type/ List /type cons/ empty-str/ /empty-str nil /cons /def
-def/ name/ "ed-row" /name type/ Int /type 0 /def
-def/ name/ "ed-col" /name type/ Int /type 0 /def
-def/ name/ "ed-mode" /name type/ Int /type 0 /def
+def/ name/ "ed-buf" /name type/ List Str /type cons/ empty-str/ /empty-str nil /cons /def
+def/ name/ "ed-row" /name type/ I64 /type 0 /def
+def/ name/ "ed-col" /name type/ I64 /type 0 /def
+def/ name/ "ed-mode" /name type/ I64 /type 0 /def
 def/ name/ "ed-cmd" /name type/ Str /type empty-str/ /empty-str /def
-def/ name/ "ed-dirty" /name type/ Int /type 0 /def
+def/ name/ "ed-dirty" /name type/ I64 /type 0 /def
 def/ name/ "ed-path" /name type/ Str /type empty-str/ /empty-str /def
-def/ name/ "ed-quit" /name type/ Int /type 0 /def
+def/ name/ "ed-quit" /name type/ I64 /type 0 /def

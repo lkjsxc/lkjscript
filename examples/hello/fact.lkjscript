@@ -3,8 +3,8 @@ import/ "examples/hello/dec.lkjscript" /import
  def/
  name/ "fact" /name
  fn/
- sig/ Any -> Any /sig
- params/ n Any /params
+ sig/ I64 -> I64 /sig
+ params/ n I64 /params
  if/
  base?/ n /base?
  1

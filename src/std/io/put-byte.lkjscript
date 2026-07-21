@@ -1,8 +1,8 @@
 def/
  name/ "put-byte" /name
  fn/
- sig/ Any -> Any /sig
- params/ b Any /params
+ sig/ I64 -> Nil /sig
+ params/ b I64 /params
  write-byte/ b /write-byte
  /fn
  /def

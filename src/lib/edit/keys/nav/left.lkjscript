@@ -1,7 +1,7 @@
 def/
  name/ "move-left" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  if/
  gt/ ed-col 0 /gt

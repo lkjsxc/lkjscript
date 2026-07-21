@@ -76,7 +76,10 @@ fn atom_from_name(name: &str) -> Expr {
         return Expr::LitBool(false);
     }
     if let Ok(n) = name.parse::<f64>() {
-        return Expr::LitNum(n);
+        return Expr::LitNum {
+            value: n,
+            float_syntax: name.contains('.'),
+        };
     }
     Expr::Symbol(name.to_string())
 }
@@ -94,7 +97,16 @@ mod tests {
             forms,
             vec![Expr::Call {
                 name: "+".into(),
-                args: vec![Expr::LitNum(1.0), Expr::LitNum(2.0)],
+                args: vec![
+                    Expr::LitNum {
+                        value: 1.0,
+                        float_syntax: false,
+                    },
+                    Expr::LitNum {
+                        value: 2.0,
+                        float_syntax: false,
+                    },
+                ],
             }]
         );
     }

@@ -2,7 +2,7 @@ import/ "lib/edit/buf/clamp-col.lkjscript" /import
  def/
  name/ "move-up" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  if/

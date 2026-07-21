@@ -3,7 +3,7 @@ import/ "std/ansi/esc.lkjscript" /import
  def/
  name/ "hide-cursor" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  esc/ /esc
@@ -14,7 +14,7 @@ import/ "std/ansi/esc.lkjscript" /import
  def/
  name/ "show-cursor" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  esc/ /esc

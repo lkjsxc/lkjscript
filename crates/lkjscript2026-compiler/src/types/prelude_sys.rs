@@ -1,31 +1,62 @@
-//! Sys and Result prelude entries.
+//! Sys and Result prelude entries (parametric, no Any).
 
 use super::ty::Type;
 use std::collections::HashMap;
 
+fn fn_ty(params: Vec<Type>, ret: Type) -> Type {
+    Type::Fn {
+        params,
+        ret: Box::new(ret),
+    }
+}
+
+fn forall(vars: &[&str], body: Type) -> Type {
+    Type::Forall {
+        vars: vars.iter().map(|s| (*s).to_string()).collect(),
+        body: Box::new(body),
+    }
+}
+
 pub fn install_sys(m: &mut HashMap<String, Type>) {
-    let res_handle = Type::Result(Box::new(Type::Handle), Box::new(Type::Str));
+    let res_h = Type::Result(Box::new(Type::Handle), Box::new(Type::Str));
     let res_nil = Type::Result(Box::new(Type::Nil), Box::new(Type::Str));
-    let res_int = Type::Result(Box::new(Type::Int), Box::new(Type::Str));
+    let res_i64 = Type::Result(Box::new(Type::I64), Box::new(Type::Str));
     let res_str = Type::Result(Box::new(Type::Str), Box::new(Type::Str));
-    m.insert("sys-open-read".into(), Type::Fn { params: vec![Type::Str], ret: Box::new(res_handle.clone()) });
-    m.insert("sys-open-write".into(), Type::Fn { params: vec![Type::Str], ret: Box::new(res_handle.clone()) });
-    m.insert("sys-path-exists".into(), Type::Fn { params: vec![Type::Str], ret: Box::new(Type::Bool) });
-    m.insert("sys-wait-ms".into(), Type::Fn { params: vec![Type::Int], ret: Box::new(res_nil.clone()) });
-    m.insert("sys-now-ms".into(), Type::Fn { params: vec![], ret: Box::new(res_int.clone()) });
-    m.insert("sys-socket".into(), Type::Fn { params: vec![], ret: Box::new(res_handle.clone()) });
-    m.insert("sys-bind".into(), Type::Fn { params: vec![Type::Handle, Type::Int], ret: Box::new(res_nil.clone()) });
-    m.insert("sys-listen".into(), Type::Fn { params: vec![Type::Handle, Type::Int], ret: Box::new(res_nil) });
-    m.insert("sys-accept".into(), Type::Fn { params: vec![Type::Handle], ret: Box::new(res_handle) });
-    m.insert("sys-recv".into(), Type::Fn { params: vec![Type::Handle], ret: Box::new(res_str) });
-    m.insert("sys-send".into(), Type::Fn { params: vec![Type::Handle, Type::Str], ret: Box::new(res_int) });
+    m.insert("sys-open-read".into(), fn_ty(vec![Type::Str], res_h.clone()));
+    m.insert("sys-open-write".into(), fn_ty(vec![Type::Str], res_h.clone()));
+    m.insert("sys-path-exists".into(), fn_ty(vec![Type::Str], Type::Bool));
+    m.insert("sys-wait-ms".into(), fn_ty(vec![Type::I64], res_nil.clone()));
+    m.insert("sys-now-ms".into(), fn_ty(vec![], res_i64.clone()));
+    m.insert("sys-socket".into(), fn_ty(vec![], res_h.clone()));
+    m.insert(
+        "sys-bind".into(),
+        fn_ty(vec![Type::Handle, Type::I64], res_nil.clone()),
+    );
+    m.insert(
+        "sys-listen".into(),
+        fn_ty(vec![Type::Handle, Type::I64], res_nil),
+    );
+    m.insert("sys-accept".into(), fn_ty(vec![Type::Handle], res_h));
+    m.insert("sys-recv".into(), fn_ty(vec![Type::Handle], res_str));
+    m.insert(
+        "sys-send".into(),
+        fn_ty(vec![Type::Handle, Type::Str], res_i64),
+    );
 }
 
 pub fn install_result_helpers(m: &mut HashMap<String, Type>) {
-    let r = Type::Result(Box::new(Type::Any), Box::new(Type::Any));
-    m.insert("ok".into(), Type::Fn { params: vec![Type::Any], ret: Box::new(r.clone()) });
-    m.insert("err".into(), Type::Fn { params: vec![Type::Any], ret: Box::new(r.clone()) });
-    m.insert("is-ok".into(), Type::Fn { params: vec![r.clone()], ret: Box::new(Type::Bool) });
-    m.insert("unwrap-ok".into(), Type::Fn { params: vec![r.clone()], ret: Box::new(Type::Any) });
-    m.insert("unwrap-err".into(), Type::Fn { params: vec![r], ret: Box::new(Type::Any) });
+    let t = Type::Param("T".into());
+    let e = Type::Param("E".into());
+    let r = Type::Result(Box::new(t.clone()), Box::new(e.clone()));
+    m.insert(
+        "ok".into(),
+        forall(&["T", "E"], fn_ty(vec![t.clone()], r.clone())),
+    );
+    m.insert(
+        "err".into(),
+        forall(&["T", "E"], fn_ty(vec![e.clone()], r.clone())),
+    );
+    m.insert("is-ok".into(), forall(&["T", "E"], fn_ty(vec![r.clone()], Type::Bool)));
+    m.insert("unwrap-ok".into(), forall(&["T", "E"], fn_ty(vec![r.clone()], t)));
+    m.insert("unwrap-err".into(), forall(&["T", "E"], fn_ty(vec![r], e)));
 }

@@ -1,16 +1,15 @@
-//! XML-like expression AST.
+//! Expression AST for slash/whitespace source.
 
 #![allow(dead_code)]
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    /// Number, bool, or nil literal.
-    LitNum(f64),
+    /// Numeric literal. `float_syntax` is true when the source used a `.` (e.g. `2.0`).
+    LitNum { value: f64, float_syntax: bool },
     LitBool(bool),
     LitNil,
     LitStr(String),
     Symbol(String),
-    /// Generic call: tag name with child args.
     Call { name: String, args: Vec<Expr> },
     List(Vec<Expr>),
 }

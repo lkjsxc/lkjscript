@@ -4,7 +4,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "del-char" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  set-cur-line/

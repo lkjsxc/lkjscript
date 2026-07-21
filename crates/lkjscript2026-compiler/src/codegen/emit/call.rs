@@ -83,6 +83,7 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
     }
     let op = match name {
         "not" => Op::Not,
+        "nil?" => Op::IsNil,
         "car" => Op::Car,
         "cdr" => Op::Cdr,
         "null?" => Op::IsNull,
@@ -92,6 +93,7 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "exit" => Op::Exit,
         "str-len" => Op::StrLen,
         "str-from-byte" => Op::StrFromByte,
+        "str-from-i64" => Op::StrFromI64,
         "sys-open-read" => Op::SysOpenRead,
         "sys-open-write" => Op::SysOpenWrite,
         "close" => Op::CloseFd,

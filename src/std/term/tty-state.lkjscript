@@ -1,2 +1,2 @@
-def/ name/ "tty-cooked-buf" /name type/ Any /type nil /def
-def/ name/ "tty-work" /name type/ Any /type nil /def
+def/ name/ "tty-cooked-buf" /name type/ Buf /type nil /def
+def/ name/ "tty-work" /name type/ Buf /type nil /def

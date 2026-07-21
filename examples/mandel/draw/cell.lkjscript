@@ -6,8 +6,8 @@ import/ "examples/mandel/core/mandel.lkjscript" /import
  def/
  name/ "cell" /name
  fn/
- sig/ Any Any -> Any /sig
- params/ x Any y Any /params
+ sig/ I64 I64 -> Nil /sig
+ params/ x I64 y I64 /params
  shade/
  mandel/
  cx-of/ x /cx-of

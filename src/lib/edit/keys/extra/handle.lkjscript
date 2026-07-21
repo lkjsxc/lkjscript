@@ -3,8 +3,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "handle-extra" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ ed-pending 100 /eq
  finish-d/ k /finish-d
@@ -19,8 +19,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "finish-d" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  do/
  set/ ed-pending 0 /set
  if/
@@ -34,8 +34,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "finish-y" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  do/
  set/ ed-pending 0 /set
  if/
@@ -49,8 +49,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "start-pend" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ k 100 /eq
  set/ ed-pending 100 /set

@@ -1,17 +1,17 @@
 import/ "std/ansi/esc.lkjscript" /import
- import/ "std/io/put-byte.lkjscript" /import
- def/
- name/ "cup" /name
- fn/
- sig/ Any Any -> Any /sig
- params/ r Any c Any /params
- do/
- esc/ /esc
- put-byte/ 91 /put-byte
- print/ r /print
- put-byte/ 59 /put-byte
- print/ c /print
- put-byte/ 72 /put-byte
- /do
- /fn
- /def
+import/ "std/io/put-byte.lkjscript" /import
+def/
+  name/ "cup" /name
+  fn/
+    sig/ I64 I64 -> Nil /sig
+    params/ r I64 c I64 /params
+    do/
+      esc/ /esc
+      put-byte/ 91 /put-byte
+      print/ str-from-i64/ r /str-from-i64 /print
+      put-byte/ 59 /put-byte
+      print/ str-from-i64/ c /str-from-i64 /print
+      put-byte/ 72 /put-byte
+    /do
+  /fn
+/def

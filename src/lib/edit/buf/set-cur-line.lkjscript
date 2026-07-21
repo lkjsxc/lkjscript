@@ -1,9 +1,9 @@
 import/ "std/list/set-nth.lkjscript" /import
- def/
- name/ "set-cur-line" /name
- fn/
- sig/ Any -> Any /sig
- params/ s Any /params
- set/ ed-buf set-nth/ ed-buf ed-row s /set-nth /set
- /fn
- /def
+def/
+  name/ "set-cur-line" /name
+  fn/
+    sig/ Str -> Nil /sig
+    params/ s Str /params
+    set/ ed-buf set-nth/ ed-buf ed-row s /set-nth /set
+  /fn
+/def

@@ -1,8 +1,8 @@
 def/
- name/ "cx-of" /name
- fn/
- sig/ Any -> Any /sig
- params/ x Any /params
- +/ -2.0 */ x 0.08 /* /+
- /fn
- /def
+  name/ "cx-of" /name
+  fn/
+    sig/ I64 -> F64 /sig
+    params/ x I64 /params
+    +/ -2.0 */ x 0.08 /* /+
+  /fn
+/def

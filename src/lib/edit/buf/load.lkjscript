@@ -5,8 +5,8 @@ import/ "lib/edit/buf/load-new.lkjscript" /import
 def/
   name/ "ed-load" /name
   fn/
-    sig/ Any -> Any /sig
-    params/ path Any /params
+    sig/ Str -> Nil /sig
+    params/ path Str /params
     if/
       path-exists/ path /path-exists
       ed-load-existing/ path /ed-load-existing
@@ -17,8 +17,8 @@ def/
 def/
   name/ "ed-load-existing" /name
   fn/
-    sig/ Any -> Any /sig
-    params/ path Any /params
+    sig/ Str -> Nil /sig
+    params/ path Str /params
     do/
       set/ ed-path path /set
       set/

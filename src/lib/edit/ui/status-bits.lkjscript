@@ -1,43 +1,43 @@
 import/ "std/term/puts.lkjscript" /import
- import/ "std/io/put-byte.lkjscript" /import
- def/
- name/ "show-mode" /name
- fn/
- sig/ -> Any /sig
- params/  /params
- if/
- eq/ ed-mode 0 /eq
- puts/ "NORMAL" /puts
- if/
- eq/ ed-mode 1 /eq
- puts/ "INSERT" /puts
- puts/ "CMD" /puts
- /if
- /if
- /fn
- /def
- def/
- name/ "show-pos" /name
- fn/
- sig/ -> Any /sig
- params/  /params
- do/
- put-byte/ 32 /put-byte
- print/ ed-row /print
- puts/ "," /puts
- print/ ed-col /print
- /do
- /fn
- /def
- def/
- name/ "show-dirty" /name
- fn/
- sig/ -> Any /sig
- params/  /params
- if/
- eq/ ed-dirty 1 /eq
- puts/ "*" /puts
- nil
- /if
- /fn
- /def
+import/ "std/io/put-byte.lkjscript" /import
+def/
+  name/ "show-mode" /name
+  fn/
+    sig/ -> Nil /sig
+    params/  /params
+    if/
+      eq/ ed-mode 0 /eq
+      puts/ "NORMAL" /puts
+      if/
+        eq/ ed-mode 1 /eq
+        puts/ "INSERT" /puts
+        puts/ "CMD" /puts
+      /if
+    /if
+  /fn
+/def
+def/
+  name/ "show-pos" /name
+  fn/
+    sig/ -> Nil /sig
+    params/  /params
+    do/
+      put-byte/ 32 /put-byte
+      print/ str-from-i64/ ed-row /str-from-i64 /print
+      puts/ "," /puts
+      print/ str-from-i64/ ed-col /str-from-i64 /print
+    /do
+  /fn
+/def
+def/
+  name/ "show-dirty" /name
+  fn/
+    sig/ -> Nil /sig
+    params/  /params
+    if/
+      eq/ ed-dirty 1 /eq
+      puts/ "*" /puts
+      nil
+    /if
+  /fn
+/def

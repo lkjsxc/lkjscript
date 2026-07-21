@@ -41,17 +41,22 @@ pub fn typecheck_program(program: &Program) -> Result<()> {
 fn install_def_sig(env: &mut HashMap<String, Type>, args: &[Expr]) -> Result<()> {
     match classify_def(args)? {
         DefKind::Fn { name, fn_args } => {
-            let (sig_params, sig_ret, param_names, param_tys, _) = parse_fn(fn_args)?;
+            let (sig_params, sig_ret, param_names, param_tys, _, forall_vars) =
+                parse_fn(fn_args)?;
             if sig_params.len() != param_tys.len() || sig_params.len() != param_names.len() {
                 return Err(Error::msg(format!("def {name}: sig/params arity mismatch")));
             }
-            env.insert(
-                name,
-                Type::Fn {
-                    params: sig_params,
-                    ret: Box::new(sig_ret),
-                },
-            );
+            let mut fty = Type::Fn {
+                params: sig_params,
+                ret: Box::new(sig_ret),
+            };
+            if !forall_vars.is_empty() {
+                fty = Type::Forall {
+                    vars: forall_vars,
+                    body: Box::new(fty),
+                };
+            }
+            env.insert(name, fty);
             Ok(())
         }
         DefKind::Value { name, ty, .. } => {
@@ -64,7 +69,8 @@ fn install_def_sig(env: &mut HashMap<String, Type>, args: &[Expr]) -> Result<()>
 fn check_def_body(env: &HashMap<String, Type>, args: &[Expr]) -> Result<()> {
     match classify_def(args)? {
         DefKind::Fn { name, fn_args } => {
-            let (sig_params, sig_ret, param_names, param_tys, body_expr) = parse_fn(fn_args)?;
+            let (sig_params, sig_ret, param_names, param_tys, body_expr, forall_vars) =
+                parse_fn(fn_args)?;
             for (s, p) in sig_params.iter().zip(&param_tys) {
                 if !Type::unify_assignable(p, s) && !Type::unify_assignable(s, p) {
                     return Err(Error::msg(format!(
@@ -73,9 +79,21 @@ fn check_def_body(env: &HashMap<String, Type>, args: &[Expr]) -> Result<()> {
                 }
             }
             let mut local = env.clone();
+            for v in &forall_vars {
+                // Type params are not value bindings; ignore.
+                let _ = v;
+            }
             for (n, t) in param_names.iter().zip(param_tys.iter()) {
                 local.insert(n.clone(), t.clone());
             }
+            // Self ref for recursion: monomorphic version for body check.
+            local.insert(
+                name.clone(),
+                Type::Fn {
+                    params: sig_params.clone(),
+                    ret: Box::new(sig_ret.clone()),
+                },
+            );
             let got = infer_expr(&local, body_expr)?;
             if !Type::unify_assignable(&got, &sig_ret) {
                 return Err(Error::msg(format!(
@@ -136,18 +154,36 @@ fn def_name(args: &[Expr]) -> Result<String> {
 }
 
 fn parse_type_form(kids: &[Expr]) -> Result<Type> {
-    match kids {
-        [e] => param_type(e),
-        _ => Err(Error::msg("type/ expects one type")),
+    // type/ List I64 /type as atoms, or type/ List/ I64 /List /type
+    if kids.len() == 1 {
+        return param_type(&kids[0]);
     }
+    let atoms = type_atoms(kids)?;
+    let (t, end) = super::ty::parse_one(&atoms, 0).map_err(Error::msg)?;
+    if end != atoms.len() {
+        return Err(Error::msg("trailing tokens in type/"));
+    }
+    Ok(t)
 }
 
-fn parse_fn(args: &[Expr]) -> Result<(Vec<Type>, Type, Vec<String>, Vec<Type>, &Expr)> {
+fn parse_fn(args: &[Expr]) -> Result<(Vec<Type>, Type, Vec<String>, Vec<Type>, &Expr, Vec<String>)> {
     let mut sig = None;
     let mut params = None;
     let mut body = None;
+    let mut forall_vars = Vec::new();
     for a in args {
         match a {
+            Expr::Call { name, args: kids } if name == "forall" => {
+                for k in kids {
+                    match k {
+                        Expr::Symbol(s) => forall_vars.push(s.clone()),
+                        Expr::Call { name, args } if args.is_empty() => {
+                            forall_vars.push(name.clone())
+                        }
+                        _ => return Err(Error::msg("forall vars must be names")),
+                    }
+                }
+            }
             Expr::Call { name, args: kids } if name == "sig" => sig = Some(parse_sig(kids)?),
             Expr::Call { name, args: kids } if name == "params" => {
                 params = Some(parse_typed_params(kids)?)
@@ -163,19 +199,24 @@ fn parse_fn(args: &[Expr]) -> Result<(Vec<Type>, Type, Vec<String>, Vec<Type>, &
     let (sp, sr) = sig.ok_or_else(|| Error::msg("fn missing mandatory sig/ … /sig"))?;
     let (names, tys) = params.ok_or_else(|| Error::msg("fn missing params/ … /params"))?;
     let body = body.ok_or_else(|| Error::msg("fn missing body"))?;
-    Ok((sp, sr, names, tys, body))
+    Ok((sp, sr, names, tys, body, forall_vars))
 }
 
 fn parse_sig(kids: &[Expr]) -> Result<(Vec<Type>, Type)> {
+    let atoms = type_atoms(kids)?;
+    Type::parse_atoms(&atoms).map_err(Error::msg)
+}
+
+fn type_atoms(kids: &[Expr]) -> Result<Vec<String>> {
     let mut atoms = Vec::new();
     for k in kids {
         match k {
             Expr::Symbol(s) => atoms.push(s.clone()),
             Expr::Call { name, args } if args.is_empty() => atoms.push(name.clone()),
-            _ => return Err(Error::msg("sig atoms must be type names or ->")),
+            _ => return Err(Error::msg("type atoms must be names or ->")),
         }
     }
-    Type::parse_atoms(&atoms).map_err(Error::msg)
+    Ok(atoms)
 }
 
 fn parse_typed_params(kids: &[Expr]) -> Result<(Vec<String>, Vec<Type>)> {
@@ -200,9 +241,10 @@ fn parse_typed_params(kids: &[Expr]) -> Result<(Vec<String>, Vec<Type>)> {
 
 fn param_type(e: &Expr) -> Result<Type> {
     match e {
-        Expr::Symbol(s) => single_type(s).ok_or_else(|| Error::msg(format!("bad type {s}"))),
-        Expr::Call { name, args } if args.is_empty() => {
-            single_type(name).ok_or_else(|| Error::msg(format!("bad type {name}")))
+        Expr::Symbol(s) => atom_type(s),
+        Expr::Call { name, args } if args.is_empty() => atom_type(name),
+        Expr::Call { name, args } if name == "List" && args.len() == 1 => {
+            Ok(Type::List(Box::new(param_type(&args[0])?)))
         }
         Expr::Call { name, args } if name == "Option" && args.len() == 1 => {
             Ok(Type::Option(Box::new(param_type(&args[0])?)))
@@ -215,18 +257,10 @@ fn param_type(e: &Expr) -> Result<Type> {
     }
 }
 
-fn single_type(s: &str) -> Option<Type> {
-    match s {
-        "Nil" => Some(Type::Nil),
-        "Bool" => Some(Type::Bool),
-        "Int" => Some(Type::Int),
-        "Float" => Some(Type::Float),
-        "Str" => Some(Type::Str),
-        "Buf" => Some(Type::Buf),
-        "Symbol" => Some(Type::Symbol),
-        "List" => Some(Type::List),
-        "Handle" => Some(Type::Handle),
-        "Any" => Some(Type::Any),
-        _ => None,
+fn atom_type(s: &str) -> Result<Type> {
+    let (t, end) = super::ty::parse_one(&[s.to_string()], 0).map_err(Error::msg)?;
+    if end != 1 {
+        return Err(Error::msg(format!("bad type {s}")));
     }
+    Ok(t)
 }

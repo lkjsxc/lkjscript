@@ -1,8 +1,8 @@
 def/
- name/ "step-x" /name
- fn/
- sig/ Any Any Any -> Any /sig
- params/ x Any y Any cx Any /params
- +/ -/ */ x x /* */ y y /* /- cx /+
- /fn
- /def
+  name/ "step-x" /name
+  fn/
+    sig/ F64 F64 F64 -> F64 /sig
+    params/ x F64 y F64 cx F64 /params
+    +/ -/ */ x x /* */ y y /* /- cx /+
+  /fn
+/def

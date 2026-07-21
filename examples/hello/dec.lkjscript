@@ -1,8 +1,8 @@
 def/
  name/ "dec" /name
  fn/
- sig/ Any -> Any /sig
- params/ n Any /params
+ sig/ I64 -> I64 /sig
+ params/ n I64 /params
  -/ n 1 /-
  /fn
  /def

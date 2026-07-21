@@ -5,8 +5,8 @@ import/ "lib/edit/keys/go/normal-i.lkjscript" /import
  def/
  name/ "handle-normal2" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ k 105 /eq
  go-insert/ /go-insert
@@ -21,8 +21,8 @@ import/ "lib/edit/keys/go/normal-i.lkjscript" /import
  def/
  name/ "handle-normal3" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ k 120 /eq
  del-char/ /del-char

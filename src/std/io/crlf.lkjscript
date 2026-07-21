@@ -2,7 +2,7 @@ import/ "std/io/put-byte.lkjscript" /import
  def/
  name/ "crlf" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  put-byte/ 13 /put-byte

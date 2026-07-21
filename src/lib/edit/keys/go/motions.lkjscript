@@ -2,8 +2,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "handle-extra2" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ k 48 /eq
  move-bol/ /move-bol
@@ -18,8 +18,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "handle-extra3" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ k 119 /eq
  move-word/ /move-word
@@ -34,8 +34,8 @@ import/ "lib/edit/keys/extra/bundle.lkjscript" /import
  def/
  name/ "handle-extra4" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> Nil /sig
+ params/ k I64 /params
  if/
  eq/ k 111 /eq
  open-below/ /open-below

@@ -3,7 +3,7 @@ import/ "std/term/puts.lkjscript" /import
  def/
  name/ "show-msg" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  put-byte/ 32 /put-byte

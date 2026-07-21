@@ -8,8 +8,8 @@ import/ "lib/edit/keys/nav/left.lkjscript" /import
  def/
  name/ "handle-normal" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ k 104 /eq
  move-left/ /move-left

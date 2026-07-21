@@ -34,6 +34,12 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(r);
             Ok(true)
         }
+        x if x == Op::StrFromI64 as u8 => {
+            let n = vm.pop();
+            let r = crate::host_ext::str_from_i64(&mut vm.arena, n)?;
+            vm.push(r);
+            Ok(true)
+        }
         x if x == Op::StrFromByte as u8 => {
             let b = vm.pop();
             let r = crate::host_ext::str_from_byte(&mut vm.arena, b)?;

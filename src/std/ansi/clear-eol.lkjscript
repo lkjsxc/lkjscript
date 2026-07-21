@@ -3,7 +3,7 @@ import/ "std/ansi/esc.lkjscript" /import
  def/
  name/ "clear-eol" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  esc/ /esc

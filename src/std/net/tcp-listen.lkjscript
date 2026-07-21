@@ -1,9 +1,9 @@
 def/
- name/ "tcp-listen" /name
- fn/
- sig/ Any -> Any /sig
- params/ port Any /params
- let/
+  name/ "tcp-listen" /name
+  fn/
+    sig/ I64 -> Handle /sig
+    params/ port I64 /params
+    let/
  bind/ fd unwrap-ok/ sys-socket/ /sys-socket /unwrap-ok /bind
  do/
  unwrap-ok/ sys-bind/ fd port /sys-bind /unwrap-ok
@@ -11,5 +11,5 @@ def/
  fd
  /do
  /let
- /fn
- /def
+  /fn
+/def

@@ -4,8 +4,8 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "insert-char" /name
  fn/
- sig/ Any -> Any /sig
- params/ ch Any /params
+ sig/ I64 -> Nil /sig
+ params/ ch I64 /params
  do/
  set-cur-line/
  insert-at/ cur-line/ /cur-line ed-col ch /insert-at

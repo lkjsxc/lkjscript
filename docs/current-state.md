@@ -50,3 +50,4 @@ thin primitives + script libs done for term/net/fs/time; then types, GC, JIT, ad
 | Time wait/now in `.lkjscript` | done |
 | Keep thin `write-str` / `flush` | intentional |
 | Types + slash grammar + opaque sys + precise GC | landed (JIT stub remains) |
+| Ban `Any` + sized numerics + `forall` polymorphism | landed (`print` is Str-only) |

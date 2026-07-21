@@ -1,13 +1,13 @@
-import/ "std/list/len.lkjscript" /import
- def/
- name/ "nth" /name
- fn/
- sig/ Any Any -> Any /sig
- params/ xs Any i Any /params
- if/
- lte/ i 0 /lte
- car/ xs /car
- nth/ cdr/ xs /cdr -/ i 1 /- /nth
- /if
- /fn
- /def
+def/
+  name/ "nth" /name
+  fn/
+    forall/ T /forall
+    sig/ List T I64 -> T /sig
+    params/ xs List/ T /List i I64 /params
+    if/
+      lte/ i 0 /lte
+      car/ xs /car
+      nth/ cdr/ xs /cdr -/ i 1 /- /nth
+    /if
+  /fn
+/def

@@ -1,8 +1,8 @@
 def/
- name/ "write-str" /name
- fn/
- sig/ Any -> Any /sig
- params/ s Any /params
- write-str/ s /write-str
- /fn
- /def
+  name/ "write-str" /name
+  fn/
+    sig/ Str -> Nil /sig
+    params/ s Str /params
+    write-str/ s /write-str
+  /fn
+/def

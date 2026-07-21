@@ -3,7 +3,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "move-back" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  if/
  lte/ ed-col 0 /lte
@@ -19,7 +19,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "back-spaces" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  if/
  and/
@@ -39,7 +39,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "back-word" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  if/
  and/

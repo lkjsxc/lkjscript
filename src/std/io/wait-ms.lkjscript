@@ -1,8 +1,8 @@
 def/
- name/ "wait-ms" /name
- fn/
- sig/ Any -> Any /sig
- params/ ms Any /params
- unwrap-ok/ sys-wait-ms/ ms /sys-wait-ms /unwrap-ok
- /fn
- /def
+  name/ "wait-ms" /name
+  fn/
+    sig/ I64 -> Nil /sig
+    params/ ms I64 /params
+    unwrap-ok/ sys-wait-ms/ ms /sys-wait-ms /unwrap-ok
+  /fn
+/def

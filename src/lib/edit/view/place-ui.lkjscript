@@ -4,7 +4,7 @@ import/ "std/ansi/cup.lkjscript" /import
  def/
  name/ "place-buf-cur" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  cup/
  -/ +/ ed-row 1 /+ ed-top /-
@@ -15,7 +15,7 @@ import/ "std/ansi/cup.lkjscript" /import
  def/
  name/ "place-cmd-cur" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  cup/
  +/ ed-rows 1 /+
@@ -26,7 +26,7 @@ import/ "std/ansi/cup.lkjscript" /import
  def/
  name/ "place-ui" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  cup/ +/ ed-rows 1 /+ 1 /cup

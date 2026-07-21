@@ -7,7 +7,7 @@ import/ "lib/edit/view/view.lkjscript" /import
  def/
  name/ "redraw-paint" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  do/
  clamp-col/ /clamp-col

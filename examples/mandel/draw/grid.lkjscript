@@ -2,8 +2,8 @@ import/ "examples/mandel/draw/row.lkjscript" /import
  def/
  name/ "grid" /name
  fn/
- sig/ Any Any Any -> Any /sig
- params/ y Any h Any w Any /params
+ sig/ I64 I64 I64 -> Nil /sig
+ params/ y I64 h I64 w I64 /params
  if/
  gte/ y h /gte
  nil

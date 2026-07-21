@@ -2,7 +2,7 @@ import/ "lib/edit/buf/load.lkjscript" /import
  def/
  name/ "maybe-load" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  if/
  gt/ argc/ /argc 0 /gt

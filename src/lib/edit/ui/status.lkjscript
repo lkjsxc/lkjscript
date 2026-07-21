@@ -6,7 +6,7 @@ import/ "std/term/puts.lkjscript" /import
  def/
  name/ "show-cmdline" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  puts/ ":" /puts
@@ -18,7 +18,7 @@ import/ "std/term/puts.lkjscript" /import
  def/
  name/ "show-status" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  if/
  eq/ ed-mode 2 /eq

@@ -2,7 +2,7 @@ import/ "lib/edit/buf/save.lkjscript" /import
  def/
  name/ "try-quit" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  if/
  eq/ ed-dirty 0 /eq
@@ -14,7 +14,7 @@ import/ "lib/edit/buf/save.lkjscript" /import
  def/
  name/ "run-cmd2" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  if/
  eq/ ed-cmd "q!" /eq

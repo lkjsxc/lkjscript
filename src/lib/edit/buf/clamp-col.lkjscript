@@ -2,7 +2,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "clamp-col" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  let/
  bind/ n str-len/ cur-line/ /cur-line /str-len /bind

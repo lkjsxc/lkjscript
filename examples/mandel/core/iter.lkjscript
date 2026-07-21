@@ -1,19 +1,19 @@
 import/ "examples/mandel/core/escape.lkjscript" /import
- import/ "examples/mandel/core/step-x.lkjscript" /import
- import/ "examples/mandel/core/step-y.lkjscript" /import
- def/
- name/ "iter" /name
- fn/
- sig/ Any Any Any Any Any Any -> Any /sig
- params/ x Any y Any cx Any cy Any i Any max Any /params
- if/
- escape?/ x y i max /escape?
- i
- iter/
- step-x/ x y cx /step-x
- step-y/ x y cy /step-y
- cx cy +/ i 1 /+ max
- /iter
- /if
- /fn
- /def
+import/ "examples/mandel/core/step-x.lkjscript" /import
+import/ "examples/mandel/core/step-y.lkjscript" /import
+def/
+  name/ "iter" /name
+  fn/
+    sig/ F64 F64 F64 F64 I64 I64 -> I64 /sig
+    params/ x F64 y F64 cx F64 cy F64 i I64 max I64 /params
+    if/
+      escape?/ x y i max /escape?
+      i
+      iter/
+        step-x/ x y cx /step-x
+        step-y/ x y cy /step-y
+        cx cy +/ i 1 /+ max
+      /iter
+    /if
+  /fn
+/def

@@ -2,7 +2,7 @@ import/ "std/list/insert.lkjscript" /import
  def/
  name/ "open-below" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  set/
@@ -23,7 +23,7 @@ import/ "std/list/insert.lkjscript" /import
  def/
  name/ "open-above" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  set/

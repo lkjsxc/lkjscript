@@ -1,16 +1,16 @@
 def/
  name/ "leibniz" /name
  fn/
- sig/ Any -> Any /sig
- params/ n Any /params
+ sig/ I64 -> I64 /sig
+ params/ n I64 /params
  */ 4.0 leibniz-acc/ n 0 0.0 1.0 /leibniz-acc /*
  /fn
  /def
  def/
  name/ "leibniz-acc" /name
  fn/
- sig/ Any Any Any Any -> Any /sig
- params/ n Any i Any acc Any sign Any /params
+ sig/ I64 I64 I64 I64 -> I64 /sig
+ params/ n I64 i I64 acc I64 sign I64 /params
  if/
  gte/ i n /gte
  acc
@@ -23,8 +23,8 @@ def/
  def/
  name/ "leibniz-next" /name
  fn/
- sig/ Any Any Any Any -> Any /sig
- params/ n Any i Any acc Any sign Any /params
+ sig/ I64 I64 I64 I64 -> I64 /sig
+ params/ n I64 i I64 acc I64 sign I64 /params
  leibniz-acc/
  n
  +/ i 1 /+
@@ -36,24 +36,24 @@ def/
  def/
  name/ "add-term" /name
  fn/
- sig/ Any Any Any -> Any /sig
- params/ acc Any sign Any i Any /params
+ sig/ I64 I64 I64 -> I64 /sig
+ params/ acc I64 sign I64 i I64 /params
  +/ acc */ sign term-of/ i /term-of /* /+
  /fn
  /def
  def/
  name/ "term-of" /name
  fn/
- sig/ Any -> Any /sig
- params/ i Any /params
+ sig/ I64 -> I64 /sig
+ params/ i I64 /params
  div/ 1.0 denom/ i /denom /div
  /fn
  /def
  def/
  name/ "denom" /name
  fn/
- sig/ Any -> Any /sig
- params/ i Any /params
+ sig/ I64 -> I64 /sig
+ params/ i I64 /params
  +/ */ 2.0 i /* 1.0 /+
  /fn
  /def

@@ -1,7 +1,7 @@
 def/
  name/ "crlf" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Str /sig
  params/  /params
  str-append/
  str-from-byte/ 13 /str-from-byte

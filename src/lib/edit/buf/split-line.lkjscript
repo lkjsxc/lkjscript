@@ -1,53 +1,53 @@
 import/ "lib/edit/buf/cur-line.lkjscript" /import
- import/ "lib/edit/buf/set-cur-line.lkjscript" /import
- import/ "std/list/insert.lkjscript" /import
- def/
- name/ "split-line" /name
- fn/
- sig/ -> Any /sig
- params/  /params
- split-at/
- cur-line/ /cur-line
- ed-col
- /split-at
- /fn
- /def
- def/
- name/ "split-at" /name
- fn/
- sig/ Any Any -> Any /sig
- params/ line Any col Any /params
- do/
- set-cur-line/
- str-slice/ line 0 col /str-slice
- /set-cur-line
- insert-tail/
- str-slice/
- line
- col
- str-len/ line /str-len
- /str-slice
- /insert-tail
- /do
- /fn
- /def
- def/
- name/ "insert-tail" /name
- fn/
- sig/ Any -> Any /sig
- params/ right Any /params
- do/
- set/
- ed-buf
- list-insert/
- ed-buf
- +/ ed-row 1 /+
- right
- /list-insert
- /set
- set/ ed-row +/ ed-row 1 /+ /set
- set/ ed-col 0 /set
- set/ ed-dirty 1 /set
- /do
- /fn
- /def
+import/ "lib/edit/buf/set-cur-line.lkjscript" /import
+import/ "std/list/insert.lkjscript" /import
+def/
+  name/ "split-line" /name
+  fn/
+    sig/ -> Nil /sig
+    params/  /params
+    split-at/
+      cur-line/ /cur-line
+      ed-col
+    /split-at
+  /fn
+/def
+def/
+  name/ "split-at" /name
+  fn/
+    sig/ Str I64 -> Nil /sig
+    params/ line Str col I64 /params
+    do/
+      set-cur-line/
+        str-slice/ line 0 col /str-slice
+      /set-cur-line
+      insert-tail/
+        str-slice/
+          line
+          col
+          str-len/ line /str-len
+        /str-slice
+      /insert-tail
+    /do
+  /fn
+/def
+def/
+  name/ "insert-tail" /name
+  fn/
+    sig/ Str -> Nil /sig
+    params/ right Str /params
+    do/
+      set/
+        ed-buf
+        list-insert/
+          ed-buf
+          +/ ed-row 1 /+
+          right
+        /list-insert
+      /set
+      set/ ed-row +/ ed-row 1 /+ /set
+      set/ ed-col 0 /set
+      set/ ed-dirty 1 /set
+    /do
+  /fn
+/def

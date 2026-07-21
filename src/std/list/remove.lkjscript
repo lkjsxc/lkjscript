@@ -1,19 +1,16 @@
 def/
- name/ "list-remove" /name
- fn/
- sig/ Any Any -> Any /sig
- params/ xs Any i Any /params
- if/
- eq/ xs nil /eq
- nil
- if/
- lte/ i 0 /lte
- cdr/ xs /cdr
- cons/
- car/ xs /car
- list-remove/ cdr/ xs /cdr -/ i 1 /- /list-remove
- /cons
- /if
- /if
- /fn
- /def
+  name/ "list-remove" /name
+  fn/
+    forall/ T /forall
+    sig/ List T I64 -> List T /sig
+    params/ xs List/ T /List i I64 /params
+    if/
+      lte/ i 0 /lte
+      cdr/ xs /cdr
+      cons/
+        car/ xs /car
+        list-remove/ cdr/ xs /cdr -/ i 1 /- /list-remove
+      /cons
+    /if
+  /fn
+/def

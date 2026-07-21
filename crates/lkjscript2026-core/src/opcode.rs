@@ -79,6 +79,8 @@ pub enum Op {
     IsOk = 142,
     UnwrapOk = 143,
     UnwrapErr = 144,
+    IsNil = 145,
+    StrFromI64 = 146,
     Pop = 70,
     Dup = 71,
     False = 80,

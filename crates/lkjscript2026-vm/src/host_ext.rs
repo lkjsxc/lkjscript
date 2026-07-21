@@ -235,3 +235,8 @@ pub fn unwrap_err(arena: &Arena, v: Value) -> Result<Value> {
         _ => Err(Error::msg("unwrap-err: expected Result")),
     }
 }
+
+pub fn str_from_i64(arena: &mut Arena, n: Value) -> Result<Value> {
+    let n = n.as_int().ok_or_else(|| Error::msg("str-from-i64"))?;
+    Ok(arena.alloc(HeapObj::Str(n.to_string())))
+}

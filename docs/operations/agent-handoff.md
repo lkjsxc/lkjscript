@@ -50,7 +50,14 @@ again unless the user asks.
 
 ## Near-Term Focus
 
-Keep editor/HTTP/bench green while migrating toward thinner sys primitives and
-`.lkjscript` libraries. Mandatory types + slash grammar + opaque Handle/`Result` sys + precise GC landed; baseline JIT still roadmap-only; see
-[vision/performance-roadmap.md](../vision/performance-roadmap.md) and
-[decisions/scratch-host.md](../decisions/scratch-host.md).
+Keep editor/HTTP/bench green. Mandatory types + slash grammar + opaque
+Handle/`Result` sys + precise GC + ban-`Any` (sized `I32`/`U64`/`F64`…,
+annotation-driven `forall`, Str-only `print`) landed; baseline JIT still
+roadmap-only; see [vision/performance-roadmap.md](../vision/performance-roadmap.md)
+and [decisions/slash-types-sys.md](../decisions/slash-types-sys.md).
+
+## Typing sharp edges
+
+- Prefer `null?/ xs /null?` over `eq/ xs nil /eq` for empty lists.
+- Side-effect helpers should declare `-> Nil` (not `I64`).
+- `List T` is flat in `sig/`; use `List/ T /List` in `params/`.

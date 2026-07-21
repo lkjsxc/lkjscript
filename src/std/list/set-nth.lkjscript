@@ -1,15 +1,16 @@
 def/
- name/ "set-nth" /name
- fn/
- sig/ Any Any Any -> Any /sig
- params/ xs Any i Any v Any /params
- if/
- lte/ i 0 /lte
- cons/ v cdr/ xs /cdr /cons
- cons/
- car/ xs /car
- set-nth/ cdr/ xs /cdr -/ i 1 /- v /set-nth
- /cons
- /if
- /fn
- /def
+  name/ "set-nth" /name
+  fn/
+    forall/ T /forall
+    sig/ List T I64 T -> List T /sig
+    params/ xs List/ T /List i I64 v T /params
+    if/
+      lte/ i 0 /lte
+      cons/ v cdr/ xs /cdr /cons
+      cons/
+        car/ xs /car
+        set-nth/ cdr/ xs /cdr -/ i 1 /- v /set-nth
+      /cons
+    /if
+  /fn
+/def

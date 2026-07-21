@@ -3,7 +3,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "move-right" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  if/
  lt/ ed-col line-len/ cur-line/ /cur-line /line-len /lt

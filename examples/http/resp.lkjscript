@@ -2,7 +2,7 @@ import/ "examples/http/crlf.lkjscript" /import
  def/
  name/ "hello-resp" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Str /sig
  params/  /params
  str-append/
  str-append/

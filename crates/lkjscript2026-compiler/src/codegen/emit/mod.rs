@@ -32,7 +32,10 @@ pub fn compile_expr(cx: &mut Cx<'_>, expr: &Expr) -> Result<()> {
         Expr::LitNil => cx.proto.emit(Op::Nil),
         Expr::LitBool(true) => cx.proto.emit(Op::True),
         Expr::LitBool(false) => cx.proto.emit(Op::False),
-        Expr::LitNum(n) => emit_number(cx, *n),
+        Expr::LitNum {
+            value: n,
+            float_syntax: _,
+        } => emit_number(cx, *n),
         Expr::LitStr(s) => {
             let cid = cx.chunk.add_const(Constant::Str(s.clone()));
             cx.proto.emit_op_u16(Op::LoadConst, cid.0);

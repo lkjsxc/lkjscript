@@ -144,6 +144,11 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if x == Op::Car as u8 => car(vm),
         x if x == Op::Cdr as u8 => cdr(vm),
+        x if x == Op::IsNil as u8 => {
+            let v = vm.pop();
+            vm.push(Value::from_bool(v.is_nil()));
+            Ok(())
+        }
         x if x == Op::IsNull as u8 => {
             let v = vm.pop();
             vm.push(Value::from_bool(v.is_nil()));

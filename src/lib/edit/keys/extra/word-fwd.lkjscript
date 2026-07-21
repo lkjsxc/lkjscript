@@ -2,15 +2,15 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "is-space" /name
  fn/
- sig/ Any -> Any /sig
- params/ ch Any /params
+ sig/ I64 -> Bool /sig
+ params/ ch I64 /params
  eq/ ch 32 /eq
  /fn
  /def
  def/
  name/ "move-word" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  do/
  skip-word/ /skip-word
@@ -21,7 +21,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "skip-word" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  if/
  and/
@@ -43,7 +43,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "skip-spaces" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> I64 /sig
  params/  /params
  if/
  and/

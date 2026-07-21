@@ -4,8 +4,8 @@ import/ "lib/edit/keys/mod/normal.lkjscript" /import
  def/
  name/ "handle-key" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> I64 /sig
+ params/ k I64 /params
  if/
  eq/ ed-mode 0 /eq
  handle-normal/ k /handle-normal

@@ -1,8 +1,8 @@
 def/
- name/ "open-write" /name
- fn/
- sig/ Any -> Any /sig
- params/ path Any /params
- unwrap-ok/ sys-open-write/ path /sys-open-write /unwrap-ok
- /fn
- /def
+  name/ "open-write" /name
+  fn/
+    sig/ Str -> Handle /sig
+    params/ path Str /params
+    unwrap-ok/ sys-open-write/ path /sys-open-write /unwrap-ok
+  /fn
+/def

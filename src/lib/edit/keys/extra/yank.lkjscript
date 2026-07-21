@@ -3,7 +3,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "yank-line" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  set/ ed-yank cur-line/ /cur-line /set
  /fn
@@ -11,7 +11,7 @@ import/ "lib/edit/buf/cur-line.lkjscript" /import
  def/
  name/ "paste-line" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  set/

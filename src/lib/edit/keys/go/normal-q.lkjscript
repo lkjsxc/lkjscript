@@ -1,7 +1,7 @@
 def/
  name/ "go-cmd" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  set/ ed-mode 2 /set
@@ -12,7 +12,7 @@ def/
  def/
  name/ "go-quit" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  set/ ed-quit 1 /set
  /fn

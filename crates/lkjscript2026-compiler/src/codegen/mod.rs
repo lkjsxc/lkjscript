@@ -127,7 +127,11 @@ fn parse_fn_compile(args: &[Expr]) -> Result<(Vec<String>, &Expr)> {
     let mut saw_sig = false;
     for a in args {
         match a {
-            Expr::Call { name, .. } if name == "sig" => saw_sig = true,
+            Expr::Call { name, .. } if name == "sig" || name == "forall" => {
+                if name == "sig" {
+                    saw_sig = true;
+                }
+            }
             Expr::Call {
                 name: p,
                 args: plist,

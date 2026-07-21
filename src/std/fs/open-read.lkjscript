@@ -1,8 +1,8 @@
 def/
- name/ "open-read" /name
- fn/
- sig/ Any -> Any /sig
- params/ path Any /params
- unwrap-ok/ sys-open-read/ path /sys-open-read /unwrap-ok
- /fn
- /def
+  name/ "open-read" /name
+  fn/
+    sig/ Str -> Handle /sig
+    params/ path Str /params
+    unwrap-ok/ sys-open-read/ path /sys-open-read /unwrap-ok
+  /fn
+/def

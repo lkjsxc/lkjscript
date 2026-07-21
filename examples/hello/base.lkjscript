@@ -1,8 +1,8 @@
 def/
- name/ "base?" /name
- fn/
- sig/ Any -> Any /sig
- params/ n Any /params
- lte/ n 1 /lte
- /fn
- /def
+  name/ "base?" /name
+  fn/
+    sig/ I64 -> Bool /sig
+    params/ n I64 /params
+    lte/ n 1 /lte
+  /fn
+/def

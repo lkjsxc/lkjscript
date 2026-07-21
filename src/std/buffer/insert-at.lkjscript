@@ -1,14 +1,14 @@
 def/
- name/ "insert-at" /name
- fn/
- sig/ Any Any Any -> Any /sig
- params/ s Any i Any ch Any /params
- str-append/
- str-append/
- str-slice/ s 0 i /str-slice
- str-from-byte/ ch /str-from-byte
- /str-append
- str-slice/ s i str-len/ s /str-len /str-slice
- /str-append
- /fn
- /def
+  name/ "insert-at" /name
+  fn/
+    sig/ Str I64 I64 -> Str /sig
+    params/ s Str i I64 ch I64 /params
+    str-append/
+      str-append/
+        str-slice/ s 0 i /str-slice
+        str-from-byte/ ch /str-from-byte
+      /str-append
+      str-slice/ s i str-len/ s /str-len /str-slice
+    /str-append
+  /fn
+/def

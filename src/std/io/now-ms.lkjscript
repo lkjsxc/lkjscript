@@ -1,8 +1,8 @@
 def/
- name/ "now-ms" /name
- fn/
- sig/ -> Any /sig
- params/  /params
- unwrap-ok/ sys-now-ms/ /sys-now-ms /unwrap-ok
- /fn
- /def
+  name/ "now-ms" /name
+  fn/
+    sig/ -> I64 /sig
+    params/  /params
+    unwrap-ok/ sys-now-ms/ /sys-now-ms /unwrap-ok
+  /fn
+/def

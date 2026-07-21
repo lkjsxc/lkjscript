@@ -1,8 +1,8 @@
 def/
- name/ "path-exists" /name
- fn/
- sig/ Any -> Any /sig
- params/ path Any /params
- sys-path-exists/ path /sys-path-exists
- /fn
- /def
+  name/ "path-exists" /name
+  fn/
+    sig/ Str -> Bool /sig
+    params/ path Str /params
+    sys-path-exists/ path /sys-path-exists
+  /fn
+/def

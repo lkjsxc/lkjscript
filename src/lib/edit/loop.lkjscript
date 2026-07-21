@@ -6,7 +6,7 @@ import/ "lib/edit/view/redraw.lkjscript" /import
  def/
  name/ "edit-loop" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  enter-raw/ /enter-raw
@@ -22,7 +22,7 @@ import/ "lib/edit/view/redraw.lkjscript" /import
  def/
  name/ "edit-step" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  let/
  bind/ k poll-byte/ /poll-byte /bind
@@ -33,8 +33,8 @@ import/ "lib/edit/view/redraw.lkjscript" /import
  def/
  name/ "edit-on-key" /name
  fn/
- sig/ Any -> Any /sig
- params/ k Any /params
+ sig/ I64 -> Nil /sig
+ params/ k I64 /params
  if/
  eq/ k -2 /eq
  do/

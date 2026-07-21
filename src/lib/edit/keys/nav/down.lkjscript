@@ -3,7 +3,7 @@ import/ "std/list/len.lkjscript" /import
  def/
  name/ "move-down" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  if/

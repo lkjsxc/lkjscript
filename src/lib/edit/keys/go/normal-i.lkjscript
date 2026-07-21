@@ -3,7 +3,7 @@ import/ "lib/edit/keys/nav/right.lkjscript" /import
  def/
  name/ "go-insert" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  set/ ed-mode 1 /set
  /fn
@@ -11,7 +11,7 @@ import/ "lib/edit/keys/nav/right.lkjscript" /import
  def/
  name/ "go-append" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  move-right/ /move-right

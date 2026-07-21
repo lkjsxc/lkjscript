@@ -4,7 +4,7 @@ import/ "lib/edit/view/redraw-paint.lkjscript" /import
  def/
  name/ "redraw-ed" /name
  fn/
- sig/ -> Any /sig
+ sig/ -> Nil /sig
  params/  /params
  do/
  redraw-paint/ /redraw-paint

@@ -1,11 +1,11 @@
 def/
- name/ "escape?" /name
- fn/
- sig/ Any Any Any Any -> Any /sig
- params/ x Any y Any i Any max Any /params
- or/
- gte/ i max /gte
- gt/ +/ */ x x /* */ y y /* /+ 4.0 /gt
- /or
- /fn
- /def
+  name/ "escape?" /name
+  fn/
+    sig/ F64 F64 I64 I64 -> Bool /sig
+    params/ x F64 y F64 i I64 max I64 /params
+    or/
+      gte/ i max /gte
+      gt/ +/ */ x x /* */ y y /* /+ 4.0 /gt
+    /or
+  /fn
+/def
