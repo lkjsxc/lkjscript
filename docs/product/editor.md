@@ -36,7 +36,7 @@ meta/scripts/editor-smoke.sh
 
 - Thin sys: `sys-ioctl` / `sys-poll` / `stdin-fd` / `isatty` / `buf-*` / tty-guard
 - Script term: `enter-raw` / `leave-raw` / `poll-byte` under `src/std`
-- Wait: `wait-ms` / `now-ms`
+- Wait: script `wait-ms` / `now-ms` on thin `sys-wait-ms` / `sys-now-ms`
 - Output: `write-byte` / `write-str` / `flush`
 - Files: script `open-read` / `open-write` / `path-exists`; thin
   `close` / `read-byte-fd` / `write-byte-fd` (sys-backed)

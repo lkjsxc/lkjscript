@@ -45,6 +45,8 @@ again unless the user asks.
   reintroduce fat `tcp-*` opcodes or `std::net` in the VM.
 - File open/path-exists are script libraries (`std/fs`); do not reintroduce
   fat `open-read` / `open-write` / `path-exists` or VM `std::fs`.
+- Time wait/now are script libraries (`std/io`); do not reintroduce fat
+  `wait-ms` / `now-ms` or VM `thread::sleep` / `Instant`.
 
 ## Near-Term Focus
 

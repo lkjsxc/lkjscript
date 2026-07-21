@@ -176,13 +176,21 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(crate::host_buf::tty_guard_clear());
             Ok(true)
         }
-        x if x == Op::NowMs as u8 => {
-            vm.push(crate::host_term::now_ms()?);
+        x if x == Op::SysNowMs as u8 => {
+            let ms = lkjscript2026_sys::now_ms_monotonic()
+                .map_err(|e| lkjscript2026_core::Error::msg(format!("sys-now-ms: {e}")))?;
+            vm.push(Value::from_int(ms));
             Ok(true)
         }
-        x if x == Op::WaitMs as u8 => {
+        x if x == Op::SysWaitMs as u8 => {
             let v = vm.pop();
-            vm.push(crate::host_term::wait_ms(v)?);
+            let n = v
+                .as_int()
+                .ok_or_else(|| lkjscript2026_core::Error::msg("sys-wait-ms expects int"))?;
+            let n = n.max(0) as u64;
+            lkjscript2026_sys::sleep_ms(n)
+                .map_err(|e| lkjscript2026_core::Error::msg(format!("sys-wait-ms: {e}")))?;
+            vm.push(Value::NIL);
             Ok(true)
         }
         x if x == Op::SysSocket as u8 => {

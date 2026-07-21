@@ -1,3 +1,4 @@
+<import>std/io/wait-ms.lkjscript</import>
 <def>
   <name>io-wait</name>
   <fn>

@@ -1,0 +1,7 @@
+<def>
+  <name>now-ms</name>
+  <fn>
+    <params></params>
+    <sys-now-ms></sys-now-ms>
+  </fn>
+</def>

@@ -10,6 +10,7 @@ mod ioctl;
 mod poll;
 mod socket;
 mod termios;
+mod time;
 
 pub use fd::{close_fd, FdError, OwnedFd};
 pub use file::{open_read, open_write, path_exists, read_fd, write_fd};
@@ -25,3 +26,4 @@ pub use socket::{
 pub use termios::{
     make_raw, tcgetattr_stdin, tcsetattr_stdin_now, Termios, TermiosError,
 };
+pub use time::{now_ms_monotonic, sleep_ms};

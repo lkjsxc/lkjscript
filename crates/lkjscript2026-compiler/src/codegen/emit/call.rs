@@ -97,7 +97,7 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "close" => Op::CloseFd,
         "read-byte-fd" => Op::ReadByteFd,
         "arg" => Op::Arg,
-        "wait-ms" => Op::WaitMs,
+        "sys-wait-ms" => Op::SysWaitMs,
         "sys-accept" => Op::SysAccept,
         "sys-recv" => Op::SysRecv,
         "sys-path-exists" => Op::SysPathExists,
@@ -157,8 +157,8 @@ fn try_host(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
             cx.proto.emit(Op::TtyGuardClear);
             Ok(true)
         }
-        ("now-ms", 0) => {
-            cx.proto.emit(Op::NowMs);
+        ("sys-now-ms", 0) => {
+            cx.proto.emit(Op::SysNowMs);
             Ok(true)
         }
         ("sys-socket", 0) => {

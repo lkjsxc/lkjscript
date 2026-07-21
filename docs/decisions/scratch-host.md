@@ -29,31 +29,29 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 **Fat host ops to migrate later** (ranked):
 
-1. ~~Terminal policy~~ — done in `.lkjscript` (`enter-raw` / `leave-raw` / `poll-byte`)
-2. ~~Sockets~~ — done in `.lkjscript` (`tcp-*` on `sys-socket` / `sys-bind` / …)
-3. ~~Filesystem~~ — done in `.lkjscript` (`open-*` / `path-exists` on `sys-open-*`)
-4. Time: `wait-ms`, `now-ms` → thin clock/sleep primitives + script
-5. Bulk stdout: `write-str` / `flush` may stay as thin byte-pump intrinsics
+1. ~~Terminal policy~~ — done in `.lkjscript`
+2. ~~Sockets~~ — done in `.lkjscript`
+3. ~~Filesystem~~ — done in `.lkjscript`
+4. ~~Time~~ — done in `.lkjscript` (`wait-ms` / `now-ms` on `sys-wait-ms` / `sys-now-ms`)
+5. Bulk stdout: `write-str` / `flush` **intentionally kept** as thin byte-pump intrinsics
 
 ## This sprint
 
-Filesystem demotion: fat `open-read` / `open-write` / `path-exists` and VM
-`std::fs` paths are gone. Policy lives in `src/std/fs` on thin
-`sys-open-read` / `sys-open-write` / `sys-path-exists` over
-`lkjscript2026-sys` (`OwnedFd`, open/read/write/access). Byte IO stays as
-thin `read-byte-fd` / `write-byte-fd` / `close`. Line helpers live under
-`src/std/fs/text/` to keep fan-out ≤8.
+Time demotion: Rust `Instant` / `thread::sleep` removed from the VM time path.
+`lkjscript2026-sys` owns `clock_gettime(CLOCK_MONOTONIC)` and `nanosleep`.
+Script wrappers live in `src/std/io/wait-ms.lkjscript` and `now-ms.lkjscript`.
 
-Earlier: socket demotion (`src/std/net`); terminal demotion (`src/std/term`).
+Demotion backlog for OS feature opcodes is complete aside from intentional thin
+`write-str` / `flush`.
 
 ## Consequences
 
-- Next demotion target is time (`wait-ms` / `now-ms`)
-- Docker/Linux is the acceptance platform; other OS support is deferred
-- Performance roadmap (types → GC → JIT → adaptive) stays compatible: specialize
-  hot thin primitives, not opaque frameworks
+- No further fat OS demotion required unless new fat ops appear
+- Docker/Linux remains the acceptance platform
+- Performance roadmap (types → GC → JIT → adaptive) stays the next major arc
 
 ## Rejected
 
 - Growing a Rust TUI / networking framework beside the language
 - Adding crates.io deps for convenience without an ADR
+- Turning `write-str` into per-byte `.lkjscript` loops

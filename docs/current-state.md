@@ -17,10 +17,9 @@ all passed on this checkout.
 - Language name: **lkjscript2026**; sources use **`.lkjscript`**
 - Layout: `src/std` (primitives), `src/lib/edit` (editor package), `examples/`
 - Imports: `std/...`, `lib/...`, `examples/...` (package-root; no `../`)
-- Scratch OS layer: `lkjscript2026-sys`; terminal + TCP + FS policy in `.lkjscript`
-  (`enter-raw` / `poll-byte`; `tcp-*`; `open-*` / `path-exists` on `sys-open-*`)
+- Scratch OS layer: `lkjscript2026-sys`; terminal + TCP + FS + time policy in `.lkjscript`
 - Hardcoded limit constants (no user-facing JSON limits)
-- Bytecode VM; remaining fat host: time; bulk `write-str` + `flush`
+- Bytecode VM; intentional thin host: `write-str` + `flush`
 - Language special `while`; bit ops for flag poking
 - Terminal editor: idle without full redraw, visible cmdline, cursor clamp/hide
 - Examples: `hello`, `mandel`, `texteditor`, `http`, `bench`
@@ -31,7 +30,7 @@ all passed on this checkout.
 ## Open Work
 
 See [vision/performance-roadmap.md](vision/performance-roadmap.md):
-thin primitives + script libs (time next), then types, GC, JIT, adaptive opts.
+thin primitives + script libs done for term/net/fs/time; then types, GC, JIT, adaptive opts.
 
 ## Sprint Board
 
@@ -48,5 +47,6 @@ thin primitives + script libs (time next), then types, GC, JIT, adaptive opts.
 | Terminal policy in `.lkjscript` | done |
 | TCP sockets in `.lkjscript` (`src/std/net`) | done |
 | Filesystem open/path-exists in `.lkjscript` | done |
-| Move time fat ops into `.lkjscript` | backlog |
+| Time wait/now in `.lkjscript` | done |
+| Keep thin `write-str` / `flush` | intentional |
 | Types / GC / adaptive JIT | roadmap only |

@@ -2,6 +2,7 @@
 <import>lib/edit/handle.lkjscript</import>
 <import>std/term/raw.lkjscript</import>
 <import>std/io/poll-byte.lkjscript</import>
+<import>std/io/wait-ms.lkjscript</import>
 <def>
   <name>edit-loop</name>
   <fn>

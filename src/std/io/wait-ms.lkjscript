@@ -1,0 +1,7 @@
+<def>
+  <name>wait-ms</name>
+  <fn>
+    <params><ms/></params>
+    <sys-wait-ms><ms/></sys-wait-ms>
+  </fn>
+</def>
