@@ -8,42 +8,39 @@ use lkjscript2026_core::{Error, Result, Value};
 
 #[cfg(unix)]
 mod tty {
-    use std::io::IsTerminal;
     use std::sync::Mutex;
 
-    use rustix::event::{poll, PollFd, PollFlags};
-    use rustix::stdio::stdin;
-    use rustix::termios::{self, OptionalActions, Termios};
+    use lkjscript2026_sys::{
+        make_raw, poll_stdin_ready, tcgetattr_stdin, tcsetattr_stdin_now, Termios,
+    };
 
     static STATE: Mutex<Option<Termios>> = Mutex::new(None);
 
     pub fn term_raw() -> lkjscript2026_core::Result<lkjscript2026_core::Value> {
-        if !std::io::stdin().is_terminal() {
-            return Ok(lkjscript2026_core::Value::NIL);
-        }
-        let fd = stdin();
         let mut guard = STATE
             .lock()
             .map_err(|_| lkjscript2026_core::Error::msg("term lock"))?;
         if guard.is_none() {
-            let saved = termios::tcgetattr(fd)
-                .map_err(|e| lkjscript2026_core::Error::msg(format!("tcgetattr: {e}")))?;
-            *guard = Some(saved.clone());
+            let Some(saved) = tcgetattr_stdin()
+                .map_err(|e| lkjscript2026_core::Error::msg(format!("tcgetattr: {e}")))?
+            else {
+                return Ok(lkjscript2026_core::Value::NIL);
+            };
+            *guard = Some(saved);
             let mut raw = saved;
-            raw.make_raw();
-            termios::tcsetattr(fd, OptionalActions::Now, &raw)
+            make_raw(&mut raw);
+            tcsetattr_stdin_now(&raw)
                 .map_err(|e| lkjscript2026_core::Error::msg(format!("tcsetattr: {e}")))?;
         }
         Ok(lkjscript2026_core::Value::NIL)
     }
 
     pub fn term_cooked() -> lkjscript2026_core::Result<lkjscript2026_core::Value> {
-        let fd = stdin();
         let mut guard = STATE
             .lock()
             .map_err(|_| lkjscript2026_core::Error::msg("term lock"))?;
         if let Some(saved) = guard.take() {
-            let _ = termios::tcsetattr(fd, OptionalActions::Now, &saved);
+            let _ = tcsetattr_stdin_now(&saved);
         }
         Ok(lkjscript2026_core::Value::NIL)
     }
@@ -53,14 +50,7 @@ mod tty {
     }
 
     pub fn poll_ready() -> lkjscript2026_core::Result<bool> {
-        let fd = stdin();
-        let mut pfd = [PollFd::new(&fd, PollFlags::IN | PollFlags::HUP)];
-        let n = poll(&mut pfd, 0i32).map_err(|e| lkjscript2026_core::Error::msg(format!("poll: {e}")))?;
-        if n <= 0 {
-            return Ok(false);
-        }
-        let ev = pfd[0].revents();
-        Ok(ev.contains(PollFlags::IN) || ev.contains(PollFlags::HUP) || ev.contains(PollFlags::ERR))
+        poll_stdin_ready().map_err(|e| lkjscript2026_core::Error::msg(format!("poll: {e}")))
     }
 }
 

@@ -17,18 +17,20 @@ all passed on this checkout.
 - Language name: **lkjscript2026**; sources use **`.lkjscript`**
 - Layout: `src/std` (primitives), `src/lib/edit` (editor package), `examples/`
 - Imports: `std/...`, `lib/...`, `examples/...` (package-root; no `../`)
+- Scratch OS layer: `lkjscript2026-sys` (no `rustix` / crates.io OS helpers)
 - Hardcoded limit constants (no user-facing JSON limits)
 - Bytecode VM; host IO, FD, TCP, wait, TTY raw/poll; bulk `write-str` + `flush`
 - Language special `while` for stack-safe loops
 - Terminal editor: idle without full redraw, visible cmdline, cursor clamp/hide
 - Examples: `hello`, `mandel`, `texteditor`, `http`, `bench`
 - Honest C comparison script: `meta/scripts/bench-compare.sh`
-- Session intent and pitfalls: [operations/agent-handoff.md](operations/agent-handoff.md)
+- Laws: [decisions/scratch-host.md](decisions/scratch-host.md),
+  [operations/agent-handoff.md](operations/agent-handoff.md)
 
 ## Open Work
 
 See [vision/performance-roadmap.md](vision/performance-roadmap.md):
-static types, advanced GC, baseline JIT, adaptive PGO-style opts.
+thin primitives + script libs, then types, GC, baseline JIT, adaptive opts.
 
 ## Sprint Board
 
@@ -41,4 +43,6 @@ static types, advanced GC, baseline JIT, adaptive PGO-style opts.
 | Rust-like `src/std` + `src/lib` | done |
 | Standalone GitHub repo | done |
 | Editor beauty (idle/cmdline/while/flush) | done |
+| Scratch host law + drop rustix | done |
+| Move fat ops into `.lkjscript` | backlog |
 | Types / GC / adaptive JIT | roadmap only |

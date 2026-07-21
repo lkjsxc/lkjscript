@@ -12,3 +12,4 @@ Architecture decision records for `lkjscript2026`.
 - [dir-fanout.md](dir-fanout.md): max children per directory
 - [package-imports.md](package-imports.md): package-root import paths
 - [essential-limits.md](essential-limits.md): tokens/forms over line count
+- [scratch-host.md](scratch-host.md): owned sys layer; fat-opcode freeze

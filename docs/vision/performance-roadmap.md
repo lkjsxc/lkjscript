@@ -9,18 +9,26 @@ Organize the path toward a low-level, highly abstract, eventually very fast
 
 ```mermaid
 flowchart TB
-  now[Now_correctness_HTTP_bench]
+  now[Now_correctness_and_scratch_host]
+  thin[Thin_sys_primitives_plus_script_libs]
   types[Static_types_and_modules]
   gc[Precise_then_generational_GC]
   jit[Baseline_JIT]
   pgo[Profile_guided_adaptive_opts]
-  now --> types --> gc --> jit --> pgo
+  now --> thin --> types --> gc --> jit --> pgo
 ```
 
 ### Now
 
 Correct editor/runtime, package-root imports, hardcoded limits, thin TCP/HTTP
-demo, and honest numeric benchmarks versus C.
+demo, honest numeric benchmarks versus C, and a scratch `lkjscript2026-sys`
+layer (no crates.io OS helpers).
+
+### Thin primitives + `.lkjscript` libraries
+
+Shrink fat host opcodes over time. Keep hot ops obvious so a future JIT can
+specialize them; put policy (termios, sockets, buffering) in `.lkjscript`.
+See [decisions/scratch-host.md](../decisions/scratch-host.md).
 
 ### Static types and modules
 

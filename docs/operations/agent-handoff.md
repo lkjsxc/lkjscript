@@ -7,7 +7,10 @@ can continue without rediscovering recent pain.
 
 ## Product Intent
 
-- Thin Rust host; grow capability in `.lkjscript`, not in host frameworks.
+- Thin, scratch Rust host; grow capability in `.lkjscript`, not frameworks.
+- No new crates.io dependencies without an ADR (`lkjscript2026-sys` owns OS
+  wrappers; `unsafe` only there).
+- Fat host opcodes are frozen; prefer script libraries for new features.
 - Docker and `quiet verify` are the honesty gates for claimed completion.
 - AI-friendly sources: many small files, fan-out at most eight visible children.
 - Package-root imports only: `std/...`, `lib/...`, `examples/...`, or `./...`.
@@ -19,11 +22,11 @@ can continue without rediscovering recent pain.
 src/std/          # primitives: list buffer io fs ansi term
 src/lib/edit/     # only reusable lib package this sprint
 examples/         # hello mandel texteditor http bench
-crates/           # Rust host / compiler / VM
+crates/           # Rust host / compiler / VM / sys
 ```
 
-Do not invent many crates, sealed modules, or rename the product again unless
-the user asks.
+Do not invent many application crates, sealed modules, or rename the product
+again unless the user asks.
 
 ## Known Sharp Edges
 
@@ -40,6 +43,7 @@ the user asks.
 
 ## Near-Term Focus
 
-Keep editor, HTTP demo, and bench scripts green. Types, advanced GC, baseline
-JIT, and adaptive/PGO-style opts stay roadmap-only; see
-[vision/performance-roadmap.md](../vision/performance-roadmap.md).
+Keep editor/HTTP/bench green while migrating toward thinner sys primitives and
+`.lkjscript` libraries. Types / GC / JIT stay roadmap-only; see
+[vision/performance-roadmap.md](../vision/performance-roadmap.md) and
+[decisions/scratch-host.md](../decisions/scratch-host.md).

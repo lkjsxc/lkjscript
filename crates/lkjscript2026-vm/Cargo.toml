@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 lkjscript2026-core = { path = "../lkjscript2026-core" }
-rustix = { version = "0.38", features = ["termios", "event", "stdio"] }
+lkjscript2026-sys = { path = "../lkjscript2026-sys" }
 
 [lints]
 workspace = true
