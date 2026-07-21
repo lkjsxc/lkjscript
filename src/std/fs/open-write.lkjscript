@@ -1,0 +1,7 @@
+<def>
+  <name>open-write</name>
+  <fn>
+    <params><path/></params>
+    <sys-open-write><path/></sys-open-write>
+  </fn>
+</def>

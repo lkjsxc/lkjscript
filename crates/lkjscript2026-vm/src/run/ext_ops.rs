@@ -40,17 +40,17 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::OpenRead as u8 => {
+        x if x == Op::SysOpenRead as u8 => {
             let p = vm.pop();
             let path = crate::host_ext::as_str(&vm.arena, p)?.to_string();
-            let r = vm.fds.open_read(&path)?;
+            let r = vm.fds.sys_open_read(&path)?;
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::OpenWrite as u8 => {
+        x if x == Op::SysOpenWrite as u8 => {
             let p = vm.pop();
             let path = crate::host_ext::as_str(&vm.arena, p)?.to_string();
-            let r = vm.fds.open_write(&path)?;
+            let r = vm.fds.sys_open_write(&path)?;
             vm.push(r);
             Ok(true)
         }
@@ -223,10 +223,10 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::PathExists as u8 => {
+        x if x == Op::SysPathExists as u8 => {
             let p = vm.pop();
             let path = crate::host_ext::as_str(&vm.arena, p)?.to_string();
-            vm.push(crate::host_ext::path_exists(&path)?);
+            vm.push(crate::host_ext::FdTable::sys_path_exists(&path)?);
             Ok(true)
         }
         _ => Ok(false),

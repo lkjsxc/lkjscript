@@ -1,4 +1,5 @@
 <import>std/fs/write-all.lkjscript</import>
+<import>std/fs/open-write.lkjscript</import>
 <def>
   <name>write-file</name>
   <fn>

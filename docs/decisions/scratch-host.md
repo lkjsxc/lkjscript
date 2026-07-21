@@ -31,25 +31,24 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 1. ~~Terminal policy~~ — done in `.lkjscript` (`enter-raw` / `leave-raw` / `poll-byte`)
 2. ~~Sockets~~ — done in `.lkjscript` (`tcp-*` on `sys-socket` / `sys-bind` / …)
-3. Filesystem helpers: `open-read`, `open-write`, `path-exists`, fd byte IO policy
+3. ~~Filesystem~~ — done in `.lkjscript` (`open-*` / `path-exists` on `sys-open-*`)
 4. Time: `wait-ms`, `now-ms` → thin clock/sleep primitives + script
 5. Bulk stdout: `write-str` / `flush` may stay as thin byte-pump intrinsics
 
 ## This sprint
 
-Socket demotion: fat `tcp-listen` / `tcp-accept` / `tcp-recv` / `tcp-send`
-opcodes and `std::net` paths are gone. Policy lives in `src/std/net` on thin
-`sys-socket` / `sys-bind` / `sys-listen` / `sys-accept` / `sys-recv` /
-`sys-send` primitives over `lkjscript2026-sys` Linux socket wrappers. Scripts
-still use fd-table indices (not raw OS fds).
+Filesystem demotion: fat `open-read` / `open-write` / `path-exists` and VM
+`std::fs` paths are gone. Policy lives in `src/std/fs` on thin
+`sys-open-read` / `sys-open-write` / `sys-path-exists` over
+`lkjscript2026-sys` (`OwnedFd`, open/read/write/access). Byte IO stays as
+thin `read-byte-fd` / `write-byte-fd` / `close`. Line helpers live under
+`src/std/fs/text/` to keep fan-out ≤8.
 
-Earlier: terminal demotion — `term-raw` / `term-cooked` / `poll-byte` removed;
-policy in `src/std/term` and `src/std/io` on `buf-*` / `sys-ioctl` / `sys-poll`.
-Exit still restores a guarded termios blob via `lkjscript2026-sys`.
+Earlier: socket demotion (`src/std/net`); terminal demotion (`src/std/term`).
 
 ## Consequences
 
-- Next demotion target is filesystem (`open-read` / `std::fs`)
+- Next demotion target is time (`wait-ms` / `now-ms`)
 - Docker/Linux is the acceptance platform; other OS support is deferred
 - Performance roadmap (types → GC → JIT → adaptive) stays compatible: specialize
   hot thin primitives, not opaque frameworks

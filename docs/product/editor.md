@@ -38,7 +38,8 @@ meta/scripts/editor-smoke.sh
 - Script term: `enter-raw` / `leave-raw` / `poll-byte` under `src/std`
 - Wait: `wait-ms` / `now-ms`
 - Output: `write-byte` / `write-str` / `flush`
-- Files: `open-read` / `open-write` / `close` / `read-byte-fd` / `write-byte-fd`
+- Files: script `open-read` / `open-write` / `path-exists`; thin
+  `close` / `read-byte-fd` / `write-byte-fd` (sys-backed)
 - Args: `argc` / `arg`
 - Strings: `str-len` / `str-ref` / `str-append` / `str-slice` / `str-from-byte`
 - Bits: `bit-and` / `bit-or` / `bit-xor`

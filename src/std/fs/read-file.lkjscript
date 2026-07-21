@@ -1,4 +1,5 @@
 <import>std/fs/read-all.lkjscript</import>
+<import>std/fs/open-read.lkjscript</import>
 <def>
   <name>read-file</name>
   <fn>

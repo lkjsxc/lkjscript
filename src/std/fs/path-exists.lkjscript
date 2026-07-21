@@ -1,0 +1,7 @@
+<def>
+  <name>path-exists</name>
+  <fn>
+    <params><path/></params>
+    <sys-path-exists><path/></sys-path-exists>
+  </fn>
+</def>

@@ -1,4 +1,4 @@
-<import>std/fs/split-lines.lkjscript</import>
+<import>std/fs/text/split-lines.lkjscript</import>
 <import>std/list/reverse.lkjscript</import>
 <def>
   <name>file-to-buf</name>

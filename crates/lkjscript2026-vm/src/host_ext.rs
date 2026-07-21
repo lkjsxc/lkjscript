@@ -1,12 +1,9 @@
 //! String, filesystem, and thin socket host ops.
 
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
 use std::os::fd::RawFd;
-use std::path::Path;
 
 use lkjscript2026_core::{Error, HeapObj, Result, Value};
-use lkjscript2026_sys::OwnedSock;
+use lkjscript2026_sys::OwnedFd;
 
 use crate::arena::Arena;
 
@@ -46,18 +43,14 @@ pub fn str_slice(arena: &mut Arena, s: Value, start: Value, end: Value) -> Resul
     Ok(arena.alloc(HeapObj::Str(text.to_string())))
 }
 
-pub fn path_exists(path: &str) -> Result<Value> {
-    Ok(Value::from_int(if Path::new(path).exists() { 1 } else { 0 }))
-}
-
 pub fn str_from_byte(arena: &mut Arena, b: Value) -> Result<Value> {
     let n = b.as_int().ok_or_else(|| Error::msg("str-from-byte"))? as u8;
     Ok(arena.alloc(HeapObj::Str(String::from(char::from(n)))))
 }
 
 enum IoHandle {
-    File(File),
-    Sock(OwnedSock),
+    File(OwnedFd),
+    Sock(OwnedFd),
 }
 
 pub struct FdTable {
@@ -71,19 +64,22 @@ impl Default for FdTable {
 }
 
 impl FdTable {
-    pub fn open_read(&mut self, path: &str) -> Result<Value> {
-        let f = File::open(path).map_err(|e| Error::msg(format!("open-read: {e}")))?;
+    pub fn sys_open_read(&mut self, path: &str) -> Result<Value> {
+        let f = lkjscript2026_sys::open_read(path)
+            .map_err(|e| Error::msg(format!("sys-open-read: {e}")))?;
         Ok(Value::from_int(self.push(IoHandle::File(f)) as i64))
     }
 
-    pub fn open_write(&mut self, path: &str) -> Result<Value> {
-        let f = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(path)
-            .map_err(|e| Error::msg(format!("open-write: {e}")))?;
+    pub fn sys_open_write(&mut self, path: &str) -> Result<Value> {
+        let f = lkjscript2026_sys::open_write(path)
+            .map_err(|e| Error::msg(format!("sys-open-write: {e}")))?;
         Ok(Value::from_int(self.push(IoHandle::File(f)) as i64))
+    }
+
+    pub fn sys_path_exists(path: &str) -> Result<Value> {
+        let ok = lkjscript2026_sys::path_exists(path)
+            .map_err(|e| Error::msg(format!("sys-path-exists: {e}")))?;
+        Ok(Value::from_int(if ok { 1 } else { 0 }))
     }
 
     pub fn sys_socket(&mut self) -> Result<Value> {
@@ -158,8 +154,7 @@ impl FdTable {
         let i = fd.as_int().ok_or_else(|| Error::msg("read-byte-fd"))? as usize;
         let mut buf = [0u8; 1];
         let n = match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
-            Some(IoHandle::File(f)) => f
-                .read(&mut buf)
+            Some(IoHandle::File(f)) => lkjscript2026_sys::read_fd(f.as_raw(), &mut buf)
                 .map_err(|e| Error::msg(format!("read-byte-fd: {e}")))?,
             Some(IoHandle::Sock(s)) => lkjscript2026_sys::recv_sock(s.as_raw(), &mut buf)
                 .map_err(|e| Error::msg(format!("read-byte-fd: {e}")))?,
@@ -176,9 +171,10 @@ impl FdTable {
         let i = fd.as_int().ok_or_else(|| Error::msg("write-byte-fd"))? as usize;
         let n = b.as_int().ok_or_else(|| Error::msg("byte"))? as u8;
         match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
-            Some(IoHandle::File(f)) => f
-                .write_all(&[n])
-                .map_err(|e| Error::msg(format!("write-byte-fd: {e}")))?,
+            Some(IoHandle::File(f)) => {
+                lkjscript2026_sys::write_fd(f.as_raw(), &[n])
+                    .map_err(|e| Error::msg(format!("write-byte-fd: {e}")))?;
+            }
             Some(IoHandle::Sock(s)) => {
                 lkjscript2026_sys::send_sock(s.as_raw(), &[n])
                     .map_err(|e| Error::msg(format!("write-byte-fd: {e}")))?;

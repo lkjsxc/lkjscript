@@ -1,5 +1,5 @@
 <import>std/fs/write-file.lkjscript</import>
-<import>std/fs/join-lines.lkjscript</import>
+<import>std/fs/text/join-lines.lkjscript</import>
 <import>std/list/len.lkjscript</import>
 <def>
   <name>ed-save</name>

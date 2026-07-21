@@ -43,6 +43,8 @@ again unless the user asks.
 - Terminal raw/poll are script libraries; do not reintroduce `term-raw` opcodes.
 - TCP listen/accept/recv/send are script libraries (`std/net`); do not
   reintroduce fat `tcp-*` opcodes or `std::net` in the VM.
+- File open/path-exists are script libraries (`std/fs`); do not reintroduce
+  fat `open-read` / `open-write` / `path-exists` or VM `std::fs`.
 
 ## Near-Term Focus
 

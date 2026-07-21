@@ -1,0 +1,7 @@
+<def>
+  <name>open-read</name>
+  <fn>
+    <params><path/></params>
+    <sys-open-read><path/></sys-open-read>
+  </fn>
+</def>
