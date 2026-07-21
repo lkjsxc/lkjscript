@@ -40,6 +40,7 @@ again unless the user asks.
 - Command mode must paint `ed-cmd` and CUP onto the cmdline row.
 - Flush after final CUP; hide cursor during clear/paint.
 - Prefer host `write-str` for bulk TTY output (not per-byte loops).
+- Terminal raw/poll are script libraries; do not reintroduce `term-raw` opcodes.
 
 ## Near-Term Focus
 

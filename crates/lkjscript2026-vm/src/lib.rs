@@ -2,6 +2,7 @@
 
 mod arena;
 mod host;
+mod host_buf;
 mod host_ext;
 mod host_term;
 mod run;

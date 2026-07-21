@@ -17,10 +17,11 @@ all passed on this checkout.
 - Language name: **lkjscript2026**; sources use **`.lkjscript`**
 - Layout: `src/std` (primitives), `src/lib/edit` (editor package), `examples/`
 - Imports: `std/...`, `lib/...`, `examples/...` (package-root; no `../`)
-- Scratch OS layer: `lkjscript2026-sys` (no `rustix` / crates.io OS helpers)
+- Scratch OS layer: `lkjscript2026-sys`; terminal policy in `.lkjscript`
+  (`enter-raw` / `poll-byte` on `sys-ioctl` / `sys-poll` / `buf-*`)
 - Hardcoded limit constants (no user-facing JSON limits)
-- Bytecode VM; host IO, FD, TCP, wait, TTY raw/poll; bulk `write-str` + `flush`
-- Language special `while` for stack-safe loops
+- Bytecode VM; remaining fat host: TCP/FS/time; bulk `write-str` + `flush`
+- Language special `while`; bit ops for flag poking
 - Terminal editor: idle without full redraw, visible cmdline, cursor clamp/hide
 - Examples: `hello`, `mandel`, `texteditor`, `http`, `bench`
 - Honest C comparison script: `meta/scripts/bench-compare.sh`
@@ -30,7 +31,7 @@ all passed on this checkout.
 ## Open Work
 
 See [vision/performance-roadmap.md](vision/performance-roadmap.md):
-thin primitives + script libs, then types, GC, baseline JIT, adaptive opts.
+thin primitives + script libs (sockets/FS next), then types, GC, JIT, adaptive opts.
 
 ## Sprint Board
 
@@ -44,5 +45,6 @@ thin primitives + script libs, then types, GC, baseline JIT, adaptive opts.
 | Standalone GitHub repo | done |
 | Editor beauty (idle/cmdline/while/flush) | done |
 | Scratch host law + drop rustix | done |
-| Move fat ops into `.lkjscript` | backlog |
+| Terminal policy in `.lkjscript` | done |
+| Move TCP/FS fat ops into `.lkjscript` | backlog |
 | Types / GC / adaptive JIT | roadmap only |

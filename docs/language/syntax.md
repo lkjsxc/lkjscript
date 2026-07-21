@@ -13,6 +13,7 @@ Define the attribute-less XML-like surface.
 - Text nodes are strings (spaces preserved).
 - Specials: `def`, `fn`, `if`, `while`, `let`, `do`, `quote`, `import`.
 - `<while><cond/>body…</while>` repeats body while cond is truthy; yields nil.
+- Bitwise ints: `bit-and`, `bit-or`, `bit-xor`.
 - Top-level forms must be `def`, `do`, or `import`.
 - At most `MAX_TOPLEVEL_FORMS` top-level forms per file (default 8).
 - Imports: package-root if the path does not start with `.`

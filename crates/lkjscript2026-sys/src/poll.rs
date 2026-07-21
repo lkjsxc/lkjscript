@@ -1,8 +1,5 @@
-//! stdin poll(2) via owned libc extern.
+//! poll(2) via owned libc extern.
 
-use std::os::fd::RawFd;
-
-const STDIN_FILENO: RawFd = 0;
 const POLLIN: i16 = 1;
 const POLLERR: i16 = 8;
 const POLLHUP: i16 = 16;
@@ -28,18 +25,18 @@ extern "C" {
     fn __errno_location() -> *mut i32;
 }
 
-fn errno() -> i32 {
+pub(crate) fn errno() -> i32 {
     unsafe { *__errno_location() }
 }
 
-/// Non-blocking readiness check for stdin (`timeout` 0).
-pub fn poll_stdin_ready() -> Result<bool, PollError> {
+/// Readiness check for `fd` with `timeout_ms` (0 = non-blocking).
+pub fn poll_fd(fd: i32, timeout_ms: i32) -> Result<bool, PollError> {
     let mut pfd = PollFd {
-        fd: STDIN_FILENO,
+        fd,
         events: POLLIN | POLLHUP,
         revents: 0,
     };
-    let n = unsafe { poll(&mut pfd, 1, 0) };
+    let n = unsafe { poll(&mut pfd, 1, timeout_ms) };
     if n < 0 {
         return Err(PollError(errno()));
     }
@@ -48,4 +45,9 @@ pub fn poll_stdin_ready() -> Result<bool, PollError> {
     }
     let ev = pfd.revents;
     Ok(ev & (POLLIN | POLLHUP | POLLERR) != 0)
+}
+
+/// Non-blocking readiness check for stdin.
+pub fn poll_stdin_ready() -> Result<bool, PollError> {
+    poll_fd(0, 0)
 }

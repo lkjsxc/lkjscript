@@ -1,0 +1,18 @@
+<def>
+  <name>poll-byte</name>
+  <fn>
+    <params></params>
+    <if>
+      <eq><sys-poll><stdin-fd></stdin-fd><0/></sys-poll><0/></eq>
+      <-1/>
+      <let>
+        <bind><b/><read-byte></read-byte></bind>
+        <if>
+          <eq><b/><-1/></eq>
+          <-2/>
+          <b/>
+        </if>
+      </let>
+    </if>
+  </fn>
+</def>

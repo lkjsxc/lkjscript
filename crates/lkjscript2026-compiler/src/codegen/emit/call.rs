@@ -61,6 +61,12 @@ fn try_binop(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "str-append" => Op::StrAppend,
         "write-byte-fd" => Op::WriteByteFd,
         "tcp-send" => Op::TcpSend,
+        "buf-ref" => Op::BufRef,
+        "buf-get-u32" => Op::BufGetU32,
+        "sys-poll" => Op::SysPoll,
+        "bit-and" => Op::BitAnd,
+        "bit-or" => Op::BitOr,
+        "bit-xor" => Op::BitXor,
         _ => return Ok(false),
     };
     compile_expr(cx, &args[0])?;
@@ -94,6 +100,11 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "tcp-accept" => Op::TcpAccept,
         "tcp-recv" => Op::TcpRecv,
         "path-exists" => Op::PathExists,
+        "buf-new" => Op::BufNew,
+        "buf-len" => Op::BufLen,
+        "buf-clone" => Op::BufClone,
+        "isatty" => Op::Isatty,
+        "tty-guard-save" => Op::TtyGuardSave,
         _ => return Ok(false),
     };
     compile_expr(cx, &args[0])?;
@@ -102,13 +113,20 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
 }
 
 fn try_ternary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
-    if args.len() != 3 || name != "str-slice" {
+    if args.len() != 3 {
         return Ok(false);
     }
+    let op = match name {
+        "str-slice" => Op::StrSlice,
+        "buf-set" => Op::BufSet,
+        "buf-set-u32" => Op::BufSetU32,
+        "sys-ioctl" => Op::SysIoctl,
+        _ => return Ok(false),
+    };
     compile_expr(cx, &args[0])?;
     compile_expr(cx, &args[1])?;
     compile_expr(cx, &args[2])?;
-    cx.proto.emit(Op::StrSlice);
+    cx.proto.emit(op);
     Ok(true)
 }
 
@@ -130,16 +148,12 @@ fn try_host(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
             cx.proto.emit(Op::EmptyStr);
             Ok(true)
         }
-        ("term-raw", 0) => {
-            cx.proto.emit(Op::TermRaw);
+        ("stdin-fd", 0) => {
+            cx.proto.emit(Op::StdinFd);
             Ok(true)
         }
-        ("term-cooked", 0) => {
-            cx.proto.emit(Op::TermCooked);
-            Ok(true)
-        }
-        ("poll-byte", 0) => {
-            cx.proto.emit(Op::PollByte);
+        ("tty-guard-clear", 0) => {
+            cx.proto.emit(Op::TtyGuardClear);
             Ok(true)
         }
         ("now-ms", 0) => {

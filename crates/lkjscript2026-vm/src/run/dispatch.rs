@@ -29,6 +29,19 @@ fn eq_values<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
+fn bin_bits<J: JitHook>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
+    let b = vm
+        .pop()
+        .as_int()
+        .ok_or_else(|| Error::msg("bit op expects int"))?;
+    let a = vm
+        .pop()
+        .as_int()
+        .ok_or_else(|| Error::msg("bit op expects int"))?;
+    vm.push(Value::from_int(f(a, b)));
+    Ok(())
+}
+
 pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Nop as u8 => Ok(()),
@@ -88,6 +101,9 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             vm.push(Value::from_bool(!v.is_truthy()));
             Ok(())
         }
+        x if x == Op::BitAnd as u8 => bin_bits(vm, |a, b| a & b),
+        x if x == Op::BitOr as u8 => bin_bits(vm, |a, b| a | b),
+        x if x == Op::BitXor as u8 => bin_bits(vm, |a, b| a ^ b),
         x if x == Op::Jump as u8 => {
             let at = vm.read_u16()? as usize;
             if let Some(fr) = vm.frames.last_mut() {

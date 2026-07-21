@@ -1,17 +1,19 @@
 <import>lib/edit/view/redraw.lkjscript</import>
 <import>lib/edit/handle.lkjscript</import>
+<import>std/term/raw.lkjscript</import>
+<import>std/io/poll-byte.lkjscript</import>
 <def>
   <name>edit-loop</name>
   <fn>
     <params></params>
     <do>
-      <term-raw></term-raw>
+      <enter-raw></enter-raw>
       <redraw-ed></redraw-ed>
       <while>
         <eq><ed-quit/><0/></eq>
         <edit-step></edit-step>
       </while>
-      <term-cooked></term-cooked>
+      <leave-raw></leave-raw>
     </do>
   </fn>
 </def>
@@ -31,7 +33,10 @@
     <params><k/></params>
     <if>
       <eq><k/><-2/></eq>
-      <set><ed-quit/><1/></set>
+      <do>
+        <set><ed-quit/><1/></set>
+        <leave-raw></leave-raw>
+      </do>
       <if>
         <eq><k/><-1/></eq>
         <wait-ms><16/></wait-ms>

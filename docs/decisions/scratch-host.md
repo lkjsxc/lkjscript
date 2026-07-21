@@ -29,8 +29,7 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 **Fat host ops to migrate later** (ranked):
 
-1. Terminal policy: `term-raw`, `term-cooked`, `poll-byte` → script termios + poll
-   on thin fd/poll primitives
+1. ~~Terminal policy~~ — done in `.lkjscript` (`enter-raw` / `leave-raw` / `poll-byte`)
 2. Sockets: `tcp-listen`, `tcp-accept`, `tcp-recv`, `tcp-send` → script socket lib
 3. Filesystem helpers: `open-read`, `open-write`, `path-exists`, fd byte IO policy
 4. Time: `wait-ms`, `now-ms` → thin clock/sleep primitives + script
@@ -38,7 +37,10 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 ## This sprint
 
-Replace `rustix` with `lkjscript2026-sys`. Behavior of fat opcodes unchanged.
+Terminal demotion: `term-raw` / `term-cooked` / `poll-byte` removed as language
+opcodes. Policy lives in `src/std/term` and `src/std/io/poll-byte.lkjscript` on
+thin `buf-*` / `sys-ioctl` / `sys-poll` primitives. Exit still restores a
+guarded termios blob via `lkjscript2026-sys`.
 
 ## Consequences
 

@@ -100,4 +100,5 @@ pub enum HeapObj {
     Pair { car: Value, cdr: Value },
     Closure { proto: u32, captures: Vec<Value> },
     Builtin(u16),
+    Buf(Vec<u8>),
 }
