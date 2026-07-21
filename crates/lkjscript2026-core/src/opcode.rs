@@ -35,6 +35,7 @@ pub enum Op {
     ReadByte = 62,
     WriteByte = 63,
     Exit = 64,
+    WriteStr = 65,
     StrLen = 90,
     StrRef = 91,
     StrAppend = 92,

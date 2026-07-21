@@ -9,11 +9,12 @@ Document the modal single-buffer editor shipped as `.lkjscript` under `src/lib/e
 - Modes: Normal / Insert / command-line (`:`)
 - Motions: `hjkl`, `0`, `$`, `w`, `b`
 - Edits: `i` / `a` / `x` / `dd` / `yy` / `p` / `o` / `O`
-- Commands: `:w` `:q` `:q!` `:wq`
+- Commands: `:w` `:q` `:q!` `:wq` (cmdline shows typed text; backspace works)
 - Viewport scroll, line-number gutter, status (mode, path, dirty, message)
 - Open one path from CLI argv (`arg` / `argc`); missing paths open as a new
   empty buffer with status `new file` (created on `:w`)
-- Idle wait via `poll-byte` + `wait-ms` (not a hard FPS engine)
+- Key loop via language `while` + `poll-byte`; idle waits without full redraw
+- Redraw hides cursor, paints, places cursor (buffer or cmdline), then `flush`
 
 Not full vim: no windows, visual mode, search, undo tree, or plugins.
 
@@ -33,7 +34,7 @@ meta/scripts/editor-smoke.sh
 
 ## Host surface used
 
-- Terminal: `term-raw` / `term-cooked` / `poll-byte` / `write-byte`
+- Terminal: `term-raw` / `term-cooked` / `poll-byte` / `write-byte` / `write-str` / `flush`
 - Wait: `wait-ms` / `now-ms`
 - Files: `open-read` / `open-write` / `close` / `read-byte-fd` / `write-byte-fd`
 - Args: `argc` / `arg`

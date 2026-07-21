@@ -2,7 +2,7 @@
 
 use lkjscript2026_core::{Error, HeapObj, JitHook, Op, Result, Value};
 
-use crate::host::{flush_out, print_value, read_byte, write_byte};
+use crate::host::{flush_out, print_value, read_byte, write_byte, write_str};
 use super::calls::{call, car, cdr, make_closure};
 use super::numeric::{as_f64, bin_cmp, bin_num};
 use super::Vm;
@@ -151,6 +151,11 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         x if x == Op::WriteByte as u8 => {
             let v = vm.pop();
             vm.push(write_byte(v)?);
+            Ok(())
+        }
+        x if x == Op::WriteStr as u8 => {
+            let v = vm.pop();
+            vm.push(write_str(&vm.arena, v)?);
             Ok(())
         }
         x if x == Op::Exit as u8 => {

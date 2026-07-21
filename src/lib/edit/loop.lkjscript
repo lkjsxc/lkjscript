@@ -7,11 +7,11 @@
     <do>
       <term-raw></term-raw>
       <redraw-ed></redraw-ed>
-      <if>
-        <eq><ed-quit/><1/></eq>
-        <term-cooked></term-cooked>
+      <while>
+        <eq><ed-quit/><0/></eq>
         <edit-step></edit-step>
-      </if>
+      </while>
+      <term-cooked></term-cooked>
     </do>
   </fn>
 </def>
@@ -31,20 +31,14 @@
     <params><k/></params>
     <if>
       <eq><k/><-2/></eq>
-      <do>
-        <set><ed-quit/><1/></set>
-        <term-cooked></term-cooked>
-      </do>
+      <set><ed-quit/><1/></set>
       <if>
         <eq><k/><-1/></eq>
-        <do>
-          <wait-ms><16/></wait-ms>
-          <edit-loop></edit-loop>
-        </do>
+        <wait-ms><16/></wait-ms>
         <do>
           <set><ed-msg/><empty-str></empty-str></set>
           <handle-key><k/></handle-key>
-          <edit-loop></edit-loop>
+          <redraw-ed></redraw-ed>
         </do>
       </if>
     </if>

@@ -80,6 +80,7 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "null?" => Op::IsNull,
         "print" => Op::Print,
         "write-byte" => Op::WriteByte,
+        "write-str" => Op::WriteStr,
         "exit" => Op::Exit,
         "str-len" => Op::StrLen,
         "str-from-byte" => Op::StrFromByte,

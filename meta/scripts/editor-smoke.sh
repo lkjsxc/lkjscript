@@ -24,4 +24,8 @@ printf 'a\nb\n' > "$TMP"
 printf 'q' | "$LKJ" run "$ROOT/examples/texteditor/main.lkjscript" "$TMP" >/tmp/ed-crlf.out
 # staircase bug emitted only LF; after fix, redraw should contain CR before LF
 grep -q $'\r' /tmp/ed-crlf.out
+# cmdline paint: :wq must appear in the redraw stream
+printf 'iZ\x1b:wq\n' | "$LKJ" run "$ROOT/examples/texteditor/main.lkjscript" "$TMP" >/tmp/ed-cmd.out
+grep -q ':wq' /tmp/ed-cmd.out
+grep -q 'Z' "$TMP"
 printf 'editor-smoke ok\n'

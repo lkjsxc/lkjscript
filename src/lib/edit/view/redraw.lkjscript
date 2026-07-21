@@ -1,18 +1,15 @@
-<import>lib/edit/view/view.lkjscript</import>
-<import>lib/edit/view/draw-rows.lkjscript</import>
+<import>lib/edit/view/redraw-paint.lkjscript</import>
 <import>lib/edit/view/place-ui.lkjscript</import>
-<import>std/ansi/clear.lkjscript</import>
-<import>std/ansi/home.lkjscript</import>
+<import>std/ansi/cursor.lkjscript</import>
 <def>
   <name>redraw-ed</name>
   <fn>
     <params></params>
     <do>
-      <clamp-view></clamp-view>
-      <clear-screen></clear-screen>
-      <home></home>
-      <draw-rows><ed-top/><0/></draw-rows>
+      <redraw-paint></redraw-paint>
       <place-ui></place-ui>
+      <show-cursor></show-cursor>
+      <flush></flush>
     </do>
   </fn>
 </def>

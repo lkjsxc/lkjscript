@@ -40,6 +40,39 @@ pub fn compile_if(cx: &mut Cx<'_>, args: &[Expr]) -> Result<()> {
     Ok(())
 }
 
+/// `<while><cond/>body…</while>` — stack-safe loop; yields nil.
+pub fn compile_while(cx: &mut Cx<'_>, args: &[Expr]) -> Result<()> {
+    if args.is_empty() {
+        return Err(Error::msg("while needs a condition"));
+    }
+    let cond = &args[0];
+    let body = &args[1..];
+    let loop_start = cx.proto.len() as u16;
+    compile_expr(cx, cond)?;
+    cx.proto.emit(Op::JumpIfFalse);
+    let exit_jump = cx.proto.len();
+    cx.proto.emit_u16(0);
+    if body.is_empty() {
+        cx.proto.emit(Op::Nil);
+    } else {
+        for (i, e) in body.iter().enumerate() {
+            compile_expr(cx, e)?;
+            if i + 1 != body.len() {
+                cx.proto.emit(Op::Pop);
+            }
+        }
+    }
+    cx.proto.emit(Op::Pop);
+    cx.proto.emit(Op::Jump);
+    let back = cx.proto.len();
+    cx.proto.emit_u16(0);
+    cx.proto.patch_u16(back, loop_start);
+    let end_at = cx.proto.len() as u16;
+    cx.proto.patch_u16(exit_jump, end_at);
+    cx.proto.emit(Op::Nil);
+    Ok(())
+}
+
 pub fn compile_let(cx: &mut Cx<'_>, args: &[Expr]) -> Result<()> {
     if args.is_empty() {
         return Err(Error::msg("let needs body"));
@@ -126,4 +159,22 @@ pub fn compile_set(cx: &mut Cx<'_>, args: &[Expr]) -> Result<()> {
     let gid = cx.chunk.intern_global(&name);
     cx.proto.emit_op_u16(Op::StoreGlobal, gid);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::codegen::emit::Cx;
+    use lkjscript2026_core::Chunk;
+
+    #[test]
+    fn while_emits_back_edge() {
+        let mut chunk = Chunk::default();
+        let mut cx = Cx::new(&mut chunk, Vec::new(), "t");
+        let cond = Expr::LitBool(false);
+        compile_while(&mut cx, &[cond]).unwrap();
+        let code = &cx.proto.code;
+        assert!(code.iter().any(|&b| b == Op::Jump as u8));
+        assert!(code.iter().any(|&b| b == Op::JumpIfFalse as u8));
+    }
 }

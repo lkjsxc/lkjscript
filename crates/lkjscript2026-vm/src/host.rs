@@ -61,3 +61,11 @@ pub fn write_byte(v: Value) -> Result<Value> {
         .map_err(|e| Error::msg(format!("write-byte: {e}")))?;
     Ok(Value::NIL)
 }
+
+pub fn write_str(arena: &Arena, v: Value) -> Result<Value> {
+    let s = crate::host_ext::as_str(arena, v)?;
+    io::stdout()
+        .write_all(s.as_bytes())
+        .map_err(|e| Error::msg(format!("write-str: {e}")))?;
+    Ok(Value::NIL)
+}

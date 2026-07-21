@@ -1,57 +1,35 @@
 <import>std/term/puts.lkjscript</import>
 <import>std/io/put-byte.lkjscript</import>
-<import>std/io/crlf.lkjscript</import>
+<import>std/ansi/clear-eol.lkjscript</import>
 <import>lib/edit/ui/status-msg.lkjscript</import>
+<import>lib/edit/ui/status-bits.lkjscript</import>
 <def>
-  <name>show-mode</name>
-  <fn>
-    <params></params>
-    <if>
-      <eq><ed-mode/><0/></eq>
-      <puts>NORMAL</puts>
-      <if>
-        <eq><ed-mode/><1/></eq>
-        <puts>INSERT</puts>
-        <puts>:</puts>
-      </if>
-    </if>
-  </fn>
-</def>
-<def>
-  <name>show-pos</name>
+  <name>show-cmdline</name>
   <fn>
     <params></params>
     <do>
-      <put-byte><32/></put-byte>
-      <print><ed-row/></print>
-      <puts>,</puts>
-      <print><ed-col/></print>
-      <crlf></crlf>
+      <puts>:</puts>
+      <puts><ed-cmd/></puts>
+      <clear-eol></clear-eol>
     </do>
-  </fn>
-</def>
-<def>
-  <name>show-dirty</name>
-  <fn>
-    <params></params>
-    <if>
-      <eq><ed-dirty/><1/></eq>
-      <puts>*</puts>
-      <nil/>
-    </if>
   </fn>
 </def>
 <def>
   <name>show-status</name>
   <fn>
     <params></params>
-    <do>
-      <show-mode></show-mode>
-      <put-byte><32/></put-byte>
-      <puts><ed-path/></puts>
-      <show-dirty></show-dirty>
-      <show-msg></show-msg>
-      <show-pos></show-pos>
-    </do>
+    <if>
+      <eq><ed-mode/><2/></eq>
+      <show-cmdline></show-cmdline>
+      <do>
+        <show-mode></show-mode>
+        <put-byte><32/></put-byte>
+        <puts><ed-path/></puts>
+        <show-dirty></show-dirty>
+        <show-msg></show-msg>
+        <show-pos></show-pos>
+        <clear-eol></clear-eol>
+      </do>
+    </if>
   </fn>
 </def>

@@ -1,0 +1,12 @@
+<import>std/ansi/esc.lkjscript</import>
+<import>std/term/puts.lkjscript</import>
+<def>
+  <name>clear-eol</name>
+  <fn>
+    <params></params>
+    <do>
+      <esc></esc>
+      <puts>[K</puts>
+    </do>
+  </fn>
+</def>

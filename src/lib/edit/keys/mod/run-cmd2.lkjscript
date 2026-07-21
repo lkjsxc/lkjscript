@@ -6,7 +6,7 @@
     <if>
       <eq><ed-dirty/><0/></eq>
       <set><ed-quit/><1/></set>
-      <nil/>
+      <set><ed-msg/>no write</set>
     </if>
   </fn>
 </def>
@@ -23,7 +23,7 @@
           <ed-save></ed-save>
           <set><ed-quit/><1/></set>
         </do>
-        <nil/>
+        <set><ed-msg/>unknown</set>
       </if>
     </if>
   </fn>

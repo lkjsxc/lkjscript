@@ -11,7 +11,8 @@ Define the attribute-less XML-like surface.
 - Empty tags with numeric names are number literals (`<1/>`, `<-2.0/>`).
 - Other empty tags are symbols (`<n/>`).
 - Text nodes are strings (spaces preserved).
-- Specials: `def`, `fn`, `if`, `let`, `do`, `quote`, `import`.
+- Specials: `def`, `fn`, `if`, `while`, `let`, `do`, `quote`, `import`.
+- `<while><cond/>body…</while>` repeats body while cond is truthy; yields nil.
 - Top-level forms must be `def`, `do`, or `import`.
 - At most `MAX_TOPLEVEL_FORMS` top-level forms per file (default 8).
 - Imports: package-root if the path does not start with `.`

@@ -33,6 +33,10 @@ the user asks.
   (`compile_do`); this is already fixed — do not regress it.
 - Raw TTY redraw must emit CR+LF (LF-only caused a staircase display bug).
 - Missing file opens as an empty buffer with status `new file`.
+- Editor idle must not full-redraw; use `while` + `wait-ms` without paint.
+- Command mode must paint `ed-cmd` and CUP onto the cmdline row.
+- Flush after final CUP; hide cursor during clear/paint.
+- Prefer host `write-str` for bulk TTY output (not per-byte loops).
 
 ## Near-Term Focus
 

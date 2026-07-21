@@ -1,11 +1,15 @@
+<import>lib/edit/buf/clamp-col.lkjscript</import>
 <def>
   <name>move-up</name>
   <fn>
     <params></params>
-    <if>
-      <gt><ed-row/><0/></gt>
-      <set><ed-row/><-><ed-row/><1/></-></set>
-      <nil/>
-    </if>
+    <do>
+      <if>
+        <gt><ed-row/><0/></gt>
+        <set><ed-row/><-><ed-row/><1/></-></set>
+        <nil/>
+      </if>
+      <clamp-col></clamp-col>
+    </do>
   </fn>
 </def>

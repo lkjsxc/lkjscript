@@ -79,6 +79,7 @@ pub fn compile_call(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<()> {
     };
     match name {
         "if" => special::compile_if(cx, args),
+        "while" => special::compile_while(cx, args),
         "let" => special::compile_let(cx, args),
         "quote" => special::compile_quote(cx, args),
         "do" => special::compile_do_expr(cx, args),

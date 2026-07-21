@@ -18,8 +18,9 @@ all passed on this checkout.
 - Layout: `src/std` (primitives), `src/lib/edit` (editor package), `examples/`
 - Imports: `std/...`, `lib/...`, `examples/...` (package-root; no `../`)
 - Hardcoded limit constants (no user-facing JSON limits)
-- Bytecode VM; host IO, FD, TCP, wait, TTY raw/poll
-- Terminal editor under `src/lib/edit` with CRLF redraw and new-file open
+- Bytecode VM; host IO, FD, TCP, wait, TTY raw/poll; bulk `write-str` + `flush`
+- Language special `while` for stack-safe loops
+- Terminal editor: idle without full redraw, visible cmdline, cursor clamp/hide
 - Examples: `hello`, `mandel`, `texteditor`, `http`, `bench`
 - Honest C comparison script: `meta/scripts/bench-compare.sh`
 - Session intent and pitfalls: [operations/agent-handoff.md](operations/agent-handoff.md)
@@ -39,4 +40,5 @@ static types, advanced GC, baseline JIT, adaptive PGO-style opts.
 | Minimal HTTP + bench vs C | done |
 | Rust-like `src/std` + `src/lib` | done |
 | Standalone GitHub repo | done |
+| Editor beauty (idle/cmdline/while/flush) | done |
 | Types / GC / adaptive JIT | roadmap only |
