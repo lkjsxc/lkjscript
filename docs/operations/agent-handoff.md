@@ -19,7 +19,7 @@ can continue without rediscovering recent pain.
 ## Locked Layout
 
 ```text
-src/std/          # primitives: list buffer io fs ansi term
+src/std/          # primitives: list buffer io fs ansi term net
 src/lib/edit/     # only reusable lib package this sprint
 examples/         # hello mandel texteditor http bench
 crates/           # Rust host / compiler / VM / sys
@@ -41,6 +41,8 @@ again unless the user asks.
 - Flush after final CUP; hide cursor during clear/paint.
 - Prefer host `write-str` for bulk TTY output (not per-byte loops).
 - Terminal raw/poll are script libraries; do not reintroduce `term-raw` opcodes.
+- TCP listen/accept/recv/send are script libraries (`std/net`); do not
+  reintroduce fat `tcp-*` opcodes or `std::net` in the VM.
 
 ## Near-Term Focus
 

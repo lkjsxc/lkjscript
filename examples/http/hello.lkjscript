@@ -1,4 +1,8 @@
 <import>examples/http/resp.lkjscript</import>
+<import>std/net/tcp-listen.lkjscript</import>
+<import>std/net/tcp-accept.lkjscript</import>
+<import>std/net/tcp-recv.lkjscript</import>
+<import>std/net/tcp-send.lkjscript</import>
 <def>
   <name>serve-once</name>
   <fn>

@@ -1,0 +1,7 @@
+<def>
+  <name>tcp-send</name>
+  <fn>
+    <params><fd/><s/></params>
+    <sys-send><fd/><s/></sys-send>
+  </fn>
+</def>

@@ -185,28 +185,41 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(crate::host_term::wait_ms(v)?);
             Ok(true)
         }
-        x if x == Op::TcpListen as u8 => {
-            let p = vm.pop();
-            let r = vm.fds.tcp_listen(p)?;
+        x if x == Op::SysSocket as u8 => {
+            let r = vm.fds.sys_socket()?;
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::TcpAccept as u8 => {
+        x if x == Op::SysBind as u8 => {
+            let port = vm.pop();
             let fd = vm.pop();
-            let r = vm.fds.tcp_accept(fd)?;
+            let r = vm.fds.sys_bind(fd, port)?;
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::TcpRecv as u8 => {
+        x if x == Op::SysListen as u8 => {
+            let backlog = vm.pop();
             let fd = vm.pop();
-            let r = vm.fds.tcp_recv(&mut vm.arena, fd)?;
+            let r = vm.fds.sys_listen(fd, backlog)?;
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::TcpSend as u8 => {
+        x if x == Op::SysAccept as u8 => {
+            let fd = vm.pop();
+            let r = vm.fds.sys_accept(fd)?;
+            vm.push(r);
+            Ok(true)
+        }
+        x if x == Op::SysRecv as u8 => {
+            let fd = vm.pop();
+            let r = vm.fds.sys_recv(&mut vm.arena, fd)?;
+            vm.push(r);
+            Ok(true)
+        }
+        x if x == Op::SysSend as u8 => {
             let data = vm.pop();
             let fd = vm.pop();
-            let r = vm.fds.tcp_send(&vm.arena, fd, data)?;
+            let r = vm.fds.sys_send(&vm.arena, fd, data)?;
             vm.push(r);
             Ok(true)
         }

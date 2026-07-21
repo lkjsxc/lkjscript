@@ -1,11 +1,12 @@
-//! String, filesystem, and TCP host ops.
+//! String, filesystem, and thin socket host ops.
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::os::fd::RawFd;
 use std::path::Path;
 
 use lkjscript2026_core::{Error, HeapObj, Result, Value};
+use lkjscript2026_sys::OwnedSock;
 
 use crate::arena::Arena;
 
@@ -56,8 +57,7 @@ pub fn str_from_byte(arena: &mut Arena, b: Value) -> Result<Value> {
 
 enum IoHandle {
     File(File),
-    Listener(TcpListener),
-    Stream(TcpStream),
+    Sock(OwnedSock),
 }
 
 pub struct FdTable {
@@ -86,49 +86,62 @@ impl FdTable {
         Ok(Value::from_int(self.push(IoHandle::File(f)) as i64))
     }
 
-    pub fn tcp_listen(&mut self, port: Value) -> Result<Value> {
-        let p = port.as_int().ok_or_else(|| Error::msg("tcp-listen port"))? as u16;
-        let addr = format!("0.0.0.0:{p}");
-        let lis = TcpListener::bind(&addr).map_err(|e| Error::msg(format!("tcp-listen: {e}")))?;
-        Ok(Value::from_int(self.push(IoHandle::Listener(lis)) as i64))
+    pub fn sys_socket(&mut self) -> Result<Value> {
+        let sock = lkjscript2026_sys::tcp_socket()
+            .map_err(|e| Error::msg(format!("sys-socket: {e}")))?;
+        Ok(Value::from_int(self.push(IoHandle::Sock(sock)) as i64))
     }
 
-    pub fn tcp_accept(&mut self, fd: Value) -> Result<Value> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("tcp-accept fd"))? as usize;
-        let stream = match self.slots.get(i).and_then(|s| s.as_ref()) {
-            Some(IoHandle::Listener(lis)) => {
-                let (s, _) = lis
-                    .accept()
-                    .map_err(|e| Error::msg(format!("tcp-accept: {e}")))?;
-                s
-            }
-            _ => return Err(Error::msg("tcp-accept: not a listener")),
-        };
-        Ok(Value::from_int(self.push(IoHandle::Stream(stream)) as i64))
+    pub fn sys_bind(&mut self, fd: Value, port: Value) -> Result<Value> {
+        let raw = self.sock_raw(fd)?;
+        let p = port
+            .as_int()
+            .ok_or_else(|| Error::msg("sys-bind port"))? as u16;
+        lkjscript2026_sys::set_reuseaddr(raw)
+            .map_err(|e| Error::msg(format!("sys-bind reuse: {e}")))?;
+        lkjscript2026_sys::bind_ipv4_any(raw, p)
+            .map_err(|e| Error::msg(format!("sys-bind: {e}")))?;
+        Ok(Value::NIL)
     }
 
-    pub fn tcp_recv(&mut self, arena: &mut Arena, fd: Value) -> Result<Value> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("tcp-recv fd"))? as usize;
+    pub fn sys_listen(&mut self, fd: Value, backlog: Value) -> Result<Value> {
+        let raw = self.sock_raw(fd)?;
+        let n = backlog
+            .as_int()
+            .ok_or_else(|| Error::msg("sys-listen backlog"))? as i32;
+        lkjscript2026_sys::listen_sock(raw, n)
+            .map_err(|e| Error::msg(format!("sys-listen: {e}")))?;
+        Ok(Value::NIL)
+    }
+
+    pub fn sys_accept(&mut self, fd: Value) -> Result<Value> {
+        let raw = self.sock_raw(fd)?;
+        let client = lkjscript2026_sys::accept_sock(raw)
+            .map_err(|e| Error::msg(format!("sys-accept: {e}")))?;
+        Ok(Value::from_int(self.push(IoHandle::Sock(client)) as i64))
+    }
+
+    pub fn sys_recv(&mut self, arena: &mut Arena, fd: Value) -> Result<Value> {
+        let raw = self.sock_raw(fd)?;
         let mut buf = vec![0u8; 4096];
-        let n = match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
-            Some(IoHandle::Stream(s)) => s
-                .read(&mut buf)
-                .map_err(|e| Error::msg(format!("tcp-recv: {e}")))?,
-            _ => return Err(Error::msg("tcp-recv: not a stream")),
-        };
+        let n = lkjscript2026_sys::recv_sock(raw, &mut buf)
+            .map_err(|e| Error::msg(format!("sys-recv: {e}")))?;
         buf.truncate(n);
         let text = String::from_utf8_lossy(&buf).into_owned();
         Ok(arena.alloc(HeapObj::Str(text)))
     }
 
-    pub fn tcp_send(&mut self, arena: &Arena, fd: Value, data: Value) -> Result<Value> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("tcp-send fd"))? as usize;
+    pub fn sys_send(&mut self, arena: &Arena, fd: Value, data: Value) -> Result<Value> {
+        let raw = self.sock_raw(fd)?;
         let bytes = as_str(arena, data)?.as_bytes();
-        match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
-            Some(IoHandle::Stream(s)) => s
-                .write_all(bytes)
-                .map_err(|e| Error::msg(format!("tcp-send: {e}")))?,
-            _ => return Err(Error::msg("tcp-send: not a stream")),
+        let mut sent = 0;
+        while sent < bytes.len() {
+            let n = lkjscript2026_sys::send_sock(raw, &bytes[sent..])
+                .map_err(|e| Error::msg(format!("sys-send: {e}")))?;
+            if n == 0 {
+                break;
+            }
+            sent += n;
         }
         Ok(Value::NIL)
     }
@@ -145,11 +158,13 @@ impl FdTable {
         let i = fd.as_int().ok_or_else(|| Error::msg("read-byte-fd"))? as usize;
         let mut buf = [0u8; 1];
         let n = match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
-            Some(IoHandle::File(f)) => f.read(&mut buf),
-            Some(IoHandle::Stream(s)) => s.read(&mut buf),
+            Some(IoHandle::File(f)) => f
+                .read(&mut buf)
+                .map_err(|e| Error::msg(format!("read-byte-fd: {e}")))?,
+            Some(IoHandle::Sock(s)) => lkjscript2026_sys::recv_sock(s.as_raw(), &mut buf)
+                .map_err(|e| Error::msg(format!("read-byte-fd: {e}")))?,
             _ => return Err(Error::msg("bad fd")),
-        }
-        .map_err(|e| Error::msg(format!("read-byte-fd: {e}")))?;
+        };
         if n == 0 {
             Ok(Value::from_int(-1))
         } else {
@@ -164,12 +179,21 @@ impl FdTable {
             Some(IoHandle::File(f)) => f
                 .write_all(&[n])
                 .map_err(|e| Error::msg(format!("write-byte-fd: {e}")))?,
-            Some(IoHandle::Stream(s)) => s
-                .write_all(&[n])
-                .map_err(|e| Error::msg(format!("write-byte-fd: {e}")))?,
+            Some(IoHandle::Sock(s)) => {
+                lkjscript2026_sys::send_sock(s.as_raw(), &[n])
+                    .map_err(|e| Error::msg(format!("write-byte-fd: {e}")))?;
+            }
             _ => return Err(Error::msg("bad fd")),
         }
         Ok(Value::NIL)
+    }
+
+    fn sock_raw(&self, fd: Value) -> Result<RawFd> {
+        let i = fd.as_int().ok_or_else(|| Error::msg("sock fd"))? as usize;
+        match self.slots.get(i).and_then(|s| s.as_ref()) {
+            Some(IoHandle::Sock(s)) => Ok(s.as_raw()),
+            _ => Err(Error::msg("not a socket fd")),
+        }
     }
 
     fn push(&mut self, h: IoHandle) -> usize {

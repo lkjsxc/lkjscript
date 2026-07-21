@@ -1,0 +1,7 @@
+<def>
+  <name>tcp-recv</name>
+  <fn>
+    <params><fd/></params>
+    <sys-recv><fd/></sys-recv>
+  </fn>
+</def>

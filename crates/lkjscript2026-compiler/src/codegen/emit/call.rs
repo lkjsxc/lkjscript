@@ -60,10 +60,12 @@ fn try_binop(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "str-ref" => Op::StrRef,
         "str-append" => Op::StrAppend,
         "write-byte-fd" => Op::WriteByteFd,
-        "tcp-send" => Op::TcpSend,
+        "sys-send" => Op::SysSend,
         "buf-ref" => Op::BufRef,
         "buf-get-u32" => Op::BufGetU32,
         "sys-poll" => Op::SysPoll,
+        "sys-bind" => Op::SysBind,
+        "sys-listen" => Op::SysListen,
         "bit-and" => Op::BitAnd,
         "bit-or" => Op::BitOr,
         "bit-xor" => Op::BitXor,
@@ -96,9 +98,8 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "read-byte-fd" => Op::ReadByteFd,
         "arg" => Op::Arg,
         "wait-ms" => Op::WaitMs,
-        "tcp-listen" => Op::TcpListen,
-        "tcp-accept" => Op::TcpAccept,
-        "tcp-recv" => Op::TcpRecv,
+        "sys-accept" => Op::SysAccept,
+        "sys-recv" => Op::SysRecv,
         "path-exists" => Op::PathExists,
         "buf-new" => Op::BufNew,
         "buf-len" => Op::BufLen,
@@ -158,6 +159,10 @@ fn try_host(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         }
         ("now-ms", 0) => {
             cx.proto.emit(Op::NowMs);
+            Ok(true)
+        }
+        ("sys-socket", 0) => {
+            cx.proto.emit(Op::SysSocket);
             Ok(true)
         }
         _ => Ok(false),

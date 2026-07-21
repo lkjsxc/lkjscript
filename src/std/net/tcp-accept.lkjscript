@@ -1,0 +1,7 @@
+<def>
+  <name>tcp-accept</name>
+  <fn>
+    <params><lis/></params>
+    <sys-accept><lis/></sys-accept>
+  </fn>
+</def>

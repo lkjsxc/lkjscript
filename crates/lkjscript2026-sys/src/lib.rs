@@ -6,6 +6,7 @@
 
 mod ioctl;
 mod poll;
+mod socket;
 mod termios;
 
 pub use ioctl::{
@@ -13,6 +14,10 @@ pub use ioctl::{
     TCGETS, TCSETS, TERMIOS_LEN,
 };
 pub use poll::{poll_fd, poll_stdin_ready, PollError};
+pub use socket::{
+    accept_sock, bind_ipv4_any, close_fd, listen_sock, recv_sock, send_sock, set_reuseaddr,
+    tcp_socket, OwnedSock, SockError,
+};
 pub use termios::{
     make_raw, tcgetattr_stdin, tcsetattr_stdin_now, Termios, TermiosError,
 };
