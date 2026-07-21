@@ -1,14 +1,15 @@
-<def>
-  <name>reverse</name>
-  <fn>
-    <params><xs/><acc/></params>
-    <if>
-      <null?><xs/></null?>
-      <acc/>
-      <reverse>
-        <cdr><xs/></cdr>
-        <cons><car><xs/></car><acc/></cons>
-      </reverse>
-    </if>
-  </fn>
-</def>
+def/
+ name/ "reverse" /name
+ fn/
+ sig/ Any Any -> Any /sig
+ params/ xs Any acc Any /params
+ if/
+ null?/ xs /null?
+ acc
+ reverse/
+ cdr/ xs /cdr
+ cons/ car/ xs /car acc /cons
+ /reverse
+ /if
+ /fn
+ /def

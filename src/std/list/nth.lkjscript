@@ -1,12 +1,13 @@
-<import>std/list/len.lkjscript</import>
-<def>
-  <name>nth</name>
-  <fn>
-    <params><xs/><i/></params>
-    <if>
-      <lte><i/><0/></lte>
-      <car><xs/></car>
-      <nth><cdr><xs/></cdr><-><i/><1/></-></nth>
-    </if>
-  </fn>
-</def>
+import/ "std/list/len.lkjscript" /import
+ def/
+ name/ "nth" /name
+ fn/
+ sig/ Any Any -> Any /sig
+ params/ xs Any i Any /params
+ if/
+ lte/ i 0 /lte
+ car/ xs /car
+ nth/ cdr/ xs /cdr -/ i 1 /- /nth
+ /if
+ /fn
+ /def

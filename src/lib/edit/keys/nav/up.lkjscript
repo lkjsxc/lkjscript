@@ -1,15 +1,16 @@
-<import>lib/edit/buf/clamp-col.lkjscript</import>
-<def>
-  <name>move-up</name>
-  <fn>
-    <params></params>
-    <do>
-      <if>
-        <gt><ed-row/><0/></gt>
-        <set><ed-row/><-><ed-row/><1/></-></set>
-        <nil/>
-      </if>
-      <clamp-col></clamp-col>
-    </do>
-  </fn>
-</def>
+import/ "lib/edit/buf/clamp-col.lkjscript" /import
+ def/
+ name/ "move-up" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ if/
+ gt/ ed-row 0 /gt
+ set/ ed-row -/ ed-row 1 /- /set
+ nil
+ /if
+ clamp-col/ /clamp-col
+ /do
+ /fn
+ /def

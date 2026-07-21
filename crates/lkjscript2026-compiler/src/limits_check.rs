@@ -43,7 +43,7 @@ fn check_nest_tokens(tokens: &[Token], limits: &Limits, path: &str) -> Result<()
                 child_stack.pop();
                 depth = depth.saturating_sub(1);
             }
-            Token::Empty(_) | Token::Text(_) => {
+            Token::Atom(_) | Token::Str(_) => {
                 if let Some(c) = child_stack.last_mut() {
                     *c += 1;
                     if *c > limits.max_children {
@@ -70,7 +70,7 @@ mod tests {
             max_tokens_per_file: 2,
             ..Limits::default()
         };
-        let tokens = lex("<a/><b/><c/>").expect("lex");
+        let tokens = lex("a b c").expect("lex");
         let err = check_file_limits(&tokens, &lim, "t.lkjscript").expect_err("budget");
         assert!(err.as_str().contains("split via import"));
     }

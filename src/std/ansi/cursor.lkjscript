@@ -1,22 +1,24 @@
-<import>std/ansi/esc.lkjscript</import>
-<import>std/term/puts.lkjscript</import>
-<def>
-  <name>hide-cursor</name>
-  <fn>
-    <params></params>
-    <do>
-      <esc></esc>
-      <puts>[?25l</puts>
-    </do>
-  </fn>
-</def>
-<def>
-  <name>show-cursor</name>
-  <fn>
-    <params></params>
-    <do>
-      <esc></esc>
-      <puts>[?25h</puts>
-    </do>
-  </fn>
-</def>
+import/ "std/ansi/esc.lkjscript" /import
+ import/ "std/term/puts.lkjscript" /import
+ def/
+ name/ "hide-cursor" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ esc/ /esc
+ puts/ "[?25l" /puts
+ /do
+ /fn
+ /def
+ def/
+ name/ "show-cursor" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ esc/ /esc
+ puts/ "[?25h" /puts
+ /do
+ /fn
+ /def

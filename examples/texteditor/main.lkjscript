@@ -1,7 +1,7 @@
-<import>lib/edit/init.lkjscript</import>
-<import>lib/edit/buf/maybe-load.lkjscript</import>
-<import>lib/edit/loop.lkjscript</import>
-<do>
-  <maybe-load></maybe-load>
-  <edit-loop></edit-loop>
-</do>
+import/ "lib/edit/init.lkjscript" /import
+ import/ "lib/edit/buf/maybe-load.lkjscript" /import
+ import/ "lib/edit/loop.lkjscript" /import
+ do/
+ maybe-load/ /maybe-load
+ edit-loop/ /edit-loop
+ /do

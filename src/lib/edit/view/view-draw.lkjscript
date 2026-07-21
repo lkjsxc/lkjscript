@@ -1,20 +1,22 @@
-<import>std/term/puts.lkjscript</import>
-<import>std/io/put-byte.lkjscript</import>
-<import>lib/edit/view/pad-num.lkjscript</import>
-<def>
-  <name>gutter-w</name>
-  <fn>
-    <params></params>
-    <5/>
-  </fn>
-</def>
-<def>
-  <name>draw-gutter</name>
-  <fn>
-    <params><n/></params>
-    <do>
-      <pad-num><+><n/><1/></+></pad-num>
-      <puts>|</puts>
-    </do>
-  </fn>
-</def>
+import/ "std/term/puts.lkjscript" /import
+ import/ "std/io/put-byte.lkjscript" /import
+ import/ "lib/edit/view/pad-num.lkjscript" /import
+ def/
+ name/ "gutter-w" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ 5
+ /fn
+ /def
+ def/
+ name/ "draw-gutter" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ n Any /params
+ do/
+ pad-num/ +/ n 1 /+ /pad-num
+ puts/ "|" /puts
+ /do
+ /fn
+ /def

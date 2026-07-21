@@ -1,11 +1,12 @@
-<import>std/io/put-byte.lkjscript</import>
-<def>
-  <name>crlf</name>
-  <fn>
-    <params></params>
-    <do>
-      <put-byte><13/></put-byte>
-      <put-byte><10/></put-byte>
-    </do>
-  </fn>
-</def>
+import/ "std/io/put-byte.lkjscript" /import
+ def/
+ name/ "crlf" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ put-byte/ 13 /put-byte
+ put-byte/ 10 /put-byte
+ /do
+ /fn
+ /def

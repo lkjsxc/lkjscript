@@ -1,15 +1,16 @@
-<import>lib/edit/buf/cur-line.lkjscript</import>
-<import>lib/edit/buf/set-cur-line.lkjscript</import>
-<import>std/buffer/delete-at.lkjscript</import>
-<def>
-  <name>del-char</name>
-  <fn>
-    <params></params>
-    <do>
-      <set-cur-line>
-        <delete-at><cur-line></cur-line><ed-col/></delete-at>
-      </set-cur-line>
-      <set><ed-dirty/><1/></set>
-    </do>
-  </fn>
-</def>
+import/ "lib/edit/buf/cur-line.lkjscript" /import
+ import/ "lib/edit/buf/set-cur-line.lkjscript" /import
+ import/ "std/buffer/delete-at.lkjscript" /import
+ def/
+ name/ "del-char" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ set-cur-line/
+ delete-at/ cur-line/ /cur-line ed-col /delete-at
+ /set-cur-line
+ set/ ed-dirty 1 /set
+ /do
+ /fn
+ /def

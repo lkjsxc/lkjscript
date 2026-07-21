@@ -1,8 +1,9 @@
-<import>std/io/put-byte.lkjscript</import>
-<def>
-  <name>esc</name>
-  <fn>
-    <params></params>
-    <put-byte><27/></put-byte>
-  </fn>
-</def>
+import/ "std/io/put-byte.lkjscript" /import
+ def/
+ name/ "esc" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ put-byte/ 27 /put-byte
+ /fn
+ /def

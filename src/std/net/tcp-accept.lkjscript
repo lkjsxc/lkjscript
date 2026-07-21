@@ -1,7 +1,8 @@
-<def>
-  <name>tcp-accept</name>
-  <fn>
-    <params><lis/></params>
-    <sys-accept><lis/></sys-accept>
-  </fn>
-</def>
+def/
+ name/ "tcp-accept" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ lis Any /params
+ unwrap-ok/ sys-accept/ lis /sys-accept /unwrap-ok
+ /fn
+ /def

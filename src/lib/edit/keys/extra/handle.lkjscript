@@ -1,60 +1,64 @@
-<import>lib/edit/keys/extra/bundle.lkjscript</import>
-<import>lib/edit/keys/go/motions.lkjscript</import>
-<def>
-  <name>handle-extra</name>
-  <fn>
-    <params><k/></params>
-    <if>
-      <eq><ed-pending/><100/></eq>
-      <finish-d><k/></finish-d>
-      <if>
-        <eq><ed-pending/><121/></eq>
-        <finish-y><k/></finish-y>
-        <start-pend><k/></start-pend>
-      </if>
-    </if>
-  </fn>
-</def>
-<def>
-  <name>finish-d</name>
-  <fn>
-    <params><k/></params>
-    <do>
-      <set><ed-pending/><0/></set>
-      <if>
-        <eq><k/><100/></eq>
-        <del-line></del-line>
-        <handle-extra2><k/></handle-extra2>
-      </if>
-    </do>
-  </fn>
-</def>
-<def>
-  <name>finish-y</name>
-  <fn>
-    <params><k/></params>
-    <do>
-      <set><ed-pending/><0/></set>
-      <if>
-        <eq><k/><121/></eq>
-        <yank-line></yank-line>
-        <handle-extra2><k/></handle-extra2>
-      </if>
-    </do>
-  </fn>
-</def>
-<def>
-  <name>start-pend</name>
-  <fn>
-    <params><k/></params>
-    <if>
-      <eq><k/><100/></eq>
-      <set><ed-pending/><100/></set>
-      <if>
-        <eq><k/><121/></eq>
-        <set><ed-pending/><121/></set>
-        <handle-extra2><k/></handle-extra2>
-      </if>
-    </if>
-  </fn>
-</def>
+import/ "lib/edit/keys/extra/bundle.lkjscript" /import
+ import/ "lib/edit/keys/go/motions.lkjscript" /import
+ def/
+ name/ "handle-extra" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ k Any /params
+ if/
+ eq/ ed-pending 100 /eq
+ finish-d/ k /finish-d
+ if/
+ eq/ ed-pending 121 /eq
+ finish-y/ k /finish-y
+ start-pend/ k /start-pend
+ /if
+ /if
+ /fn
+ /def
+ def/
+ name/ "finish-d" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ k Any /params
+ do/
+ set/ ed-pending 0 /set
+ if/
+ eq/ k 100 /eq
+ del-line/ /del-line
+ handle-extra2/ k /handle-extra2
+ /if
+ /do
+ /fn
+ /def
+ def/
+ name/ "finish-y" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ k Any /params
+ do/
+ set/ ed-pending 0 /set
+ if/
+ eq/ k 121 /eq
+ yank-line/ /yank-line
+ handle-extra2/ k /handle-extra2
+ /if
+ /do
+ /fn
+ /def
+ def/
+ name/ "start-pend" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ k Any /params
+ if/
+ eq/ k 100 /eq
+ set/ ed-pending 100 /set
+ if/
+ eq/ k 121 /eq
+ set/ ed-pending 121 /set
+ handle-extra2/ k /handle-extra2
+ /if
+ /if
+ /fn
+ /def

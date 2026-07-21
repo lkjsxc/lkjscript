@@ -54,7 +54,7 @@ fn real_main() -> Result<(), String> {
 }
 
 fn print_help() {
-    println!("lkjscript2026 — attribute-less XML-like language runtime");
+    println!("lkjscript2026 — typed slash-grammar language runtime");
     println!();
     println!("Usage:");
     println!("  lkjscript2026 run <file.lkjscript> [script-args…]");

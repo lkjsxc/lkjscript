@@ -1,15 +1,16 @@
-<import>lib/edit/view/redraw-paint.lkjscript</import>
-<import>lib/edit/view/place-ui.lkjscript</import>
-<import>std/ansi/cursor.lkjscript</import>
-<def>
-  <name>redraw-ed</name>
-  <fn>
-    <params></params>
-    <do>
-      <redraw-paint></redraw-paint>
-      <place-ui></place-ui>
-      <show-cursor></show-cursor>
-      <flush></flush>
-    </do>
-  </fn>
-</def>
+import/ "lib/edit/view/redraw-paint.lkjscript" /import
+ import/ "lib/edit/view/place-ui.lkjscript" /import
+ import/ "std/ansi/cursor.lkjscript" /import
+ def/
+ name/ "redraw-ed" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ redraw-paint/ /redraw-paint
+ place-ui/ /place-ui
+ show-cursor/ /show-cursor
+ flush/ /flush
+ /do
+ /fn
+ /def

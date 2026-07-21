@@ -1,8 +1,9 @@
-<import>examples/mandel/core/iter.lkjscript</import>
-<def>
-  <name>mandel</name>
-  <fn>
-    <params><cx/><cy/></params>
-    <iter><0.0/><0.0/><cx/><cy/><0/><20/></iter>
-  </fn>
-</def>
+import/ "examples/mandel/core/iter.lkjscript" /import
+ def/
+ name/ "mandel" /name
+ fn/
+ sig/ Any Any -> Any /sig
+ params/ cx Any cy Any /params
+ iter/ 0.0 0.0 cx cy 0 20 /iter
+ /fn
+ /def

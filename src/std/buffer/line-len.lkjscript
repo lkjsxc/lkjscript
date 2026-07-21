@@ -1,7 +1,8 @@
-<def>
-  <name>line-len</name>
-  <fn>
-    <params><s/></params>
-    <str-len><s/></str-len>
-  </fn>
-</def>
+def/
+ name/ "line-len" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ s Any /params
+ str-len/ s /str-len
+ /fn
+ /def

@@ -1,7 +1,8 @@
-<def>
-  <name>nl</name>
-  <fn>
-    <params></params>
-    <write-byte><10/></write-byte>
-  </fn>
-</def>
+def/
+ name/ "nl" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ write-byte/ 10 /write-byte
+ /fn
+ /def

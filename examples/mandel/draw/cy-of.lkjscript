@@ -1,7 +1,8 @@
-<def>
-  <name>cy-of</name>
-  <fn>
-    <params><y/></params>
-    <-><1.2/><*><y/><0.1/></*></->
-  </fn>
-</def>
+def/
+ name/ "cy-of" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ y Any /params
+ -/ 1.2 */ y 0.1 /* /-
+ /fn
+ /def

@@ -1,14 +1,15 @@
-<def>
-  <name>tcp-listen</name>
-  <fn>
-    <params><port/></params>
-    <let>
-      <bind><fd/><sys-socket></sys-socket></bind>
-      <do>
-        <sys-bind><fd/><port/></sys-bind>
-        <sys-listen><fd/><128/></sys-listen>
-        <fd/>
-      </do>
-    </let>
-  </fn>
-</def>
+def/
+ name/ "tcp-listen" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ port Any /params
+ let/
+ bind/ fd unwrap-ok/ sys-socket/ /sys-socket /unwrap-ok /bind
+ do/
+ unwrap-ok/ sys-bind/ fd port /sys-bind /unwrap-ok
+ unwrap-ok/ sys-listen/ fd 128 /sys-listen /unwrap-ok
+ fd
+ /do
+ /let
+ /fn
+ /def

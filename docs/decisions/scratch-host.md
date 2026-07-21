@@ -55,3 +55,9 @@ Demotion backlog for OS feature opcodes is complete aside from intentional thin
 - Growing a Rust TUI / networking framework beside the language
 - Adding crates.io deps for convenience without an ADR
 - Turning `write-str` into per-byte `.lkjscript` loops
+
+
+## Multi-OS note
+
+Linux backend is current. Keep `sys-*` behind a portable façade so
+future native ports do not force another language rewrite.

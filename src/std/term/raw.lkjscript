@@ -1,38 +1,41 @@
-<import>std/term/make-raw.lkjscript</import>
-<def>
-  <name>enter-raw</name>
-  <fn>
-    <params></params>
-    <if>
-      <eq><isatty><stdin-fd></stdin-fd></isatty><0/></eq>
-      <nil/>
-      <if>
-        <null?><tty-cooked-buf/></null?>
-        <do>
-          <set><tty-work/><buf-new><60/></buf-new></set>
-          <sys-ioctl><stdin-fd></stdin-fd><21505/><tty-work/></sys-ioctl>
-          <set><tty-cooked-buf/><buf-clone><tty-work/></buf-clone></set>
-          <tty-guard-save><tty-cooked-buf/></tty-guard-save>
-          <make-raw-buf><tty-work/></make-raw-buf>
-          <sys-ioctl><stdin-fd></stdin-fd><21506/><tty-work/></sys-ioctl>
-        </do>
-        <nil/>
-      </if>
-    </if>
-  </fn>
-</def>
-<def>
-  <name>leave-raw</name>
-  <fn>
-    <params></params>
-    <if>
-      <null?><tty-cooked-buf/></null?>
-      <nil/>
-      <do>
-        <sys-ioctl><stdin-fd></stdin-fd><21506/><tty-cooked-buf/></sys-ioctl>
-        <set><tty-cooked-buf/><nil/></set>
-        <tty-guard-clear></tty-guard-clear>
-      </do>
-    </if>
-  </fn>
-</def>
+import/ "std/term/tty-state.lkjscript" /import
+import/ "std/term/make-raw.lkjscript" /import
+ def/
+ name/ "enter-raw" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ if/
+ not/ isatty/ stdin-fd/ /stdin-fd /isatty /not
+ nil
+ if/
+ null?/ tty-cooked-buf /null?
+ do/
+ set/ tty-work buf-new/ 60 /buf-new /set
+ sys-ioctl/ stdin-fd/ /stdin-fd 21505 tty-work /sys-ioctl
+ set/ tty-cooked-buf buf-clone/ tty-work /buf-clone /set
+ tty-guard-save/ tty-cooked-buf /tty-guard-save
+ make-raw-buf/ tty-work /make-raw-buf
+ sys-ioctl/ stdin-fd/ /stdin-fd 21506 tty-work /sys-ioctl
+ /do
+ nil
+ /if
+ /if
+ /fn
+ /def
+ def/
+ name/ "leave-raw" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ if/
+ null?/ tty-cooked-buf /null?
+ nil
+ do/
+ sys-ioctl/ stdin-fd/ /stdin-fd 21506 tty-cooked-buf /sys-ioctl
+ set/ tty-cooked-buf nil /set
+ tty-guard-clear/ /tty-guard-clear
+ /do
+ /if
+ /fn
+ /def

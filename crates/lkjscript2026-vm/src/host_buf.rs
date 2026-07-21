@@ -93,7 +93,7 @@ pub fn buf_clone(arena: &mut Arena, v: Value) -> Result<Value> {
 
 pub fn sys_ioctl(arena: &mut Arena, fd: Value, req: Value, buf: Value) -> Result<Value> {
     let fd = fd
-        .as_int()
+        .as_fd_index()
         .ok_or_else(|| Error::msg("sys-ioctl fd"))? as i32;
     let req = req
         .as_int()
@@ -105,7 +105,7 @@ pub fn sys_ioctl(arena: &mut Arena, fd: Value, req: Value, buf: Value) -> Result
 }
 
 pub fn sys_poll(fd: Value, timeout: Value) -> Result<Value> {
-    let fd = fd.as_int().ok_or_else(|| Error::msg("sys-poll fd"))? as i32;
+    let fd = fd.as_fd_index().ok_or_else(|| Error::msg("sys-poll fd"))? as i32;
     let ms = timeout
         .as_int()
         .ok_or_else(|| Error::msg("sys-poll timeout"))? as i32;
@@ -115,16 +115,12 @@ pub fn sys_poll(fd: Value, timeout: Value) -> Result<Value> {
 }
 
 pub fn stdin_fd() -> Value {
-    Value::from_int(lkjscript2026_sys::STDIN_FD as i64)
+    Value::from_handle(lkjscript2026_sys::STDIN_FD as u32)
 }
 
 pub fn isatty(fd: Value) -> Result<Value> {
-    let fd = fd.as_int().ok_or_else(|| Error::msg("isatty fd"))? as i32;
-    Ok(Value::from_int(if lkjscript2026_sys::is_tty(fd) {
-        1
-    } else {
-        0
-    }))
+    let fd = fd.as_fd_index().ok_or_else(|| Error::msg("isatty fd"))? as i32;
+    Ok(Value::from_bool(lkjscript2026_sys::is_tty(fd)))
 }
 
 pub fn tty_guard_save(arena: &Arena, buf: Value) -> Result<Value> {

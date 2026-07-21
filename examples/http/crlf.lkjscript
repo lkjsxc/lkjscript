@@ -1,10 +1,11 @@
-<def>
-  <name>crlf</name>
-  <fn>
-    <params></params>
-    <str-append>
-      <str-from-byte><13/></str-from-byte>
-      <str-from-byte><10/></str-from-byte>
-    </str-append>
-  </fn>
-</def>
+def/
+ name/ "crlf" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ str-append/
+ str-from-byte/ 13 /str-from-byte
+ str-from-byte/ 10 /str-from-byte
+ /str-append
+ /fn
+ /def

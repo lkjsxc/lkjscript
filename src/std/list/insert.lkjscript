@@ -1,18 +1,19 @@
-<def>
-  <name>list-insert</name>
-  <fn>
-    <params><xs/><i/><v/></params>
-    <if>
-      <lte><i/><0/></lte>
-      <cons><v/><xs/></cons>
-      <cons>
-        <car><xs/></car>
-        <list-insert>
-          <cdr><xs/></cdr>
-          <-><i/><1/></->
-          <v/>
-        </list-insert>
-      </cons>
-    </if>
-  </fn>
-</def>
+def/
+ name/ "list-insert" /name
+ fn/
+ sig/ Any Any Any -> Any /sig
+ params/ xs Any i Any v Any /params
+ if/
+ lte/ i 0 /lte
+ cons/ v xs /cons
+ cons/
+ car/ xs /car
+ list-insert/
+ cdr/ xs /cdr
+ -/ i 1 /-
+ v
+ /list-insert
+ /cons
+ /if
+ /fn
+ /def

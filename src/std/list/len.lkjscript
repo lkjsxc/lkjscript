@@ -1,11 +1,12 @@
-<def>
-  <name>list-len</name>
-  <fn>
-    <params><xs/></params>
-    <if>
-      <null?><xs/></null?>
-      <0/>
-      <+><1/><list-len><cdr><xs/></cdr></list-len></+>
-    </if>
-  </fn>
-</def>
+def/
+ name/ "list-len" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ xs Any /params
+ if/
+ null?/ xs /null?
+ 0
+ +/ 1 list-len/ cdr/ xs /cdr /list-len /+
+ /if
+ /fn
+ /def

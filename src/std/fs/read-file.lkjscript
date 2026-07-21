@@ -1,18 +1,19 @@
-<import>std/fs/read-all.lkjscript</import>
-<import>std/fs/open-read.lkjscript</import>
-<def>
-  <name>read-file</name>
-  <fn>
-    <params><path/></params>
-    <let>
-      <bind><fd/><open-read><path/></open-read></bind>
-      <let>
-        <bind><s/><read-all><fd/><empty-str></empty-str></read-all></bind>
-        <do>
-          <close><fd/></close>
-          <s/>
-        </do>
-      </let>
-    </let>
-  </fn>
-</def>
+import/ "std/fs/read-all.lkjscript" /import
+ import/ "std/fs/open-read.lkjscript" /import
+ def/
+ name/ "read-file" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ path Any /params
+ let/
+ bind/ fd open-read/ path /open-read /bind
+ let/
+ bind/ s read-all/ fd empty-str/ /empty-str /read-all /bind
+ do/
+ close/ fd /close
+ s
+ /do
+ /let
+ /let
+ /fn
+ /def

@@ -1,7 +1,8 @@
-<def>
-  <name>write-str</name>
-  <fn>
-    <params><s/></params>
-    <write-str><s/></write-str>
-  </fn>
-</def>
+def/
+ name/ "write-str" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ s Any /params
+ write-str/ s /write-str
+ /fn
+ /def

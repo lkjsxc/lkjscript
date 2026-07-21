@@ -1,7 +1,8 @@
-<def>
-  <name>wait-ms</name>
-  <fn>
-    <params><ms/></params>
-    <sys-wait-ms><ms/></sys-wait-ms>
-  </fn>
-</def>
+def/
+ name/ "wait-ms" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ ms Any /params
+ unwrap-ok/ sys-wait-ms/ ms /sys-wait-ms /unwrap-ok
+ /fn
+ /def

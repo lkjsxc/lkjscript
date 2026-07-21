@@ -1,3 +1,9 @@
+# Superseded
+
+Superseded by [slash-types-sys.md](slash-types-sys.md) for new language surface.
+
+---
+
 # XML Surface
 
 ## Context

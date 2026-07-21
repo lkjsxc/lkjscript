@@ -17,10 +17,10 @@ pub fn parse_tokens(tokens: &[Token]) -> Result<Vec<Expr>> {
 
 fn parse_expr(tokens: &[Token], i: usize) -> Result<(Expr, usize)> {
     match tokens.get(i) {
-        Some(Token::Empty(name)) => Ok((atom_from_name(name), i + 1)),
-        Some(Token::Text(t)) => Ok((text_atom(t), i + 1)),
+        Some(Token::Atom(name)) => Ok((atom_from_name(name), i + 1)),
+        Some(Token::Str(t)) => Ok((Expr::LitStr(t.clone()), i + 1)),
         Some(Token::Open(name)) => parse_element(tokens, i, name),
-        Some(Token::Close(name)) => Err(Error::msg(format!("unexpected </{name}>"))),
+        Some(Token::Close(name)) => Err(Error::msg(format!("unexpected /{name}"))),
         None => Err(Error::msg("unexpected end of input")),
     }
 }
@@ -35,10 +35,10 @@ fn parse_element(tokens: &[Token], i: usize, name: &str) -> Result<(Expr, usize)
             }
             Some(Token::Close(other)) => {
                 return Err(Error::msg(format!(
-                    "mismatched close </{other}>, expected </{name}>"
+                    "mismatched close /{other}, expected /{name}"
                 )));
             }
-            None => return Err(Error::msg(format!("unclosed <{name}>"))),
+            None => return Err(Error::msg(format!("unclosed {name}/"))),
             _ => {
                 let (kid, next) = parse_expr(tokens, j)?;
                 kids.push(kid);
@@ -59,7 +59,6 @@ fn element_to_expr(name: &str, kids: Vec<Expr>) -> Result<Expr> {
             }
         }
     }
-    // Open/close with zero kids is an empty call (e.g. <params></params>), not an atom.
     Ok(Expr::Call {
         name: name.into(),
         args: kids,
@@ -82,18 +81,21 @@ fn atom_from_name(name: &str) -> Expr {
     Expr::Symbol(name.to_string())
 }
 
-fn text_atom(t: &str) -> Expr {
-    if let Ok(n) = t.parse::<f64>() {
-        return Expr::LitNum(n);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lex::lex;
+
+    #[test]
+    fn parses_call() {
+        let toks = lex("+/ 1 2 /+").unwrap();
+        let forms = parse_tokens(&toks).unwrap();
+        assert_eq!(
+            forms,
+            vec![Expr::Call {
+                name: "+".into(),
+                args: vec![Expr::LitNum(1.0), Expr::LitNum(2.0)],
+            }]
+        );
     }
-    if t == "true" {
-        return Expr::LitBool(true);
-    }
-    if t == "false" {
-        return Expr::LitBool(false);
-    }
-    if t == "nil" {
-        return Expr::LitNil;
-    }
-    Expr::LitStr(t.to_string())
 }

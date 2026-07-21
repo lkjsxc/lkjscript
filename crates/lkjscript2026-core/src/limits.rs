@@ -3,9 +3,9 @@
 /// Maximum XML nest depth in one file.
 pub const MAX_NEST_DEPTH: u32 = 8;
 /// Maximum children under one element.
-pub const MAX_CHILDREN: u32 = 8;
+pub const MAX_CHILDREN: u32 = 16;
 /// Maximum lexer tokens per source file.
-pub const MAX_TOKENS_PER_FILE: u32 = 256;
+pub const MAX_TOKENS_PER_FILE: u32 = 384;
 /// Maximum visible children in one directory (`check-tree`).
 pub const MAX_DIR_CHILDREN: u32 = 8;
 /// Maximum top-level `def` / `do` / `import` forms per file.

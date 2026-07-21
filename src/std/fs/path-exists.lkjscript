@@ -1,7 +1,8 @@
-<def>
-  <name>path-exists</name>
-  <fn>
-    <params><path/></params>
-    <sys-path-exists><path/></sys-path-exists>
-  </fn>
-</def>
+def/
+ name/ "path-exists" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ path Any /params
+ sys-path-exists/ path /sys-path-exists
+ /fn
+ /def

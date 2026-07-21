@@ -1,8 +1,9 @@
-<import>std/io/wait-ms.lkjscript</import>
-<def>
-  <name>io-wait</name>
-  <fn>
-    <params><ms/></params>
-    <wait-ms><ms/></wait-ms>
-  </fn>
-</def>
+import/ "std/io/wait-ms.lkjscript" /import
+ def/
+ name/ "io-wait" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ ms Any /params
+ wait-ms/ ms /wait-ms
+ /fn
+ /def

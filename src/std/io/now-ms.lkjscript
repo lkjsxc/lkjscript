@@ -1,7 +1,8 @@
-<def>
-  <name>now-ms</name>
-  <fn>
-    <params></params>
-    <sys-now-ms></sys-now-ms>
-  </fn>
-</def>
+def/
+ name/ "now-ms" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ unwrap-ok/ sys-now-ms/ /sys-now-ms /unwrap-ok
+ /fn
+ /def

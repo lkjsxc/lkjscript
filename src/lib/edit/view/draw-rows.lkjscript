@@ -1,43 +1,45 @@
-<import>lib/edit/view/view-draw.lkjscript</import>
-<import>std/list/nth.lkjscript</import>
-<import>std/list/len.lkjscript</import>
-<import>std/term/puts.lkjscript</import>
-<import>std/io/put-byte.lkjscript</import>
-<import>std/io/crlf.lkjscript</import>
-<def>
-  <name>draw-rows</name>
-  <fn>
-    <params><i/><n/></params>
-    <if>
-      <gte><n/><ed-rows/></gte>
-      <nil/>
-      <draw-one><i/><n/></draw-one>
-    </if>
-  </fn>
-</def>
-<def>
-  <name>draw-one</name>
-  <fn>
-    <params><i/><n/></params>
-    <do>
-      <if>
-        <gte><i/><list-len><ed-buf/></list-len></gte>
-        <do>
-          <spaces3></spaces3>
-          <put-byte><32/></put-byte>
-          <put-byte><32/></put-byte>
-          <puts>~</puts>
-        </do>
-        <do>
-          <draw-gutter><i/></draw-gutter>
-          <puts><nth><ed-buf/><i/></nth></puts>
-        </do>
-      </if>
-      <crlf></crlf>
-      <draw-rows>
-        <+><i/><1/></+>
-        <+><n/><1/></+>
-      </draw-rows>
-    </do>
-  </fn>
-</def>
+import/ "lib/edit/view/view-draw.lkjscript" /import
+ import/ "std/list/nth.lkjscript" /import
+ import/ "std/list/len.lkjscript" /import
+ import/ "std/term/puts.lkjscript" /import
+ import/ "std/io/put-byte.lkjscript" /import
+ import/ "std/io/crlf.lkjscript" /import
+ def/
+ name/ "draw-rows" /name
+ fn/
+ sig/ Any Any -> Any /sig
+ params/ i Any n Any /params
+ if/
+ gte/ n ed-rows /gte
+ nil
+ draw-one/ i n /draw-one
+ /if
+ /fn
+ /def
+ def/
+ name/ "draw-one" /name
+ fn/
+ sig/ Any Any -> Any /sig
+ params/ i Any n Any /params
+ do/
+ if/
+ gte/ i list-len/ ed-buf /list-len /gte
+ do/
+ spaces3/ /spaces3
+ put-byte/ 32 /put-byte
+ put-byte/ 32 /put-byte
+ puts/ "~" /puts
+ /do
+ do/
+ draw-gutter/ i /draw-gutter
+ puts/ nth/ ed-buf i /nth /puts
+ /do
+ /if
+ crlf/ /crlf
+ draw-rows/
+ +/ i 1 /+
+ +/ n 1 /+
+ /draw-rows
+ /do
+ /fn
+ /def

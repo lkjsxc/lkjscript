@@ -16,6 +16,9 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if let Some(n) = v.as_int() {
         return Ok(n.to_string());
     }
+    if let Some(h) = v.as_handle() {
+        return Ok(format!("handle#{h}"));
+    }
     match arena.get(v)? {
         HeapObj::Float(f) => Ok(format!("{f}")),
         HeapObj::Str(s) => Ok(s.clone()),
@@ -28,6 +31,8 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
         HeapObj::Closure { proto, .. } => Ok(format!("#<fn:{proto}>")),
         HeapObj::Builtin(id) => Ok(format!("#<builtin:{id}>")),
         HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
+        HeapObj::ResultOk(x) => Ok(format!("Ok({})", display_value(arena, *x)?)),
+        HeapObj::ResultErr(x) => Ok(format!("Err({})", display_value(arena, *x)?)),
     }
 }
 

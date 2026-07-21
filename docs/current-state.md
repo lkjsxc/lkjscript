@@ -49,4 +49,4 @@ thin primitives + script libs done for term/net/fs/time; then types, GC, JIT, ad
 | Filesystem open/path-exists in `.lkjscript` | done |
 | Time wait/now in `.lkjscript` | done |
 | Keep thin `write-str` / `flush` | intentional |
-| Types / GC / adaptive JIT | roadmap only |
+| Types + slash grammar + opaque sys + precise GC | landed (JIT stub remains) |

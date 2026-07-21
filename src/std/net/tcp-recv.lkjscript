@@ -1,7 +1,8 @@
-<def>
-  <name>tcp-recv</name>
-  <fn>
-    <params><fd/></params>
-    <sys-recv><fd/></sys-recv>
-  </fn>
-</def>
+def/
+ name/ "tcp-recv" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ fd Any /params
+ unwrap-ok/ sys-recv/ fd /sys-recv /unwrap-ok
+ /fn
+ /def

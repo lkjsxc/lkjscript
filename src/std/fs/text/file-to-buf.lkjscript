@@ -1,12 +1,13 @@
-<import>std/fs/text/split-lines.lkjscript</import>
-<import>std/list/reverse.lkjscript</import>
-<def>
-  <name>file-to-buf</name>
-  <fn>
-    <params><s/></params>
-    <reverse>
-      <split-lines><s/><0/><0/><nil/></split-lines>
-      <nil/>
-    </reverse>
-  </fn>
-</def>
+import/ "std/fs/text/split-lines.lkjscript" /import
+ import/ "std/list/reverse.lkjscript" /import
+ def/
+ name/ "file-to-buf" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ s Any /params
+ reverse/
+ split-lines/ s 0 0 nil /split-lines
+ nil
+ /reverse
+ /fn
+ /def

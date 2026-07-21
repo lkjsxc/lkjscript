@@ -1,52 +1,55 @@
-<import>lib/edit/view/redraw.lkjscript</import>
-<import>lib/edit/handle.lkjscript</import>
-<import>std/term/raw.lkjscript</import>
-<import>std/io/poll-byte.lkjscript</import>
-<import>std/io/wait-ms.lkjscript</import>
-<def>
-  <name>edit-loop</name>
-  <fn>
-    <params></params>
-    <do>
-      <enter-raw></enter-raw>
-      <redraw-ed></redraw-ed>
-      <while>
-        <eq><ed-quit/><0/></eq>
-        <edit-step></edit-step>
-      </while>
-      <leave-raw></leave-raw>
-    </do>
-  </fn>
-</def>
-<def>
-  <name>edit-step</name>
-  <fn>
-    <params></params>
-    <let>
-      <bind><k/><poll-byte></poll-byte></bind>
-      <edit-on-key><k/></edit-on-key>
-    </let>
-  </fn>
-</def>
-<def>
-  <name>edit-on-key</name>
-  <fn>
-    <params><k/></params>
-    <if>
-      <eq><k/><-2/></eq>
-      <do>
-        <set><ed-quit/><1/></set>
-        <leave-raw></leave-raw>
-      </do>
-      <if>
-        <eq><k/><-1/></eq>
-        <wait-ms><16/></wait-ms>
-        <do>
-          <set><ed-msg/><empty-str></empty-str></set>
-          <handle-key><k/></handle-key>
-          <redraw-ed></redraw-ed>
-        </do>
-      </if>
-    </if>
-  </fn>
-</def>
+import/ "lib/edit/view/redraw.lkjscript" /import
+ import/ "lib/edit/handle.lkjscript" /import
+ import/ "std/term/raw.lkjscript" /import
+ import/ "std/io/poll-byte.lkjscript" /import
+ import/ "std/io/wait-ms.lkjscript" /import
+ def/
+ name/ "edit-loop" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ enter-raw/ /enter-raw
+ redraw-ed/ /redraw-ed
+ while/
+ eq/ ed-quit 0 /eq
+ edit-step/ /edit-step
+ /while
+ leave-raw/ /leave-raw
+ /do
+ /fn
+ /def
+ def/
+ name/ "edit-step" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ let/
+ bind/ k poll-byte/ /poll-byte /bind
+ edit-on-key/ k /edit-on-key
+ /let
+ /fn
+ /def
+ def/
+ name/ "edit-on-key" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ k Any /params
+ if/
+ eq/ k -2 /eq
+ do/
+ set/ ed-quit 1 /set
+ leave-raw/ /leave-raw
+ /do
+ if/
+ eq/ k -1 /eq
+ wait-ms/ 16 /wait-ms
+ do/
+ set/ ed-msg empty-str/ /empty-str /set
+ handle-key/ k /handle-key
+ redraw-ed/ /redraw-ed
+ /do
+ /if
+ /if
+ /fn
+ /def

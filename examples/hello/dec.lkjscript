@@ -1,7 +1,8 @@
-<def>
-  <name>dec</name>
-  <fn>
-    <params><n/></params>
-    <-><n/><1/></->
-  </fn>
-</def>
+def/
+ name/ "dec" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ n Any /params
+ -/ n 1 /-
+ /fn
+ /def

@@ -1,7 +1,8 @@
-<def>
-  <name>base?</name>
-  <fn>
-    <params><n/></params>
-    <lte><n/><1/></lte>
-  </fn>
-</def>
+def/
+ name/ "base?" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ n Any /params
+ lte/ n 1 /lte
+ /fn
+ /def

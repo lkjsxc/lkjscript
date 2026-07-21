@@ -67,25 +67,25 @@ impl FdTable {
     pub fn sys_open_read(&mut self, path: &str) -> Result<Value> {
         let f = lkjscript2026_sys::open_read(path)
             .map_err(|e| Error::msg(format!("sys-open-read: {e}")))?;
-        Ok(Value::from_int(self.push(IoHandle::File(f)) as i64))
+        Ok(Value::from_handle(self.push(IoHandle::File(f)) as u32))
     }
 
     pub fn sys_open_write(&mut self, path: &str) -> Result<Value> {
         let f = lkjscript2026_sys::open_write(path)
             .map_err(|e| Error::msg(format!("sys-open-write: {e}")))?;
-        Ok(Value::from_int(self.push(IoHandle::File(f)) as i64))
+        Ok(Value::from_handle(self.push(IoHandle::File(f)) as u32))
     }
 
     pub fn sys_path_exists(path: &str) -> Result<Value> {
         let ok = lkjscript2026_sys::path_exists(path)
             .map_err(|e| Error::msg(format!("sys-path-exists: {e}")))?;
-        Ok(Value::from_int(if ok { 1 } else { 0 }))
+        Ok(Value::from_bool(ok))
     }
 
     pub fn sys_socket(&mut self) -> Result<Value> {
         let sock = lkjscript2026_sys::tcp_socket()
             .map_err(|e| Error::msg(format!("sys-socket: {e}")))?;
-        Ok(Value::from_int(self.push(IoHandle::Sock(sock)) as i64))
+        Ok(Value::from_handle(self.push(IoHandle::Sock(sock)) as u32))
     }
 
     pub fn sys_bind(&mut self, fd: Value, port: Value) -> Result<Value> {
@@ -114,7 +114,7 @@ impl FdTable {
         let raw = self.sock_raw(fd)?;
         let client = lkjscript2026_sys::accept_sock(raw)
             .map_err(|e| Error::msg(format!("sys-accept: {e}")))?;
-        Ok(Value::from_int(self.push(IoHandle::Sock(client)) as i64))
+        Ok(Value::from_handle(self.push(IoHandle::Sock(client)) as u32))
     }
 
     pub fn sys_recv(&mut self, arena: &mut Arena, fd: Value) -> Result<Value> {
@@ -143,7 +143,7 @@ impl FdTable {
     }
 
     pub fn close(&mut self, fd: Value) -> Result<Value> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("close fd"))? as usize;
+        let i = fd.as_fd_index().ok_or_else(|| Error::msg("close fd"))?;
         if let Some(slot) = self.slots.get_mut(i) {
             *slot = None;
         }
@@ -151,7 +151,7 @@ impl FdTable {
     }
 
     pub fn read_byte(&mut self, fd: Value) -> Result<Value> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("read-byte-fd"))? as usize;
+        let i = fd.as_fd_index().ok_or_else(|| Error::msg("read-byte-fd"))?;
         let mut buf = [0u8; 1];
         let n = match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
             Some(IoHandle::File(f)) => lkjscript2026_sys::read_fd(f.as_raw(), &mut buf)
@@ -168,7 +168,7 @@ impl FdTable {
     }
 
     pub fn write_byte(&mut self, fd: Value, b: Value) -> Result<Value> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("write-byte-fd"))? as usize;
+        let i = fd.as_fd_index().ok_or_else(|| Error::msg("write-byte-fd"))?;
         let n = b.as_int().ok_or_else(|| Error::msg("byte"))? as u8;
         match self.slots.get_mut(i).and_then(|s| s.as_mut()) {
             Some(IoHandle::File(f)) => {
@@ -185,7 +185,7 @@ impl FdTable {
     }
 
     fn sock_raw(&self, fd: Value) -> Result<RawFd> {
-        let i = fd.as_int().ok_or_else(|| Error::msg("sock fd"))? as usize;
+        let i = fd.as_fd_index().ok_or_else(|| Error::msg("sock fd"))?;
         match self.slots.get(i).and_then(|s| s.as_ref()) {
             Some(IoHandle::Sock(s)) => Ok(s.as_raw()),
             _ => Err(Error::msg("not a socket fd")),
@@ -201,5 +201,37 @@ impl FdTable {
         }
         self.slots.push(Some(h));
         self.slots.len() - 1
+    }
+}
+
+pub fn result_ok(arena: &mut Arena, v: Value) -> Value {
+    arena.alloc(HeapObj::ResultOk(v))
+}
+
+pub fn result_err(arena: &mut Arena, v: Value) -> Value {
+    arena.alloc(HeapObj::ResultErr(v))
+}
+
+pub fn is_ok(arena: &Arena, v: Value) -> Result<Value> {
+    match arena.get(v)? {
+        HeapObj::ResultOk(_) => Ok(Value::TRUE),
+        HeapObj::ResultErr(_) => Ok(Value::FALSE),
+        _ => Err(Error::msg("is-ok: expected Result")),
+    }
+}
+
+pub fn unwrap_ok(arena: &Arena, v: Value) -> Result<Value> {
+    match arena.get(v)? {
+        HeapObj::ResultOk(x) => Ok(*x),
+        HeapObj::ResultErr(_) => Err(Error::msg("unwrap-ok on Err")),
+        _ => Err(Error::msg("unwrap-ok: expected Result")),
+    }
+}
+
+pub fn unwrap_err(arena: &Arena, v: Value) -> Result<Value> {
+    match arena.get(v)? {
+        HeapObj::ResultErr(x) => Ok(*x),
+        HeapObj::ResultOk(_) => Err(Error::msg("unwrap-err on Ok")),
+        _ => Err(Error::msg("unwrap-err: expected Result")),
     }
 }

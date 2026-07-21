@@ -51,6 +51,6 @@ again unless the user asks.
 ## Near-Term Focus
 
 Keep editor/HTTP/bench green while migrating toward thinner sys primitives and
-`.lkjscript` libraries. Types / GC / JIT stay roadmap-only; see
+`.lkjscript` libraries. Mandatory types + slash grammar + opaque Handle/`Result` sys + precise GC landed; baseline JIT still roadmap-only; see
 [vision/performance-roadmap.md](../vision/performance-roadmap.md) and
 [decisions/scratch-host.md](../decisions/scratch-host.md).

@@ -49,7 +49,7 @@ fn try_binop(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "+" => Op::Add,
         "-" => Op::Sub,
         "*" => Op::Mul,
-        "/" => Op::Div,
+        "/" | "div" => Op::Div,
         "=" => Op::Eq,
         "!=" => Op::Ne,
         "<" => Op::Lt,
@@ -106,6 +106,11 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "buf-clone" => Op::BufClone,
         "isatty" => Op::Isatty,
         "tty-guard-save" => Op::TtyGuardSave,
+        "ok" => Op::OkWrap,
+        "err" => Op::ErrWrap,
+        "is-ok" => Op::IsOk,
+        "unwrap-ok" => Op::UnwrapOk,
+        "unwrap-err" => Op::UnwrapErr,
         _ => return Ok(false),
     };
     compile_expr(cx, &args[0])?;

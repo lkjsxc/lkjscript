@@ -1,7 +1,8 @@
-<def>
-  <name>open-write</name>
-  <fn>
-    <params><path/></params>
-    <sys-open-write><path/></sys-open-write>
-  </fn>
-</def>
+def/
+ name/ "open-write" /name
+ fn/
+ sig/ Any -> Any /sig
+ params/ path Any /params
+ unwrap-ok/ sys-open-write/ path /sys-open-write /unwrap-ok
+ /fn
+ /def

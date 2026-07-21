@@ -1,7 +1,8 @@
-<def>
-  <name>step-y</name>
-  <fn>
-    <params><x/><y/><cy/></params>
-    <+><*><2.0/><x/><y/></*><cy/></+>
-  </fn>
-</def>
+def/
+ name/ "step-y" /name
+ fn/
+ sig/ Any Any Any -> Any /sig
+ params/ x Any y Any cy Any /params
+ +/ */ 2.0 x y /* cy /+
+ /fn
+ /def

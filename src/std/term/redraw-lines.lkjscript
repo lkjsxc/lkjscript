@@ -1,21 +1,22 @@
-<import>std/ansi/clear.lkjscript</import>
-<import>std/ansi/home.lkjscript</import>
-<import>std/term/puts.lkjscript</import>
-<import>std/list/nth.lkjscript</import>
-<import>std/list/len.lkjscript</import>
-<import>std/io/crlf.lkjscript</import>
-<def>
-  <name>draw-line</name>
-  <fn>
-    <params><lines/><i/><n/></params>
-    <if>
-      <gte><i/><n/></gte>
-      <nil/>
-      <do>
-        <puts><nth><lines/><i/></nth></puts>
-        <crlf></crlf>
-        <draw-line><lines/><+><i/><1/></+><n/></draw-line>
-      </do>
-    </if>
-  </fn>
-</def>
+import/ "std/ansi/clear.lkjscript" /import
+ import/ "std/ansi/home.lkjscript" /import
+ import/ "std/term/puts.lkjscript" /import
+ import/ "std/list/nth.lkjscript" /import
+ import/ "std/list/len.lkjscript" /import
+ import/ "std/io/crlf.lkjscript" /import
+ def/
+ name/ "draw-line" /name
+ fn/
+ sig/ Any Any Any -> Any /sig
+ params/ lines Any i Any n Any /params
+ if/
+ gte/ i n /gte
+ nil
+ do/
+ puts/ nth/ lines i /nth /puts
+ crlf/ /crlf
+ draw-line/ lines +/ i 1 /+ n /draw-line
+ /do
+ /if
+ /fn
+ /def

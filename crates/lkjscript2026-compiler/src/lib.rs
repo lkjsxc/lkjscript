@@ -1,4 +1,4 @@
-//! Compile attribute-less XML-like `.lkjscript` into bytecode.
+//! Compile slash/whitespace `.lkjscript` into bytecode.
 
 mod ast;
 mod codegen;
@@ -6,6 +6,7 @@ mod import;
 mod lex;
 mod limits_check;
 mod parse;
+mod types;
 
 use std::path::{Path, PathBuf};
 

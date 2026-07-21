@@ -1,16 +1,17 @@
-<import>std/list/len.lkjscript</import>
-<import>lib/edit/buf/clamp-col.lkjscript</import>
-<def>
-  <name>move-down</name>
-  <fn>
-    <params></params>
-    <do>
-      <if>
-        <lt><ed-row/><-><list-len><ed-buf/></list-len><1/></-></lt>
-        <set><ed-row/><+><ed-row/><1/></+></set>
-        <nil/>
-      </if>
-      <clamp-col></clamp-col>
-    </do>
-  </fn>
-</def>
+import/ "std/list/len.lkjscript" /import
+ import/ "lib/edit/buf/clamp-col.lkjscript" /import
+ def/
+ name/ "move-down" /name
+ fn/
+ sig/ -> Any /sig
+ params/  /params
+ do/
+ if/
+ lt/ ed-row -/ list-len/ ed-buf /list-len 1 /- /lt
+ set/ ed-row +/ ed-row 1 /+ /set
+ nil
+ /if
+ clamp-col/ /clamp-col
+ /do
+ /fn
+ /def

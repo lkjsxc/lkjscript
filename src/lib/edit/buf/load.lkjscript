@@ -1,32 +1,34 @@
-<import>std/fs/read-file.lkjscript</import>
-<import>std/fs/text/file-to-buf.lkjscript</import>
-<import>std/fs/path-exists.lkjscript</import>
-<import>lib/edit/buf/load-new.lkjscript</import>
-<def>
-  <name>ed-load</name>
-  <fn>
-    <params><path/></params>
-    <if>
-      <eq><path-exists><path/></path-exists><1/></eq>
-      <ed-load-existing><path/></ed-load-existing>
-      <ed-load-new><path/></ed-load-new>
-    </if>
-  </fn>
-</def>
-<def>
-  <name>ed-load-existing</name>
-  <fn>
-    <params><path/></params>
-    <do>
-      <set><ed-path/><path/></set>
-      <set>
-        <ed-buf/>
-        <file-to-buf><read-file><path/></read-file></file-to-buf>
-      </set>
-      <set><ed-row/><0/></set>
-      <set><ed-col/><0/></set>
-      <set><ed-dirty/><0/></set>
-      <set><ed-msg/><empty-str></empty-str></set>
-    </do>
-  </fn>
-</def>
+import/ "std/fs/read-file.lkjscript" /import
+import/ "std/fs/text/file-to-buf.lkjscript" /import
+import/ "std/fs/path-exists.lkjscript" /import
+import/ "lib/edit/buf/load-new.lkjscript" /import
+def/
+  name/ "ed-load" /name
+  fn/
+    sig/ Any -> Any /sig
+    params/ path Any /params
+    if/
+      path-exists/ path /path-exists
+      ed-load-existing/ path /ed-load-existing
+      ed-load-new/ path /ed-load-new
+    /if
+  /fn
+/def
+def/
+  name/ "ed-load-existing" /name
+  fn/
+    sig/ Any -> Any /sig
+    params/ path Any /params
+    do/
+      set/ ed-path path /set
+      set/
+        ed-buf
+        file-to-buf/ read-file/ path /read-file /file-to-buf
+      /set
+      set/ ed-row 0 /set
+      set/ ed-col 0 /set
+      set/ ed-dirty 0 /set
+      set/ ed-msg empty-str/ /empty-str /set
+    /do
+  /fn
+/def

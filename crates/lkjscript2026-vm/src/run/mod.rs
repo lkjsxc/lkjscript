@@ -62,6 +62,11 @@ impl<'a, J: JitHook> Vm<'a, J> {
             if self.frames.is_empty() {
                 return Ok(self.pop());
             }
+            if self.arena.needs_collect() {
+                let mut roots = self.globals.clone();
+                roots.extend_from_slice(&self.stack);
+                self.arena.collect(&roots);
+            }
             self.step()?;
         }
     }
