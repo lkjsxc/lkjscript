@@ -1,5 +1,9 @@
+# Build / local
 /target/
 /tmp/
 .env
 *.swp
 .DS_Store
+
+# OMX / agent local state (plans, HUD, ultragoal, etc.)
+.omx/
