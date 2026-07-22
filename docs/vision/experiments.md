@@ -219,6 +219,53 @@ sample. The slice was adopted to eliminate type-confused absence and semantic
 fallback values. Temporary artifacts were removed and the candidate release
 tree was rebuilt.
 
+## S4 Explicit Equality Families: Adopted
+
+- Baseline: `13fbd1bd9a44d4d65864fad3f6a571df9901de9d`
+- Candidate: `ba1d2219fcff34f53f8a7f316c2ece39ba6357bd`
+- Semantic result: universal `eq`/`ne` and opcode 21 were removed; exact
+  `equal-value`, `same-object`, bounded `list-equal`, and `f64-bits-equal`
+  operations now resolve through HIR and execute in the VM. Str and Symbol use
+  distinct constant/runtime categories.
+- Correctness: 80 tests, exact 127-source/11-root closure, strict Clippy, hello,
+  direct Mandelbrot, Brainfuck smoke, lkjedit, and HTTP passed. Runtime outputs
+  were byte-identical across variants for hello, direct Mandelbrot,
+  Leibniz-200000, and Brainfuck hello. Disassembly intentionally changed to the
+  canonical equality vocabulary. A separate clean candidate full Brainfuck
+  Mandelbrot correctness run completed in 1,265.803147 seconds and matched the
+  independent 6,240-byte oracle with SHA-256
+  `83a0aac65090b3b5e85c22337afac39d8ac17bfd88675f044b33bd55ca0c351b`.
+- Docker: the first verification attempt exposed pre-existing broken links
+  because the image omitted `meta/benchmarks`; commit
+  `41d3d31346dc498cf441cdaa736187ff5c001c81` copied those committed link targets,
+  and the exact Docker verification command then passed with `result=ok`.
+- Environment: Linux 7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX
+  16-core/32-thread, 32 GiB RAM, Rust/Cargo 1.96.0, Python 3.12.3.
+- Build: locked release workspace in one target tree; baseline and candidate
+  binaries and exact source snapshots were retained only under `target/` for
+  measurement.
+- Timing: four warmups per variant/workload followed by 31 samples per variant
+  and workload in deterministic randomized order (`0xE0A117`); monotonic
+  end-to-end process wall time with stdout discarded. Entries are median / MAD
+  / p95 milliseconds.
+
+| Workload | Universal equality | Explicit equality | Candidate / baseline |
+| --- | ---: | ---: | ---: |
+| hello compile + run | 0.510 / 0.036 / 1.736 | 0.525 / 0.041 / 1.406 | 1.029 |
+| Mandelbrot compile + run | 5.393 / 0.079 / 6.081 | 5.408 / 0.111 / 6.549 | 1.003 |
+| Leibniz-200000 compile + run | 74.942 / 1.189 / 78.240 | 73.314 / 1.121 / 78.982 | 0.978 |
+| Mandelbrot compile + disassemble | 0.824 / 0.055 / 2.065 | 0.801 / 0.032 / 1.287 | 0.972 |
+| Brainfuck hello compile + run | 1.842 / 0.046 / 2.869 | 1.839 / 0.057 / 3.116 | 0.998 |
+
+Release binary size increased from 660,112 to 663,888 bytes (1.006x). No
+performance threshold was chosen before this required semantic migration. The
+sample is diagnostic and shows no candidate median movement above 3%; it does
+not support a general performance claim. The slice was adopted for exact static
+semantics, removal of closure identity, bounded structural comparison, and
+backend-ready operation identities. No samples were removed. Temporary source
+snapshots, copied binaries, and detailed JSON were deleted after this compact
+record was committed.
+
 ## B1 Brainfuck Mandelbrot Interpreter: Adopted
 
 - Question: can a straightforward Brainfuck interpreter authored in canonical

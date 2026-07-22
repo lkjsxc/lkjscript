@@ -103,7 +103,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | canonical hello | passed; output `3628800` |
 | Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
 | Brainfuck smoke | direct and run-folded correctness/failure boundaries passed |
-| Brainfuck Mandelbrot interpreted by lkjscript | direct implementation exceeded the 1,800-second ceiling; run-folded output matched the 6,240-byte independent oracle; three measured end-to-end release-process runs had 1,281.143690-second median and 6.731340-second MAD |
+| Brainfuck Mandelbrot interpreted by lkjscript | direct implementation exceeded the 1,800-second ceiling; run-folded output matched the 6,240-byte independent oracle; three measured end-to-end release-process runs had 1,281.143690-second median and 6.731340-second MAD; post-equality full correctness remained byte-identical |
 | lkjedit smoke | passed |
 | one-shot HTTP smoke | passed |
 | terminal safety unit tests | wrong-size buffers rejected before FFI; exact size reaches only fixed requests |
@@ -121,9 +121,10 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Unit/strict-if diagnostic sample | 31 randomized runs: hello 0.993x, Mandelbrot 0.985x, Leibniz-200,000 1.004x, Mandelbrot disassembly 1.005x candidate/baseline median; release binary 0.982x size |
 | typed-empty-list diagnostic sample | 31 randomized runs: hello 1.002x, Mandelbrot 0.979x, Leibniz-200,000 0.937x, Mandelbrot disassembly 1.003x candidate/baseline median; release binary 1.009x size |
 | Option/no-nil diagnostic sample | 31 randomized runs: hello 0.994x, Mandelbrot 1.027x, Leibniz-200,000 1.015x, Mandelbrot disassembly 1.014x candidate/baseline median; release binary 1.012x size |
+| explicit-equality diagnostic sample | 31 randomized runs: hello 1.029x, Mandelbrot 1.003x, Leibniz-200000 0.978x, Mandelbrot disassembly 0.972x, Brainfuck hello 0.998x candidate/baseline median; release binary 1.006x size |
 | Markdown local links/status audit | 41 files, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
-| Docker verify profile | passed after the image was corrected to include machine-required `AGENTS.md` |
+| Docker verify profile | passed; the verification image includes machine-required `AGENTS.md` and committed benchmark documentation link targets |
 | decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
 
 A gate that did not run did not pass.
