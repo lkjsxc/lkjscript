@@ -117,6 +117,37 @@ The size increase is retained as an explicit optimization target. These
 process-level figures are not a general performance claim or a substitute for
 the full scorecard.
 
+## S1 Dedicated Unit And Exact If: Adopted
+
+- Baseline: `9c985e6ae4618bb7bd1f9ae5364719b43da49c82`
+- Candidate: `ec4c55513a4d21f509e282f699271cb8feb6723d`
+- Environment: Linux 7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX
+  16-core/32-thread, Rust/Cargo 1.96.0
+- Build: locked release workspace in one shared target tree; each binary ran the
+  algorithm-equivalent source checked out at its own commit because Unit is a
+  breaking source change
+- Correctness: hello, Mandelbrot, and Leibniz output bytes were identical;
+  candidate disassembly used Unit and no Nil; 62 tests, exact source closure,
+  strict Clippy, release smokes, and Docker verification passed
+- Timing: four warmups per binary/workload, 31 samples per variant in
+  deterministic randomized order, monotonic process wall time, stdout discarded
+  during samples; medians, median absolute deviation, and p95 recorded
+
+| Workload | Baseline median / MAD / p95 | Unit median / MAD / p95 | Candidate / baseline |
+| --- | ---: | ---: | ---: |
+| hello compile + run | 0.413 / 0.010 / 0.510 ms | 0.410 / 0.011 / 0.701 ms | 0.993 |
+| Mandelbrot compile + run | 4.929 / 0.161 / 6.074 ms | 4.855 / 0.117 / 5.729 ms | 0.985 |
+| Leibniz 200,000 compile + run | 70.385 / 0.882 / 75.330 ms | 70.651 / 1.093 / 74.717 ms | 1.004 |
+| Mandelbrot compile + disassemble | 0.686 / 0.032 / 1.327 ms | 0.689 / 0.026 / 0.851 ms | 1.005 |
+
+Release binary size decreased from 658,288 to 646,368 bytes (0.982x), recovering
+part of the C1 size increase. No performance threshold was recorded before this
+required semantic migration, so these figures are diagnostic rather than a
+performance adoption claim. They show no measured median regression above 1%
+in this sample. The migration was adopted for exact semantics and simpler HIR.
+Temporary worktree and binary copies were removed; the candidate release tree
+was rebuilt after measurement.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS
