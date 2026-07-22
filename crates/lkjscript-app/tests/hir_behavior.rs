@@ -45,6 +45,31 @@ fn resolved_locals_and_short_circuit_operations_preserve_runtime_behavior() {
 }
 
 #[test]
+fn typed_empty_lists_survive_source_to_vm_lowering() {
+    let empty = "do/\nempty-list/\nI64\n/empty-list\n/do\n";
+    let value = evaluate_program(empty).expect("evaluate empty list");
+    assert!(value.is_empty_list());
+    assert!(!value.is_nil());
+    assert!(!value.is_unit());
+
+    let predicate = "do/\nempty-list?/\nempty-list/\nI64\n/empty-list\n/empty-list?\n/do\n";
+    assert_eq!(
+        evaluate_program(predicate)
+            .expect("evaluate empty-list predicate")
+            .as_bool(),
+        Some(true)
+    );
+
+    let tail = "do/\ncdr/\ncons/\n7\nempty-list/\nI64\n/empty-list\n/cons\n/cdr\n/do\n";
+    assert!(evaluate_program(tail)
+        .expect("evaluate final list tail")
+        .is_empty_list());
+
+    let invalid = "do/\ncar/\nempty-list/\nI64\n/empty-list\n/car\n/do\n";
+    assert!(evaluate_program(invalid).is_err());
+}
+
+#[test]
 fn unit_and_exact_three_arm_if_survive_source_to_vm_lowering() {
     let conditional = "do/\nif/\ntrue\nunit\nunit\n/if\n/do\n";
     let value = evaluate_program(conditional).expect("evaluate Unit conditional");

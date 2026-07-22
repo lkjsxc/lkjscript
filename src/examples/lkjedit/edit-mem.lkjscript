@@ -15,7 +15,9 @@ cons/
 str/
 world
 /str
-nil
+empty-list/
+Str
+/empty-list
 /cons
 /cons
 /set

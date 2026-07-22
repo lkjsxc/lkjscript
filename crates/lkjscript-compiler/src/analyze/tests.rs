@@ -218,13 +218,15 @@ mod tests {
         let function_target = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\ndo/\nset/\nf\nunit\n/set\n/do\n";
         assert!(analysis_error(function_target).contains("not a mutable global value"));
 
-        let nil_list = "def/\nname/\nxs\n/name\ntype/\nList\nI64\n/type\ncons/\n1\nnil\n/cons\n/def\ndo/\nset/\nxs\nnil\n/set\n/do\n";
-        assert!(analyze_one(nil_list).is_ok());
+        let typed_list = "def/\nname/\nxs\n/name\ntype/\nList\nI64\n/type\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\n/def\ndo/\nset/\nxs\nempty-list/\nI64\n/empty-list\n/set\n/do\n";
+        assert!(analyze_one(typed_list).is_ok());
+        let nil_list = "def/\nname/\nxs\n/name\ntype/\nList\nI64\n/type\nnil\n/def\n";
+        assert!(analysis_error(nil_list).contains("Nil not assignable to List"));
     }
 
     #[test]
     fn generic_list_and_result_calls_instantiate_once_into_exact_types() {
-        let source = "do/\ncons/\n1\nnil\n/cons\nunwrap-ok/\nsys-now-ms/\n/sys-now-ms\n/unwrap-ok\n/do\n";
+        let source = "do/\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\nunwrap-ok/\nsys-now-ms/\n/sys-now-ms\n/unwrap-ok\n/do\n";
         let program = analyze_one(source).expect("analyze generic calls");
         let TopLevel::Do { expression, .. } = &program.forms[0] else {
             panic!("expected do");
@@ -237,13 +239,46 @@ mod tests {
     }
 
     #[test]
+    fn typed_empty_lists_have_exact_hir_and_contextual_types() {
+        let program = analyze_one("do/\nempty-list/\nStr\n/empty-list\n/do\n")
+            .expect("analyze typed empty list");
+        let TopLevel::Do { expression, .. } = &program.forms[0] else {
+            panic!("expected do");
+        };
+        let ExprKind::Do(expressions) = &expression.kind else {
+            panic!("expected do expression");
+        };
+        assert_eq!(expressions[0].kind, ExprKind::EmptyList);
+        assert_eq!(expressions[0].ty, Type::List(Box::new(Type::Str)));
+        assert_eq!(expressions[0].effects, EffectSet::PURE);
+
+        let chunk = compile_program(&program).expect("lower typed empty list");
+        assert!(chunk.main.code.contains(&(Op::EmptyList as u8)));
+
+        let generic = "def/\nname/\nempty\n/name\nfn/\nforall/\nT\n/forall\nsig/\n->\nList\nT\n/sig\nparams/\n/params\nempty-list/\nT\n/empty-list\n/fn\n/def\n";
+        assert!(analyze_one(generic).is_ok());
+        assert!(analysis_error("do/\nempty-list/\nT\n/empty-list\n/do\n")
+            .contains("type parameter T is not declared by forall"));
+        assert!(analysis_error("do/\nempty-list/\n/empty-list\n/do\n")
+            .contains("empty-list: expected type"));
+        assert!(analysis_error("do/\nempty-list/\nI64\nF64\n/empty-list\n/do\n")
+            .contains("trailing tokens"));
+        assert!(analysis_error(
+            "do/\ncons/\n1\nempty-list/\nF64\n/empty-list\n/cons\n/do\n"
+        )
+        .contains("type parameter T conflict"));
+        assert!(analysis_error("do/\nnull?/\nempty-list/\nI64\n/empty-list\n/null?\n/do\n")
+            .contains("unknown call null?"));
+    }
+
+    #[test]
     fn operation_names_and_generic_variables_are_resolved_without_capture() {
         assert!(analysis_error("do/\n+\n/do\n").contains("not a first-class value"));
         let collision = "def/\nname/\nprint\n/name\nfn/\nsig/\nStr\n->\nUnit\n/sig\nparams/\ntext\nStr\n/params\nunit\n/fn\n/def\n";
         assert!(analysis_error(collision).contains("collides with a reserved operation"));
 
         assert!(analysis_error("do/\ncar/\nnil\n/car\n/do\n")
-            .contains("cannot infer type parameter T"));
+            .contains("cannot instantiate List(Param(\"T\")) from Nil"));
         assert!(analysis_error("do/\nok/\n1\n/ok\n/do\n")
             .contains("cannot infer type parameter E"));
 

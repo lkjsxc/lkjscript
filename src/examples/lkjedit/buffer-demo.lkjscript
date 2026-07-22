@@ -15,7 +15,9 @@ cons/
 str/
 demo
 /str
-nil
+empty-list/
+Str
+/empty-list
 /cons
 /cons
 /cons

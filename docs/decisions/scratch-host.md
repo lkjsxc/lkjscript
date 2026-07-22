@@ -32,7 +32,7 @@ a self-owned, eventually JIT-fast stack.
 Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 - arithmetic / compare / logic
-- `cons` / `car` / `cdr` / `null?`
+- `cons` / `car` / `cdr` / `empty-list?`
 - string ops (`str-len`, `str-ref`, `str-append`, `str-slice`, `str-from-byte`)
 - `print` / control (`if`, `while`, `call`, …)
 

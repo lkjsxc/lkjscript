@@ -9,7 +9,9 @@ Str
 cons/
 empty-str/
 /empty-str
-nil
+empty-list/
+Str
+/empty-list
 /cons
 /def
 def/

@@ -11,10 +11,11 @@ Define expression, type, and import behavior above the physical line format.
 
 ## Expressions
 
-- Atoms are numbers, `true`, `false`, `unit`, legacy `nil`, or symbols.
+- Atoms are numbers, `true`, `false`, `unit`, temporary legacy `nil`, or symbols.
 - `Unit` has exactly one value, `unit`, for completion without useful data.
-  Legacy `nil` is not a completion value and remains only for temporary
-  list/absence forms pending their explicit replacements.
+- `empty-list/ T /empty-list` creates the empty `List T`; `empty-list?` is its
+  only predicate. `null?` is removed. Legacy `nil` is neither completion nor a
+  list and remains only for temporary absence pending explicit Option.
 - `str/` blocks produce `Str` values.
 - Calls use matching open and close markers around child expressions.
 - Division is named `div` because slash is structural.
@@ -44,12 +45,12 @@ mutation itself remains temporary and is removed by the accepted local
 
 ## Semantic Migration
 
-The first AI-first semantic slice is **Current**: dedicated `Unit`/`unit` and
-strict three-arm `if` are enforced from source through HIR and VM. The remaining
-semantic core is an **Accepted Target**:
+The first AI-first semantic slices are **Current**: dedicated `Unit`/`unit`,
+strict three-arm `if`, and typed empty lists are enforced from source through
+HIR and VM. The remaining semantic core is an **Accepted Target**:
 
-- replace legacy list/absence `nil` with typed empty lists and explicit
-  `Option T` values `some`/typed `none`;
+- replace legacy absence `nil` with explicit `Option T` values
+  `some`/typed `none`;
 - replace global mutation with immutable declarations and function-local
   `var`/`set`;
 - replace top-level `do` with one explicit executable `main` and prohibit

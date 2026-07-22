@@ -21,7 +21,7 @@ pub enum Operation {
     Cons,
     Car,
     Cdr,
-    IsNull,
+    IsEmptyList,
     Print,
     Flush,
     ReadByte,
@@ -97,7 +97,7 @@ impl Operation {
         Self::Cons,
         Self::Car,
         Self::Cdr,
-        Self::IsNull,
+        Self::IsEmptyList,
         Self::Print,
         Self::Flush,
         Self::ReadByte,
@@ -170,7 +170,7 @@ impl Operation {
         Self::Cons,
         Self::Car,
         Self::Cdr,
-        Self::IsNull,
+        Self::IsEmptyList,
         Self::Print,
         Self::Flush,
         Self::ReadByte,
@@ -201,7 +201,7 @@ impl Operation {
             Self::Cons => "cons",
             Self::Car => "car",
             Self::Cdr => "cdr",
-            Self::IsNull => "null?",
+            Self::IsEmptyList => "empty-list?",
             Self::Print => "print",
             Self::Flush => "flush",
             Self::ReadByte => "read-byte",
@@ -325,7 +325,7 @@ impl Operation {
                     ),
                 )
             }
-            Self::IsNull => forall(
+            Self::IsEmptyList => forall(
                 &["T"],
                 function(
                     vec![Type::List(Box::new(Type::Param("T".into())))],
@@ -556,7 +556,7 @@ impl Operation {
             | Self::IsNil
             | Self::And
             | Self::Or
-            | Self::IsNull => EffectSet::PURE,
+            | Self::IsEmptyList => EffectSet::PURE,
         }
     }
 }
@@ -630,7 +630,6 @@ fn bind_type_params(
         | (Type::Option(pattern), Type::Option(argument)) => {
             bind_type_params(name, pattern, argument, variables, substitutions)
         }
-        (Type::List(_), Type::Nil) => Ok(()),
         (Type::Result(ok_pattern, err_pattern), Type::Result(ok_argument, err_argument)) => {
             bind_type_params(name, ok_pattern, ok_argument, variables, substitutions)?;
             bind_type_params(name, err_pattern, err_argument, variables, substitutions)

@@ -13,6 +13,9 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if v.is_unit() {
         return Ok("unit".into());
     }
+    if v.is_empty_list() {
+        return Ok("empty-list".into());
+    }
     if let Some(b) = v.as_bool() {
         return Ok(b.to_string());
     }

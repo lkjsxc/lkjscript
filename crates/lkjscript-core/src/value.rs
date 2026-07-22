@@ -13,6 +13,7 @@ const TAG_INT: u64 = 2;
 const TAG_HEAP: u64 = 3;
 const TAG_HANDLE: u64 = 4;
 const TAG_UNIT: u64 = 5;
+const TAG_EMPTY_LIST: u64 = 6;
 
 pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
 pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
@@ -20,6 +21,7 @@ pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
 impl Value {
     pub const NIL: Self = Self(TAG_NIL);
     pub const UNIT: Self = Self(TAG_UNIT);
+    pub const EMPTY_LIST: Self = Self(TAG_EMPTY_LIST);
     pub const FALSE: Self = Self(TAG_BOOL);
     pub const TRUE: Self = Self((1 << 3) | TAG_BOOL);
 
@@ -52,6 +54,10 @@ impl Value {
 
     pub fn is_unit(self) -> bool {
         self.0 == TAG_UNIT
+    }
+
+    pub fn is_empty_list(self) -> bool {
+        self.0 == TAG_EMPTY_LIST
     }
 
     pub fn as_bool(self) -> Option<bool> {
@@ -104,6 +110,9 @@ impl fmt::Debug for Value {
         }
         if self.is_unit() {
             return write!(f, "unit");
+        }
+        if self.is_empty_list() {
+            return write!(f, "empty-list");
         }
         if let Some(b) = self.as_bool() {
             return write!(f, "{b}");
@@ -165,6 +174,11 @@ mod tests {
         assert!(Value::NIL.is_nil());
         assert!(!Value::NIL.is_unit());
         assert_ne!(Value::UNIT, Value::NIL);
+        assert!(Value::EMPTY_LIST.is_empty_list());
+        assert!(!Value::EMPTY_LIST.is_unit());
+        assert!(!Value::EMPTY_LIST.is_nil());
+        assert_ne!(Value::EMPTY_LIST, Value::UNIT);
+        assert_ne!(Value::EMPTY_LIST, Value::NIL);
     }
 
     #[test]

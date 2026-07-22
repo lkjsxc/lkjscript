@@ -52,20 +52,15 @@ impl Type {
     }
 
     pub fn unify_assignable(got: &Type, expect: &Type) -> bool {
-        // Empty list.
-        if matches!(got, Type::Nil) {
-            if let Type::List(_) = expect {
-                return true;
-            }
-            // Uninitialized buffer/handle slots may be nil.
-            if matches!(expect, Type::Buf | Type::Handle) {
-                return true;
-            }
+        // Uninitialized buffer/handle slots may temporarily be nil until the
+        // Option migration removes this legacy exception.
+        if matches!(got, Type::Nil) && matches!(expect, Type::Buf | Type::Handle) {
+            return true;
         }
         match (got, expect) {
             (a, b) if a == b => true,
             (Type::Param(a), Type::Param(b)) => a == b,
-            (Type::List(g), Type::List(e)) => Self::unify_assignable(g, e),
+            (Type::List(g), Type::List(e)) => g == e,
             (Type::Option(g), Type::Option(e)) => Self::unify_assignable(g, e),
             (Type::Result(a, b), Type::Result(c, d)) => {
                 Self::unify_assignable(a, c) && Self::unify_assignable(b, d)

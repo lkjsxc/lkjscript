@@ -8,9 +8,9 @@ ambiguity or unchecked hints.
 
 ## Status
 
-**Accepted Target** overall. Dedicated Unit and exact three-arm `if` are
-**Current**. Option, typed empty lists, local-only mutation, explicit main, and
-the equality split remain pending; [current-state.md](../current-state.md)
+**Accepted Target** overall. Dedicated Unit, exact three-arm `if`, and typed
+empty lists are **Current**. Option, local-only mutation, explicit main, and the
+equality split remain pending; [current-state.md](../current-state.md)
 records the exact boundary.
 
 ## Canonicality
@@ -48,11 +48,12 @@ source semantics. Native and Wasm backends specialize Option representation per
 type, including proven niches, without changing source semantics. The all-zero internal value pattern
 is invalid rather than a semantic default.
 
-The Unit slice is implemented: `Unit`/`unit` has a dedicated VM tag, empty `do`,
-`while`, `set`, and successful side-effecting operations return Unit, and
-completion is no longer represented as nil. Legacy `nil` remains temporarily
-only for list termination, absence, and internal default state until the
-typed-empty-list and Option slices remove it.
+The Unit and typed-empty-list slices are implemented. `Unit`/`unit` has a
+dedicated VM tag; empty `do`, `while`, `set`, and successful side-effecting
+operations return Unit. `empty-list` has a distinct singleton tag and exact
+`List T` HIR type, and `empty-list?` is canonical. Legacy `nil` remains
+only for temporary absence and internal default state until the Option/no-nil
+slice removes it.
 
 ## Control Flow
 

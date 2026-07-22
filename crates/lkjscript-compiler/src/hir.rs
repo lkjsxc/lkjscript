@@ -148,6 +148,7 @@ pub enum ExprKind {
     LitF64(f64),
     LitBool(bool),
     LitUnit,
+    EmptyList,
     LitNil,
     LitStr(String),
     Load(BindingId),

@@ -146,9 +146,9 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             vm.push(Value::from_bool(v.is_nil()));
             Ok(())
         }
-        x if x == Op::IsNull as u8 => {
+        x if x == Op::IsEmptyList as u8 => {
             let v = vm.pop();
-            vm.push(Value::from_bool(v.is_nil()));
+            vm.push(Value::from_bool(v.is_empty_list()));
             Ok(())
         }
         x if x == Op::Print as u8 => {
@@ -210,6 +210,10 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if x == Op::Unit as u8 => {
             vm.push(Value::UNIT);
+            Ok(())
+        }
+        x if x == Op::EmptyList as u8 => {
+            vm.push(Value::EMPTY_LIST);
             Ok(())
         }
         other => Err(Error::msg(format!("unknown opcode {other}"))),

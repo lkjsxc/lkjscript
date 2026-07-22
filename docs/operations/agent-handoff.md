@@ -41,8 +41,8 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 
 - Imports merge definitions into one program-global namespace.
 - Top-level definitions are installed in source order at runtime.
-- `set` is heavily used by lkjedit but its target/type contract is not fully
-  checked.
+- `set` is heavily used by lkjedit and remains program-global despite exact
+  target/type checking.
 - Raw terminal redraw must emit CR+LF; LF-only output causes staircase display.
 - lkjedit idle must wait without full repaint.
 - Final cursor placement must be followed by a flush.
@@ -50,9 +50,10 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   construction.
 - VM host operations block and process exit is not process-safe.
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
-  I64/F64 execution, and resolved typed HIR have landed. Unit/strict-if is the
-  next semantic slice, followed by Option/empty-list/comparison and explicit
-  main/local-state migration. SSA/AOT remain targets, not current capability.
+  I64/F64 execution, resolved typed HIR, Unit/strict-if, and typed empty lists
+  have landed. Option/no-nil is the next semantic slice, followed by equality
+  and explicit main/local-state migration. SSA/AOT remain targets, not current
+  capability.
 
 ## Host Boundary
 

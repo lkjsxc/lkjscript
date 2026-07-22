@@ -35,6 +35,7 @@ impl<'a> Cx<'a> {
 pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
     match &expression.kind {
         ExprKind::LitUnit => cx.proto.emit(Op::Unit),
+        ExprKind::EmptyList => cx.proto.emit(Op::EmptyList),
         ExprKind::LitNil => cx.proto.emit(Op::Nil),
         ExprKind::LitBool(true) => cx.proto.emit(Op::True),
         ExprKind::LitBool(false) => cx.proto.emit(Op::False),
@@ -276,7 +277,7 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::Cons => Op::Cons,
         Operation::Car => Op::Car,
         Operation::Cdr => Op::Cdr,
-        Operation::IsNull => Op::IsNull,
+        Operation::IsEmptyList => Op::IsEmptyList,
         Operation::Print => Op::Print,
         Operation::Flush => Op::Flush,
         Operation::ReadByte => Op::ReadByte,

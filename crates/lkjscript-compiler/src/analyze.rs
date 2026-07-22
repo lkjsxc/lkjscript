@@ -234,7 +234,8 @@ impl Analyzer {
                 value,
             } => {
                 let (value, locals) = {
-                    let mut resolver = Resolver::new(self, origin, HashMap::new(), 0);
+                    let mut resolver =
+                        Resolver::new(self, origin, HashMap::new(), HashSet::new(), 0);
                     let value = resolver.resolve_expr(value)?;
                     let locals = resolver.local_count()?;
                     (value, locals)
@@ -261,7 +262,8 @@ impl Analyzer {
                 expressions,
             } => {
                 let (expression, locals) = {
-                    let mut resolver = Resolver::new(self, origin, HashMap::new(), 0);
+                    let mut resolver =
+                        Resolver::new(self, origin, HashMap::new(), HashSet::new(), 0);
                     let expression = resolver.resolve_do(expressions)?;
                     let locals = resolver.local_count()?;
                     (expression, locals)
@@ -305,7 +307,8 @@ impl Analyzer {
         }
 
         let (body, local_count) = {
-            let mut resolver = Resolver::new(self, origin, scope, params.len());
+            let type_variables = parsed.forall_vars.iter().cloned().collect();
+            let mut resolver = Resolver::new(self, origin, scope, type_variables, params.len());
             let body = resolver.resolve_expr(parsed.body)?;
             let local_count = resolver.local_count()?;
             (body, local_count)
@@ -372,6 +375,7 @@ impl Analyzer {
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)
             | ExprKind::LitUnit
+            | ExprKind::EmptyList
             | ExprKind::LitNil
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => {}
@@ -458,6 +462,7 @@ struct Resolver<'a> {
     analyzer: &'a mut Analyzer,
     origin: SourceId,
     scopes: Vec<HashMap<String, BindingId>>,
+    type_variables: HashSet<String>,
     next_slot: usize,
     max_slots: usize,
 }
@@ -467,12 +472,14 @@ impl<'a> Resolver<'a> {
         analyzer: &'a mut Analyzer,
         origin: SourceId,
         function_scope: HashMap<String, BindingId>,
+        type_variables: HashSet<String>,
         parameter_count: usize,
     ) -> Self {
         Self {
             analyzer,
             origin,
             scopes: vec![function_scope],
+            type_variables,
             next_slot: parameter_count,
             max_slots: parameter_count,
         }
@@ -521,6 +528,7 @@ impl<'a> Resolver<'a> {
             "let" => self.resolve_let(args),
             "quote" => self.resolve_quote(args),
             "set" => self.resolve_set(args),
+            "empty-list" => self.resolve_empty_list(args),
             "bind" => Err(self.error("bind is only valid inside let")),
             "fn" | "def" | "sig" | "params" | "forall" | "type" | "import" | "name" => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
@@ -660,7 +668,6 @@ impl<'a> Resolver<'a> {
             (Type::List(pattern), Type::List(got)) => {
                 self.bind_type_params(function, pattern, got, variables, substitutions)
             }
-            (Type::List(_), Type::Nil) => Ok(()),
             (Type::Option(pattern), Type::Option(got)) => {
                 self.bind_type_params(function, pattern, got, variables, substitutions)
             }
@@ -835,6 +842,22 @@ impl<'a> Resolver<'a> {
         ))
     }
 
+    fn resolve_empty_list(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let element = parse_type_form(args)
+            .map_err(|message| self.error(format!("empty-list: {message}")))?;
+        let mut parameters = HashSet::new();
+        collect_type_params(&element, &mut parameters);
+        if let Some(parameter) = parameters
+            .into_iter()
+            .find(|parameter| !self.type_variables.contains(*parameter))
+        {
+            return Err(self.error(format!(
+                "empty-list: type parameter {parameter} is not declared by forall"
+            )));
+        }
+        Ok(self.expression(Type::List(Box::new(element)), ExprKind::EmptyList))
+    }
+
     fn resolve_quote(&mut self, args: &[AstExpr]) -> Result<Expr> {
         let symbol = match args {
             [AstExpr::Symbol(symbol)] => symbol.clone(),
@@ -887,6 +910,7 @@ impl<'a> Resolver<'a> {
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)
             | ExprKind::LitUnit
+            | ExprKind::EmptyList
             | ExprKind::LitNil
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
@@ -955,6 +979,7 @@ fn is_contextual_name(name: &str) -> bool {
             | "let"
             | "quote"
             | "set"
+            | "empty-list"
             | "bind"
             | "fn"
             | "def"

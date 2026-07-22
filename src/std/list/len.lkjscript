@@ -19,9 +19,9 @@ T
 /List
 /params
 if/
-null?/
+empty-list?/
 xs
-/null?
+/empty-list?
 0
 +/
 1

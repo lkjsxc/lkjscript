@@ -22,7 +22,9 @@ ed-buf
 cons/
 empty-str/
 /empty-str
-nil
+empty-list/
+Str
+/empty-list
 /cons
 /set
 set/

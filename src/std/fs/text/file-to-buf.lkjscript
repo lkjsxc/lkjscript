@@ -24,9 +24,13 @@ split-lines/
 s
 0
 0
-nil
+empty-list/
+Str
+/empty-list
 /split-lines
-nil
+empty-list/
+Str
+/empty-list
 /list-reverse
 /fn
 /def
