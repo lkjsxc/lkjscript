@@ -54,8 +54,15 @@ panic-prone assumptions; compiler-produced chunks are the supported path.
 
 ## Accepted Target
 
-- Make numeric representation and execution match the static contract exactly.
+- Preserve complete I64 values with immediate signed 61-bit values and boxed
+  wide integers, while keeping F64 as a distinct heap value.
+- Preserve numeric types in bytecode and dispatch checked I64 versus IEEE F64
+  arithmetic without routing integers through floating point.
+- Make every numeric host consumer accept full I64 and check narrower domains.
 - Validate public chunks before dispatch.
+
+The numeric representation and behavior are specified by
+[Exact I64 And F64 Semantics](../decisions/numeric-semantics.md).
 
 Process-safe outcomes, host-service injection, instruction quanta, blocking
 wait objects, generation-reused handle slots, and per-process budgets are
