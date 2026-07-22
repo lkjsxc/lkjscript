@@ -88,6 +88,35 @@ C1 is adopted only when accepted/rejected corpus behavior and runtime outputs
 remain identical while duplicate resolution/lowering logic is deleted. C2-C5
 require differential trap/outcome tests before performance measurement.
 
+## C1 Resolved Typed HIR: Adopted
+
+- Baseline: `5815cf574600cd0d4f90ff19f0fade011749ee6f`
+- Candidate: `b7f77d9` (`refactor: make resolved typed HIR authoritative`)
+- Environment: Linux 7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX
+  16-core/32-thread, Rust/Cargo 1.96.0
+- Build: locked release `lkjscript-app`, same target directory, baseline and
+  candidate binaries copied only for the measurement and then deleted
+- Correctness: identical hello, Mandelbrot, Leibniz, and disassembly outputs;
+  60 tests, exact source closure, strict Clippy, release smokes, and Docker
+  verification passed
+- Timing method: four warmups per binary/workload, 31 samples per variant in
+  randomized order, process wall time from monotonic high-resolution clock;
+  medians, median absolute deviation, and p95 recorded
+
+| Workload | Baseline median | HIR median | Candidate / baseline | Baseline MAD | HIR MAD |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| hello compile + run | 1.555 ms | 1.540 ms | 0.990 | 0.145 ms | 0.108 ms |
+| Mandelbrot compile + run | 5.591 ms | 5.389 ms | 0.964 | 0.171 ms | 0.158 ms |
+| Leibniz compile + run | 78.401 ms | 77.130 ms | 0.984 | 2.504 ms | 3.724 ms |
+| Mandelbrot compile + disassemble | 0.876 ms | 0.787 ms | 0.899 | 0.026 ms | 0.029 ms |
+
+Release binary size increased from 608,368 to 658,288 bytes (1.082x). The HIR
+was adopted for semantic authority, deletion of duplicate resolution/lowering,
+and absence of a measured median runtime regression in this diagnostic sample.
+The size increase is retained as an explicit optimization target. These
+process-level figures are not a general performance claim or a substitute for
+the full scorecard.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS
