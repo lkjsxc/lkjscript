@@ -110,6 +110,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | `.lkjml` CLI run | rejected with canonical-extension diagnostic |
 | HIR diagnostic performance sample | 31 randomized runs: hello 0.990x, Mandelbrot 0.964x, Leibniz 0.984x, Mandelbrot disassembly 0.899x candidate/baseline median; release binary 1.082x size |
 | Unit/strict-if diagnostic sample | 31 randomized runs: hello 0.993x, Mandelbrot 0.985x, Leibniz-200,000 1.004x, Mandelbrot disassembly 1.005x candidate/baseline median; release binary 0.982x size |
+| typed-empty-list diagnostic sample | 31 randomized runs: hello 1.002x, Mandelbrot 0.979x, Leibniz-200,000 0.937x, Mandelbrot disassembly 1.003x candidate/baseline median; release binary 1.009x size |
 | Markdown local links/status audit | 39 files, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
 | Docker verify profile | passed after the image was corrected to include machine-required `AGENTS.md` |

@@ -148,6 +148,32 @@ in this sample. The migration was adopted for exact semantics and simpler HIR.
 Temporary worktree and binary copies were removed; the candidate release tree
 was rebuilt after measurement.
 
+## S2 Exact Typed Empty Lists: Adopted
+
+- Baseline: `8d221ac` (dedicated Unit and exact `if`)
+- Candidate: `45e2d085e13638b92dd1c08e12b2095781f0d248`
+- Environment/build: the S1 Linux x86-64 host and locked release procedure;
+  each binary ran algorithm-equivalent source from its own commit
+- Correctness: hello, Mandelbrot, and Leibniz output bytes were identical;
+  64 tests, exact source closure, strict Clippy, release smokes, typed-list
+  positive/negative CLI boundaries, lkjedit, and HTTP passed
+- Timing: four warmups and 31 deterministic randomized samples per variant;
+  entries are median / median absolute deviation / p95 process milliseconds
+
+| Workload | Baseline | Typed empty list | Candidate / baseline |
+| --- | ---: | ---: | ---: |
+| hello compile + run | 0.447 / 0.022 / 0.497 | 0.448 / 0.019 / 0.507 | 1.002 |
+| Mandelbrot compile + run | 5.171 / 0.118 / 5.990 | 5.061 / 0.206 / 5.790 | 0.979 |
+| Leibniz 200,000 compile + run | 74.766 / 1.680 / 78.994 | 70.040 / 0.755 / 74.601 | 0.937 |
+| Mandelbrot compile + disassemble | 0.672 / 0.026 / 0.967 | 0.674 / 0.013 / 1.169 | 1.003 |
+
+Release binary size increased from 646,368 to 652,080 bytes (1.009x). No
+performance threshold was recorded before this required semantic slice. The
+runtime medians are diagnostic—especially the unexplained Leibniz movement,
+which is not attributed to typed lists. The slice was adopted for exact type
+semantics and removal of nil/list ambiguity. Temporary artifacts were removed
+and the candidate release tree was rebuilt.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS
