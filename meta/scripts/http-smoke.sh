@@ -2,7 +2,7 @@
 # One-shot HTTP hello smoke: serve one request, curl it, require our server to exit cleanly.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-BIN="${LKJSCRIPT:-${LKJ:-$ROOT/target/debug/lkjscript}}"
+BIN="${LKJSCRIPT_BIN:-$ROOT/target/debug/lkjscript}"
 TMP_DIR="$(mktemp -d)"
 PID=""
 cleanup() {
@@ -13,7 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$BIN" run "$ROOT/src/examples/http/hello.lkjml" \
+"$BIN" run "$ROOT/src/examples/http/hello.lkjscript" \
   >"$TMP_DIR/server.out" 2>"$TMP_DIR/server.err" &
 PID=$!
 for _ in 1 2 3 4 5 6 7 8 9 10; do

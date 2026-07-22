@@ -9,6 +9,7 @@ const SOCK_STREAM: i32 = 1;
 const SOL_SOCKET: i32 = 1;
 const SO_REUSEADDR: i32 = 2;
 const INADDR_ANY: u32 = 0;
+const MSG_NOSIGNAL: i32 = 0x4000;
 
 #[repr(C)]
 struct InAddr {
@@ -125,7 +126,7 @@ pub fn recv_sock(fd: RawFd, buf: &mut [u8]) -> Result<usize, SockError> {
 }
 
 pub fn send_sock(fd: RawFd, buf: &[u8]) -> Result<usize, SockError> {
-    let n = unsafe { send(fd, buf.as_ptr(), buf.len(), 0) };
+    let n = unsafe { send(fd, buf.as_ptr(), buf.len(), MSG_NOSIGNAL) };
     if n < 0 {
         return Err(FdError(errno()));
     }

@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: meta/Dockerfile
       target: runtime
-    command: ["run", "src/examples/hello/main.lkjml"]
+    command: ["run", "src/examples/hello/main.lkjscript"]
     working_dir: /usr/local/share/lkjscript
     stdin_open: true
     tty: true
@@ -16,7 +16,7 @@ services:
       context: ..
       dockerfile: meta/Dockerfile
       target: runtime
-    command: ["run", "src/examples/mandel/main.lkjml"]
+    command: ["run", "src/examples/mandel/main.lkjscript"]
     working_dir: /usr/local/share/lkjscript
     stdin_open: true
     tty: true
@@ -27,7 +27,7 @@ services:
       context: ..
       dockerfile: meta/Dockerfile
       target: runtime
-    command: ["run", "src/examples/lkjedit/main.lkjml"]
+    command: ["run", "src/examples/lkjedit/main.lkjscript"]
     working_dir: /usr/local/share/lkjscript
     stdin_open: true
     tty: true
@@ -38,7 +38,7 @@ services:
       context: ..
       dockerfile: meta/Dockerfile
       target: runtime
-    command: ["run", "src/examples/http/hello.lkjml"]
+    command: ["run", "src/examples/http/hello.lkjscript"]
     working_dir: /usr/local/share/lkjscript
     ports:
       - "8080:8080"

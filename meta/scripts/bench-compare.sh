@@ -4,9 +4,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-BIN="${LKJSCRIPT:-${LKJ:-$ROOT/target/release/lkjscript}}"
+BIN="${LKJSCRIPT_BIN:-$ROOT/target/release/lkjscript}"
 if [[ ! -x "$BIN" ]]; then
-  BIN="${LKJ:-$ROOT/target/debug/lkjscript}"
+  printf 'missing release binary: %s (run cargo build --release or set LKJSCRIPT_BIN)\n' "$BIN" >&2
+  exit 1
 fi
 N="${N:-50000}"
 CC="${CC:-cc}"
@@ -15,10 +16,10 @@ mkdir -p "$ROOT/target"
 "$CC" -O2 -o "$OUT" "$ROOT/meta/bench/c/leibniz.c"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-TMP="$TMP_DIR/bench.lkjml"
+TMP="$TMP_DIR/bench.lkjscript"
 cat > "$TMP" <<EOF
 import/
-examples/bench/leibniz-loop.lkjml
+examples/bench/leibniz-loop.lkjscript
 /import
 do/
 print/

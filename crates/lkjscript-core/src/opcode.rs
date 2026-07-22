@@ -13,7 +13,6 @@ pub enum Op {
     Sub = 11,
     Mul = 12,
     Div = 13,
-    Neg = 14,
     Eq = 20,
     Ne = 21,
     Lt = 22,
@@ -87,4 +86,122 @@ pub enum Op {
     False = 80,
     True = 81,
     Nil = 82,
+}
+
+impl Op {
+    pub fn from_byte(byte: u8) -> Option<Self> {
+        Some(match byte {
+            0 => Self::Nop,
+            1 => Self::LoadConst,
+            2 => Self::LoadLocal,
+            3 => Self::StoreLocal,
+            4 => Self::LoadGlobal,
+            5 => Self::StoreGlobal,
+            10 => Self::Add,
+            11 => Self::Sub,
+            12 => Self::Mul,
+            13 => Self::Div,
+            20 => Self::Eq,
+            21 => Self::Ne,
+            22 => Self::Lt,
+            23 => Self::Le,
+            24 => Self::Gt,
+            25 => Self::Ge,
+            26 => Self::Not,
+            27 => Self::BitAnd,
+            28 => Self::BitOr,
+            29 => Self::BitXor,
+            30 => Self::Jump,
+            31 => Self::JumpIfFalse,
+            40 => Self::Call,
+            41 => Self::Return,
+            42 => Self::MakeClosure,
+            50 => Self::Cons,
+            51 => Self::Car,
+            52 => Self::Cdr,
+            53 => Self::IsNull,
+            60 => Self::Print,
+            61 => Self::Flush,
+            62 => Self::ReadByte,
+            63 => Self::WriteByte,
+            64 => Self::Exit,
+            65 => Self::WriteStr,
+            66 => Self::BufNew,
+            67 => Self::BufLen,
+            68 => Self::BufRef,
+            69 => Self::BufSet,
+            70 => Self::Pop,
+            71 => Self::Dup,
+            72 => Self::BufGetU32,
+            73 => Self::BufSetU32,
+            74 => Self::SysIoctl,
+            75 => Self::SysPoll,
+            76 => Self::StdinFd,
+            77 => Self::Isatty,
+            78 => Self::TtyGuardSave,
+            79 => Self::TtyGuardClear,
+            80 => Self::False,
+            81 => Self::True,
+            82 => Self::Nil,
+            85 => Self::BufClone,
+            90 => Self::StrLen,
+            91 => Self::StrRef,
+            92 => Self::StrAppend,
+            93 => Self::StrSlice,
+            94 => Self::StrFromByte,
+            100 => Self::SysOpenRead,
+            101 => Self::SysOpenWrite,
+            102 => Self::CloseFd,
+            103 => Self::ReadByteFd,
+            104 => Self::WriteByteFd,
+            110 => Self::Arg,
+            111 => Self::Argc,
+            112 => Self::EmptyStr,
+            123 => Self::SysNowMs,
+            124 => Self::SysWaitMs,
+            130 => Self::SysSocket,
+            131 => Self::SysBind,
+            132 => Self::SysListen,
+            133 => Self::SysAccept,
+            134 => Self::SysPathExists,
+            135 => Self::SysRecv,
+            136 => Self::SysSend,
+            140 => Self::OkWrap,
+            141 => Self::ErrWrap,
+            142 => Self::IsOk,
+            143 => Self::UnwrapOk,
+            144 => Self::UnwrapErr,
+            145 => Self::IsNil,
+            146 => Self::StrFromI64,
+            147 => Self::StrFromF64,
+            _ => return None,
+        })
+    }
+
+    pub const fn operand_width(self) -> usize {
+        match self {
+            Self::LoadConst
+            | Self::LoadGlobal
+            | Self::StoreGlobal
+            | Self::Jump
+            | Self::JumpIfFalse
+            | Self::MakeClosure => 2,
+            Self::LoadLocal | Self::StoreLocal | Self::Call => 1,
+            _ => 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Op;
+
+    #[test]
+    fn byte_decoder_and_operand_widths_are_truthful() {
+        assert_eq!(Op::from_byte(Op::LoadConst as u8), Some(Op::LoadConst));
+        assert_eq!(Op::LoadConst.operand_width(), 2);
+        assert_eq!(Op::Call.operand_width(), 1);
+        assert_eq!(Op::Return.operand_width(), 0);
+        assert_eq!(Op::from_byte(255), None);
+    }
 }

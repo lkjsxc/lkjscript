@@ -1,0 +1,12 @@
+import/
+std/term/banner.lkjscript
+/import
+import/
+std/io/get-byte.lkjscript
+/import
+do/
+banner/
+/banner
+get-byte/
+/get-byte
+/do

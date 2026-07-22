@@ -1,0 +1,12 @@
+import/
+examples/bench/leibniz-loop.lkjscript
+/import
+do/
+print/
+str-from-f64/
+leibniz/
+200000
+/leibniz
+/str-from-f64
+/print
+/do

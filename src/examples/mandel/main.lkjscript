@@ -1,0 +1,10 @@
+import/
+examples/mandel/draw/grid.lkjscript
+/import
+do/
+grid/
+0
+24
+48
+/grid
+/do

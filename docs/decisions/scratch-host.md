@@ -12,7 +12,7 @@ inside the VM.
 ## Context
 
 High-level Rust wrappers (`term-raw`, `tcp-listen`, …) and crates.io deps
-(e.g. former `rustix`) pull behavior out of `.lkjml` and fight the goal of
+(e.g. former `rustix`) pull behavior out of `.lkjscript` and fight the goal of
 a self-owned, eventually JIT-fast stack.
 
 ## Decision
@@ -22,10 +22,10 @@ a self-owned, eventually JIT-fast stack.
 2. **`unsafe` only in `lkjscript-sys`** — owned Linux-first syscall / libc
    extern wrappers. All other crates keep `unsafe_code = "forbid"`.
 3. **Fat-opcode freeze** — do not add new high-level host features. New
-   capability should land as `.lkjml` under `src/std` or `src/lib`, or as
+   capability should land as `.lkjscript` under `src/std` or `src/lib`, or as
    thinner primitives after an ADR.
 4. **Migration direction** — shrink today’s fat ops toward syscall-shaped
-   primitives; reimplement policy in `.lkjml` over time.
+   primitives; reimplement policy in `.lkjscript` over time.
 
 ## Fat opcode inventory and backlog
 
@@ -38,17 +38,17 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 **Fat host ops to migrate later** (ranked):
 
-1. ~~Terminal policy~~ — done in `.lkjml`
-2. ~~Sockets~~ — done in `.lkjml`
-3. ~~Filesystem~~ — done in `.lkjml`
-4. ~~Time~~ — done in `.lkjml` (`wait-ms` / `now-ms` on `sys-wait-ms` / `sys-now-ms`)
+1. ~~Terminal policy~~ — done in `.lkjscript`
+2. ~~Sockets~~ — done in `.lkjscript`
+3. ~~Filesystem~~ — done in `.lkjscript`
+4. ~~Time~~ — done in `.lkjscript` (`wait-ms` / `now-ms` on `sys-wait-ms` / `sys-now-ms`)
 5. Bulk stdout: `write-str` / `flush` **intentionally kept** as thin byte-pump intrinsics
 
 ## This sprint
 
 Time demotion: Rust `Instant` / `thread::sleep` removed from the VM time path.
 `lkjscript-sys` owns `clock_gettime(CLOCK_MONOTONIC)` and `nanosleep`.
-Script wrappers live in `src/std/io/wait-ms.lkjml` and `now-ms.lkjml`.
+Script wrappers live in `src/std/io/wait-ms.lkjscript` and `now-ms.lkjscript`.
 
 Demotion backlog for OS feature opcodes is complete aside from intentional thin
 `write-str` / `flush`.
@@ -63,7 +63,7 @@ Demotion backlog for OS feature opcodes is complete aside from intentional thin
 
 - Growing a Rust TUI / networking framework beside the language
 - Adding crates.io deps for convenience without an ADR
-- Turning `write-str` into per-byte `.lkjml` loops
+- Turning `write-str` into per-byte `.lkjscript` loops
 
 
 ## Multi-OS note

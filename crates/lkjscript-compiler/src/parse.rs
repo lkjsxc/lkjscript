@@ -52,7 +52,7 @@ fn element_to_expr(name: &str, kids: Vec<Expr>) -> Result<Expr> {
     if name == "str" {
         return match kids.as_slice() {
             [Expr::LitStr(s)] => Ok(Expr::LitStr(s.clone())),
-            _ => Err(Error::msg("str/ must contain one LKJML text value")),
+            _ => Err(Error::msg("str/ must contain one lkjscript text value")),
         };
     }
     if kids.len() == 1 {

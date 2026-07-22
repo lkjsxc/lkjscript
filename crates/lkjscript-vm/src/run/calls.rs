@@ -47,7 +47,7 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
     let obj = vm.arena.get(callee)?.clone();
     match obj {
         HeapObj::Closure { proto, .. } => {
-            let _ = vm.jit.maybe_compile(vm.chunk, proto);
+            vm.jit.observe_call(vm.chunk, proto);
             let p = &vm.chunk.protos[proto as usize];
             if argc as usize != p.arity as usize {
                 return Err(Error::msg(format!(

@@ -2,96 +2,108 @@
 
 ## Purpose
 
-Separate observed behavior from accepted targets and later ambitions.
+State implemented behavior, evidence boundaries, known defects, and accepted
+next work without mixing them with long-term vision.
 
 ## Status
 
-**Current** baseline plus an explicitly separated **Accepted Target**.
+**Current** for the implementation section. Repairs and future products are
+explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 
-## Current
+## Current Implementation
 
-This snapshot was observed before the foundation cutover.
-
-- Commit: `8aa09d82280c8939d81078b0f040fdf10c550e35`
 - Repository: `https://github.com/lkjsxc/lkjscript`
-- Branch state: clean `main`, synchronized with `origin/main`
-- Host: Linux x86-64, kernel `7.0.0-27-generic`
-- Rust: `rustc 1.96.0`, Cargo `1.96.0`, LLVM `22.1.2`
-- C compiler: Ubuntu GCC `13.3.0`
-- Disk at baseline: 100 GiB available, repository `target/` 63 MiB
+- Canonical source: `.lkjscript`; other extensions are rejected without shims
+- Corpus: 116 language files under `src`; an exact duplicate lkjedit entry was removed
+- Physical format: one column-one marker/atom per line with matched markers and
+  raw `str/`, `name/`, and `import/` blocks
+- Source limits: depth 8, form children 16, tokens 384, top-level forms 8, and
+  16 combined immediate files/directories per source directory
+- Source-tree scope: the width rule applies to language source directories,
+  not Rust, docs, metadata, `.git`, or generated Cargo output
+- Imports: contained `std/`, `lib/`, `examples/`, and `./` paths with installed
+  fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
+  and canonicalized symlink escapes fail
+- Host implementation: six Rust workspace crates with no third-party Rust
+  dependencies; unsafe Rust is confined to `lkjscript-sys`
+- Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
+  and return-adjacent tail-frame reuse
+- CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub
+  was removed
+- Workloads: hello, Mandelbrot, lkjedit, one-shot HTTP, and Leibniz comparison
+- Send behavior: successful `sys-send` reports its byte count and uses Linux
+  `MSG_NOSIGNAL` instead of risking process termination on a broken peer
+- JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
+  native compilation or execution handoff
 
-The implementation currently has:
+## Known Defects
 
-- 117 `.lkjml` language files under `src`;
-- line-oriented matched markers and raw `str/`, `name/`, and `import/` blocks;
-- package-root imports for `std/`, `lib/`, `examples/`, and importer-relative `./`;
-- six Rust workspace crates and no third-party Rust dependencies;
-- a compiler, static type pass, dense bytecode VM, precise mark-sweep GC, and
-  return-adjacent frame reuse;
-- Linux-first filesystem, terminal, time, and IPv4 TCP primitives;
-- hello, Mandelbrot, one-shot HTTP, benchmark, and lkjedit workloads;
-- Docker packaging that bundles the standard library and in-tree packages.
+The source identity cutover does not make the runtime semantically complete.
+The highest-priority defects are:
 
-Known current defects and incomplete boundaries include:
+1. arbitrary script-controlled ioctl request/buffer pairs cross an unsound safe
+   Rust wrapper;
+2. raw descriptor and reusable resource-table handle namespaces overlap, and
+   stale handles can alias later resources;
+3. many ordinary system failures abort the VM instead of returning the
+   Result values promised by the type prelude;
+4. numeric widths, literals, arithmetic, casts, and code generation do not all
+   match their static signatures;
+5. `set`, optional `if`, `arg`, and several comparison/operator paths have
+   type/runtime disagreements;
+6. imports load files but definitions share one global namespace and top-level
+   initialization order can be unsafe;
+7. strings and IO lack a lossless bulk byte contract, and some library file
+   operations are per-byte or quadratic;
+8. public malformed chunks can reach unchecked VM assumptions;
+9. source/import aggregate bytes, depth, count, constants, globals, bytecode,
+   VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
+10. the repository is not rustfmt-clean and strict Clippy still reports
+    pre-existing production and test debt.
 
-- `.lkjml` is still accepted while `.lkjscript` is rejected;
-- `check-tree` applies an eight-visible-entry repository rule instead of the
-  accepted 16-entry lkjscript source-tree rule;
-- arbitrary script-controlled `sys-ioctl` reaches a safe Rust wrapper that does
-  not validate the kernel structure size;
-- ordinary OS failures from many `sys-*` operations abort the VM instead of
-  producing language `ResultErr` values;
-- `sys-send` reports zero rather than its successful byte count;
-- handles conflate raw descriptors and reusable table indexes;
-- the type prelude advertises numeric widths, conversions, and operators that
-  code generation and runtime execution do not fully implement;
-- `disasm` reports only summary counts, and the CLI contains an unadvertised,
-  unimplemented `repl` branch;
-- the JIT interface observes calls but cannot transfer execution to compiled
-  code;
-- native installation, self-update, packages, CI, releases, browser, GUI, and a
-  general HTTP server/framework are absent.
+## Evidence
 
-## Baseline Evidence
+The source-cutover working tree was checked on Linux x86-64 with Rust/Cargo
+1.96.0. Evidence is command-specific; Docker and performance are not implied.
 
-Observed at the commit above:
-
-| Command | Result |
+| Command or check | Result |
 | --- | --- |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 20 Rust tests passed |
+| `cargo check --workspace --all-targets --locked` | passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 23 workspace tests passed |
+| `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
+| `check-sources` | passed for 116 `.lkjscript` sources, 172 imports, and 11 compile roots |
 | `cargo build --workspace --release --locked` | passed |
-| hello workload | passed; output `3628800` |
-| Mandelbrot workload | passed; 1,176 bytes, 24 lines |
-| `meta/scripts/lkjedit-smoke.sh` | passed |
-| `meta/scripts/http-smoke.sh` | passed |
-| `cargo fmt --all -- --check` | failed on pre-existing formatting drift |
-| strict workspace Clippy | failed on pre-existing production and test lint debt |
+| canonical hello | passed; output `3628800` |
+| Mandelbrot | passed; 1,176 bytes and 24 lines |
+| lkjedit smoke | passed |
+| one-shot HTTP smoke | passed |
+| `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
+| script argument `--help` after `--` | passed through to the script |
+| `.lkjml` CLI run | rejected with canonical-extension diagnostic |
+| Markdown local links/status audit | 33 files, zero broken links, zero missing statuses |
+| `git diff --check` | passed |
+| Docker | not run for this cutover |
+| repeated performance comparison | not run |
 
-Docker and performance comparisons were not rerun for this baseline. They are
-not claimed as passing.
+A gate that did not run did not pass.
 
-## Accepted Target: Foundation Cutover
+## Accepted Next Target
 
-The active foundation cycle will:
+The next safety/conformance sequence is:
 
-1. make `.lkjscript` the only source extension and remove active LKJML naming;
-2. enforce a maximum of 16 combined immediate files and subdirectories as an
-   lkjscript source-tree rule, not a Rust/repository layout rule;
-3. make documentation status and placeholder labeling machine-checkable;
-4. remove the unlabeled REPL stub and make disassembly behavior truthful;
-5. replace arbitrary ioctl access with bounded terminal operations;
-6. separate opaque handles so stale values cannot alias later resources;
-7. return truthful language Results from fallible system operations;
-8. align the executable numeric surface with the type contract;
-9. make formatting, Clippy, source coverage, and documentation checks honest
-   repository gates.
-
-Items move into **Current** only after their focused and acceptance gates run.
+1. replace arbitrary ioctl with fixed size-validated terminal operations;
+2. introduce namespace-separated stale-safe resource handles;
+3. turn all ordinary fallible system operations into truthful language Results;
+4. implement an exact current numeric contract and remove unsupported prelude
+   vocabulary;
+5. add generated prelude/codegen/VM conformance coverage;
+6. make rustfmt, Clippy, documentation status, source coverage, and explicit
+   placeholder scanning part of the local honesty gate.
 
 ## Deferred
 
-Package management, signed installation/update, the process supervisor,
-nonblocking scheduling, adaptive/generational GC, native JIT execution,
-non-Linux backends, a browser platform, GUI runtime, and web framework remain
-later cycles. Their designs may be explored, but no current capability may be
-implied.
+Native installation and update, package manifests/locks/registry, process-safe
+VM outcomes, supervisor/scheduler, adaptive or generational GC, native JIT,
+non-Linux backends, browser, general HTTP server/framework, and GUI runtime are
+later cycles. Their documents are designs or experiments, not capability
+claims.

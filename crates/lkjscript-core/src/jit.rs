@@ -1,12 +1,13 @@
-//! Future JIT insertion point. Sprint 4 ships the stub only.
+//! PLACEHOLDER: observation-only seam for future native-code experiments.
 
 use crate::chunk::Chunk;
 
-/// Called by the VM before interpreting a hot proto. Default is a no-op.
+/// PLACEHOLDER: observes interpreted calls but cannot compile or execute code.
+///
+/// A real JIT contract must replace this trait with callable compiled-code
+/// objects, execution transfer, failure behavior, and deoptimization/fallback.
 pub trait JitHook {
-    fn maybe_compile(&mut self, _chunk: &Chunk, _proto: u32) -> bool {
-        false
-    }
+    fn observe_call(&mut self, _chunk: &Chunk, _proto: u32) {}
 }
 
 #[derive(Debug, Default)]

@@ -12,6 +12,7 @@ general server/framework are **Deferred**.
 
 ## Table of Contents
 
+- [examples.md](examples.md): catalog and lifecycle of every validation root
 - [lkjedit.md](lkjedit.md): in-tree terminal editor validation application
 
 The HTTP example accepts one connection and exits. It is not a general HTTP

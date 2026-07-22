@@ -249,9 +249,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             let data = vm.pop();
             let fd = vm.pop();
             let r = vm.fds.sys_send(&vm.arena, fd, data)?;
-            // prelude: Result Int Str — use 0 for now on full send
-            let _ = r;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, Value::from_int(0));
+            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
             vm.push(__r);
             Ok(true)
         }

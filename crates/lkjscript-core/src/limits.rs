@@ -1,13 +1,13 @@
 //! Language-spec source budgets. Numbers are fixed for this language version.
 
-/// Maximum LKJML form depth in one file.
+/// Maximum lkjscript form depth in one file.
 pub const MAX_NEST_DEPTH: u32 = 8;
 /// Maximum children under one element.
 pub const MAX_CHILDREN: u32 = 16;
 /// Maximum lexer tokens per source file.
 pub const MAX_TOKENS_PER_FILE: u32 = 384;
-/// Maximum visible children in one directory (`check-tree`).
-pub const MAX_DIR_CHILDREN: u32 = 8;
+/// Maximum files plus subdirectories in one lkjscript source directory.
+pub const MAX_DIR_CHILDREN: u32 = 16;
 /// Maximum top-level `def` / `do` / `import` forms per file.
 pub const MAX_TOPLEVEL_FORMS: u32 = 8;
 
@@ -40,6 +40,9 @@ mod tests {
     fn defaults_match_spec_consts() {
         let lim = Limits::default();
         assert_eq!(lim.max_nest_depth, MAX_NEST_DEPTH);
+        assert_eq!(lim.max_children, MAX_CHILDREN);
+        assert_eq!(lim.max_tokens_per_file, MAX_TOKENS_PER_FILE);
+        assert_eq!(lim.max_dir_children, MAX_DIR_CHILDREN);
         assert_eq!(lim.max_toplevel_forms, MAX_TOPLEVEL_FORMS);
     }
 }

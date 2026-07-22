@@ -7,8 +7,8 @@ the compiler implementation or repository infrastructure.
 
 ## Status
 
-**Accepted Target.** It supersedes the repository-wide eight-visible-child
-policy still present in the baseline gate.
+**Current.** It supersedes the former repository-wide eight-visible-child
+policy.
 
 ## Decision
 

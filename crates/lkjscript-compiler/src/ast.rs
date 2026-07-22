@@ -1,4 +1,4 @@
-//! Expression AST lowered from LKJML source.
+//! Expression AST lowered from canonical lkjscript source.
 
 #![allow(dead_code)]
 

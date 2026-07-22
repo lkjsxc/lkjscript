@@ -3,7 +3,7 @@
 ## Purpose
 
 Define the experimental path from one VM per OS process to one runtime per OS
-user hosting many independent LKJML processes. One Docker container is one
+user hosting many independent lkjscript processes. One Docker container is one
 runtime domain and is treated as one machine for this contract.
 
 ## Status
@@ -47,7 +47,7 @@ processes and the thread-per-VM prototype.
 A future per-user runtime should:
 
 - own a single local control endpoint and reject a second daemon;
-- run arbitrary numbers and kinds of LKJML entries, bounded by configured
+- run arbitrary numbers and kinds of lkjscript entries, bounded by configured
   resources rather than a hardcoded process count;
 - isolate globals, stack, heap, handles, arguments, environment, working
   directory, output, cancellation, and failures per logical process;
@@ -65,9 +65,9 @@ The target command vocabulary follows familiar process tools while keeping one
 obvious path for each job:
 
 ```text
-lkjscript run main.lkjml             foreground, ephemeral
-lkjscript start main.lkjml --name api background, non-persistent
-lkjscript deploy main.lkjml --name api persistent and started
+lkjscript run main.lkjscript             foreground, ephemeral
+lkjscript start main.lkjscript --name api background, non-persistent
+lkjscript deploy main.lkjscript --name api persistent and started
 lkjscript undeploy api                stop and remove persistent spec
 lkjscript ps
 lkjscript logs api --follow

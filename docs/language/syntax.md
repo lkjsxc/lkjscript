@@ -6,8 +6,8 @@ Define expression, type, and import behavior above the physical line format.
 
 ## Status
 
-**Current** where explicitly described below. Extension and numeric-surface
-changes are **Accepted Target** and are not current until their gates pass.
+**Current** for the source format, imports, and implemented semantics.
+Numeric-surface repair remains an **Accepted Target**.
 
 ## Expressions
 
@@ -60,13 +60,13 @@ Current path resolution supports:
 - installed fallback through `LKJSCRIPT_ROOT` when a local category directory
   is absent.
 
-Paths containing `..` are rejected. Cycles are rejected and repeated canonical
-files are deduplicated. Definitions are not namespaced modules yet.
+Parent path components and absolute imports are rejected. Canonicalized paths
+must remain inside the project or installed root, so symlink escapes fail.
+Cycles are rejected and repeated canonical files are deduplicated. Definitions
+are not namespaced modules yet.
 
-The **Accepted Target** requires every entry and import to end in `.lkjscript`.
-`.lkjml`, extensionless source, and unrelated extensions are rejected before
-parsing. Absolute paths and canonicalized symlink escapes must not bypass the
-package-root contract.
+Every entry and import must end in `.lkjscript`. `.lkjml`, extensionless source,
+and unrelated extensions are rejected before parsing.
 
 ## Strings And Bytes
 

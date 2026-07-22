@@ -88,14 +88,14 @@ and process-global IO prevent safe multi-VM supervision today.
 
 ## Source Layout Rule
 
-The accepted language rule limits each lkjscript source directory to 16
+The current language rule limits each lkjscript source directory to 16
 immediate entries, counting files and subdirectories together. Rust crates,
 documentation, metadata, `.git`, and build output are not language source
 and are outside this rule.
 
 The repository gate checks the complete in-tree language corpus. The compiler
-must also reject an imported source directory that violates the rule so an
-external project receives the same contract.
+also rejects an entry or imported source directory that violates the rule, so
+an external project receives the same contract.
 
 ## Change Guide
 

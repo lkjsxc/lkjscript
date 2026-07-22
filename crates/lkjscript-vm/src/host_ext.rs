@@ -135,11 +135,11 @@ impl FdTable {
             let n = lkjscript_sys::send_sock(raw, &bytes[sent..])
                 .map_err(|e| Error::msg(format!("sys-send: {e}")))?;
             if n == 0 {
-                break;
+                return Err(Error::msg("sys-send: zero-byte progress"));
             }
             sent += n;
         }
-        Ok(Value::NIL)
+        Ok(Value::from_int(sent as i64))
     }
 
     pub fn close(&mut self, fd: Value) -> Result<Value> {

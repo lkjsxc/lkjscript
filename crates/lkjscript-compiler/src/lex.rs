@@ -1,4 +1,4 @@
-//! Lexer tokens for canonical, line-oriented LKJML source.
+//! Lexer tokens for canonical, line-oriented lkjscript source.
 
 use lkjscript_core::{Error, Result};
 
@@ -101,7 +101,7 @@ fn validate_single_line_text(name: &str, content: &[String], line_no: usize) -> 
 fn reject_whitespace(line: &str, line_no: usize) -> Result<()> {
     if line.chars().any(char::is_whitespace) {
         return Err(Error::msg(format!(
-            "line {line_no}: LKJML uses one column-one marker or atom per line"
+            "line {line_no}: lkjscript uses one column-one marker or atom per line"
         )));
     }
     Ok(())

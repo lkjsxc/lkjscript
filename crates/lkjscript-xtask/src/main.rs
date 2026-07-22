@@ -1,13 +1,11 @@
-//! Quiet verification gates for the lkj workspace.
-
-mod tree;
+//! Verification gates for the lkjscript workspace.
 
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-use lkjscript_compiler::{compile_path, validate_source};
+use lkjscript_compiler::{compile_path, validate_source, validate_source_tree};
 use lkjscript_core::Limits;
 
 fn main() -> ExitCode {
@@ -15,7 +13,7 @@ fn main() -> ExitCode {
     let root = PathBuf::from(".");
     let code = match args.first().map(String::as_str) {
         Some("check-docs") => check_docs(&root),
-        Some("check-tree") => tree::check_tree(&root, 8),
+        Some("check-tree") => check_tree(&root),
         Some("check-sources") => check_sources(&root),
         Some("quiet") => match args.get(1).map(String::as_str) {
             Some("test") => quiet_test(&root),
@@ -27,7 +25,7 @@ fn main() -> ExitCode {
         },
         _ => {
             eprintln!(
-                "usage: lkjscript-xtask [check-docs|check-tree|check-sources|quiet …]"
+                "usage: lkjscript-xtask [check-docs|check-tree|check-sources|quiet ...]"
             );
             2
         }
@@ -37,117 +35,147 @@ fn main() -> ExitCode {
 
 fn check_docs(root: &Path) -> i32 {
     let required = [
+        "AGENTS.md",
         "docs/README.md",
         "docs/current-state.md",
         "docs/vision/README.md",
+        "docs/vision/experiments.md",
         "docs/vision/process-supervisor.md",
         "docs/language/README.md",
-        "docs/language/lkjml.md",
+        "docs/language/source-format.md",
         "docs/runtime/README.md",
         "docs/operations/README.md",
+        "docs/operations/architecture.md",
+        "docs/operations/verification.md",
         "docs/product/README.md",
         "docs/decisions/README.md",
     ];
-    for r in required {
-        if !root.join(r).is_file() {
-            eprintln!("missing {r}");
+    for relative in required {
+        if !root.join(relative).is_file() {
+            eprintln!("missing {relative}");
             return 1;
         }
+    }
+    if root.join("docs/language/lkjml.md").exists() {
+        eprintln!("superseded active documentation path: docs/language/lkjml.md");
+        return 1;
     }
     0
 }
 
+fn check_tree(root: &Path) -> i32 {
+    let limits = Limits::default();
+    match validate_source_tree(&root.join("src"), &limits) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{error}");
+            1
+        }
+    }
+}
+
 fn check_sources(root: &Path) -> i32 {
     let mut files = Vec::new();
-    walk(&root.join("src"), &mut |path| files.push(path.to_path_buf()));
+    if let Err(error) = walk(&root.join("src"), &mut files) {
+        eprintln!("{error}");
+        return 1;
+    }
     files.sort();
-    let mut bad = 0;
+
+    let mut failures = 0;
     if root.join("examples").exists() {
-        eprintln!("legacy examples/ directory; move examples under src/examples/");
-        bad += 1;
+        eprintln!("obsolete examples/ directory; use src/examples/");
+        failures += 1;
     }
     let limits = Limits::default();
-    for path in files {
+    for path in &files {
         match path.extension().and_then(|extension| extension.to_str()) {
-            Some("lkjscript") => {
-                eprintln!("legacy source extension: {}", path.display());
-                bad += 1;
+            Some("lkjml") => {
+                eprintln!("superseded source extension: {}", path.display());
+                failures += 1;
             }
-            Some("lkjml") => match fs::read_to_string(&path) {
+            Some("lkjscript") => match fs::read_to_string(path) {
                 Ok(source) => {
                     let label = path.display().to_string();
                     if let Err(error) = validate_source(&source, &label, &limits) {
                         eprintln!("{error}");
-                        bad += 1;
+                        failures += 1;
                     }
                 }
                 Err(error) => {
                     eprintln!("read {}: {error}", path.display());
-                    bad += 1;
+                    failures += 1;
                 }
             },
             _ => {}
         }
     }
+
     for entry in [
-        "src/examples/bench/main.lkjml",
-        "src/examples/hello/main.lkjml",
-        "src/examples/http/hello.lkjml",
-        "src/examples/mandel/main.lkjml",
-        "src/examples/lkjedit/buffer-demo.lkjml",
-        "src/examples/lkjedit/edit-mem.lkjml",
-        "src/examples/lkjedit/hello.lkjml",
-        "src/examples/lkjedit/main.lkjml",
-        "src/examples/lkjedit/vimlike.lkjml",
+        "src/examples/bench/main.lkjscript",
+        "src/examples/hello/main.lkjscript",
+        "src/examples/http/hello.lkjscript",
+        "src/examples/mandel/main.lkjscript",
+        "src/examples/lkjedit/buffer-demo.lkjscript",
+        "src/examples/lkjedit/edit-mem.lkjscript",
+        "src/examples/lkjedit/hello.lkjscript",
+        "src/examples/lkjedit/main.lkjscript",
+        "src/std/io/now-ms.lkjscript",
+        "src/std/io/wait.lkjscript",
+        "src/std/term/write-str.lkjscript",
     ] {
         if let Err(error) = compile_path(&root.join(entry), &limits) {
             eprintln!("{entry}: {error}");
-            bad += 1;
+            failures += 1;
         }
     }
-    if bad > 0 { 1 } else { 0 }
+
+    i32::from(failures > 0)
 }
 
 fn quiet_test(root: &Path) -> i32 {
     let status = Command::new("cargo")
-        .args(["test", "--workspace", "--quiet"])
+        .args(["test", "--workspace", "--quiet", "--locked"])
         .current_dir(root)
         .status();
     match status {
-        Ok(s) if s.success() => 0,
-        _ => 1,
+        Ok(status) if status.success() => 0,
+        Ok(status) => {
+            eprintln!("cargo test exited with {status}");
+            1
+        }
+        Err(error) => {
+            eprintln!("run cargo test: {error}");
+            1
+        }
     }
 }
 
 fn quiet_verify(root: &Path) -> i32 {
-    if check_docs(root) != 0 {
-        return 1;
-    }
-    if tree::check_tree(root, 8) != 0 {
-        return 1;
-    }
-    if check_sources(root) != 0 {
-        return 1;
-    }
-    if quiet_test(root) != 0 {
+    if check_docs(root) != 0
+        || check_tree(root) != 0
+        || check_sources(root) != 0
+        || quiet_test(root) != 0
+    {
         return 1;
     }
     0
 }
 
-fn walk(dir: &Path, f: &mut dyn FnMut(&Path)) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    for ent in entries.flatten() {
-        let p = ent.path();
-        if p.is_dir() {
-            if p.file_name().and_then(|n| n.to_str()) == Some("target") {
-                continue;
-            }
-            walk(&p, f);
-        } else {
-            f(&p);
+fn walk(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir)
+        .map_err(|error| format!("read source directory {}: {error}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("read entry in {}: {error}", dir.display()))?;
+        let path = entry.path();
+        let kind = entry
+            .file_type()
+            .map_err(|error| format!("inspect {}: {error}", path.display()))?;
+        if kind.is_dir() {
+            walk(&path, files)?;
+        } else if kind.is_file() {
+            files.push(path);
         }
     }
+    Ok(())
 }

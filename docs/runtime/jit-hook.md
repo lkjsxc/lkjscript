@@ -12,10 +12,10 @@ handoff, deoptimization path, or JIT performance claim.
 
 ## Current Behavior
 
-The VM invokes `JitHook::maybe_compile` when calling a closure. The baseline
-hook returns a Boolean that the VM ignores; execution always remains in the
-interpreter. During the foundation cycle this API will be made explicitly
-observation-only so its type cannot imply a usable handoff.
+The VM invokes `JitHook::observe_call` when calling a closure. The method
+returns no compilation status and execution always remains in the interpreter.
+The source and documentation both label this seam `PLACEHOLDER`, so its type
+cannot imply a usable native execution handoff.
 
 ## Completion Contract
 

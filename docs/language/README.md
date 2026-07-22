@@ -7,16 +7,14 @@ source budgets of `lkjscript`.
 
 ## Status
 
-The checked-out baseline still implements the LKJML-named `.lkjml` format. The
-**Accepted Target** renames that same line-oriented format to lkjscript source
-and makes `.lkjscript` the only accepted extension. No dual-extension period is
-part of the product contract.
+**Current.** Canonical source uses `.lkjscript`; the former LKJML name and
+`.lkjml` extension are **Superseded** and unsupported.
 
 ## Table of Contents
 
-- [lkjml.md](lkjml.md): current baseline notation and accepted naming cutover
+- [source-format.md](source-format.md): canonical line-oriented notation
 - [syntax.md](syntax.md): expressions, forms, types, and imports
-- [limits.md](limits.md): language source budgets, including source-tree width
+- [limits.md](limits.md): fixed source budgets and source-tree width
 
-After the cutover, `lkjml.md` is replaced by `source-format.md`; references to
-LKJML remain only in superseded history.
+Historical notation records live only under
+[decisions/archive/](../decisions/archive/).

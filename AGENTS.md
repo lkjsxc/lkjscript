@@ -8,7 +8,7 @@ Define the working contract for automated engineering in this repository.
 
 `lkjscript` is a typed, line-oriented language implemented by a small Rust
 compiler and bytecode VM. The canonical accepted source extension is
-`.lkjscript`; the repository is moving to it without `.lkjml` compatibility.
+`.lkjscript`; `.lkjml` is rejected without a compatibility mode.
 Linux x86-64 is the current acceptance platform. Portability is a design
 constraint, not a current support claim.
 

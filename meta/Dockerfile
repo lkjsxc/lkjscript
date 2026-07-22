@@ -28,11 +28,11 @@ RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/regis
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-verify,target=/src/target,sharing=locked \
     cargo run --locked -p lkjscript-xtask -- quiet verify \
-    && /tmp/lkjscript run src/examples/hello/main.lkjml | grep -q 3628800 \
-    && /tmp/lkjscript run src/examples/mandel/main.lkjml > /tmp/mandel.out \
+    && /tmp/lkjscript run src/examples/hello/main.lkjscript | grep -q 3628800 \
+    && /tmp/lkjscript run src/examples/mandel/main.lkjscript > /tmp/mandel.out \
     && test -s /tmp/mandel.out \
-    && LKJ=/tmp/lkjscript bash meta/scripts/lkjedit-smoke.sh \
-    && LKJ=/tmp/lkjscript bash meta/scripts/http-smoke.sh \
+    && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/lkjedit-smoke.sh \
+    && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/http-smoke.sh \
     && printf 'result=ok\n' > /tmp/lkjscript-verification-result
 
 FROM debian:bookworm-slim AS runtime

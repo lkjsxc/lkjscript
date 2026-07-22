@@ -3,30 +3,44 @@
 ## Purpose
 
 `lkjscript` is a typed, line-oriented functional language with a compact Rust
-compiler, dense bytecode VM, explicit source budgets, and an ecosystem intended
-to grow in lkjscript itself rather than in host frameworks.
+compiler, dense bytecode VM, fixed source budgets, and an ecosystem intended to
+grow in lkjscript itself rather than in host frameworks.
 
 ## Status
 
-The checked-out implementation still uses `.lkjml` during the documentation-first
-foundation cutover. The accepted canonical extension is **`.lkjscript`**, with
-no compatibility mode. Current evidence and the exact accepted target are kept
-separate in [docs/current-state.md](docs/current-state.md).
+Canonical source files use **`.lkjscript`**. Other extensions, including the
+superseded `.lkjml`, are rejected without a compatibility mode. Linux x86-64 is
+the current acceptance platform.
 
-## Current Development Commands
+Current capabilities and known defects are recorded in
+[docs/current-state.md](docs/current-state.md). Future installation, update,
+package, GUI, browser, server, and native-performance work is direction rather
+than current product behavior.
 
-These commands describe the pre-cutover baseline at commit `8aa09d8`:
+## Development Commands
 
 ```sh
-cargo run --locked -p lkjscript-app -- run src/examples/hello/main.lkjml
-cargo run --locked -p lkjscript-app -- run src/examples/mandel/main.lkjml
-cargo run --locked -p lkjscript-app -- run src/examples/lkjedit/main.lkjml path/to/file
-cargo run --locked -p lkjscript-app -- run src/examples/http/hello.lkjml
+cargo run --locked -p lkjscript-app -- run src/examples/hello/main.lkjscript
+cargo run --locked -p lkjscript-app -- run src/examples/mandel/main.lkjscript
+cargo run --locked -p lkjscript-app -- run src/examples/lkjedit/main.lkjscript path/to/file
+cargo run --locked -p lkjscript-app -- run src/examples/http/hello.lkjscript
+cargo run --locked -p lkjscript-app -- disasm src/examples/hello/main.lkjscript
 cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
 
-After the accepted cutover, the same source paths end in `.lkjscript`; `.lkjml`
-is rejected rather than aliased.
+Runtime acceptance:
+
+```sh
+cargo build --workspace --release --locked
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
+```
+
+Docker acceptance, run from this repository:
+
+```sh
+docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
+```
 
 ## Architecture
 
@@ -40,16 +54,11 @@ is rejected rather than aliased.
 - `src/lib`: reusable language packages
 - `src/examples`: executable acceptance workloads
 
-See [docs/operations/architecture.md](docs/operations/architecture.md) for the
-compile and execution flows.
+Each lkjscript source directory may contain at most 16 immediate files plus
+subdirectories. This language rule does not constrain Rust, docs, metadata, or
+generated build trees.
 
-## Direction
-
-The long-term direction includes self-contained installation and update,
-packages, process-safe multi-application execution, native performance work,
-servers, frameworks, browsers, and multiplatform GUI applications. These are
-not current capability claims. Each layer must land through reproducible
-experiments and truthful contracts.
+See [docs/operations/architecture.md](docs/operations/architecture.md).
 
 ## Read Order
 
