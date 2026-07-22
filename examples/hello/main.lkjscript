@@ -1,4 +1,0 @@
-import/ "examples/hello/fact.lkjscript" /import
-do/
-  print/ str-from-i64/ fact/ 10 /fact /str-from-i64 /print
-/do

@@ -1,0 +1,12 @@
+import/
+std/term/banner.lkjml
+/import
+import/
+std/io/get-byte.lkjml
+/import
+do/
+banner/
+/banner
+get-byte/
+/get-byte
+/do

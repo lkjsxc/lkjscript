@@ -13,15 +13,26 @@ fan-out.
   - `lib/...` → `src/lib/...`
 - Paths starting with `./` resolve relative to the importing file.
 - Paths containing `..` are rejected.
-- Package root is the nearest ancestor containing `src/std/`.
+- Package root is the nearest ancestor containing `src/std/`; otherwise it is
+  the current working directory.
+- If a project has no local `src/std` or `src/lib`, those prefixes fall back to
+  `$LKJSCRIPT2026_ROOT/src/std` or `$LKJSCRIPT2026_ROOT/src/lib`.
+- Project-local library directories win over the installed fallback.
 
-Examples:
+Example:
 
-- `<import>std/list/nth.lkjscript</import>`
-- `<import>lib/edit/loop.lkjscript</import>`
-- `<import>examples/hello/fact.lkjscript</import>`
+```text
+import/
+std/list/nth.lkjml
+/import
+```
+
+The same form accepts `lib/edit/loop.lkjml` and
+`examples/hello/fact.lkjml`.
 
 ## Consequences
 
 Modules are identified by logical path (`std/…`, `lib/…`, `examples/…`).
-Top-level `def` remains program-global for this release.
+Top-level `def` remains program-global for this release. Docker sets
+`LKJSCRIPT2026_ROOT` to its bundled libraries, so bind-mounted projects do not
+need to copy the standard library.

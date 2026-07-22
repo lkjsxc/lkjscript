@@ -1,8 +1,0 @@
-def/
-  name/ "line-len" /name
-  fn/
-    sig/ Str -> I64 /sig
-    params/ s Str /params
-    str-len/ s /str-len
-  /fn
-/def

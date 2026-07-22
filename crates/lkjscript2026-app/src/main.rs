@@ -20,6 +20,10 @@ fn main() -> ExitCode {
 
 fn real_main() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args.as_slice() == ["--version"] || args.as_slice() == ["-V"] {
+        println!("lkjscript2026 {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
         print_help();
         return Ok(());
@@ -30,7 +34,7 @@ fn real_main() -> Result<(), String> {
         "run" => {
             let file = args
                 .get(1)
-                .ok_or_else(|| "run needs a .lkjscript path".to_string())?
+                .ok_or_else(|| "run needs a .lkjml path".to_string())?
                 .clone();
             let script_args: Vec<String> = args.iter().skip(2).cloned().collect();
             let path = PathBuf::from(&file);
@@ -41,7 +45,7 @@ fn real_main() -> Result<(), String> {
         "disasm" => {
             let file = args
                 .get(1)
-                .ok_or_else(|| "disasm needs a .lkjscript path".to_string())?;
+                .ok_or_else(|| "disasm needs a .lkjml path".to_string())?;
             let path = PathBuf::from(file);
             let chunk = compile_path(&path, &limits).map_err(|e| e.to_string())?;
             println!("globals: {:?}", chunk.global_names);
@@ -54,10 +58,14 @@ fn real_main() -> Result<(), String> {
 }
 
 fn print_help() {
-    println!("lkjscript2026 — typed slash-grammar language runtime");
+    println!("lkjscript2026 — typed LKJML language runtime");
     println!();
     println!("Usage:");
-    println!("  lkjscript2026 run <file.lkjscript> [script-args…]");
-    println!("  lkjscript2026 disasm <file.lkjscript>");
+    println!("  lkjscript2026 run <file.lkjml> [script-args…]");
+    println!("  lkjscript2026 disasm <file.lkjml>");
     println!("  lkjscript2026 --help");
+    println!("  lkjscript2026 --version");
+    println!();
+    println!("Environment:");
+    println!("  LKJSCRIPT2026_ROOT  installed root containing src/std and src/lib");
 }

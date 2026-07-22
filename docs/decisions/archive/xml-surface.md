@@ -1,6 +1,7 @@
 # Superseded
 
-Superseded by [slash-types-sys.md](slash-types-sys.md) for new language surface.
+Superseded first by [slash-types-sys.md](../slash-types-sys.md), then by
+[LKJML](../../language/lkjml.md) for the canonical language surface.
 
 ---
 

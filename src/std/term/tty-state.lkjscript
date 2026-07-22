@@ -1,2 +1,0 @@
-def/ name/ "tty-cooked-buf" /name type/ Buf /type nil /def
-def/ name/ "tty-work" /name type/ Buf /type nil /def

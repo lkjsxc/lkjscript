@@ -1,4 +1,4 @@
-//! Load a root `.lkjscript` file and follow package-root / relative imports.
+//! Load a root `.lkjml` file and follow package-root / relative imports.
 
 use std::collections::HashSet;
 use std::fs;
@@ -82,9 +82,10 @@ fn load_file(
     let source = fs::read_to_string(&canon)
         .map_err(|e| Error::msg(format!("read {}: {e}", canon.display())))?;
     let label = canon.display().to_string();
-    let tokens = lex(&source)?;
+    let tokens = lex(&source).map_err(|error| Error::msg(format!("{label}: {error}")))?;
     check_file_limits(&tokens, limits, &label)?;
-    let forms = parse_tokens(&tokens)?;
+    let forms = parse_tokens(&tokens)
+        .map_err(|error| Error::msg(format!("{label}: {error}")))?;
     validate_top_level(&forms, limits, &label)?;
     let parent = canon.parent().unwrap_or_else(|| Path::new("."));
     for form in &forms {
@@ -106,6 +107,16 @@ fn load_file(
 }
 
 fn resolve_import(spec: &str, parent: &Path, package_root: &Path) -> Result<PathBuf> {
+    let installed = std::env::var_os("LKJSCRIPT2026_ROOT").map(PathBuf::from);
+    resolve_import_with_root(spec, parent, package_root, installed.as_deref())
+}
+
+fn resolve_import_with_root(
+    spec: &str,
+    parent: &Path,
+    package_root: &Path,
+    installed_root: Option<&Path>,
+) -> Result<PathBuf> {
     if spec.contains("..") {
         return Err(Error::msg(format!(
             "import climb banned ({spec}); use package-root path"
@@ -120,15 +131,32 @@ fn resolve_import(spec: &str, parent: &Path, package_root: &Path) -> Result<Path
         )));
     }
     if let Some(rest) = spec.strip_prefix("std/") {
-        return Ok(package_root.join("src").join("std").join(rest));
+        return Ok(library_path(package_root, installed_root, "std", rest));
     }
     if let Some(rest) = spec.strip_prefix("lib/") {
-        return Ok(package_root.join("src").join("lib").join(rest));
+        return Ok(library_path(package_root, installed_root, "lib", rest));
     }
     Ok(package_root.join(spec))
 }
 
-fn validate_top_level(forms: &[Expr], limits: &Limits, path: &str) -> Result<()> {
+fn library_path(
+    package_root: &Path,
+    installed_root: Option<&Path>,
+    library: &str,
+    rest: &str,
+) -> PathBuf {
+    let local = package_root.join("src").join(library);
+    if local.is_dir() || installed_root.is_none() {
+        return local.join(rest);
+    }
+    installed_root
+        .unwrap_or(package_root)
+        .join("src")
+        .join(library)
+        .join(rest)
+}
+
+pub(crate) fn validate_top_level(forms: &[Expr], limits: &Limits, path: &str) -> Result<()> {
     let n = forms.len() as u32;
     if n > limits.max_toplevel_forms {
         return Err(Error::msg(format!(
@@ -163,32 +191,76 @@ mod tests {
 
     #[test]
     fn rejects_climb() {
-        let err = resolve_import("../x.lkjscript", Path::new("/a"), Path::new("/pkg")).unwrap_err();
+        let err = resolve_import_with_root(
+            "../x.lkjml",
+            Path::new("/a"),
+            Path::new("/pkg"),
+            None,
+        )
+        .unwrap_err();
         assert!(err.as_str().contains("climb"));
     }
 
     #[test]
     fn std_prefix() {
-        let p = resolve_import("std/list/nth.lkjscript", Path::new("/a/b"), Path::new("/pkg")).unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/src/std/list/nth.lkjscript"));
+        let p = resolve_import_with_root(
+            "std/list/nth.lkjml",
+            Path::new("/a/b"),
+            Path::new("/pkg"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(p, PathBuf::from("/pkg/src/std/list/nth.lkjml"));
     }
 
     #[test]
     fn lib_prefix() {
-        let p = resolve_import("lib/edit/loop.lkjscript", Path::new("/a/b"), Path::new("/pkg")).unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/src/lib/edit/loop.lkjscript"));
+        let p = resolve_import_with_root(
+            "lib/edit/loop.lkjml",
+            Path::new("/a/b"),
+            Path::new("/pkg"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(p, PathBuf::from("/pkg/src/lib/edit/loop.lkjml"));
     }
 
     #[test]
     fn examples_join() {
-        let p = resolve_import("examples/hello/main.lkjscript", Path::new("/a/b"), Path::new("/pkg"))
-            .unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/examples/hello/main.lkjscript"));
+        let p = resolve_import_with_root(
+            "examples/hello/main.lkjml",
+            Path::new("/a/b"),
+            Path::new("/pkg"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(p, PathBuf::from("/pkg/examples/hello/main.lkjml"));
     }
 
     #[test]
     fn dot_relative() {
-        let p = resolve_import("./sib.lkjscript", Path::new("/a/b"), Path::new("/pkg")).unwrap();
-        assert_eq!(p, PathBuf::from("/a/b/sib.lkjscript"));
+        let p = resolve_import_with_root(
+            "./sib.lkjml",
+            Path::new("/a/b"),
+            Path::new("/pkg"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(p, PathBuf::from("/a/b/sib.lkjml"));
+    }
+
+    #[test]
+    fn installed_std_is_used_when_project_has_no_std() {
+        let p = resolve_import_with_root(
+            "std/list/nth.lkjml",
+            Path::new("/project"),
+            Path::new("/project"),
+            Some(Path::new("/opt/lkjscript2026")),
+        )
+        .unwrap();
+        assert_eq!(
+            p,
+            PathBuf::from("/opt/lkjscript2026/src/std/list/nth.lkjml")
+        );
     }
 }

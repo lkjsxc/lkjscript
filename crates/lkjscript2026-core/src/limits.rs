@@ -1,6 +1,6 @@
 //! Language-spec source budgets. Numbers are fixed for this language version.
 
-/// Maximum XML nest depth in one file.
+/// Maximum LKJML form depth in one file.
 pub const MAX_NEST_DEPTH: u32 = 8;
 /// Maximum children under one element.
 pub const MAX_CHILDREN: u32 = 16;

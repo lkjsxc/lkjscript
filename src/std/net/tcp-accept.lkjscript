@@ -1,8 +1,0 @@
-def/
-  name/ "tcp-accept" /name
-  fn/
-    sig/ Handle -> Handle /sig
-    params/ lis Handle /params
-    unwrap-ok/ sys-accept/ lis /sys-accept /unwrap-ok
-  /fn
-/def

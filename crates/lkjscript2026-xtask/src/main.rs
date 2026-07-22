@@ -7,13 +7,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+use lkjscript2026_compiler::{compile_path, validate_source};
+use lkjscript2026_core::Limits;
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(".");
     let code = match args.first().map(String::as_str) {
-        Some("check-lines") => check_lines(&root),
         Some("check-docs") => check_docs(&root),
         Some("check-tree") => tree::check_tree(&root, 8),
+        Some("check-sources") => check_sources(&root),
         Some("quiet") => match args.get(1).map(String::as_str) {
             Some("test") => quiet_test(&root),
             Some("verify") => quiet_verify(&root),
@@ -23,39 +26,13 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            eprintln!("usage: lkjscript2026-xtask [check-lines|check-docs|check-tree|quiet …]");
+            eprintln!(
+                "usage: lkjscript2026-xtask [check-docs|check-tree|check-sources|quiet …]"
+            );
             2
         }
     };
     ExitCode::from(code as u8)
-}
-
-fn check_lines(root: &Path) -> i32 {
-    let mut bad = 0;
-    for dir in ["crates", "docs"] {
-        let p = root.join(dir);
-        if !p.exists() {
-            continue;
-        }
-        walk(&p, &mut |path| {
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if !matches!(ext, "rs" | "md") {
-                return;
-            }
-            if let Ok(text) = fs::read_to_string(path) {
-                let lines = text.lines().count();
-                if lines > 200 {
-                    eprintln!("{} has {lines} lines (max 200)", path.display());
-                    bad += 1;
-                }
-            }
-        });
-    }
-    if bad > 0 {
-        1
-    } else {
-        0
-    }
 }
 
 fn check_docs(root: &Path) -> i32 {
@@ -63,7 +40,9 @@ fn check_docs(root: &Path) -> i32 {
         "docs/README.md",
         "docs/current-state.md",
         "docs/vision/README.md",
+        "docs/vision/process-supervisor.md",
         "docs/language/README.md",
+        "docs/language/lkjml.md",
         "docs/runtime/README.md",
         "docs/operations/README.md",
         "docs/product/README.md",
@@ -76,6 +55,55 @@ fn check_docs(root: &Path) -> i32 {
         }
     }
     0
+}
+
+fn check_sources(root: &Path) -> i32 {
+    let mut files = Vec::new();
+    for directory in ["src", "examples"] {
+        walk(&root.join(directory), &mut |path| files.push(path.to_path_buf()));
+    }
+    files.sort();
+    let mut bad = 0;
+    let limits = Limits::default();
+    for path in files {
+        match path.extension().and_then(|extension| extension.to_str()) {
+            Some("lkjscript") => {
+                eprintln!("legacy source extension: {}", path.display());
+                bad += 1;
+            }
+            Some("lkjml") => match fs::read_to_string(&path) {
+                Ok(source) => {
+                    let label = path.display().to_string();
+                    if let Err(error) = validate_source(&source, &label, &limits) {
+                        eprintln!("{error}");
+                        bad += 1;
+                    }
+                }
+                Err(error) => {
+                    eprintln!("read {}: {error}", path.display());
+                    bad += 1;
+                }
+            },
+            _ => {}
+        }
+    }
+    for entry in [
+        "examples/bench/main.lkjml",
+        "examples/hello/main.lkjml",
+        "examples/http/hello.lkjml",
+        "examples/mandel/main.lkjml",
+        "examples/texteditor/buffer-demo.lkjml",
+        "examples/texteditor/edit-mem.lkjml",
+        "examples/texteditor/hello.lkjml",
+        "examples/texteditor/main.lkjml",
+        "examples/texteditor/vimlike.lkjml",
+    ] {
+        if let Err(error) = compile_path(&root.join(entry), &limits) {
+            eprintln!("{entry}: {error}");
+            bad += 1;
+        }
+    }
+    if bad > 0 { 1 } else { 0 }
 }
 
 fn quiet_test(root: &Path) -> i32 {
@@ -94,6 +122,9 @@ fn quiet_verify(root: &Path) -> i32 {
         return 1;
     }
     if tree::check_tree(root, 8) != 0 {
+        return 1;
+    }
+    if check_sources(root) != 0 {
         return 1;
     }
     if quiet_test(root) != 0 {

@@ -1,5 +1,11 @@
 # Slash grammar, mandatory types, safe sys
 
+## Status
+
+The whitespace-separated surface in this record is superseded by
+[LKJML](../language/lkjml.md). Mandatory types, safe sys, GC, and JIT decisions
+remain active.
+
 ## Context
 XML `<>` surface and untyped defs block the performance roadmap’s types arc.
 User authorized a full rewrite: mandatory signatures, Result-aware checking,
@@ -7,9 +13,10 @@ opaque `sys-*` handles, and bundling precise GC. Multi-OS is a future goal;
 Linux backend is fine now behind a portable façade.
 
 ## Decision
-1. **Slash surface** — Open forms end with `/` (`if/`), close forms start with
-   `/` (`/if`), atoms have no slash (`xs`, `0`, `"str"`). Whitespace separates
-   tokens. Strings use `"` with `\` escapes. Comments: `;;` to EOL.
+1. **Slash surface (superseded notation)** — Open forms end with `/` (`if/`),
+   close forms start with `/` (`/if`), and atoms have no slash (`xs`, `0`).
+   LKJML retains those markers but places one item on each column-one line and
+   replaces quote-delimited strings with text tags.
 2. **Structural `/` only** — Arithmetic division is the atom/call name `div`
    (not `/`), so close/open markers stay unambiguous.
 3. **Mandatory types** — Every `def` of an `fn` carries `sig/` … `/sig` and
@@ -22,14 +29,18 @@ Linux backend is fine now behind a portable façade.
    (no exceptions). Parametric polymorphism is **annotation-driven**:
    `forall/ T /forall` on fns; call sites instantiate from argument types
    (no Hindley–Milner inference). No traits/typeclasses.
-5. **`print` is `Str`-only** — Convert with `str-from-i64` / `str-from-byte`.
+5. **`print` is `Str`-only** — Convert with `str-from-i64`, `str-from-f64`,
+   or `str-from-byte`.
 6. **Literals** — `2` is `I64`; `2.0` (source contains `.`) is `F64`.
 7. **Safe sys** — Scripts see only opaque `Handle` + `Result`; raw fds stay
    inside VM/`lkjscript2026-sys`. Portable façade module; Linux impl first.
 8. **GC** — Precise mark-sweep replaces bump-only; value tags include Handle.
 9. **JIT** — Stub + typed call hooks only in this cut.
 
-## Example
+## Historical Example
+
+This example records the superseded whitespace-separated layout.
+
 ```text
 def/
   name/ wait-ms /name
@@ -56,7 +67,7 @@ def/
 ```
 
 ## Consequences
-- Supersedes [xml-surface.md](xml-surface.md) for new sources.
+- Superseded XML; LKJML now supersedes this record's physical notation.
 - Full corpus migration required; honesty gates must stay green.
 - Token/fan-out constants may be retuned with docs if signatures demand it.
 - Numeric widths are type-level today; VM still stores tagged i64 + heap float

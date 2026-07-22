@@ -7,7 +7,7 @@ can continue without rediscovering recent pain.
 
 ## Product Intent
 
-- Thin, scratch Rust host; grow capability in `.lkjscript`, not frameworks.
+- Thin, scratch Rust host; grow capability in `.lkjml`, not frameworks.
 - No new crates.io dependencies without an ADR (`lkjscript2026-sys` owns OS
   wrappers; `unsafe` only there).
 - Fat host opcodes are frozen; prefer script libraries for new features.
@@ -30,9 +30,9 @@ again unless the user asks.
 
 ## Known Sharp Edges
 
-- Prefer helpers like `maybe-load` over heavy work in a top-level `<if>`
-  then-branch (can hang).
-- Top-level `<do>` + `<let>` must copy proto locals into the chunk main locals
+- Prefer helpers like `maybe-load` over heavy work in a top-level `if/`
+  then-branch.
+- Top-level `do/` + `let/` must copy proto locals into the chunk main locals
   (`compile_do`); this is already fixed — do not regress it.
 - Raw TTY redraw must emit CR+LF (LF-only caused a staircase display bug).
 - Missing file opens as an empty buffer with status `new file`.
@@ -50,8 +50,8 @@ again unless the user asks.
 
 ## Near-Term Focus
 
-Keep editor/HTTP/bench green. Mandatory types + slash grammar + opaque
-Handle/`Result` sys + precise GC + ban-`Any` (sized `I32`/`U64`/`F64`…,
+Keep editor/HTTP/bench green. LKJML + mandatory types + opaque Handle/`Result`
+sys + precise GC + ban-`Any` (sized `I32`/`U64`/`F64`…,
 annotation-driven `forall`, Str-only `print`) landed; baseline JIT still
 roadmap-only; see [vision/performance-roadmap.md](../vision/performance-roadmap.md)
 and [decisions/slash-types-sys.md](../decisions/slash-types-sys.md).

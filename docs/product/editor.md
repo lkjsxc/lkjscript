@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Document the modal single-buffer editor shipped as `.lkjscript` under `src/lib/edit/`.
+Document the modal single-buffer editor shipped as `.lkjml` under `src/lib/edit/`.
 
 ## Scope
 
@@ -21,9 +21,9 @@ Not full vim: no windows, visual mode, search, undo tree, or plugins.
 ## Run
 
 ```sh
-cargo run -p lkjscript2026-app -- run examples/texteditor/main.lkjscript path/to/file
+cargo run -p lkjscript2026-app -- run examples/texteditor/main.lkjml path/to/file
 docker compose -f meta/docker-compose.yml run -it --rm lkjscript2026 \
-  run examples/texteditor/main.lkjscript path/to/file
+  run examples/texteditor/main.lkjml path/to/file
 ```
 
 Scripted acceptance:

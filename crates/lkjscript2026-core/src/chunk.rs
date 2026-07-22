@@ -100,6 +100,10 @@ impl FunctionProto {
         self.code.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.code.is_empty()
+    }
+
     pub fn patch_u16(&mut self, at: usize, n: u16) {
         let bytes = n.to_le_bytes();
         self.code[at] = bytes[0];

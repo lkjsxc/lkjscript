@@ -68,7 +68,7 @@ impl Arena {
     }
 
     pub fn needs_collect(&self) -> bool {
-        self.allocs_since_gc >= 1024 || self.objs.len() > 4096
+        self.allocs_since_gc >= 1024
     }
 
     pub fn maybe_collect(&mut self, roots: &[Value]) {
@@ -90,5 +90,16 @@ mod tests {
         a.collect(&[keep]);
         assert!(a.get(keep).is_ok());
         assert_eq!(a.free.len(), 1);
+    }
+
+    #[test]
+    fn collection_resets_pressure_for_large_arenas() {
+        let mut arena = Arena::default();
+        let roots: Vec<_> = (0..4097)
+            .map(|n| arena.alloc(HeapObj::Float(f64::from(n))))
+            .collect();
+        assert!(arena.needs_collect());
+        arena.collect(&roots);
+        assert!(!arena.needs_collect());
     }
 }

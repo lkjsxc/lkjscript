@@ -1,6 +1,6 @@
 //! Call and pair opcodes.
 
-use lkjscript2026_core::{Error, HeapObj, JitHook, Result, Value};
+use lkjscript2026_core::{Error, HeapObj, JitHook, Op, Result, Value};
 
 use crate::run::{Frame, Vm};
 
@@ -57,6 +57,28 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
             }
             let locals = p.locals;
             let args_start = vm.stack.len() - argc as usize;
+            if is_tail_position(vm) {
+                let stack_base = vm
+                    .frames
+                    .last()
+                    .map(|frame| frame.stack_base)
+                    .unwrap_or(0);
+                let args = vm.stack[args_start..].to_vec();
+                vm.stack.truncate(stack_base);
+                vm.stack.extend_from_slice(&args);
+                while vm.stack.len() < stack_base + locals as usize {
+                    vm.stack.push(Value::NIL);
+                }
+                if let Some(frame) = vm.frames.last_mut() {
+                    *frame = Frame {
+                        proto,
+                        ip: 0,
+                        stack_base,
+                        locals_base: stack_base,
+                    };
+                }
+                return Ok(());
+            }
             while vm.stack.len() < args_start + locals as usize {
                 vm.stack.push(Value::NIL);
             }
@@ -69,5 +91,62 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
             Ok(())
         }
         _ => Err(Error::msg("call expects closure")),
+    }
+}
+
+fn is_tail_position<J: JitHook>(vm: &Vm<'_, J>) -> bool {
+    let Some(frame) = vm.frames.last() else {
+        return false;
+    };
+    if frame.proto == u32::MAX {
+        return false;
+    }
+    vm.chunk
+        .protos
+        .get(frame.proto as usize)
+        .and_then(|proto| proto.code.get(frame.ip))
+        .copied()
+        == Some(Op::Return as u8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lkjscript2026_core::{Chunk, FunctionProto, NullJit};
+
+    #[test]
+    fn tail_call_reuses_the_current_frame() {
+        let mut chunk = Chunk::new();
+        chunk.protos.push(FunctionProto {
+            name: "callee".into(),
+            arity: 1,
+            locals: 1,
+            code: vec![Op::Return as u8],
+        });
+        chunk.protos.push(FunctionProto {
+            name: "caller".into(),
+            arity: 0,
+            locals: 0,
+            code: vec![Op::Return as u8],
+        });
+        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        vm.frames.push(Frame {
+            proto: 1,
+            ip: 0,
+            stack_base: 0,
+            locals_base: 0,
+        });
+        vm.push(Value::from_int(42));
+        let callee = vm.arena.alloc(HeapObj::Closure {
+            proto: 0,
+            captures: Vec::new(),
+        });
+        vm.push(callee);
+
+        call(&mut vm, 1).expect("tail call");
+
+        assert_eq!(vm.frames.len(), 1);
+        assert_eq!(vm.frames[0].proto, 0);
+        assert_eq!(vm.stack, vec![Value::from_int(42)]);
     }
 }

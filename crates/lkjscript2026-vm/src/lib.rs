@@ -1,4 +1,4 @@
-//! Stack VM with bump arena and host IO builtins.
+//! Stack VM with precise mark-sweep GC and thin host IO builtins.
 
 mod arena;
 mod host;

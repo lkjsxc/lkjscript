@@ -7,8 +7,9 @@ Entry instructions for automated coding agents working in this repository
 
 ## What lkjscript2026 Is
 
-A small functional language with attribute-less XML surface syntax, a Rust
-bytecode VM, AI-friendly source budgets, and Docker-gated verification.
+A small functional language with the line-oriented, attribute-less LKJML
+surface, a Rust bytecode VM, AI-friendly source budgets, and Docker-gated
+verification.
 
 ## Non-Negotiable Rules
 

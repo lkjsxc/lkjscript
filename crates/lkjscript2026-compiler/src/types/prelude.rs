@@ -116,6 +116,7 @@ pub fn prelude() -> HashMap<String, Type> {
     );
     m.insert("str-from-byte".into(), fn_ty(vec![Type::I64], Type::Str));
     m.insert("str-from-i64".into(), fn_ty(vec![Type::I64], Type::Str));
+    m.insert("str-from-f64".into(), fn_ty(vec![Type::F64], Type::Str));
     m.insert("i64-from-u32".into(), fn_ty(vec![Type::U32], Type::I64));
     m.insert("u32-from-i64".into(), fn_ty(vec![Type::I64], Type::U32));
     m.insert("i64-from-i32".into(), fn_ty(vec![Type::I32], Type::I64));

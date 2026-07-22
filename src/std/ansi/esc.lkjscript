@@ -1,9 +1,0 @@
-import/ "std/io/put-byte.lkjscript" /import
- def/
- name/ "esc" /name
- fn/
- sig/ -> Nil /sig
- params/  /params
- put-byte/ 27 /put-byte
- /fn
- /def

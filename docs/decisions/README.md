@@ -13,4 +13,5 @@ Architecture decision records for `lkjscript2026`.
 - [package-imports.md](package-imports.md): package-root import paths
 - [limits/essential-limits.md](limits/essential-limits.md): tokens/forms over line count
 - [scratch-host.md](scratch-host.md): owned sys layer; fat-opcode freeze
-- [slash-types-sys.md](slash-types-sys.md): slash grammar, mandatory types, safe sys
+- [slash-types-sys.md](slash-types-sys.md): historical slash layout; active types and safe sys
+- [LKJML](../language/lkjml.md): current line-oriented surface contract

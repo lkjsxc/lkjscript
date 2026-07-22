@@ -1,8 +1,0 @@
-def/
- name/ "get-byte" /name
- fn/
- sig/ -> I64 /sig
- params/  /params
- read-byte/ /read-byte
- /fn
- /def

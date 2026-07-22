@@ -1,8 +1,0 @@
-def/
-  name/ "tcp-send" /name
-  fn/
-    sig/ Handle Str -> I64 /sig
-    params/ fd Handle data Str /params
-    unwrap-ok/ sys-send/ fd data /sys-send /unwrap-ok
-  /fn
-/def

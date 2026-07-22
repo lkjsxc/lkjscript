@@ -240,3 +240,15 @@ pub fn str_from_i64(arena: &mut Arena, n: Value) -> Result<Value> {
     let n = n.as_int().ok_or_else(|| Error::msg("str-from-i64"))?;
     Ok(arena.alloc(HeapObj::Str(n.to_string())))
 }
+
+pub fn str_from_f64(arena: &mut Arena, n: Value) -> Result<Value> {
+    let number = if let Some(integer) = n.as_int() {
+        integer as f64
+    } else {
+        match arena.get(n)? {
+            HeapObj::Float(float) => *float,
+            _ => return Err(Error::msg("str-from-f64")),
+        }
+    };
+    Ok(arena.alloc(HeapObj::Str(number.to_string())))
+}

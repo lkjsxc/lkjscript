@@ -1,9 +1,0 @@
-import/ "std/io/wait-ms.lkjscript" /import
- def/
- name/ "io-wait" /name
- fn/
- sig/ I64 -> I64 /sig
- params/ ms I64 /params
- wait-ms/ ms /wait-ms
- /fn
- /def

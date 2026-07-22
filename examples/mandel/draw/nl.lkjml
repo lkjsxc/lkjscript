@@ -1,0 +1,16 @@
+def/
+name/
+nl
+/name
+fn/
+sig/
+->
+Nil
+/sig
+params/
+/params
+write-byte/
+10
+/write-byte
+/fn
+/def

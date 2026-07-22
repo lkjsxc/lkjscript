@@ -37,3 +37,7 @@ dependencies = [
 [[package]]
 name = "lkjscript2026-xtask"
 version = "0.1.0"
+dependencies = [
+ "lkjscript2026-compiler",
+ "lkjscript2026-core",
+]

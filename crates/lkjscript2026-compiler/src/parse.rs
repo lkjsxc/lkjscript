@@ -49,6 +49,12 @@ fn parse_element(tokens: &[Token], i: usize, name: &str) -> Result<(Expr, usize)
 }
 
 fn element_to_expr(name: &str, kids: Vec<Expr>) -> Result<Expr> {
+    if name == "str" {
+        return match kids.as_slice() {
+            [Expr::LitStr(s)] => Ok(Expr::LitStr(s.clone())),
+            _ => Err(Error::msg("str/ must contain one LKJML text value")),
+        };
+    }
     if kids.len() == 1 {
         if let Expr::LitStr(s) = &kids[0] {
             if name == "name" || name == "import" {
@@ -91,7 +97,7 @@ mod tests {
 
     #[test]
     fn parses_call() {
-        let toks = lex("+/ 1 2 /+").unwrap();
+        let toks = lex("+/\n1\n2\n/+\n").unwrap();
         let forms = parse_tokens(&toks).unwrap();
         assert_eq!(
             forms,
@@ -109,5 +115,12 @@ mod tests {
                 ],
             }]
         );
+    }
+
+    #[test]
+    fn parses_text_block_as_string_literal() {
+        let tokens = lex("str/\nhello world\n/str\n").expect("lex");
+        let forms = parse_tokens(&tokens).expect("parse");
+        assert_eq!(forms, vec![Expr::LitStr("hello world".into())]);
     }
 }

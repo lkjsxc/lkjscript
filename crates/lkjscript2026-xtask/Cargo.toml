@@ -9,5 +9,9 @@ publish.workspace = true
 name = "lkjscript2026-xtask"
 path = "src/main.rs"
 
+[dependencies]
+lkjscript2026-compiler = { path = "../lkjscript2026-compiler" }
+lkjscript2026-core = { path = "../lkjscript2026-core" }
+
 [lints]
 workspace = true

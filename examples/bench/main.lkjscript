@@ -1,4 +1,0 @@
-import/ "examples/bench/leibniz-loop.lkjscript" /import
- do/
- print/ leibniz/ 200000 /leibniz /print
- /do

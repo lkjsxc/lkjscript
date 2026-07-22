@@ -1,74 +1,127 @@
-//! Lexer tokens for slash/whitespace source.
+//! Lexer tokens for canonical, line-oriented LKJML source.
 
 use lkjscript2026_core::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
-    /// `name/`
+    /// A column-one `name/` line.
     Open(String),
-    /// `/name`
+    /// A column-one `/name` line.
     Close(String),
-    /// bare atom (symbol, number literal spelling, bool, nil)
+    /// A complete atom line.
     Atom(String),
-    /// `"…"` string literal (unescaped contents)
+    /// Raw contents of `str/`, `name/`, or `import/`.
     Str(String),
 }
 
 pub fn lex(source: &str) -> Result<Vec<Token>> {
-    let bytes = source.as_bytes();
+    let lines: Vec<&str> = source.lines().collect();
     let mut out = Vec::new();
     let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if b.is_ascii_whitespace() {
+    while i < lines.len() {
+        let line = lines[i];
+        let line_no = i + 1;
+        if line.is_empty() || line.starts_with(";;") {
             i += 1;
             continue;
         }
-        if b == b';' && bytes.get(i + 1) == Some(&b';') {
-            while i < bytes.len() && bytes[i] != b'\n' {
-                i += 1;
-            }
-            continue;
-        }
-        if b == b'"' {
-            let (s, next) = lex_string(bytes, i)?;
-            out.push(Token::Str(s));
+        if let Some(name) = text_open_name(line) {
+            let (text, next) = lex_text_block(&lines, i, name)?;
+            out.push(Token::Open(name.to_string()));
+            out.push(Token::Str(text));
+            out.push(Token::Close(name.to_string()));
             i = next;
             continue;
         }
-        if b == b'/' {
-            let (name, next) = lex_ident(bytes, i + 1)?;
-            if name.is_empty() {
-                return Err(Error::msg("close marker needs a name after /"));
-            }
-            out.push(Token::Close(name));
-            i = next;
-            continue;
-        }
-        let (name, next) = lex_ident(bytes, i)?;
-        if name.is_empty() {
-            return Err(Error::msg(format!("unexpected byte {:?}", b as char)));
-        }
-        if bytes.get(next) == Some(&b'/') {
-            out.push(Token::Open(name));
-            i = next + 1;
+        reject_whitespace(line, line_no)?;
+        if let Some(name) = line.strip_prefix('/') {
+            validate_name(name, line_no, "close marker")?;
+            out.push(Token::Close(name.to_string()));
+        } else if let Some(name) = line.strip_suffix('/') {
+            validate_name(name, line_no, "open marker")?;
+            out.push(Token::Open(name.to_string()));
         } else {
-            out.push(Token::Atom(name));
-            i = next;
+            validate_name(line, line_no, "atom")?;
+            out.push(Token::Atom(line.to_string()));
         }
+        i += 1;
     }
     Ok(out)
 }
 
-fn lex_ident(bytes: &[u8], mut i: usize) -> Result<(String, usize)> {
-    let start = i;
-    while i < bytes.len() && is_ident_byte(bytes[i]) {
+fn text_open_name(line: &str) -> Option<&'static str> {
+    match line {
+        "str/" => Some("str"),
+        "name/" => Some("name"),
+        "import/" => Some("import"),
+        _ => None,
+    }
+}
+
+fn lex_text_block(lines: &[&str], open: usize, name: &str) -> Result<(String, usize)> {
+    let close = format!("/{name}");
+    let escaped_close = format!("\\{close}");
+    let mut content = Vec::new();
+    let mut i = open + 1;
+    while let Some(&line) = lines.get(i) {
+        if line == close {
+            if name != "str" {
+                validate_single_line_text(name, &content, open + 1)?;
+            }
+            return Ok((content.join("\n"), i + 1));
+        }
+        if line == escaped_close {
+            content.push(close.clone());
+        } else {
+            content.push(line.to_string());
+        }
         i += 1;
     }
-    let name = std::str::from_utf8(&bytes[start..i])
-        .map_err(|_| Error::msg("invalid utf-8 ident"))?
-        .to_string();
-    Ok((name, i))
+    Err(Error::msg(format!(
+        "line {}: unclosed {name}/ text block",
+        open + 1
+    )))
+}
+
+fn validate_single_line_text(name: &str, content: &[String], line_no: usize) -> Result<()> {
+    if content.len() != 1 || content[0].is_empty() {
+        return Err(Error::msg(format!(
+            "line {line_no}: {name}/ needs exactly one non-empty text line"
+        )));
+    }
+    if content[0].trim() != content[0] {
+        return Err(Error::msg(format!(
+            "line {}: {name}/ text cannot have surrounding whitespace",
+            line_no + 1
+        )));
+    }
+    Ok(())
+}
+
+fn reject_whitespace(line: &str, line_no: usize) -> Result<()> {
+    if line.chars().any(char::is_whitespace) {
+        return Err(Error::msg(format!(
+            "line {line_no}: LKJML uses one column-one marker or atom per line"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_name(name: &str, line_no: usize, kind: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(Error::msg(format!("line {line_no}: empty {kind}")));
+    }
+    if !name.as_bytes().iter().copied().all(is_ident_byte) {
+        let hint = if name.contains('"') {
+            "; use str/ ... /str instead of quotes"
+        } else {
+            ""
+        };
+        return Err(Error::msg(format!(
+            "line {line_no}: invalid {kind} {name:?}{hint}"
+        )));
+    }
+    Ok(())
 }
 
 fn is_ident_byte(b: u8) -> bool {
@@ -91,56 +144,48 @@ fn is_ident_byte(b: u8) -> bool {
     )
 }
 
-fn lex_string(bytes: &[u8], mut i: usize) -> Result<(String, usize)> {
-    i += 1; // opening quote
-    let mut out = String::new();
-    while i < bytes.len() {
-        match bytes[i] {
-            b'"' => return Ok((out, i + 1)),
-            b'\\' => {
-                i += 1;
-                let Some(&esc) = bytes.get(i) else {
-                    return Err(Error::msg("unterminated string escape"));
-                };
-                match esc {
-                    b'\\' => out.push('\\'),
-                    b'"' => out.push('"'),
-                    b'n' => out.push('\n'),
-                    b't' => out.push('\t'),
-                    other => {
-                        return Err(Error::msg(format!(
-                            "unknown string escape \\{}",
-                            other as char
-                        )))
-                    }
-                }
-                i += 1;
-            }
-            b => {
-                out.push(b as char);
-                i += 1;
-            }
-        }
-    }
-    Err(Error::msg("unterminated string"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn lexes_open_close_atom_string() {
-        let t = lex(r#"print/ "hi" /print n"#).expect("lex");
-        assert_eq!(t[0], Token::Open("print".into()));
-        assert_eq!(t[1], Token::Str("hi".into()));
-        assert_eq!(t[2], Token::Close("print".into()));
-        assert_eq!(t[3], Token::Atom("n".into()));
+    fn lexes_markers_atoms_and_text() {
+        let source = "print/\nstr/\nhi world\n/str\n/print\nn\n";
+        let tokens = lex(source).expect("lex");
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Open("print".into()),
+                Token::Open("str".into()),
+                Token::Str("hi world".into()),
+                Token::Close("str".into()),
+                Token::Close("print".into()),
+                Token::Atom("n".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn text_blocks_preserve_lines_and_escape_the_close_marker() {
+        let tokens = lex("str/\nfirst\n\\/str\nthird\n/str\n").expect("lex");
+        assert_eq!(tokens[1], Token::Str("first\n/str\nthird".into()));
     }
 
     #[test]
     fn lexes_comment() {
-        let t = lex(";; hi\n1").expect("lex");
-        assert_eq!(t, vec![Token::Atom("1".into())]);
+        let tokens = lex(";; hi\n1\n").expect("lex");
+        assert_eq!(tokens, vec![Token::Atom("1".into())]);
+    }
+
+    #[test]
+    fn rejects_indentation_and_packed_tokens() {
+        assert!(lex("  one\n").is_err());
+        assert!(lex("one two\n").is_err());
+    }
+
+    #[test]
+    fn rejects_quote_delimiters() {
+        let error = lex("\"hi\"\n").expect_err("quotes must fail");
+        assert!(error.as_str().contains("use str/"));
     }
 }

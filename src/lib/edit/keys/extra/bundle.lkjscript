@@ -1,6 +1,0 @@
-import/ "lib/edit/keys/extra/bol-eol.lkjscript" /import
- import/ "lib/edit/keys/extra/open-line.lkjscript" /import
- import/ "lib/edit/keys/extra/del-line.lkjscript" /import
- import/ "lib/edit/keys/extra/word-fwd.lkjscript" /import
- import/ "lib/edit/keys/extra/word-back.lkjscript" /import
- import/ "lib/edit/keys/extra/yank.lkjscript" /import

@@ -1,4 +1,4 @@
-//! Expression AST for slash/whitespace source.
+//! Expression AST lowered from LKJML source.
 
 #![allow(dead_code)]
 

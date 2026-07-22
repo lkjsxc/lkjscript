@@ -94,6 +94,7 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "str-len" => Op::StrLen,
         "str-from-byte" => Op::StrFromByte,
         "str-from-i64" => Op::StrFromI64,
+        "str-from-f64" => Op::StrFromF64,
         "sys-open-read" => Op::SysOpenRead,
         "sys-open-write" => Op::SysOpenWrite,
         "close" => Op::CloseFd,
