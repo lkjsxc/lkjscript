@@ -13,6 +13,7 @@ Index active architecture decisions separately from superseded history.
 - [bytecode-vm.md](bytecode-vm.md): dense Rust bytecode VM
 - [compiler-pipeline.md](compiler-pipeline.md): typed HIR/SSA and runtime JIT pipeline
 - [equality-families.md](equality-families.md): explicit value, identity, list, and F64-bit equality
+- [immutable-nominal-products.md](immutable-nominal-products.md): named immutable aggregate state
 - [runtime-jit-instead-of-offline-pgo.md](runtime-jit-instead-of-offline-pgo.md): runtime JIT tiers and rejection of offline PGO
 - [numeric-semantics.md](numeric-semantics.md): exact I64/F64 source-to-host contract
 - [semantic-core.md](semantic-core.md): AI-first Unit/Option/control/mutation/equality contract

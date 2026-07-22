@@ -133,15 +133,18 @@ A gate that did not run did not pass.
 
 The next implementation sequence is:
 
-1. establish explicit main/effect-free libraries, immutable product state and
-   local var/set, then remove mutable globals;
-2. compute required effect summaries, validate chunks, and return structured
+1. implement the accepted nominal immutable product slice through typed HIR,
+   bytecode, GC, VM, malformed-chunk checks, and differential tests;
+2. use products to establish explicit main/effect-free libraries and local
+   var/set, then remove mutable globals;
+3. compute required effect summaries, validate chunks, and return structured
    process-safe VM outcomes;
-3. implement typed SSA and its verifier/differential oracle before the shared
+4. implement typed SSA and its verifier/differential oracle before the shared
    Linux x86-64 code-object backend and function-triggered baseline JIT.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),
 [Explicit Equality Families](decisions/equality-families.md),
+[Immutable Nominal Products](decisions/immutable-nominal-products.md),
 [Typed Compiler Pipeline And Runtime JIT](decisions/compiler-pipeline.md),
 [Runtime JIT Instead of Offline PGO](decisions/runtime-jit-instead-of-offline-pgo.md),
 and the [Performance Scorecard](vision/performance-scorecard.md).

@@ -10,7 +10,8 @@ ambiguity or unchecked hints.
 
 **Accepted Target** overall. Dedicated Unit, exact three-arm `if`, typed empty
 lists, explicit Option/no-nil semantics, and explicit equality families are
-**Current**. Local-only mutation and explicit main remain pending; [current-state.md](../current-state.md)
+**Current**. Immutable nominal products are the accepted next slice; local-only
+mutation and explicit main remain pending. [current-state.md](../current-state.md)
 records the exact boundary.
 
 ## Canonicality
@@ -104,8 +105,9 @@ reference type is required when observable shared mutation is intentional.
 
 The current singleton lkjedit globals must migrate to an immutable product
 value passed through helpers and held by one local `var` in executable main.
-A record/product contract must land before that migration; positional or hidden
-mutable-cell substitutes are rejected.
+The accepted [immutable nominal product contract](immutable-nominal-products.md)
+must become Current before that migration; positional or hidden mutable-cell
+substitutes are rejected.
 
 ## Declarations And Initialization
 
