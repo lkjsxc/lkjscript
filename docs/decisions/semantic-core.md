@@ -48,9 +48,10 @@ operation and is not implied by this constructor.
 
 Reference-VM representations may erase the element type and share one dedicated
 empty-list singleton because resolved typed HIR retains the exact `List T`.
-Other singleton tags and typed native/Wasm layouts may differ without changing
-source semantics. Native and Wasm backends specialize Option representation per
-type, including proven niches, without changing source semantics. The all-zero
+Other singleton tags and typed runtime-JIT/AOT-test/Wasm layouts may differ
+without changing source semantics. Those typed backends specialize Option
+representation per type, including proven niches, without changing source
+semantics. The all-zero
 internal value pattern is invalid rather than a semantic default. The reference
 VM uses a dedicated none singleton and a traced wrapper for some.
 

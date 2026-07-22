@@ -7,9 +7,11 @@ Describe the current VM and explicitly incomplete native-code boundary.
 ## Status
 
 The bytecode VM is **Current**. Native JIT execution is **Placeholder** and
-must not be described as implemented.
+must not be described as implemented. Runtime-JIT-first tiering is an
+**Accepted Target**; offline PGO is rejected.
 
 ## Table of Contents
 
 - [vm.md](vm.md): values, frames, heap, and host boundary
 - [jit-hook.md](jit-hook.md): explicitly labeled observation-only placeholder
+- [../decisions/runtime-jit-instead-of-offline-pgo.md](../decisions/runtime-jit-instead-of-offline-pgo.md): accepted tiers, OSR, code-object, and no-PGO contract

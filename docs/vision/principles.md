@@ -27,7 +27,10 @@ Rank the invariants used when architectural goals conflict.
 13. Keep language source shallow and at most 16 entries wide per directory.
 14. Keep the reference VM cache-conscious, but do not carry universal tagged
     values into typed native hot paths when static representation is available.
-15. Use one typed semantic IR family for VM, AOT, Wasm, and future JIT lowering.
-16. Build portability seams honestly while accepting Linux-first delivery.
-17. Delete redundant tests and generated artifacts only when stronger evidence
+15. Use one typed semantic IR family for VM, runtime JIT, minimal AOT tests,
+    and Wasm lowering.
+16. Keep adaptive observations bounded, process-local, ephemeral, and distinct
+    from telemetry; offline PGO is not an accepted strategy.
+17. Build portability seams honestly while accepting Linux-first delivery.
+18. Delete redundant tests and generated artifacts only when stronger evidence
     or reproducibility makes them unnecessary.

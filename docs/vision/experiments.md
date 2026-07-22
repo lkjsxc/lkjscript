@@ -50,8 +50,9 @@ its single-shot C comparison is diagnostic only and is not a regression gate.
 | R6 | best measured GC | rooted constants | optimized calls | interaction candidate |
 
 Each retained candidate is tested on numeric loops, allocation churn, literal
-loads, tail recursion at multiple arities, list operations, bulk file IO,
-compiler startup, lkjedit, and HTTP acceptance.
+loads, tail recursion at multiple arities, branch-heavy work, list operations,
+bulk byte/buffer IO, compiler startup, lkjedit, one-shot and repeated-warm HTTP,
+direct lkjscript Mandelbrot, and Brainfuck Mandelbrot interpreted by lkjscript.
 
 Default adoption thresholds are correct output, more than 10% target-workload
 improvement and twice observed noise, at least 5% geometric-mean improvement,
@@ -79,14 +80,31 @@ reason to retain complexity.
 | --- | --- | --- | --- |
 | C0 | duplicated untyped AST interpretation | bytecode VM | current baseline |
 | C1 | resolved typed HIR | bytecode VM | isolate correctness and compile-time cost |
-| C2 | typed HIR + SSA | reference evaluator/VM | differential SSA semantics |
-| C3 | typed SSA | owned baseline x86-64 AOT | native ceiling and ABI baseline |
-| C4 | typed SSA | measured mature build-time backend | optimization reference candidate |
-| C5 | typed SSA + profile | best AOT candidates | PGO interaction |
+| C2 | typed HIR + SSA | verifier + reference evaluator/VM | differential SSA semantics |
+| C3 | typed SSA | shared x86-64 code-object backend + minimal AOT test emitter | native ABI, relocation, and codegen boundary |
+| C4 | typed SSA | synchronous function-triggered baseline JIT | callable native execution and break-even |
+| C5 | typed SSA | loop-triggered baseline JIT + OSR | long-running invocation transfer |
+| C6 | typed SSA | proof-based optimizing JIT | static optimization and tier promotion |
+| C7 | typed SSA + guarded observations | specialization + deoptimization | later measured dynamic assumptions |
 
 C1 is adopted only when accepted/rejected corpus behavior and runtime outputs
-remain identical while duplicate resolution/lowering logic is deleted. C2-C5
-require differential trap/outcome tests before performance measurement.
+remain identical while duplicate resolution/lowering logic is deleted. C2-C7
+require differential values, output, traps, outcomes, GC, and resource-limit
+tests before performance measurement. C4-C7 forced modes must prove native code
+actually executed rather than silently falling back to the VM.
+
+## P0 Offline PGO: Rejected
+
+- Status: **Rejected by Product Decision**, not by measurement.
+- Removed mechanism: instrumented training builds, profile generation/merging,
+  profile-use rebuilds, persistent profile artifacts, and PGO-specific release
+  decisions.
+- Replacement: bounded saturating observations used only by the current process
+  for its own runtime JIT tiers and discarded at exit.
+- Evidence boundary: no offline PGO implementation or benchmark was run, so no
+  performance conclusion about PGO is claimed.
+- Reconsideration condition: a later explicit product decision must supersede
+  [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
 
 ## C1 Resolved Typed HIR: Adopted
 
@@ -292,9 +310,11 @@ in the ignored `target/brainfuck-bench/` tree.
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS
 processes, native threads, cooperative instruction quanta, and epoll plus
-quanta using identical mixed workloads. Native JIT candidates require a typed
-IR, executable code-object boundary, deoptimization contract, and separate
-warmup/steady-state evidence before implementation claims begin.
+quanta using identical mixed workloads. Baseline JIT candidates require typed
+SSA, callable bounded code objects, exact outcomes, precise native stack maps,
+and separate total/steady-state evidence. Loop OSR requires exact VM/SSA/native
+state mapping. Proof-based optimizing JIT does not require general
+deoptimization; guarded specialization does and remains a later separate gate.
 
 ## Disk Policy
 

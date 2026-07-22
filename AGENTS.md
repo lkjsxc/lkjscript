@@ -8,7 +8,8 @@ Define the working contract for automated engineering in this repository.
 
 `lkjscript` is a typed, line-oriented, AI-authored language implemented by a
 small Rust compiler and reference bytecode VM. Canonical explicit source feeds
-a resolved typed pipeline intended for VM, native AOT, Wasm, and future JIT.
+a resolved typed pipeline intended for VM, runtime JIT, a minimal native/AOT
+test surface, and Wasm.
 The canonical accepted extension is `.lkjscript`; `.lkjml` is rejected without
 a compatibility mode. Linux x86-64 is the current acceptance platform.
 Portability is a design constraint, not a current support claim.
@@ -39,13 +40,17 @@ Portability is a design constraint, not a current support claim.
    backend, and language-package effects.
 10. Do not trust AI-authored optimizer hints. Prove them, retain a runtime
     check, or reject them; undefined behavior is not a performance mechanism.
-11. Keep VM, AOT, Wasm, and future JIT semantics behind one resolved typed IR
-    family; do not independently reinterpret untyped syntax in a backend.
+11. Keep VM, runtime JIT, minimal AOT tests, and Wasm semantics behind one
+    resolved typed IR family; do not independently reinterpret untyped syntax
+    in a backend.
 12. Use one build-artifact tree, monitor free space, and remove reproducible
     experiment artifacts after recording compact results.
 13. Record rejected experiments as carefully as adopted ones, including
     combinations that may become useful under different conditions.
 14. Keep commits coherent and include `Tested:` and `Not-tested:` trailers.
+15. Runtime JIT is the adaptive-performance path. Do not add offline PGO,
+    training builds, persistent profiles, or cross-run code caches without a
+    later explicit product decision.
 
 ## Read Order
 
@@ -54,10 +59,11 @@ Portability is a design constraint, not a current support claim.
 3. [docs/language/README.md](docs/language/README.md)
 4. [docs/decisions/semantic-core.md](docs/decisions/semantic-core.md)
 5. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
-6. [docs/operations/verification.md](docs/operations/verification.md)
-7. [docs/vision/README.md](docs/vision/README.md)
-8. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
-9. [docs/vision/experiments.md](docs/vision/experiments.md)
+6. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
+7. [docs/operations/verification.md](docs/operations/verification.md)
+8. [docs/vision/README.md](docs/vision/README.md)
+9. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
+10. [docs/vision/experiments.md](docs/vision/experiments.md)
 
 ## Development Loop
 

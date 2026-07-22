@@ -79,10 +79,13 @@ binding identity, exact static type facts, declaration kind, canonical
 operation and resolved signature, source origin, and conservative effects;
 codegen no longer re-parses declarations or resolves names.
 
-Typed SSA, native AOT, direct Wasm, and future JIT consuming the same semantic
-IR family remain **Accepted Targets**. Native scalar/product representations
-replace universal tagged values only after differential SSA/backend gates.
-See [Typed Compiler Pipeline And Early AOT](../decisions/compiler-pipeline.md).
+Typed SSA, a shared native code-object backend, function/loop-triggered runtime
+JIT, a minimal AOT test emitter, and direct Wasm consuming the same semantic IR
+family remain **Accepted Targets**. Native scalar/product representations
+replace universal tagged values only after differential SSA/backend gates. The
+VM remains the cold tier and oracle. See
+[Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md) and
+[Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
 
 ## Runtime Flow
 
@@ -99,6 +102,21 @@ Chunk main
 
 The VM is synchronous and single-threaded. Process exit, blocking host effects,
 and process-global IO prevent safe multi-VM supervision today.
+
+The accepted later native flow is:
+
+```text
+VM function entry / loop backedge
+  -> bounded process-local saturating hotness
+  -> synchronous typed-SSA compilation at a safepoint
+  -> bounded callable native code object
+  -> VM/native or OSR transfer
+  -> exact VM fallback or structured outcome
+```
+
+No part of that flow is current. The existing observation hook sees closure
+calls only and cannot compile or transfer execution. Background compilation,
+persistent profiles, and persistent code caches are absent.
 
 ## Source Layout Rule
 
@@ -123,8 +141,12 @@ an external project receives the same contract.
 ## Accepted Redesign Direction
 
 With resolved typed HIR and separate Unit/Option/empty-list semantics in place,
-split comparisons, establish explicit main and effect-free libraries, migrate global editor state into an immutable
-product plus one local var, and remove mutable globals. Typed SSA and an early
-Linux x86-64 AOT backend follow differential VM conformance. Real modules,
-process-safe host services, byte strings/views, compiled-code objects, and
-hybrid memory management build on those layers as measured vertical slices.
+split comparisons, establish explicit main and effect-free libraries, migrate
+global editor state into an immutable product plus one local var, remove
+mutable globals, validate chunks, and make VM outcomes process-safe. Typed SSA,
+its verifier/differential oracle, and a shared Linux x86-64 native code-object
+backend follow. The first adaptive execution target is synchronous baseline
+JIT, followed by loop OSR and proof-based optimizing JIT. Minimal file emission
+remains only for backend tests; offline PGO is rejected. Real modules,
+process-safe host services, byte strings/views, and measured memory strategies
+build on those layers as vertical slices.

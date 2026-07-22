@@ -8,7 +8,8 @@ next work without mixing them with long-term vision.
 ## Status
 
 **Current** for the implementation section. Repairs and future products are
-explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
+explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
+**Rejected**.
 
 ## Current Implementation
 
@@ -56,7 +57,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
   `MSG_NOSIGNAL` instead of risking process termination on a broken peer
 - JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
-  native compilation or execution handoff
+  native compilation, engine selector, code object, execution handoff, OSR, or
+  deoptimization
+- Adaptive-performance contract: runtime JIT is the **Accepted Target** after
+  semantic/outcome and typed-SSA prerequisites; the VM remains the cold tier
+  and oracle, and minimal AOT emission is only a shared-backend test surface
 
 ## Known Defects
 
@@ -113,7 +118,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Unit/strict-if diagnostic sample | 31 randomized runs: hello 0.993x, Mandelbrot 0.985x, Leibniz-200,000 1.004x, Mandelbrot disassembly 1.005x candidate/baseline median; release binary 0.982x size |
 | typed-empty-list diagnostic sample | 31 randomized runs: hello 1.002x, Mandelbrot 0.979x, Leibniz-200,000 0.937x, Mandelbrot disassembly 1.003x candidate/baseline median; release binary 1.009x size |
 | Option/no-nil diagnostic sample | 31 randomized runs: hello 0.994x, Mandelbrot 1.027x, Leibniz-200,000 1.015x, Mandelbrot disassembly 1.014x candidate/baseline median; release binary 1.012x size |
-| Markdown local links/status audit | 39 files, zero broken links, zero missing statuses |
+| Markdown local links/status audit | 40 files, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
 | Docker verify profile | passed after the image was corrected to include machine-required `AGENTS.md` |
 | decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
@@ -122,22 +127,33 @@ A gate that did not run did not pass.
 
 ## Accepted Next Target
 
-The next semantic migration sequence is:
+The next implementation sequence is:
 
 1. split value/object/structural/F64-bit equality;
 2. establish explicit main/effect-free libraries, immutable product state and
    local var/set, then remove mutable globals;
-3. validate chunks and return structured VM outcomes before typed SSA and the
-   early Linux x86-64 native AOT experiment.
+3. compute required effect summaries, validate chunks, and return structured
+   process-safe VM outcomes;
+4. implement typed SSA and its verifier/differential oracle before the shared
+   Linux x86-64 code-object backend and function-triggered baseline JIT.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),
-[Typed Compiler Pipeline And Early AOT](decisions/compiler-pipeline.md), and the
-[Performance Scorecard](vision/performance-scorecard.md).
+[Typed Compiler Pipeline And Runtime JIT](decisions/compiler-pipeline.md),
+[Runtime JIT Instead of Offline PGO](decisions/runtime-jit-instead-of-offline-pgo.md),
+and the [Performance Scorecard](vision/performance-scorecard.md).
+
+## Rejected
+
+Offline PGO, instrumented training builds, profile generation/merging/use, and
+persistent PGO artifacts are rejected by product decision, not measurement.
+Persistent cross-run JIT profiles and native-code caches are not planned without
+a later explicit decision. Current-process bounded JIT counters are local,
+ephemeral, and not telemetry.
 
 ## Deferred
 
-Native installation and update, package manifests/locks/registry, process-safe
-VM outcomes, supervisor/scheduler, adaptive or generational GC, native JIT,
-non-Linux backends, browser, general HTTP server/framework, and GUI runtime are
-later cycles. Their documents are designs or experiments, not capability
-claims.
+Native installation and update, package manifests/locks/registry,
+supervisor/scheduler, adaptive or generational GC, background JIT compilation,
+guarded runtime specialization/deoptimization, non-Linux native backends,
+browser, general HTTP server/framework, and GUI runtime are later cycles.
+Their documents are designs or experiments, not capability claims.

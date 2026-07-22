@@ -52,8 +52,10 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
   I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists, and
   Option/no-nil have landed. Equality is the next semantic slice, followed by
-  explicit main/local-state migration. SSA/AOT remain targets, not current
-  capability.
+  explicit main/local-state migration, chunk validation, and process-safe
+  outcomes. Typed SSA, shared native code objects, runtime JIT, loop OSR, and a
+  minimal AOT test emitter remain targets, not current capability. Offline PGO
+  is rejected by product decision.
 
 ## Host Boundary
 

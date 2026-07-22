@@ -57,7 +57,9 @@ Demotion backlog for OS feature opcodes is complete aside from intentional thin
 
 - No further fat OS demotion required unless new fat ops appear
 - Docker/Linux remains the acceptance platform
-- Performance roadmap (types → GC → JIT → adaptive) stays the next major arc
+- Performance roadmap continues through semantic/outcome prerequisites,
+  typed SSA, shared native code objects, baseline runtime JIT, and loop OSR;
+  runtime JIT is the adaptive path
 
 ## Rejected
 

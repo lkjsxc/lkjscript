@@ -23,8 +23,8 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 `quiet verify` currently checks:
 
 1. required documentation paths, including architecture, experiments, numeric
-   and AI-first semantics, typed compiler pipeline, performance scorecard, and
-   the canonical source-format document;
+   and AI-first semantics, typed compiler/JIT pipeline, the runtime-JIT/no-PGO
+   decision, performance scorecard, and the canonical source-format document;
 2. a `Status` section and valid local links in every `docs/**/*.md`, plus local
    link validity in root Markdown and absence of the superseded active
    `docs/language/lkjml.md` path;
@@ -94,6 +94,21 @@ A benchmark is decision-grade only with a declared baseline, environment,
 correctness oracle, randomized repetitions, dispersion, and adoption threshold.
 Use [../vision/experiments.md](../vision/experiments.md). The current
 single-shot C script is diagnostic only.
+
+## Accepted JIT Gates
+
+No JIT gate is current. When callable native work begins, each phase compares
+exact output, values, structured traps/outcomes, malformed-input behavior, GC,
+and resource limits with explicit VM mode. Forced JIT modes must prove native
+execution and fail rather than silently fall back. Retained results include
+compilation/warmup cost, trigger and first-native latency, OSR/fallback counts,
+code/metadata/cache size, RSS, repetitions, dispersion, tails, and cleanup.
+
+The current CLI has no engine selector and always runs the VM. The accepted
+future syntax and semantics for `vm`, `auto`, `baseline-jit`, and
+`optimizing-jit` are defined in
+[Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
+Do not add inert flags before native execution exists.
 
 ## Rule
 

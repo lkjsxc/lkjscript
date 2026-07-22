@@ -20,6 +20,8 @@ Every behavior that is not unambiguously current must use one of these labels:
 - **Deferred**: intentionally outside the active implementation cycle.
 - **Placeholder**: intentionally incomplete. Code and user-facing behavior must
   also say `PLACEHOLDER` wherever the incomplete surface is observable.
+- **Rejected**: explicitly not an implementation target; retain the reason and
+  evidence boundary until a later accepted decision replaces it.
 - **Superseded**: historical contract that must not guide new implementation.
 
 A mixed-status document must label the affected sections. Aspirations are not

@@ -61,7 +61,12 @@ The numeric representation and behavior are specified by
 ## Accepted Target
 
 - Validate public chunks before dispatch.
+- Replace direct process exit and implicit VM failure with structured outcomes
+  for success, language exit, traps, deadlines, and resource limits.
+- Preserve exact stack/local initialization and host cleanup across every
+  structured outcome.
 
-Process-safe outcomes, host-service injection, instruction quanta, blocking
-wait objects, generation-reused handle slots, and per-process budgets are
+These are active prerequisites for typed SSA and callable native execution.
+Host-service injection, instruction quanta, blocking wait objects,
+generation-reused handle slots, and comprehensive per-process budgets remain
 **Deferred** to later measured cycles.

@@ -2,15 +2,17 @@
 
 ## Purpose
 
-Define a measured path toward category-leading runtime performance without
-turning aspiration into a current release claim.
+Define a measured runtime-JIT-first path toward category-leading performance
+without turning aspiration into a current release claim.
 
 ## Status
 
-The reference interpreter, exact I64/F64 execution, precise mark-sweep, and
-tail-frame reuse are **Current**. Typed HIR/SSA, native AOT, direct Wasm,
-hybrid memory management, PGO, and JIT are **Accepted Targets** or **Deferred**
-until their recorded correctness and measurement gates pass.
+The reference bytecode VM, exact I64/F64 execution, precise mark-sweep, resolved
+typed HIR, and tail-frame reuse are **Current**. The observation-only JIT hook
+is **Placeholder**. Remaining semantic prerequisites, typed SSA, native code
+objects, baseline JIT, OSR, proof-based optimizing JIT, and direct Wasm are
+**Accepted Targets**. Guarded specialization is **Deferred** until justified.
+Offline PGO is **Rejected by Product Decision**.
 
 ## Sequence
 
@@ -19,97 +21,207 @@ truthful semantics and safety
   -> reproducible category scorecard
   -> resolved typed HIR
   -> AI-first semantic core migration
-  -> typed SSA and differential evaluator
-  -> early Linux x86-64 native AOT
-  -> ownership, escape, allocation, and memory candidates
-  -> PGO AOT
-  -> direct Wasm
-  -> baseline JIT
-  -> optimizing JIT and runtime specialization
+  -> chunk validation and structured VM outcomes
+  -> typed SSA, verifier, and differential evaluator
+  -> shared Linux x86-64 native code-object backend
+  -> function-triggered baseline JIT
+  -> loop-triggered baseline JIT and OSR
+  -> proof-based optimizing JIT
+  -> guarded specialization and deoptimization only when justified
+  -> direct Wasm and additional targets
 ```
 
-AOT is intentionally early: it exposes the native performance ceiling before
-server/framework breadth hardens weak representations. The compact VM remains
-the conformance oracle and cold-execution candidate. Both lower from one typed
-semantic pipeline.
+The VM remains the cold tier, deterministic/debugging path, unsupported-platform
+fallback, and correctness oracle. A minimal file-based native emitter remains a
+shared-backend test surface; it is not an AOT-first or PGO strategy.
+
+The authoritative tier, state-machine, executable-code, OSR, GC, failure,
+engine-selection, and rejection contract is
+[Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
 
 ## Current Interpreter
 
 The VM uses dense bytecode, contiguous stacks, tagged small I64 values, boxed
 wide I64/F64 values, precise non-moving mark-sweep collection, and
 return-adjacent frame reuse. Source is compiled on every CLI invocation. Host
-effects block synchronously.
+effects block synchronously. There is no native compiler, callable code object,
+engine selector, OSR, deoptimization, or JIT performance result.
 
 Historical debug figures and single-shot C comparisons lack preserved machine,
-variance, and artifact data and therefore remain diagnostic rather than a
-baseline.
+variance, or artifact data and remain diagnostic rather than baselines. The
+Brainfuck Mandelbrot workload now supplies a retained long-running-loop VM
+result that will later expose the need for loop-triggered JIT and OSR.
 
-## Immediate Foundation Work
+## Phase 0: Policy Cutover — Current
 
-1. Establish the category and metadata rules in
-   [performance-scorecard.md](performance-scorecard.md).
-2. Use the current resolved typed HIR and canonical operation registry as the
-   sole semantic boundary for every migration and backend.
-3. Continue the semantic-core migration after the landed Unit, strict-if,
-   Option, and typed-empty-list slices: comparison split; explicit main; local
-   mutation and immutable global data.
-4. Validate public chunks and return process-safe VM outcomes.
-5. Lower HIR into typed SSA with explicit block parameters, traps, and effects.
-6. Differentially test a minimal owned Linux x86-64 AOT backend against the VM.
+The planning cutover now rejects offline PGO, makes runtime JIT the primary
+adaptive strategy, defines the VM/baseline/proof-based/guarded tiers, and fixes
+the contracts for local ephemeral hotness, synchronous compilation, states,
+fallback, resource budgets, code objects, W^X, safepoints, OSR, and forced
+testing. Runtime behavior is unchanged: the hook remains explicitly
+**PLACEHOLDER** and no inert engine flag was added.
 
-## Representation Direction
+## Phase 1: Semantic And Runtime Prerequisites — Accepted Next Target
 
-Reference tagged Value is not the native hot-path ABI. Typed lowering uses
-native I64/F64/Bool values, typed pointer/length views, flattened products, and
-specialized Option layouts. Generic code is monomorphized where measured code
-growth permits. Dynamic dispatch is explicit rather than a default call path.
+1. Split value, object-identity, structural-list, and F64-bit equality.
+2. Add explicit main and effect-free imported libraries.
+3. Add local `var`/`set`, immutable global product state, and remove mutable
+   globals.
+4. Compute fixed-point effect summaries where native movement needs them.
+5. Validate public chunks before execution.
+6. Return structured process-safe outcomes for success, exit, traps, deadlines,
+   and resource limits.
+
+Callable native code does not begin while generated code could bypass exact
+outcomes, stack/local initialization, GC roots, resource safety, or host cleanup.
+Each semantic slice retains focused VM evidence and diagnostic performance
+comparison against its prior commit.
+
+## Phase 2: Typed SSA
+
+1. Lower resolved HIR to blocks with explicit parameters, exact types, effects,
+   calls, and trap edges.
+2. Implement an SSA verifier.
+3. Implement a differential SSA evaluator or equivalent oracle.
+4. Prove bytecode lowering equivalent or lower reference bytecode from SSA.
+5. Establish isolated non-speculative passes and differential pass tests.
+
+Typed SSA is the only optimization authority. No independent
+bytecode-to-machine-code semantic compiler is accepted.
+
+## Phase 3: Native Code Objects
+
+1. Define semantic and native ABI versions and typed representations.
+2. Implement minimal owned Linux x86-64 emission, relocation, and metadata.
+3. Retain a non-PGO file-emission harness for disassembly, debugger, ABI, and
+   differential tests.
+4. Implement versioned runtime-call adapters and VM/native transitions.
+5. Implement W^X executable memory through the safe `lkjscript-sys` boundary.
+6. Add precise safepoints and stack maps before allocation-capable native paths.
+7. Bound executable bytes, object count, compile time, work, and metadata.
+
+The minimum callable code object owns entry, code size, source/tier identity,
+relocations, safepoints, stack maps, traps/side exits, OSR entries when present,
+resource accounting, and invalidation state. Emitting machine code is not yet a
+JIT claim; a forced test must call it.
+
+## Phase 4: Function-Triggered Baseline JIT
+
+1. Add bounded saturating function-entry counters.
+2. Compile whole eligible functions synchronously at a safepoint.
+3. Install and call baseline code objects.
+4. Support VM-to-native, native-to-VM, and direct native-to-native calls.
+5. Keep optimizations inexpensive and non-speculative.
+6. Add forced baseline mode that errors rather than silently falls back.
+7. Measure trigger, compilation, first native execution, end-to-end time,
+   steady state, break-even, code cache, and fallbacks.
+
+Short commands remain in the VM when compilation cannot repay its cost.
+
+## Phase 5: Loop Hotness And OSR
+
+1. Add bounded saturating loop-backedge counters without ordinary
+   per-instruction counters.
+2. Trigger compilation from long-running loops.
+3. Define verified loop-header mappings from bytecode VM state to typed SSA and
+   native frame locations.
+4. Transfer exactly representable loops into baseline native code.
+5. Leave unsupported loop shapes in the VM.
+6. Validate GC, traps, deadlines, metering, output, resources, and arguments
+   during and after transfer.
+7. Measure OSR latency and whole-program benefit on long loops, especially
+   Brainfuck Mandelbrot interpreted by lkjscript.
+
+OSR is required rather than cosmetic. Compiling only for the next function
+invocation is not OSR, and reports must state when a workload cannot benefit
+before OSR exists.
+
+## Phase 6: Proof-Based Optimizing JIT
+
+Add measured passes justified entirely by static types, SSA, effects, ownership,
+and proven control flow. Begin with constant propagation, branch cleanup,
+dead-effect-free instructions, inlining under budgets, CSE, LICM, redundant
+check elimination, scalar replacement, escape analysis, strength reduction,
+and hot/cold layout from current-process counters. Add unrolling and
+vectorization only where target and alias facts permit and measurements retain
+them.
+
+Promotion uses bounded current-process observations that are discarded on exit.
+This tier remains non-speculative where possible and does not imply general
+deoptimization.
+
+## Phase 7: Guarded Specialization
+
+Proceed only when retained evidence shows proof-based optimization is
+insufficient. Every value/shape specialization has an explicit guard, exact
+side exit, state reconstruction, usefulness/failure counters, and bounded code
+and metadata cost. Deoptimization restores correct VM or lower-tier state; it is
+not abort or whole-program restart.
+
+Background compilation remains deferred until runtime ownership, cancellation,
+heap access, code-cache synchronization, and outcomes are process-safe.
+Persistent cross-run profiles and native-code caches remain outside the plan.
+
+## Phase 8: Portability And Product Work
+
+After Linux x86-64 correctness, validate Linux AArch64 ABI assumptions, keep
+direct Wasm aligned with typed SSA, measure server-oriented tier policies, and
+consider product breadth without freezing representation defects. Browser,
+package/update, GUI, and general server/framework products retain their own
+gates.
+
+## Native Representations
+
+Reference tagged `Value` is not the native hot-path ABI. Native lowering uses
+I64/F64/Bool scalars, typed pointer/length views, flattened products, specialized
+Option layouts, and typed heap references visible in precise stack maps. Generic
+code is monomorphized where measured code growth permits. Dynamic dispatch is
+explicit rather than the default call path.
 
 Vec, Slice, Bytes, Str, views, and fixed products are performance-default data
-shapes. Linked List remains explicit. Candidate memory strategies combine
-unboxed scalars/products, unique owned buffers, regions for temporary data,
-worker-local generational collection, immutable shared bytes, and explicit GC
-references only where cycles require them.
+shapes. Candidate memory strategies include unique owned buffers, regions,
+stack placement, worker-local generational collection, immutable shared bytes,
+and explicit GC references where cycles require them. These remain measured
+candidates, not assumed JIT results.
 
-## Native And Wasm
+## Runtime Observation And Privacy
 
-The first native candidate is an owned baseline x86-64 assembler/backend with
-portable, x86-64-v2, x86-64-v3, and native target modes. Build-time mature
-backends may be evaluated later under separate dependency and performance
-records; no choice is permanent without evidence. Linux AArch64 ABI checks
-begin before x86-specific assumptions become structural.
-
-VM-in-Wasm is a reference path. Direct typed-SSA-to-Wasm is the browser
-performance path and follows native AOT closely enough to keep IR design
-portable.
-
-## PGO And JIT
-
-Local profiles bind to source hash, IR/compiler version, target CPU, and
-workload and are never telemetry. PGO AOT precedes JIT. Baseline JIT requires
-process-safe outcomes and callable code objects. Optimizing JIT requires a
-deoptimization contract and must beat PGO AOT on declared warm workloads after
-including warmup and code-cache costs.
+Function-entry, loop-backedge, and later selected block counters are bounded,
+saturating, process-local, consumed by the same process, and discarded on exit.
+They are never uploaded and are not telemetry. No training workload, profile
+merge, profile-use rebuild, persistent profile artifact, or cross-run native
+cache is part of this roadmap.
 
 ## Resource Modes
 
 Normal safety mode checks deadlines/epochs at loop backedges, calls,
-allocations, host calls, and yields. Deterministic metering is a separate,
-explicitly slower basic-block or instruction-counted mode. Heap, stack, native
-code cache, handles, tasks, queues, IO volume, wall time, and allocation volume
-all receive host-configurable limits; unlimited execution is explicit trusted
-local mode.
+allocations, host calls, yields, and VM/native transitions. Deterministic
+metering is a distinct explicitly slower block/instruction-counted mode. Heap,
+stack, code cache, code metadata, compilation time/work, handles, tasks, queues,
+IO volume, wall time, and allocation volume receive host-configurable limits;
+unlimited execution is explicit trusted local mode.
 
-## Adoption Rules
+## Benchmark And Adoption Rules
 
 Every candidate follows [experiments.md](experiments.md) and the
-[performance scorecard](performance-scorecard.md). Correct output, trap
-behavior, and ABI conformance are mandatory before timing. Results record
-isolated and combined variants, median and dispersion, code size, RSS,
-allocation/copy counts, target CPU, and cleanup. No geometric mean hides a
-material workload regression.
+[performance scorecard](performance-scorecard.md). Correct output, return
+values, structured traps/outcomes, malformed-input behavior, GC, resource
+limits, and ABI conformance precede timing. Forced modes prove native execution.
 
-## Deferred Product Work
+Applicable results compare VM, baseline including compilation, baseline steady
+state, optimizing including compilation, and optimizing steady state. They
+record trigger and compilation latency, first native execution, break-even,
+compilation/OSR/fallback/deoptimization counts, code and metadata bytes, peak
+RSS/cache, repetitions, dispersion/tails, and cleanup. A faster steady state is
+not called an end-to-end speedup when total execution is slower.
 
-Package/update, server/framework, browser product APIs, and GUI remain later
-product layers. Their designs may proceed only when they do not freeze current
-semantic, ownership, or native-representation defects into public contracts.
+## Rejected And Deferred
+
+**Rejected by Product Decision:** offline PGO, instrumented training builds,
+profile generation/merge/use, persistent PGO artifacts, PGO-specific decisions,
+and any gate requiring JIT to beat PGO AOT.
+
+**Deferred:** guarded specialization/deoptimization until Tier 2A evidence,
+background compilation until process-safe ownership, eviction until native
+relationships are modeled, persistent profiles/caches pending a new explicit
+decision, and non-Linux native backends until Linux x86-64 passes.
