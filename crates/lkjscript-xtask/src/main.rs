@@ -49,6 +49,7 @@ fn check_docs(root: &Path) -> i32 {
         "docs/product/README.md",
         "docs/decisions/README.md",
         "docs/decisions/compiler-pipeline.md",
+        "docs/decisions/equality-families.md",
         "docs/decisions/runtime-jit-instead-of-offline-pgo.md",
         "docs/decisions/numeric-semantics.md",
         "docs/decisions/semantic-core.md",

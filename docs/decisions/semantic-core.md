@@ -125,18 +125,21 @@ semantics rather than hidden initialization.
 
 ## Equality
 
-There is no universal `eq` or `ne`.
+The pending equality slice removes universal `eq`/`ne` and introduces four
+exact families:
 
-- `equal-value`: statically selected value equality for Unit, Bool, I64, IEEE
-  F64, Str, Bytes, Symbol, enums, and approved immutable product values;
-- `same-object`: identity comparison for explicit identity-bearing reference
-  types such as Handle, Buf, Cell, and Ref;
-- `list-equal`: explicit bounded structural list comparison;
+- `equal-value`: identical-type value equality for current scalar types and
+  recursively comparable Option/Result values;
+- `same-object`: identity comparison for current Buf and Handle values;
+- `list-equal`: structural `List T` equality when `T` supports value equality,
+  bounded to 1,000,000 pair-node comparisons;
 - `f64-bits-equal`: exact `to_bits` equality, distinct from IEEE equality.
 
-Use `not` around a positive comparison instead of negative aliases. Closure
-comparison is forbidden so closure allocation, duplication, merging,
-inlining, and elimination remain unobservable.
+Mixed I64/F64 equality, unconstrained generic equality, closure identity, and
+negative aliases are rejected. Use `not` around a positive comparison. Future
+Bytes, product, enum, Cell, and Ref behavior begins only when those types exist.
+The complete accepted contract is
+[Explicit Equality Families](equality-families.md).
 
 ## Integer And Floating Modes
 

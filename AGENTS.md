@@ -58,12 +58,13 @@ Portability is a design constraint, not a current support claim.
 2. [docs/operations/architecture.md](docs/operations/architecture.md)
 3. [docs/language/README.md](docs/language/README.md)
 4. [docs/decisions/semantic-core.md](docs/decisions/semantic-core.md)
-5. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
-6. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
-7. [docs/operations/verification.md](docs/operations/verification.md)
-8. [docs/vision/README.md](docs/vision/README.md)
-9. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
-10. [docs/vision/experiments.md](docs/vision/experiments.md)
+5. [docs/decisions/equality-families.md](docs/decisions/equality-families.md)
+6. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
+7. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
+8. [docs/operations/verification.md](docs/operations/verification.md)
+9. [docs/vision/README.md](docs/vision/README.md)
+10. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
+11. [docs/vision/experiments.md](docs/vision/experiments.md)
 
 ## Development Loop
 

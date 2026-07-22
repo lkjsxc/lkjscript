@@ -118,7 +118,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Unit/strict-if diagnostic sample | 31 randomized runs: hello 0.993x, Mandelbrot 0.985x, Leibniz-200,000 1.004x, Mandelbrot disassembly 1.005x candidate/baseline median; release binary 0.982x size |
 | typed-empty-list diagnostic sample | 31 randomized runs: hello 1.002x, Mandelbrot 0.979x, Leibniz-200,000 0.937x, Mandelbrot disassembly 1.003x candidate/baseline median; release binary 1.009x size |
 | Option/no-nil diagnostic sample | 31 randomized runs: hello 0.994x, Mandelbrot 1.027x, Leibniz-200,000 1.015x, Mandelbrot disassembly 1.014x candidate/baseline median; release binary 1.012x size |
-| Markdown local links/status audit | 40 files, zero broken links, zero missing statuses |
+| Markdown local links/status audit | 41 files, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
 | Docker verify profile | passed after the image was corrected to include machine-required `AGENTS.md` |
 | decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
@@ -138,6 +138,7 @@ The next implementation sequence is:
    Linux x86-64 code-object backend and function-triggered baseline JIT.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),
+[Explicit Equality Families](decisions/equality-families.md),
 [Typed Compiler Pipeline And Runtime JIT](decisions/compiler-pipeline.md),
 [Runtime JIT Instead of Offline PGO](decisions/runtime-jit-instead-of-offline-pgo.md),
 and the [Performance Scorecard](vision/performance-scorecard.md).
