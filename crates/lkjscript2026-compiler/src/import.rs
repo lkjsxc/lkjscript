@@ -136,6 +136,14 @@ fn resolve_import_with_root(
     if let Some(rest) = spec.strip_prefix("lib/") {
         return Ok(library_path(package_root, installed_root, "lib", rest));
     }
+    if let Some(rest) = spec.strip_prefix("examples/") {
+        return Ok(library_path(
+            package_root,
+            installed_root,
+            "examples",
+            rest,
+        ));
+    }
     Ok(package_root.join(spec))
 }
 
@@ -234,7 +242,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/examples/hello/main.lkjml"));
+        assert_eq!(p, PathBuf::from("/pkg/src/examples/hello/main.lkjml"));
     }
 
     #[test]

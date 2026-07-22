@@ -10,7 +10,6 @@ COPY Cargo.toml Cargo.lock README.md ./
 COPY crates ./crates
 COPY meta/config ./meta/config
 COPY docs ./docs
-COPY examples ./examples
 COPY src ./src
 COPY meta/scripts ./meta/scripts
 COPY meta/Dockerfile meta/docker-compose.yml ./meta/
@@ -29,8 +28,8 @@ RUN --mount=type=cache,id=lkjscript2026-cargo-registry,target=/usr/local/cargo/r
     --mount=type=cache,id=lkjscript2026-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript2026-target-verify,target=/src/target,sharing=locked \
     cargo run --locked -p lkjscript2026-xtask -- quiet verify \
-    && /tmp/lkjscript2026 run examples/hello/main.lkjml | grep -q 3628800 \
-    && /tmp/lkjscript2026 run examples/mandel/main.lkjml > /tmp/mandel.out \
+    && /tmp/lkjscript2026 run src/examples/hello/main.lkjml | grep -q 3628800 \
+    && /tmp/lkjscript2026 run src/examples/mandel/main.lkjml > /tmp/mandel.out \
     && test -s /tmp/mandel.out \
     && LKJ=/tmp/lkjscript2026 bash meta/scripts/editor-smoke.sh \
     && LKJ=/tmp/lkjscript2026 bash meta/scripts/http-smoke.sh \
@@ -43,8 +42,7 @@ RUN apt-get update \
 COPY --from=build /tmp/lkjscript2026 /usr/local/bin/lkjscript2026
 ENV LKJSCRIPT2026_ROOT=/usr/local/share/lkjscript2026
 COPY src /usr/local/share/lkjscript2026/src
-WORKDIR /work
-COPY examples ./examples
+WORKDIR /usr/local/share/lkjscript2026
 COPY meta/config ./meta/config
 ENTRYPOINT ["lkjscript2026"]
 CMD ["--help"]

@@ -12,7 +12,7 @@ count.
 
 ## Consequences
 
-Package layout nests under `meta/`, `examples/*/`, `src/std/`, and `src/lib/`.
+Package layout nests under `meta/`, `src/examples/`, `src/std/`, and `src/lib/`.
 
 ## Rejected
 

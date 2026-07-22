@@ -21,9 +21,9 @@ Not full vim: no windows, visual mode, search, undo tree, or plugins.
 ## Run
 
 ```sh
-cargo run -p lkjscript2026-app -- run examples/texteditor/main.lkjml path/to/file
+cargo run -p lkjscript2026-app -- run src/examples/texteditor/main.lkjml path/to/file
 docker compose -f meta/docker-compose.yml run -it --rm lkjscript2026 \
-  run examples/texteditor/main.lkjml path/to/file
+  run src/examples/texteditor/main.lkjml path/to/file
 ```
 
 Scripted acceptance:

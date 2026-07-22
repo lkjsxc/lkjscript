@@ -13,7 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$BIN" run "$ROOT/examples/http/hello.lkjml" \
+"$BIN" run "$ROOT/src/examples/http/hello.lkjml" \
   >"$TMP_DIR/server.out" 2>"$TMP_DIR/server.err" &
 PID=$!
 for _ in 1 2 3 4 5 6 7 8 9 10; do

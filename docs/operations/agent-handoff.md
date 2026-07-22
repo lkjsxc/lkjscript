@@ -21,7 +21,7 @@ can continue without rediscovering recent pain.
 ```text
 src/std/          # primitives: list buffer io fs ansi term net
 src/lib/edit/     # only reusable lib package this sprint
-examples/         # hello mandel texteditor http bench
+src/examples/     # hello mandel texteditor http bench
 crates/           # Rust host / compiler / VM / sys
 ```
 

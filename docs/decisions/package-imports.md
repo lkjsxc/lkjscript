@@ -11,12 +11,14 @@ fan-out.
 - Special prefixes:
   - `std/...` → `src/std/...`
   - `lib/...` → `src/lib/...`
+  - `examples/...` → `src/examples/...`
 - Paths starting with `./` resolve relative to the importing file.
 - Paths containing `..` are rejected.
 - Package root is the nearest ancestor containing `src/std/`; otherwise it is
   the current working directory.
-- If a project has no local `src/std` or `src/lib`, those prefixes fall back to
-  `$LKJSCRIPT2026_ROOT/src/std` or `$LKJSCRIPT2026_ROOT/src/lib`.
+- If a project has no local `src/std`, `src/lib`, or `src/examples`, those
+  prefixes fall back to the corresponding directory under
+  `$LKJSCRIPT2026_ROOT/src`.
 - Project-local library directories win over the installed fallback.
 
 Example:

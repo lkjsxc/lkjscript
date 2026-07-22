@@ -37,7 +37,7 @@ Interactive editor:
 
 ```sh
 docker compose -f meta/docker-compose.yml run -it --rm texteditor \
-  run examples/texteditor/main.lkjml /tmp/file
+  run src/examples/texteditor/main.lkjml /tmp/file
 ```
 
 One-shot HTTP hello (port 8080):

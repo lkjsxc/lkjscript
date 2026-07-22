@@ -19,8 +19,9 @@ success.
 - Language name: **lkjscript2026**; canonical LKJML sources use **`.lkjml`**
 - LKJML: one column-one marker/atom per line, no indentation or attributes,
   and quote-free `str/`, `name/`, and `import/` text blocks
-- Layout: `src/std` (primitives), `src/lib/edit` (editor package), `examples/`
-- Imports: `std/...`, `lib/...`, `examples/...` (package-root; no `../`);
+- Layout: `src/std` (primitives), `src/lib/edit` (editor package),
+  `src/examples` (runnable demonstrations)
+- Imports: `std/...`, `lib/...`, `examples/...` (mapped under `src/`; no `../`);
   installed std/lib fallback through `LKJSCRIPT2026_ROOT`
 - Runtime Docker image bundles std/lib; a bind-mounted external-project smoke
   importing `std/term/puts.lkjml` passed

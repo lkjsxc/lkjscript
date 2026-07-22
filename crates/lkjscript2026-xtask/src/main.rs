@@ -59,11 +59,13 @@ fn check_docs(root: &Path) -> i32 {
 
 fn check_sources(root: &Path) -> i32 {
     let mut files = Vec::new();
-    for directory in ["src", "examples"] {
-        walk(&root.join(directory), &mut |path| files.push(path.to_path_buf()));
-    }
+    walk(&root.join("src"), &mut |path| files.push(path.to_path_buf()));
     files.sort();
     let mut bad = 0;
+    if root.join("examples").exists() {
+        eprintln!("legacy examples/ directory; move examples under src/examples/");
+        bad += 1;
+    }
     let limits = Limits::default();
     for path in files {
         match path.extension().and_then(|extension| extension.to_str()) {
@@ -88,15 +90,15 @@ fn check_sources(root: &Path) -> i32 {
         }
     }
     for entry in [
-        "examples/bench/main.lkjml",
-        "examples/hello/main.lkjml",
-        "examples/http/hello.lkjml",
-        "examples/mandel/main.lkjml",
-        "examples/texteditor/buffer-demo.lkjml",
-        "examples/texteditor/edit-mem.lkjml",
-        "examples/texteditor/hello.lkjml",
-        "examples/texteditor/main.lkjml",
-        "examples/texteditor/vimlike.lkjml",
+        "src/examples/bench/main.lkjml",
+        "src/examples/hello/main.lkjml",
+        "src/examples/http/hello.lkjml",
+        "src/examples/mandel/main.lkjml",
+        "src/examples/texteditor/buffer-demo.lkjml",
+        "src/examples/texteditor/edit-mem.lkjml",
+        "src/examples/texteditor/hello.lkjml",
+        "src/examples/texteditor/main.lkjml",
+        "src/examples/texteditor/vimlike.lkjml",
     ] {
         if let Err(error) = compile_path(&root.join(entry), &limits) {
             eprintln!("{entry}: {error}");

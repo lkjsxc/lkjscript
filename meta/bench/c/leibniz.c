@@ -1,4 +1,4 @@
-/* Leibniz partial sum — same work as examples/bench/leibniz.lkjml */
+/* Leibniz partial sum — same work as src/examples/bench/leibniz-loop.lkjml */
 #include <stdio.h>
 #include <stdlib.h>
 
