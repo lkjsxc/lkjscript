@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
+    Unit,
     Nil,
     Bool,
     I64,
@@ -117,6 +118,7 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
     };
     match a.as_str() {
         "Any" => Err("Any is not a permitted type".into()),
+        "Unit" => Ok((Type::Unit, i + 1)),
         "Nil" => Ok((Type::Nil, i + 1)),
         "Bool" => Ok((Type::Bool, i + 1)),
         "I64" => Ok((Type::I64, i + 1)),
@@ -164,7 +166,8 @@ fn is_type_param_name(s: &str) -> bool {
         && s.chars().all(|c| c.is_ascii_alphanumeric())
         && !matches!(
             s,
-            "Nil"
+            "Unit"
+                | "Nil"
                 | "Bool"
                 | "I64"
                 | "F64"

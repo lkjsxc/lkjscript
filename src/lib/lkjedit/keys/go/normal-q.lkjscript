@@ -5,7 +5,7 @@ go-cmd
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -29,7 +29,7 @@ go-quit
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params

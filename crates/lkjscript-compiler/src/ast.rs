@@ -7,6 +7,7 @@ pub enum Expr {
     LitI64(i64),
     LitF64(f64),
     LitBool(bool),
+    LitUnit,
     LitNil,
     LitStr(String),
     Symbol(String),

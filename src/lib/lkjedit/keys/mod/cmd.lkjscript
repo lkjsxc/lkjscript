@@ -11,7 +11,7 @@ cmd-bs
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -35,7 +35,7 @@ ed-cmd
 /-
 /str-slice
 /set
-nil
+unit
 /if
 /fn
 /def
@@ -47,7 +47,7 @@ fn/
 sig/
 I64
 ->
-Nil
+Unit
 /sig
 params/
 k
@@ -81,7 +81,7 @@ ed-cmd
 k
 /insert-at
 /set
-nil
+unit
 /if
 /if
 /fn
@@ -94,7 +94,7 @@ fn/
 sig/
 I64
 ->
-Nil
+Unit
 /sig
 params/
 k

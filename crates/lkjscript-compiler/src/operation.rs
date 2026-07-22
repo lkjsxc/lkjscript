@@ -332,11 +332,11 @@ impl Operation {
                     Type::Bool,
                 ),
             ),
-            Self::Print | Self::WriteStr => function(vec![Type::Str], Type::Nil),
-            Self::Flush => function(Vec::new(), Type::Nil),
+            Self::Print | Self::WriteStr => function(vec![Type::Str], Type::Unit),
+            Self::Flush => function(Vec::new(), Type::Unit),
             Self::ReadByte => function(Vec::new(), Type::I64),
-            Self::WriteByte => function(vec![Type::I64], Type::Nil),
-            Self::Exit => function(vec![Type::I64], Type::Nil),
+            Self::WriteByte => function(vec![Type::I64], Type::Unit),
+            Self::Exit => function(vec![Type::I64], Type::Unit),
             Self::EmptyStr => function(Vec::new(), Type::Str),
             Self::ArgCount => function(Vec::new(), Type::I64),
             Self::Arg => function(vec![Type::I64], Type::Str),
@@ -344,7 +344,7 @@ impl Operation {
             Self::BufLen => function(vec![Type::Buf], Type::I64),
             Self::BufRef | Self::BufGetU32 => function(vec![Type::Buf, Type::I64], Type::I64),
             Self::BufSet | Self::BufSetU32 => {
-                function(vec![Type::Buf, Type::I64, Type::I64], Type::Nil)
+                function(vec![Type::Buf, Type::I64, Type::I64], Type::Unit)
             }
             Self::BufClone => function(vec![Type::Buf], Type::Buf),
             Self::StrLen => function(vec![Type::Str], Type::I64),
@@ -355,27 +355,29 @@ impl Operation {
             Self::StrFromF64 => function(vec![Type::F64], Type::Str),
             Self::StdinHandle => function(Vec::new(), Type::Handle),
             Self::SysIsatty => function(vec![Type::Handle], system_result(Type::Bool)),
-            Self::SysClose => function(vec![Type::Handle], system_result(Type::Nil)),
+            Self::SysClose => function(vec![Type::Handle], system_result(Type::Unit)),
             Self::SysReadByte => function(vec![Type::Handle], system_result(Type::I64)),
-            Self::SysWriteByte => function(vec![Type::Handle, Type::I64], system_result(Type::Nil)),
-            Self::SysTtyGuardSave => function(vec![Type::Buf], system_result(Type::Nil)),
-            Self::SysTtyGuardClear => function(Vec::new(), system_result(Type::Nil)),
+            Self::SysWriteByte => {
+                function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
+            }
+            Self::SysTtyGuardSave => function(vec![Type::Buf], system_result(Type::Unit)),
+            Self::SysTtyGuardClear => function(Vec::new(), system_result(Type::Unit)),
             Self::SysOpenRead | Self::SysOpenWrite => {
                 function(vec![Type::Str], system_result(Type::Handle))
             }
             Self::SysPathExists => function(vec![Type::Str], system_result(Type::Bool)),
-            Self::SysWaitMs => function(vec![Type::I64], system_result(Type::Nil)),
+            Self::SysWaitMs => function(vec![Type::I64], system_result(Type::Unit)),
             Self::SysNowMs => function(Vec::new(), system_result(Type::I64)),
             Self::SysSocket => function(Vec::new(), system_result(Type::Handle)),
             Self::SysBind | Self::SysListen => {
-                function(vec![Type::Handle, Type::I64], system_result(Type::Nil))
+                function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
             }
             Self::SysAccept => function(vec![Type::Handle], system_result(Type::Handle)),
             Self::SysRecv => function(vec![Type::Handle], system_result(Type::Str)),
             Self::SysSend => function(vec![Type::Handle, Type::Str], system_result(Type::I64)),
             Self::SysPoll => function(vec![Type::Handle, Type::I64], system_result(Type::I64)),
             Self::SysTtyGet | Self::SysTtySet => {
-                function(vec![Type::Handle, Type::Buf], system_result(Type::Nil))
+                function(vec![Type::Handle, Type::Buf], system_result(Type::Unit))
             }
             Self::Ok => {
                 let success = Type::Param("T".into());

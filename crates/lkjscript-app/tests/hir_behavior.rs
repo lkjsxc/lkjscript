@@ -10,7 +10,7 @@ fn evaluate_program(source: &str) -> lkjscript_core::Result<Value> {
         chunk
             .main
             .code
-            .ends_with(&[Op::Nil as u8, Op::Return as u8]),
+            .ends_with(&[Op::Unit as u8, Op::Return as u8]),
         "compiler epilogue changed"
     );
     let expression_end = chunk.main.code.len() - 2;
@@ -39,7 +39,20 @@ fn resolved_locals_and_short_circuit_operations_preserve_runtime_behavior() {
 
     let set_result =
         "def/\nname/\nvalue\n/name\ntype/\nI64\n/type\n0\n/def\ndo/\nset/\nvalue\n2\n/set\n/do\n";
-    assert!(evaluate_program(set_result)
-        .expect("evaluate set result")
-        .is_nil());
+    let set_result = evaluate_program(set_result).expect("evaluate set result");
+    assert!(set_result.is_unit());
+    assert!(!set_result.is_nil());
+}
+
+#[test]
+fn unit_and_exact_three_arm_if_survive_source_to_vm_lowering() {
+    let conditional = "do/\nif/\ntrue\nunit\nunit\n/if\n/do\n";
+    let value = evaluate_program(conditional).expect("evaluate Unit conditional");
+    assert!(value.is_unit());
+    assert!(!value.is_nil());
+
+    let loop_result = "do/\nwhile/\nfalse\n/while\n/do\n";
+    assert!(evaluate_program(loop_result)
+        .expect("evaluate Unit while")
+        .is_unit());
 }

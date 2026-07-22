@@ -25,9 +25,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
   fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
   and canonicalized symlink escapes fail
 - Compiler boundary: one analysis pass collects headers and produces owned,
-  resolved typed HIR with BindingIds, source origins, operation signatures,
-  explicit legacy runtime unions, and conservative effects; bytecode consumes
-  HIR without re-resolving source names or declarations
+  resolved typed HIR with BindingIds, source origins, exact operation/type
+  facts, and conservative effects; bytecode consumes HIR without re-resolving
+  source names or declarations
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
@@ -35,6 +35,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
   and return-adjacent tail-frame reuse
+- Semantics: dedicated `Unit`/`unit` is distinct from legacy nil; empty `do`,
+  `while`, `set`, and successful side effects return Unit; `if` requires a Bool
+  condition, both branches, and exactly matching branch types
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
@@ -60,9 +63,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. generic Nil conflates Unit, Option absence, empty lists, falsey/default VM
-   state, and uninitialized mutable globals; Nil-joined if expressions are
-   explicitly marked as legacy runtime unions in HIR;
+1. legacy nil still conflates Option absence, empty lists, falsey/default VM
+   state, and uninitialized mutable globals; explicit Option and typed empty
+   lists are not implemented;
 2. mutable values and imports still share one program-global namespace, and
    top-level execution/initialization remains order-dependent;
 3. out-of-range `arg` still returns Nil despite its declared Str type;
@@ -84,13 +87,13 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 60 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 62 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
 | `check-sources` | passed for all 115 `.lkjscript` sources; the 10 compiled entry closures equal the corpus exactly |
 | source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
-| HIR conformance | duplicate/unknown/collision, BindingId shadowing, source origin, generic resolution, effect facts, global set, operation signature, and legacy-union boundaries passed |
-| top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields runtime Nil as typed |
+| HIR conformance | duplicate/unknown/collision, BindingId shadowing, source origin, generic resolution, effect facts, global set, exact `if`, and operation-signature boundaries passed |
+| top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields dedicated Unit as typed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
 | Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
@@ -118,11 +121,9 @@ A gate that did not run did not pass.
 
 The next semantic migration sequence is:
 
-1. replace Nil-as-Unit and optional-if behavior with Unit and exact three-arm
-   branches while retaining typed empty-list and Option migrations as separate
-   reviewable slices;
-2. add explicit Option/empty-list values and split value/object/structural/F64
-   bit equality;
+1. add explicit Option and typed empty-list values, then remove legacy nil from
+   source semantics and internal default-state behavior;
+2. split value/object/structural/F64-bit equality;
 3. establish explicit main/effect-free libraries, immutable product state and
    local var/set, then remove mutable globals;
 4. validate chunks and return structured VM outcomes before typed SSA and the

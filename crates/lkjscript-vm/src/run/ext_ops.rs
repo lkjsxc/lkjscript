@@ -242,7 +242,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
                     .map_err(|_| lkjscript_core::Error::msg("sys-wait-ms: duration out of range"))
                     .and_then(|milliseconds| {
                         lkjscript_sys::sleep_ms(milliseconds)
-                            .map(|()| Value::NIL)
+                            .map(|()| Value::UNIT)
                             .map_err(|error| {
                                 lkjscript_core::Error::msg(format!("sys-wait-ms: {error}"))
                             })

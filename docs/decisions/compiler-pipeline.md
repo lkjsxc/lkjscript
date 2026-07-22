@@ -27,15 +27,15 @@ canonical source
   +-> in-memory native code when JIT is justified
 ```
 
-Typed HIR now owns resolved binding IDs, declaration kinds, static and runtime
-type facts, source origins, canonical operation identities and per-call
-signatures, and conservative effects. Code generation consumes HIR rather than
-re-parsing definitions, parameters, operators, and names independently.
+Typed HIR now owns resolved binding IDs, declaration kinds, exact static type
+facts, source origins, canonical operation identities and per-call signatures,
+and conservative effects. Code generation consumes HIR rather than re-parsing
+definitions, parameters, operators, and names independently.
 
-Current Nil-joined `if` expressions carry an explicit `LegacyUnion` runtime
-type fact; typed native lowering must reject it until the Unit migration removes
-that legacy ambiguity. User calls conservatively carry every effect until
-fixed-point function summaries replace the safe over-approximation.
+`Unit` is distinct from legacy nil, and every `if` has exactly three operands
+with exactly matching branch types. HIR therefore has no legacy runtime-union
+escape hatch. User calls conservatively carry every effect until fixed-point
+function summaries replace the safe over-approximation.
 
 Typed SSA uses explicit basic-block parameters, exact scalar/product types,
 trap edges, and effects. It is the optimization authority for both AOT and JIT.
@@ -57,8 +57,8 @@ optimizer ownership.
 The first HIR slice preserves accepted workload behavior while removing the
 duplicate typechecker/code-generator interpretation. It also rejects unknown
 or duplicate bindings, operation-name collisions, unresolved generic variables,
-and invalid global assignments. `set` now actually yields its declared Nil
-value, and top-level control-flow fragments use correct absolute jump targets.
+and invalid global assignments. `set` now yields Unit, and top-level
+control-flow fragments use correct absolute jump targets.
 Semantic-core changes now land as complete HIR-to-VM vertical slices.
 
 ## Runtime Representations

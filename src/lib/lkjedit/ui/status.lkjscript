@@ -20,7 +20,7 @@ show-cmdline
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -45,7 +45,7 @@ show-status
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params

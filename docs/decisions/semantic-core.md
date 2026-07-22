@@ -8,9 +8,10 @@ ambiguity or unchecked hints.
 
 ## Status
 
-**Accepted Target.** The current Nil/global-state surface remains documented in
-[current-state.md](../current-state.md) until each migration slice passes its
-cross-layer and corpus gates.
+**Accepted Target** overall. Dedicated Unit and exact three-arm `if` are
+**Current**. Option, typed empty lists, local-only mutation, explicit main, and
+the equality split remain pending; [current-state.md](../current-state.md)
+records the exact boundary.
 
 ## Canonicality
 
@@ -40,6 +41,12 @@ Wasm backends specialize Option representation per type, including proven
 niches, without changing source semantics. The all-zero internal value pattern
 is invalid rather than a semantic default.
 
+The Unit slice is implemented: `Unit`/`unit` has a dedicated VM tag, empty `do`,
+`while`, `set`, and successful side-effecting operations return Unit, and
+completion is no longer represented as nil. Legacy `nil` remains temporarily
+only for list termination, absence, and internal default state until the
+Option/typed-empty-list slice removes it.
+
 ## Control Flow
 
 `if` is always an expression with exactly three operands: condition, then, and
@@ -48,7 +55,9 @@ There is no implicit Unit or absence arm. `while` returns Unit. A future `Never`
 type represents trap, return, and other unreachable control edges and may join
 with the surviving branch type.
 
-Conditions are Bool rather than general truthy values. Missing stack values,
+This control-flow contract is implemented through parser, resolved typed HIR,
+bytecode, VM, tests, and the complete source corpus. Conditions are Bool rather
+than general truthy values. Missing stack values,
 locals, globals, or operands are validation/runtime errors, never Unit, none,
 or an empty list.
 

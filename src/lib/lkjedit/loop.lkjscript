@@ -20,7 +20,7 @@ edit-loop
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -49,7 +49,7 @@ edit-step
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -73,7 +73,7 @@ fn/
 sig/
 I64
 ->
-Nil
+Unit
 /sig
 params/
 k

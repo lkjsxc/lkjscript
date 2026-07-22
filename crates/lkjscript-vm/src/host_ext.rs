@@ -99,7 +99,7 @@ impl ResourceTable {
             .map_err(|error| Error::msg(format!("sys-bind reuse: {error}")))?;
         lkjscript_sys::bind_ipv4_any(raw, port)
             .map_err(|error| Error::msg(format!("sys-bind: {error}")))?;
-        Ok(Value::NIL)
+        Ok(Value::UNIT)
     }
 
     pub fn sys_listen(&self, handle: Value, backlog: i64) -> Result<Value> {
@@ -111,7 +111,7 @@ impl ResourceTable {
         }
         lkjscript_sys::listen_sock(raw, backlog)
             .map_err(|error| Error::msg(format!("sys-listen: {error}")))?;
-        Ok(Value::NIL)
+        Ok(Value::UNIT)
     }
 
     pub fn sys_accept(&mut self, handle: Value) -> Result<Value> {
@@ -156,7 +156,7 @@ impl ResourceTable {
         if slot.take().is_none() {
             return Err(Error::msg("sys-close: stale or already closed handle"));
         }
-        Ok(Value::NIL)
+        Ok(Value::UNIT)
     }
 
     pub fn read_byte(&mut self, handle: Value) -> Result<i64> {
@@ -200,7 +200,7 @@ impl ResourceTable {
             }
             None => return Err(Error::msg("sys-write-byte: stale or unknown handle")),
         }
-        Ok(Value::NIL)
+        Ok(Value::UNIT)
     }
 
     pub(crate) fn raw_fd(&self, handle: Value, operation: &str) -> Result<RawFd> {

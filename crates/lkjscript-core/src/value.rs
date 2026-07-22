@@ -12,12 +12,14 @@ const TAG_BOOL: u64 = 1;
 const TAG_INT: u64 = 2;
 const TAG_HEAP: u64 = 3;
 const TAG_HANDLE: u64 = 4;
+const TAG_UNIT: u64 = 5;
 
 pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
 pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
 
 impl Value {
     pub const NIL: Self = Self(TAG_NIL);
+    pub const UNIT: Self = Self(TAG_UNIT);
     pub const FALSE: Self = Self(TAG_BOOL);
     pub const TRUE: Self = Self((1 << 3) | TAG_BOOL);
 
@@ -46,6 +48,10 @@ impl Value {
 
     pub fn is_nil(self) -> bool {
         self.0 & TAG_MASK == TAG_NIL
+    }
+
+    pub fn is_unit(self) -> bool {
+        self.0 == TAG_UNIT
     }
 
     pub fn as_bool(self) -> Option<bool> {
@@ -95,6 +101,9 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_nil() {
             return write!(f, "nil");
+        }
+        if self.is_unit() {
+            return write!(f, "unit");
         }
         if let Some(b) = self.as_bool() {
             return write!(f, "{b}");
@@ -148,6 +157,15 @@ impl HeapObj {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::{Value, MAX_SMALL_I64, MIN_SMALL_I64};
+
+    #[test]
+    fn unit_is_distinct_from_nil() {
+        assert!(Value::UNIT.is_unit());
+        assert!(!Value::UNIT.is_nil());
+        assert!(Value::NIL.is_nil());
+        assert!(!Value::NIL.is_unit());
+        assert_ne!(Value::UNIT, Value::NIL);
+    }
 
     #[test]
     fn small_integer_boundaries_round_trip_without_truncation() {

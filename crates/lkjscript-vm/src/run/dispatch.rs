@@ -154,12 +154,12 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         x if x == Op::Print as u8 => {
             let v = vm.pop();
             print_value(&vm.arena, v)?;
-            vm.push(Value::NIL);
+            vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::Flush as u8 => {
             flush_out()?;
-            vm.push(Value::NIL);
+            vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::ReadByte as u8 => {
@@ -206,6 +206,10 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if x == Op::Nil as u8 => {
             vm.push(Value::NIL);
+            Ok(())
+        }
+        x if x == Op::Unit as u8 => {
+            vm.push(Value::UNIT);
             Ok(())
         }
         other => Err(Error::msg(format!("unknown opcode {other}"))),

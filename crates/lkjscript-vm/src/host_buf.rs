@@ -47,7 +47,7 @@ pub fn buf_set(arena: &mut Arena, value: Value, index: i64, byte: i64) -> Result
         .get_mut(index)
         .ok_or_else(|| Error::msg("buf-set out of bounds"))?;
     *slot = byte;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 pub fn buf_get_u32(arena: &Arena, value: Value, index: i64) -> Result<i64> {
@@ -73,7 +73,7 @@ pub fn buf_set_u32(arena: &mut Arena, value: Value, index: i64, number: i64) -> 
         .get_mut(index..end)
         .ok_or_else(|| Error::msg("buf-set-u32 out of bounds"))?;
     destination.copy_from_slice(&number.to_le_bytes());
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 pub fn buf_clone(arena: &mut Arena, value: Value) -> Result<Value> {
@@ -91,7 +91,7 @@ pub fn sys_tty_get(
     let state = as_buf_mut(arena, buffer)?;
     lkjscript_sys::tty_get(raw, state)
         .map_err(|error| Error::msg(format!("sys-tty-get: {error}")))?;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 pub fn sys_tty_set(
@@ -104,7 +104,7 @@ pub fn sys_tty_set(
     let state = as_buf(arena, buffer)?;
     lkjscript_sys::tty_set(raw, state)
         .map_err(|error| Error::msg(format!("sys-tty-set: {error}")))?;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: i64) -> Result<i64> {
@@ -132,13 +132,13 @@ pub fn sys_tty_guard_save(arena: &Arena, buffer: Value) -> Result<Value> {
     let state = as_buf(arena, buffer)?;
     lkjscript_sys::tty_guard_save(state)
         .map_err(|error| Error::msg(format!("sys-tty-guard-save: {error}")))?;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 pub fn sys_tty_guard_clear() -> Result<Value> {
     lkjscript_sys::tty_guard_clear()
         .map_err(|error| Error::msg(format!("sys-tty-guard-clear: {error}")))?;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 fn buffer_index(index: i64, operation: &str) -> Result<usize> {

@@ -18,7 +18,7 @@ fn/
 sig/
 I64
 ->
-Nil
+Unit
 /sig
 params/
 k
@@ -47,7 +47,7 @@ fn/
 sig/
 I64
 ->
-Nil
+Unit
 /sig
 params/
 k

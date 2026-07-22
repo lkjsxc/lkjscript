@@ -12,8 +12,8 @@ next repairs.
 ## Current Shape
 
 - Dense bytecode with contiguous value and frame stacks.
-- Tagged `u64` immediates for nil, booleans, signed 61-bit integers, heap
-  references, and opaque handle tokens.
+- Tagged `u64` immediates for Unit, legacy nil, booleans, signed 61-bit
+  integers, heap references, and opaque handle tokens.
 - Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
   closures, buffers, and language Result wrappers.
 - I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64

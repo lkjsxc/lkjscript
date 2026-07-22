@@ -72,6 +72,9 @@ fn element_to_expr(name: &str, kids: Vec<Expr>) -> Result<Expr> {
 }
 
 fn atom_from_name(name: &str) -> Result<Expr> {
+    if name == "unit" {
+        return Ok(Expr::LitUnit);
+    }
     if name == "nil" {
         return Ok(Expr::LitNil);
     }

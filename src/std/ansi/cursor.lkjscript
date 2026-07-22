@@ -11,7 +11,7 @@ hide-cursor
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -33,7 +33,7 @@ show-cursor
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params

@@ -11,7 +11,7 @@ enter-raw
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -24,7 +24,7 @@ stdin-handle/
 /sys-isatty
 /unwrap-ok
 /not
-nil
+unit
 if/
 nil?/
 tty-cooked-buf
@@ -64,9 +64,9 @@ stdin-handle/
 tty-work
 /sys-tty-set
 /unwrap-ok
-nil
+unit
 /do
-nil
+unit
 /if
 /if
 /fn
@@ -78,7 +78,7 @@ leave-raw
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -86,7 +86,7 @@ if/
 nil?/
 tty-cooked-buf
 /nil?
-nil
+unit
 do/
 unwrap-ok/
 sys-tty-set/

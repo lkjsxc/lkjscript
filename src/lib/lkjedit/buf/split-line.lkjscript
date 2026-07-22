@@ -14,7 +14,7 @@ split-line
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -34,7 +34,7 @@ sig/
 Str
 I64
 ->
-Nil
+Unit
 /sig
 params/
 line
@@ -70,7 +70,7 @@ fn/
 sig/
 Str
 ->
-Nil
+Unit
 /sig
 params/
 right

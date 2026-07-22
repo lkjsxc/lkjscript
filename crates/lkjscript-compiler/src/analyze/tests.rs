@@ -178,7 +178,7 @@ mod tests {
                 1,
                 0,
                 Op::Add as u8,
-                Op::Nil as u8,
+                Op::Unit as u8,
                 Op::Return as u8,
             ]
         );
@@ -209,17 +209,13 @@ mod tests {
             panic!("expected resolved set");
         };
         assert_eq!(target, value_binding);
-        assert_eq!(expressions[0].ty, Type::Nil);
-        assert_eq!(
-            expressions[0].runtime_type,
-            crate::hir::RuntimeType::Exact(Type::Nil)
-        );
+        assert_eq!(expressions[0].ty, Type::Unit);
 
         assert!(analysis_error("do/\nset/\nmissing\n1\n/set\n/do\n")
             .contains("unknown set target missing"));
         let wrong_type = "def/\nname/\ncount\n/name\ntype/\nI64\n/type\n1\n/def\ndo/\nset/\ncount\n2.0\n/set\n/do\n";
         assert!(analysis_error(wrong_type).contains("not assignable to I64"));
-        let function_target = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nNil\n/sig\nparams/\n/params\nnil\n/fn\n/def\ndo/\nset/\nf\nnil\n/set\n/do\n";
+        let function_target = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\ndo/\nset/\nf\nunit\n/set\n/do\n";
         assert!(analysis_error(function_target).contains("not a mutable global value"));
 
         let nil_list = "def/\nname/\nxs\n/name\ntype/\nList\nI64\n/type\ncons/\n1\nnil\n/cons\n/def\ndo/\nset/\nxs\nnil\n/set\n/do\n";
@@ -243,7 +239,7 @@ mod tests {
     #[test]
     fn operation_names_and_generic_variables_are_resolved_without_capture() {
         assert!(analysis_error("do/\n+\n/do\n").contains("not a first-class value"));
-        let collision = "def/\nname/\nprint\n/name\nfn/\nsig/\nStr\n->\nNil\n/sig\nparams/\ntext\nStr\n/params\nnil\n/fn\n/def\n";
+        let collision = "def/\nname/\nprint\n/name\nfn/\nsig/\nStr\n->\nUnit\n/sig\nparams/\ntext\nStr\n/params\nunit\n/fn\n/def\n";
         assert!(analysis_error(collision).contains("collides with a reserved operation"));
 
         assert!(analysis_error("do/\ncar/\nnil\n/car\n/do\n")
@@ -264,7 +260,7 @@ mod tests {
         let duplicate_let = "do/\nlet/\nbind/\nx\n1\n/bind\nbind/\nx\n2\n/bind\nx\n/let\n/do\n";
         assert!(analysis_error(duplicate_let).contains("duplicate let binding x"));
 
-        let duplicate_sig = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nNil\n/sig\nsig/\n->\nNil\n/sig\nparams/\n/params\nnil\n/fn\n/def\n";
+        let duplicate_sig = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n";
         assert!(analysis_error(duplicate_sig).contains("multiple sig blocks"));
 
         let mismatch = "def/\nname/\nf\n/name\nfn/\nsig/\nBuf\n->\nBuf\n/sig\nparams/\nx\nNil\n/params\nx\n/fn\n/def\n";
@@ -290,9 +286,14 @@ mod tests {
     }
 
     #[test]
-    fn optional_if_and_quoted_names_remain_compatible() {
-        let source = "do/\nif/\ntrue\n7\n/if\nquote/\nnot-a-binding\n/quote\n/do\n";
-        let program = analyze_one(source).expect("analyze compatibility forms");
+    fn strict_if_and_quoted_names_are_exact() {
+        assert!(analysis_error("do/\nif/\ntrue\n7\n/if\n/do\n")
+            .contains("if expects condition, then, and else"));
+        assert!(analysis_error("do/\nif/\ntrue\n7\nunit\n/if\n/do\n")
+            .contains("if branches must have the same type"));
+
+        let source = "do/\nif/\ntrue\n7\n8\n/if\nquote/\nnot-a-binding\n/quote\n/do\n";
+        let program = analyze_one(source).expect("analyze strict forms");
         let TopLevel::Do { expression, .. } = &program.forms[0] else {
             panic!("expected do");
         };
@@ -302,12 +303,8 @@ mod tests {
         let ExprKind::If { else_branch, .. } = &expressions[0].kind else {
             panic!("expected if");
         };
-        assert!(else_branch.is_none());
+        assert_eq!(else_branch.ty, Type::I64);
         assert_eq!(expressions[0].ty, Type::I64);
-        assert_eq!(
-            expressions[0].runtime_type,
-            crate::hir::RuntimeType::LegacyUnion(vec![Type::I64, Type::Nil])
-        );
         assert_eq!(
             expressions[1].kind,
             ExprKind::QuoteSymbol("not-a-binding".into())
@@ -323,6 +320,6 @@ mod tests {
             offset += 1 + operation.operand_width();
         }
         assert!(decoded.contains(&Op::JumpIfFalse));
-        assert!(decoded.contains(&Op::Nil));
+        assert!(decoded.contains(&Op::Unit));
     }
 }

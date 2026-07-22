@@ -30,11 +30,11 @@ The descriptor-facing surface becomes:
 ```text
 stdin-handle                         -> Handle
 sys-isatty Handle                    -> Result Bool Str
-sys-close Handle                     -> Result Nil Str
+sys-close Handle                     -> Result Unit Str
 sys-read-byte Handle                 -> Result I64 Str
-sys-write-byte Handle I64            -> Result Nil Str
-sys-tty-guard-save Buf               -> Result Nil Str
-sys-tty-guard-clear                  -> Result Nil Str
+sys-write-byte Handle I64            -> Result Unit Str
+sys-tty-guard-save Buf               -> Result Unit Str
+sys-tty-guard-clear                  -> Result Unit Str
 ```
 
 The old `stdin-fd`, `isatty`, `close`, `read-byte-fd`, `write-byte-fd`,
@@ -69,7 +69,7 @@ Result error text in its VM diagnostic.
 ## Rejected
 
 - Declaring `Result` while propagating only the Rust `Err` branch.
-- Returning zero or nil as a placeholder success payload.
+- Returning zero or absence as a placeholder success payload.
 - Keeping descriptor terminology after the language value became an opaque
   handle.
 - Treating all `access(2)` failures as a nonexistent path.

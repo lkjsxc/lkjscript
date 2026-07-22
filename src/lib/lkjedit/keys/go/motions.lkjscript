@@ -9,7 +9,7 @@ fn/
 sig/
 I64
 ->
-I64
+Unit
 /sig
 params/
 k
@@ -44,7 +44,7 @@ fn/
 sig/
 I64
 ->
-I64
+Unit
 /sig
 params/
 k
@@ -79,7 +79,7 @@ fn/
 sig/
 I64
 ->
-Nil
+Unit
 /sig
 params/
 k
@@ -106,7 +106,7 @@ k
 /eq
 paste-line/
 /paste-line
-nil
+unit
 /if
 /if
 /if

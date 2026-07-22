@@ -10,6 +10,9 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if v.is_nil() {
         return Ok("nil".into());
     }
+    if v.is_unit() {
+        return Ok("unit".into());
+    }
     if let Some(b) = v.as_bool() {
         return Ok(b.to_string());
     }
@@ -63,7 +66,7 @@ pub fn write_byte(number: i64) -> Result<Value> {
     io::stdout()
         .write_all(&[byte])
         .map_err(|e| Error::msg(format!("write-byte: {e}")))?;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }
 
 pub fn write_str(arena: &Arena, v: Value) -> Result<Value> {
@@ -71,5 +74,5 @@ pub fn write_str(arena: &Arena, v: Value) -> Result<Value> {
     io::stdout()
         .write_all(s.as_bytes())
         .map_err(|e| Error::msg(format!("write-str: {e}")))?;
-    Ok(Value::NIL)
+    Ok(Value::UNIT)
 }

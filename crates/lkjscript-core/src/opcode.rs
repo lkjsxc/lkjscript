@@ -87,6 +87,7 @@ pub enum Op {
     False = 80,
     True = 81,
     Nil = 82,
+    Unit = 84,
 }
 
 impl Op {
@@ -145,6 +146,7 @@ impl Op {
             81 => Self::True,
             82 => Self::Nil,
             83 => Self::SysTtySet,
+            84 => Self::Unit,
             85 => Self::BufClone,
             90 => Self::StrLen,
             91 => Self::StrRef,

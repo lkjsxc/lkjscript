@@ -134,18 +134,9 @@ impl EffectSet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RuntimeType {
-    Exact(Type),
-    /// Temporary fact for current Nil-joined if expressions. Native typed
-    /// lowering must reject this until the Unit migration removes it.
-    LegacyUnion(Vec<Type>),
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
     pub ty: Type,
-    pub runtime_type: RuntimeType,
     pub effects: EffectSet,
     pub origin: SourceId,
     pub kind: ExprKind,
@@ -156,6 +147,7 @@ pub enum ExprKind {
     LitI64(i64),
     LitF64(f64),
     LitBool(bool),
+    LitUnit,
     LitNil,
     LitStr(String),
     Load(BindingId),
@@ -173,7 +165,7 @@ pub enum ExprKind {
     If {
         condition: Box<Expr>,
         then_branch: Box<Expr>,
-        else_branch: Option<Box<Expr>>,
+        else_branch: Box<Expr>,
     },
     While {
         condition: Box<Expr>,

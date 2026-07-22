@@ -75,7 +75,7 @@ exports, package versions, locks, and serialized bytecode are absent.
 ## Compiler Pipeline Status
 
 Parsed AST -> resolved typed HIR -> reference bytecode is **Current**. HIR owns
-binding identity, static/runtime type facts, declaration kind, canonical
+binding identity, exact static type facts, declaration kind, canonical
 operation and resolved signature, source origin, and conservative effects;
 codegen no longer re-parses declarations or resolves names.
 

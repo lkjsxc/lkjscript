@@ -34,6 +34,7 @@ impl<'a> Cx<'a> {
 
 pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
     match &expression.kind {
+        ExprKind::LitUnit => cx.proto.emit(Op::Unit),
         ExprKind::LitNil => cx.proto.emit(Op::Nil),
         ExprKind::LitBool(true) => cx.proto.emit(Op::True),
         ExprKind::LitBool(false) => cx.proto.emit(Op::False),
@@ -65,7 +66,7 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
             condition,
             then_branch,
             else_branch,
-        } => emit_if(cx, condition, then_branch, else_branch.as_deref())?,
+        } => emit_if(cx, condition, then_branch, else_branch)?,
         ExprKind::While { condition, body } => emit_while(cx, condition, body)?,
         ExprKind::Let { bindings, body } => emit_let(cx, bindings, body)?,
         ExprKind::SetGlobal { target, value } => {
@@ -73,7 +74,7 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
             let slot = global_slot(cx, *target)?;
             cx.proto.emit_op_u16(Op::StoreGlobal, slot);
             cx.proto.emit(Op::Pop);
-            cx.proto.emit(Op::Nil);
+            cx.proto.emit(Op::Unit);
         }
         ExprKind::QuoteSymbol(symbol) => {
             let constant = add_constant(cx.chunk, Constant::Str(format!("sym:{symbol}")))?;
@@ -86,11 +87,11 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
 pub(crate) fn emit_sequence(
     cx: &mut Cx<'_>,
     expressions: &[Expr],
-    empty_yields_nil: bool,
+    empty_yields_unit: bool,
 ) -> Result<()> {
     if expressions.is_empty() {
-        if empty_yields_nil {
-            cx.proto.emit(Op::Nil);
+        if empty_yields_unit {
+            cx.proto.emit(Op::Unit);
         }
         return Ok(());
     }
@@ -186,7 +187,7 @@ fn emit_if(
     cx: &mut Cx<'_>,
     condition: &Expr,
     then_branch: &Expr,
-    else_branch: Option<&Expr>,
+    else_branch: &Expr,
 ) -> Result<()> {
     emit_expr(cx, condition)?;
     cx.proto.emit(Op::JumpIfFalse);
@@ -198,11 +199,7 @@ fn emit_if(
     cx.proto.emit_u16(0);
     let else_offset = code_offset(cx)?;
     patch_jump(&mut cx.proto, else_jump, else_offset)?;
-    if let Some(else_branch) = else_branch {
-        emit_expr(cx, else_branch)?;
-    } else {
-        cx.proto.emit(Op::Nil);
-    }
+    emit_expr(cx, else_branch)?;
     let end_offset = code_offset(cx)?;
     patch_jump(&mut cx.proto, end_jump, end_offset)
 }
@@ -221,7 +218,7 @@ fn emit_while(cx: &mut Cx<'_>, condition: &Expr, body: &[Expr]) -> Result<()> {
     patch_jump(&mut cx.proto, back_jump, loop_start)?;
     let end = code_offset(cx)?;
     patch_jump(&mut cx.proto, exit_jump, end)?;
-    cx.proto.emit(Op::Nil);
+    cx.proto.emit(Op::Unit);
     Ok(())
 }
 

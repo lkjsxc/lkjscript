@@ -8,7 +8,7 @@ open-below
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -54,7 +54,7 @@ open-above
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params

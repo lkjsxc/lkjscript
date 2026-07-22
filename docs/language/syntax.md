@@ -11,7 +11,10 @@ Define expression, type, and import behavior above the physical line format.
 
 ## Expressions
 
-- Atoms are numbers, `true`, `false`, `nil`, or symbols.
+- Atoms are numbers, `true`, `false`, `unit`, legacy `nil`, or symbols.
+- `Unit` has exactly one value, `unit`, for completion without useful data.
+  Legacy `nil` is not a completion value and remains only for temporary
+  list/absence forms pending their explicit replacements.
 - `str/` blocks produce `Str` values.
 - Calls use matching open and close markers around child expressions.
 - Division is named `div` because slash is structural.
@@ -30,19 +33,23 @@ Every function definition has a mandatory signature and typed parameters.
 `forall/` declares annotation-driven type variables. There is no `Any`, trait,
 typeclass, Hindley-Milner inference, or implemented user-defined type alias.
 
+`if` requires exactly three operands: a Bool condition and two branches with
+exactly the same type. There is no omitted branch or nil-based type join.
+Empty `do`, `while`, `set`, and side-effecting operations return Unit.
+
 `set` currently mutates program-global state, but resolved HIR now requires an
-existing mutable value target, assignable value type, and a runtime Nil result.
-Global mutation itself remains temporary and is removed by the accepted local
+existing mutable value target, assignable value type, and returns Unit. Global
+mutation itself remains temporary and is removed by the accepted local
 `var`/`set` redesign.
 
-## Accepted Semantic Redesign
+## Semantic Migration
 
-The AI-first semantic core is an **Accepted Target**, not current syntax:
+The first AI-first semantic slice is **Current**: dedicated `Unit`/`unit` and
+strict three-arm `if` are enforced from source through HIR and VM. The remaining
+semantic core is an **Accepted Target**:
 
-- remove generic `nil` and separate `Unit`/`unit`, typed empty lists, and
-  explicit `Option T` values `some`/typed `none`;
-- require exactly three operands for every `if` and exact reachable branch
-  types;
+- replace legacy list/absence `nil` with typed empty lists and explicit
+  `Option T` values `some`/typed `none`;
 - replace global mutation with immutable declarations and function-local
   `var`/`set`;
 - replace top-level `do` with one explicit executable `main` and prohibit

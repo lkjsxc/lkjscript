@@ -11,7 +11,7 @@ move-back
 fn/
 sig/
 ->
-I64
+Unit
 /sig
 params/
 /params
@@ -20,7 +20,7 @@ lte/
 ed-col
 0
 /lte
-nil
+unit
 do/
 set/
 ed-col
@@ -44,7 +44,7 @@ back-spaces
 fn/
 sig/
 ->
-I64
+Unit
 /sig
 params/
 /params
@@ -73,7 +73,7 @@ ed-col
 back-spaces/
 /back-spaces
 /do
-nil
+unit
 /if
 /fn
 /def
@@ -84,7 +84,7 @@ back-word
 fn/
 sig/
 ->
-I64
+Unit
 /sig
 params/
 /params
@@ -118,7 +118,7 @@ ed-col
 back-word/
 /back-word
 /do
-nil
+unit
 /if
 /fn
 /def

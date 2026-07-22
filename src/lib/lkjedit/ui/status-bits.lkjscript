@@ -11,7 +11,7 @@ show-mode
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -51,7 +51,7 @@ show-pos
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -84,7 +84,7 @@ show-dirty
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -98,7 +98,7 @@ str/
 *
 /str
 /puts
-nil
+unit
 /if
 /fn
 /def

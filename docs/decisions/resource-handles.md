@@ -34,8 +34,8 @@ that token metadata matters.
 Remove script-controlled `sys-ioctl Handle I64 Buf`. Replace it with exactly:
 
 ```text
-sys-tty-get Handle Buf -> Result Nil Str
-sys-tty-set Handle Buf -> Result Nil Str
+sys-tty-get Handle Buf -> Result Unit Str
+sys-tty-set Handle Buf -> Result Unit Str
 ```
 
 The Linux backend selects `TCGETS` and `TCSETS` internally. Both safe Rust

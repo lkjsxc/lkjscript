@@ -11,7 +11,7 @@ del-line
 fn/
 sig/
 ->
-Nil
+Unit
 /sig
 params/
 /params
@@ -35,7 +35,7 @@ empty-str/
 nil
 /cons
 /set
-nil
+unit
 /if
 if/
 gte/
@@ -53,7 +53,7 @@ ed-buf
 1
 /-
 /set
-nil
+unit
 /if
 set/
 ed-col

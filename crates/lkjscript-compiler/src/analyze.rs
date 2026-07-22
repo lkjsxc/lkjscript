@@ -7,7 +7,7 @@ use lkjscript_core::{Error, Result};
 use crate::ast::Expr as AstExpr;
 use crate::hir::{
     self, Binding, BindingId, BindingKind, EffectSet, Expr, ExprKind, Function, LocalDefinition,
-    Operation, Origin, RuntimeType, Source, SourceId, TopLevel, Type, ValueDefinition,
+    Operation, Origin, Source, SourceId, TopLevel, Type, ValueDefinition,
 };
 use crate::import::Program as AstProgram;
 use crate::types::parse_one;
@@ -371,6 +371,7 @@ impl Analyzer {
             ExprKind::LitI64(_)
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)
+            | ExprKind::LitUnit
             | ExprKind::LitNil
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => {}
@@ -399,9 +400,7 @@ impl Analyzer {
             } => {
                 self.record_expr_globals(condition, layout, seen)?;
                 self.record_expr_globals(then_branch, layout, seen)?;
-                if let Some(else_branch) = else_branch {
-                    self.record_expr_globals(else_branch, layout, seen)?;
-                }
+                self.record_expr_globals(else_branch, layout, seen)?;
             }
             ExprKind::While { condition, body } => {
                 self.record_expr_globals(condition, layout, seen)?;
@@ -486,6 +485,7 @@ impl<'a> Resolver<'a> {
 
     fn resolve_expr(&mut self, expression: &AstExpr) -> Result<Expr> {
         match expression {
+            AstExpr::LitUnit => Ok(self.expression(Type::Unit, ExprKind::LitUnit)),
             AstExpr::LitNil => Ok(self.expression(Type::Nil, ExprKind::LitNil)),
             AstExpr::LitBool(value) => Ok(self.expression(Type::Bool, ExprKind::LitBool(*value))),
             AstExpr::LitI64(value) => Ok(self.expression(Type::I64, ExprKind::LitI64(*value))),
@@ -682,61 +682,33 @@ impl<'a> Resolver<'a> {
         }
         let ty = expressions
             .last()
-            .map_or(Type::Nil, |expression| expression.ty.clone());
-        let runtime_type = expressions
-            .last()
-            .map_or(RuntimeType::Exact(Type::Nil), |expression| {
-                expression.runtime_type.clone()
-            });
-        Ok(self.expression_with_runtime(ty, runtime_type, ExprKind::Do(expressions)))
+            .map_or(Type::Unit, |expression| expression.ty.clone());
+        Ok(self.expression(ty, ExprKind::Do(expressions)))
     }
 
     fn resolve_if(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        let (condition, then_branch, else_ast) = match args {
-            [condition, then_branch] => (condition, then_branch, None),
-            [condition, then_branch, else_branch] => (condition, then_branch, Some(else_branch)),
-            _ => return Err(self.error("if expects 2 or 3 args")),
+        let [condition, then_branch, else_branch] = args else {
+            return Err(self.error("if expects condition, then, and else"));
         };
         let condition = self.resolve_expr(condition)?;
-        if !Type::unify_assignable(&condition.ty, &Type::Bool) {
+        if condition.ty != Type::Bool {
             return Err(self.error("if condition must be Bool"));
         }
         let then_branch = self.resolve_expr(then_branch)?;
-        let else_branch = match else_ast {
-            Some(expression) => Some(self.resolve_expr(expression)?),
-            None => None,
-        };
-        let else_type = else_branch
-            .as_ref()
-            .map_or(Type::Nil, |expression| expression.ty.clone());
-        let ty = join_if_types(&then_branch.ty, &else_type).ok_or_else(|| {
-            self.error(format!(
-                "if branches differ: {:?} vs {else_type:?}",
-                then_branch.ty
-            ))
-        })?;
-        let runtime_type = if then_branch.runtime_type == RuntimeType::Exact(ty.clone())
-            && else_branch.as_ref().map_or(else_type == ty, |branch| {
-                branch.runtime_type == RuntimeType::Exact(ty.clone())
-            }) {
-            RuntimeType::Exact(ty.clone())
-        } else {
-            let mut variants = Vec::new();
-            append_runtime_types(&then_branch.runtime_type, &mut variants);
-            if let Some(branch) = &else_branch {
-                append_runtime_types(&branch.runtime_type, &mut variants);
-            } else if !variants.contains(&Type::Nil) {
-                variants.push(Type::Nil);
-            }
-            RuntimeType::LegacyUnion(variants)
-        };
-        Ok(self.expression_with_runtime(
+        let else_branch = self.resolve_expr(else_branch)?;
+        if then_branch.ty != else_branch.ty {
+            return Err(self.error(format!(
+                "if branches must have the same type: {:?} vs {:?}",
+                then_branch.ty, else_branch.ty
+            )));
+        }
+        let ty = then_branch.ty.clone();
+        Ok(self.expression(
             ty,
-            runtime_type,
             ExprKind::If {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
-                else_branch: else_branch.map(Box::new),
+                else_branch: Box::new(else_branch),
             },
         ))
     }
@@ -754,7 +726,7 @@ impl<'a> Resolver<'a> {
             resolved_body.push(self.resolve_expr(expression)?);
         }
         Ok(self.expression(
-            Type::Nil,
+            Type::Unit,
             ExprKind::While {
                 condition: Box::new(condition),
                 body: resolved_body,
@@ -815,10 +787,8 @@ impl<'a> Resolver<'a> {
         self.next_slot = saved_slot;
         let _removed_scope = self.scopes.pop();
         let ty = body.ty.clone();
-        let runtime_type = body.runtime_type.clone();
-        Ok(self.expression_with_runtime(
+        Ok(self.expression(
             ty,
-            runtime_type,
             ExprKind::Let {
                 bindings: resolved_bindings,
                 body: Box::new(body),
@@ -857,7 +827,7 @@ impl<'a> Resolver<'a> {
             )));
         }
         Ok(self.expression(
-            Type::Nil,
+            Type::Unit,
             ExprKind::SetGlobal {
                 target,
                 value: Box::new(value),
@@ -904,19 +874,7 @@ impl<'a> Resolver<'a> {
     fn expression(&self, ty: Type, kind: ExprKind) -> Expr {
         let effects = self.effects(&kind);
         Expr {
-            runtime_type: RuntimeType::Exact(ty.clone()),
             ty,
-            effects,
-            origin: self.origin,
-            kind,
-        }
-    }
-
-    fn expression_with_runtime(&self, ty: Type, runtime_type: RuntimeType, kind: ExprKind) -> Expr {
-        let effects = self.effects(&kind);
-        Expr {
-            ty,
-            runtime_type,
             effects,
             origin: self.origin,
             kind,
@@ -928,6 +886,7 @@ impl<'a> Resolver<'a> {
             ExprKind::LitI64(_)
             | ExprKind::LitF64(_)
             | ExprKind::LitBool(_)
+            | ExprKind::LitUnit
             | ExprKind::LitNil
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
@@ -949,11 +908,10 @@ impl<'a> Resolver<'a> {
                 condition,
                 then_branch,
                 else_branch,
-            } => condition.effects.union(then_branch.effects).union(
-                else_branch
-                    .as_deref()
-                    .map_or(EffectSet::PURE, |expr| expr.effects),
-            ),
+            } => condition
+                .effects
+                .union(then_branch.effects)
+                .union(else_branch.effects),
             ExprKind::While { condition, body } => condition
                 .effects
                 .union(fold_effects(body))
@@ -970,23 +928,6 @@ impl<'a> Resolver<'a> {
 
     fn error(&self, message: impl Into<String>) -> Error {
         self.analyzer.error(self.origin, message)
-    }
-}
-
-fn append_runtime_types(runtime: &RuntimeType, output: &mut Vec<Type>) {
-    match runtime {
-        RuntimeType::Exact(ty) => {
-            if !output.contains(ty) {
-                output.push(ty.clone());
-            }
-        }
-        RuntimeType::LegacyUnion(types) => {
-            for ty in types {
-                if !output.contains(ty) {
-                    output.push(ty.clone());
-                }
-            }
-        }
     }
 }
 
@@ -1024,18 +965,6 @@ fn is_contextual_name(name: &str) -> bool {
             | "import"
             | "name"
     )
-}
-
-fn join_if_types(then_type: &Type, else_type: &Type) -> Option<Type> {
-    if matches!(then_type, Type::Nil) {
-        Some(else_type.clone())
-    } else if matches!(else_type, Type::Nil) || Type::unify_assignable(then_type, else_type) {
-        Some(then_type.clone())
-    } else if Type::unify_assignable(else_type, then_type) {
-        Some(else_type.clone())
-    } else {
-        None
-    }
 }
 
 enum PendingTop<'a> {

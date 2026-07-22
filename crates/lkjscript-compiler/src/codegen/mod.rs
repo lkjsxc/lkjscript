@@ -24,7 +24,7 @@ pub(crate) fn compile_program(program: &Program) -> Result<Chunk> {
             }
         }
     }
-    chunk.main.emit(Op::Nil);
+    chunk.main.emit(Op::Unit);
     chunk.main.emit(Op::Return);
     Ok(chunk)
 }

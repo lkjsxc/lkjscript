@@ -27,7 +27,7 @@ Str
 I64
 I64
 ->
-Nil
+Unit
 /sig
 params/
 lines
@@ -44,7 +44,7 @@ gte/
 i
 n
 /gte
-nil
+unit
 do/
 puts/
 nth/
