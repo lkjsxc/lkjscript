@@ -38,10 +38,7 @@ pub fn install_sys(prelude: &mut HashMap<String, Type>) {
     );
     prelude.insert(
         "sys-write-byte".into(),
-        fn_ty(
-            vec![Type::Handle, Type::I64],
-            system_result(Type::Nil),
-        ),
+        fn_ty(vec![Type::Handle, Type::I64], system_result(Type::Nil)),
     );
     prelude.insert(
         "sys-tty-guard-save".into(),
@@ -67,27 +64,18 @@ pub fn install_sys(prelude: &mut HashMap<String, Type>) {
         "sys-wait-ms".into(),
         fn_ty(vec![Type::I64], system_result(Type::Nil)),
     );
-    prelude.insert(
-        "sys-now-ms".into(),
-        fn_ty(vec![], system_result(Type::I64)),
-    );
+    prelude.insert("sys-now-ms".into(), fn_ty(vec![], system_result(Type::I64)));
     prelude.insert(
         "sys-socket".into(),
         fn_ty(vec![], system_result(Type::Handle)),
     );
     prelude.insert(
         "sys-bind".into(),
-        fn_ty(
-            vec![Type::Handle, Type::I64],
-            system_result(Type::Nil),
-        ),
+        fn_ty(vec![Type::Handle, Type::I64], system_result(Type::Nil)),
     );
     prelude.insert(
         "sys-listen".into(),
-        fn_ty(
-            vec![Type::Handle, Type::I64],
-            system_result(Type::Nil),
-        ),
+        fn_ty(vec![Type::Handle, Type::I64], system_result(Type::Nil)),
     );
     prelude.insert(
         "sys-accept".into(),
@@ -99,31 +87,19 @@ pub fn install_sys(prelude: &mut HashMap<String, Type>) {
     );
     prelude.insert(
         "sys-send".into(),
-        fn_ty(
-            vec![Type::Handle, Type::Str],
-            system_result(Type::I64),
-        ),
+        fn_ty(vec![Type::Handle, Type::Str], system_result(Type::I64)),
     );
     prelude.insert(
         "sys-poll".into(),
-        fn_ty(
-            vec![Type::Handle, Type::I64],
-            system_result(Type::I64),
-        ),
+        fn_ty(vec![Type::Handle, Type::I64], system_result(Type::I64)),
     );
     prelude.insert(
         "sys-tty-get".into(),
-        fn_ty(
-            vec![Type::Handle, Type::Buf],
-            system_result(Type::Nil),
-        ),
+        fn_ty(vec![Type::Handle, Type::Buf], system_result(Type::Nil)),
     );
     prelude.insert(
         "sys-tty-set".into(),
-        fn_ty(
-            vec![Type::Handle, Type::Buf],
-            system_result(Type::Nil),
-        ),
+        fn_ty(vec![Type::Handle, Type::Buf], system_result(Type::Nil)),
     );
 }
 
@@ -133,24 +109,15 @@ pub fn install_result_helpers(prelude: &mut HashMap<String, Type>) {
     let result = Type::Result(Box::new(success.clone()), Box::new(failure.clone()));
     prelude.insert(
         "ok".into(),
-        forall(
-            &["T", "E"],
-            fn_ty(vec![success.clone()], result.clone()),
-        ),
+        forall(&["T", "E"], fn_ty(vec![success.clone()], result.clone())),
     );
     prelude.insert(
         "err".into(),
-        forall(
-            &["T", "E"],
-            fn_ty(vec![failure.clone()], result.clone()),
-        ),
+        forall(&["T", "E"], fn_ty(vec![failure.clone()], result.clone())),
     );
     prelude.insert(
         "is-ok".into(),
-        forall(
-            &["T", "E"],
-            fn_ty(vec![result.clone()], Type::Bool),
-        ),
+        forall(&["T", "E"], fn_ty(vec![result.clone()], Type::Bool)),
     );
     prelude.insert(
         "unwrap-ok".into(),

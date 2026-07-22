@@ -58,11 +58,7 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
             let locals = p.locals;
             let args_start = vm.stack.len() - argc as usize;
             if is_tail_position(vm) {
-                let stack_base = vm
-                    .frames
-                    .last()
-                    .map(|frame| frame.stack_base)
-                    .unwrap_or(0);
+                let stack_base = vm.frames.last().map(|frame| frame.stack_base).unwrap_or(0);
                 let args = vm.stack[args_start..].to_vec();
                 vm.stack.truncate(stack_base);
                 vm.stack.extend_from_slice(&args);
@@ -110,6 +106,7 @@ fn is_tail_position<J: JitHook>(vm: &Vm<'_, J>) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use lkjscript_core::{Chunk, FunctionProto, NullJit};

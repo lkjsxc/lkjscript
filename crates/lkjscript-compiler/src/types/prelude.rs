@@ -30,7 +30,9 @@ pub fn prelude() -> HashMap<String, Type> {
     for n in ["f+", "f-", "f*", "f/"] {
         m.insert(n.into(), f64_bin.clone());
     }
-    for n in ["=", "!=", "<", "<=", ">", ">=", "lt", "le", "gt", "ge", "eq", "lte", "gte"] {
+    for n in [
+        "=", "!=", "<", "<=", ">", ">=", "lt", "le", "gt", "ge", "eq", "lte", "gte",
+    ] {
         m.insert(n.into(), i64_cmp.clone());
     }
     for n in ["f=", "f!=", "f<", "f<=", "f>", "f>="] {
@@ -41,7 +43,10 @@ pub fn prelude() -> HashMap<String, Type> {
         forall(&["T"], fn_ty(vec![Type::Param("T".into())], Type::Bool)),
     );
     m.insert("not".into(), fn_ty(vec![Type::Bool], Type::Bool));
-    m.insert("and".into(), fn_ty(vec![Type::Bool, Type::Bool], Type::Bool));
+    m.insert(
+        "and".into(),
+        fn_ty(vec![Type::Bool, Type::Bool], Type::Bool),
+    );
     m.insert("or".into(), fn_ty(vec![Type::Bool, Type::Bool], Type::Bool));
 
     let t = Type::Param("T".into());
@@ -57,7 +62,10 @@ pub fn prelude() -> HashMap<String, Type> {
     );
     m.insert(
         "car".into(),
-        forall(&["T"], fn_ty(vec![Type::List(Box::new(t.clone()))], t.clone())),
+        forall(
+            &["T"],
+            fn_ty(vec![Type::List(Box::new(t.clone()))], t.clone()),
+        ),
     );
     m.insert(
         "cdr".into(),
@@ -85,7 +93,10 @@ pub fn prelude() -> HashMap<String, Type> {
     m.insert("exit".into(), fn_ty(vec![Type::I64], Type::Nil));
     m.insert("buf-new".into(), fn_ty(vec![Type::I64], Type::Buf));
     m.insert("buf-len".into(), fn_ty(vec![Type::Buf], Type::I64));
-    m.insert("buf-ref".into(), fn_ty(vec![Type::Buf, Type::I64], Type::I64));
+    m.insert(
+        "buf-ref".into(),
+        fn_ty(vec![Type::Buf, Type::I64], Type::I64),
+    );
     m.insert(
         "buf-set".into(),
         fn_ty(vec![Type::Buf, Type::I64, Type::I64], Type::Nil),
@@ -100,8 +111,14 @@ pub fn prelude() -> HashMap<String, Type> {
         fn_ty(vec![Type::Buf, Type::I64, Type::I64], Type::Nil),
     );
     m.insert("str-len".into(), fn_ty(vec![Type::Str], Type::I64));
-    m.insert("str-ref".into(), fn_ty(vec![Type::Str, Type::I64], Type::I64));
-    m.insert("str-append".into(), fn_ty(vec![Type::Str, Type::Str], Type::Str));
+    m.insert(
+        "str-ref".into(),
+        fn_ty(vec![Type::Str, Type::I64], Type::I64),
+    );
+    m.insert(
+        "str-append".into(),
+        fn_ty(vec![Type::Str, Type::Str], Type::Str),
+    );
     m.insert(
         "str-slice".into(),
         fn_ty(vec![Type::Str, Type::I64, Type::I64], Type::Str),

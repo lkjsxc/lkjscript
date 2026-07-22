@@ -22,9 +22,7 @@ pub fn str_len(arena: &Arena, value: Value) -> Result<Value> {
 }
 
 pub fn str_ref(arena: &Arena, string: Value, index: Value) -> Result<Value> {
-    let index = index
-        .as_int()
-        .ok_or_else(|| Error::msg("str-ref index"))?;
+    let index = index.as_int().ok_or_else(|| Error::msg("str-ref index"))?;
     let index = usize::try_from(index).map_err(|_| Error::msg("str-ref index out of range"))?;
     let byte = *as_str(arena, string)?
         .as_bytes()
@@ -43,9 +41,7 @@ pub fn str_slice(arena: &mut Arena, string: Value, start: Value, end: Value) -> 
     let start = start
         .as_int()
         .ok_or_else(|| Error::msg("str-slice start"))?;
-    let end = end
-        .as_int()
-        .ok_or_else(|| Error::msg("str-slice end"))?;
+    let end = end.as_int().ok_or_else(|| Error::msg("str-slice end"))?;
     let start = usize::try_from(start).map_err(|_| Error::msg("str-slice start out of range"))?;
     let end = usize::try_from(end).map_err(|_| Error::msg("str-slice end out of range"))?;
     let bytes = as_str(arena, string)?.as_bytes();
@@ -58,9 +54,7 @@ pub fn str_slice(arena: &mut Arena, string: Value, start: Value, end: Value) -> 
 }
 
 pub fn str_from_byte(arena: &mut Arena, byte: Value) -> Result<Value> {
-    let number = byte
-        .as_int()
-        .ok_or_else(|| Error::msg("str-from-byte"))?;
+    let number = byte.as_int().ok_or_else(|| Error::msg("str-from-byte"))?;
     let byte = u8::try_from(number).map_err(|_| Error::msg("str-from-byte out of range"))?;
     Ok(arena.alloc(HeapObj::Str(String::from(char::from(byte)))))
 }
@@ -106,9 +100,7 @@ impl ResourceTable {
 
     pub fn sys_bind(&self, handle: Value, port: Value) -> Result<Value> {
         let raw = self.socket_raw(handle, "sys-bind")?;
-        let port = port
-            .as_int()
-            .ok_or_else(|| Error::msg("sys-bind port"))?;
+        let port = port.as_int().ok_or_else(|| Error::msg("sys-bind port"))?;
         let port = u16::try_from(port).map_err(|_| Error::msg("sys-bind port out of range"))?;
         lkjscript_sys::set_reuseaddr(raw)
             .map_err(|error| Error::msg(format!("sys-bind reuse: {error}")))?;
@@ -122,8 +114,8 @@ impl ResourceTable {
         let backlog = backlog
             .as_int()
             .ok_or_else(|| Error::msg("sys-listen backlog"))?;
-        let backlog = i32::try_from(backlog)
-            .map_err(|_| Error::msg("sys-listen backlog out of range"))?;
+        let backlog =
+            i32::try_from(backlog).map_err(|_| Error::msg("sys-listen backlog out of range"))?;
         if backlog < 0 {
             return Err(Error::msg("sys-listen backlog out of range"));
         }
@@ -185,8 +177,10 @@ impl ResourceTable {
         } else {
             let index = self.owned_index(handle, "sys-read-byte")?;
             match self.slots.get_mut(index).and_then(Option::as_mut) {
-                Some(OwnedResource::File(file)) => lkjscript_sys::read_fd(file.as_raw(), &mut buffer)
-                    .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?,
+                Some(OwnedResource::File(file)) => {
+                    lkjscript_sys::read_fd(file.as_raw(), &mut buffer)
+                        .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?
+                }
                 Some(OwnedResource::Socket(socket)) => {
                     lkjscript_sys::recv_sock(socket.as_raw(), &mut buffer)
                         .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?
@@ -206,7 +200,8 @@ impl ResourceTable {
         let byte = byte
             .as_int()
             .ok_or_else(|| Error::msg("sys-write-byte byte"))?;
-        let byte = u8::try_from(byte).map_err(|_| Error::msg("sys-write-byte byte out of range"))?;
+        let byte =
+            u8::try_from(byte).map_err(|_| Error::msg("sys-write-byte byte out of range"))?;
         match self.slots.get_mut(index).and_then(Option::as_mut) {
             Some(OwnedResource::File(file)) => {
                 lkjscript_sys::write_fd(file.as_raw(), &[byte])
@@ -229,9 +224,7 @@ impl ResourceTable {
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::File(file)) => Ok(file.as_raw()),
             Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
-            None => Err(Error::msg(format!(
-                "{operation}: stale or unknown handle"
-            ))),
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
@@ -239,10 +232,10 @@ impl ResourceTable {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
-            Some(OwnedResource::File(_)) => Err(Error::msg(format!("{operation}: handle is not a socket"))),
-            None => Err(Error::msg(format!(
-                "{operation}: stale or unknown handle"
-            ))),
+            Some(OwnedResource::File(_)) => {
+                Err(Error::msg(format!("{operation}: handle is not a socket")))
+            }
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
@@ -316,9 +309,7 @@ pub fn unwrap_err(arena: &Arena, value: Value) -> Result<Value> {
 }
 
 pub fn str_from_i64(arena: &mut Arena, number: Value) -> Result<Value> {
-    let number = number
-        .as_int()
-        .ok_or_else(|| Error::msg("str-from-i64"))?;
+    let number = number.as_int().ok_or_else(|| Error::msg("str-from-i64"))?;
     Ok(arena.alloc(HeapObj::Str(number.to_string())))
 }
 
@@ -353,10 +344,8 @@ mod tests {
     impl TempFile {
         fn new() -> std::io::Result<Self> {
             let id = NEXT_FILE.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "lkjscript-handle-{}-{id}",
-                std::process::id()
-            ));
+            let path =
+                std::env::temp_dir().join(format!("lkjscript-handle-{}-{id}", std::process::id()));
             fs::write(&path, b"x")?;
             Ok(Self(path))
         }
@@ -426,6 +415,9 @@ mod tests {
         let unwrapped = unwrap_ok(&arena, result)
             .err()
             .map(|error| error.to_string());
-        assert_eq!(unwrapped.as_deref(), Some("unwrap-ok: sys-example: failure"));
+        assert_eq!(
+            unwrapped.as_deref(),
+            Some("unwrap-ok: sys-example: failure")
+        );
     }
 }

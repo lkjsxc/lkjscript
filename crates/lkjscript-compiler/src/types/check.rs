@@ -41,18 +41,19 @@ pub fn typecheck_program(program: &Program) -> Result<()> {
 fn install_def_sig(env: &mut HashMap<String, Type>, args: &[Expr]) -> Result<()> {
     match classify_def(args)? {
         DefKind::Fn { name, fn_args } => {
-            let (sig_params, sig_ret, param_names, param_tys, _, forall_vars) =
-                parse_fn(fn_args)?;
-            if sig_params.len() != param_tys.len() || sig_params.len() != param_names.len() {
+            let parsed = parse_fn(fn_args)?;
+            if parsed.signature_params.len() != parsed.param_types.len()
+                || parsed.signature_params.len() != parsed.param_names.len()
+            {
                 return Err(Error::msg(format!("def {name}: sig/params arity mismatch")));
             }
             let mut fty = Type::Fn {
-                params: sig_params,
-                ret: Box::new(sig_ret),
+                params: parsed.signature_params,
+                ret: Box::new(parsed.signature_return),
             };
-            if !forall_vars.is_empty() {
+            if !parsed.forall_vars.is_empty() {
                 fty = Type::Forall {
-                    vars: forall_vars,
+                    vars: parsed.forall_vars,
                     body: Box::new(fty),
                 };
             }
@@ -69,35 +70,33 @@ fn install_def_sig(env: &mut HashMap<String, Type>, args: &[Expr]) -> Result<()>
 fn check_def_body(env: &HashMap<String, Type>, args: &[Expr]) -> Result<()> {
     match classify_def(args)? {
         DefKind::Fn { name, fn_args } => {
-            let (sig_params, sig_ret, param_names, param_tys, body_expr, forall_vars) =
-                parse_fn(fn_args)?;
-            for (s, p) in sig_params.iter().zip(&param_tys) {
-                if !Type::unify_assignable(p, s) && !Type::unify_assignable(s, p) {
+            let parsed = parse_fn(fn_args)?;
+            for (signature, parameter) in parsed.signature_params.iter().zip(&parsed.param_types) {
+                if !Type::unify_assignable(parameter, signature)
+                    && !Type::unify_assignable(signature, parameter)
+                {
                     return Err(Error::msg(format!(
                         "def {name}: param type mismatch sig vs params"
                     )));
                 }
             }
             let mut local = env.clone();
-            for v in &forall_vars {
-                // Type params are not value bindings; ignore.
-                let _ = v;
-            }
-            for (n, t) in param_names.iter().zip(param_tys.iter()) {
-                local.insert(n.clone(), t.clone());
+            for (parameter, ty) in parsed.param_names.iter().zip(&parsed.param_types) {
+                local.insert(parameter.clone(), ty.clone());
             }
             // Self ref for recursion: monomorphic version for body check.
             local.insert(
                 name.clone(),
                 Type::Fn {
-                    params: sig_params.clone(),
-                    ret: Box::new(sig_ret.clone()),
+                    params: parsed.signature_params.clone(),
+                    ret: Box::new(parsed.signature_return.clone()),
                 },
             );
-            let got = infer_expr(&local, body_expr)?;
-            if !Type::unify_assignable(&got, &sig_ret) {
+            let got = infer_expr(&local, parsed.body)?;
+            if !Type::unify_assignable(&got, &parsed.signature_return) {
                 return Err(Error::msg(format!(
-                    "def {name}: body type {got:?} not assignable to {sig_ret:?}"
+                    "def {name}: body type {got:?} not assignable to {:?}",
+                    parsed.signature_return
                 )));
             }
             Ok(())
@@ -131,12 +130,13 @@ fn classify_def(args: &[Expr]) -> Result<DefKind<'_>> {
     match args {
         [_, Expr::Call { name: t, args: ta }, val] if t == "type" => {
             let ty = parse_type_form(ta)?;
-            Ok(DefKind::Value { name, ty, expr: val })
+            Ok(DefKind::Value {
+                name,
+                ty,
+                expr: val,
+            })
         }
-        [_, Expr::Call { name: f, args: fa }] if f == "fn" => Ok(DefKind::Fn {
-            name,
-            fn_args: fa,
-        }),
+        [_, Expr::Call { name: f, args: fa }] if f == "fn" => Ok(DefKind::Fn { name, fn_args: fa }),
         _ => Err(Error::msg(format!(
             "def {name}: need fn/…/fn or type/…/type value"
         ))),
@@ -166,7 +166,16 @@ fn parse_type_form(kids: &[Expr]) -> Result<Type> {
     Ok(t)
 }
 
-fn parse_fn(args: &[Expr]) -> Result<(Vec<Type>, Type, Vec<String>, Vec<Type>, &Expr, Vec<String>)> {
+struct ParsedFn<'a> {
+    signature_params: Vec<Type>,
+    signature_return: Type,
+    param_names: Vec<String>,
+    param_types: Vec<Type>,
+    body: &'a Expr,
+    forall_vars: Vec<String>,
+}
+
+fn parse_fn(args: &[Expr]) -> Result<ParsedFn<'_>> {
     let mut sig = None;
     let mut params = None;
     let mut body = None;
@@ -199,7 +208,14 @@ fn parse_fn(args: &[Expr]) -> Result<(Vec<Type>, Type, Vec<String>, Vec<Type>, &
     let (sp, sr) = sig.ok_or_else(|| Error::msg("fn missing mandatory sig/ … /sig"))?;
     let (names, tys) = params.ok_or_else(|| Error::msg("fn missing params/ … /params"))?;
     let body = body.ok_or_else(|| Error::msg("fn missing body"))?;
-    Ok((sp, sr, names, tys, body, forall_vars))
+    Ok(ParsedFn {
+        signature_params: sp,
+        signature_return: sr,
+        param_names: names,
+        param_types: tys,
+        body,
+        forall_vars,
+    })
 }
 
 fn parse_sig(kids: &[Expr]) -> Result<(Vec<Type>, Type)> {
@@ -220,7 +236,7 @@ fn type_atoms(kids: &[Expr]) -> Result<Vec<String>> {
 }
 
 fn parse_typed_params(kids: &[Expr]) -> Result<(Vec<String>, Vec<Type>)> {
-    if kids.len() % 2 != 0 {
+    if !kids.len().is_multiple_of(2) {
         return Err(Error::msg("params must be name Type pairs"));
     }
     let mut names = Vec::new();

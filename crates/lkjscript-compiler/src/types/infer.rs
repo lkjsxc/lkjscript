@@ -45,15 +45,26 @@ pub fn infer_expr(env: &HashMap<String, Type>, e: &Expr) -> Result<Type> {
             }
             infer_expr(env, &args[1])
         }
-        Expr::Call { name, args } if matches!(name.as_str(), "+" | "-" | "*" | "/" | "div")
-            && args.len() >= 2 =>
+        Expr::Call { name, args }
+            if matches!(name.as_str(), "+" | "-" | "*" | "/" | "div") && args.len() >= 2 =>
         {
             infer_num_op(env, name, args)
         }
         Expr::Call { name, args }
             if matches!(
                 name.as_str(),
-                "=" | "!=" | "<" | "<=" | ">" | ">=" | "lt" | "le" | "gt" | "ge" | "eq" | "lte" | "gte"
+                "=" | "!="
+                    | "<"
+                    | "<="
+                    | ">"
+                    | ">="
+                    | "lt"
+                    | "le"
+                    | "gt"
+                    | "ge"
+                    | "eq"
+                    | "lte"
+                    | "gte"
             ) && args.len() == 2 =>
         {
             infer_cmp_op(env, args)
@@ -64,22 +75,19 @@ pub fn infer_expr(env: &HashMap<String, Type>, e: &Expr) -> Result<Type> {
 
 fn infer_num_op(env: &HashMap<String, Type>, name: &str, args: &[Expr]) -> Result<Type> {
     let mut saw_f64 = false;
-    let mut saw_i64 = false;
     for a in args {
         let g = infer_expr(env, a)?;
         if Type::unify_assignable(&g, &Type::F64) {
             saw_f64 = true;
-        } else if Type::unify_assignable(&g, &Type::I64) {
-            saw_i64 = true;
-        } else {
-            return Err(Error::msg(format!("{name}: expected I64 or F64, got {g:?}")));
+        } else if !Type::unify_assignable(&g, &Type::I64) {
+            return Err(Error::msg(format!(
+                "{name}: expected I64 or F64, got {g:?}"
+            )));
         }
     }
     // Mixed I64/F64 promotes to F64 (explicit widths still required at bindings).
     if saw_f64 {
         Ok(Type::F64)
-    } else if saw_i64 {
-        Ok(Type::I64)
     } else {
         Ok(Type::I64)
     }
@@ -162,16 +170,12 @@ fn infer_if(env: &HashMap<String, Type>, args: &[Expr]) -> Result<Type> {
     // Nil is unit for side-effect branches: join prefers the other arm.
     if matches!(t, Type::Nil) {
         Ok(e)
-    } else if matches!(e, Type::Nil) {
-        Ok(t)
-    } else if Type::unify_assignable(&t, &e) {
+    } else if matches!(e, Type::Nil) || Type::unify_assignable(&t, &e) {
         Ok(t)
     } else if Type::unify_assignable(&e, &t) {
         Ok(e)
     } else {
-        Err(Error::msg(format!(
-            "if branches differ: {t:?} vs {e:?}"
-        )))
+        Err(Error::msg(format!("if branches differ: {t:?} vs {e:?}")))
     }
 }
 

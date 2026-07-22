@@ -24,9 +24,7 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            eprintln!(
-                "usage: lkjscript-xtask [check-docs|check-tree|check-sources|quiet ...]"
-            );
+            eprintln!("usage: lkjscript-xtask [check-docs|check-tree|check-sources|quiet ...]");
             2
         }
     };
@@ -134,18 +132,47 @@ fn check_sources(root: &Path) -> i32 {
 }
 
 fn quiet_test(root: &Path) -> i32 {
-    let status = Command::new("cargo")
-        .args(["test", "--workspace", "--quiet", "--locked"])
+    run_cargo(
+        root,
+        &["test", "--workspace", "--quiet", "--locked"],
+        "cargo test",
+    )
+}
+
+fn quiet_format(root: &Path) -> i32 {
+    run_cargo(root, &["fmt", "--all", "--", "--check"], "cargo fmt")
+}
+
+fn quiet_clippy(root: &Path) -> i32 {
+    run_cargo(
+        root,
+        &[
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+            "--locked",
+            "--",
+            "-D",
+            "warnings",
+        ],
+        "cargo clippy",
+    )
+}
+
+fn run_cargo(root: &Path, arguments: &[&str], label: &str) -> i32 {
+    match Command::new("cargo")
+        .args(arguments)
         .current_dir(root)
-        .status();
-    match status {
+        .status()
+    {
         Ok(status) if status.success() => 0,
         Ok(status) => {
-            eprintln!("cargo test exited with {status}");
+            eprintln!("{label} exited with {status}");
             1
         }
         Err(error) => {
-            eprintln!("run cargo test: {error}");
+            eprintln!("run {label}: {error}");
             1
         }
     }
@@ -155,6 +182,8 @@ fn quiet_verify(root: &Path) -> i32 {
     if check_docs(root) != 0
         || check_tree(root) != 0
         || check_sources(root) != 0
+        || quiet_format(root) != 0
+        || quiet_clippy(root) != 0
         || quiet_test(root) != 0
     {
         return 1;

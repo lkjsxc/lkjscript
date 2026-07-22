@@ -145,6 +145,7 @@ fn is_ident_byte(b: u8) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

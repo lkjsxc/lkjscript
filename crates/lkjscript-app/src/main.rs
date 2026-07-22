@@ -137,9 +137,7 @@ fn disassemble_function(chunk: &Chunk, function: &FunctionProto) -> Result<(), S
         };
         let annotation = operand_annotation(chunk, op, operand);
         if let Some(operand) = operand {
-            println!(
-                "  {instruction_offset:04} {op:?} {operand}{annotation}"
-            );
+            println!("  {instruction_offset:04} {op:?} {operand}{annotation}");
         } else {
             println!("  {instruction_offset:04} {op:?}");
         }

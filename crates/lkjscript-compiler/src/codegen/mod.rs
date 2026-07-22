@@ -31,8 +31,26 @@ pub fn compile_program(program: &Program) -> Result<Chunk> {
 
 fn install_builtins(chunk: &mut Chunk) {
     for name in [
-        "+", "-", "*", "/", "=", "!=", "<", "<=", ">", ">=", "not", "cons", "car", "cdr",
-        "null?", "print", "flush", "read-byte", "write-byte", "exit",
+        "+",
+        "-",
+        "*",
+        "/",
+        "=",
+        "!=",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "not",
+        "cons",
+        "car",
+        "cdr",
+        "null?",
+        "print",
+        "flush",
+        "read-byte",
+        "write-byte",
+        "exit",
     ] {
         let gid = chunk.intern_global(name);
         let _ = gid;
@@ -75,9 +93,10 @@ fn compile_def(chunk: &mut Chunk, args: &[Expr]) -> Result<()> {
             chunk.main.emit(Op::Pop);
             Ok(())
         }
-        [_, Expr::Call { name: fn_tag, args: fa }] if fn_tag == "fn" => {
-            compile_fn_def(chunk, &name, fa)
-        }
+        [_, Expr::Call {
+            name: fn_tag,
+            args: fa,
+        }] if fn_tag == "fn" => compile_fn_def(chunk, &name, fa),
         _ => Err(Error::msg("def expects fn/ or type/ value form")),
     }
 }

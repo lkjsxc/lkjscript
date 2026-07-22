@@ -19,7 +19,11 @@ impl Value {
     pub const TRUE: Self = Self((1 << 3) | TAG_BOOL);
 
     pub fn from_bool(b: bool) -> Self {
-        if b { Self::TRUE } else { Self::FALSE }
+        if b {
+            Self::TRUE
+        } else {
+            Self::FALSE
+        }
     }
 
     pub fn from_int(n: i64) -> Self {
@@ -34,44 +38,70 @@ impl Value {
         Self(((index as u64) << 3) | TAG_HANDLE)
     }
 
-    pub fn is_nil(self) -> bool { self.0 & TAG_MASK == TAG_NIL }
+    pub fn is_nil(self) -> bool {
+        self.0 & TAG_MASK == TAG_NIL
+    }
 
     pub fn as_bool(self) -> Option<bool> {
-        if self.0 & TAG_MASK != TAG_BOOL { return None; }
+        if self.0 & TAG_MASK != TAG_BOOL {
+            return None;
+        }
         Some(self.0 >> 3 != 0)
     }
 
     pub fn as_int(self) -> Option<i64> {
-        if self.0 & TAG_MASK != TAG_INT { return None; }
+        if self.0 & TAG_MASK != TAG_INT {
+            return None;
+        }
         Some((self.0 as i64) >> 3)
     }
 
     pub fn as_heap(self) -> Option<u32> {
-        if self.0 & TAG_MASK != TAG_HEAP { return None; }
+        if self.0 & TAG_MASK != TAG_HEAP {
+            return None;
+        }
         Some((self.0 >> 3) as u32)
     }
 
     pub fn as_handle(self) -> Option<u32> {
-        if self.0 & TAG_MASK != TAG_HANDLE { return None; }
+        if self.0 & TAG_MASK != TAG_HANDLE {
+            return None;
+        }
         Some((self.0 >> 3) as u32)
     }
 
     pub fn is_truthy(self) -> bool {
-        if self.is_nil() { return false; }
-        if let Some(b) = self.as_bool() { return b; }
+        if self.is_nil() {
+            return false;
+        }
+        if let Some(b) = self.as_bool() {
+            return b;
+        }
         true
     }
 
-    pub fn raw(self) -> u64 { self.0 }
+    pub fn raw(self) -> u64 {
+        self.0
+    }
 }
 
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_nil() { return write!(f, "nil"); }
-        if let Some(b) = self.as_bool() { return write!(f, "{b}"); }
-        if let Some(n) = self.as_int() { return write!(f, "{n}"); }
-        if let Some(h) = self.as_handle() { return write!(f, "handle#{h}"); }
-        if let Some(i) = self.as_heap() { return write!(f, "heap#{i}"); }
+        if self.is_nil() {
+            return write!(f, "nil");
+        }
+        if let Some(b) = self.as_bool() {
+            return write!(f, "{b}");
+        }
+        if let Some(n) = self.as_int() {
+            return write!(f, "{n}");
+        }
+        if let Some(h) = self.as_handle() {
+            return write!(f, "handle#{h}");
+        }
+        if let Some(i) = self.as_heap() {
+            return write!(f, "heap#{i}");
+        }
         write!(f, "value({:x})", self.0)
     }
 }
@@ -92,9 +122,14 @@ pub enum HeapObj {
 impl HeapObj {
     pub fn trace(&self, mark: &mut dyn FnMut(Value)) {
         match self {
-            HeapObj::Pair { car, cdr } => { mark(*car); mark(*cdr); }
+            HeapObj::Pair { car, cdr } => {
+                mark(*car);
+                mark(*cdr);
+            }
             HeapObj::Closure { captures, .. } => {
-                for c in captures { mark(*c); }
+                for c in captures {
+                    mark(*c);
+                }
             }
             HeapObj::ResultOk(v) | HeapObj::ResultErr(v) => mark(*v),
             _ => {}

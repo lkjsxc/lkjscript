@@ -161,8 +161,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
         x if x == Op::SysTtyGet as u8 => {
             let buffer = vm.pop();
             let handle = vm.pop();
-            let result =
-                crate::host_buf::sys_tty_get(&mut vm.arena, &vm.resources, handle, buffer);
+            let result = crate::host_buf::sys_tty_get(&mut vm.arena, &vm.resources, handle, buffer);
             push_language_result(vm, result);
             Ok(true)
         }
@@ -211,13 +210,13 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
         x if x == Op::SysWaitMs as u8 => {
             let duration = vm.pop();
             let result = match duration.as_int() {
-                Some(milliseconds) if milliseconds >= 0 => lkjscript_sys::sleep_ms(
-                    milliseconds as u64,
-                )
-                .map(|()| Value::NIL)
-                .map_err(|error| {
-                    lkjscript_core::Error::msg(format!("sys-wait-ms: {error}"))
-                }),
+                Some(milliseconds) if milliseconds >= 0 => {
+                    lkjscript_sys::sleep_ms(milliseconds as u64)
+                        .map(|()| Value::NIL)
+                        .map_err(|error| {
+                            lkjscript_core::Error::msg(format!("sys-wait-ms: {error}"))
+                        })
+                }
                 Some(_) => Err(lkjscript_core::Error::msg(
                     "sys-wait-ms: duration out of range",
                 )),

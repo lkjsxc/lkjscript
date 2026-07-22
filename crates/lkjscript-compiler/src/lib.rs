@@ -32,10 +32,7 @@ pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<Chunk
     let fake = PathBuf::from(path);
     let program = import::Program {
         root: fake.clone(),
-        files: vec![import::SourceFile {
-            path: fake,
-            forms,
-        }],
+        files: vec![import::SourceFile { path: fake, forms }],
     };
     compile_program(&program)
 }
@@ -60,8 +57,8 @@ pub(crate) fn ensure_source_path(path: &Path) -> Result<()> {
 }
 
 fn parse_source(source: &str, path: &str, limits: &Limits) -> Result<Vec<Expr>> {
-    let tokens = lex::lex(source)
-        .map_err(|error| lkjscript_core::Error::msg(format!("{path}: {error}")))?;
+    let tokens =
+        lex::lex(source).map_err(|error| lkjscript_core::Error::msg(format!("{path}: {error}")))?;
     check_file_limits(&tokens, limits, path)?;
     let forms = parse_tokens(&tokens)
         .map_err(|error| lkjscript_core::Error::msg(format!("{path}: {error}")))?;
@@ -96,7 +93,8 @@ mod tests {
 
     #[test]
     fn descriptor_names_are_handle_and_result_explicit() {
-        let canonical = "do/\nis-ok/\nsys-close/\nstdin-handle/\n/stdin-handle\n/sys-close\n/is-ok\n/do\n";
+        let canonical =
+            "do/\nis-ok/\nsys-close/\nstdin-handle/\n/stdin-handle\n/sys-close\n/is-ok\n/do\n";
         let obsolete = "do/\nclose/\nstdin-handle/\n/stdin-handle\n/close\n/do\n";
         assert!(compile_source(canonical, "handles.lkjscript", &Limits::default()).is_ok());
         assert!(compile_source(obsolete, "handles.lkjscript", &Limits::default()).is_err());

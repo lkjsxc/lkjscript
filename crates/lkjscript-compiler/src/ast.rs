@@ -5,12 +5,18 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// Numeric literal. `float_syntax` is true when the source used a `.` (e.g. `2.0`).
-    LitNum { value: f64, float_syntax: bool },
+    LitNum {
+        value: f64,
+        float_syntax: bool,
+    },
     LitBool(bool),
     LitNil,
     LitStr(String),
     Symbol(String),
-    Call { name: String, args: Vec<Expr> },
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
     List(Vec<Expr>),
 }
 

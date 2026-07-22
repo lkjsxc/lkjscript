@@ -6,9 +6,9 @@ Define current evidence gates and their exact boundaries.
 
 ## Status
 
-Source identity and source-tree checks are **Current**. Formatting, Clippy,
-semantic conformance, and stronger documentation checks are an
-**Accepted Target** for the next gate revision.
+Source identity, source-tree, formatting, Clippy, and workspace test checks are
+**Current**. Generated semantic conformance and stronger documentation checks
+remain an **Accepted Target**.
 
 ## Current Local Gates
 
@@ -29,9 +29,13 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
    tree, using the compiler's shared language rule;
 4. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
 5. successful compilation of 11 roots whose import closures cover the corpus;
-6. workspace unit tests with the locked Cargo graph.
+6. `cargo fmt --all -- --check`;
+7. strict Clippy for the workspace, all targets, and all features;
+8. workspace unit tests with the locked Cargo graph.
 
-It does not yet run rustfmt, Clippy, runtime smokes, benchmarks, or Docker.
+Test modules may locally allow panic-oriented assertion ergonomics. Product
+code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
+`unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.
 
 ## Runtime Acceptance
 
@@ -74,10 +78,7 @@ The next `quiet verify` revision adds:
 - explicit placeholder scanning;
 - import/source coverage validation rather than relying on a hand-maintained
   root assumption;
-- focused type/prelude/codegen/VM conformance;
-- `cargo fmt --all -- --check`;
-- strict workspace Clippy;
-- workspace tests.
+- focused generated type/prelude/codegen/VM conformance.
 
 Runtime smokes remain separate so focused compiler work does not need a socket
 or terminal. Docker remains the final package and installed-library gate.

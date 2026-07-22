@@ -2,10 +2,10 @@
 
 use lkjscript_core::{Error, HeapObj, JitHook, Op, Result, Value};
 
-use crate::host::{flush_out, print_value, read_byte, write_byte, write_str};
 use super::calls::{call, car, cdr, make_closure};
 use super::numeric::{as_f64, bin_cmp, bin_num};
 use super::Vm;
+use crate::host::{flush_out, print_value, read_byte, write_byte, write_str};
 
 fn eq_values<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     let b = vm.pop();

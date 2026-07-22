@@ -83,9 +83,7 @@ impl Type {
                     ret: er,
                 },
             ) if gp.len() == ep.len() => {
-                gp.iter()
-                    .zip(ep)
-                    .all(|(g, e)| Self::unify_assignable(g, e))
+                gp.iter().zip(ep).all(|(g, e)| Self::unify_assignable(g, e))
                     && Self::unify_assignable(gr, er)
             }
             _ => false,
@@ -160,7 +158,8 @@ fn is_type_param_name(s: &str) -> bool {
         && s.chars().all(|c| c.is_ascii_alphanumeric())
         && !matches!(
             s,
-            "Nil" | "Bool"
+            "Nil"
+                | "Bool"
                 | "I32"
                 | "I64"
                 | "U32"

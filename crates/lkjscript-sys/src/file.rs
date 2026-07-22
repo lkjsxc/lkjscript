@@ -3,7 +3,7 @@
 use std::ffi::CString;
 use std::os::fd::RawFd;
 
-use crate::fd::{errno, OwnedFd, FdError};
+use crate::fd::{errno, FdError, OwnedFd};
 
 const O_RDONLY: i32 = 0;
 const O_WRONLY: i32 = 1;
@@ -80,11 +80,7 @@ mod tests {
 
     #[test]
     fn missing_paths_are_false_but_malformed_paths_are_errors() {
-        let missing = format!(
-            "/tmp/lkjscript-missing-{}-{}",
-            std::process::id(),
-            line!()
-        );
+        let missing = format!("/tmp/lkjscript-missing-{}-{}", std::process::id(), line!());
         assert_eq!(path_exists(&missing).ok(), Some(false));
         assert!(path_exists("embedded\0nul").is_err());
     }

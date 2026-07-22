@@ -26,6 +26,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
   and canonicalized symlink escapes fail
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
+- Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
+  Clippy for all targets/features; product panic/unwrap/expect paths stay denied
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
   and return-adjacent tail-frame reuse
 - CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub
@@ -63,19 +65,17 @@ The highest-priority defects are:
    VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
 7. the terminal exit guard remains process-global and is not a supervisor-safe
    terminal lease;
-8. monotonic handle tokens retain closed metadata until the VM ends;
-9. the repository is not rustfmt-clean and strict Clippy still reports
-    pre-existing production and test debt.
+8. monotonic handle tokens retain closed metadata until the VM ends.
 
 ## Evidence
 
-The source-cutover working tree was checked on Linux x86-64 with Rust/Cargo
+The current working tree was checked on Linux x86-64 with Rust/Cargo
 1.96.0. Evidence is command-specific; Docker and performance are not implied.
 
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 33 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 33 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | `check-sources` | passed for 116 `.lkjscript` sources, 172 imports, and 11 compile roots |
 | `cargo build --workspace --release --locked` | passed |
@@ -105,8 +105,8 @@ The next safety/conformance sequence is:
 1. implement an exact current numeric contract and remove unsupported prelude
    vocabulary;
 2. add generated prelude/codegen/VM conformance coverage;
-3. make rustfmt, Clippy, documentation status, source coverage, and explicit
-   placeholder scanning part of the local honesty gate.
+3. make documentation status, exact source-closure coverage, and explicit
+   placeholder scanning machine-checked.
 
 ## Deferred
 

@@ -43,10 +43,7 @@ pub fn load_program(path: &Path, limits: &Limits) -> Result<Program> {
         &mut done,
         &mut files,
     )?;
-    Ok(Program {
-        root: entry,
-        files,
-    })
+    Ok(Program { root: entry, files })
 }
 
 pub fn validate_source_tree(root: &Path, limits: &Limits) -> Result<()> {
@@ -95,8 +92,7 @@ fn load_file(
     let label = canonical.display().to_string();
     let tokens = lex(&source).map_err(|error| Error::msg(format!("{label}: {error}")))?;
     check_file_limits(&tokens, limits, &label)?;
-    let forms = parse_tokens(&tokens)
-        .map_err(|error| Error::msg(format!("{label}: {error}")))?;
+    let forms = parse_tokens(&tokens).map_err(|error| Error::msg(format!("{label}: {error}")))?;
     validate_top_level(&forms, limits, &label)?;
 
     for form in &forms {
@@ -123,7 +119,10 @@ fn resolve_import(spec: &str, parent: &Path, package_root: &Path) -> Result<Path
     let candidate =
         resolve_import_with_root(spec, parent, package_root, installed_root.as_deref())?;
     let canonical = candidate.canonicalize().map_err(|error| {
-        Error::msg(format!("cannot open import {spec} ({}): {error}", candidate.display()))
+        Error::msg(format!(
+            "cannot open import {spec} ({}): {error}",
+            candidate.display()
+        ))
     })?;
 
     let package_root = package_root.canonicalize().map_err(|error| {
@@ -180,12 +179,7 @@ fn resolve_import_with_root(
         return Ok(library_path(package_root, installed_root, "lib", rest));
     }
     if let Some(rest) = spec.strip_prefix("examples/") {
-        return Ok(library_path(
-            package_root,
-            installed_root,
-            "examples",
-            rest,
-        ));
+        return Ok(library_path(package_root, installed_root, "examples", rest));
     }
     Ok(package_root.join(spec))
 }
@@ -211,7 +205,10 @@ fn validate_source_directory_recursive(dir: &Path, max: u32) -> Result<()> {
     let entries = source_directory_entries(dir, max)?;
     for entry in entries {
         let kind = entry.file_type().map_err(|error| {
-            Error::msg(format!("inspect source entry {}: {error}", entry.path().display()))
+            Error::msg(format!(
+                "inspect source entry {}: {error}",
+                entry.path().display()
+            ))
         })?;
         if kind.is_dir() {
             validate_source_directory_recursive(&entry.path(), max)?;
@@ -310,26 +307,19 @@ mod tests {
 
     #[test]
     fn rejects_climb() {
-        let error = resolve_import_with_root(
-            "../x.lkjscript",
-            Path::new("/a"),
-            Path::new("/pkg"),
-            None,
-        )
-        .err()
-        .map(|error| error.to_string());
+        let error =
+            resolve_import_with_root("../x.lkjscript", Path::new("/a"), Path::new("/pkg"), None)
+                .err()
+                .map(|error| error.to_string());
         assert!(error.as_deref().is_some_and(|text| text.contains("climb")));
     }
 
     #[test]
     fn rejects_absolute_and_legacy_imports() {
-        assert!(resolve_import_with_root(
-            "/x.lkjscript",
-            Path::new("/a"),
-            Path::new("/pkg"),
-            None,
-        )
-        .is_err());
+        assert!(
+            resolve_import_with_root("/x.lkjscript", Path::new("/a"), Path::new("/pkg"), None,)
+                .is_err()
+        );
         assert!(resolve_import_with_root(
             "std/list/nth.lkjml",
             Path::new("/a"),
@@ -370,8 +360,14 @@ mod tests {
         )
         .ok();
 
-        assert_eq!(std_path, Some(PathBuf::from("/pkg/src/std/list/nth.lkjscript")));
-        assert_eq!(lib_path, Some(PathBuf::from("/pkg/src/lib/lkjedit/loop.lkjscript")));
+        assert_eq!(
+            std_path,
+            Some(PathBuf::from("/pkg/src/std/list/nth.lkjscript"))
+        );
+        assert_eq!(
+            lib_path,
+            Some(PathBuf::from("/pkg/src/lib/lkjedit/loop.lkjscript"))
+        );
         assert_eq!(
             example_path,
             Some(PathBuf::from("/pkg/src/examples/hello/main.lkjscript"))
@@ -390,30 +386,21 @@ mod tests {
         .ok();
         assert_eq!(
             path,
-            Some(PathBuf::from(
-                "/opt/lkjscript/src/std/list/nth.lkjscript"
-            ))
+            Some(PathBuf::from("/opt/lkjscript/src/std/list/nth.lkjscript"))
         );
     }
 
     #[test]
-    fn source_tree_accepts_sixteen_and_rejects_seventeen(
-    ) -> std::io::Result<()> {
+    fn source_tree_accepts_sixteen_and_rejects_seventeen() -> std::io::Result<()> {
         let accepted = TempDir::new("sixteen")?;
         for index in 0..16 {
-            fs::write(
-                accepted.0.join(format!("source-{index}.lkjscript")),
-                "",
-            )?;
+            fs::write(accepted.0.join(format!("source-{index}.lkjscript")), "")?;
         }
         assert!(validate_source_tree(&accepted.0, &Limits::default()).is_ok());
 
         let rejected = TempDir::new("seventeen")?;
         for index in 0..16 {
-            fs::write(
-                rejected.0.join(format!("source-{index}.lkjscript")),
-                "",
-            )?;
+            fs::write(rejected.0.join(format!("source-{index}.lkjscript")), "")?;
         }
         fs::write(rejected.0.join(".hidden.lkjscript"), "")?;
         assert!(validate_source_tree(&rejected.0, &Limits::default()).is_err());

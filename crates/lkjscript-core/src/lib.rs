@@ -11,8 +11,7 @@ pub use chunk::{Chunk, ConstId, Constant, FunctionProto};
 pub use error::{Error, Result};
 pub use jit::{JitHook, NullJit};
 pub use limits::{
-    Limits, MAX_CHILDREN, MAX_DIR_CHILDREN, MAX_NEST_DEPTH, MAX_TOKENS_PER_FILE,
-    MAX_TOPLEVEL_FORMS,
+    Limits, MAX_CHILDREN, MAX_DIR_CHILDREN, MAX_NEST_DEPTH, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
 };
 
 pub use opcode::Op;

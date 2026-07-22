@@ -91,6 +91,7 @@ fn atom_from_name(name: &str) -> Expr {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::lex::lex;

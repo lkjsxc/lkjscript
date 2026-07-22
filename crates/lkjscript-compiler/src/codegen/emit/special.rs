@@ -162,6 +162,7 @@ pub fn compile_set(cx: &mut Cx<'_>, args: &[Expr]) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::codegen::emit::Cx;
@@ -174,7 +175,7 @@ mod tests {
         let cond = Expr::LitBool(false);
         compile_while(&mut cx, &[cond]).unwrap();
         let code = &cx.proto.code;
-        assert!(code.iter().any(|&b| b == Op::Jump as u8));
-        assert!(code.iter().any(|&b| b == Op::JumpIfFalse as u8));
+        assert!(code.contains(&(Op::Jump as u8)));
+        assert!(code.contains(&(Op::JumpIfFalse as u8)));
     }
 }

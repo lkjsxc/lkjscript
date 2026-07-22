@@ -46,9 +46,7 @@ pub fn buf_ref(arena: &Arena, value: Value, index: Value) -> Result<Value> {
 
 pub fn buf_set(arena: &mut Arena, value: Value, index: Value, byte: Value) -> Result<Value> {
     let index = buffer_index(index, "buf-set")?;
-    let byte = byte
-        .as_int()
-        .ok_or_else(|| Error::msg("buf-set byte"))?;
+    let byte = byte.as_int().ok_or_else(|| Error::msg("buf-set byte"))?;
     let buffer = as_buf_mut(arena, value)?;
     let slot = buffer
         .get_mut(index)
@@ -121,8 +119,8 @@ pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: Value) -> Resul
     let timeout = timeout
         .as_int()
         .ok_or_else(|| Error::msg("sys-poll timeout"))?;
-    let timeout = i32::try_from(timeout)
-        .map_err(|_| Error::msg("sys-poll timeout out of range"))?;
+    let timeout =
+        i32::try_from(timeout).map_err(|_| Error::msg("sys-poll timeout out of range"))?;
     if timeout < 0 {
         return Err(Error::msg("sys-poll timeout out of range"));
     }
@@ -172,11 +170,6 @@ mod tests {
     fn polling_rejects_invalid_handles_and_timeouts() {
         let handles = ResourceTable::default();
         assert!(sys_poll(&handles, Value::from_int(1), Value::from_int(0)).is_err());
-        assert!(sys_poll(
-            &handles,
-            ResourceTable::stdin_handle(),
-            Value::from_int(-1)
-        )
-        .is_err());
+        assert!(sys_poll(&handles, ResourceTable::stdin_handle(), Value::from_int(-1)).is_err());
     }
 }
