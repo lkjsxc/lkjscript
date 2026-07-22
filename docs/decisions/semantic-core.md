@@ -34,18 +34,25 @@ empty List T         empty-list/ T /empty-list
 
 `Unit` has one value, `unit`, and means successful completion without useful
 data. `Option T` uses `some/ value /some` or the explicitly typed `none` form.
-An empty list is a typed collection value, not Unit or Option absence.
+An empty list is a typed collection value, not Unit or Option absence. Its
+canonical form contains exactly one element type expression. `empty-list?` is
+the only emptiness predicate and has type `List T -> Bool`; the historical
+`null?` and generic `nil?` spellings are not list aliases. `car` and `cdr` trap
+when given an empty list. List structural equality remains a separate explicit
+operation and is not implied by this constructor.
 
-Reference-VM representations may use dedicated singleton tags. Typed native and
-Wasm backends specialize Option representation per type, including proven
-niches, without changing source semantics. The all-zero internal value pattern
+Reference-VM representations may erase the element type and share one dedicated
+empty-list singleton because resolved typed HIR retains the exact `List T`.
+Other singleton tags and typed native/Wasm layouts may differ without changing
+source semantics. Native and Wasm backends specialize Option representation per
+type, including proven niches, without changing source semantics. The all-zero internal value pattern
 is invalid rather than a semantic default.
 
 The Unit slice is implemented: `Unit`/`unit` has a dedicated VM tag, empty `do`,
 `while`, `set`, and successful side-effecting operations return Unit, and
 completion is no longer represented as nil. Legacy `nil` remains temporarily
 only for list termination, absence, and internal default state until the
-Option/typed-empty-list slice removes it.
+typed-empty-list and Option slices remove it.
 
 ## Control Flow
 
