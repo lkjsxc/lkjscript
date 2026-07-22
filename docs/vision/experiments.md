@@ -201,6 +201,76 @@ sample. The slice was adopted to eliminate type-confused absence and semantic
 fallback values. Temporary artifacts were removed and the candidate release
 tree was rebuilt.
 
+## B1 Brainfuck Mandelbrot Interpreter: Running
+
+- Question: can a straightforward Brainfuck interpreter authored in canonical
+  lkjscript execute and reproducibly validate Erik Bosman's Mandelbrot program?
+- Workload identity: **Brainfuck Mandelbrot interpreted by lkjscript**. It is
+  not algorithm-equivalent to the native `src/examples/mandel/` workload, and
+  their timings must not be presented as a language comparison.
+- Input: `pablojorge/brainfuck` commit
+  `153924714ae5e569ec39dcf0c0a5b5ae33600cc6`, path
+  `programs/mandelbrot.bf`, SHA-256
+  `f0f048e90855450fb06f2bea21f914f0d24e6b6c15fd050c68176ff794c6229e`;
+  downloaded only below `target/` under the upstream MIT license.
+- Oracle: the repository-authored
+  [`../../meta/benchmarks/brainfuck/reference.c`](../../meta/benchmarks/brainfuck/reference.c),
+  SHA-256 `af6250f93ef18b35e35788958e6c1feed1a20155011e7208546940661dbedf1d`,
+  compiled locally with strict C11 warnings and `-O3`; its required output is
+  6,240 bytes with SHA-256
+  `83a0aac65090b3b5e85c22337afac39d8ac17bfd88675f044b33bd55ca0c351b`.
+- Acceptance chosen before measurement: every authored smoke boundary passes;
+  Mandelbrot output is byte-equal to the independent oracle; a full direct run
+  completes within 1,800 seconds or its timeout is retained before enabling
+  only consecutive-identical `+`, `-`, `>`, and `<` run folding; a completed
+  expensive variant receives one warmup and at least three measured runs.
+- Primary metric: end-to-end release-process wall time, including lkjscript
+  startup and compilation, VM initialization, Brainfuck load/preparation and
+  execution, output writes, and shutdown. This is not interpreter-loop-only
+  time. Peak RSS and allocation were not measured in this initial experiment.
+- Harness: [`../../meta/benchmarks/brainfuck/benchmark.py`](../../meta/benchmarks/brainfuck/benchmark.py)
+  uses Python standard-library facilities, verifies every output, and retains
+  compact JSON under `target/brainfuck-bench/results/`.
+
+The first direct implementation was measured from dirty base commit
+`4426d0ec319ff3ab7461110375a4118d09cff2b6`, interpreter source SHA-256
+`51ce62c2f328186d44810a3257ecabf8522178c1bb3b769726c70d2756b8c98a`.
+Its 10-second diagnostic and 1,800-second full run both timed out, so no direct
+completion time or stable direct benchmark is claimed. The oracle completed,
+but byte equality could not be established for that timed-out run. The exact
+harness command was `python3 meta/benchmarks/brainfuck/benchmark.py --mode
+correctness --no-build --diagnostic-timeout 10 --timeout 1800`; the executed
+release binary command was `target/release/lkjscript run
+src/examples/brainfuck/main.lkjscript --
+target/brainfuck-bench/inputs/mandelbrot.bf` (absolute checkout paths were
+recorded by the harness).
+
+One permitted run-folding implementation was then tried from the same dirty
+base, source SHA-256
+`ee43bca92a56b7b00d6961106df64ba90990526bffd8005dece1244c2a0d75e4`.
+It remained direct dispatch over a prepared instruction buffer and folded only
+identical arithmetic/pointer runs. A full output completed in
+1,504.994145 seconds and had the expected 6,240-byte output hash; its 10-second
+diagnostic timed out. That preliminary run used the pinned upstream C
+interpreter as its comparison process. Audit then rejected that program as the
+final oracle because its tape is uninitialized and its signed-`char` arithmetic
+is not portable, even though it produced the expected bytes on this machine.
+The repository-authored exact reference above replaced it. The superseded
+folded interpreter was also simplified to remove avoidable lkjscript helper
+calls from the hot path. Final clean-tree correctness and repeated measurement
+are pending; neither change erases the retained preliminary result. The exact
+folded harness command was `python3 meta/benchmarks/brainfuck/benchmark.py
+--mode correctness --fold-runs --no-build --diagnostic-timeout 10 --timeout
+1800`; the interpreter command added `--fold-runs` after the input path.
+
+Both attempts used Linux 7.0.0-27-generic x86-64, an AMD Ryzen 9 9955HX
+16-core/32-thread CPU, 32 GiB RAM, Rust/Cargo 1.96.0, and the locked release
+workspace. The reference compiler was GCC-compatible `cc` 13.3.0. No samples
+were discarded; the timed-out direct attempt and superseded folded result are
+retained explicitly. Full output files were removed after their hashes were
+recorded; downloaded inputs, temporary reference binaries, and compact JSON
+remain only in the ignored `target/brainfuck-bench/` tree.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS

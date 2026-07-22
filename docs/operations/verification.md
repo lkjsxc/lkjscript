@@ -33,8 +33,8 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 4. at most 16 immediate entries in every directory under the language `src`
    tree, using the compiler's shared language rule;
 5. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
-6. successful compilation of 10 roots and exact equality between their reported
-   import closures and every canonical source in the corpus;
+6. successful compilation of 11 roots and exact equality between their reported
+   import closures and all 127 canonical sources in the corpus;
 7. `cargo fmt --all -- --check`;
 8. strict Clippy for the workspace, all targets, and all features;
 9. workspace unit tests with the locked Cargo graph.
@@ -51,6 +51,7 @@ code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 cargo build --workspace --release --locked
 ./target/release/lkjscript run src/examples/hello/main.lkjscript
 ./target/release/lkjscript run src/examples/mandel/main.lkjscript
+python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
 ```

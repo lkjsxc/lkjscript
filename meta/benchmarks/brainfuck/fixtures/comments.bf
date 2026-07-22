@@ -1,0 +1,3 @@
+THIS TEXT AND 123 ARE IGNORED
+++++++++[>++++++++<-]>+.
+MORE TEXT IS IGNORED

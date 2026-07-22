@@ -18,6 +18,7 @@ manifest is an **Accepted Target**.
 | `src/examples/mandel/main.lkjscript` | numeric/list/render workload | non-empty deterministic shape |
 | `src/examples/http/hello.lkjscript` | one-connection TCP/HTTP smoke | curl response contains `ok`, then exits |
 | `src/examples/bench/main.lkjscript` | Leibniz diagnostic entry | numeric result checked by benchmark tooling |
+| `src/examples/brainfuck/main.lkjscript` | direct Brainfuck interpreter, with optional identical-run folding | authored smoke fixtures and pinned Mandelbrot output checked byte-for-byte by `meta/benchmarks/brainfuck/benchmark.py` |
 | `src/examples/lkjedit/main.lkjscript` | full terminal editor acceptance | scripted open/edit/save/reopen/new-file smoke |
 | `src/examples/lkjedit/buffer-demo.lkjscript` | terminal redraw/list demonstration | compile coverage only |
 | `src/examples/lkjedit/edit-mem.lkjscript` | editor loop with in-memory buffer | compile coverage only |
@@ -33,7 +34,6 @@ as roots so no in-tree source remains syntax-only:
 
 - `src/std/io/now-ms.lkjscript`
 - `src/std/io/wait.lkjscript`
-- `src/std/term/write-str.lkjscript`
 
 ## Lifecycle Rule
 

@@ -14,7 +14,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 115 language files under `src`; duplicate and builtin-shadowing wrappers were removed
+- Corpus: 127 language files under `src`; duplicate and builtin-shadowing wrappers were removed
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8, and
@@ -43,7 +43,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
   checked or IEEE as declared, and narrower host domains reject truncation
 - CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub
   was removed
-- Workloads: hello, Mandelbrot, lkjedit, one-shot HTTP, and Leibniz comparison
+- Workloads: hello, native lkjscript Mandelbrot, Brainfuck Mandelbrot interpreted by lkjscript, lkjedit, one-shot HTTP, and Leibniz comparison
 - Resource handles: integers are rejected, stdin uses a reserved borrowed token,
   owned file/socket tokens are monotonic, and closed tokens are never reused
 - Terminal ABI: arbitrary ioctl is absent; fixed `sys-tty-get`/`sys-tty-set`
@@ -88,7 +88,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 70 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
-| `check-sources` | passed for all 115 `.lkjscript` sources; the 10 compiled entry closures equal the corpus exactly |
+| `check-sources` | passed for all 127 `.lkjscript` sources; the 11 compiled entry closures equal the corpus exactly |
 | source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
 | HIR conformance | duplicate/unknown/collision, BindingId shadowing, generic resolution, effects, global set, exact `if`, typed empty-list, Option, and `arg` boundaries passed |
 | top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields dedicated Unit as typed |
