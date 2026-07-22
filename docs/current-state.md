@@ -56,18 +56,21 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. `set`, optional `if`, and out-of-range `arg` behavior still have static or
+1. type analysis and bytecode lowering independently reinterpret the untyped
+   AST, including declarations, names, parameters, and operations;
+2. generic Nil conflates Unit, Option absence, empty lists, falsey/default VM
+   state, and uninitialized mutable globals;
+3. `set`, optional `if`, and out-of-range `arg` behavior still have static or
    lifecycle disagreements;
-2. imports load files but definitions share one global namespace and top-level
+4. imports load files but definitions share one global namespace and top-level
    initialization order can be unsafe;
-3. strings and IO lack a lossless bulk byte contract, and some library file
+5. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-4. public malformed chunks can reach unchecked VM assumptions;
-5. source/import aggregate bytes, depth, count, constants, globals, bytecode,
+6. public malformed chunks can reach unchecked VM assumptions;
+7. source/import aggregate bytes, depth, count, constants, globals, bytecode,
    VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
-6. the terminal exit guard remains process-global and is not a supervisor-safe
-   terminal lease;
-7. monotonic handle tokens retain closed metadata until the VM ends.
+8. process exit/terminal state remain process-global, and monotonic handle
+   metadata remains until the VM ends.
 
 ## Evidence
 
@@ -106,11 +109,18 @@ A gate that did not run did not pass.
 
 ## Accepted Next Target
 
-The next safety/conformance sequence is:
+The replanned safety/performance sequence is:
 
-1. add generated whole-prelude/codegen/VM conformance coverage;
-2. repair `set`, optional `if`, `arg`, and global initialization contracts;
-3. validate public chunks before VM dispatch.
+1. introduce a behavior-preserving resolved typed HIR and make bytecode lowering
+   consume it instead of independently resolving the AST;
+2. migrate the complete corpus through Unit/strict-if, explicit Option and empty
+   lists, split equality, explicit main, local mutation, and immutable globals;
+3. validate chunks and return structured VM outcomes, then lower typed HIR to
+   SSA and measure an early Linux x86-64 native AOT backend.
+
+The contracts are [AI-First Semantic Core](decisions/semantic-core.md),
+[Typed Compiler Pipeline And Early AOT](decisions/compiler-pipeline.md), and the
+[Performance Scorecard](vision/performance-scorecard.md).
 
 ## Deferred
 

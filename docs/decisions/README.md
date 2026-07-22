@@ -11,7 +11,9 @@ Index active architecture decisions separately from superseded history.
 ## Active And Accepted Decisions
 
 - [bytecode-vm.md](bytecode-vm.md): dense Rust bytecode VM
+- [compiler-pipeline.md](compiler-pipeline.md): typed HIR/SSA and early native AOT
 - [numeric-semantics.md](numeric-semantics.md): exact I64/F64 source-to-host contract
+- [semantic-core.md](semantic-core.md): AI-first Unit/Option/control/mutation/equality contract
 - [package-imports.md](package-imports.md): package-root source paths
 - [resource-handles.md](resource-handles.md): stale-safe resources and bounded terminal ABI
 - [system-results.md](system-results.md): truthful host failures as language values

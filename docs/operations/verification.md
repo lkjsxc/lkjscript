@@ -23,7 +23,8 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 `quiet verify` currently checks:
 
 1. required documentation paths, including architecture, experiments, numeric
-   semantics, and the canonical source-format document;
+   and AI-first semantics, typed compiler pipeline, performance scorecard, and
+   the canonical source-format document;
 2. a `Status` section and valid local links in every `docs/**/*.md`, plus local
    link validity in root Markdown and absence of the superseded active
    `docs/language/lkjml.md` path;

@@ -48,7 +48,10 @@ fn check_docs(root: &Path) -> i32 {
         "docs/operations/verification.md",
         "docs/product/README.md",
         "docs/decisions/README.md",
+        "docs/decisions/compiler-pipeline.md",
         "docs/decisions/numeric-semantics.md",
+        "docs/decisions/semantic-core.md",
+        "docs/vision/performance-scorecard.md",
     ];
     let mut failures = 0;
     for relative in required {

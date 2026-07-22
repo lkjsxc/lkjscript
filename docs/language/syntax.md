@@ -34,6 +34,26 @@ typeclass, Hindley-Milner inference, or implemented user-defined type alias.
 that its target exists or matches the declared global type; repairing that
 contract is part of the foundation cycle.
 
+## Accepted Semantic Redesign
+
+The AI-first semantic core is an **Accepted Target**, not current syntax:
+
+- remove generic `nil` and separate `Unit`/`unit`, typed empty lists, and
+  explicit `Option T` values `some`/typed `none`;
+- require exactly three operands for every `if` and exact reachable branch
+  types;
+- replace global mutation with immutable declarations and function-local
+  `var`/`set`;
+- replace top-level `do` with one explicit executable `main` and prohibit
+  imported initialization effects;
+- replace universal `eq` with typed value, object identity, structural list,
+  and F64 bit comparisons;
+- keep Option absence, Result failure, and process-safe VM Trap outcomes
+  distinct.
+
+See [AI-First Semantic Core](../decisions/semantic-core.md). A resolved typed HIR
+lands first so typing and lowering cannot interpret these forms differently.
+
 ## Numeric Contract
 
 The canonical numeric types are only `I64` and `F64`. Integer and decimal

@@ -14,5 +14,6 @@ Separate the long-term direction from current product capability.
 - [north-star.md](north-star.md): ecosystem mission
 - [principles.md](principles.md): ranked engineering invariants
 - [performance-roadmap.md](performance-roadmap.md): measured path beyond the interpreter
+- [performance-scorecard.md](performance-scorecard.md): category-specific evidence and claim rules
 - [experiments.md](experiments.md): hypotheses, combinations, and decision records
 - [process-supervisor.md](process-supervisor.md): experimental one-runtime design

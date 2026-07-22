@@ -50,9 +50,10 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   construction.
 - VM host operations block and process exit is not process-safe.
 - Bounded terminal operations, monotonic stale-safe handles, truthful system
-  Results, and exact I64/F64 execution have landed. Global initialization and
-  remaining type/runtime conformance are the next foundation priorities; do
-  not build a daemon or JIT on top of unresolved lifecycle semantics.
+  Results, and exact I64/F64 execution have landed. A behavior-preserving
+  resolved typed HIR is the next foundation, followed by the Unit/Option/main/
+  mutation migration. Do not add product frameworks or native claims while
+  untyped analysis and lowering can still disagree.
 
 ## Host Boundary
 

@@ -70,6 +70,19 @@ CLI path
 Imported definitions currently share one program-global namespace. Modules,
 exports, package versions, locks, and serialized bytecode are absent.
 
+## Accepted Compiler Pipeline
+
+The accepted replacement is parsed AST -> resolved typed HIR -> typed SSA,
+with reference bytecode, native AOT, direct Wasm, and future JIT consuming the
+same semantic IR family. HIR owns binding identity, type, declaration kind,
+canonical operation, source origin, and later effects; codegen no longer
+re-parses declarations or resolves names. Native scalar/product representations
+replace universal tagged values on typed hot paths.
+
+See [Typed Compiler Pipeline And Early AOT](../decisions/compiler-pipeline.md).
+This is an **Accepted Target**; the ownership map and compile flow above remain
+current until implementation lands.
+
 ## Runtime Flow
 
 ```text
@@ -108,8 +121,10 @@ an external project receives the same contract.
 
 ## Accepted Redesign Direction
 
-A normalized typed intermediate representation should eventually unify symbol
-resolution, typing, and lowering. Real modules, process-safe host services,
-byte strings, compiled-code objects, and adaptive
-memory management build on that layer. They must be measured and delivered as
-coherent vertical slices rather than dormant interfaces.
+Implement a behavior-preserving typed HIR before the breaking semantic slices.
+Then separate Unit/Option/empty lists, split comparisons, establish explicit
+main and effect-free libraries, migrate global editor state into an immutable
+product plus one local var, and remove mutable globals. Typed SSA and an early
+Linux x86-64 AOT backend follow differential VM conformance. Real modules,
+process-safe host services, byte strings/views, compiled-code objects, and
+hybrid memory management build on those layers as measured vertical slices.

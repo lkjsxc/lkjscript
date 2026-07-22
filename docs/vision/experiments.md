@@ -73,6 +73,21 @@ identical, semantic coverage is complete, wall time improves at least 20%, and
 peak memory stays within 25% of baseline. Lower parse counts alone are not a
 reason to retain complexity.
 
+## Compiler Pipeline Matrix: Proposed
+
+| ID | Semantic IR | Backend | Purpose |
+| --- | --- | --- | --- |
+| C0 | duplicated untyped AST interpretation | bytecode VM | current baseline |
+| C1 | resolved typed HIR | bytecode VM | isolate correctness and compile-time cost |
+| C2 | typed HIR + SSA | reference evaluator/VM | differential SSA semantics |
+| C3 | typed SSA | owned baseline x86-64 AOT | native ceiling and ABI baseline |
+| C4 | typed SSA | measured mature build-time backend | optimization reference candidate |
+| C5 | typed SSA + profile | best AOT candidates | PGO interaction |
+
+C1 is adopted only when accepted/rejected corpus behavior and runtime outputs
+remain identical while duplicate resolution/lowering logic is deleted. C2-C5
+require differential trap/outcome tests before performance measurement.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS
