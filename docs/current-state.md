@@ -38,7 +38,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   and return-adjacent tail-frame reuse
 - Semantics: Unit, typed empty-list, and Option none have distinct singleton
   tags, while Option some is traced; `nil`, `Nil`, `nil?`, and `null?` are
-  removed; `arg` returns `Option Str`; empty `do`/`while`/`set` return Unit
+  removed; `arg` returns `Option Str`; empty `do`/`while`/`set` return Unit;
+  universal `eq`/`ne` are removed in favor of exact value, object-identity,
+  bounded structural-list, and F64-bit equality families
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
@@ -90,12 +92,12 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 70 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 80 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
 | `check-sources` | passed for all 127 `.lkjscript` sources; the 11 compiled entry closures equal the corpus exactly |
 | source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
-| HIR conformance | duplicate/unknown/collision, BindingId shadowing, generic resolution, effects, global set, exact `if`, typed empty-list, Option, and `arg` boundaries passed |
+| HIR conformance | duplicate/unknown/collision, BindingId shadowing, generic resolution, effects, global set, exact `if`, typed empty-list, Option, explicit equality, and `arg` boundaries passed |
 | top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields dedicated Unit as typed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
@@ -109,7 +111,8 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | terminal Result workload | 59-byte state returned `ResultErr`; VM continued and exited successfully |
 | system Result workload | missing open, repeated close, and negative wait returned errors; later expressions ran; exit 0 |
 | Result unit coverage | malformed path, invalid handle/timeout/range, error text, and canonical names passed |
-| numeric conformance | complete I64 boundaries, boxed transition, checked arithmetic/division, IEEE F64 identity/equality, 64-bit bitwise, byte/u32 narrowing, and removed vocabulary passed |
+| equality conformance | exact scalar/Option/Result value equality, Buf/Handle identity, bounded structural List equality, F64 bit equality, category errors, removed `eq`/`ne`, and retired opcode 21 passed |
+| numeric conformance | complete I64 boundaries, boxed transition, checked arithmetic/division, IEEE F64 identity/equality, exact F64-bit equality, 64-bit bitwise, byte/u32 narrowing, and removed vocabulary passed |
 | numeric CLI boundary | exact `9007199254740993 + 2`; overflow and `1e3` rejected |
 | `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
 | script argument `--help` after `--` | passed through to the script |
@@ -129,12 +132,11 @@ A gate that did not run did not pass.
 
 The next implementation sequence is:
 
-1. split value/object/structural/F64-bit equality;
-2. establish explicit main/effect-free libraries, immutable product state and
+1. establish explicit main/effect-free libraries, immutable product state and
    local var/set, then remove mutable globals;
-3. compute required effect summaries, validate chunks, and return structured
+2. compute required effect summaries, validate chunks, and return structured
    process-safe VM outcomes;
-4. implement typed SSA and its verifier/differential oracle before the shared
+3. implement typed SSA and its verifier/differential oracle before the shared
    Linux x86-64 code-object backend and function-triggered baseline JIT.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),

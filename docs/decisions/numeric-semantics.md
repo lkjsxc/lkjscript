@@ -53,12 +53,16 @@ The canonical binary arithmetic names are `+`, `-`, `*`, and `div`.
 `bit-and`, `bit-or`, and `bit-xor` accept exactly two I64 values and operate on
 all 64 two's-complement bits.
 
-Canonical comparisons are `eq`, `ne`, `lt`, `lte`, `gt`, and `gte`.
-Ordering is numeric and uses the same I64/F64 promotion rule as arithmetic.
-I64/I64 equality is exact. F64 equality is IEEE equality: NaN is unequal to
-every value, while positive and negative zero are equal. General equality for
-Unit, Option, typed empty lists, booleans, strings, symbols, handles, and identity-bearing heap values
-remains available through `eq` and `ne`; ordering does not extend to them.
+Canonical numeric ordering operations are `lt`, `lte`, `gt`, and `gte`.
+Ordering uses the same I64/F64 promotion rule as arithmetic.
+
+Equality does not promote. `equal-value` requires identical supported operand
+types: I64 equality is exact and F64 equality is IEEE equality, where NaN is
+unequal to every value and positive/negative zero are equal.
+`f64-bits-equal` accepts only F64 and compares complete bit patterns, so equal
+NaN payloads match and signed zero differs. Use `not` around a positive
+operation instead of a negative alias. Non-numeric equality categories are
+specified by [Explicit Equality Families](equality-families.md).
 
 ## Representation
 
@@ -89,7 +93,8 @@ Focused conformance covers:
 - literal overflow and every rejected numeric spelling;
 - checked add, subtract, multiply, divide, zero divide, and `MIN / -1`;
 - mixed arithmetic, integral F64 identity, signed zero, infinity, and NaN;
-- exact I64 and IEEE F64 equality and ordering;
+- exact I64 equality, IEEE F64 equality, exact F64-bit equality, and numeric
+  ordering;
 - high-bit bitwise operations;
 - strict string conversions and checked host narrowing;
 - rejection of every removed type, alias, cast, and operator;

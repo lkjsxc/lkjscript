@@ -426,9 +426,9 @@ implied by a non-speculative optimizing tier.
 
 ## Implementation Sequence
 
-1. Finish equality, explicit-main/effect-free-import, local-mutation/immutable-
-   global, fixed-point-effect, chunk-validation, and structured-outcome
-   prerequisites.
+1. With explicit equality current, finish explicit-main/effect-free-import,
+   local-mutation/immutable-global, fixed-point-effect, chunk-validation, and
+   structured-outcome prerequisites.
 2. Implement typed SSA, verifier, differential evaluator, and isolated proven
    optimization passes.
 3. Implement the shared Linux x86-64 native code-object backend and minimal

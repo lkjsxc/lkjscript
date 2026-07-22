@@ -10,7 +10,7 @@ I64
 params/
 /params
 if/
-eq/
+equal-value/
 unwrap-ok/
 sys-poll/
 stdin-handle/
@@ -19,7 +19,7 @@ stdin-handle/
 /sys-poll
 /unwrap-ok
 0
-/eq
+/equal-value
 -1
 let/
 bind/
@@ -28,10 +28,10 @@ read-byte/
 /read-byte
 /bind
 if/
-eq/
+equal-value/
 b
 -1
-/eq
+/equal-value
 -2
 b
 /if

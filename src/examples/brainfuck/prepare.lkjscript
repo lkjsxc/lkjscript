@@ -46,10 +46,10 @@ Unit
 params/
 /params
 if/
-eq/
+equal-value/
 bf-depth
 0
-/eq
+/equal-value
 bf-fail/
 str/
 unmatched ]
@@ -112,17 +112,17 @@ command
 I64
 /params
 if/
-eq/
+equal-value/
 command
 91
-/eq
+/equal-value
 bf-prepare-open/
 /bf-prepare-open
 if/
-eq/
+equal-value/
 command
 93
-/eq
+/equal-value
 bf-prepare-close/
 /bf-prepare-close
 unit
@@ -190,10 +190,10 @@ bf-scan
 /do
 /while
 if/
-eq/
+equal-value/
 bf-depth
 0
-/eq
+/equal-value
 unit
 bf-fail/
 str/

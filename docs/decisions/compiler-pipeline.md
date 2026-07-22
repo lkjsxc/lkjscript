@@ -37,8 +37,9 @@ type facts, source origins, canonical operation identities and per-call
 signatures, and conservative effects. Code generation consumes HIR rather than
 re-parsing definitions, parameters, operators, and names independently.
 
-`Unit`, typed empty lists, and Option have distinct exact HIR/runtime semantics,
-and every `if` has exactly three operands with matching branch types. Nil and
+`Unit`, typed empty lists, Option, and the explicit value/object/list/F64-bit
+equality families have distinct exact HIR/runtime semantics, and every `if` has
+exactly three operands with matching branch types. Nil, universal equality, and
 the legacy runtime-union escape hatch are absent. User calls conservatively
 carry every effect until fixed-point function summaries replace the safe
 over-approximation.

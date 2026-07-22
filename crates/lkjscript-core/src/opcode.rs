@@ -13,8 +13,7 @@ pub enum Op {
     Sub = 11,
     Mul = 12,
     Div = 13,
-    Eq = 20,
-    Ne = 21,
+    EqualValue = 20,
     Lt = 22,
     Le = 23,
     Gt = 24,
@@ -32,6 +31,9 @@ pub enum Op {
     Car = 51,
     Cdr = 52,
     IsEmptyList = 53,
+    SameObject = 54,
+    ListEqual = 55,
+    F64BitsEqual = 56,
     Print = 60,
     Flush = 61,
     ReadByte = 62,
@@ -106,8 +108,7 @@ impl Op {
             11 => Self::Sub,
             12 => Self::Mul,
             13 => Self::Div,
-            20 => Self::Eq,
-            21 => Self::Ne,
+            20 => Self::EqualValue,
             22 => Self::Lt,
             23 => Self::Le,
             24 => Self::Gt,
@@ -125,6 +126,9 @@ impl Op {
             51 => Self::Car,
             52 => Self::Cdr,
             53 => Self::IsEmptyList,
+            54 => Self::SameObject,
+            55 => Self::ListEqual,
+            56 => Self::F64BitsEqual,
             60 => Self::Print,
             61 => Self::Flush,
             62 => Self::ReadByte,
@@ -212,6 +216,14 @@ mod tests {
         assert_eq!(Op::LoadConst.operand_width(), 2);
         assert_eq!(Op::Call.operand_width(), 1);
         assert_eq!(Op::Return.operand_width(), 0);
+        assert_eq!(Op::from_byte(Op::EqualValue as u8), Some(Op::EqualValue));
+        assert_eq!(Op::from_byte(Op::SameObject as u8), Some(Op::SameObject));
+        assert_eq!(Op::from_byte(Op::ListEqual as u8), Some(Op::ListEqual));
+        assert_eq!(
+            Op::from_byte(Op::F64BitsEqual as u8),
+            Some(Op::F64BitsEqual)
+        );
+        assert_eq!(Op::from_byte(21), None);
         assert_eq!(Op::from_byte(255), None);
     }
 }

@@ -11,8 +11,10 @@ pub enum Operation {
     Subtract,
     Multiply,
     Divide,
-    Equal,
-    NotEqual,
+    EqualValue,
+    SameObject,
+    ListEqual,
+    F64BitsEqual,
     Less,
     LessEqual,
     Greater,
@@ -82,15 +84,16 @@ pub enum Operation {
 }
 
 impl Operation {
-    /// All current source-visible operations. The leading entries retain the
-    /// historical VM global layout used by existing chunks and disassembly.
+    /// All current source-visible operations.
     pub const ALL: &'static [Self] = &[
         Self::Add,
         Self::Subtract,
         Self::Multiply,
         Self::Divide,
-        Self::Equal,
-        Self::NotEqual,
+        Self::EqualValue,
+        Self::SameObject,
+        Self::ListEqual,
+        Self::F64BitsEqual,
         Self::Less,
         Self::LessEqual,
         Self::Greater,
@@ -159,13 +162,12 @@ impl Operation {
         Self::UnwrapSome,
     ];
 
-    pub const LEGACY_GLOBALS: &'static [Self] = &[
+    pub const CORE_GLOBALS: &'static [Self] = &[
         Self::Add,
         Self::Subtract,
         Self::Multiply,
         Self::Divide,
-        Self::Equal,
-        Self::NotEqual,
+        Self::EqualValue,
         Self::Less,
         Self::LessEqual,
         Self::Greater,
@@ -195,8 +197,10 @@ impl Operation {
             Self::Subtract => "-",
             Self::Multiply => "*",
             Self::Divide => "div",
-            Self::Equal => "eq",
-            Self::NotEqual => "ne",
+            Self::EqualValue => "equal-value",
+            Self::SameObject => "same-object",
+            Self::ListEqual => "list-equal",
+            Self::F64BitsEqual => "f64-bits-equal",
             Self::Less => "lt",
             Self::LessEqual => "lte",
             Self::Greater => "gt",
@@ -290,13 +294,19 @@ impl Operation {
 
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => numeric_binary(),
-            Self::Equal | Self::NotEqual => forall(
+            Self::EqualValue | Self::SameObject => forall(
                 &["T"],
                 function(
                     vec![Type::Param("T".into()), Type::Param("T".into())],
                     Type::Bool,
                 ),
             ),
+            Self::ListEqual => {
+                let item = Type::Param("T".into());
+                let list = Type::List(Box::new(item));
+                forall(&["T"], function(vec![list.clone(), list], Type::Bool))
+            }
+            Self::F64BitsEqual => function(vec![Type::F64, Type::F64], Type::Bool),
             Self::Less | Self::LessEqual | Self::Greater | Self::GreaterEqual => {
                 numeric_comparison()
             }
@@ -475,18 +485,61 @@ impl Operation {
                     Type::I64
                 }
             }
-            Self::Equal | Self::NotEqual => {
+            Self::EqualValue => {
                 let left = &arguments[0];
                 let right = &arguments[1];
-                if both_numeric(left, right)
-                    || Type::unify_assignable(left, right)
-                    || Type::unify_assignable(right, left)
-                {
+                if left != right {
+                    return Err(format!(
+                        "equal-value: operands must have the same type, got {left:?} and {right:?}"
+                    ));
+                }
+                if !supports_value_equality(left) {
+                    return Err(format!(
+                        "equal-value: type {left:?} does not support value equality"
+                    ));
+                }
+                Type::Bool
+            }
+            Self::SameObject => {
+                let left = &arguments[0];
+                let right = &arguments[1];
+                if left != right {
+                    return Err(format!(
+                        "same-object: operands must have the same type, got {left:?} and {right:?}"
+                    ));
+                }
+                if !matches!(left, Type::Buf | Type::Handle) {
+                    return Err(format!(
+                        "same-object: type {left:?} does not have object identity"
+                    ));
+                }
+                Type::Bool
+            }
+            Self::ListEqual => {
+                let left = &arguments[0];
+                let right = &arguments[1];
+                if left != right {
+                    return Err(format!(
+                        "list-equal: operands must have the same type, got {left:?} and {right:?}"
+                    ));
+                }
+                let Type::List(item) = left else {
+                    return Err(format!("list-equal: expected List, got {left:?}"));
+                };
+                if !supports_value_equality(item) {
+                    return Err(format!(
+                        "list-equal: element type {item:?} does not support value equality"
+                    ));
+                }
+                Type::Bool
+            }
+            Self::F64BitsEqual => {
+                if arguments == [Type::F64, Type::F64] {
                     Type::Bool
                 } else {
                     return Err(format!(
-                        "{}: equality type mismatch {left:?} vs {right:?}",
-                        self.name()
+                        "f64-bits-equal: expected F64 and F64, got {:?} and {:?}",
+                        arguments[0], arguments[1]
                     ));
                 }
             }
@@ -571,9 +624,7 @@ impl Operation {
             Self::Exit => EffectSet::HOST_IO
                 .union(EffectSet::MAY_EXIT)
                 .union(EffectSet::MAY_TRAP),
-            Self::Equal
-            | Self::NotEqual
-            | Self::Less
+            Self::Less
             | Self::LessEqual
             | Self::Greater
             | Self::GreaterEqual
@@ -584,6 +635,8 @@ impl Operation {
             | Self::And
             | Self::Or
             | Self::IsEmptyList => EffectSet::PURE,
+            Self::EqualValue | Self::SameObject | Self::F64BitsEqual => EffectSet::READS_MEMORY,
+            Self::ListEqual => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
         }
     }
 }
@@ -676,6 +729,20 @@ fn callable_arity(ty: &Type) -> Option<usize> {
     }
 }
 
+fn supports_value_equality(ty: &Type) -> bool {
+    match ty {
+        Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
+        Type::Option(value) => supports_value_equality(value),
+        Type::Result(ok, err) => supports_value_equality(ok) && supports_value_equality(err),
+        Type::Buf
+        | Type::Handle
+        | Type::Param(_)
+        | Type::List(_)
+        | Type::Fn { .. }
+        | Type::Forall { .. } => false,
+    }
+}
+
 fn both_numeric(left: &Type, right: &Type) -> bool {
     matches!(left, Type::I64 | Type::F64) && matches!(right, Type::I64 | Type::F64)
 }
@@ -699,4 +766,89 @@ fn generic_result() -> Type {
         Box::new(Type::Param("T".into())),
         Box::new(Type::Param("E".into())),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::hir::EffectSet;
+    use crate::types::Type;
+
+    use super::Operation;
+
+    #[test]
+    fn explicit_equality_families_enforce_static_categories() {
+        for ty in [
+            Type::Unit,
+            Type::Bool,
+            Type::I64,
+            Type::F64,
+            Type::Str,
+            Type::Symbol,
+            Type::Option(Box::new(Type::I64)),
+            Type::Result(Box::new(Type::Str), Box::new(Type::I64)),
+        ] {
+            assert!(Operation::EqualValue
+                .resolve_types(&[ty.clone(), ty])
+                .is_ok());
+        }
+        for ty in [
+            Type::Buf,
+            Type::Handle,
+            Type::List(Box::new(Type::I64)),
+            Type::Param("T".into()),
+            Type::Fn {
+                params: Vec::new(),
+                ret: Box::new(Type::Unit),
+            },
+        ] {
+            assert!(Operation::EqualValue
+                .resolve_types(&[ty.clone(), ty])
+                .is_err());
+        }
+        assert!(Operation::EqualValue
+            .resolve_types(&[Type::I64, Type::F64])
+            .is_err());
+
+        for ty in [Type::Buf, Type::Handle] {
+            assert!(Operation::SameObject
+                .resolve_types(&[ty.clone(), ty])
+                .is_ok());
+        }
+        assert!(Operation::SameObject
+            .resolve_types(&[Type::I64, Type::I64])
+            .is_err());
+
+        let list = Type::List(Box::new(Type::Option(Box::new(Type::Str))));
+        assert!(Operation::ListEqual
+            .resolve_types(&[list.clone(), list])
+            .is_ok());
+        let nested = Type::List(Box::new(Type::List(Box::new(Type::I64))));
+        assert!(Operation::ListEqual
+            .resolve_types(&[nested.clone(), nested])
+            .is_err());
+        let buffers = Type::List(Box::new(Type::Buf));
+        assert!(Operation::ListEqual
+            .resolve_types(&[buffers.clone(), buffers])
+            .is_err());
+
+        assert!(Operation::F64BitsEqual
+            .resolve_types(&[Type::F64, Type::F64])
+            .is_ok());
+        assert!(Operation::F64BitsEqual
+            .resolve_types(&[Type::I64, Type::I64])
+            .is_err());
+    }
+
+    #[test]
+    fn removed_equality_names_and_effects_are_truthful() {
+        assert!(Operation::from_name("eq").is_none());
+        assert!(Operation::from_name("ne").is_none());
+        assert_eq!(Operation::EqualValue.effects(), EffectSet::READS_MEMORY);
+        assert_eq!(Operation::SameObject.effects(), EffectSet::READS_MEMORY);
+        assert_eq!(Operation::F64BitsEqual.effects(), EffectSet::READS_MEMORY);
+        assert_eq!(
+            Operation::ListEqual.effects(),
+            EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP)
+        );
+    }
 }

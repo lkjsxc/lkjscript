@@ -84,10 +84,10 @@ ed-rows
 show-status/
 /show-status
 if/
-eq/
+equal-value/
 ed-mode
 2
-/eq
+/equal-value
 place-cmd-cur/
 /place-cmd-cur
 place-buf-cur/

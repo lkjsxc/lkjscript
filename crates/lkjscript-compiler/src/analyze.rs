@@ -337,7 +337,7 @@ impl Analyzer {
     fn build_global_layout(&self, forms: &[TopLevel]) -> Result<Vec<BindingId>> {
         let mut layout = Vec::new();
         let mut seen = HashSet::new();
-        for operation in Operation::LEGACY_GLOBALS {
+        for operation in Operation::CORE_GLOBALS {
             let Some(binding) = self.operations.get(operation).copied() else {
                 return Err(Error::msg(format!(
                     "missing canonical operation binding for {}",

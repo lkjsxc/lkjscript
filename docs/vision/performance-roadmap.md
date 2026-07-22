@@ -63,13 +63,14 @@ testing. Runtime behavior is unchanged: the hook remains explicitly
 
 ## Phase 1: Semantic And Runtime Prerequisites — Accepted Next Target
 
-1. Split value, object-identity, structural-list, and F64-bit equality.
-2. Add explicit main and effect-free imported libraries.
-3. Add local `var`/`set`, immutable global product state, and remove mutable
+The value/object/list/F64-bit equality split is **Current**. Remaining work is:
+
+1. Add explicit main and effect-free imported libraries.
+2. Add local `var`/`set`, immutable global product state, and remove mutable
    globals.
-4. Compute fixed-point effect summaries where native movement needs them.
-5. Validate public chunks before execution.
-6. Return structured process-safe outcomes for success, exit, traps, deadlines,
+3. Compute fixed-point effect summaries where native movement needs them.
+4. Validate public chunks before execution.
+5. Return structured process-safe outcomes for success, exit, traps, deadlines,
    and resource limits.
 
 Callable native code does not begin while generated code could bypass exact

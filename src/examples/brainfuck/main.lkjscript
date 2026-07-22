@@ -12,11 +12,11 @@ examples/brainfuck/options.lkjscript
 /import
 do/
 if/
-eq/
+equal-value/
 argc/
 /argc
 0
-/eq
+/equal-value
 bf-fail/
 str/
 usage: brainfuck PROGRAM.bf

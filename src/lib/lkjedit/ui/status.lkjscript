@@ -50,10 +50,10 @@ Unit
 params/
 /params
 if/
-eq/
+equal-value/
 ed-mode
 2
-/eq
+/equal-value
 show-cmdline/
 /show-cmdline
 do/

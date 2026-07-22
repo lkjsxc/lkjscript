@@ -4,7 +4,7 @@
 mod tests {
     use std::path::PathBuf;
 
-    use lkjscript_core::{Op, Result};
+    use lkjscript_core::{Constant, Op, Result};
 
     use super::analyze_program;
     use crate::codegen::compile_program;
@@ -184,11 +184,47 @@ mod tests {
         );
         assert_eq!(
             chunk.global_names,
-            Operation::LEGACY_GLOBALS
+            Operation::CORE_GLOBALS
                 .iter()
                 .map(|operation| operation.name().to_string())
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn explicit_equality_identity_and_types_reach_bytecode() {
+        let program = analyze_one(
+            "do/\nequal-value/\n9223372036854775807\n9223372036854775807\n/equal-value\n/do\n",
+        )
+        .expect("analyze equal-value");
+        let TopLevel::Do { expression, .. } = &program.forms[0] else {
+            panic!("expected top-level do");
+        };
+        let ExprKind::Do(expressions) = &expression.kind else {
+            panic!("expected typed do");
+        };
+        let ExprKind::Operation {
+            operation,
+            resolved_signature,
+            ..
+        } = &expressions[0].kind
+        else {
+            panic!("expected equality operation");
+        };
+        assert_eq!(*operation, Operation::EqualValue);
+        assert_eq!(
+            resolved_signature,
+            &Type::Fn {
+                params: vec![Type::I64, Type::I64],
+                ret: Box::new(Type::Bool),
+            }
+        );
+        assert_eq!(expressions[0].ty, Type::Bool);
+        assert_eq!(expressions[0].effects, EffectSet::READS_MEMORY);
+
+        let chunk = compile_program(&program).expect("lower equality HIR");
+        assert!(chunk.main.code.contains(&(Op::EqualValue as u8)));
+        assert!(!chunk.main.code.contains(&21));
     }
 
     #[test]
@@ -404,7 +440,10 @@ mod tests {
         );
         assert_eq!(expressions[1].ty, Type::Symbol);
 
-        let chunk = compile_program(&program).expect("lower compatibility forms");
+        let chunk = compile_program(&program).expect("lower strict forms");
+        assert!(chunk.constants.iter().any(
+            |constant| matches!(constant, Constant::Symbol(symbol) if symbol == "not-a-binding")
+        ));
         let mut offset = 0;
         let mut decoded = Vec::new();
         while let Some(byte) = chunk.main.code.get(offset) {

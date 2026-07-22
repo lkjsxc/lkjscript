@@ -18,7 +18,8 @@ next repairs.
 - Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
   closures, buffers, Option some wrappers, and language Result wrappers.
 - I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64
-  arithmetic, exact/IEEE numeric equality, and checked narrow host domains.
+  arithmetic, exact value/object/F64-bit equality, structural List equality
+  bounded to 1,000,000 pair nodes, and checked narrow host domains.
 - Precise non-moving mark-sweep collection after 1,024 allocations.
 - Return-adjacent frame reuse for tail recursion.
 - Synchronous, single-threaded execution with blocking host operations.

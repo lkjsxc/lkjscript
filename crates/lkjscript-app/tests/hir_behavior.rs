@@ -27,6 +27,15 @@ fn evaluate_program_with_args(source: &str, args: &[String]) -> lkjscript_core::
     run_chunk_with_args(&expression_chunk(source)?, args)
 }
 
+fn assert_program_bool(source: &str, expected: bool) {
+    assert_eq!(
+        evaluate_program(source)
+            .expect("evaluate Bool program")
+            .as_bool(),
+        Some(expected)
+    );
+}
+
 #[test]
 fn resolved_locals_and_short_circuit_operations_preserve_runtime_behavior() {
     let shadowing = "def/\nname/\nshadow\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nx\nI64\n/params\nlet/\nbind/\nx\n2\n/bind\nlet/\nbind/\nx\n3\n/bind\nx\n/let\n/let\n/fn\n/def\ndo/\nshadow/\n9\n/shadow\n/do\n";
@@ -89,6 +98,81 @@ fn explicit_option_and_argument_absence_survive_source_to_vm_lowering() {
         .expect_err("unwrap-some on none must trap")
         .to_string();
     assert!(error.contains("unwrap-some on none"));
+}
+
+#[test]
+fn explicit_equality_families_survive_source_to_vm_lowering() {
+    assert_program_bool(
+        "do/\nequal-value/\n9223372036854775807\n9223372036854775807\n/equal-value\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nequal-value/\nstr/\nsame\n/str\nstr/\nsame\n/str\n/equal-value\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nequal-value/\nstr/\nsym:same\n/str\nstr-append/\nstr/\nsym:\n/str\nstr/\nsame\n/str\n/str-append\n/equal-value\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nequal-value/\nquote/\nsame\n/quote\nquote/\nsame\n/quote\n/equal-value\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nequal-value/\nsome/\n42\n/some\nsome/\n42\n/some\n/equal-value\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nequal-value/\nnone/\nI64\n/none\nsome/\n42\n/some\n/equal-value\n/do\n",
+        false,
+    );
+    assert_program_bool(
+        "do/\nlet/\nbind/\nbuffer\nbuf-new/\n1\n/buf-new\n/bind\nsame-object/\nbuffer\nbuffer\n/same-object\n/let\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nlist-equal/\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\n/list-equal\n/do\n",
+        true,
+    );
+    assert_program_bool(
+        "do/\nf64-bits-equal/\n0.0\n-0.0\n/f64-bits-equal\n/do\n",
+        false,
+    );
+}
+
+#[test]
+fn invalid_or_removed_equality_categories_fail_during_compilation() {
+    for expression in [
+        "eq/\n1\n1\n/eq",
+        "ne/\n1\n1\n/ne",
+        "equal-value/\n1\n1.0\n/equal-value",
+        "equal-value/\nbuf-new/\n1\n/buf-new\nbuf-new/\n1\n/buf-new\n/equal-value",
+        "same-object/\n1\n1\n/same-object",
+        "f64-bits-equal/\n1\n1\n/f64-bits-equal",
+        "list-equal/\nempty-list/\nList\nI64\n/empty-list\nempty-list/\nList\nI64\n/empty-list\n/list-equal",
+    ] {
+        let source = format!("do/\n{expression}\n/do\n");
+        assert!(
+            compile_source(&source, "invalid-equality.lkjscript", &Limits::default()).is_err(),
+            "accepted {expression}"
+        );
+    }
+
+    let function_identity = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\ndo/\nequal-value/\nf\nf\n/equal-value\n/do\n";
+    assert!(compile_source(
+        function_identity,
+        "closure-equality.lkjscript",
+        &Limits::default()
+    )
+    .is_err());
+
+    let unconstrained = "def/\nname/\nsame\n/name\nforall/\nT\n/forall\nfn/\nsig/\nT\nT\n->\nBool\n/sig\nparams/\nleft\nT\nright\nT\n/params\nequal-value/\nleft\nright\n/equal-value\n/fn\n/def\n";
+    assert!(compile_source(
+        unconstrained,
+        "generic-equality.lkjscript",
+        &Limits::default()
+    )
+    .is_err());
 }
 
 #[test]

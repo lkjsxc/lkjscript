@@ -41,13 +41,13 @@ i
 acc
 /cons
 if/
-eq/
+equal-value/
 str-ref/
 s
 i
 /str-ref
 10
-/eq
+/equal-value
 split-lines/
 s
 +/

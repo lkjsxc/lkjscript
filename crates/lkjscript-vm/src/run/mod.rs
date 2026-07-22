@@ -166,13 +166,8 @@ impl<'a, J: JitHook> Vm<'a, J> {
         {
             Constant::I64(number) => Ok(self.make_i64(*number)),
             Constant::F64(number) => Ok(self.arena.alloc(HeapObj::Float(*number))),
-            Constant::Str(s) => {
-                if let Some(sym) = s.strip_prefix("sym:") {
-                    Ok(self.arena.alloc(HeapObj::Symbol(sym.to_string())))
-                } else {
-                    Ok(self.arena.alloc(HeapObj::Str(s.clone())))
-                }
-            }
+            Constant::Str(text) => Ok(self.arena.alloc(HeapObj::Str(text.clone()))),
+            Constant::Symbol(symbol) => Ok(self.arena.alloc(HeapObj::Symbol(symbol.clone()))),
             Constant::Proto(proto) => Ok(self.make_i64(i64::from(*proto))),
         }
     }
@@ -232,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_conditions_and_removed_nil_opcodes_are_errors() {
+    fn malformed_conditions_and_removed_semantic_opcodes_are_errors() {
         let mut not = Chunk::new();
         not.main.emit(Op::Unit);
         not.main.emit(Op::Not);
@@ -246,7 +241,7 @@ mod tests {
         branch.main.emit(Op::Return);
         assert!(vm_error(branch).contains("JumpIfFalse expects Bool"));
 
-        for removed in [82, 145] {
+        for removed in [21, 82, 145] {
             let mut removed_opcode = Chunk::new();
             removed_opcode.main.code = vec![removed];
             assert!(vm_error(removed_opcode).contains("unknown opcode"));

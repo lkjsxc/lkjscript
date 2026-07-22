@@ -78,7 +78,7 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
             cx.proto.emit(Op::Unit);
         }
         ExprKind::QuoteSymbol(symbol) => {
-            let constant = add_constant(cx.chunk, Constant::Str(format!("sym:{symbol}")))?;
+            let constant = add_constant(cx.chunk, Constant::Symbol(symbol.clone()))?;
             cx.proto.emit_op_u16(Op::LoadConst, constant);
         }
     }
@@ -267,8 +267,10 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::Subtract => Op::Sub,
         Operation::Multiply => Op::Mul,
         Operation::Divide => Op::Div,
-        Operation::Equal => Op::Eq,
-        Operation::NotEqual => Op::Ne,
+        Operation::EqualValue => Op::EqualValue,
+        Operation::SameObject => Op::SameObject,
+        Operation::ListEqual => Op::ListEqual,
+        Operation::F64BitsEqual => Op::F64BitsEqual,
         Operation::Less => Op::Lt,
         Operation::LessEqual => Op::Le,
         Operation::Greater => Op::Gt,

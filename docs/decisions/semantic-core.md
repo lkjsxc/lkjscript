@@ -9,8 +9,8 @@ ambiguity or unchecked hints.
 ## Status
 
 **Accepted Target** overall. Dedicated Unit, exact three-arm `if`, typed empty
-lists, and explicit Option/no-nil semantics are **Current**. Local-only mutation,
-explicit main, and the equality split remain pending; [current-state.md](../current-state.md)
+lists, explicit Option/no-nil semantics, and explicit equality families are
+**Current**. Local-only mutation and explicit main remain pending; [current-state.md](../current-state.md)
 records the exact boundary.
 
 ## Canonicality
@@ -125,8 +125,8 @@ semantics rather than hidden initialization.
 
 ## Equality
 
-The pending equality slice removes universal `eq`/`ne` and introduces four
-exact families:
+The current equality slice removes universal `eq`/`ne` and provides four exact
+families:
 
 - `equal-value`: identical-type value equality for current scalar types and
   recursively comparable Option/Result values;

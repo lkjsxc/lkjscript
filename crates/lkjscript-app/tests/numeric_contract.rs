@@ -22,10 +22,12 @@ fn assert_true(expression: &str) {
 
 #[test]
 fn compiled_i64_arithmetic_is_exact_across_f64_and_immediate_boundaries() {
-    assert_true("eq/\n+/\n9007199254740993\n2\n/+\n9007199254740995\n/eq");
-    assert_true("eq/\n+/\n1152921504606846975\n1\n/+\n1152921504606846976\n/eq");
-    assert_true("eq/\ndiv/\n-7\n2\n/div\n-3\n/eq");
-    assert_true("eq/\nbit-xor/\n-9223372036854775808\n-1\n/bit-xor\n9223372036854775807\n/eq");
+    assert_true("equal-value/\n+/\n9007199254740993\n2\n/+\n9007199254740995\n/equal-value");
+    assert_true("equal-value/\n+/\n1152921504606846975\n1\n/+\n1152921504606846976\n/equal-value");
+    assert_true("equal-value/\ndiv/\n-7\n2\n/div\n-3\n/equal-value");
+    assert_true(
+        "equal-value/\nbit-xor/\n-9223372036854775808\n-1\n/bit-xor\n9223372036854775807\n/equal-value",
+    );
 }
 
 #[test]
@@ -33,10 +35,10 @@ fn compiled_numeric_failures_and_ieee_equality_are_truthful() {
     assert!(evaluate("+/\n9223372036854775807\n1\n/+").is_err());
     assert!(evaluate("div/\n1\n0\n/div").is_err());
     assert_eq!(
-        evaluate("eq/\n1.0\n1.0000000000005\n/eq")
+        evaluate("equal-value/\n1.0\n1.0000000000005\n/equal-value")
             .expect("IEEE equality")
             .as_bool(),
         Some(false)
     );
-    assert_true("eq/\n+/\n2.0\n1\n/+\n3.0\n/eq");
+    assert_true("equal-value/\n+/\n2.0\n1\n/+\n3.0\n/equal-value");
 }

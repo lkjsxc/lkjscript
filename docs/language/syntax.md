@@ -47,17 +47,16 @@ mutation itself remains temporary and is removed by the accepted local
 ## Semantic Migration
 
 The first AI-first semantic slices are **Current**: dedicated `Unit`/`unit`,
-strict three-arm `if`, typed empty lists, and Option/no-nil semantics are
-enforced from source through HIR and VM. `arg` returns `Option Str`; negative or
-out-of-range indexes return none. The remaining semantic core is an
+strict three-arm `if`, typed empty lists, Option/no-nil semantics, and explicit
+equality families are enforced from source through HIR and VM. `arg` returns
+`Option Str`; negative or out-of-range indexes return none. The remaining
+semantic core is an
 **Accepted Target**:
 
 - replace global mutation with immutable declarations and function-local
   `var`/`set`;
 - replace top-level `do` with one explicit executable `main` and prohibit
   imported initialization effects;
-- replace universal `eq` with typed value, object identity, structural list,
-  and F64 bit comparisons;
 - keep Option absence, Result failure, and process-safe VM Trap outcomes
   distinct.
 
@@ -74,11 +73,14 @@ F64, in which case IEEE-754 F64 behavior applies. F64 identity is preserved,
 I64 values cover the complete signed 64-bit range, bitwise operations cover all
 64 bits, and host narrowing is checked.
 
-The canonical comparison names are `eq`, `ne`, `lt`, `lte`, `gt`, and `gte`.
-I64 equality is exact and F64 equality follows IEEE rules rather than an
-epsilon. See [Exact I64 And F64 Semantics](../decisions/numeric-semantics.md)
-for literal grammar, promotion, overflow, representation, and removed
-vocabulary.
+The canonical numeric ordering names are `lt`, `lte`, `gt`, and `gte`, using
+the arithmetic I64/F64 promotion rule. Equality never promotes: `equal-value`
+requires identical supported types and gives exact I64 or IEEE F64 equality;
+`f64-bits-equal` compares exact F64 bits. `same-object` is Buf/Handle identity,
+and `list-equal` is bounded structural equality. There is no negative alias;
+use `not` around a positive operation. See
+[Exact I64 And F64 Semantics](../decisions/numeric-semantics.md) and
+[Explicit Equality Families](../decisions/equality-families.md).
 
 ## Files And Imports
 

@@ -7,9 +7,9 @@ whose names expose value, identity, structural-list, and floating-bit semantics.
 
 ## Status
 
-**Accepted Target.** The current implementation still exposes universal `eq`
-and `ne`; the source-to-HIR-to-bytecode-to-VM cutover must land atomically before
-this record becomes **Current**. No compatibility aliases are retained.
+**Current.** The source-to-HIR-to-bytecode-to-VM cutover is complete. Universal
+`eq`/`ne` and their bytecodes are removed, and no compatibility aliases are
+retained.
 
 ## Canonical Operations
 
@@ -108,10 +108,12 @@ operands are rejected.
 ## HIR And Bytecode Contract
 
 Resolved HIR records the exact canonical operation and operand/result types.
-Backends never infer equality category from runtime values.
+Backends never infer equality category from runtime values. Bytecode constants
+also keep Str and Symbol as distinct variants; no string prefix can change a
+Str value into a Symbol.
 
-The bytecode cutover is intentionally incompatible because chunks are currently
-in-memory and unversioned:
+The bytecode contract is intentionally incompatible with the removed operations
+because chunks are currently in-memory and unversioned:
 
 - byte 20 becomes `EqualValue`;
 - historical byte 21 (`Ne`) becomes invalid;

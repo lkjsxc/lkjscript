@@ -9,6 +9,7 @@ pub enum Constant {
     I64(i64),
     F64(f64),
     Str(String),
+    Symbol(String),
     /// Prototype index for MakeClosure.
     Proto(u32),
 }

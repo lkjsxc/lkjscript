@@ -15,10 +15,10 @@ params/
 ch
 I64
 /params
-eq/
+equal-value/
 ch
 32
-/eq
+/equal-value
 /fn
 /def
 def/

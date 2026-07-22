@@ -37,20 +37,6 @@ fn number<J: JitHook>(vm: &Vm<'_, J>, value: Value) -> Result<Number> {
     }
 }
 
-fn optional_number<J: JitHook>(vm: &Vm<'_, J>, value: Value) -> Result<Option<Number>> {
-    if let Some(number) = value.as_small_i64() {
-        return Ok(Some(Number::I64(number)));
-    }
-    let Some(_) = value.as_heap() else {
-        return Ok(None);
-    };
-    match vm.arena.get(value)? {
-        HeapObj::Int(number) => Ok(Some(Number::I64(*number))),
-        HeapObj::Float(number) => Ok(Some(Number::F64(*number))),
-        _ => Ok(None),
-    }
-}
-
 fn push_number<J: JitHook>(vm: &mut Vm<'_, J>, number: Number) {
     let value = match number {
         Number::I64(number) => vm.make_i64(number),
@@ -143,27 +129,12 @@ fn compare_f64(ordering: Ordering, left: f64, right: f64) -> bool {
     }
 }
 
-pub fn numeric_equal<J: JitHook>(
-    vm: &Vm<'_, J>,
-    left: Value,
-    right: Value,
-) -> Result<Option<bool>> {
-    let left = optional_number(vm, left)?;
-    let right = optional_number(vm, right)?;
-    Ok(match (left, right) {
-        (None, None) => None,
-        (Some(_), None) | (None, Some(_)) => Some(false),
-        (Some(Number::I64(left)), Some(Number::I64(right))) => Some(left == right),
-        (Some(left), Some(right)) => Some(into_f64(left) == into_f64(right)),
-    })
-}
-
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
     use lkjscript_core::{Chunk, HeapObj, NullJit, Op, MAX_SMALL_I64, MIN_SMALL_I64};
 
-    use super::{bin_arithmetic, bin_ordering, numeric_equal, Arithmetic, Ordering};
+    use super::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
     use crate::run::Vm;
 
     fn pop_i64(vm: &mut Vm<'_, NullJit>) -> i64 {
@@ -263,13 +234,11 @@ mod tests {
     }
 
     #[test]
-    fn numeric_equality_and_ordering_are_exact_or_ieee() {
+    fn numeric_ordering_is_exact_and_uses_ieee_promotion() {
         let chunk = Chunk::new();
         let mut vm = Vm::new(&chunk, NullJit, Vec::new());
         let left = vm.make_i64(9_007_199_254_740_992);
         let right = vm.make_i64(9_007_199_254_740_993);
-        assert_eq!(numeric_equal(&vm, left, right).ok(), Some(Some(false)));
-
         vm.push(left);
         vm.push(right);
         bin_ordering(&mut vm, Ordering::Less).expect("exact I64 ordering");
@@ -278,19 +247,14 @@ mod tests {
             Some(true)
         );
 
-        let close_left = vm.arena.alloc(HeapObj::Float(1.0));
-        let close_right = vm.arena.alloc(HeapObj::Float(1.0 + 5.0e-13));
+        let integer = vm.make_i64(1);
+        let float = vm.arena.alloc(HeapObj::Float(1.5));
+        vm.push(integer);
+        vm.push(float);
+        bin_ordering(&mut vm, Ordering::Less).expect("mixed numeric ordering");
         assert_eq!(
-            numeric_equal(&vm, close_left, close_right).ok(),
-            Some(Some(false))
-        );
-        let nan = vm.arena.alloc(HeapObj::Float(f64::NAN));
-        assert_eq!(numeric_equal(&vm, nan, nan).ok(), Some(Some(false)));
-        let positive_zero = vm.arena.alloc(HeapObj::Float(0.0));
-        let negative_zero = vm.arena.alloc(HeapObj::Float(-0.0));
-        assert_eq!(
-            numeric_equal(&vm, positive_zero, negative_zero).ok(),
-            Some(Some(true))
+            vm.pop().expect("comparison result on stack").as_bool(),
+            Some(true)
         );
     }
 

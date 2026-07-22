@@ -1,4 +1,4 @@
-//! Language-spec source budgets. Numbers are fixed for this language version.
+//! Language-spec fixed budgets. Numbers are fixed for this language version.
 
 /// Maximum lkjscript form depth in one file.
 pub const MAX_NEST_DEPTH: u32 = 8;
@@ -10,6 +10,8 @@ pub const MAX_TOKENS_PER_FILE: u32 = 384;
 pub const MAX_DIR_CHILDREN: u32 = 16;
 /// Maximum top-level `def` / `do` / `import` forms per file.
 pub const MAX_TOPLEVEL_FORMS: u32 = 8;
+/// Maximum pair-node comparisons performed by one structural list equality.
+pub const MAX_LIST_EQUAL_STEPS: usize = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
@@ -44,5 +46,6 @@ mod tests {
         assert_eq!(lim.max_tokens_per_file, MAX_TOKENS_PER_FILE);
         assert_eq!(lim.max_dir_children, MAX_DIR_CHILDREN);
         assert_eq!(lim.max_toplevel_forms, MAX_TOPLEVEL_FORMS);
+        assert_eq!(MAX_LIST_EQUAL_STEPS, 1_000_000);
     }
 }

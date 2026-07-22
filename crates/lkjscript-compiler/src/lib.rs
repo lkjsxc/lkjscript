@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn bytecode_constants_preserve_numeric_source_types() {
         let source =
-            "do/\neq/\n9223372036854775807\n9223372036854775807\n/eq\n+/\n2.0\n1\n/+\n/do\n";
+            "do/\nequal-value/\n9223372036854775807\n9223372036854775807\n/equal-value\n+/\n2.0\n1\n/+\n/do\n";
         let chunk = compile_source(source, "numeric.lkjscript", &Limits::default())
             .expect("compile numeric source");
         assert!(chunk
@@ -149,6 +149,8 @@ mod tests {
             );
         }
         for name in [
+            "eq",
+            "ne",
             "f+",
             "f-",
             "f*",
