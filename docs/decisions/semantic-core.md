@@ -34,7 +34,10 @@ empty List T         empty-list/ T /empty-list
 
 `Unit` has one value, `unit`, and means successful completion without useful
 data. `Option T` uses `some/ value /some` or the explicitly typed `none` form.
-An empty list is a typed collection value, not Unit or Option absence. Its
+`none/ T /none` contains exactly one type expression. `is-some` is the positive
+predicate; absence is `not/is-some/...`, not a second negative alias.
+`unwrap-some` returns the payload or traps explicitly on none. `arg` has type
+`I64 -> Option Str`, including negative and out-of-range indices. An empty list is a typed collection value, not Unit or Option absence. Its
 canonical form contains exactly one element type expression. `empty-list?` is
 the only emptiness predicate and has type `List T -> Bool`; the historical
 `null?` and generic `nil?` spellings are not list aliases. `car` and `cdr` trap
@@ -45,8 +48,9 @@ Reference-VM representations may erase the element type and share one dedicated
 empty-list singleton because resolved typed HIR retains the exact `List T`.
 Other singleton tags and typed native/Wasm layouts may differ without changing
 source semantics. Native and Wasm backends specialize Option representation per
-type, including proven niches, without changing source semantics. The all-zero internal value pattern
-is invalid rather than a semantic default.
+type, including proven niches, without changing source semantics. The all-zero
+internal value pattern is invalid rather than a semantic default. The reference
+VM uses a dedicated none singleton and a traced wrapper for some.
 
 The Unit and typed-empty-list slices are implemented. `Unit`/`unit` has a
 dedicated VM tag; empty `do`, `while`, `set`, and successful side-effecting
@@ -65,9 +69,10 @@ with the surviving branch type.
 
 This control-flow contract is implemented through parser, resolved typed HIR,
 bytecode, VM, tests, and the complete source corpus. Conditions are Bool rather
-than general truthy values. Missing stack values,
-locals, globals, or operands are validation/runtime errors, never Unit, none,
-or an empty list.
+than general truthy values. VM branch and `not` opcodes reject non-Bool values.
+Missing stack values, locals, globals, or operands are validation/runtime errors,
+never Unit, none, or an empty list. Uninitialized storage is private VM state
+that traps if observed.
 
 ## Option, Result, And Trap
 
