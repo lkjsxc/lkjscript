@@ -7,7 +7,7 @@ Separate observed behavior in this checkout from remaining work.
 ## Evidence Boundary
 
 Docker verification is the acceptance path for claimed completion.
-Local `quiet verify`, source-corpus validation, editor/http smokes, the numeric
+Local `quiet verify`, source-corpus validation, lkjedit/HTTP smokes, the numeric
 benchmark, and
 `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify`
 all passed on this checkout. The explicit `--build` prevents stale-image
@@ -19,11 +19,12 @@ success.
 - Language name: **lkjscript2026**; canonical LKJML sources use **`.lkjml`**
 - LKJML: one column-one marker/atom per line, no indentation or attributes,
   and quote-free `str/`, `name/`, and `import/` text blocks
-- Layout: `src/std` (primitives), `src/lib/edit` (editor package),
+- Layout: `src/std` (primitives), `src/lib/lkjedit` (validation app package),
   `src/examples` (runnable demonstrations)
 - Imports: `std/...`, `lib/...`, `examples/...` (mapped under `src/`; no `../`);
-  installed std/lib fallback through `LKJSCRIPT2026_ROOT`
-- Runtime Docker image bundles std/lib; a bind-mounted external-project smoke
+  installed std/lib/examples fallback through `LKJSCRIPT2026_ROOT`
+- Runtime Docker image bundles the source libraries and validation examples; a
+  bind-mounted external-project smoke
   importing `std/term/puts.lkjml` passed
 - Scratch OS layer: `lkjscript2026-sys`; terminal + TCP + FS + time policy in `.lkjml`
 - Hardcoded limit constants (no user-facing JSON limits)
@@ -31,8 +32,9 @@ success.
   compiled by `check-sources`
 - Bytecode VM; precise mark-sweep, tail-frame reuse, and intentional thin host
 - Language special `while`; bit ops for flag poking
-- Terminal editor: idle without full redraw, visible cmdline, cursor clamp/hide
-- Examples: `hello`, `mandel`, `texteditor`, `http`, `bench`
+- `lkjedit`: terminal/filesystem validation app; planned as a future standalone
+  repository, not part of the runtime product boundary
+- Examples: `hello`, `mandel`, `lkjedit`, `http`, `bench`
 - Honest C comparison script: `meta/scripts/bench-compare.sh`; F64 output and
   benchmark signatures are type-correct
 - Laws: [decisions/scratch-host.md](decisions/scratch-host.md),
@@ -42,21 +44,22 @@ success.
 
 See [vision/performance-roadmap.md](vision/performance-roadmap.md). Immediate
 product gaps are native self-contained installation, a published immutable
-Docker image, process-safe VM outcomes/host services, and a singleton
-multi-process supervisor. Runtime gaps include truthful sys `Result` errors,
+Docker image, process-safe VM outcomes/host services, and a Linux-first,
+daemon-default singleton supervisor motivated by resource efficiency. Runtime
+gaps include truthful sys `Result` errors,
 handle namespace separation, adaptive GC, and a real JIT execution handoff.
 
 ## Sprint Board
 
 | Area | Status |
 | --- | --- |
-| Editor display / new-file | done |
+| `lkjedit` display / new-file validation | done |
 | LKJML grammar + `.lkjml` corpus cutover | done |
 | Hardcoded limits | done |
 | Minimal HTTP + bench vs C | done |
 | Rust-like `src/std` + `src/lib` | done |
 | Standalone GitHub repo | done |
-| Editor beauty (idle/cmdline/while/flush) | done |
+| `lkjedit` idle/cmdline/while/flush validation | done |
 | Scratch host law + drop rustix | done |
 | Terminal policy in `.lkjml` | done |
 | TCP sockets in `.lkjml` (`src/std/net`) | done |

@@ -20,8 +20,8 @@ can continue without rediscovering recent pain.
 
 ```text
 src/std/          # primitives: list buffer io fs ansi term net
-src/lib/edit/     # only reusable lib package this sprint
-src/examples/     # hello mandel texteditor http bench
+src/lib/lkjedit/  # runtime validation app; future standalone repository
+src/examples/     # hello mandel lkjedit http bench
 crates/           # Rust host / compiler / VM / sys
 ```
 
@@ -36,7 +36,7 @@ again unless the user asks.
   (`compile_do`); this is already fixed — do not regress it.
 - Raw TTY redraw must emit CR+LF (LF-only caused a staircase display bug).
 - Missing file opens as an empty buffer with status `new file`.
-- Editor idle must not full-redraw; use `while` + `wait-ms` without paint.
+- `lkjedit` idle must not full-redraw; use `while` + `wait-ms` without paint.
 - Command mode must paint `ed-cmd` and CUP onto the cmdline row.
 - Flush after final CUP; hide cursor during clear/paint.
 - Prefer host `write-str` for bulk TTY output (not per-byte loops).
@@ -50,7 +50,7 @@ again unless the user asks.
 
 ## Near-Term Focus
 
-Keep editor/HTTP/bench green. LKJML + mandatory types + opaque Handle/`Result`
+Keep lkjedit/HTTP/bench green. LKJML + mandatory types + opaque Handle/`Result`
 sys + precise GC + ban-`Any` (sized `I32`/`U64`/`F64`…,
 annotation-driven `forall`, Str-only `print`) landed; baseline JIT still
 roadmap-only; see [vision/performance-roadmap.md](../vision/performance-roadmap.md)

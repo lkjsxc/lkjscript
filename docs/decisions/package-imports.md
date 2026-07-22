@@ -29,7 +29,7 @@ std/list/nth.lkjml
 /import
 ```
 
-The same form accepts `lib/edit/loop.lkjml` and
+The same form accepts `lib/lkjedit/loop.lkjml` and
 `examples/hello/fact.lkjml`.
 
 ## Consequences

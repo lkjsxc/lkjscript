@@ -12,7 +12,7 @@ cargo run -p lkjscript2026-xtask -- check-tree
 cargo run -p lkjscript2026-xtask -- check-sources
 cargo run -p lkjscript2026-xtask -- quiet test
 cargo run -p lkjscript2026-xtask -- quiet verify
-LKJ=target/debug/lkjscript2026 meta/scripts/editor-smoke.sh
+LKJ=target/debug/lkjscript2026 meta/scripts/lkjedit-smoke.sh
 LKJ=target/debug/lkjscript2026 meta/scripts/http-smoke.sh
 N=5000 meta/scripts/bench-compare.sh
 ```
@@ -33,11 +33,11 @@ docker build -f meta/Dockerfile --target runtime -t lkjscript2026 . && \
   run main.lkjml
 ```
 
-Interactive editor:
+Interactive `lkjedit` validation app:
 
 ```sh
-docker compose -f meta/docker-compose.yml run -it --rm texteditor \
-  run src/examples/texteditor/main.lkjml /tmp/file
+docker compose -f meta/docker-compose.yml run -it --rm lkjedit \
+  run src/examples/lkjedit/main.lkjml /tmp/file
 ```
 
 One-shot HTTP hello (port 8080):
@@ -48,6 +48,6 @@ docker compose -f meta/docker-compose.yml run --rm -p 8080:8080 http
 
 `quiet verify` checks required docs, directory fan-out, every `.lkjml` file,
 absence of legacy `.lkjscript` source, and Rust unit tests. The verify image
-also runs hello/mandel demos, editor-smoke, and http-smoke.
+also runs hello/mandel demos, lkjedit-smoke, and http-smoke.
 
 A gate that did not run did not pass.

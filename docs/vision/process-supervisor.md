@@ -8,7 +8,34 @@ machine hosting many independent LKJML processes.
 ## Status
 
 This is a staged product plan, not current behavior. The CLI currently compiles
-one entry and runs one synchronous VM in one OS process.
+one entry and runs one synchronous VM in one OS process. Linux is the first
+production target. The intended default is daemon-backed execution; a direct
+standalone path may remain for bootstrap, recovery, and diagnostics.
+
+## Accepted Direction
+
+- Remain Linux-first until the daemon and scheduler are operationally sound.
+- Make normal execution daemon-backed; standalone execution is explicit
+  recovery tooling, not a second default runtime model.
+- Optimize the singleton for machine resource efficiency and aggregate
+  performance while preserving strict logical-process isolation.
+- Use `lkjedit` only as an in-tree validation application and prepare it for a
+  future standalone repository.
+
+## Why One Runtime
+
+The singleton is a performance and resource decision, not only a management
+convenience. A machine-wide runtime can share immutable compiled chunks and
+import caches, centralize epoll and timers, avoid one scheduler and service
+layer per application, and enforce global CPU, memory, handle, and output
+budgets. Cooperative quanta also avoid requiring one permanently active native
+thread for every mostly idle process.
+
+Logical processes still require isolated globals, stacks, heaps, handles, and
+failures. The singleton must not become one global mutable heap or a serial
+bottleneck. Measurements must compare resident memory per idle process,
+throughput, latency, scheduler overhead, and cache reuse against separate OS
+processes and the thread-per-VM prototype.
 
 ## Product contract
 
@@ -23,7 +50,9 @@ A future machine runtime should:
   or stalling unrelated processes;
 - cache immutable compiled chunks by source/import content hash;
 - make lifecycle state and failure reasons observable without reading raw logs;
-- preserve a foreground mode that feels as direct as today's `run` command.
+- make ordinary `run` daemon-backed while preserving direct foreground UX;
+- retain an explicit standalone recovery path rather than silently starting a
+  second independent machine runtime.
 
 ## Control UX
 
@@ -40,6 +69,11 @@ lkjscript2026 restart api
 lkjscript2026 inspect api
 lkjscript2026 daemon
 ```
+
+`run` should ensure the singleton daemon exists, submit an ephemeral process,
+and attach its streams. It must not silently create an independent runtime when
+the daemon is unavailable. An explicit `run --standalone` recovery mode may
+bypass the daemon for diagnostics and repair.
 
 Human output should be a stable table with name, state, entry, uptime, restart
 count, CPU/fuel, heap, and last failure. A versioned machine-readable mode must
@@ -102,7 +136,7 @@ A non-mock milestone concurrently runs:
 - one CPU-bound numeric process;
 - two HTTP processes on different ports;
 - one sleeping worker;
-- one foreground editor with the terminal lease.
+- one foreground `lkjedit` validation process with the terminal lease.
 
 The test must list all processes, stream distinct logs, stop and restart each
 one, enforce a cancelled CPU process within its latency budget, and prove that
@@ -118,4 +152,5 @@ GC pause, cancellation latency, and descriptor cleanup.
 4. Measure the acceptance workload and retain both results.
 5. Add the local control socket and lifecycle commands.
 6. Add nonblocking Linux IO, timers, quotas, logs, persistence, and restart.
-7. Only then make the daemon the default Docker/native product shape.
+7. Make the daemon the default Linux Docker/native product shape while keeping
+   standalone execution explicit for recovery and diagnostics.

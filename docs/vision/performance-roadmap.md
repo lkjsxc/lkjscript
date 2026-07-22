@@ -20,7 +20,7 @@ flowchart TB
 
 ### Now
 
-Correct editor/runtime, package-root imports, hardcoded limits, thin TCP/HTTP
+Correct lkjedit/runtime behavior, package-root imports, hardcoded limits, thin TCP/HTTP
 demo, honest numeric benchmarks versus C, and a scratch `lkjscript2026-sys`
 layer (no crates.io OS helpers).
 
@@ -34,7 +34,7 @@ See [decisions/scratch-host.md](../decisions/scratch-host.md).
 
 Mandatory signatures, sized numeric types, checked defs, annotation-driven
 polymorphism, and opaque handles have landed. Sealed modules remain later work
-and must not break shared editor globals without an explicit migration.
+and must not break shared lkjedit globals before its repository extraction.
 
 ### GC
 

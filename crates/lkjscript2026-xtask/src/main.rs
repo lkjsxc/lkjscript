@@ -94,11 +94,11 @@ fn check_sources(root: &Path) -> i32 {
         "src/examples/hello/main.lkjml",
         "src/examples/http/hello.lkjml",
         "src/examples/mandel/main.lkjml",
-        "src/examples/texteditor/buffer-demo.lkjml",
-        "src/examples/texteditor/edit-mem.lkjml",
-        "src/examples/texteditor/hello.lkjml",
-        "src/examples/texteditor/main.lkjml",
-        "src/examples/texteditor/vimlike.lkjml",
+        "src/examples/lkjedit/buffer-demo.lkjml",
+        "src/examples/lkjedit/edit-mem.lkjml",
+        "src/examples/lkjedit/hello.lkjml",
+        "src/examples/lkjedit/main.lkjml",
+        "src/examples/lkjedit/vimlike.lkjml",
     ] {
         if let Err(error) = compile_path(&root.join(entry), &limits) {
             eprintln!("{entry}: {error}");

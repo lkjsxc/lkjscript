@@ -21,13 +21,13 @@ services:
     stdin_open: true
     tty: true
 
-  texteditor:
+  lkjedit:
     profiles: ["run"]
     build:
       context: ..
       dockerfile: meta/Dockerfile
       target: runtime
-    command: ["run", "src/examples/texteditor/main.lkjml"]
+    command: ["run", "src/examples/lkjedit/main.lkjml"]
     working_dir: /usr/local/share/lkjscript2026
     stdin_open: true
     tty: true

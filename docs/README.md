@@ -11,5 +11,5 @@ Implementation contract for the `lkjscript2026` language and runtime.
 - [language/](language/README.md): surface syntax and limits
 - [runtime/](runtime/README.md): VM and JIT hook
 - [operations/](operations/README.md): gates and Docker
-- [product/](product/README.md): editor and demos
+- [product/](product/README.md): lkjedit validation app and demos
 - [decisions/](decisions/README.md): ADRs

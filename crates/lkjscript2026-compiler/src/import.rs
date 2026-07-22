@@ -224,13 +224,13 @@ mod tests {
     #[test]
     fn lib_prefix() {
         let p = resolve_import_with_root(
-            "lib/edit/loop.lkjml",
+            "lib/lkjedit/loop.lkjml",
             Path::new("/a/b"),
             Path::new("/pkg"),
             None,
         )
         .unwrap();
-        assert_eq!(p, PathBuf::from("/pkg/src/lib/edit/loop.lkjml"));
+        assert_eq!(p, PathBuf::from("/pkg/src/lib/lkjedit/loop.lkjml"));
     }
 
     #[test]

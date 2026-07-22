@@ -31,7 +31,7 @@ RUN --mount=type=cache,id=lkjscript2026-cargo-registry,target=/usr/local/cargo/r
     && /tmp/lkjscript2026 run src/examples/hello/main.lkjml | grep -q 3628800 \
     && /tmp/lkjscript2026 run src/examples/mandel/main.lkjml > /tmp/mandel.out \
     && test -s /tmp/mandel.out \
-    && LKJ=/tmp/lkjscript2026 bash meta/scripts/editor-smoke.sh \
+    && LKJ=/tmp/lkjscript2026 bash meta/scripts/lkjedit-smoke.sh \
     && LKJ=/tmp/lkjscript2026 bash meta/scripts/http-smoke.sh \
     && printf 'result=ok\n' > /tmp/lkjscript2026-verification-result
 
