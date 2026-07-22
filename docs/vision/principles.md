@@ -2,22 +2,28 @@
 
 ## Purpose
 
-Ranked invariants that shape every change.
+Rank the invariants used when architectural goals conflict.
+
+## Status
+
+**Current engineering policy.**
 
 ## Ranked List
 
-1. Honest gates beat aspirational claims.
-2. Prefer shallow multi-def and multi-file over deep nests.
-3. Keep the host thin and syscall-shaped; grow capability in `.lkjml`.
-4. Prefer one resource-efficient runtime per OS user, or per Docker container,
-   with isolated logical processes, shared immutable work, and explicit global
-   budgets.
-5. Backward compatibility is not a project constraint; replace obsolete
-   contracts instead of carrying compatibility shims.
-6. Avoid Python in project tooling. Use Rust or shell by default; allow Python
-   only when an experiment or external comparison materially benefits from it.
-7. No new third-party Rust crates without an ADR; prefer owned scratch code.
-8. Do not add fat host “feature” opcodes when a script library could own it.
-9. Limits are language constants / policy knobs, not sacred forever.
-10. Dense bytecode and tagged values stay cache-friendly and JIT-ready.
-11. Docs and code move together.
+1. Truthful contracts and evidence outrank aspirational feature breadth.
+2. Memory safety and semantic conformance precede performance claims.
+3. Documentation changes define a public contract before implementation.
+4. Backward compatibility is not required; obsolete surfaces are removed.
+5. Placeholders are allowed only when explicitly labeled everywhere visible.
+6. Prefer complete vertical slices over mocks and dormant interfaces.
+7. Measure isolated candidates and multiple combinations before adoption.
+8. Preserve rejected ideas with the conditions under which they may become useful.
+9. Grow capability in lkjscript libraries over a small, safe host boundary.
+10. Keep unsafe Rust isolated in `lkjscript-sys`; safe wrappers uphold safety.
+11. Add no third-party Rust dependency without a measured decision record.
+12. Keep language source shallow and at most 16 entries wide per directory.
+13. Keep bytecode/value layouts cache-conscious, but redesign them when evidence
+    supports a simpler or faster truthful contract.
+14. Build portability seams honestly while accepting Linux-first delivery.
+15. Delete redundant tests and generated artifacts only when stronger evidence
+    or reproducibility makes them unnecessary.

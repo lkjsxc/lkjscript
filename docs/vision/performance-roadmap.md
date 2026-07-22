@@ -1,83 +1,108 @@
-# Performance roadmap
+# Performance Roadmap
 
 ## Purpose
 
-Organize the path toward a low-level, highly abstract, eventually very fast
-`lkjscript` runtime. This is aspiration and sequencing — not a release claim.
+Define a measured path toward exceptional runtime performance without turning
+aspiration into a release claim.
 
-## Layers
+## Status
 
-```mermaid
-flowchart TB
-  now[Now_correctness_and_scratch_host]
-  thin[Thin_sys_primitives_plus_script_libs]
-  types[Static_types_and_modules]
-  gc[Precise_then_generational_GC]
-  jit[Baseline_JIT]
-  pgo[Profile_guided_adaptive_opts]
-  now --> thin --> types --> gc --> jit --> pgo
+Interpreter, precise mark-sweep, and tail-frame reuse are **Current**. Typed IR,
+exact numeric execution, adaptive GC, native JIT, and profile-guided
+specialization are **Deferred** or **Experimental** until their recorded gates
+pass.
+
+## Sequence
+
+```text
+truthful semantics and safety
+  -> reproducible measurement
+  -> normalized typed IR
+  -> exact specialized bytecode
+  -> allocation and call-path optimization
+  -> adaptive memory management
+  -> baseline native code
+  -> profile-guided specialization
 ```
 
-### Now
+Safety and type/runtime agreement are performance prerequisites: an optimizer
+cannot preserve semantics that are contradictory or undefined.
 
-Correct lkjedit/runtime behavior, package-root imports, hardcoded limits, thin TCP/HTTP
-demo, honest numeric benchmarks versus C, and a scratch `lkjscript-sys`
-layer (no crates.io OS helpers).
+## Current Interpreter
 
-### Thin primitives + `.lkjml` libraries
+The VM uses dense bytecode, contiguous stacks, tagged values, precise
+non-moving mark-sweep collection, and return-adjacent frame reuse. Source is
+compiled on every CLI invocation. Host effects block synchronously.
 
-Shrink fat host opcodes over time. Keep hot ops obvious so a future JIT can
-specialize them; put policy (termios, sockets, buffering) in `.lkjml`.
-See [decisions/scratch-host.md](../decisions/scratch-host.md).
+A historical GC condition caused a full heap trace before nearly every
+instruction after the arena exceeded 4,096 slots. Removing that condition and
+reusing tail frames eliminated the observed cliff. Historical debug figures
+were 0.091 seconds for 20,000 and 0.877 seconds for 200,000 Leibniz iterations;
+the C comparison at 20,000 was 0.001 seconds. The machine, variance, and raw
+artifacts were not preserved, so these are diagnostic history rather than a
+current baseline.
 
-### Static types and modules
+## Immediate Measurement Work
 
-Mandatory signatures, sized numeric types, checked defs, annotation-driven
-polymorphism, and opaque handles have landed. Sealed modules remain later work
-and must not break shared lkjedit globals before its repository extraction.
+Create separate measurements for:
 
-### GC
+- source loading and compilation;
+- VM-only execution of an already compiled chunk;
+- CLI startup plus compile plus run;
+- allocations, collections, live/high-water heap, and pause latency;
+- resident memory and output correctness;
+- lkjedit and HTTP end-to-end regressions.
 
-Precise mark-sweep has landed. Collection scheduling is allocation-driven: a
-completed collection resets pressure even when the arena has more than 4,096
-slots. The former `slots > 4096` condition stayed true after collection and
-therefore ran a full heap trace before every VM instruction. A 20,000-iteration
-Leibniz run exceeded 55 seconds while 2,000 iterations took 0.010 seconds,
-exposing that cliff.
+Use randomized repeated trials and report median plus dispersion. Compare an
+algorithm-equivalent C implementation as well as the optimized iterative C
+version.
 
-The immediate policy collects once per 1,024 allocations. Together with tail
-frame reuse, the same debug-build benchmark completed 20,000 iterations in
-0.091 seconds and 200,000 in 0.877 seconds on this checkout; the C comparison
-at 20,000 took 0.001 seconds. These figures are diagnostic, not portable
-marketing claims.
+## Candidate Layers
 
-Alternatives retained for measurement are an adaptive threshold based on
-post-collection live bytes, slot compaction, and a nursery plus old generation.
-Combining adaptive growth with generations is likely best for long-lived
-multi-process workloads, but it requires write barriers and representative
-resident-set benchmarks first.
+### Typed IR
 
-### Tail calls
+Resolve symbols, declarations, imports, and types into one normalized form
+consumed by both bytecode and future native lowering. This removes duplicated
+operator/type tables and prevents typechecker/code-generator disagreement.
 
-The interpreter reuses the current frame when a `Call` is immediately followed
-by `Return`. LKJML libraries use recursion for loops, so this peephole prevents
-tail-recursive processes from retaining every frame and every heap temporary.
-An explicit `TailCall` opcode was considered, but return-adjacent frame reuse
-keeps bytecode stable and gives the same result for the current compiler.
-Compiler-emitted tail opcodes remain useful if later control-flow lowering
-makes adjacency unreliable; native tail jumps belong in the baseline JIT.
+### Exact Bytecode
 
-### Baseline JIT
+Use operations whose names encode actual semantics, such as integer and float
+arithmetic, checked conversion, and typed resource access. Validate chunks at
+public boundaries.
 
-Grow `JitHook` from a stub into a baseline native compiler for hot calls.
+### Allocation And Calls
 
-### Adaptive / profile-guided speed
+Measure rooted immutable constants, closure-prototype access without cloning,
+tail-call argument movement without temporary allocation, bulk byte IO, and
+content-keyed compiler caches independently and in combinations.
 
-Hot-path counters and specialization so long-running processes get faster
-over time (PGO-style), without promising “world’s fastest” in marketing copy.
+### Adaptive Memory
 
-## Deferred
+Compare multiple fixed thresholds, live-heap adaptive thresholds, compaction,
+and nursery/old-generation designs. Retain rejected policies with workload and
+heap-shape conditions in the experiment registry.
 
-- Browser IDE (explicitly deferred)
-- Full Rust-parity type system in one jump
-- Claiming victory over C before measurements say so
+### Native Execution
+
+The current JIT seam is an explicit placeholder. Native work starts only after
+there is a typed IR and an execution handoff with defined failure and
+fallback/deoptimization behavior. Measure warmup and steady state separately.
+
+### Profile-Guided Specialization
+
+Long-running applications may specialize hot calls, representations, and host
+paths. Specialization must remain observable, bounded, invalidatable, and
+correct under the same conformance suite as the interpreter.
+
+## Adoption Rules
+
+See [experiments.md](experiments.md). No isolated win is adopted solely from a
+single microbenchmark. Correctness, whole-suite geometric mean, worst
+regression, memory, and operational complexity are considered together.
+
+## Deferred Product Work
+
+Browser, GUI, package, server, supervisor, and framework milestones receive
+their own workload matrices. They do not serve as justification for prematurely
+shipping an unsafe or semantically inconsistent optimization layer.

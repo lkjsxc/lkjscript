@@ -8,7 +8,7 @@ runtime domain and is treated as one machine for this contract.
 
 ## Status
 
-This is a staged product plan, not current behavior. The CLI currently compiles
+**Experimental.** This is a staged product plan, not current behavior. The CLI currently compiles
 one entry and runs one synchronous VM in one OS process. Linux is the first
 production target. The intended default is daemon-backed execution; a direct
 standalone path may remain for bootstrap, recovery, and diagnostics.

@@ -1,40 +1,37 @@
-# Package-root imports
+# Package-Root Imports
 
-## Context
+## Purpose
 
-Relative `../` climbs made libraries and examples brittle under directory
-fan-out.
+Define current path resolution and its accepted containment/extension repairs.
 
-## Decision
+## Status
 
-- Import paths that do **not** start with `.` resolve from the package root.
-- Special prefixes:
-  - `std/...` → `src/std/...`
-  - `lib/...` → `src/lib/...`
-  - `examples/...` → `src/examples/...`
-- Paths starting with `./` resolve relative to the importing file.
-- Paths containing `..` are rejected.
-- Package root is the nearest ancestor containing `src/std/`; otherwise it is
-  the current working directory.
-- If a project has no local `src/std`, `src/lib`, or `src/examples`, those
-  prefixes fall back to the corresponding directory under
-  `$LKJSCRIPT_ROOT/src`.
-- Project-local library directories win over the installed fallback.
+Package-root categories and importer-relative `./` are **Current**. Canonical
+`.lkjscript` enforcement and containment hardening are **Accepted Target**.
 
-Example:
+## Current Decision
 
-```text
-import/
-std/list/nth.lkjml
-/import
-```
+- `std/...`, `lib/...`, and `examples/...` map below package `src` categories.
+- `./...` resolves relative to the importing file.
+- Strings containing `..` are rejected.
+- The package root is the nearest ancestor containing `src/std`; otherwise the
+  current working directory is used.
+- Missing local category directories fall back to `$LKJSCRIPT_ROOT/src/...`.
+- Local category directories win over installed fallback.
+- Cycles fail and repeated canonical files are deduplicated.
 
-The same form accepts `lib/lkjedit/loop.lkjml` and
-`examples/hello/fact.lkjml`.
+Current definitions merge into one program-global namespace; this is source
+loading, not a complete module/package system.
 
-## Consequences
+## Accepted Target
 
-Modules are identified by logical path (`std/…`, `lib/…`, `examples/…`).
-Top-level `def` remains program-global for this release. Docker sets
-`LKJSCRIPT_ROOT` to its bundled libraries, so bind-mounted projects do not
-need to copy the standard library.
+- Every source and import ends in `.lkjscript`; `.lkjml` is rejected.
+- Absolute import paths are rejected.
+- Canonicalized paths remain inside the selected project or installed category
+  root; symlinks cannot escape it.
+- Imported source directories obey the 16-entry language rule.
+
+## Deferred
+
+Namespaces, exports, manifests, versions, locks, registries, content-addressed
+archives, and serialized compiled packages require separate decisions.

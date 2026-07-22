@@ -2,52 +2,76 @@
 
 ## Purpose
 
-Define how completion is checked.
+Define evidence gates and distinguish their current and accepted scope.
 
-## Local
+## Status
+
+The baseline commands are **Current**. Stronger documentation, source-tree,
+formatting, Clippy, and conformance gates are an **Accepted Target**.
+
+## Current Local Gates
 
 ```sh
-cargo run -p lkjscript-xtask -- check-docs
-cargo run -p lkjscript-xtask -- check-tree
-cargo run -p lkjscript-xtask -- check-sources
-cargo run -p lkjscript-xtask -- quiet test
-cargo run -p lkjscript-xtask -- quiet verify
-LKJ=target/debug/lkjscript meta/scripts/lkjedit-smoke.sh
-LKJ=target/debug/lkjscript meta/scripts/http-smoke.sh
-N=5000 meta/scripts/bench-compare.sh
+cargo run --locked -p lkjscript-xtask -- check-docs
+cargo run --locked -p lkjscript-xtask -- check-tree
+cargo run --locked -p lkjscript-xtask -- check-sources
+cargo run --locked -p lkjscript-xtask -- quiet test
+cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
+
+At baseline, `quiet verify` checks selected document existence, the old global
+eight-visible-entry tree rule, syntax for `.lkjml` under `src`, nine hardcoded
+compile roots, and workspace unit tests. It does not run rustfmt, Clippy,
+runtime smokes, benchmarks, or Docker.
+
+Separate current runtime acceptance:
+
+```sh
+cargo build --workspace --release --locked
+LKJ=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
+LKJ=target/release/lkjscript meta/scripts/http-smoke.sh
+```
+
+The pre-cutover commands and results are recorded in
+[../current-state.md](../current-state.md).
 
 ## Docker
 
-Build and run the full acceptance image from the current checkout:
+The current full acceptance image is built explicitly to avoid stale-image
+success:
 
 ```sh
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
 ```
 
-Run an arbitrary project against the bundled standard library:
+Docker was not rerun for the recorded foundation baseline and is not claimed as
+passing there.
 
-```sh
-docker build -f meta/Dockerfile --target runtime -t lkjscript . && \
-  docker run --rm -it -v "$PWD:/project" -w /project lkjscript \
-  run main.lkjml
-```
+## Accepted Local Gate
 
-Interactive `lkjedit` validation app:
+After the foundation cutover, `quiet verify` must check:
 
-```sh
-docker compose -f meta/docker-compose.yml run -it --rm lkjedit \
-  run src/examples/lkjedit/main.lkjml /tmp/file
-```
+1. required documentation and valid status/placeholder labeling;
+2. the 16-entry rule only for lkjscript source directories;
+3. `.lkjscript` source inventory and rejection of `.lkjml`;
+4. import suffix, containment, cycle, and corpus coverage;
+5. focused type/prelude/codegen/VM conformance;
+6. `cargo fmt --all -- --check`;
+7. strict workspace Clippy;
+8. workspace tests.
 
-One-shot HTTP hello (port 8080):
+Runtime smokes remain separate so focused compiler work is not forced to open a
+socket or terminal on every test run. Docker remains the final packaging and
+installed-library acceptance gate.
 
-```sh
-docker compose -f meta/docker-compose.yml run --rm -p 8080:8080 http
-```
+## Performance Evidence
 
-`quiet verify` checks required docs, directory fan-out, every `.lkjml` file,
-absence of legacy `.lkjscript` source, and Rust unit tests. The verify image
-also runs hello/mandel demos, lkjedit-smoke, and http-smoke.
+A benchmark is not a pass/fail correctness gate unless it has a declared
+baseline, repetitions, noise measure, correctness oracle, and adoption
+threshold. Use [../vision/experiments.md](../vision/experiments.md). A
+single-shot C comparison is diagnostic only.
 
-A gate that did not run did not pass.
+## Rule
+
+A gate that did not run did not pass. A historical pass is not evidence for a
+new commit.

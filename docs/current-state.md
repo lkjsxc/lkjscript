@@ -2,75 +2,96 @@
 
 ## Purpose
 
-Separate observed behavior in this checkout from remaining work.
+Separate observed behavior from accepted targets and later ambitions.
 
-## Evidence Boundary
+## Status
 
-Docker verification is the acceptance path for claimed completion.
-Local `quiet verify`, source-corpus validation, lkjedit/HTTP smokes, the numeric
-benchmark, and
-`docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify`
-all passed on this checkout. The explicit `--build` prevents stale-image
-success.
+**Current** baseline plus an explicitly separated **Accepted Target**.
 
-## Current Implementation
+## Current
 
-- Standalone repo: `https://github.com/lkjsxc/lkjscript`
-- Language name: **lkjscript**; canonical LKJML sources use **`.lkjml`**
-- LKJML: one column-one marker/atom per line, no indentation or attributes,
-  and quote-free `str/`, `name/`, and `import/` text blocks
-- Layout: `src/std` (primitives), `src/lib/lkjedit` (validation app package),
-  `src/examples` (runnable demonstrations)
-- Imports: `std/...`, `lib/...`, `examples/...` (mapped under `src/`; no `../`);
-  installed std/lib/examples fallback through `LKJSCRIPT_ROOT`
-- Runtime Docker image bundles the source libraries and validation examples; a
-  bind-mounted external-project smoke
-  importing `std/term/puts.lkjml` passed
-- Scratch OS layer: `lkjscript-sys`; terminal + TCP + FS + time policy in `.lkjml`
-- Hardcoded limit constants (no user-facing JSON limits)
-- Every source is syntax-checked; all nine executable roots are typechecked and
-  compiled by `check-sources`
-- Bytecode VM; precise mark-sweep, tail-frame reuse, and intentional thin host
-- Language special `while`; bit ops for flag poking
-- `lkjedit`: terminal/filesystem validation app; planned as a future standalone
-  repository, not part of the runtime product boundary
-- Examples: `hello`, `mandel`, `lkjedit`, `http`, `bench`
-- Honest C comparison script: `meta/scripts/bench-compare.sh`; F64 output and
-  benchmark signatures are type-correct
-- Laws: [decisions/scratch-host.md](decisions/scratch-host.md),
-  [operations/agent-handoff.md](operations/agent-handoff.md)
+This snapshot was observed before the foundation cutover.
 
-## Open Work
+- Commit: `8aa09d82280c8939d81078b0f040fdf10c550e35`
+- Repository: `https://github.com/lkjsxc/lkjscript`
+- Branch state: clean `main`, synchronized with `origin/main`
+- Host: Linux x86-64, kernel `7.0.0-27-generic`
+- Rust: `rustc 1.96.0`, Cargo `1.96.0`, LLVM `22.1.2`
+- C compiler: Ubuntu GCC `13.3.0`
+- Disk at baseline: 100 GiB available, repository `target/` 63 MiB
 
-See [vision/performance-roadmap.md](vision/performance-roadmap.md). Immediate
-product gaps are native self-contained installation, a published immutable
-Docker image, process-safe VM outcomes/host services, and a Linux-first,
-daemon-default singleton supervisor motivated by resource efficiency. The
-agreed target is one daemon per OS user and one daemon per Docker container;
-`run` is attached and cancelled on disconnect, `start` is detached but
-non-persistent, and the separate `deploy` operation owns persistent specs.
-`restart` recompiles the latest source. Runtime gaps include truthful sys
-`Result` errors,
-handle namespace separation, adaptive GC, and a real JIT execution handoff.
+The implementation currently has:
 
-## Sprint Board
+- 117 `.lkjml` language files under `src`;
+- line-oriented matched markers and raw `str/`, `name/`, and `import/` blocks;
+- package-root imports for `std/`, `lib/`, `examples/`, and importer-relative `./`;
+- six Rust workspace crates and no third-party Rust dependencies;
+- a compiler, static type pass, dense bytecode VM, precise mark-sweep GC, and
+  return-adjacent frame reuse;
+- Linux-first filesystem, terminal, time, and IPv4 TCP primitives;
+- hello, Mandelbrot, one-shot HTTP, benchmark, and lkjedit workloads;
+- Docker packaging that bundles the standard library and in-tree packages.
 
-| Area | Status |
+Known current defects and incomplete boundaries include:
+
+- `.lkjml` is still accepted while `.lkjscript` is rejected;
+- `check-tree` applies an eight-visible-entry repository rule instead of the
+  accepted 16-entry lkjscript source-tree rule;
+- arbitrary script-controlled `sys-ioctl` reaches a safe Rust wrapper that does
+  not validate the kernel structure size;
+- ordinary OS failures from many `sys-*` operations abort the VM instead of
+  producing language `ResultErr` values;
+- `sys-send` reports zero rather than its successful byte count;
+- handles conflate raw descriptors and reusable table indexes;
+- the type prelude advertises numeric widths, conversions, and operators that
+  code generation and runtime execution do not fully implement;
+- `disasm` reports only summary counts, and the CLI contains an unadvertised,
+  unimplemented `repl` branch;
+- the JIT interface observes calls but cannot transfer execution to compiled
+  code;
+- native installation, self-update, packages, CI, releases, browser, GUI, and a
+  general HTTP server/framework are absent.
+
+## Baseline Evidence
+
+Observed at the commit above:
+
+| Command | Result |
 | --- | --- |
-| `lkjedit` display / new-file validation | done |
-| LKJML grammar + `.lkjml` corpus cutover | done |
-| Hardcoded limits | done |
-| Minimal HTTP + bench vs C | done |
-| Rust-like `src/std` + `src/lib` | done |
-| Standalone GitHub repo | done |
-| `lkjedit` idle/cmdline/while/flush validation | done |
-| Scratch host law + drop rustix | done |
-| Terminal policy in `.lkjml` | done |
-| TCP sockets in `.lkjml` (`src/std/net`) | done |
-| Filesystem open/path-exists in `.lkjml` | done |
-| Time wait/now in `.lkjml` | done |
-| Keep thin `write-str` / `flush` | intentional |
-| Types + LKJML + opaque sys + precise GC | landed (JIT stub remains) |
-| Ban `Any` + sized numerics + `forall` polymorphism | landed (`print` is Str-only) |
-| GC cliff + tail-recursive frame growth | fixed and benchmarked |
-| One-runtime multi-process supervisor | not implemented |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 20 Rust tests passed |
+| `cargo build --workspace --release --locked` | passed |
+| hello workload | passed; output `3628800` |
+| Mandelbrot workload | passed; 1,176 bytes, 24 lines |
+| `meta/scripts/lkjedit-smoke.sh` | passed |
+| `meta/scripts/http-smoke.sh` | passed |
+| `cargo fmt --all -- --check` | failed on pre-existing formatting drift |
+| strict workspace Clippy | failed on pre-existing production and test lint debt |
+
+Docker and performance comparisons were not rerun for this baseline. They are
+not claimed as passing.
+
+## Accepted Target: Foundation Cutover
+
+The active foundation cycle will:
+
+1. make `.lkjscript` the only source extension and remove active LKJML naming;
+2. enforce a maximum of 16 combined immediate files and subdirectories as an
+   lkjscript source-tree rule, not a Rust/repository layout rule;
+3. make documentation status and placeholder labeling machine-checkable;
+4. remove the unlabeled REPL stub and make disassembly behavior truthful;
+5. replace arbitrary ioctl access with bounded terminal operations;
+6. separate opaque handles so stale values cannot alias later resources;
+7. return truthful language Results from fallible system operations;
+8. align the executable numeric surface with the type contract;
+9. make formatting, Clippy, source coverage, and documentation checks honest
+   repository gates.
+
+Items move into **Current** only after their focused and acceptance gates run.
+
+## Deferred
+
+Package management, signed installation/update, the process supervisor,
+nonblocking scheduling, adaptive/generational GC, native JIT execution,
+non-Linux backends, a browser platform, GUI runtime, and web framework remain
+later cycles. Their designs may be explored, but no current capability may be
+implied.

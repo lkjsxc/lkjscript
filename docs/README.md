@@ -1,15 +1,38 @@
-# Docs
+# Documentation
 
 ## Purpose
 
-Implementation contract for the `lkjscript` language and runtime.
+Provide the authoritative, status-labeled contract for `lkjscript`.
 
-## Table of Contents
+## Status
 
-- [current-state.md](current-state.md): observed behavior and open work
-- [vision/](vision/README.md): north star and principles
-- [language/](language/README.md): surface syntax and limits
-- [runtime/](runtime/README.md): VM and JIT hook
-- [operations/](operations/README.md): gates and Docker
-- [product/](product/README.md): lkjedit validation app and demos
-- [decisions/](decisions/README.md): ADRs
+**Current.** This index defines the documentation status vocabulary.
+
+## Status Vocabulary
+
+Every behavior that is not unambiguously current must use one of these labels:
+
+- **Current**: implemented and supported by recorded evidence.
+- **Accepted Target**: approved contract that implementation is expected to
+  reach next; it must not be described as already available.
+- **Experimental**: implemented or proposed for measurement without an adoption
+  decision.
+- **Deferred**: intentionally outside the active implementation cycle.
+- **Placeholder**: intentionally incomplete. Code and user-facing behavior must
+  also say `PLACEHOLDER` wherever the incomplete surface is observable.
+- **Superseded**: historical contract that must not guide new implementation.
+
+A mixed-status document must label the affected sections. Aspirations are not
+release claims, and an old passing command is historical evidence rather than a
+permanent property.
+
+## Map
+
+- [current-state.md](current-state.md): observed baseline and accepted next state
+- [operations/architecture.md](operations/architecture.md): crate ownership and data flow
+- [language/](language/README.md): source format, semantics, imports, and limits
+- [runtime/](runtime/README.md): VM and explicitly labeled JIT placeholder
+- [operations/](operations/README.md): verification and engineering handoff
+- [product/](product/README.md): validation applications and capability boundaries
+- [vision/](vision/README.md): long-term direction and experiment registry
+- [decisions/](decisions/README.md): active and superseded decisions

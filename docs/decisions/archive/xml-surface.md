@@ -1,24 +1,22 @@
-# Superseded
+# Historical XML Surface
 
-Superseded first by [slash-types-sys.md](../slash-types-sys.md), then by
-[LKJML](../../language/lkjml.md) for the canonical language surface.
+## Purpose
 
----
+Preserve the earliest XML-like notation decision.
 
-# XML Surface
+## Status
 
-## Context
+**Superseded** first by slash markers and then by the line-oriented source
+format documented under [../../language/](../../language/README.md).
 
-Need an AI-friendly functional syntax aligned with lkjagent model actions.
+## Historical Decision
 
-## Decision
+The parser used attribute-less XML-like tags whose names represented operators
+and forms. It was selected for explicit closing structure and alignment with an
+earlier agent grammar.
 
-Use attribute-less XML-like tags; tag name is operator or special form.
+## Reason For Replacement
 
-## Consequences
-
-Parser stays small; closing tags help weak models; humans rarely author by hand.
-
-## Rejected
-
-S-expressions (less aligned with existing agent grammar); ML-like surface (heavier parser).
+Angle-bracket markup and inline layout were replaced by column-one matched
+markers and raw text blocks. This record must not guide current parser or
+source-authoring work.

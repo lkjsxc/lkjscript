@@ -2,65 +2,65 @@
 
 ## Purpose
 
-Capture product intent, locked layout, and known sharp edges so a new session
-can continue without rediscovering recent pain.
+Capture product intent and known sharp edges without preserving obsolete
+implementation contracts.
+
+## Status
+
+**Current** for engineering policy. Foundation changes are **Accepted Target**.
 
 ## Product Intent
 
-- Thin, scratch Rust host; grow capability in `.lkjml`, not frameworks.
-- No new crates.io dependencies without an ADR (`lkjscript-sys` owns OS
-  wrappers; `unsafe` only there).
-- Fat host opcodes are frozen; prefer script libraries for new features.
-- Docker and `quiet verify` are the honesty gates for claimed completion.
-- AI-friendly sources: many small files, fan-out at most eight visible children.
-- Backward compatibility is not required; remove obsolete contracts and paths.
-- Avoid Python in project tooling; prefer Rust or shell except where an
-  experiment or external comparison materially benefits from Python.
-- Package-root imports only: `std/...`, `lib/...`, `examples/...`, or `./...`.
-  Paths containing `..` are rejected.
+- Build the language, compiler, runtime, standard library, and future ecosystem
+  as one coherent product named `lkjscript`.
+- Canonical accepted sources use `.lkjscript`; do not preserve `.lkjml` support.
+- Keep the Rust host small, owned, and Linux-first. Grow policy in lkjscript
+  source rather than host frameworks.
+- Keep unsafe Rust inside `lkjscript-sys`, and require every safe wrapper to
+  uphold memory safety for arbitrary safe callers.
+- Do not add a crates.io dependency without an accepted decision record.
+- Backward compatibility is not required; remove stale aliases and contracts.
+- A source directory may contain at most 16 immediate files plus directories.
+  This language rule does not constrain Rust/docs/infrastructure layout.
+- Placeholders are allowed only when code, observable behavior, and docs all
+  explicitly label them `PLACEHOLDER`.
+- Prefer complete vertical slices and focused conformance tests over broad mock
+  scaffolding.
 
-## Locked Layout
+## Layout
 
 ```text
-src/std/          # primitives: list buffer io fs ansi term net
-src/lib/lkjedit/  # runtime validation app; future standalone repository
-src/examples/     # hello mandel lkjedit http bench
-crates/           # Rust host / compiler / VM / sys
+src/std/          language standard library
+src/lib/          reusable language packages
+src/examples/     executable validation workloads
+crates/           compiler, VM, sys, CLI, and gates
+meta/             Docker, scripts, benchmark comparators, and configuration
 ```
 
-Do not invent many application crates, sealed modules, or rename the product
-again unless the user asks.
+## Current Sharp Edges
 
-## Known Sharp Edges
+- Imports merge definitions into one program-global namespace.
+- Top-level definitions are installed in source order at runtime.
+- `set` is heavily used by lkjedit but its target/type contract is not fully
+  checked.
+- Raw terminal redraw must emit CR+LF; LF-only output causes staircase display.
+- lkjedit idle must wait without full repaint.
+- Final cursor placement must be followed by a flush.
+- Current string/file helpers may perform per-byte syscalls or quadratic string
+  construction.
+- VM host operations block and process exit is not process-safe.
+- System Results, handles, ioctl safety, and numeric conformance are foundation
+  priorities; do not build a daemon or JIT on top of their current defects.
 
-- Prefer helpers like `maybe-load` over heavy work in a top-level `if/`
-  then-branch.
-- Top-level `do/` + `let/` must copy proto locals into the chunk main locals
-  (`compile_do`); this is already fixed — do not regress it.
-- Raw TTY redraw must emit CR+LF (LF-only caused a staircase display bug).
-- Missing file opens as an empty buffer with status `new file`.
-- `lkjedit` idle must not full-redraw; use `while` + `wait-ms` without paint.
-- Command mode must paint `ed-cmd` and CUP onto the cmdline row.
-- Flush after final CUP; hide cursor during clear/paint.
-- Prefer host `write-str` for bulk TTY output (not per-byte loops).
-- Terminal raw/poll are script libraries; do not reintroduce `term-raw` opcodes.
-- TCP listen/accept/recv/send are script libraries (`std/net`); do not
-  reintroduce fat `tcp-*` opcodes or `std::net` in the VM.
-- File open/path-exists are script libraries (`std/fs`); do not reintroduce
-  fat `open-read` / `open-write` / `path-exists` or VM `std::fs`.
-- Time wait/now are script libraries (`std/io`); do not reintroduce fat
-  `wait-ms` / `now-ms` or VM `thread::sleep` / `Instant`.
+## Host Boundary
 
-## Near-Term Focus
+Terminal, filesystem, network, and time policy belongs in the standard library
+when a safe thin primitive can support it. Do not reintroduce removed fat host
+features merely for convenience. Bulk operations are appropriate when they
+are necessary for correctness or measured performance.
 
-Keep lkjedit/HTTP/bench green. LKJML + mandatory types + opaque Handle/`Result`
-sys + precise GC + ban-`Any` (sized `I32`/`U64`/`F64`…,
-annotation-driven `forall`, Str-only `print`) landed; baseline JIT still
-roadmap-only; see [vision/performance-roadmap.md](../vision/performance-roadmap.md)
-and [decisions/slash-types-sys.md](../decisions/slash-types-sys.md).
+## Verification Discipline
 
-## Typing sharp edges
-
-- Prefer `null?/ xs /null?` over `eq/ xs nil /eq` for empty lists.
-- Side-effect helpers should declare `-> Nil` (not `I64`).
-- `List T` is flat in `sig/`; use `List/ T /List` in `params/`.
+Use [verification.md](verification.md). Record commands that actually ran,
+including expected failures. Keep rejected experiment results in
+[../vision/experiments.md](../vision/experiments.md).

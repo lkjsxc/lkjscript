@@ -2,20 +2,33 @@
 
 ## Purpose
 
-State the mission for the `lkjscript` runtime.
+State the long-term mission without presenting it as current capability.
+
+## Status
+
+**Deferred vision.** This document is direction, not a release claim.
 
 ## Mission
 
-Ship a tiny, cache-friendly functional language that weak AI models can author
-reliably, with a real bytecode VM ready for later JIT, and an ecosystem grown
-in `.lkjml` rather than host frameworks or third-party Rust crates.
+Build `lkjscript` into a tiny, understandable, extremely high-performance
+language and application ecosystem whose major layers are themselves owned by
+lkjscript rather than delegated permanently to web or host frameworks.
 
-The long horizon:
+The long horizon includes:
 
-- **Scratch host** — own the low-level OS surface; avoid crates.io dependencies.
-- **Libraries in `.lkjml`** — termios, sockets, buffered IO, and apps live as
-  script libraries on a thin syscall-shaped primitive layer, not as fat Rust
-  feature wrappers.
-- **Eventual speed** — interpreter correctness first; baseline JIT and adaptive
-  specialization later so the same programs can become extremely fast without
-  rewriting product logic into Rust frameworks.
+- a self-contained one-command installer and a safe `lkjscript update` path;
+- packages, reproducible application builds, and signed distribution;
+- a compiler/runtime able to compete on startup, throughput, memory, and
+  predictable latency with the best systems-language implementations;
+- servers, protocols, application frameworks, browser-like clients, and
+  development tools implemented as lkjscript ecosystem layers;
+- multiplatform GUI applications through owned portable runtime boundaries;
+- efficient multi-application execution with isolation and shared immutable
+  compilation work.
+
+## Discipline
+
+The ecosystem grows from correct contracts and measured foundations. Linux is
+the current implementation target. Browser, GUI, update, server, package, JIT,
+and supervisor work remains absent until its corresponding current-state entry
+and acceptance evidence exist.

@@ -1,18 +1,28 @@
-# Essential source limits
+# Essential Source Limits
 
-## Context
+## Purpose
 
-A fixed line-count gate poorly measures attribute-less XML density.
-JSON-tunable limits invited ad-hoc policy drift.
+Choose stable semantic budgets rather than misleading line-count rules.
+
+## Status
+
+**Current** for nest, form-child, token, and top-level limits.
+**Accepted Target** for the 16-entry language source-directory rule.
 
 ## Decision
 
-- Keep nest depth, children-per-element, tokens-per-file, directory fan-out,
-  and top-level form caps as **hardcoded language constants**.
-- Treat `MAX_TOKENS_PER_FILE` as the primary file-size budget.
-- Do not expose a user-facing JSON `--limits` flag.
+- Keep nest depth, form-child count, tokens per file, top-level forms, and
+  source-directory width as hardcoded language-version constants.
+- Treat token count as the primary structural file budget, while recognizing
+  that raw text and aggregate imports require separate byte/resource limits.
+- Do not expose user configuration or CLI overrides for syntax validity.
+- Apply source-directory width only to lkjscript language trees.
 
 ## Consequences
 
-Authors split by meaning under fixed budgets. Changing numbers implies a
-new language version, not a config tweak.
+Authors split source by meaning. Changing a limit changes the language contract
+and requires docs, boundary tests, and migration rather than local config.
+
+## Supersedes
+
+[../archive/tunable-limits.md](../archive/tunable-limits.md).

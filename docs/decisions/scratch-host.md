@@ -1,4 +1,13 @@
-# Scratch host
+# Scratch Host
+
+## Purpose
+
+Define the owned Linux-first host boundary and reject framework-shaped policy
+inside the VM.
+
+## Status
+
+**Current direction**, with safety repairs in the foundation target.
 
 ## Context
 
