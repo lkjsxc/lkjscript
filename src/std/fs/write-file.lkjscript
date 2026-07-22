@@ -34,9 +34,11 @@ fd
 s
 0
 /write-all
-close/
+unwrap-ok/
+sys-close/
 fd
-/close
+/sys-close
+/unwrap-ok
 /do
 /let
 /fn

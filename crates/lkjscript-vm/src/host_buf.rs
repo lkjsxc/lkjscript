@@ -3,7 +3,7 @@
 use lkjscript_core::{Error, HeapObj, Result, Value};
 
 use crate::arena::Arena;
-use crate::host_ext::FdTable;
+use crate::host_ext::ResourceTable;
 
 fn as_buf_mut(arena: &mut Arena, value: Value) -> Result<&mut Vec<u8>> {
     match arena.get_mut(value)? {
@@ -92,7 +92,7 @@ pub fn buf_clone(arena: &mut Arena, value: Value) -> Result<Value> {
 
 pub fn sys_tty_get(
     arena: &mut Arena,
-    handles: &FdTable,
+    handles: &ResourceTable,
     handle: Value,
     buffer: Value,
 ) -> Result<Value> {
@@ -105,7 +105,7 @@ pub fn sys_tty_get(
 
 pub fn sys_tty_set(
     arena: &Arena,
-    handles: &FdTable,
+    handles: &ResourceTable,
     handle: Value,
     buffer: Value,
 ) -> Result<Value> {
@@ -116,7 +116,7 @@ pub fn sys_tty_set(
     Ok(Value::NIL)
 }
 
-pub fn sys_poll(handles: &FdTable, handle: Value, timeout: Value) -> Result<Value> {
+pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: Value) -> Result<Value> {
     let raw = handles.raw_fd(handle, "sys-poll")?;
     let timeout = timeout
         .as_int()
@@ -132,24 +132,24 @@ pub fn sys_poll(handles: &FdTable, handle: Value, timeout: Value) -> Result<Valu
 }
 
 pub fn stdin_handle() -> Value {
-    FdTable::stdin_handle()
+    ResourceTable::stdin_handle()
 }
 
-pub fn isatty(handles: &FdTable, handle: Value) -> Result<Value> {
-    let raw = handles.raw_fd(handle, "isatty")?;
+pub fn sys_isatty(handles: &ResourceTable, handle: Value) -> Result<Value> {
+    let raw = handles.raw_fd(handle, "sys-isatty")?;
     Ok(Value::from_bool(lkjscript_sys::is_tty(raw)))
 }
 
-pub fn tty_guard_save(arena: &Arena, buffer: Value) -> Result<Value> {
+pub fn sys_tty_guard_save(arena: &Arena, buffer: Value) -> Result<Value> {
     let state = as_buf(arena, buffer)?;
     lkjscript_sys::tty_guard_save(state)
-        .map_err(|error| Error::msg(format!("tty-guard-save: {error}")))?;
+        .map_err(|error| Error::msg(format!("sys-tty-guard-save: {error}")))?;
     Ok(Value::NIL)
 }
 
-pub fn tty_guard_clear() -> Result<Value> {
+pub fn sys_tty_guard_clear() -> Result<Value> {
     lkjscript_sys::tty_guard_clear()
-        .map_err(|error| Error::msg(format!("tty-guard-clear: {error}")))?;
+        .map_err(|error| Error::msg(format!("sys-tty-guard-clear: {error}")))?;
     Ok(Value::NIL)
 }
 
@@ -158,4 +158,25 @@ fn buffer_index(value: Value, operation: &str) -> Result<usize> {
         .as_int()
         .ok_or_else(|| Error::msg(format!("{operation} index")))?;
     usize::try_from(index).map_err(|_| Error::msg(format!("{operation} index out of range")))
+}
+
+#[cfg(test)]
+mod tests {
+    use lkjscript_core::Value;
+
+    use crate::host_ext::ResourceTable;
+
+    use super::sys_poll;
+
+    #[test]
+    fn polling_rejects_invalid_handles_and_timeouts() {
+        let handles = ResourceTable::default();
+        assert!(sys_poll(&handles, Value::from_int(1), Value::from_int(0)).is_err());
+        assert!(sys_poll(
+            &handles,
+            ResourceTable::stdin_handle(),
+            Value::from_int(-1)
+        )
+        .is_err());
+    }
 }

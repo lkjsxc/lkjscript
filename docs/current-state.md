@@ -35,8 +35,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
   owned file/socket tokens are monotonic, and closed tokens are never reused
 - Terminal ABI: arbitrary ioctl is absent; fixed `sys-tty-get`/`sys-tty-set`
   operations validate the exact 60-byte Linux state before FFI and return Results
-- Polling: `sys-poll` resolves handles through the resource table and returns a
-  language Result
+- System Results: open, path existence, close/read/write, `isatty`, time,
+  socket, poll, terminal, and terminal-guard failures return operation-qualified
+  `ResultErr` values; standard wrappers unwrap explicitly
+- Canonical resource names: `stdin-handle`, `sys-close`, `sys-read-byte`,
+  `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
   `MSG_NOSIGNAL` instead of risking process termination on a broken peer
 - JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
@@ -47,23 +50,21 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. many ordinary system failures still abort the VM instead of returning the
-   Result values promised by the type prelude;
-2. numeric widths, literals, arithmetic, casts, and code generation do not all
+1. numeric widths, literals, arithmetic, casts, and code generation do not all
    match their static signatures;
-3. `set`, optional `if`, `arg`, and several comparison/operator paths have
+2. `set`, optional `if`, `arg`, and several comparison/operator paths have
    type/runtime disagreements;
-4. imports load files but definitions share one global namespace and top-level
+3. imports load files but definitions share one global namespace and top-level
    initialization order can be unsafe;
-5. strings and IO lack a lossless bulk byte contract, and some library file
+4. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-6. public malformed chunks can reach unchecked VM assumptions;
-7. source/import aggregate bytes, depth, count, constants, globals, bytecode,
+5. public malformed chunks can reach unchecked VM assumptions;
+6. source/import aggregate bytes, depth, count, constants, globals, bytecode,
    VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
-8. the terminal exit guard remains process-global and is not a supervisor-safe
+7. the terminal exit guard remains process-global and is not a supervisor-safe
    terminal lease;
-9. monotonic handle tokens retain closed metadata until the VM ends;
-10. the repository is not rustfmt-clean and strict Clippy still reports
+8. monotonic handle tokens retain closed metadata until the VM ends;
+9. the repository is not rustfmt-clean and strict Clippy still reports
     pre-existing production and test debt.
 
 ## Evidence
@@ -74,7 +75,7 @@ The source-cutover working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 28 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 33 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | `check-sources` | passed for 116 `.lkjscript` sources, 172 imports, and 11 compile roots |
 | `cargo build --workspace --release --locked` | passed |
@@ -85,10 +86,12 @@ The source-cutover working tree was checked on Linux x86-64 with Rust/Cargo
 | terminal safety unit tests | wrong-size buffers rejected before FFI; exact size reaches only fixed requests |
 | resource handle unit tests | integer/borrowed close, stale reuse, repeated close, and wrong-kind use rejected |
 | terminal Result workload | 59-byte state returned `ResultErr`; VM continued and exited successfully |
+| system Result workload | missing open, repeated close, and negative wait returned errors; later expressions ran; exit 0 |
+| Result unit coverage | malformed path, invalid handle/timeout/range, error text, and canonical names passed |
 | `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
 | script argument `--help` after `--` | passed through to the script |
 | `.lkjml` CLI run | rejected with canonical-extension diagnostic |
-| Markdown local links/status audit | 33 files, zero broken links, zero missing statuses |
+| Markdown local links/status audit | 35 files, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
 | Docker | not run for this cutover |
 | repeated performance comparison | not run |
@@ -99,11 +102,10 @@ A gate that did not run did not pass.
 
 The next safety/conformance sequence is:
 
-1. turn all ordinary fallible system operations into truthful language Results;
-2. implement an exact current numeric contract and remove unsupported prelude
+1. implement an exact current numeric contract and remove unsupported prelude
    vocabulary;
-3. add generated prelude/codegen/VM conformance coverage;
-4. make rustfmt, Clippy, documentation status, source coverage, and explicit
+2. add generated prelude/codegen/VM conformance coverage;
+3. make rustfmt, Clippy, documentation status, source coverage, and explicit
    placeholder scanning part of the local honesty gate.
 
 ## Deferred

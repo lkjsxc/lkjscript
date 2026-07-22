@@ -65,17 +65,17 @@ pub fn str_from_byte(arena: &mut Arena, byte: Value) -> Result<Value> {
     Ok(arena.alloc(HeapObj::Str(String::from(char::from(byte)))))
 }
 
-enum IoHandle {
+enum OwnedResource {
     File(OwnedFd),
     Socket(OwnedFd),
 }
 
 #[derive(Default)]
-pub struct FdTable {
-    slots: Vec<Option<IoHandle>>,
+pub struct ResourceTable {
+    slots: Vec<Option<OwnedResource>>,
 }
 
-impl FdTable {
+impl ResourceTable {
     pub fn stdin_handle() -> Value {
         Value::from_handle(STDIN_TOKEN)
     }
@@ -83,13 +83,13 @@ impl FdTable {
     pub fn sys_open_read(&mut self, path: &str) -> Result<Value> {
         let file = lkjscript_sys::open_read(path)
             .map_err(|error| Error::msg(format!("sys-open-read: {error}")))?;
-        self.push(IoHandle::File(file))
+        self.push(OwnedResource::File(file))
     }
 
     pub fn sys_open_write(&mut self, path: &str) -> Result<Value> {
         let file = lkjscript_sys::open_write(path)
             .map_err(|error| Error::msg(format!("sys-open-write: {error}")))?;
-        self.push(IoHandle::File(file))
+        self.push(OwnedResource::File(file))
     }
 
     pub fn sys_path_exists(path: &str) -> Result<Value> {
@@ -101,7 +101,7 @@ impl FdTable {
     pub fn sys_socket(&mut self) -> Result<Value> {
         let socket = lkjscript_sys::tcp_socket()
             .map_err(|error| Error::msg(format!("sys-socket: {error}")))?;
-        self.push(IoHandle::Socket(socket))
+        self.push(OwnedResource::Socket(socket))
     }
 
     pub fn sys_bind(&self, handle: Value, port: Value) -> Result<Value> {
@@ -136,7 +136,7 @@ impl FdTable {
         let raw = self.socket_raw(handle, "sys-accept")?;
         let client = lkjscript_sys::accept_sock(raw)
             .map_err(|error| Error::msg(format!("sys-accept: {error}")))?;
-        self.push(IoHandle::Socket(client))
+        self.push(OwnedResource::Socket(client))
     }
 
     pub fn sys_recv(&self, arena: &mut Arena, handle: Value) -> Result<Value> {
@@ -166,13 +166,13 @@ impl FdTable {
     }
 
     pub fn close(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "close")?;
+        let index = self.owned_index(handle, "sys-close")?;
         let slot = self
             .slots
             .get_mut(index)
-            .ok_or_else(|| Error::msg("close: unknown handle"))?;
+            .ok_or_else(|| Error::msg("sys-close: unknown handle"))?;
         if slot.take().is_none() {
-            return Err(Error::msg("close: stale or already closed handle"));
+            return Err(Error::msg("sys-close: stale or already closed handle"));
         }
         Ok(Value::NIL)
     }
@@ -181,17 +181,17 @@ impl FdTable {
         let mut buffer = [0_u8; 1];
         let count = if handle.as_handle() == Some(STDIN_TOKEN) {
             lkjscript_sys::read_fd(lkjscript_sys::STDIN_FD, &mut buffer)
-                .map_err(|error| Error::msg(format!("read-byte-fd: {error}")))?
+                .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?
         } else {
-            let index = self.owned_index(handle, "read-byte-fd")?;
+            let index = self.owned_index(handle, "sys-read-byte")?;
             match self.slots.get_mut(index).and_then(Option::as_mut) {
-                Some(IoHandle::File(file)) => lkjscript_sys::read_fd(file.as_raw(), &mut buffer)
-                    .map_err(|error| Error::msg(format!("read-byte-fd: {error}")))?,
-                Some(IoHandle::Socket(socket)) => {
+                Some(OwnedResource::File(file)) => lkjscript_sys::read_fd(file.as_raw(), &mut buffer)
+                    .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?,
+                Some(OwnedResource::Socket(socket)) => {
                     lkjscript_sys::recv_sock(socket.as_raw(), &mut buffer)
-                        .map_err(|error| Error::msg(format!("read-byte-fd: {error}")))?
+                        .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?
                 }
-                None => return Err(Error::msg("read-byte-fd: stale or unknown handle")),
+                None => return Err(Error::msg("sys-read-byte: stale or unknown handle")),
             }
         };
         if count == 0 {
@@ -202,21 +202,21 @@ impl FdTable {
     }
 
     pub fn write_byte(&mut self, handle: Value, byte: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "write-byte-fd")?;
+        let index = self.owned_index(handle, "sys-write-byte")?;
         let byte = byte
             .as_int()
-            .ok_or_else(|| Error::msg("write-byte-fd byte"))?;
-        let byte = u8::try_from(byte).map_err(|_| Error::msg("write-byte-fd byte out of range"))?;
+            .ok_or_else(|| Error::msg("sys-write-byte byte"))?;
+        let byte = u8::try_from(byte).map_err(|_| Error::msg("sys-write-byte byte out of range"))?;
         match self.slots.get_mut(index).and_then(Option::as_mut) {
-            Some(IoHandle::File(file)) => {
+            Some(OwnedResource::File(file)) => {
                 lkjscript_sys::write_fd(file.as_raw(), &[byte])
-                    .map_err(|error| Error::msg(format!("write-byte-fd: {error}")))?;
+                    .map_err(|error| Error::msg(format!("sys-write-byte: {error}")))?;
             }
-            Some(IoHandle::Socket(socket)) => {
+            Some(OwnedResource::Socket(socket)) => {
                 lkjscript_sys::send_sock(socket.as_raw(), &[byte])
-                    .map_err(|error| Error::msg(format!("write-byte-fd: {error}")))?;
+                    .map_err(|error| Error::msg(format!("sys-write-byte: {error}")))?;
             }
-            None => return Err(Error::msg("write-byte-fd: stale or unknown handle")),
+            None => return Err(Error::msg("sys-write-byte: stale or unknown handle")),
         }
         Ok(Value::NIL)
     }
@@ -227,8 +227,8 @@ impl FdTable {
         }
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
-            Some(IoHandle::File(file)) => Ok(file.as_raw()),
-            Some(IoHandle::Socket(socket)) => Ok(socket.as_raw()),
+            Some(OwnedResource::File(file)) => Ok(file.as_raw()),
+            Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
             None => Err(Error::msg(format!(
                 "{operation}: stale or unknown handle"
             ))),
@@ -238,8 +238,8 @@ impl FdTable {
     fn socket_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
-            Some(IoHandle::Socket(socket)) => Ok(socket.as_raw()),
-            Some(IoHandle::File(_)) => Err(Error::msg(format!("{operation}: handle is not a socket"))),
+            Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
+            Some(OwnedResource::File(_)) => Err(Error::msg(format!("{operation}: handle is not a socket"))),
             None => Err(Error::msg(format!(
                 "{operation}: stale or unknown handle"
             ))),
@@ -256,7 +256,7 @@ impl FdTable {
         usize::try_from(index).map_err(|_| Error::msg(format!("{operation}: invalid handle")))
     }
 
-    fn push(&mut self, handle: IoHandle) -> Result<Value> {
+    fn push(&mut self, handle: OwnedResource) -> Result<Value> {
         let index = u32::try_from(self.slots.len())
             .map_err(|_| Error::msg("resource handle table exhausted"))?;
         let token = FIRST_OWNED_TOKEN
@@ -340,9 +340,11 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use lkjscript_core::Value;
+    use lkjscript_core::{Error, Value};
 
-    use super::FdTable;
+    use crate::arena::Arena;
+
+    use super::{as_str, is_ok, language_result, unwrap_err, unwrap_ok, ResourceTable};
 
     static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
 
@@ -368,20 +370,20 @@ mod tests {
 
     #[test]
     fn integer_and_borrowed_handles_cannot_be_closed() {
-        let mut table = FdTable::default();
+        let mut table = ResourceTable::default();
         assert!(table.close(Value::from_int(16)).is_err());
-        assert!(table.close(FdTable::stdin_handle()).is_err());
+        assert!(table.close(ResourceTable::stdin_handle()).is_err());
     }
 
     #[test]
     fn closed_tokens_are_never_reused() -> std::io::Result<()> {
         let file = TempFile::new()?;
         let path = file.0.to_string_lossy();
-        let mut table = FdTable::default();
+        let mut table = ResourceTable::default();
         let first = table.sys_open_read(&path).ok();
         assert!(first.is_some());
         let first = first.unwrap_or(Value::NIL);
-        assert_ne!(first, FdTable::stdin_handle());
+        assert_ne!(first, ResourceTable::stdin_handle());
         assert!(table.close(first).is_ok());
         assert!(table.close(first).is_err());
         assert!(table.read_byte(first).is_err());
@@ -398,9 +400,32 @@ mod tests {
     fn file_handles_cannot_be_used_as_sockets() -> std::io::Result<()> {
         let file = TempFile::new()?;
         let path = file.0.to_string_lossy();
-        let mut table = FdTable::default();
+        let mut table = ResourceTable::default();
         let handle = table.sys_open_read(&path).ok().unwrap_or(Value::NIL);
         assert!(table.sys_listen(handle, Value::from_int(1)).is_err());
         Ok(())
+    }
+
+    #[test]
+    fn socket_ranges_are_checked_before_os_calls() {
+        let mut table = ResourceTable::default();
+        let socket = table.sys_socket().ok().unwrap_or(Value::NIL);
+        assert!(table.sys_bind(socket, Value::from_int(-1)).is_err());
+        assert!(table.sys_bind(socket, Value::from_int(65_536)).is_err());
+        assert!(table.sys_listen(socket, Value::from_int(-1)).is_err());
+        assert!(table.close(socket).is_ok());
+    }
+
+    #[test]
+    fn language_results_preserve_operation_error_text() {
+        let mut arena = Arena::default();
+        let result = language_result(&mut arena, Err(Error::msg("sys-example: failure")));
+        assert_eq!(is_ok(&arena, result).ok(), Some(Value::FALSE));
+        let error = unwrap_err(&arena, result).ok().unwrap_or(Value::NIL);
+        assert_eq!(as_str(&arena, error).ok(), Some("sys-example: failure"));
+        let unwrapped = unwrap_ok(&arena, result)
+            .err()
+            .map(|error| error.to_string());
+        assert_eq!(unwrapped.as_deref(), Some("unwrap-ok: sys-example: failure"));
     }
 }

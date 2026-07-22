@@ -4,6 +4,11 @@ use lkjscript_core::{HeapObj, JitHook, Op, Result, Value};
 
 use crate::run::Vm;
 
+fn push_language_result<J: JitHook>(vm: &mut Vm<'_, J>, result: Result<Value>) {
+    let value = crate::host_ext::language_result(&mut vm.arena, result);
+    vm.push(value);
+}
+
 pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::StrLen as u8 => {
@@ -53,38 +58,36 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysOpenRead as u8 => {
-            let p = vm.pop();
-            let path = crate::host_ext::as_str(&vm.arena, p)?.to_string();
-            let r = vm.fds.sys_open_read(&path)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let path = vm.pop();
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_read(&path);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysOpenWrite as u8 => {
-            let p = vm.pop();
-            let path = crate::host_ext::as_str(&vm.arena, p)?.to_string();
-            let r = vm.fds.sys_open_write(&path)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let path = vm.pop();
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_write(&path);
+            push_language_result(vm, result);
             Ok(true)
         }
-        x if x == Op::CloseFd as u8 => {
-            let fd = vm.pop();
-            let r = vm.fds.close(fd)?;
-            vm.push(r);
+        x if x == Op::SysClose as u8 => {
+            let handle = vm.pop();
+            let result = vm.resources.close(handle);
+            push_language_result(vm, result);
             Ok(true)
         }
-        x if x == Op::ReadByteFd as u8 => {
-            let fd = vm.pop();
-            let r = vm.fds.read_byte(fd)?;
-            vm.push(r);
+        x if x == Op::SysReadByte as u8 => {
+            let handle = vm.pop();
+            let result = vm.resources.read_byte(handle);
+            push_language_result(vm, result);
             Ok(true)
         }
-        x if x == Op::WriteByteFd as u8 => {
-            let b = vm.pop();
-            let fd = vm.pop();
-            let r = vm.fds.write_byte(fd, b)?;
-            vm.push(r);
+        x if x == Op::SysWriteByte as u8 => {
+            let byte = vm.pop();
+            let handle = vm.pop();
+            let result = vm.resources.write_byte(handle, byte);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::Arg as u8 => {
@@ -159,117 +162,115 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             let buffer = vm.pop();
             let handle = vm.pop();
             let result =
-                crate::host_buf::sys_tty_get(&mut vm.arena, &vm.fds, handle, buffer);
-            let value = crate::host_ext::language_result(&mut vm.arena, result);
-            vm.push(value);
+                crate::host_buf::sys_tty_get(&mut vm.arena, &vm.resources, handle, buffer);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysTtySet as u8 => {
             let buffer = vm.pop();
             let handle = vm.pop();
-            let result = crate::host_buf::sys_tty_set(&vm.arena, &vm.fds, handle, buffer);
-            let value = crate::host_ext::language_result(&mut vm.arena, result);
-            vm.push(value);
+            let result = crate::host_buf::sys_tty_set(&vm.arena, &vm.resources, handle, buffer);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysPoll as u8 => {
             let timeout = vm.pop();
             let handle = vm.pop();
-            let result = crate::host_buf::sys_poll(&vm.fds, handle, timeout);
-            let value = crate::host_ext::language_result(&mut vm.arena, result);
-            vm.push(value);
+            let result = crate::host_buf::sys_poll(&vm.resources, handle, timeout);
+            push_language_result(vm, result);
             Ok(true)
         }
-        x if x == Op::StdinFd as u8 => {
+        x if x == Op::StdinHandle as u8 => {
             vm.push(crate::host_buf::stdin_handle());
             Ok(true)
         }
-        x if x == Op::Isatty as u8 => {
+        x if x == Op::SysIsatty as u8 => {
             let handle = vm.pop();
-            let result = crate::host_buf::isatty(&vm.fds, handle)?;
-            vm.push(result);
+            let result = crate::host_buf::sys_isatty(&vm.resources, handle);
+            push_language_result(vm, result);
             Ok(true)
         }
-        x if x == Op::TtyGuardSave as u8 => {
+        x if x == Op::SysTtyGuardSave as u8 => {
             let buffer = vm.pop();
-            let result = crate::host_buf::tty_guard_save(&vm.arena, buffer);
-            let value = crate::host_ext::language_result(&mut vm.arena, result);
-            vm.push(value);
+            let result = crate::host_buf::sys_tty_guard_save(&vm.arena, buffer);
+            push_language_result(vm, result);
             Ok(true)
         }
-        x if x == Op::TtyGuardClear as u8 => {
-            let result = crate::host_buf::tty_guard_clear();
-            let value = crate::host_ext::language_result(&mut vm.arena, result);
-            vm.push(value);
+        x if x == Op::SysTtyGuardClear as u8 => {
+            let result = crate::host_buf::sys_tty_guard_clear();
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysNowMs as u8 => {
-            let ms = lkjscript_sys::now_ms_monotonic()
-                .map_err(|e| lkjscript_core::Error::msg(format!("sys-now-ms: {e}")))?;
-            let r = crate::host_ext::result_ok(&mut vm.arena, Value::from_int(ms));
-            vm.push(r);
+            let result = lkjscript_sys::now_ms_monotonic()
+                .map(Value::from_int)
+                .map_err(|error| lkjscript_core::Error::msg(format!("sys-now-ms: {error}")));
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysWaitMs as u8 => {
-            let v = vm.pop();
-            let n = v
-                .as_int()
-                .ok_or_else(|| lkjscript_core::Error::msg("sys-wait-ms expects int"))?;
-            let n = n.max(0) as u64;
-            lkjscript_sys::sleep_ms(n)
-                .map_err(|e| lkjscript_core::Error::msg(format!("sys-wait-ms: {e}")))?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, Value::NIL);
-            vm.push(__r);
+            let duration = vm.pop();
+            let result = match duration.as_int() {
+                Some(milliseconds) if milliseconds >= 0 => lkjscript_sys::sleep_ms(
+                    milliseconds as u64,
+                )
+                .map(|()| Value::NIL)
+                .map_err(|error| {
+                    lkjscript_core::Error::msg(format!("sys-wait-ms: {error}"))
+                }),
+                Some(_) => Err(lkjscript_core::Error::msg(
+                    "sys-wait-ms: duration out of range",
+                )),
+                None => Err(lkjscript_core::Error::msg(
+                    "sys-wait-ms: expected I64 duration",
+                )),
+            };
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysSocket as u8 => {
-            let r = vm.fds.sys_socket()?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let result = vm.resources.sys_socket();
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysBind as u8 => {
             let port = vm.pop();
-            let fd = vm.pop();
-            let r = vm.fds.sys_bind(fd, port)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let handle = vm.pop();
+            let result = vm.resources.sys_bind(handle, port);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysListen as u8 => {
             let backlog = vm.pop();
-            let fd = vm.pop();
-            let r = vm.fds.sys_listen(fd, backlog)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let handle = vm.pop();
+            let result = vm.resources.sys_listen(handle, backlog);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysAccept as u8 => {
-            let fd = vm.pop();
-            let r = vm.fds.sys_accept(fd)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let handle = vm.pop();
+            let result = vm.resources.sys_accept(handle);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysRecv as u8 => {
-            let fd = vm.pop();
-            let r = vm.fds.sys_recv(&mut vm.arena, fd)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let handle = vm.pop();
+            let result = vm.resources.sys_recv(&mut vm.arena, handle);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysSend as u8 => {
             let data = vm.pop();
-            let fd = vm.pop();
-            let r = vm.fds.sys_send(&vm.arena, fd, data)?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, r);
-            vm.push(__r);
+            let handle = vm.pop();
+            let result = vm.resources.sys_send(&vm.arena, handle, data);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysPathExists as u8 => {
-            let p = vm.pop();
-            let path = crate::host_ext::as_str(&vm.arena, p)?.to_string();
-            vm.push(crate::host_ext::FdTable::sys_path_exists(&path)?);
+            let path = vm.pop();
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = crate::host_ext::ResourceTable::sys_path_exists(&path);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::OkWrap as u8 => {

@@ -88,9 +88,17 @@ mod tests {
 
     #[test]
     fn bounded_terminal_operations_replace_arbitrary_ioctl() {
-        let canonical = "do/\nsys-tty-get/\nstdin-fd/\n/stdin-fd\nbuf-new/\n60\n/buf-new\n/sys-tty-get\n/do\n";
-        let arbitrary = "do/\nsys-ioctl/\nstdin-fd/\n/stdin-fd\n21505\nbuf-new/\n1\n/buf-new\n/sys-ioctl\n/do\n";
+        let canonical = "do/\nsys-tty-get/\nstdin-handle/\n/stdin-handle\nbuf-new/\n60\n/buf-new\n/sys-tty-get\n/do\n";
+        let arbitrary = "do/\nsys-ioctl/\nstdin-handle/\n/stdin-handle\n21505\nbuf-new/\n1\n/buf-new\n/sys-ioctl\n/do\n";
         assert!(compile_source(canonical, "terminal.lkjscript", &Limits::default()).is_ok());
         assert!(compile_source(arbitrary, "terminal.lkjscript", &Limits::default()).is_err());
+    }
+
+    #[test]
+    fn descriptor_names_are_handle_and_result_explicit() {
+        let canonical = "do/\nis-ok/\nsys-close/\nstdin-handle/\n/stdin-handle\n/sys-close\n/is-ok\n/do\n";
+        let obsolete = "do/\nclose/\nstdin-handle/\n/stdin-handle\n/close\n/do\n";
+        assert!(compile_source(canonical, "handles.lkjscript", &Limits::default()).is_ok());
+        assert!(compile_source(obsolete, "handles.lkjscript", &Limits::default()).is_err());
     }
 }

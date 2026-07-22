@@ -8,7 +8,7 @@ mod numeric;
 use lkjscript_core::{Chunk, Constant, Error, HeapObj, JitHook, Result, Value};
 
 use crate::arena::Arena;
-use crate::host_ext::FdTable;
+use crate::host_ext::ResourceTable;
 
 pub struct Frame {
     pub proto: u32,
@@ -26,7 +26,7 @@ pub struct Vm<'a, J: JitHook> {
     pub jit: J,
     pub exit_code: Option<i32>,
     pub args: Vec<String>,
-    pub fds: FdTable,
+    pub resources: ResourceTable,
 }
 
 impl<'a, J: JitHook> Vm<'a, J> {
@@ -40,7 +40,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
             jit,
             exit_code: None,
             args,
-            fds: FdTable::default(),
+            resources: ResourceTable::default(),
         }
     }
 

@@ -35,9 +35,11 @@ empty-str/
 /read-all
 /bind
 do/
-close/
+unwrap-ok/
+sys-close/
 fd
-/close
+/sys-close
+/unwrap-ok
 s
 /do
 /let

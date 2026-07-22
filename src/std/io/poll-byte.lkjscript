@@ -13,8 +13,8 @@ if/
 eq/
 unwrap-ok/
 sys-poll/
-stdin-fd/
-/stdin-fd
+stdin-handle/
+/stdin-handle
 0
 /sys-poll
 /unwrap-ok

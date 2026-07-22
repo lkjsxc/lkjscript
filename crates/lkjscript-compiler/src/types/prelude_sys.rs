@@ -1,7 +1,8 @@
-//! Sys and Result prelude entries (parametric, no Any).
+//! Typed system and Result prelude entries.
+
+use std::collections::HashMap;
 
 use super::ty::Type;
-use std::collections::HashMap;
 
 fn fn_ty(params: Vec<Type>, ret: Type) -> Type {
     Type::Fn {
@@ -12,63 +13,151 @@ fn fn_ty(params: Vec<Type>, ret: Type) -> Type {
 
 fn forall(vars: &[&str], body: Type) -> Type {
     Type::Forall {
-        vars: vars.iter().map(|s| (*s).to_string()).collect(),
+        vars: vars.iter().map(|name| (*name).to_string()).collect(),
         body: Box::new(body),
     }
 }
 
-pub fn install_sys(m: &mut HashMap<String, Type>) {
-    let res_h = Type::Result(Box::new(Type::Handle), Box::new(Type::Str));
-    let res_nil = Type::Result(Box::new(Type::Nil), Box::new(Type::Str));
-    let res_i64 = Type::Result(Box::new(Type::I64), Box::new(Type::Str));
-    let res_str = Type::Result(Box::new(Type::Str), Box::new(Type::Str));
-    m.insert("sys-open-read".into(), fn_ty(vec![Type::Str], res_h.clone()));
-    m.insert("sys-open-write".into(), fn_ty(vec![Type::Str], res_h.clone()));
-    m.insert("sys-path-exists".into(), fn_ty(vec![Type::Str], Type::Bool));
-    m.insert("sys-wait-ms".into(), fn_ty(vec![Type::I64], res_nil.clone()));
-    m.insert("sys-now-ms".into(), fn_ty(vec![], res_i64.clone()));
-    m.insert("sys-socket".into(), fn_ty(vec![], res_h.clone()));
-    m.insert(
+fn system_result(success: Type) -> Type {
+    Type::Result(Box::new(success), Box::new(Type::Str))
+}
+
+pub fn install_sys(prelude: &mut HashMap<String, Type>) {
+    prelude.insert("stdin-handle".into(), fn_ty(vec![], Type::Handle));
+    prelude.insert(
+        "sys-isatty".into(),
+        fn_ty(vec![Type::Handle], system_result(Type::Bool)),
+    );
+    prelude.insert(
+        "sys-close".into(),
+        fn_ty(vec![Type::Handle], system_result(Type::Nil)),
+    );
+    prelude.insert(
+        "sys-read-byte".into(),
+        fn_ty(vec![Type::Handle], system_result(Type::I64)),
+    );
+    prelude.insert(
+        "sys-write-byte".into(),
+        fn_ty(
+            vec![Type::Handle, Type::I64],
+            system_result(Type::Nil),
+        ),
+    );
+    prelude.insert(
+        "sys-tty-guard-save".into(),
+        fn_ty(vec![Type::Buf], system_result(Type::Nil)),
+    );
+    prelude.insert(
+        "sys-tty-guard-clear".into(),
+        fn_ty(vec![], system_result(Type::Nil)),
+    );
+    prelude.insert(
+        "sys-open-read".into(),
+        fn_ty(vec![Type::Str], system_result(Type::Handle)),
+    );
+    prelude.insert(
+        "sys-open-write".into(),
+        fn_ty(vec![Type::Str], system_result(Type::Handle)),
+    );
+    prelude.insert(
+        "sys-path-exists".into(),
+        fn_ty(vec![Type::Str], system_result(Type::Bool)),
+    );
+    prelude.insert(
+        "sys-wait-ms".into(),
+        fn_ty(vec![Type::I64], system_result(Type::Nil)),
+    );
+    prelude.insert(
+        "sys-now-ms".into(),
+        fn_ty(vec![], system_result(Type::I64)),
+    );
+    prelude.insert(
+        "sys-socket".into(),
+        fn_ty(vec![], system_result(Type::Handle)),
+    );
+    prelude.insert(
         "sys-bind".into(),
-        fn_ty(vec![Type::Handle, Type::I64], res_nil.clone()),
+        fn_ty(
+            vec![Type::Handle, Type::I64],
+            system_result(Type::Nil),
+        ),
     );
-    m.insert(
+    prelude.insert(
         "sys-listen".into(),
-        fn_ty(vec![Type::Handle, Type::I64], res_nil.clone()),
+        fn_ty(
+            vec![Type::Handle, Type::I64],
+            system_result(Type::Nil),
+        ),
     );
-    m.insert("sys-accept".into(), fn_ty(vec![Type::Handle], res_h));
-    m.insert("sys-recv".into(), fn_ty(vec![Type::Handle], res_str));
-    m.insert(
+    prelude.insert(
+        "sys-accept".into(),
+        fn_ty(vec![Type::Handle], system_result(Type::Handle)),
+    );
+    prelude.insert(
+        "sys-recv".into(),
+        fn_ty(vec![Type::Handle], system_result(Type::Str)),
+    );
+    prelude.insert(
         "sys-send".into(),
-        fn_ty(vec![Type::Handle, Type::Str], res_i64.clone()),
+        fn_ty(
+            vec![Type::Handle, Type::Str],
+            system_result(Type::I64),
+        ),
     );
-    m.insert(
+    prelude.insert(
         "sys-poll".into(),
-        fn_ty(vec![Type::Handle, Type::I64], res_i64),
+        fn_ty(
+            vec![Type::Handle, Type::I64],
+            system_result(Type::I64),
+        ),
     );
-    m.insert(
+    prelude.insert(
         "sys-tty-get".into(),
-        fn_ty(vec![Type::Handle, Type::Buf], res_nil.clone()),
+        fn_ty(
+            vec![Type::Handle, Type::Buf],
+            system_result(Type::Nil),
+        ),
     );
-    m.insert(
+    prelude.insert(
         "sys-tty-set".into(),
-        fn_ty(vec![Type::Handle, Type::Buf], res_nil),
+        fn_ty(
+            vec![Type::Handle, Type::Buf],
+            system_result(Type::Nil),
+        ),
     );
 }
 
-pub fn install_result_helpers(m: &mut HashMap<String, Type>) {
-    let t = Type::Param("T".into());
-    let e = Type::Param("E".into());
-    let r = Type::Result(Box::new(t.clone()), Box::new(e.clone()));
-    m.insert(
+pub fn install_result_helpers(prelude: &mut HashMap<String, Type>) {
+    let success = Type::Param("T".into());
+    let failure = Type::Param("E".into());
+    let result = Type::Result(Box::new(success.clone()), Box::new(failure.clone()));
+    prelude.insert(
         "ok".into(),
-        forall(&["T", "E"], fn_ty(vec![t.clone()], r.clone())),
+        forall(
+            &["T", "E"],
+            fn_ty(vec![success.clone()], result.clone()),
+        ),
     );
-    m.insert(
+    prelude.insert(
         "err".into(),
-        forall(&["T", "E"], fn_ty(vec![e.clone()], r.clone())),
+        forall(
+            &["T", "E"],
+            fn_ty(vec![failure.clone()], result.clone()),
+        ),
     );
-    m.insert("is-ok".into(), forall(&["T", "E"], fn_ty(vec![r.clone()], Type::Bool)));
-    m.insert("unwrap-ok".into(), forall(&["T", "E"], fn_ty(vec![r.clone()], t)));
-    m.insert("unwrap-err".into(), forall(&["T", "E"], fn_ty(vec![r], e)));
+    prelude.insert(
+        "is-ok".into(),
+        forall(
+            &["T", "E"],
+            fn_ty(vec![result.clone()], Type::Bool),
+        ),
+    );
+    prelude.insert(
+        "unwrap-ok".into(),
+        forall(&["T", "E"], fn_ty(vec![result.clone()], success)),
+    );
+    prelude.insert(
+        "unwrap-err".into(),
+        forall(&["T", "E"], fn_ty(vec![result], failure)),
+    );
 }

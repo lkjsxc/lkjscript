@@ -54,8 +54,8 @@ cycle.
 unwrap or propagate these values explicitly. Ordinary invalid/stale handle and
 OS failures are data at `sys-*` language boundaries, not VM termination.
 
-Non-`sys-*` descriptor helpers remain direct VM-error surfaces and are migrated
-to explicit Results in the following conformance slice.
+Descriptor close/read/write and handle `isatty` are now canonical `sys-*`
+primitives returning explicit Results.
 
 ## Verification
 

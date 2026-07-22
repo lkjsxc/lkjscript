@@ -7,12 +7,13 @@ unexpected VM termination or false success.
 
 ## Status
 
-**Accepted Target.** Terminal and polling primitives already follow this rule;
-the remaining system surface is migrated by the implementation commit.
+**Current.** The compiler prelude, opcode mapping, VM dispatch, and standard
+library wrappers use the Result-explicit system surface.
 
 ## Decision
 
-Every fallible OS/resource primitive returns `Result Success Str`. Static types,
+Every canonical `sys-*` OS/resource primitive returns `Result Success Str`.
+Core console operations remain VM-failure surfaces. Static types,
 bytecode dispatch, and runtime allocation must agree on the exact success type.
 Ordinary errno, invalid/stale handle, range, and no-progress outcomes become
 `ResultErr` containing their operation-qualified message.

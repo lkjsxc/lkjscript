@@ -57,9 +57,11 @@ cli
 hello-resp/
 /hello-resp
 /tcp-send
-close/
+unwrap-ok/
+sys-close/
 cli
-/close
+/sys-close
+/unwrap-ok
 /do
 /fn
 /def
@@ -75,9 +77,11 @@ do/
 serve-once/
 lis
 /serve-once
-close/
+unwrap-ok/
+sys-close/
 lis
-/close
+/sys-close
+/unwrap-ok
 /do
 /let
 /do

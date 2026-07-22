@@ -36,14 +36,17 @@ panic-prone assumptions; compiler-produced chunks are the supported path.
 - Socket-only operations reject file handles.
 - Arbitrary ioctl is absent. `sys-tty-get` and `sys-tty-set` select fixed Linux
   requests internally and validate exactly 60 state bytes before FFI.
-- `sys-poll` and terminal operations return language Results.
+- Every fallible resource, filesystem, time, socket, polling, terminal, and
+  terminal-guard primitive returns a language Result.
+- Descriptor-era aliases are removed in favor of handle-explicit `sys-*` names.
+- Missing paths return `Ok(false)` only for absence-class errors; other
+  `access(2)` failures return errors.
 - Network send returns its real byte count and uses `MSG_NOSIGNAL`.
 
 ## Current Host Risks
 
-- Many other ordinary OS failures still become VM errors despite Result-typed
-  prelude signatures.
-- Non-`sys-*` descriptor read/write/close operations expose direct failure.
+- Core stdout/stdin operations outside the resource API still treat host IO
+  failure as VM failure.
 - The terminal exit guard is process-global rather than a per-process lease.
 - Monotonic handle metadata grows until the VM ends.
 - Strings and network/file bytes do not provide a complete lossless byte model.
@@ -51,8 +54,6 @@ panic-prone assumptions; compiler-produced chunks are the supported path.
 
 ## Accepted Target
 
-- Represent every ordinary fallible host outcome with a truthful language
-  Result and preserve the error text through `unwrap-ok`.
 - Make numeric representation and execution match the static contract exactly.
 - Validate public chunks before dispatch.
 

@@ -59,7 +59,7 @@ fn try_binop(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "cons" => Op::Cons,
         "str-ref" => Op::StrRef,
         "str-append" => Op::StrAppend,
-        "write-byte-fd" => Op::WriteByteFd,
+        "sys-write-byte" => Op::SysWriteByte,
         "sys-send" => Op::SysSend,
         "buf-ref" => Op::BufRef,
         "buf-get-u32" => Op::BufGetU32,
@@ -99,8 +99,8 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "str-from-f64" => Op::StrFromF64,
         "sys-open-read" => Op::SysOpenRead,
         "sys-open-write" => Op::SysOpenWrite,
-        "close" => Op::CloseFd,
-        "read-byte-fd" => Op::ReadByteFd,
+        "sys-close" => Op::SysClose,
+        "sys-read-byte" => Op::SysReadByte,
         "arg" => Op::Arg,
         "sys-wait-ms" => Op::SysWaitMs,
         "sys-accept" => Op::SysAccept,
@@ -109,8 +109,8 @@ fn try_unary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "buf-new" => Op::BufNew,
         "buf-len" => Op::BufLen,
         "buf-clone" => Op::BufClone,
-        "isatty" => Op::Isatty,
-        "tty-guard-save" => Op::TtyGuardSave,
+        "sys-isatty" => Op::SysIsatty,
+        "sys-tty-guard-save" => Op::SysTtyGuardSave,
         "ok" => Op::OkWrap,
         "err" => Op::ErrWrap,
         "is-ok" => Op::IsOk,
@@ -158,12 +158,12 @@ fn try_host(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
             cx.proto.emit(Op::EmptyStr);
             Ok(true)
         }
-        ("stdin-fd", 0) => {
-            cx.proto.emit(Op::StdinFd);
+        ("stdin-handle", 0) => {
+            cx.proto.emit(Op::StdinHandle);
             Ok(true)
         }
-        ("tty-guard-clear", 0) => {
-            cx.proto.emit(Op::TtyGuardClear);
+        ("sys-tty-guard-clear", 0) => {
+            cx.proto.emit(Op::SysTtyGuardClear);
             Ok(true)
         }
         ("sys-now-ms", 0) => {

@@ -18,9 +18,11 @@ Str
 let/
 bind/
 b
-read-byte-fd/
+unwrap-ok/
+sys-read-byte/
 fd
-/read-byte-fd
+/sys-read-byte
+/unwrap-ok
 /bind
 if/
 lt/

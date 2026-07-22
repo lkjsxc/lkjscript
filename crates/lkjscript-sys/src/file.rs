@@ -11,6 +11,8 @@ const O_CREAT: i32 = 0o100;
 const O_TRUNC: i32 = 0o1000;
 const F_OK: i32 = 0;
 const MODE_0666: u32 = 0o666;
+const ENOENT: i32 = 2;
+const ENOTDIR: i32 = 20;
 
 extern "C" {
     fn open(pathname: *const i8, flags: i32, mode: u32) -> i32;
@@ -62,8 +64,28 @@ pub fn path_exists(path: &str) -> Result<bool, FdError> {
     let c = c_path(path)?;
     let rc = unsafe { access(c.as_ptr(), F_OK) };
     if rc == 0 {
-        Ok(true)
-    } else {
+        return Ok(true);
+    }
+    let error = errno();
+    if error == ENOENT || error == ENOTDIR {
         Ok(false)
+    } else {
+        Err(FdError(error))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_exists;
+
+    #[test]
+    fn missing_paths_are_false_but_malformed_paths_are_errors() {
+        let missing = format!(
+            "/tmp/lkjscript-missing-{}-{}",
+            std::process::id(),
+            line!()
+        );
+        assert_eq!(path_exists(&missing).ok(), Some(false));
+        assert!(path_exists("embedded\0nul").is_err());
     }
 }
