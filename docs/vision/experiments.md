@@ -201,7 +201,7 @@ sample. The slice was adopted to eliminate type-confused absence and semantic
 fallback values. Temporary artifacts were removed and the candidate release
 tree was rebuilt.
 
-## B1 Brainfuck Mandelbrot Interpreter: Running
+## B1 Brainfuck Mandelbrot Interpreter: Adopted
 
 - Question: can a straightforward Brainfuck interpreter authored in canonical
   lkjscript execute and reproducibly validate Erik Bosman's Mandelbrot program?
@@ -257,19 +257,36 @@ final oracle because its tape is uninitialized and its signed-`char` arithmetic
 is not portable, even though it produced the expected bytes on this machine.
 The repository-authored exact reference above replaced it. The superseded
 folded interpreter was also simplified to remove avoidable lkjscript helper
-calls from the hot path. Final clean-tree correctness and repeated measurement
-are pending; neither change erases the retained preliminary result. The exact
-folded harness command was `python3 meta/benchmarks/brainfuck/benchmark.py
---mode correctness --fold-runs --no-build --diagnostic-timeout 10 --timeout
-1800`; the interpreter command added `--fold-runs` after the input path.
+calls from the hot path. Neither change erases the retained preliminary result.
+The exact preliminary folded harness command was `python3
+meta/benchmarks/brainfuck/benchmark.py --mode correctness --fold-runs
+--no-build --diagnostic-timeout 10 --timeout 1800`; the interpreter command
+added `--fold-runs` after the input path.
 
-Both attempts used Linux 7.0.0-27-generic x86-64, an AMD Ryzen 9 9955HX
+The final clean-tree run used implementation commit
+`4589fee6c8bccbaad541b1b7f1132eb89a11af32`, interpreter source SHA-256
+`bda35e1a38b29b40817924c7263df77439d3982f81fa238fa7fc7365c9acc916`,
+and release binary SHA-256
+`3371bc1a2d50340387bb44f6dfc143db6d6ced736f2151cb1ce9357518beae46`.
+The exact command was `python3 meta/benchmarks/brainfuck/benchmark.py
+--fold-runs --warmups 1 --runs 3 --diagnostic-timeout 10 --timeout 1800`.
+The 10-second diagnostic timed out as bounded; the full correctness run then
+completed in 1,303.539639 seconds and was byte-equal to the independent oracle.
+One verified warmup took 1,264.299752 seconds. The three measured end-to-end
+process wall times were 1,274.412351, 1,281.143690, and 1,294.269931 seconds:
+minimum 1,274.412351, median 1,281.143690, maximum 1,294.269931, and median
+absolute deviation 6.731340 seconds. No samples were discarded.
+
+All B1 attempts used Linux 7.0.0-27-generic x86-64, an AMD Ryzen 9 9955HX
 16-core/32-thread CPU, 32 GiB RAM, Rust/Cargo 1.96.0, and the locked release
-workspace. The reference compiler was GCC-compatible `cc` 13.3.0. No samples
-were discarded; the timed-out direct attempt and superseded folded result are
-retained explicitly. Full output files were removed after their hashes were
-recorded; downloaded inputs, temporary reference binaries, and compact JSON
-remain only in the ignored `target/brainfuck-bench/` tree.
+workspace. The final reference compiler was `cc` 13.3.0 with `-O3 -std=c11
+-Wall -Wextra -Werror`. Peak RSS and allocation were not measured, so this is a
+reproducible workload result rather than a complete scorecard result. The
+run-folded variant is adopted to make the workload practical; the original
+direct timeout remains the baseline result and no direct completion time is
+claimed. Full output files were removed after their hashes were recorded;
+downloaded inputs, temporary reference binaries, and compact JSON remain only
+in the ignored `target/brainfuck-bench/` tree.
 
 ## Deferred Matrices
 

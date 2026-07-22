@@ -95,6 +95,8 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
 | Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
+| Brainfuck smoke | direct and run-folded correctness/failure boundaries passed |
+| Brainfuck Mandelbrot interpreted by lkjscript | direct implementation exceeded the 1,800-second ceiling; run-folded output matched the 6,240-byte independent oracle; three measured end-to-end release-process runs had 1,281.143690-second median and 6.731340-second MAD |
 | lkjedit smoke | passed |
 | one-shot HTTP smoke | passed |
 | terminal safety unit tests | wrong-size buffers rejected before FFI; exact size reaches only fixed requests |
