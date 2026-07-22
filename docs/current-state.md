@@ -31,6 +31,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 - CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub
   was removed
 - Workloads: hello, Mandelbrot, lkjedit, one-shot HTTP, and Leibniz comparison
+- Resource handles: integers are rejected, stdin uses a reserved borrowed token,
+  owned file/socket tokens are monotonic, and closed tokens are never reused
+- Terminal ABI: arbitrary ioctl is absent; fixed `sys-tty-get`/`sys-tty-set`
+  operations validate the exact 60-byte Linux state before FFI and return Results
+- Polling: `sys-poll` resolves handles through the resource table and returns a
+  language Result
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
   `MSG_NOSIGNAL` instead of risking process termination on a broken peer
 - JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
@@ -41,23 +47,22 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. arbitrary script-controlled ioctl request/buffer pairs cross an unsound safe
-   Rust wrapper;
-2. raw descriptor and reusable resource-table handle namespaces overlap, and
-   stale handles can alias later resources;
-3. many ordinary system failures abort the VM instead of returning the
+1. many ordinary system failures still abort the VM instead of returning the
    Result values promised by the type prelude;
-4. numeric widths, literals, arithmetic, casts, and code generation do not all
+2. numeric widths, literals, arithmetic, casts, and code generation do not all
    match their static signatures;
-5. `set`, optional `if`, `arg`, and several comparison/operator paths have
+3. `set`, optional `if`, `arg`, and several comparison/operator paths have
    type/runtime disagreements;
-6. imports load files but definitions share one global namespace and top-level
+4. imports load files but definitions share one global namespace and top-level
    initialization order can be unsafe;
-7. strings and IO lack a lossless bulk byte contract, and some library file
+5. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-8. public malformed chunks can reach unchecked VM assumptions;
-9. source/import aggregate bytes, depth, count, constants, globals, bytecode,
+6. public malformed chunks can reach unchecked VM assumptions;
+7. source/import aggregate bytes, depth, count, constants, globals, bytecode,
    VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
+8. the terminal exit guard remains process-global and is not a supervisor-safe
+   terminal lease;
+9. monotonic handle tokens retain closed metadata until the VM ends;
 10. the repository is not rustfmt-clean and strict Clippy still reports
     pre-existing production and test debt.
 
@@ -69,7 +74,7 @@ The source-cutover working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 23 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; 28 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | `check-sources` | passed for 116 `.lkjscript` sources, 172 imports, and 11 compile roots |
 | `cargo build --workspace --release --locked` | passed |
@@ -77,6 +82,9 @@ The source-cutover working tree was checked on Linux x86-64 with Rust/Cargo
 | Mandelbrot | passed; 1,176 bytes and 24 lines |
 | lkjedit smoke | passed |
 | one-shot HTTP smoke | passed |
+| terminal safety unit tests | wrong-size buffers rejected before FFI; exact size reaches only fixed requests |
+| resource handle unit tests | integer/borrowed close, stale reuse, repeated close, and wrong-kind use rejected |
+| terminal Result workload | 59-byte state returned `ResultErr`; VM continued and exited successfully |
 | `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
 | script argument `--help` after `--` | passed through to the script |
 | `.lkjml` CLI run | rejected with canonical-extension diagnostic |
@@ -91,13 +99,11 @@ A gate that did not run did not pass.
 
 The next safety/conformance sequence is:
 
-1. replace arbitrary ioctl with fixed size-validated terminal operations;
-2. introduce namespace-separated stale-safe resource handles;
-3. turn all ordinary fallible system operations into truthful language Results;
-4. implement an exact current numeric contract and remove unsupported prelude
+1. turn all ordinary fallible system operations into truthful language Results;
+2. implement an exact current numeric contract and remove unsupported prelude
    vocabulary;
-5. add generated prelude/codegen/VM conformance coverage;
-6. make rustfmt, Clippy, documentation status, source coverage, and explicit
+3. add generated prelude/codegen/VM conformance coverage;
+4. make rustfmt, Clippy, documentation status, source coverage, and explicit
    placeholder scanning part of the local honesty gate.
 
 ## Deferred

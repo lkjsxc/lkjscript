@@ -56,13 +56,6 @@ impl Value {
         Some((self.0 >> 3) as u32)
     }
 
-    /// Fd-table index: opaque Handle, or legacy Int during migration.
-    pub fn as_fd_index(self) -> Option<usize> {
-        self.as_handle()
-            .map(|h| h as usize)
-            .or_else(|| self.as_int().map(|i| i as usize))
-    }
-
     pub fn is_truthy(self) -> bool {
         if self.is_nil() { return false; }
         if let Some(b) = self.as_bool() { return b; }

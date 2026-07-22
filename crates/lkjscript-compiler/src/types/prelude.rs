@@ -121,16 +121,12 @@ pub fn prelude() -> HashMap<String, Type> {
     m.insert("u32-from-i64".into(), fn_ty(vec![Type::I64], Type::U32));
     m.insert("i64-from-i32".into(), fn_ty(vec![Type::I32], Type::I64));
     m.insert("i32-from-i64".into(), fn_ty(vec![Type::I64], Type::I32));
+    let terminal_result = Type::Result(Box::new(Type::Nil), Box::new(Type::Str));
     m.insert(
-        "sys-ioctl".into(),
-        fn_ty(vec![Type::Handle, Type::I64, Type::Buf], Type::I64),
+        "tty-guard-save".into(),
+        fn_ty(vec![Type::Buf], terminal_result.clone()),
     );
-    m.insert(
-        "sys-poll".into(),
-        fn_ty(vec![Type::Handle, Type::I64], Type::I64),
-    );
-    m.insert("tty-guard-save".into(), fn_ty(vec![Type::Buf], Type::Nil));
-    m.insert("tty-guard-clear".into(), fn_ty(vec![], Type::Nil));
+    m.insert("tty-guard-clear".into(), fn_ty(vec![], terminal_result));
     install_sys(&mut m);
     install_result_helpers(&mut m);
     m

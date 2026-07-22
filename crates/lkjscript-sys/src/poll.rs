@@ -46,8 +46,3 @@ pub fn poll_fd(fd: i32, timeout_ms: i32) -> Result<bool, PollError> {
     let ev = pfd.revents;
     Ok(ev & (POLLIN | POLLHUP | POLLERR) != 0)
 }
-
-/// Non-blocking readiness check for stdin.
-pub fn poll_stdin_ready() -> Result<bool, PollError> {
-    poll_fd(0, 0)
-}

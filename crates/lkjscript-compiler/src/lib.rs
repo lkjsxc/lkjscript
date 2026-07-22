@@ -75,12 +75,22 @@ pub use lkjscript_core::Limits as CompileLimits;
 mod tests {
     use std::path::Path;
 
-    use super::ensure_source_path;
+    use lkjscript_core::Limits;
+
+    use super::{compile_source, ensure_source_path};
 
     #[test]
     fn accepts_only_canonical_source_extension() {
         assert!(ensure_source_path(Path::new("main.lkjscript")).is_ok());
         assert!(ensure_source_path(Path::new("main.lkjml")).is_err());
         assert!(ensure_source_path(Path::new("main")).is_err());
+    }
+
+    #[test]
+    fn bounded_terminal_operations_replace_arbitrary_ioctl() {
+        let canonical = "do/\nsys-tty-get/\nstdin-fd/\n/stdin-fd\nbuf-new/\n60\n/buf-new\n/sys-tty-get\n/do\n";
+        let arbitrary = "do/\nsys-ioctl/\nstdin-fd/\n/stdin-fd\n21505\nbuf-new/\n1\n/buf-new\n/sys-ioctl\n/do\n";
+        assert!(compile_source(canonical, "terminal.lkjscript", &Limits::default()).is_ok());
+        assert!(compile_source(arbitrary, "terminal.lkjscript", &Limits::default()).is_err());
     }
 }

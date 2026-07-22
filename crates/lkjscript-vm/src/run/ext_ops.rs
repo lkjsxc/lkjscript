@@ -155,39 +155,52 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(r);
             Ok(true)
         }
-        x if x == Op::SysIoctl as u8 => {
-            let buf = vm.pop();
-            let req = vm.pop();
-            let fd = vm.pop();
-            let r = crate::host_buf::sys_ioctl(&mut vm.arena, fd, req, buf)?;
-            vm.push(r);
+        x if x == Op::SysTtyGet as u8 => {
+            let buffer = vm.pop();
+            let handle = vm.pop();
+            let result =
+                crate::host_buf::sys_tty_get(&mut vm.arena, &vm.fds, handle, buffer);
+            let value = crate::host_ext::language_result(&mut vm.arena, result);
+            vm.push(value);
+            Ok(true)
+        }
+        x if x == Op::SysTtySet as u8 => {
+            let buffer = vm.pop();
+            let handle = vm.pop();
+            let result = crate::host_buf::sys_tty_set(&vm.arena, &vm.fds, handle, buffer);
+            let value = crate::host_ext::language_result(&mut vm.arena, result);
+            vm.push(value);
             Ok(true)
         }
         x if x == Op::SysPoll as u8 => {
-            let ms = vm.pop();
-            let fd = vm.pop();
-            let r = crate::host_buf::sys_poll(fd, ms)?;
-            vm.push(r);
+            let timeout = vm.pop();
+            let handle = vm.pop();
+            let result = crate::host_buf::sys_poll(&vm.fds, handle, timeout);
+            let value = crate::host_ext::language_result(&mut vm.arena, result);
+            vm.push(value);
             Ok(true)
         }
         x if x == Op::StdinFd as u8 => {
-            vm.push(crate::host_buf::stdin_fd());
+            vm.push(crate::host_buf::stdin_handle());
             Ok(true)
         }
         x if x == Op::Isatty as u8 => {
-            let fd = vm.pop();
-            let r = crate::host_buf::isatty(fd)?;
-            vm.push(r);
+            let handle = vm.pop();
+            let result = crate::host_buf::isatty(&vm.fds, handle)?;
+            vm.push(result);
             Ok(true)
         }
         x if x == Op::TtyGuardSave as u8 => {
-            let buf = vm.pop();
-            let r = crate::host_buf::tty_guard_save(&vm.arena, buf)?;
-            vm.push(r);
+            let buffer = vm.pop();
+            let result = crate::host_buf::tty_guard_save(&vm.arena, buffer);
+            let value = crate::host_ext::language_result(&mut vm.arena, result);
+            vm.push(value);
             Ok(true)
         }
         x if x == Op::TtyGuardClear as u8 => {
-            vm.push(crate::host_buf::tty_guard_clear());
+            let result = crate::host_buf::tty_guard_clear();
+            let value = crate::host_ext::language_result(&mut vm.arena, result);
+            vm.push(value);
             Ok(true)
         }
         x if x == Op::SysNowMs as u8 => {

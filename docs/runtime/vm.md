@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Describe the execution engine implemented in the baseline and its accepted
-foundation repairs.
+Describe the current execution engine, host-resource boundary, and accepted
+next repairs.
 
 ## Status
 
-**Current** unless a bullet is labeled **Accepted Target**.
+**Current** unless a section is labeled **Accepted Target** or **Deferred**.
 
 ## Current Shape
 
 - Dense bytecode with contiguous value and frame stacks.
 - Tagged `u64` immediates for nil, booleans, small integers, heap references,
-  and handle payloads.
+  and opaque handle tokens.
 - Arena objects for floats, strings, symbols, pairs, closures, buffers, and
   language Result wrappers.
 - Precise non-moving mark-sweep collection after 1,024 allocations.
@@ -26,25 +26,36 @@ The VM/compiler boundary is `Chunk`, `FunctionProto`, `Constant`, and `Op` in
 `lkjscript-core`. Public malformed chunks are not fully validated and can reach
 panic-prone assumptions; compiler-produced chunks are the supported path.
 
+## Current Resource Boundary
+
+- Integer values are never accepted as resource handles.
+- Stdin has a reserved borrowed token disjoint from owned files and sockets.
+- Owned tokens are monotonic and never reused after close.
+- All raw descriptor resolution is centralized in the VM resource table.
+- Close rejects borrowed, unknown, stale, and repeatedly closed tokens.
+- Socket-only operations reject file handles.
+- Arbitrary ioctl is absent. `sys-tty-get` and `sys-tty-set` select fixed Linux
+  requests internally and validate exactly 60 state bytes before FFI.
+- `sys-poll` and terminal operations return language Results.
+- Network send returns its real byte count and uses `MSG_NOSIGNAL`.
+
 ## Current Host Risks
 
-- Arbitrary ioctl requests and buffer sizes cross an unsound safe wrapper.
-- Handle payloads can mean raw descriptors or reusable resource-table indexes.
-- Ordinary OS failures often become VM errors despite Result-typed prelude
-  signatures.
-- Network send reports zero after success.
+- Many other ordinary OS failures still become VM errors despite Result-typed
+  prelude signatures.
+- Non-`sys-*` descriptor read/write/close operations expose direct failure.
+- The terminal exit guard is process-global rather than a per-process lease.
+- Monotonic handle metadata grows until the VM ends.
 - Strings and network/file bytes do not provide a complete lossless byte model.
+- Blocking calls and process exit prevent safe multi-VM supervision.
 
-## Accepted Foundation Target
+## Accepted Target
 
-- Replace arbitrary ioctl with fixed, size-validated terminal operations.
-- Use opaque namespace-separated handles whose stale values cannot alias new
-  resources.
-- Represent ordinary fallible host outcomes as language `ResultOk` or
-  `ResultErr`; reserve VM errors for language/runtime contract violations.
-- Report actual send counts and suppress process-killing SIGPIPE behavior.
-- Make the currently executable numeric contract match static typing exactly.
+- Represent every ordinary fallible host outcome with a truthful language
+  Result and preserve the error text through `unwrap-ok`.
+- Make numeric representation and execution match the static contract exactly.
+- Validate public chunks before dispatch.
 
 Process-safe outcomes, host-service injection, instruction quanta, blocking
-wait objects, and per-process budgets remain **Deferred** to the supervisor
-cycle.
+wait objects, generation-reused handle slots, and per-process budgets are
+**Deferred** to later measured cycles.

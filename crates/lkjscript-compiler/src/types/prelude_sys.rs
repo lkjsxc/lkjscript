@@ -34,13 +34,25 @@ pub fn install_sys(m: &mut HashMap<String, Type>) {
     );
     m.insert(
         "sys-listen".into(),
-        fn_ty(vec![Type::Handle, Type::I64], res_nil),
+        fn_ty(vec![Type::Handle, Type::I64], res_nil.clone()),
     );
     m.insert("sys-accept".into(), fn_ty(vec![Type::Handle], res_h));
     m.insert("sys-recv".into(), fn_ty(vec![Type::Handle], res_str));
     m.insert(
         "sys-send".into(),
-        fn_ty(vec![Type::Handle, Type::Str], res_i64),
+        fn_ty(vec![Type::Handle, Type::Str], res_i64.clone()),
+    );
+    m.insert(
+        "sys-poll".into(),
+        fn_ty(vec![Type::Handle, Type::I64], res_i64),
+    );
+    m.insert(
+        "sys-tty-get".into(),
+        fn_ty(vec![Type::Handle, Type::Buf], res_nil.clone()),
+    );
+    m.insert(
+        "sys-tty-set".into(),
+        fn_ty(vec![Type::Handle, Type::Buf], res_nil),
     );
 }
 

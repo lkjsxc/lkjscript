@@ -64,6 +64,8 @@ fn try_binop(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "buf-ref" => Op::BufRef,
         "buf-get-u32" => Op::BufGetU32,
         "sys-poll" => Op::SysPoll,
+        "sys-tty-get" => Op::SysTtyGet,
+        "sys-tty-set" => Op::SysTtySet,
         "sys-bind" => Op::SysBind,
         "sys-listen" => Op::SysListen,
         "bit-and" => Op::BitAnd,
@@ -129,7 +131,6 @@ fn try_ternary(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "str-slice" => Op::StrSlice,
         "buf-set" => Op::BufSet,
         "buf-set-u32" => Op::BufSetU32,
-        "sys-ioctl" => Op::SysIoctl,
         _ => return Ok(false),
     };
     compile_expr(cx, &args[0])?;

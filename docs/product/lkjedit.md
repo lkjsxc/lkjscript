@@ -51,6 +51,6 @@ LKJSCRIPT_BIN=target/debug/lkjscript meta/scripts/lkjedit-smoke.sh
 - filesystem open/read/write/path existence;
 - arguments, strings, lists, buffers, and bit operations.
 
-Arbitrary ioctl and ambiguous handles remain known foundation defects, not
-accepted editor architecture. lkjedit will migrate with their bounded,
-stale-safe replacements.
+lkjedit now uses fixed size-validated terminal operations and reserved,
+monotonic stale-safe handles. The process-global exit guard remains a temporary
+single-VM boundary and must become a terminal lease before supervision.

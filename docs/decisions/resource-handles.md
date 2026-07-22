@@ -7,8 +7,9 @@ state before multi-process or untrusted execution work begins.
 
 ## Status
 
-**Accepted Target.** The current implementation still exposes arbitrary ioctl
-and ambiguous reusable handle indexes until the implementation commit lands.
+**Current.** Bounded terminal operations and monotonic stale-safe handles are
+implemented. Generation-based reusable slots and per-process terminal leases
+remain deferred.
 
 ## Handle Decision
 
@@ -53,8 +54,8 @@ cycle.
 unwrap or propagate these values explicitly. Ordinary invalid/stale handle and
 OS failures are data at `sys-*` language boundaries, not VM termination.
 
-Non-`sys-*` descriptor helpers are migrated to explicit Results in the
-following conformance slice so this safety change remains reviewable.
+Non-`sys-*` descriptor helpers remain direct VM-error surfaces and are migrated
+to explicit Results in the following conformance slice.
 
 ## Verification
 
