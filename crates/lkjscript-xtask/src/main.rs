@@ -1,11 +1,12 @@
 //! Verification gates for the lkjscript workspace.
 
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-use lkjscript_compiler::{compile_path, validate_source, validate_source_tree};
+use lkjscript_compiler::{compile_path_with_sources, validate_source, validate_source_tree};
 use lkjscript_core::Limits;
 
 fn main() -> ExitCode {
@@ -47,18 +48,127 @@ fn check_docs(root: &Path) -> i32 {
         "docs/operations/verification.md",
         "docs/product/README.md",
         "docs/decisions/README.md",
+        "docs/decisions/numeric-semantics.md",
     ];
+    let mut failures = 0;
     for relative in required {
         if !root.join(relative).is_file() {
             eprintln!("missing {relative}");
-            return 1;
+            failures += 1;
         }
     }
     if root.join("docs/language/lkjml.md").exists() {
         eprintln!("superseded active documentation path: docs/language/lkjml.md");
+        failures += 1;
+    }
+    failures += check_markdown(root);
+    failures += check_explicit_inert_markers(root);
+    i32::from(failures > 0)
+}
+
+fn check_markdown(root: &Path) -> usize {
+    let mut files = Vec::new();
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+                && path.extension().and_then(|extension| extension.to_str()) == Some("md")
+            {
+                files.push(path);
+            }
+        }
+    }
+    let mut docs = Vec::new();
+    if let Err(error) = walk(&root.join("docs"), &mut docs) {
+        eprintln!("{error}");
         return 1;
     }
-    0
+    docs.retain(|path| path.extension().and_then(|extension| extension.to_str()) == Some("md"));
+    files.extend(docs.iter().cloned());
+    files.sort();
+
+    let mut failures = 0;
+    for path in files {
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(error) => {
+                eprintln!("read Markdown {}: {error}", path.display());
+                failures += 1;
+                continue;
+            }
+        };
+        if path.starts_with(root.join("docs")) && !content.contains("\n## Status\n") {
+            eprintln!("documentation status missing: {}", path.display());
+            failures += 1;
+        }
+        for target in markdown_targets(&content) {
+            if target.starts_with('#') || target.contains("://") || target.starts_with("mailto:") {
+                continue;
+            }
+            let local = target.split('#').next().unwrap_or("");
+            if local.is_empty() {
+                continue;
+            }
+            let destination = path.parent().unwrap_or(root).join(local);
+            if !destination.exists() {
+                eprintln!("broken local Markdown link in {}: {target}", path.display());
+                failures += 1;
+            }
+        }
+    }
+    failures
+}
+
+fn markdown_targets(content: &str) -> Vec<&str> {
+    let mut targets = Vec::new();
+    let mut remaining = content;
+    while let Some(start) = remaining.find("](") {
+        remaining = &remaining[start + 2..];
+        let Some(end) = remaining.find(')') else {
+            break;
+        };
+        let target = remaining[..end].trim().trim_matches(['<', '>']);
+        if !target.is_empty() {
+            targets.push(target);
+        }
+        remaining = &remaining[end + 1..];
+    }
+    targets
+}
+
+fn check_explicit_inert_markers(root: &Path) -> usize {
+    const PLACEHOLDER_WORD: &str = concat!("place", "holder");
+
+    let mut files = Vec::new();
+    for directory in ["crates", "src"] {
+        if let Err(error) = walk(&root.join(directory), &mut files) {
+            eprintln!("{error}");
+            return 1;
+        }
+    }
+    let mut failures = 0;
+    for path in files {
+        let extension = path.extension().and_then(|extension| extension.to_str());
+        if !matches!(extension, Some("rs" | "lkjscript")) {
+            continue;
+        }
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(error) => {
+                eprintln!("read inert-marker input {}: {error}", path.display());
+                failures += 1;
+                continue;
+            }
+        };
+        for (index, line) in content.lines().enumerate() {
+            if line.to_ascii_lowercase().contains(PLACEHOLDER_WORD) && !line.contains("PLACEHOLDER")
+            {
+                eprintln!("unlabeled inert marker at {}:{}", path.display(), index + 1);
+                failures += 1;
+            }
+        }
+    }
+    failures
 }
 
 fn check_tree(root: &Path) -> i32 {
@@ -109,7 +219,7 @@ fn check_sources(root: &Path) -> i32 {
         }
     }
 
-    for entry in [
+    let entries = [
         "src/examples/bench/main.lkjscript",
         "src/examples/hello/main.lkjscript",
         "src/examples/http/hello.lkjscript",
@@ -121,11 +231,49 @@ fn check_sources(root: &Path) -> i32 {
         "src/std/io/now-ms.lkjscript",
         "src/std/io/wait.lkjscript",
         "src/std/term/write-str.lkjscript",
-    ] {
-        if let Err(error) = compile_path(&root.join(entry), &limits) {
-            eprintln!("{entry}: {error}");
-            failures += 1;
+    ];
+    let mut covered = HashSet::new();
+    for entry in entries {
+        match compile_path_with_sources(&root.join(entry), &limits) {
+            Ok((_, sources)) => covered.extend(sources),
+            Err(error) => {
+                eprintln!("{entry}: {error}");
+                failures += 1;
+            }
         }
+    }
+
+    let mut expected = HashSet::new();
+    for path in files.iter().filter(|path| {
+        path.extension().and_then(|extension| extension.to_str()) == Some("lkjscript")
+    }) {
+        match path.canonicalize() {
+            Ok(path) => {
+                expected.insert(path);
+            }
+            Err(error) => {
+                eprintln!("canonicalize source {}: {error}", path.display());
+                failures += 1;
+            }
+        }
+    }
+    let mut missing: Vec<_> = expected.difference(&covered).collect();
+    missing.sort();
+    for path in missing {
+        eprintln!(
+            "source is outside compiled entry closures: {}",
+            path.display()
+        );
+        failures += 1;
+    }
+    let mut unexpected: Vec<_> = covered.difference(&expected).collect();
+    unexpected.sort();
+    for path in unexpected {
+        eprintln!(
+            "compiled source is outside canonical corpus: {}",
+            path.display()
+        );
+        failures += 1;
     }
 
     i32::from(failures > 0)

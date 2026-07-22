@@ -27,7 +27,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
-  Clippy for all targets/features; product panic/unwrap/expect paths stay denied
+  Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
+  labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
   and return-adjacent tail-frame reuse
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
@@ -78,7 +79,9 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | `cargo check --workspace --all-targets --locked` | passed |
 | `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 49 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
-| `check-sources` | passed for 116 `.lkjscript` sources, 172 imports, and 11 compile roots |
+| documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
+| `check-sources` | passed for all 116 `.lkjscript` sources; the 11 compiled entry closures equal the corpus exactly |
+| source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
 | Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
@@ -107,8 +110,7 @@ The next safety/conformance sequence is:
 
 1. add generated whole-prelude/codegen/VM conformance coverage;
 2. repair `set`, optional `if`, `arg`, and global initialization contracts;
-3. make documentation status, exact source-closure coverage, and explicit
-   placeholder scanning machine-checked.
+3. validate public chunks before VM dispatch.
 
 ## Deferred
 

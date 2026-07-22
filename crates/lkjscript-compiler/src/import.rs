@@ -14,7 +14,6 @@ use lkjscript_core::{Error, Limits, Result};
 
 #[derive(Debug, Clone)]
 pub struct SourceFile {
-    #[allow(dead_code)]
     pub path: PathBuf,
     pub forms: Vec<Expr>,
 }

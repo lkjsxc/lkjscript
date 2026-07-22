@@ -37,7 +37,7 @@ The actual dependency edges are:
 | Concern | Primary location | Entry symbols |
 | --- | --- | --- |
 | CLI | `crates/lkjscript-app/src/main.rs` | `main`, `real_main` |
-| Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_source`, `validate_source` |
+| Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` |
 | Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
 | Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
 | Static types | `crates/lkjscript-compiler/src/types/` | `typecheck_program`, inference and prelude |

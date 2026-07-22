@@ -21,9 +21,19 @@ use crate::parse::parse_tokens;
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 
 pub fn compile_path(path: &Path, limits: &Limits) -> Result<Chunk> {
+    compile_path_with_sources(path, limits).map(|(chunk, _)| chunk)
+}
+
+pub fn compile_path_with_sources(path: &Path, limits: &Limits) -> Result<(Chunk, Vec<PathBuf>)> {
     ensure_source_path(path)?;
     let program = load_program(path, limits)?;
-    compile_program(&program)
+    let sources = program
+        .files
+        .iter()
+        .map(|source| source.path.clone())
+        .collect();
+    let chunk = compile_program(&program)?;
+    Ok((chunk, sources))
 }
 
 pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<Chunk> {
