@@ -174,6 +174,33 @@ which is not attributed to typed lists. The slice was adopted for exact type
 semantics and removal of nil/list ambiguity. Temporary artifacts were removed
 and the candidate release tree was rebuilt.
 
+## S3 Explicit Option And No Nil: Adopted
+
+- Baseline: `45e2d085e13638b92dd1c08e12b2095781f0d248`
+- Candidate: `0f17d9749966101473746530b26415127371d5a1`
+- Environment/build: the S1 Linux x86-64 host and locked release procedure;
+  each binary ran algorithm-equivalent source from its own commit
+- Correctness: hello, Mandelbrot, and Leibniz output bytes were identical;
+  70 tests, exact source closure, strict Clippy, release smokes, Option/argument
+  CLI boundaries, removed Nil diagnostics/opcodes, malformed-VM boundaries,
+  lkjedit, HTTP, and Docker verification passed
+- Timing: four warmups and 31 deterministic randomized samples per variant;
+  entries are median / median absolute deviation / p95 process milliseconds
+
+| Workload | Baseline | Option/no-nil | Candidate / baseline |
+| --- | ---: | ---: | ---: |
+| hello compile + run | 0.408 / 0.014 / 1.141 | 0.405 / 0.015 / 0.516 | 0.994 |
+| Mandelbrot compile + run | 5.052 / 0.224 / 5.905 | 5.188 / 0.258 / 5.948 | 1.027 |
+| Leibniz 200,000 compile + run | 70.093 / 1.057 / 80.102 | 71.174 / 0.824 / 77.158 | 1.015 |
+| Mandelbrot compile + disassemble | 0.668 / 0.021 / 0.996 | 0.678 / 0.015 / 0.803 | 1.014 |
+
+Release binary size increased from 652,080 to 660,112 bytes (1.012x). No
+performance threshold was recorded before this required safety/semantic slice;
+the figures are diagnostic and show no median regression above 3% in this
+sample. The slice was adopted to eliminate type-confused absence and semantic
+fallback values. Temporary artifacts were removed and the candidate release
+tree was rebuilt.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS
