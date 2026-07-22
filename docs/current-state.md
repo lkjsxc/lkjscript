@@ -15,18 +15,18 @@ success.
 
 ## Current Implementation
 
-- Standalone repo: `https://github.com/lkjsxc/lkjscript2026`
-- Language name: **lkjscript2026**; canonical LKJML sources use **`.lkjml`**
+- Standalone repo: `https://github.com/lkjsxc/lkjscript`
+- Language name: **lkjscript**; canonical LKJML sources use **`.lkjml`**
 - LKJML: one column-one marker/atom per line, no indentation or attributes,
   and quote-free `str/`, `name/`, and `import/` text blocks
 - Layout: `src/std` (primitives), `src/lib/lkjedit` (validation app package),
   `src/examples` (runnable demonstrations)
 - Imports: `std/...`, `lib/...`, `examples/...` (mapped under `src/`; no `../`);
-  installed std/lib/examples fallback through `LKJSCRIPT2026_ROOT`
+  installed std/lib/examples fallback through `LKJSCRIPT_ROOT`
 - Runtime Docker image bundles the source libraries and validation examples; a
   bind-mounted external-project smoke
   importing `std/term/puts.lkjml` passed
-- Scratch OS layer: `lkjscript2026-sys`; terminal + TCP + FS + time policy in `.lkjml`
+- Scratch OS layer: `lkjscript-sys`; terminal + TCP + FS + time policy in `.lkjml`
 - Hardcoded limit constants (no user-facing JSON limits)
 - Every source is syntax-checked; all nine executable roots are typechecked and
   compiled by `check-sources`
@@ -45,8 +45,12 @@ success.
 See [vision/performance-roadmap.md](vision/performance-roadmap.md). Immediate
 product gaps are native self-contained installation, a published immutable
 Docker image, process-safe VM outcomes/host services, and a Linux-first,
-daemon-default singleton supervisor motivated by resource efficiency. Runtime
-gaps include truthful sys `Result` errors,
+daemon-default singleton supervisor motivated by resource efficiency. The
+agreed target is one daemon per OS user and one daemon per Docker container;
+`run` is attached and cancelled on disconnect, `start` is detached but
+non-persistent, and the separate `deploy` operation owns persistent specs.
+`restart` recompiles the latest source. Runtime gaps include truthful sys
+`Result` errors,
 handle namespace separation, adaptive GC, and a real JIT execution handoff.
 
 ## Sprint Board

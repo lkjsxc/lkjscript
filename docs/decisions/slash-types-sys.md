@@ -33,7 +33,7 @@ Linux backend is fine now behind a portable façade.
    or `str-from-byte`.
 6. **Literals** — `2` is `I64`; `2.0` (source contains `.`) is `F64`.
 7. **Safe sys** — Scripts see only opaque `Handle` + `Result`; raw fds stay
-   inside VM/`lkjscript2026-sys`. Portable façade module; Linux impl first.
+   inside VM/`lkjscript-sys`. Portable façade module; Linux impl first.
 8. **GC** — Precise mark-sweep replaces bump-only; value tags include Handle.
 9. **JIT** — Stub + typed call hooks only in this cut.
 

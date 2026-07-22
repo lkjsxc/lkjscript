@@ -2,7 +2,7 @@
 
 ## Purpose
 
-State the mission for the `lkjscript2026` runtime.
+State the mission for the `lkjscript` runtime.
 
 ## Mission
 

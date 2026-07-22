@@ -1,0 +1,18 @@
+[package]
+name = "lkjscript-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "lkjscript"
+path = "src/main.rs"
+
+[dependencies]
+lkjscript-core = { path = "../lkjscript-core" }
+lkjscript-compiler = { path = "../lkjscript-compiler" }
+lkjscript-vm = { path = "../lkjscript-vm" }
+
+[lints]
+workspace = true

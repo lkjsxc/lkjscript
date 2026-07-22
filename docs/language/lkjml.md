@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Define the canonical, line-oriented source notation for `lkjscript2026`.
+Define the canonical, line-oriented source notation for `lkjscript`.
 
 ## Identity
 
 LKJML is the language's attribute-less markup surface. Canonical source files
 use the `.lkjml` extension. The runtime and semantic language remain
-`lkjscript2026`; LKJML changes notation, not evaluation, typing, imports, or
+`lkjscript`; LKJML changes notation, not evaluation, typing, imports, or
 runtime behavior.
 
 ## Invariants

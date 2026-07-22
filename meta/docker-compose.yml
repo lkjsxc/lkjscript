@@ -1,12 +1,12 @@
 services:
-  lkjscript2026:
+  lkjscript:
     profiles: ["run"]
     build:
       context: ..
       dockerfile: meta/Dockerfile
       target: runtime
     command: ["run", "src/examples/hello/main.lkjml"]
-    working_dir: /usr/local/share/lkjscript2026
+    working_dir: /usr/local/share/lkjscript
     stdin_open: true
     tty: true
 
@@ -17,7 +17,7 @@ services:
       dockerfile: meta/Dockerfile
       target: runtime
     command: ["run", "src/examples/mandel/main.lkjml"]
-    working_dir: /usr/local/share/lkjscript2026
+    working_dir: /usr/local/share/lkjscript
     stdin_open: true
     tty: true
 
@@ -28,7 +28,7 @@ services:
       dockerfile: meta/Dockerfile
       target: runtime
     command: ["run", "src/examples/lkjedit/main.lkjml"]
-    working_dir: /usr/local/share/lkjscript2026
+    working_dir: /usr/local/share/lkjscript
     stdin_open: true
     tty: true
 
@@ -39,7 +39,7 @@ services:
       dockerfile: meta/Dockerfile
       target: runtime
     command: ["run", "src/examples/http/hello.lkjml"]
-    working_dir: /usr/local/share/lkjscript2026
+    working_dir: /usr/local/share/lkjscript
     ports:
       - "8080:8080"
 
@@ -50,4 +50,4 @@ services:
       dockerfile: meta/Dockerfile
       target: verified
     entrypoint: ["cat"]
-    command: ["/tmp/lkjscript2026-verification-result"]
+    command: ["/tmp/lkjscript-verification-result"]

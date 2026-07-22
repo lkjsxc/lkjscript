@@ -7,13 +7,13 @@ Define how completion is checked.
 ## Local
 
 ```sh
-cargo run -p lkjscript2026-xtask -- check-docs
-cargo run -p lkjscript2026-xtask -- check-tree
-cargo run -p lkjscript2026-xtask -- check-sources
-cargo run -p lkjscript2026-xtask -- quiet test
-cargo run -p lkjscript2026-xtask -- quiet verify
-LKJ=target/debug/lkjscript2026 meta/scripts/lkjedit-smoke.sh
-LKJ=target/debug/lkjscript2026 meta/scripts/http-smoke.sh
+cargo run -p lkjscript-xtask -- check-docs
+cargo run -p lkjscript-xtask -- check-tree
+cargo run -p lkjscript-xtask -- check-sources
+cargo run -p lkjscript-xtask -- quiet test
+cargo run -p lkjscript-xtask -- quiet verify
+LKJ=target/debug/lkjscript meta/scripts/lkjedit-smoke.sh
+LKJ=target/debug/lkjscript meta/scripts/http-smoke.sh
 N=5000 meta/scripts/bench-compare.sh
 ```
 
@@ -28,8 +28,8 @@ docker compose -f meta/docker-compose.yml --profile verify run --build --rm veri
 Run an arbitrary project against the bundled standard library:
 
 ```sh
-docker build -f meta/Dockerfile --target runtime -t lkjscript2026 . && \
-  docker run --rm -it -v "$PWD:/project" -w /project lkjscript2026 \
+docker build -f meta/Dockerfile --target runtime -t lkjscript . && \
+  docker run --rm -it -v "$PWD:/project" -w /project lkjscript \
   run main.lkjml
 ```
 

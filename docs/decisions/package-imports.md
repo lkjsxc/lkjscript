@@ -18,7 +18,7 @@ fan-out.
   the current working directory.
 - If a project has no local `src/std`, `src/lib`, or `src/examples`, those
   prefixes fall back to the corresponding directory under
-  `$LKJSCRIPT2026_ROOT/src`.
+  `$LKJSCRIPT_ROOT/src`.
 - Project-local library directories win over the installed fallback.
 
 Example:
@@ -36,5 +36,5 @@ The same form accepts `lib/lkjedit/loop.lkjml` and
 
 Modules are identified by logical path (`std/…`, `lib/…`, `examples/…`).
 Top-level `def` remains program-global for this release. Docker sets
-`LKJSCRIPT2026_ROOT` to its bundled libraries, so bind-mounted projects do not
+`LKJSCRIPT_ROOT` to its bundled libraries, so bind-mounted projects do not
 need to copy the standard library.

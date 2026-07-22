@@ -2,7 +2,7 @@
 
 ## Purpose
 
-North star and ranked principles for `lkjscript2026`.
+North star and ranked principles for `lkjscript`.
 
 ## Table of Contents
 

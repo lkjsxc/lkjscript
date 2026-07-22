@@ -13,36 +13,36 @@ COPY docs ./docs
 COPY src ./src
 COPY meta/scripts ./meta/scripts
 COPY meta/Dockerfile meta/docker-compose.yml ./meta/
-RUN --mount=type=cache,id=lkjscript2026-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=lkjscript2026-cargo-git,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,id=lkjscript2026-target-release,target=/src/target,sharing=locked \
-    cargo build --locked --release -p lkjscript2026-app -p lkjscript2026-xtask \
-    && cp /src/target/release/lkjscript2026 /tmp/lkjscript2026 \
-    && cp /src/target/release/lkjscript2026-xtask /tmp/lkjscript2026-xtask
+RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=lkjscript-target-release,target=/src/target,sharing=locked \
+    cargo build --locked --release -p lkjscript-app -p lkjscript-xtask \
+    && cp /src/target/release/lkjscript /tmp/lkjscript \
+    && cp /src/target/release/lkjscript-xtask /tmp/lkjscript-xtask
 
 FROM build AS verified
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
-RUN --mount=type=cache,id=lkjscript2026-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=lkjscript2026-cargo-git,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,id=lkjscript2026-target-verify,target=/src/target,sharing=locked \
-    cargo run --locked -p lkjscript2026-xtask -- quiet verify \
-    && /tmp/lkjscript2026 run src/examples/hello/main.lkjml | grep -q 3628800 \
-    && /tmp/lkjscript2026 run src/examples/mandel/main.lkjml > /tmp/mandel.out \
+RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=lkjscript-target-verify,target=/src/target,sharing=locked \
+    cargo run --locked -p lkjscript-xtask -- quiet verify \
+    && /tmp/lkjscript run src/examples/hello/main.lkjml | grep -q 3628800 \
+    && /tmp/lkjscript run src/examples/mandel/main.lkjml > /tmp/mandel.out \
     && test -s /tmp/mandel.out \
-    && LKJ=/tmp/lkjscript2026 bash meta/scripts/lkjedit-smoke.sh \
-    && LKJ=/tmp/lkjscript2026 bash meta/scripts/http-smoke.sh \
-    && printf 'result=ok\n' > /tmp/lkjscript2026-verification-result
+    && LKJ=/tmp/lkjscript bash meta/scripts/lkjedit-smoke.sh \
+    && LKJ=/tmp/lkjscript bash meta/scripts/http-smoke.sh \
+    && printf 'result=ok\n' > /tmp/lkjscript-verification-result
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /tmp/lkjscript2026 /usr/local/bin/lkjscript2026
-ENV LKJSCRIPT2026_ROOT=/usr/local/share/lkjscript2026
-COPY src /usr/local/share/lkjscript2026/src
-WORKDIR /usr/local/share/lkjscript2026
+COPY --from=build /tmp/lkjscript /usr/local/bin/lkjscript
+ENV LKJSCRIPT_ROOT=/usr/local/share/lkjscript
+COPY src /usr/local/share/lkjscript/src
+WORKDIR /usr/local/share/lkjscript
 COPY meta/config ./meta/config
-ENTRYPOINT ["lkjscript2026"]
+ENTRYPOINT ["lkjscript"]
 CMD ["--help"]

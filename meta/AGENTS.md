@@ -3,9 +3,9 @@
 ## Purpose
 
 Entry instructions for automated coding agents working in this repository
-(`https://github.com/lkjsxc/lkjscript2026`). This directory is the repo root.
+(`https://github.com/lkjsxc/lkjscript`). This directory is the repo root.
 
-## What lkjscript2026 Is
+## What lkjscript Is
 
 A small functional language with the line-oriented, attribute-less LKJML
 surface, a Rust bytecode VM, AI-friendly source budgets, and Docker-gated
@@ -21,7 +21,11 @@ verification.
 5. Limit numbers are hardcoded language constants for now; do not invent user-facing JSON limits.
 6. Pure core, effects at the edges; no panic paths in product crates.
 7. Honest state only: no fake success or unrun gate claims.
-8. Commit small slices with `Tested` and `Not-tested` trailers.
+8. Backward compatibility is not required; delete obsolete paths instead of
+   carrying shims.
+9. Avoid Python in project tooling; use Rust or shell unless an experiment or
+   external comparison materially benefits from Python.
+10. Commit small slices with `Tested` and `Not-tested` trailers.
 
 ## Read Order
 
@@ -34,5 +38,5 @@ verification.
 
 ## Verification
 
-A gate that did not run did not pass. Prefer `cargo run -p lkjscript2026-xtask -- quiet verify`
+A gate that did not run did not pass. Prefer `cargo run -p lkjscript-xtask -- quiet verify`
 and Docker when claiming completion.

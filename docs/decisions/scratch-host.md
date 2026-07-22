@@ -10,7 +10,7 @@ a self-owned, eventually JIT-fast stack.
 
 1. **No third-party Rust crates** unless an ADR explicitly allows one.
    Rust `std` / `core` remain allowed.
-2. **`unsafe` only in `lkjscript2026-sys`** — owned Linux-first syscall / libc
+2. **`unsafe` only in `lkjscript-sys`** — owned Linux-first syscall / libc
    extern wrappers. All other crates keep `unsafe_code = "forbid"`.
 3. **Fat-opcode freeze** — do not add new high-level host features. New
    capability should land as `.lkjml` under `src/std` or `src/lib`, or as
@@ -38,7 +38,7 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 ## This sprint
 
 Time demotion: Rust `Instant` / `thread::sleep` removed from the VM time path.
-`lkjscript2026-sys` owns `clock_gettime(CLOCK_MONOTONIC)` and `nanosleep`.
+`lkjscript-sys` owns `clock_gettime(CLOCK_MONOTONIC)` and `nanosleep`.
 Script wrappers live in `src/std/io/wait-ms.lkjml` and `now-ms.lkjml`.
 
 Demotion backlog for OS feature opcodes is complete aside from intentional thin

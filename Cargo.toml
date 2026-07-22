@@ -1,11 +1,11 @@
 [workspace]
 members = [
-    "crates/lkjscript2026-core",
-    "crates/lkjscript2026-compiler",
-    "crates/lkjscript2026-sys",
-    "crates/lkjscript2026-vm",
-    "crates/lkjscript2026-app",
-    "crates/lkjscript2026-xtask",
+    "crates/lkjscript-core",
+    "crates/lkjscript-compiler",
+    "crates/lkjscript-sys",
+    "crates/lkjscript-vm",
+    "crates/lkjscript-app",
+    "crates/lkjscript-xtask",
 ]
 resolver = "2"
 

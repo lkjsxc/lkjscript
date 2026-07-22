@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Define the experimental path from one VM per OS process to one runtime per
-machine hosting many independent LKJML processes.
+Define the experimental path from one VM per OS process to one runtime per OS
+user hosting many independent LKJML processes. One Docker container is one
+runtime domain and is treated as one machine for this contract.
 
 ## Status
 
@@ -17,15 +18,19 @@ standalone path may remain for bootstrap, recovery, and diagnostics.
 - Remain Linux-first until the daemon and scheduler are operationally sound.
 - Make normal execution daemon-backed; standalone execution is explicit
   recovery tooling, not a second default runtime model.
-- Optimize the singleton for machine resource efficiency and aggregate
-  performance while preserving strict logical-process isolation.
+- Run exactly one daemon per OS user; do not introduce machine-wide multi-user
+  privilege management into the initial product.
+- Treat one Docker container as one machine/runtime domain, with one daemon
+  managing all logical processes inside that container.
+- Optimize the singleton for resource efficiency and aggregate performance
+  while preserving strict logical-process isolation.
 - Use `lkjedit` only as an in-tree validation application and prepare it for a
   future standalone repository.
 
 ## Why One Runtime
 
 The singleton is a performance and resource decision, not only a management
-convenience. A machine-wide runtime can share immutable compiled chunks and
+convenience. A per-user runtime can share immutable compiled chunks and
 import caches, centralize epoll and timers, avoid one scheduler and service
 layer per application, and enforce global CPU, memory, handle, and output
 budgets. Cooperative quanta also avoid requiring one permanently active native
@@ -39,7 +44,7 @@ processes and the thread-per-VM prototype.
 
 ## Product contract
 
-A future machine runtime should:
+A future per-user runtime should:
 
 - own a single local control endpoint and reject a second daemon;
 - run arbitrary numbers and kinds of LKJML entries, bounded by configured
@@ -52,7 +57,7 @@ A future machine runtime should:
 - make lifecycle state and failure reasons observable without reading raw logs;
 - make ordinary `run` daemon-backed while preserving direct foreground UX;
 - retain an explicit standalone recovery path rather than silently starting a
-  second independent machine runtime.
+  second independent runtime for the same OS user.
 
 ## Control UX
 
@@ -60,25 +65,37 @@ The target command vocabulary follows familiar process tools while keeping one
 obvious path for each job:
 
 ```text
-lkjscript2026 run main.lkjml             foreground, ephemeral
-lkjscript2026 start main.lkjml --name api
-lkjscript2026 ps
-lkjscript2026 logs api --follow
-lkjscript2026 stop api
-lkjscript2026 restart api
-lkjscript2026 inspect api
-lkjscript2026 daemon
+lkjscript run main.lkjml             foreground, ephemeral
+lkjscript start main.lkjml --name api background, non-persistent
+lkjscript deploy main.lkjml --name api persistent and started
+lkjscript undeploy api                stop and remove persistent spec
+lkjscript ps
+lkjscript logs api --follow
+lkjscript stop api
+lkjscript restart api
+lkjscript inspect api
+lkjscript daemon
 ```
 
 `run` should ensure the singleton daemon exists, submit an ephemeral process,
 and attach its streams. It must not silently create an independent runtime when
 the daemon is unavailable. An explicit `run --standalone` recovery mode may
-bypass the daemon for diagnostics and repair.
+bypass the daemon for diagnostics and repair. If an attached `run` client
+disconnects, its process is cancelled. `start` is detached but non-persistent;
+`deploy` is the separate operation that stores a persistent specification and
+starts it. `undeploy` stops that process and removes its stored specification.
+
+`restart` always resolves imports and recompiles the latest source from disk;
+it does not reuse the old process's source snapshot. A daemon restart applies
+the same rule to every deployed specification.
 
 Human output should be a stable table with name, state, entry, uptime, restart
 count, CPU/fuel, heap, and last failure. A versioned machine-readable mode must
-exist before external UI clients. Interactive terminal ownership is an
-exclusive lease; background processes never write directly to the terminal.
+exist before external UI clients. Protocol versions must fail clearly when
+mismatched; backward compatibility is not required, and obsolete protocol
+paths must be deleted rather than retained as shims. Interactive terminal
+ownership is an exclusive lease; background processes never write directly to
+the terminal.
 
 ## Required VM boundary
 
@@ -116,16 +133,19 @@ yet be made nonblocking.
 
 ## Persistence and restart
 
-A persisted `ProcessSpec` needs entry, arguments, environment, cwd, process
-kind, resource limits, and restart policy. Runtime state and open handles are
-not checkpointed initially. On daemon restart, only specs explicitly marked
-persistent are started again. Restart backoff must be bounded and visible so a
-crash loop cannot consume the machine silently.
+`start` never persists a process specification. `deploy` stores a
+`ProcessSpec` containing entry, arguments, environment, cwd, process kind,
+resource limits, and restart policy, then starts it. `undeploy` stops the
+process and removes that specification. Runtime state and open handles are not
+checkpointed. On daemon restart, only deployed specs are resolved and compiled
+from the latest source before starting again. Restart backoff must be bounded
+and visible so a crash loop cannot consume the machine silently.
 
 ## Security boundary
 
-The first local daemon is not a sandbox. Its control socket must use filesystem
-permissions, and process specs must not imply protection from malicious source.
+The first local daemon is not a sandbox. Its per-user control socket must use
+filesystem permissions, and process specs must not imply protection from
+malicious source.
 Capabilities for filesystem roots, network listeners, environment, and host
 operations should be explicit before accepting untrusted workloads.
 

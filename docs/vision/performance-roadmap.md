@@ -3,7 +3,7 @@
 ## Purpose
 
 Organize the path toward a low-level, highly abstract, eventually very fast
-`lkjscript2026` runtime. This is aspiration and sequencing — not a release claim.
+`lkjscript` runtime. This is aspiration and sequencing — not a release claim.
 
 ## Layers
 
@@ -21,7 +21,7 @@ flowchart TB
 ### Now
 
 Correct lkjedit/runtime behavior, package-root imports, hardcoded limits, thin TCP/HTTP
-demo, honest numeric benchmarks versus C, and a scratch `lkjscript2026-sys`
+demo, honest numeric benchmarks versus C, and a scratch `lkjscript-sys`
 layer (no crates.io OS helpers).
 
 ### Thin primitives + `.lkjml` libraries

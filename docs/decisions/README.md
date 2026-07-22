@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Architecture decision records for `lkjscript2026`.
+Architecture decision records for `lkjscript`.
 
 ## Table of Contents
 

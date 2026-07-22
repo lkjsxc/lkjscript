@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Implementation contract for the `lkjscript2026` language and runtime.
+Implementation contract for the `lkjscript` language and runtime.
 
 ## Table of Contents
 

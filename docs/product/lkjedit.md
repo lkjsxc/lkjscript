@@ -7,7 +7,7 @@ application before its planned extraction into a separate repository.
 
 ## Product Boundary
 
-`lkjedit` is not the primary `lkjscript2026` product. It exercises terminal,
+`lkjedit` is not the primary `lkjscript` product. It exercises terminal,
 filesystem, arguments, strings, lists, polling, timing, and long-running LKJML
 control flow as a real application rather than a mock fixture.
 
@@ -40,7 +40,7 @@ current validation scope.
 ## Run
 
 ```sh
-cargo run -p lkjscript2026-app -- run src/examples/lkjedit/main.lkjml path/to/file
+cargo run -p lkjscript-app -- run src/examples/lkjedit/main.lkjml path/to/file
 docker compose -f meta/docker-compose.yml run -it --rm lkjedit \
   run src/examples/lkjedit/main.lkjml path/to/file
 ```

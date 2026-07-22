@@ -8,11 +8,14 @@ can continue without rediscovering recent pain.
 ## Product Intent
 
 - Thin, scratch Rust host; grow capability in `.lkjml`, not frameworks.
-- No new crates.io dependencies without an ADR (`lkjscript2026-sys` owns OS
+- No new crates.io dependencies without an ADR (`lkjscript-sys` owns OS
   wrappers; `unsafe` only there).
 - Fat host opcodes are frozen; prefer script libraries for new features.
 - Docker and `quiet verify` are the honesty gates for claimed completion.
 - AI-friendly sources: many small files, fan-out at most eight visible children.
+- Backward compatibility is not required; remove obsolete contracts and paths.
+- Avoid Python in project tooling; prefer Rust or shell except where an
+  experiment or external comparison materially benefits from Python.
 - Package-root imports only: `std/...`, `lib/...`, `examples/...`, or `./...`.
   Paths containing `..` are rejected.
 

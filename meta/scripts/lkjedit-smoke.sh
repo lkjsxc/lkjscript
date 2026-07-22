@@ -2,9 +2,9 @@
 # Scripted editor acceptance: open -> insert -> save -> reopen; missing path creates.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-LKJ="${LKJ:-$ROOT/target/debug/lkjscript2026}"
+LKJ="${LKJ:-$ROOT/target/debug/lkjscript}"
 if [[ ! -x "$LKJ" ]]; then
-  LKJ="$(command -v lkjscript2026)"
+  LKJ="$(command -v lkjscript)"
 fi
 TMP_DIR="$(mktemp -d)"
 TMP="$TMP_DIR/existing.txt"
