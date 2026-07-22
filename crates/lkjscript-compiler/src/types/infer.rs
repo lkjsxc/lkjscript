@@ -9,18 +9,8 @@ pub fn infer_expr(env: &HashMap<String, Type>, e: &Expr) -> Result<Type> {
     match e {
         Expr::LitNil => Ok(Type::Nil),
         Expr::LitBool(_) => Ok(Type::Bool),
-        Expr::LitNum {
-            value: n,
-            float_syntax,
-        } => {
-            if *float_syntax {
-                Ok(Type::F64)
-            } else if *n == (*n as i64 as f64) {
-                Ok(Type::I64)
-            } else {
-                Ok(Type::F64)
-            }
-        }
+        Expr::LitI64(_) => Ok(Type::I64),
+        Expr::LitF64(_) => Ok(Type::F64),
         Expr::LitStr(_) => Ok(Type::Str),
         Expr::Symbol(s) => env
             .get(s)
@@ -45,35 +35,21 @@ pub fn infer_expr(env: &HashMap<String, Type>, e: &Expr) -> Result<Type> {
             }
             infer_expr(env, &args[1])
         }
-        Expr::Call { name, args }
-            if matches!(name.as_str(), "+" | "-" | "*" | "/" | "div") && args.len() >= 2 =>
-        {
+        Expr::Call { name, args } if matches!(name.as_str(), "+" | "-" | "*" | "div") => {
             infer_num_op(env, name, args)
         }
-        Expr::Call { name, args }
-            if matches!(
-                name.as_str(),
-                "=" | "!="
-                    | "<"
-                    | "<="
-                    | ">"
-                    | ">="
-                    | "lt"
-                    | "le"
-                    | "gt"
-                    | "ge"
-                    | "eq"
-                    | "lte"
-                    | "gte"
-            ) && args.len() == 2 =>
-        {
-            infer_cmp_op(env, args)
+        Expr::Call { name, args } if matches!(name.as_str(), "eq" | "ne") => {
+            infer_equality(env, name, args)
+        }
+        Expr::Call { name, args } if matches!(name.as_str(), "lt" | "lte" | "gt" | "gte") => {
+            infer_ordering(env, name, args)
         }
         Expr::Call { name, args } => infer_call(env, name, args),
     }
 }
 
 fn infer_num_op(env: &HashMap<String, Type>, name: &str, args: &[Expr]) -> Result<Type> {
+    require_binary(name, args)?;
     let mut saw_f64 = false;
     for a in args {
         let g = infer_expr(env, a)?;
@@ -85,7 +61,6 @@ fn infer_num_op(env: &HashMap<String, Type>, name: &str, args: &[Expr]) -> Resul
             )));
         }
     }
-    // Mixed I64/F64 promotes to F64 (explicit widths still required at bindings).
     if saw_f64 {
         Ok(Type::F64)
     } else {
@@ -93,19 +68,48 @@ fn infer_num_op(env: &HashMap<String, Type>, name: &str, args: &[Expr]) -> Resul
     }
 }
 
-fn infer_cmp_op(env: &HashMap<String, Type>, args: &[Expr]) -> Result<Type> {
-    let a = infer_expr(env, &args[0])?;
-    let b = infer_expr(env, &args[1])?;
-    let num = (Type::unify_assignable(&a, &Type::I64) || Type::unify_assignable(&a, &Type::F64))
-        && (Type::unify_assignable(&b, &Type::I64) || Type::unify_assignable(&b, &Type::F64));
-    let ok = num
-        || (Type::unify_assignable(&a, &Type::Bool) && Type::unify_assignable(&b, &Type::Bool))
-        || (Type::unify_assignable(&a, &Type::Str) && Type::unify_assignable(&b, &Type::Str))
-        || Type::unify_assignable(&a, &b);
-    if !ok {
-        return Err(Error::msg(format!("compare type mismatch {a:?} vs {b:?}")));
+fn infer_equality(env: &HashMap<String, Type>, name: &str, args: &[Expr]) -> Result<Type> {
+    require_binary(name, args)?;
+    let left = infer_expr(env, &args[0])?;
+    let right = infer_expr(env, &args[1])?;
+    if both_numeric(&left, &right)
+        || Type::unify_assignable(&left, &right)
+        || Type::unify_assignable(&right, &left)
+    {
+        Ok(Type::Bool)
+    } else {
+        Err(Error::msg(format!(
+            "{name}: equality type mismatch {left:?} vs {right:?}"
+        )))
     }
-    Ok(Type::Bool)
+}
+
+fn infer_ordering(env: &HashMap<String, Type>, name: &str, args: &[Expr]) -> Result<Type> {
+    require_binary(name, args)?;
+    let left = infer_expr(env, &args[0])?;
+    let right = infer_expr(env, &args[1])?;
+    if both_numeric(&left, &right) {
+        Ok(Type::Bool)
+    } else {
+        Err(Error::msg(format!(
+            "{name}: expected numeric operands, got {left:?} and {right:?}"
+        )))
+    }
+}
+
+fn require_binary(name: &str, args: &[Expr]) -> Result<()> {
+    if args.len() == 2 {
+        Ok(())
+    } else {
+        Err(Error::msg(format!(
+            "{name}: expected 2 args, got {}",
+            args.len()
+        )))
+    }
+}
+
+fn both_numeric(left: &Type, right: &Type) -> bool {
+    matches!(left, Type::I64 | Type::F64) && matches!(right, Type::I64 | Type::F64)
 }
 
 fn infer_do(env: &HashMap<String, Type>, args: &[Expr]) -> Result<Type> {

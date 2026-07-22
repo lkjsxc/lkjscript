@@ -109,7 +109,7 @@ an external project receives the same contract.
 ## Accepted Redesign Direction
 
 A normalized typed intermediate representation should eventually unify symbol
-resolution, typing, and lowering. Real modules, exact numeric operations,
-process-safe host services, byte strings, compiled-code objects, and adaptive
+resolution, typing, and lowering. Real modules, process-safe host services,
+byte strings, compiled-code objects, and adaptive
 memory management build on that layer. They must be measured and delivered as
 coherent vertical slices rather than dormant interfaces.

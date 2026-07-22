@@ -111,6 +111,20 @@ impl<'a, J: JitHook> Vm<'a, J> {
         self.stack.push(v);
     }
 
+    pub fn make_i64(&mut self, number: i64) -> Value {
+        Value::from_small_i64(number).unwrap_or_else(|| self.arena.alloc(HeapObj::Int(number)))
+    }
+
+    pub fn as_i64(&self, value: Value) -> Result<i64> {
+        if let Some(number) = value.as_small_i64() {
+            return Ok(number);
+        }
+        match value.as_heap().and_then(|_| self.arena.get(value).ok()) {
+            Some(HeapObj::Int(number)) => Ok(*number),
+            _ => Err(Error::msg("expected I64")),
+        }
+    }
+
     pub fn pop(&mut self) -> Value {
         self.stack.pop().unwrap_or(Value::NIL)
     }
@@ -126,8 +140,8 @@ impl<'a, J: JitHook> Vm<'a, J> {
             .get(id)
             .ok_or_else(|| Error::msg("bad const"))?
         {
-            Constant::Value(v) => Ok(*v),
-            Constant::Float(f) => Ok(self.arena.alloc(HeapObj::Float(*f))),
+            Constant::I64(number) => Ok(self.make_i64(*number)),
+            Constant::F64(number) => Ok(self.arena.alloc(HeapObj::Float(*number))),
             Constant::Str(s) => {
                 if let Some(sym) = s.strip_prefix("sym:") {
                     Ok(self.arena.alloc(HeapObj::Symbol(sym.to_string())))
@@ -135,7 +149,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
                     Ok(self.arena.alloc(HeapObj::Str(s.clone())))
                 }
             }
-            Constant::Proto(p) => Ok(Value::from_int(*p as i64)),
+            Constant::Proto(proto) => Ok(self.make_i64(i64::from(*proto))),
         }
     }
 

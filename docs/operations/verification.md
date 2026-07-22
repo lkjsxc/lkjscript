@@ -33,6 +33,8 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 7. strict Clippy for the workspace, all targets, and all features;
 8. workspace unit tests with the locked Cargo graph.
 
+Workspace tests include focused numeric parser/type/bytecode/VM/host boundaries
+and compiled source-to-VM execution across immediate and boxed I64 values.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.

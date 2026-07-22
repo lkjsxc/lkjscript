@@ -19,10 +19,7 @@ fn as_buf(arena: &Arena, value: Value) -> Result<&[u8]> {
     }
 }
 
-pub fn buf_new(arena: &mut Arena, size: Value) -> Result<Value> {
-    let size = size
-        .as_int()
-        .ok_or_else(|| Error::msg("buf-new expects int"))?;
+pub fn buf_new(arena: &mut Arena, size: i64) -> Result<Value> {
     if !(0..=1_000_000).contains(&size) {
         return Err(Error::msg("buf-new size out of range"));
     }
@@ -30,32 +27,30 @@ pub fn buf_new(arena: &mut Arena, size: Value) -> Result<Value> {
     Ok(arena.alloc(HeapObj::Buf(vec![0_u8; size])))
 }
 
-pub fn buf_len(arena: &Arena, value: Value) -> Result<Value> {
-    let length = i64::try_from(as_buf(arena, value)?.len())
-        .map_err(|_| Error::msg("buf-len out of range"))?;
-    Ok(Value::from_int(length))
+pub fn buf_len(arena: &Arena, value: Value) -> Result<i64> {
+    i64::try_from(as_buf(arena, value)?.len()).map_err(|_| Error::msg("buf-len out of range"))
 }
 
-pub fn buf_ref(arena: &Arena, value: Value, index: Value) -> Result<Value> {
+pub fn buf_ref(arena: &Arena, value: Value, index: i64) -> Result<i64> {
     let index = buffer_index(index, "buf-ref")?;
     let byte = *as_buf(arena, value)?
         .get(index)
         .ok_or_else(|| Error::msg("buf-ref out of bounds"))?;
-    Ok(Value::from_int(i64::from(byte)))
+    Ok(i64::from(byte))
 }
 
-pub fn buf_set(arena: &mut Arena, value: Value, index: Value, byte: Value) -> Result<Value> {
+pub fn buf_set(arena: &mut Arena, value: Value, index: i64, byte: i64) -> Result<Value> {
     let index = buffer_index(index, "buf-set")?;
-    let byte = byte.as_int().ok_or_else(|| Error::msg("buf-set byte"))?;
+    let byte = u8::try_from(byte).map_err(|_| Error::msg("buf-set byte out of range"))?;
     let buffer = as_buf_mut(arena, value)?;
     let slot = buffer
         .get_mut(index)
         .ok_or_else(|| Error::msg("buf-set out of bounds"))?;
-    *slot = (byte & 0xff) as u8;
+    *slot = byte;
     Ok(Value::NIL)
 }
 
-pub fn buf_get_u32(arena: &Arena, value: Value, index: Value) -> Result<Value> {
+pub fn buf_get_u32(arena: &Arena, value: Value, index: i64) -> Result<i64> {
     let index = buffer_index(index, "buf-get-u32")?;
     let end = index
         .checked_add(4)
@@ -65,17 +60,15 @@ pub fn buf_get_u32(arena: &Arena, value: Value, index: Value) -> Result<Value> {
         .ok_or_else(|| Error::msg("buf-get-u32 out of bounds"))?;
     let mut word = [0_u8; 4];
     word.copy_from_slice(bytes);
-    Ok(Value::from_int(i64::from(u32::from_le_bytes(word))))
+    Ok(i64::from(u32::from_le_bytes(word)))
 }
 
-pub fn buf_set_u32(arena: &mut Arena, value: Value, index: Value, number: Value) -> Result<Value> {
+pub fn buf_set_u32(arena: &mut Arena, value: Value, index: i64, number: i64) -> Result<Value> {
     let index = buffer_index(index, "buf-set-u32")?;
     let end = index
         .checked_add(4)
         .ok_or_else(|| Error::msg("buf-set-u32 index overflow"))?;
-    let number = number
-        .as_int()
-        .ok_or_else(|| Error::msg("buf-set-u32 value"))? as u32;
+    let number = u32::try_from(number).map_err(|_| Error::msg("buf-set-u32 value out of range"))?;
     let destination = as_buf_mut(arena, value)?
         .get_mut(index..end)
         .ok_or_else(|| Error::msg("buf-set-u32 out of bounds"))?;
@@ -114,11 +107,8 @@ pub fn sys_tty_set(
     Ok(Value::NIL)
 }
 
-pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: Value) -> Result<Value> {
+pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: i64) -> Result<i64> {
     let raw = handles.raw_fd(handle, "sys-poll")?;
-    let timeout = timeout
-        .as_int()
-        .ok_or_else(|| Error::msg("sys-poll timeout"))?;
     let timeout =
         i32::try_from(timeout).map_err(|_| Error::msg("sys-poll timeout out of range"))?;
     if timeout < 0 {
@@ -126,7 +116,7 @@ pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: Value) -> Resul
     }
     let ready = lkjscript_sys::poll_fd(raw, timeout)
         .map_err(|error| Error::msg(format!("sys-poll: {error}")))?;
-    Ok(Value::from_int(i64::from(ready)))
+    Ok(i64::from(ready))
 }
 
 pub fn stdin_handle() -> Value {
@@ -151,25 +141,37 @@ pub fn sys_tty_guard_clear() -> Result<Value> {
     Ok(Value::NIL)
 }
 
-fn buffer_index(value: Value, operation: &str) -> Result<usize> {
-    let index = value
-        .as_int()
-        .ok_or_else(|| Error::msg(format!("{operation} index")))?;
+fn buffer_index(index: i64, operation: &str) -> Result<usize> {
     usize::try_from(index).map_err(|_| Error::msg(format!("{operation} index out of range")))
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use lkjscript_core::Value;
 
+    use crate::arena::Arena;
     use crate::host_ext::ResourceTable;
 
-    use super::sys_poll;
+    use super::{buf_new, buf_set, buf_set_u32, sys_poll};
 
     #[test]
     fn polling_rejects_invalid_handles_and_timeouts() {
         let handles = ResourceTable::default();
-        assert!(sys_poll(&handles, Value::from_int(1), Value::from_int(0)).is_err());
-        assert!(sys_poll(&handles, ResourceTable::stdin_handle(), Value::from_int(-1)).is_err());
+        let integer = Value::from_small_i64(1).expect("small integer");
+        assert!(sys_poll(&handles, integer, 0).is_err());
+        assert!(sys_poll(&handles, ResourceTable::stdin_handle(), -1).is_err());
+    }
+
+    #[test]
+    fn buffer_narrowing_rejects_truncation_and_wrapping() {
+        let mut arena = Arena::default();
+        let buffer = buf_new(&mut arena, 4).expect("buffer");
+        assert!(buf_set(&mut arena, buffer, 0, -1).is_err());
+        assert!(buf_set(&mut arena, buffer, 0, 256).is_err());
+        assert!(buf_set_u32(&mut arena, buffer, 0, -1).is_err());
+        assert!(buf_set_u32(&mut arena, buffer, 0, i64::from(u32::MAX) + 1).is_err());
+        assert!(buf_set(&mut arena, buffer, 0, 255).is_ok());
+        assert!(buf_set_u32(&mut arena, buffer, 0, i64::from(u32::MAX)).is_ok());
     }
 }

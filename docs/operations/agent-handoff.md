@@ -49,9 +49,10 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Current string/file helpers may perform per-byte syscalls or quadratic string
   construction.
 - VM host operations block and process exit is not process-safe.
-- Bounded terminal operations, monotonic stale-safe handles, and truthful
-  system Results have landed. Numeric conformance remains the next foundation
-  priority; do not build a daemon or JIT on top of contradictory numerics.
+- Bounded terminal operations, monotonic stale-safe handles, truthful system
+  Results, and exact I64/F64 execution have landed. Global initialization and
+  remaining type/runtime conformance are the next foundation priorities; do
+  not build a daemon or JIT on top of unresolved lifecycle semantics.
 
 ## Host Boundary
 

@@ -17,7 +17,7 @@ pub fn parse_tokens(tokens: &[Token]) -> Result<Vec<Expr>> {
 
 fn parse_expr(tokens: &[Token], i: usize) -> Result<(Expr, usize)> {
     match tokens.get(i) {
-        Some(Token::Atom(name)) => Ok((atom_from_name(name), i + 1)),
+        Some(Token::Atom(name)) => Ok((atom_from_name(name)?, i + 1)),
         Some(Token::Str(t)) => Ok((Expr::LitStr(t.clone()), i + 1)),
         Some(Token::Open(name)) => parse_element(tokens, i, name),
         Some(Token::Close(name)) => Err(Error::msg(format!("unexpected /{name}"))),
@@ -71,23 +71,61 @@ fn element_to_expr(name: &str, kids: Vec<Expr>) -> Result<Expr> {
     })
 }
 
-fn atom_from_name(name: &str) -> Expr {
+fn atom_from_name(name: &str) -> Result<Expr> {
     if name == "nil" {
-        return Expr::LitNil;
+        return Ok(Expr::LitNil);
     }
     if name == "true" {
-        return Expr::LitBool(true);
+        return Ok(Expr::LitBool(true));
     }
     if name == "false" {
-        return Expr::LitBool(false);
+        return Ok(Expr::LitBool(false));
     }
-    if let Ok(n) = name.parse::<f64>() {
-        return Expr::LitNum {
-            value: n,
-            float_syntax: name.contains('.'),
-        };
+
+    let unsigned = name.strip_prefix('-').unwrap_or(name);
+    if is_ascii_digits(unsigned) {
+        return name
+            .parse::<i64>()
+            .map(Expr::LitI64)
+            .map_err(|_| Error::msg(format!("I64 literal out of range: {name}")));
     }
-    Expr::Symbol(name.to_string())
+    if let Some((whole, fraction)) = unsigned.split_once('.') {
+        if is_ascii_digits(whole) && is_ascii_digits(fraction) && !fraction.contains('.') {
+            let value = name
+                .parse::<f64>()
+                .map_err(|_| Error::msg(format!("invalid F64 literal: {name}")))?;
+            if !value.is_finite() {
+                return Err(Error::msg(format!("F64 literal must be finite: {name}")));
+            }
+            return Ok(Expr::LitF64(value));
+        }
+    }
+    if looks_numeric(name) || is_non_finite_spelling(name) {
+        return Err(Error::msg(format!("invalid numeric literal: {name}")));
+    }
+    Ok(Expr::Symbol(name.to_string()))
+}
+
+fn is_ascii_digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn looks_numeric(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.first().is_some_and(u8::is_ascii_digit)
+        || matches!(bytes, [b'-' | b'+', digit, ..] if digit.is_ascii_digit())
+        || matches!(bytes, [b'-' | b'+', b'.'])
+        || matches!(bytes, [b'-' | b'+', b'.', digit, ..] if digit.is_ascii_digit())
+        || matches!(bytes, [b'-' | b'+', b'-' | b'+', digit, ..] if digit.is_ascii_digit() || *digit == b'.')
+        || matches!(bytes, [b'.'])
+        || matches!(bytes, [b'.', digit, ..] if digit.is_ascii_digit())
+}
+
+fn is_non_finite_spelling(text: &str) -> bool {
+    matches!(
+        text.to_ascii_lowercase().as_str(),
+        "nan" | "inf" | "infinity" | "-nan" | "-inf" | "-infinity" | "+nan" | "+inf" | "+infinity"
+    )
 }
 
 #[cfg(test)]
@@ -104,16 +142,7 @@ mod tests {
             forms,
             vec![Expr::Call {
                 name: "+".into(),
-                args: vec![
-                    Expr::LitNum {
-                        value: 1.0,
-                        float_syntax: false,
-                    },
-                    Expr::LitNum {
-                        value: 2.0,
-                        float_syntax: false,
-                    },
-                ],
+                args: vec![Expr::LitI64(1), Expr::LitI64(2)],
             }]
         );
     }
@@ -123,5 +152,39 @@ mod tests {
         let tokens = lex("str/\nhello world\n/str\n").expect("lex");
         let forms = parse_tokens(&tokens).expect("parse");
         assert_eq!(forms, vec![Expr::LitStr("hello world".into())]);
+    }
+
+    #[test]
+    fn integer_literals_preserve_complete_i64_values() {
+        assert_eq!(
+            atom_from_name("-9223372036854775808").ok(),
+            Some(Expr::LitI64(i64::MIN))
+        );
+        assert_eq!(
+            atom_from_name("9223372036854775807").ok(),
+            Some(Expr::LitI64(i64::MAX))
+        );
+        assert!(atom_from_name("-9223372036854775809").is_err());
+        assert!(atom_from_name("9223372036854775808").is_err());
+    }
+
+    #[test]
+    fn decimal_literals_preserve_f64_identity_and_signed_zero() {
+        assert_eq!(atom_from_name("2.0").ok(), Some(Expr::LitF64(2.0)));
+        let value = atom_from_name("-0.0").expect("F64 literal");
+        let Expr::LitF64(value) = value else {
+            panic!("expected F64 literal");
+        };
+        assert!(value.is_sign_negative());
+    }
+
+    #[test]
+    fn malformed_numeric_spellings_are_not_symbols() {
+        for spelling in [
+            "+1", "1e3", "1.", ".", "-.", "+.", ".5", "-.5", "+.5", "--1", "+-1", "1_000", "0x10",
+            "1.2.3", "NaN", "+inf", "inf",
+        ] {
+            assert!(atom_from_name(spelling).is_err(), "accepted {spelling}");
+        }
     }
 }

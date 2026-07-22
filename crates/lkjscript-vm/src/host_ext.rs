@@ -17,18 +17,17 @@ pub fn as_str(arena: &Arena, value: Value) -> Result<&str> {
     }
 }
 
-pub fn str_len(arena: &Arena, value: Value) -> Result<Value> {
-    Ok(Value::from_int(as_str(arena, value)?.len() as i64))
+pub fn str_len(arena: &Arena, value: Value) -> Result<i64> {
+    i64::try_from(as_str(arena, value)?.len()).map_err(|_| Error::msg("str-len out of range"))
 }
 
-pub fn str_ref(arena: &Arena, string: Value, index: Value) -> Result<Value> {
-    let index = index.as_int().ok_or_else(|| Error::msg("str-ref index"))?;
+pub fn str_ref(arena: &Arena, string: Value, index: i64) -> Result<i64> {
     let index = usize::try_from(index).map_err(|_| Error::msg("str-ref index out of range"))?;
     let byte = *as_str(arena, string)?
         .as_bytes()
         .get(index)
         .ok_or_else(|| Error::msg("str-ref out of bounds"))?;
-    Ok(Value::from_int(i64::from(byte)))
+    Ok(i64::from(byte))
 }
 
 pub fn str_append(arena: &mut Arena, left: Value, right: Value) -> Result<Value> {
@@ -37,11 +36,7 @@ pub fn str_append(arena: &mut Arena, left: Value, right: Value) -> Result<Value>
     Ok(arena.alloc(HeapObj::Str(output)))
 }
 
-pub fn str_slice(arena: &mut Arena, string: Value, start: Value, end: Value) -> Result<Value> {
-    let start = start
-        .as_int()
-        .ok_or_else(|| Error::msg("str-slice start"))?;
-    let end = end.as_int().ok_or_else(|| Error::msg("str-slice end"))?;
+pub fn str_slice(arena: &mut Arena, string: Value, start: i64, end: i64) -> Result<Value> {
     let start = usize::try_from(start).map_err(|_| Error::msg("str-slice start out of range"))?;
     let end = usize::try_from(end).map_err(|_| Error::msg("str-slice end out of range"))?;
     let bytes = as_str(arena, string)?.as_bytes();
@@ -53,8 +48,7 @@ pub fn str_slice(arena: &mut Arena, string: Value, start: Value, end: Value) -> 
     Ok(arena.alloc(HeapObj::Str(text.to_string())))
 }
 
-pub fn str_from_byte(arena: &mut Arena, byte: Value) -> Result<Value> {
-    let number = byte.as_int().ok_or_else(|| Error::msg("str-from-byte"))?;
+pub fn str_from_byte(arena: &mut Arena, number: i64) -> Result<Value> {
     let byte = u8::try_from(number).map_err(|_| Error::msg("str-from-byte out of range"))?;
     Ok(arena.alloc(HeapObj::Str(String::from(char::from(byte)))))
 }
@@ -98,9 +92,8 @@ impl ResourceTable {
         self.push(OwnedResource::Socket(socket))
     }
 
-    pub fn sys_bind(&self, handle: Value, port: Value) -> Result<Value> {
+    pub fn sys_bind(&self, handle: Value, port: i64) -> Result<Value> {
         let raw = self.socket_raw(handle, "sys-bind")?;
-        let port = port.as_int().ok_or_else(|| Error::msg("sys-bind port"))?;
         let port = u16::try_from(port).map_err(|_| Error::msg("sys-bind port out of range"))?;
         lkjscript_sys::set_reuseaddr(raw)
             .map_err(|error| Error::msg(format!("sys-bind reuse: {error}")))?;
@@ -109,11 +102,8 @@ impl ResourceTable {
         Ok(Value::NIL)
     }
 
-    pub fn sys_listen(&self, handle: Value, backlog: Value) -> Result<Value> {
+    pub fn sys_listen(&self, handle: Value, backlog: i64) -> Result<Value> {
         let raw = self.socket_raw(handle, "sys-listen")?;
-        let backlog = backlog
-            .as_int()
-            .ok_or_else(|| Error::msg("sys-listen backlog"))?;
         let backlog =
             i32::try_from(backlog).map_err(|_| Error::msg("sys-listen backlog out of range"))?;
         if backlog < 0 {
@@ -141,7 +131,7 @@ impl ResourceTable {
         Ok(arena.alloc(HeapObj::Str(text)))
     }
 
-    pub fn sys_send(&self, arena: &Arena, handle: Value, data: Value) -> Result<Value> {
+    pub fn sys_send(&self, arena: &Arena, handle: Value, data: Value) -> Result<i64> {
         let raw = self.socket_raw(handle, "sys-send")?;
         let bytes = as_str(arena, data)?.as_bytes();
         let mut sent = 0_usize;
@@ -154,7 +144,7 @@ impl ResourceTable {
             sent += count;
         }
         let sent = i64::try_from(sent).map_err(|_| Error::msg("sys-send count out of range"))?;
-        Ok(Value::from_int(sent))
+        Ok(sent)
     }
 
     pub fn close(&mut self, handle: Value) -> Result<Value> {
@@ -169,7 +159,7 @@ impl ResourceTable {
         Ok(Value::NIL)
     }
 
-    pub fn read_byte(&mut self, handle: Value) -> Result<Value> {
+    pub fn read_byte(&mut self, handle: Value) -> Result<i64> {
         let mut buffer = [0_u8; 1];
         let count = if handle.as_handle() == Some(STDIN_TOKEN) {
             lkjscript_sys::read_fd(lkjscript_sys::STDIN_FD, &mut buffer)
@@ -189,17 +179,14 @@ impl ResourceTable {
             }
         };
         if count == 0 {
-            Ok(Value::from_int(-1))
+            Ok(-1)
         } else {
-            Ok(Value::from_int(i64::from(buffer[0])))
+            Ok(i64::from(buffer[0]))
         }
     }
 
-    pub fn write_byte(&mut self, handle: Value, byte: Value) -> Result<Value> {
+    pub fn write_byte(&mut self, handle: Value, byte: i64) -> Result<Value> {
         let index = self.owned_index(handle, "sys-write-byte")?;
-        let byte = byte
-            .as_int()
-            .ok_or_else(|| Error::msg("sys-write-byte byte"))?;
         let byte =
             u8::try_from(byte).map_err(|_| Error::msg("sys-write-byte byte out of range"))?;
         match self.slots.get_mut(index).and_then(Option::as_mut) {
@@ -308,19 +295,13 @@ pub fn unwrap_err(arena: &Arena, value: Value) -> Result<Value> {
     }
 }
 
-pub fn str_from_i64(arena: &mut Arena, number: Value) -> Result<Value> {
-    let number = number.as_int().ok_or_else(|| Error::msg("str-from-i64"))?;
-    Ok(arena.alloc(HeapObj::Str(number.to_string())))
+pub fn str_from_i64(arena: &mut Arena, number: i64) -> Value {
+    arena.alloc(HeapObj::Str(number.to_string()))
 }
 
 pub fn str_from_f64(arena: &mut Arena, number: Value) -> Result<Value> {
-    let number = if let Some(integer) = number.as_int() {
-        integer as f64
-    } else {
-        match arena.get(number)? {
-            HeapObj::Float(float) => *float,
-            _ => return Err(Error::msg("str-from-f64")),
-        }
+    let HeapObj::Float(number) = arena.get(number)? else {
+        return Err(Error::msg("str-from-f64 expects F64"));
     };
     Ok(arena.alloc(HeapObj::Str(number.to_string())))
 }
@@ -331,11 +312,14 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use lkjscript_core::{Error, Value};
+    use lkjscript_core::{Error, HeapObj, Value};
 
     use crate::arena::Arena;
 
-    use super::{as_str, is_ok, language_result, unwrap_err, unwrap_ok, ResourceTable};
+    use super::{
+        as_str, is_ok, language_result, str_from_f64, str_from_i64, unwrap_err, unwrap_ok,
+        ResourceTable,
+    };
 
     static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
 
@@ -360,7 +344,8 @@ mod tests {
     #[test]
     fn integer_and_borrowed_handles_cannot_be_closed() {
         let mut table = ResourceTable::default();
-        assert!(table.close(Value::from_int(16)).is_err());
+        let integer = Value::from_small_i64(16).unwrap_or(Value::NIL);
+        assert!(table.close(integer).is_err());
         assert!(table.close(ResourceTable::stdin_handle()).is_err());
     }
 
@@ -391,7 +376,7 @@ mod tests {
         let path = file.0.to_string_lossy();
         let mut table = ResourceTable::default();
         let handle = table.sys_open_read(&path).ok().unwrap_or(Value::NIL);
-        assert!(table.sys_listen(handle, Value::from_int(1)).is_err());
+        assert!(table.sys_listen(handle, 1).is_err());
         Ok(())
     }
 
@@ -399,9 +384,9 @@ mod tests {
     fn socket_ranges_are_checked_before_os_calls() {
         let mut table = ResourceTable::default();
         let socket = table.sys_socket().ok().unwrap_or(Value::NIL);
-        assert!(table.sys_bind(socket, Value::from_int(-1)).is_err());
-        assert!(table.sys_bind(socket, Value::from_int(65_536)).is_err());
-        assert!(table.sys_listen(socket, Value::from_int(-1)).is_err());
+        assert!(table.sys_bind(socket, -1).is_err());
+        assert!(table.sys_bind(socket, 65_536).is_err());
+        assert!(table.sys_listen(socket, -1).is_err());
         assert!(table.close(socket).is_ok());
     }
 
@@ -419,5 +404,18 @@ mod tests {
             unwrapped.as_deref(),
             Some("unwrap-ok: sys-example: failure")
         );
+    }
+
+    #[test]
+    fn numeric_string_conversions_are_type_strict_and_exact() {
+        let mut arena = Arena::default();
+        let text = str_from_i64(&mut arena, i64::MIN);
+        assert_eq!(as_str(&arena, text).ok(), Some("-9223372036854775808"));
+
+        let integer = Value::from_small_i64(2).unwrap_or(Value::NIL);
+        assert!(str_from_f64(&mut arena, integer).is_err());
+        let float = arena.alloc(HeapObj::Float(2.0));
+        let text = str_from_f64(&mut arena, float).ok().unwrap_or(Value::NIL);
+        assert_eq!(as_str(&arena, text).ok(), Some("2"));
     }
 }

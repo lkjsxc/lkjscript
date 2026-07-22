@@ -1,4 +1,4 @@
-//! Type expressions: sized numerics, parametric types, no Any.
+//! Type expressions: exact I64/F64 numerics, parametric types, no Any.
 
 use std::collections::HashMap;
 
@@ -6,11 +6,7 @@ use std::collections::HashMap;
 pub enum Type {
     Nil,
     Bool,
-    I32,
     I64,
-    U32,
-    U64,
-    F32,
     F64,
     Str,
     Buf,
@@ -123,12 +119,12 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         "Any" => Err("Any is not a permitted type".into()),
         "Nil" => Ok((Type::Nil, i + 1)),
         "Bool" => Ok((Type::Bool, i + 1)),
-        "I32" | "i32" => Ok((Type::I32, i + 1)),
-        "I64" | "i64" | "Int" => Ok((Type::I64, i + 1)), // Int alias → I64
-        "U32" | "u32" => Ok((Type::U32, i + 1)),
-        "U64" | "u64" => Ok((Type::U64, i + 1)),
-        "F32" | "f32" => Ok((Type::F32, i + 1)),
-        "F64" | "f64" | "Float" => Ok((Type::F64, i + 1)),
+        "I64" => Ok((Type::I64, i + 1)),
+        "F64" => Ok((Type::F64, i + 1)),
+        "I32" | "U32" | "U64" | "F32" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "Int"
+        | "Float" => Err(format!(
+            "unsupported numeric type {a}; use canonical I64 or F64"
+        )),
         "Str" => Ok((Type::Str, i + 1)),
         "Buf" => Ok((Type::Buf, i + 1)),
         "Symbol" => Ok((Type::Symbol, i + 1)),
@@ -146,10 +142,20 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
             let (err, n2) = parse_one(atoms, n1)?;
             Ok((Type::Result(Box::new(ok), Box::new(err)), n2))
         }
+        other if is_numeric_width_name(other) => Err(format!(
+            "unsupported numeric type {other}; use canonical I64 or F64"
+        )),
         // Type parameter: single uppercase letter or T, U, E, …
         other if is_type_param_name(other) => Ok((Type::Param(other.to_string()), i + 1)),
         other => Err(format!("unknown type {other}")),
     }
+}
+
+fn is_numeric_width_name(name: &str) -> bool {
+    let mut bytes = name.bytes();
+    matches!(bytes.next(), Some(b'I' | b'U' | b'F' | b'i' | b'u' | b'f'))
+        && bytes.clone().next().is_some()
+        && bytes.all(|byte| byte.is_ascii_digit())
 }
 
 fn is_type_param_name(s: &str) -> bool {
@@ -160,11 +166,7 @@ fn is_type_param_name(s: &str) -> bool {
             s,
             "Nil"
                 | "Bool"
-                | "I32"
                 | "I64"
-                | "U32"
-                | "U64"
-                | "F32"
                 | "F64"
                 | "Str"
                 | "Buf"
@@ -177,4 +179,22 @@ fn is_type_param_name(s: &str) -> bool {
                 | "Float"
                 | "Any"
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_one, Type};
+
+    #[test]
+    fn only_canonical_numeric_type_names_are_accepted() {
+        for (name, expected) in [("I64", Type::I64), ("F64", Type::F64)] {
+            assert_eq!(parse_one(&[name.into()], 0).ok(), Some((expected, 1)));
+        }
+        for name in [
+            "I32", "U32", "U64", "F32", "I128", "U8", "F16", "i32", "i64", "u32", "u64", "f32",
+            "f64", "i128", "Int", "Float",
+        ] {
+            assert!(parse_one(&[name.into()], 0).is_err(), "accepted {name}");
+        }
+    }
 }

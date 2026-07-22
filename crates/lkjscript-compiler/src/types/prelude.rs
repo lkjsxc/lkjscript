@@ -1,4 +1,4 @@
-//! Typed prelude: sized numerics + polymorphic containers (no Any).
+//! Typed prelude: exact numerics and polymorphic containers (no Any).
 
 use super::prelude_sys::{install_result_helpers, install_sys};
 use super::ty::Type;
@@ -21,22 +21,8 @@ fn fn_ty(params: Vec<Type>, ret: Type) -> Type {
 pub fn prelude() -> HashMap<String, Type> {
     let mut m = HashMap::new();
     let i64_bin = fn_ty(vec![Type::I64, Type::I64], Type::I64);
-    let f64_bin = fn_ty(vec![Type::F64, Type::F64], Type::F64);
-    let i64_cmp = fn_ty(vec![Type::I64, Type::I64], Type::Bool);
-    let f64_cmp = fn_ty(vec![Type::F64, Type::F64], Type::Bool);
-    for n in ["+", "-", "*", "/", "div", "bit-and", "bit-or", "bit-xor"] {
-        m.insert(n.into(), i64_bin.clone());
-    }
-    for n in ["f+", "f-", "f*", "f/"] {
-        m.insert(n.into(), f64_bin.clone());
-    }
-    for n in [
-        "=", "!=", "<", "<=", ">", ">=", "lt", "le", "gt", "ge", "eq", "lte", "gte",
-    ] {
-        m.insert(n.into(), i64_cmp.clone());
-    }
-    for n in ["f=", "f!=", "f<", "f<=", "f>", "f>="] {
-        m.insert(n.into(), f64_cmp.clone());
+    for name in ["bit-and", "bit-or", "bit-xor"] {
+        m.insert(name.into(), i64_bin.clone());
     }
     m.insert(
         "nil?".into(),
@@ -126,10 +112,6 @@ pub fn prelude() -> HashMap<String, Type> {
     m.insert("str-from-byte".into(), fn_ty(vec![Type::I64], Type::Str));
     m.insert("str-from-i64".into(), fn_ty(vec![Type::I64], Type::Str));
     m.insert("str-from-f64".into(), fn_ty(vec![Type::F64], Type::Str));
-    m.insert("i64-from-u32".into(), fn_ty(vec![Type::U32], Type::I64));
-    m.insert("u32-from-i64".into(), fn_ty(vec![Type::I64], Type::U32));
-    m.insert("i64-from-i32".into(), fn_ty(vec![Type::I32], Type::I64));
-    m.insert("i32-from-i64".into(), fn_ty(vec![Type::I64], Type::I32));
     install_sys(&mut m);
     install_result_helpers(&mut m);
     m

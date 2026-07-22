@@ -7,8 +7,8 @@ VM values, arithmetic, comparison, and host boundaries agree.
 
 ## Status
 
-**Accepted Target.** This record becomes **Current** only after focused boundary
-and end-to-end conformance tests pass.
+**Current.** Focused parser, type-vocabulary, bytecode, VM boundary, host
+narrowing, and compiled source-to-VM conformance tests enforce this record.
 
 ## Canonical Types
 

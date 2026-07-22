@@ -6,10 +6,12 @@ use crate::run::{Frame, Vm};
 
 pub fn make_closure<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     let _caps = vm.read_u16()?;
+    let value = vm.pop();
     let proto_id = vm
-        .pop()
-        .as_int()
-        .ok_or_else(|| Error::msg("MakeClosure expects proto index"))? as u32;
+        .as_i64(value)
+        .map_err(|_| Error::msg("MakeClosure expects proto index"))?;
+    let proto_id =
+        u32::try_from(proto_id).map_err(|_| Error::msg("MakeClosure proto index out of range"))?;
     let v = vm.arena.alloc(HeapObj::Closure {
         proto: proto_id,
         captures: Vec::new(),
@@ -133,7 +135,8 @@ mod tests {
             stack_base: 0,
             locals_base: 0,
         });
-        vm.push(Value::from_int(42));
+        let argument = vm.make_i64(42);
+        vm.push(argument);
         let callee = vm.arena.alloc(HeapObj::Closure {
             proto: 0,
             captures: Vec::new(),
@@ -144,6 +147,6 @@ mod tests {
 
         assert_eq!(vm.frames.len(), 1);
         assert_eq!(vm.frames[0].proto, 0);
-        assert_eq!(vm.stack, vec![Value::from_int(42)]);
+        assert_eq!(vm.stack, vec![argument]);
     }
 }

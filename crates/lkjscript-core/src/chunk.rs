@@ -1,15 +1,13 @@
 //! Bytecode chunk and function prototypes.
 
 use crate::opcode::Op;
-use crate::value::Value;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConstId(pub u16);
 
 #[derive(Debug, Clone)]
 pub enum Constant {
-    Value(Value),
-    Float(f64),
+    I64(i64),
+    F64(f64),
     Str(String),
     /// Prototype index for MakeClosure.
     Proto(u32),

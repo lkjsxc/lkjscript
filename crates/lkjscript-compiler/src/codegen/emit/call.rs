@@ -17,22 +17,6 @@ pub fn compile_plain_call(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<
     if try_host(cx, name, args)? {
         return Ok(());
     }
-    if name == "+" && args.len() > 2 {
-        compile_expr(cx, &args[0])?;
-        for a in &args[1..] {
-            compile_expr(cx, a)?;
-            cx.proto.emit(Op::Add);
-        }
-        return Ok(());
-    }
-    if name == "*" && args.len() > 2 {
-        compile_expr(cx, &args[0])?;
-        for a in &args[1..] {
-            compile_expr(cx, a)?;
-            cx.proto.emit(Op::Mul);
-        }
-        return Ok(());
-    }
     for a in args {
         compile_expr(cx, a)?;
     }
@@ -49,13 +33,13 @@ fn try_binop(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<bool> {
         "+" => Op::Add,
         "-" => Op::Sub,
         "*" => Op::Mul,
-        "/" | "div" => Op::Div,
-        "=" => Op::Eq,
-        "!=" => Op::Ne,
-        "<" => Op::Lt,
-        "<=" => Op::Le,
-        ">" => Op::Gt,
-        ">=" => Op::Ge,
+        "div" => Op::Div,
+        "eq" => Op::Eq,
+        "ne" => Op::Ne,
+        "lt" => Op::Lt,
+        "lte" => Op::Le,
+        "gt" => Op::Gt,
+        "gte" => Op::Ge,
         "cons" => Op::Cons,
         "str-ref" => Op::StrRef,
         "str-append" => Op::StrAppend,

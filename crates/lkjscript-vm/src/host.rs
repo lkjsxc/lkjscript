@@ -13,13 +13,14 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if let Some(b) = v.as_bool() {
         return Ok(b.to_string());
     }
-    if let Some(n) = v.as_int() {
+    if let Some(n) = v.as_small_i64() {
         return Ok(n.to_string());
     }
     if let Some(h) = v.as_handle() {
         return Ok(format!("handle#{h}"));
     }
     match arena.get(v)? {
+        HeapObj::Int(number) => Ok(number.to_string()),
         HeapObj::Float(f) => Ok(format!("{f}")),
         HeapObj::Str(s) => Ok(s.clone()),
         HeapObj::Symbol(s) => Ok(s.clone()),
@@ -48,22 +49,19 @@ pub fn flush_out() -> Result<()> {
         .map_err(|e| Error::msg(format!("flush: {e}")))
 }
 
-pub fn read_byte() -> Result<Value> {
+pub fn read_byte() -> Result<i64> {
     let mut buf = [0u8; 1];
     match io::stdin().read(&mut buf) {
-        Ok(0) => Ok(Value::from_int(-1)),
-        Ok(_) => Ok(Value::from_int(buf[0] as i64)),
+        Ok(0) => Ok(-1),
+        Ok(_) => Ok(i64::from(buf[0])),
         Err(e) => Err(Error::msg(format!("read-byte: {e}"))),
     }
 }
 
-pub fn write_byte(v: Value) -> Result<Value> {
-    let n = v
-        .as_int()
-        .ok_or_else(|| Error::msg("write-byte expects int"))?;
-    let b = (n & 0xff) as u8;
+pub fn write_byte(number: i64) -> Result<Value> {
+    let byte = u8::try_from(number).map_err(|_| Error::msg("write-byte out of range"))?;
     io::stdout()
-        .write_all(&[b])
+        .write_all(&[byte])
         .map_err(|e| Error::msg(format!("write-byte: {e}")))?;
     Ok(Value::NIL)
 }

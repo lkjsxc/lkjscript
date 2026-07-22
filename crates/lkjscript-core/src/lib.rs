@@ -15,4 +15,4 @@ pub use limits::{
 };
 
 pub use opcode::Op;
-pub use value::{HeapObj, Value};
+pub use value::{HeapObj, Value, MAX_SMALL_I64, MIN_SMALL_I64};

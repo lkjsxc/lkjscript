@@ -7,8 +7,8 @@ aspiration into a release claim.
 
 ## Status
 
-Interpreter, precise mark-sweep, and tail-frame reuse are **Current**. Typed IR,
-exact numeric execution, adaptive GC, native JIT, and profile-guided
+Interpreter, exact I64/F64 execution, precise mark-sweep, and tail-frame reuse
+are **Current**. Typed IR, adaptive GC, native JIT, and profile-guided
 specialization are **Deferred** or **Experimental** until their recorded gates
 pass.
 
@@ -30,8 +30,9 @@ cannot preserve semantics that are contradictory or undefined.
 
 ## Current Interpreter
 
-The VM uses dense bytecode, contiguous stacks, tagged values, precise
-non-moving mark-sweep collection, and return-adjacent frame reuse. Source is
+The VM uses dense bytecode, contiguous stacks, tagged small I64 values, boxed
+wide I64/F64 values, precise non-moving mark-sweep collection, and
+return-adjacent frame reuse. Source is
 compiled on every CLI invocation. Host effects block synchronously.
 
 A historical GC condition caused a full heap trace before nearly every

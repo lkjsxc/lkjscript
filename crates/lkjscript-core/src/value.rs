@@ -13,6 +13,9 @@ const TAG_INT: u64 = 2;
 const TAG_HEAP: u64 = 3;
 const TAG_HANDLE: u64 = 4;
 
+pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
+pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
+
 impl Value {
     pub const NIL: Self = Self(TAG_NIL);
     pub const FALSE: Self = Self(TAG_BOOL);
@@ -26,8 +29,11 @@ impl Value {
         }
     }
 
-    pub fn from_int(n: i64) -> Self {
-        Self(((n as u64) << 3) | TAG_INT)
+    pub fn from_small_i64(number: i64) -> Option<Self> {
+        if !(MIN_SMALL_I64..=MAX_SMALL_I64).contains(&number) {
+            return None;
+        }
+        Some(Self(((number as u64) << 3) | TAG_INT))
     }
 
     pub fn from_heap(index: u32) -> Self {
@@ -49,7 +55,7 @@ impl Value {
         Some(self.0 >> 3 != 0)
     }
 
-    pub fn as_int(self) -> Option<i64> {
+    pub fn as_small_i64(self) -> Option<i64> {
         if self.0 & TAG_MASK != TAG_INT {
             return None;
         }
@@ -93,7 +99,7 @@ impl fmt::Debug for Value {
         if let Some(b) = self.as_bool() {
             return write!(f, "{b}");
         }
-        if let Some(n) = self.as_int() {
+        if let Some(n) = self.as_small_i64() {
             return write!(f, "{n}");
         }
         if let Some(h) = self.as_handle() {
@@ -108,6 +114,7 @@ impl fmt::Debug for Value {
 
 #[derive(Debug, Clone)]
 pub enum HeapObj {
+    Int(i64),
     Float(f64),
     Str(String),
     Symbol(String),
@@ -134,5 +141,23 @@ impl HeapObj {
             HeapObj::ResultOk(v) | HeapObj::ResultErr(v) => mark(*v),
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::{Value, MAX_SMALL_I64, MIN_SMALL_I64};
+
+    #[test]
+    fn small_integer_boundaries_round_trip_without_truncation() {
+        for number in [MIN_SMALL_I64, -1, 0, 1, MAX_SMALL_I64] {
+            let value = Value::from_small_i64(number).expect("representable small I64");
+            assert_eq!(value.as_small_i64(), Some(number));
+        }
+        assert!(Value::from_small_i64(MIN_SMALL_I64 - 1).is_none());
+        assert!(Value::from_small_i64(MAX_SMALL_I64 + 1).is_none());
+        assert!(Value::from_small_i64(i64::MIN).is_none());
+        assert!(Value::from_small_i64(i64::MAX).is_none());
     }
 }

@@ -3,15 +3,15 @@
 use lkjscript_core::{Error, HeapObj, JitHook, Op, Result, Value};
 
 use super::calls::{call, car, cdr, make_closure};
-use super::numeric::{as_f64, bin_cmp, bin_num};
+use super::numeric::{bin_arithmetic, bin_ordering, numeric_equal, Arithmetic, Ordering};
 use super::Vm;
 use crate::host::{flush_out, print_value, read_byte, write_byte, write_str};
 
 fn eq_values<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     let b = vm.pop();
     let a = vm.pop();
-    if let (Some(x), Some(y)) = (a.as_int(), b.as_int()) {
-        vm.push(Value::from_bool(x == y));
+    if let Some(equal) = numeric_equal(vm, a, b)? {
+        vm.push(Value::from_bool(equal));
         return Ok(());
     }
     if let (Ok(sa), Ok(sb)) = (
@@ -21,24 +21,21 @@ fn eq_values<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
         vm.push(Value::from_bool(sa == sb));
         return Ok(());
     }
-    if let (Ok(fa), Ok(fb)) = (as_f64(vm, a), as_f64(vm, b)) {
-        vm.push(Value::from_bool((fa - fb).abs() < 1e-12));
-        return Ok(());
-    }
     vm.push(Value::from_bool(a.raw() == b.raw()));
     Ok(())
 }
 
 fn bin_bits<J: JitHook>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
-    let b = vm
-        .pop()
-        .as_int()
-        .ok_or_else(|| Error::msg("bit op expects int"))?;
-    let a = vm
-        .pop()
-        .as_int()
-        .ok_or_else(|| Error::msg("bit op expects int"))?;
-    vm.push(Value::from_int(f(a, b)));
+    let right = vm.pop();
+    let left = vm.pop();
+    let right = vm
+        .as_i64(right)
+        .map_err(|_| Error::msg("bit op expects I64"))?;
+    let left = vm
+        .as_i64(left)
+        .map_err(|_| Error::msg("bit op expects I64"))?;
+    let result = vm.make_i64(f(left, right));
+    vm.push(result);
     Ok(())
 }
 
@@ -81,10 +78,10 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             }
             Ok(())
         }
-        x if x == Op::Add as u8 => bin_num(vm, |a, b| a + b),
-        x if x == Op::Sub as u8 => bin_num(vm, |a, b| a - b),
-        x if x == Op::Mul as u8 => bin_num(vm, |a, b| a * b),
-        x if x == Op::Div as u8 => bin_num(vm, |a, b| a / b),
+        x if x == Op::Add as u8 => bin_arithmetic(vm, Arithmetic::Add),
+        x if x == Op::Sub as u8 => bin_arithmetic(vm, Arithmetic::Subtract),
+        x if x == Op::Mul as u8 => bin_arithmetic(vm, Arithmetic::Multiply),
+        x if x == Op::Div as u8 => bin_arithmetic(vm, Arithmetic::Divide),
         x if x == Op::Eq as u8 => eq_values(vm),
         x if x == Op::Ne as u8 => {
             eq_values(vm)?;
@@ -92,10 +89,10 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             vm.push(Value::from_bool(!v.is_truthy()));
             Ok(())
         }
-        x if x == Op::Lt as u8 => bin_cmp(vm, |a, b| a < b),
-        x if x == Op::Le as u8 => bin_cmp(vm, |a, b| a <= b),
-        x if x == Op::Gt as u8 => bin_cmp(vm, |a, b| a > b),
-        x if x == Op::Ge as u8 => bin_cmp(vm, |a, b| a >= b),
+        x if x == Op::Lt as u8 => bin_ordering(vm, Ordering::Less),
+        x if x == Op::Le as u8 => bin_ordering(vm, Ordering::LessEqual),
+        x if x == Op::Gt as u8 => bin_ordering(vm, Ordering::Greater),
+        x if x == Op::Ge as u8 => bin_ordering(vm, Ordering::GreaterEqual),
         x if x == Op::Not as u8 => {
             let v = vm.pop();
             vm.push(Value::from_bool(!v.is_truthy()));
@@ -166,12 +163,15 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             Ok(())
         }
         x if x == Op::ReadByte as u8 => {
-            vm.push(read_byte()?);
+            let number = read_byte()?;
+            let value = vm.make_i64(number);
+            vm.push(value);
             Ok(())
         }
         x if x == Op::WriteByte as u8 => {
-            let v = vm.pop();
-            vm.push(write_byte(v)?);
+            let value = vm.pop();
+            let byte = vm.as_i64(value)?;
+            vm.push(write_byte(byte)?);
             Ok(())
         }
         x if x == Op::WriteStr as u8 => {
@@ -180,7 +180,10 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             Ok(())
         }
         x if x == Op::Exit as u8 => {
-            vm.exit_code = Some(vm.pop().as_int().unwrap_or(0) as i32);
+            let value = vm.pop();
+            let code = vm.as_i64(value)?;
+            let code = i32::try_from(code).map_err(|_| Error::msg("exit code out of range"))?;
+            vm.exit_code = Some(code);
             Ok(())
         }
         x if crate::run::ext_ops::dispatch_ext(vm, x)? => Ok(()),

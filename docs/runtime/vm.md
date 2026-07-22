@@ -12,10 +12,12 @@ next repairs.
 ## Current Shape
 
 - Dense bytecode with contiguous value and frame stacks.
-- Tagged `u64` immediates for nil, booleans, small integers, heap references,
-  and opaque handle tokens.
-- Arena objects for floats, strings, symbols, pairs, closures, buffers, and
-  language Result wrappers.
+- Tagged `u64` immediates for nil, booleans, signed 61-bit integers, heap
+  references, and opaque handle tokens.
+- Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
+  closures, buffers, and language Result wrappers.
+- I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64
+  arithmetic, exact/IEEE numeric equality, and checked narrow host domains.
 - Precise non-moving mark-sweep collection after 1,024 allocations.
 - Return-adjacent frame reuse for tail recursion.
 - Synchronous, single-threaded execution with blocking host operations.
@@ -52,17 +54,12 @@ panic-prone assumptions; compiler-produced chunks are the supported path.
 - Strings and network/file bytes do not provide a complete lossless byte model.
 - Blocking calls and process exit prevent safe multi-VM supervision.
 
-## Accepted Target
-
-- Preserve complete I64 values with immediate signed 61-bit values and boxed
-  wide integers, while keeping F64 as a distinct heap value.
-- Preserve numeric types in bytecode and dispatch checked I64 versus IEEE F64
-  arithmetic without routing integers through floating point.
-- Make every numeric host consumer accept full I64 and check narrower domains.
-- Validate public chunks before dispatch.
-
 The numeric representation and behavior are specified by
 [Exact I64 And F64 Semantics](../decisions/numeric-semantics.md).
+
+## Accepted Target
+
+- Validate public chunks before dispatch.
 
 Process-safe outcomes, host-service injection, instruction quanta, blocking
 wait objects, generation-reused handle slots, and per-process budgets are

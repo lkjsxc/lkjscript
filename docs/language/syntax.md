@@ -6,9 +6,8 @@ Define expression, type, and import behavior above the physical line format.
 
 ## Status
 
-**Current** for the source format, imports, and implemented semantics. The
-numeric contract in [numeric-semantics.md](../decisions/numeric-semantics.md)
-is an **Accepted Target**.
+**Current.** The exact numeric contract is
+[numeric-semantics.md](../decisions/numeric-semantics.md).
 
 ## Expressions
 
@@ -35,15 +34,9 @@ typeclass, Hindley-Milner inference, or implemented user-defined type alias.
 that its target exists or matches the declared global type; repairing that
 contract is part of the foundation cycle.
 
-## Current Numeric Reality
+## Numeric Contract
 
-The baseline advertises widths, aliases, casts, and operators that are not all
-executable. Integer literals and arithmetic can pass through `f64`, integral
-F64 values can become runtime integers, and wide values can lose precision.
-
-## Accepted Numeric Target
-
-The canonical numeric types become only `I64` and `F64`. Integer and decimal
+The canonical numeric types are only `I64` and `F64`. Integer and decimal
 literal spelling is explicit and exact; malformed or out-of-range literals are
 errors. Binary arithmetic is checked I64 arithmetic unless either operand is
 F64, in which case IEEE-754 F64 behavior applies. F64 identity is preserved,
@@ -53,7 +46,8 @@ I64 values cover the complete signed 64-bit range, bitwise operations cover all
 The canonical comparison names are `eq`, `ne`, `lt`, `lte`, `gt`, and `gte`.
 I64 equality is exact and F64 equality follows IEEE rules rather than an
 epsilon. See [Exact I64 And F64 Semantics](../decisions/numeric-semantics.md)
-for the complete accepted contract and removed vocabulary.
+for literal grammar, promotion, overflow, representation, and removed
+vocabulary.
 
 ## Files And Imports
 

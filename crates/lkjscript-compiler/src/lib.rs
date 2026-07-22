@@ -69,10 +69,11 @@ fn parse_source(source: &str, path: &str, limits: &Limits) -> Result<Vec<Expr>> 
 pub use lkjscript_core::Limits as CompileLimits;
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::path::Path;
 
-    use lkjscript_core::Limits;
+    use lkjscript_core::{Constant, Limits};
 
     use super::{compile_source, ensure_source_path};
 
@@ -98,5 +99,66 @@ mod tests {
         let obsolete = "do/\nclose/\nstdin-handle/\n/stdin-handle\n/close\n/do\n";
         assert!(compile_source(canonical, "handles.lkjscript", &Limits::default()).is_ok());
         assert!(compile_source(obsolete, "handles.lkjscript", &Limits::default()).is_err());
+    }
+
+    #[test]
+    fn bytecode_constants_preserve_numeric_source_types() {
+        let source =
+            "do/\neq/\n9223372036854775807\n9223372036854775807\n/eq\n+/\n2.0\n1\n/+\n/do\n";
+        let chunk = compile_source(source, "numeric.lkjscript", &Limits::default())
+            .expect("compile numeric source");
+        assert!(chunk
+            .constants
+            .iter()
+            .any(|constant| matches!(constant, Constant::I64(i64::MAX))));
+        assert!(chunk
+            .constants
+            .iter()
+            .any(|constant| matches!(constant, Constant::F64(value) if *value == 2.0)));
+    }
+
+    #[test]
+    fn removed_numeric_vocabulary_and_non_binary_arithmetic_fail() {
+        for ty in [
+            "I32", "U32", "U64", "F32", "I128", "U8", "F16", "i32", "i64", "u32", "u64", "f32",
+            "f64", "i128", "Int", "Float",
+        ] {
+            let source = format!("def/\nname/ value /name\ntype/ {ty} /type\n1\n/def\n");
+            assert!(
+                compile_source(&source, "removed-type.lkjscript", &Limits::default()).is_err(),
+                "accepted type {ty}"
+            );
+        }
+        for name in [
+            "f+",
+            "f-",
+            "f*",
+            "f=",
+            "f!=",
+            "f<",
+            "f<=",
+            "f>",
+            "f>=",
+            "le",
+            "ge",
+            "=",
+            "!=",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "i64-from-u32",
+            "u32-from-i64",
+            "i64-from-i32",
+            "i32-from-i64",
+        ] {
+            let source = format!("do/\n{name}/\n1\n2\n/{name}\n/do\n");
+            assert!(
+                compile_source(&source, "removed-op.lkjscript", &Limits::default()).is_err(),
+                "accepted operator {name}"
+            );
+        }
+        let variadic = "do/\n+/\n1\n2\n3\n/+\n/do\n";
+        assert!(compile_source(variadic, "arity.lkjscript", &Limits::default()).is_err());
     }
 }

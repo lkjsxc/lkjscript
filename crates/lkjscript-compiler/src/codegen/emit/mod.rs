@@ -4,7 +4,7 @@ mod call;
 mod special;
 
 use crate::ast::Expr;
-use lkjscript_core::{Chunk, Constant, Error, FunctionProto, Op, Result, Value};
+use lkjscript_core::{Chunk, Constant, Error, FunctionProto, Op, Result};
 
 pub struct Cx<'a> {
     pub chunk: &'a mut Chunk,
@@ -32,10 +32,14 @@ pub fn compile_expr(cx: &mut Cx<'_>, expr: &Expr) -> Result<()> {
         Expr::LitNil => cx.proto.emit(Op::Nil),
         Expr::LitBool(true) => cx.proto.emit(Op::True),
         Expr::LitBool(false) => cx.proto.emit(Op::False),
-        Expr::LitNum {
-            value: n,
-            float_syntax: _,
-        } => emit_number(cx, *n),
+        Expr::LitI64(value) => {
+            let id = cx.chunk.add_const(Constant::I64(*value));
+            cx.proto.emit_op_u16(Op::LoadConst, id.0);
+        }
+        Expr::LitF64(value) => {
+            let id = cx.chunk.add_const(Constant::F64(*value));
+            cx.proto.emit_op_u16(Op::LoadConst, id.0);
+        }
         Expr::LitStr(s) => {
             let cid = cx.chunk.add_const(Constant::Str(s.clone()));
             cx.proto.emit_op_u16(Op::LoadConst, cid.0);
@@ -45,18 +49,6 @@ pub fn compile_expr(cx: &mut Cx<'_>, expr: &Expr) -> Result<()> {
         Expr::List(_) => return Err(Error::msg("bare list not supported")),
     }
     Ok(())
-}
-
-fn emit_number(cx: &mut Cx<'_>, n: f64) {
-    if n.fract() == 0.0 && n >= (i32::MIN as f64) && n <= (i32::MAX as f64) {
-        let cid = cx
-            .chunk
-            .add_const(Constant::Value(Value::from_int(n as i64)));
-        cx.proto.emit_op_u16(Op::LoadConst, cid.0);
-    } else {
-        let cid = cx.chunk.add_const(Constant::Float(n));
-        cx.proto.emit_op_u16(Op::LoadConst, cid.0);
-    }
 }
 
 pub(crate) fn compile_name(cx: &mut Cx<'_>, name: &str) -> Result<()> {
@@ -70,16 +62,6 @@ pub(crate) fn compile_name(cx: &mut Cx<'_>, name: &str) -> Result<()> {
 }
 
 pub fn compile_call(cx: &mut Cx<'_>, name: &str, args: &[Expr]) -> Result<()> {
-    let name = match name {
-        "lte" => "<=",
-        "gte" => ">=",
-        "lt" => "<",
-        "gt" => ">",
-        "eq" => "=",
-        "ne" => "!=",
-        "div" => "/",
-        other => other,
-    };
     match name {
         "if" => special::compile_if(cx, args),
         "while" => special::compile_while(cx, args),
