@@ -57,7 +57,7 @@ Canonical comparisons are `eq`, `ne`, `lt`, `lte`, `gt`, and `gte`.
 Ordering is numeric and uses the same I64/F64 promotion rule as arithmetic.
 I64/I64 equality is exact. F64 equality is IEEE equality: NaN is unequal to
 every value, while positive and negative zero are equal. General equality for
-Unit, legacy nil, booleans, strings, symbols, handles, and identity-bearing heap values
+Unit, Option, typed empty lists, booleans, strings, symbols, handles, and identity-bearing heap values
 remains available through `eq` and `ne`; ordering does not extend to them.
 
 ## Representation

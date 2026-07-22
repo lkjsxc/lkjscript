@@ -12,10 +12,11 @@ next repairs.
 ## Current Shape
 
 - Dense bytecode with contiguous value and frame stacks.
-- Tagged `u64` immediates for Unit, typed empty-list, temporary legacy nil,
-  booleans, signed 61-bit integers, heap references, and opaque handle tokens.
+- Tagged `u64` immediates for Unit, typed empty-list, Option none, booleans,
+  signed 61-bit integers, heap references, and opaque handle tokens; all-zero
+  is private invalid/uninitialized state, not a language value.
 - Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
-  closures, buffers, and language Result wrappers.
+  closures, buffers, Option some wrappers, and language Result wrappers.
 - I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64
   arithmetic, exact/IEEE numeric equality, and checked narrow host domains.
 - Precise non-moving mark-sweep collection after 1,024 allocations.

@@ -36,7 +36,7 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
     match &expression.kind {
         ExprKind::LitUnit => cx.proto.emit(Op::Unit),
         ExprKind::EmptyList => cx.proto.emit(Op::EmptyList),
-        ExprKind::LitNil => cx.proto.emit(Op::Nil),
+        ExprKind::LitNone => cx.proto.emit(Op::OptionNone),
         ExprKind::LitBool(true) => cx.proto.emit(Op::True),
         ExprKind::LitBool(false) => cx.proto.emit(Op::False),
         ExprKind::LitI64(value) => {
@@ -286,7 +286,6 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::BitAnd => Op::BitAnd,
         Operation::BitOr => Op::BitOr,
         Operation::BitXor => Op::BitXor,
-        Operation::IsNil => Op::IsNil,
         Operation::WriteStr => Op::WriteStr,
         Operation::EmptyStr => Op::EmptyStr,
         Operation::ArgCount => Op::Argc,
@@ -331,6 +330,9 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::IsOk => Op::IsOk,
         Operation::UnwrapOk => Op::UnwrapOk,
         Operation::UnwrapErr => Op::UnwrapErr,
+        Operation::Some => Op::SomeWrap,
+        Operation::IsSome => Op::IsSome,
+        Operation::UnwrapSome => Op::UnwrapSome,
         Operation::And | Operation::Or => return None,
     })
 }

@@ -76,7 +76,9 @@ fn atom_from_name(name: &str) -> Result<Expr> {
         return Ok(Expr::LitUnit);
     }
     if name == "nil" {
-        return Ok(Expr::LitNil);
+        return Err(Error::msg(
+            "nil was removed; use unit, none/ T /none, or empty-list/ T /empty-list",
+        ));
     }
     if name == "true" {
         return Ok(Expr::LitBool(true));

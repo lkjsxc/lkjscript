@@ -3,9 +3,12 @@ name/
 tty-cooked-buf
 /name
 type/
+Option
 Buf
 /type
-nil
+none/
+Buf
+/none
 /def
 def/
 name/
@@ -14,5 +17,7 @@ tty-work
 type/
 Buf
 /type
-nil
+buf-new/
+60
+/buf-new
 /def

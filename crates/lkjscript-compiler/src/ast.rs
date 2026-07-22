@@ -8,7 +8,6 @@ pub enum Expr {
     LitF64(f64),
     LitBool(bool),
     LitUnit,
-    LitNil,
     LitStr(String),
     Symbol(String),
     Call { name: String, args: Vec<Expr> },

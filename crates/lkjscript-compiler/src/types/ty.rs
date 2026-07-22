@@ -5,7 +5,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Unit,
-    Nil,
     Bool,
     I64,
     F64,
@@ -52,11 +51,6 @@ impl Type {
     }
 
     pub fn unify_assignable(got: &Type, expect: &Type) -> bool {
-        // Uninitialized buffer/handle slots may temporarily be nil until the
-        // Option migration removes this legacy exception.
-        if matches!(got, Type::Nil) && matches!(expect, Type::Buf | Type::Handle) {
-            return true;
-        }
         match (got, expect) {
             (a, b) if a == b => true,
             (Type::Param(a), Type::Param(b)) => a == b,
@@ -114,7 +108,7 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
     match a.as_str() {
         "Any" => Err("Any is not a permitted type".into()),
         "Unit" => Ok((Type::Unit, i + 1)),
-        "Nil" => Ok((Type::Nil, i + 1)),
+        "Nil" => Err("Nil was removed; use Unit, Option T, or List T".into()),
         "Bool" => Ok((Type::Bool, i + 1)),
         "I64" => Ok((Type::I64, i + 1)),
         "F64" => Ok((Type::F64, i + 1)),
@@ -162,7 +156,6 @@ fn is_type_param_name(s: &str) -> bool {
         && !matches!(
             s,
             "Unit"
-                | "Nil"
                 | "Bool"
                 | "I64"
                 | "F64"

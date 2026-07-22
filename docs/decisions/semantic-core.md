@@ -8,9 +8,9 @@ ambiguity or unchecked hints.
 
 ## Status
 
-**Accepted Target** overall. Dedicated Unit, exact three-arm `if`, and typed
-empty lists are **Current**. Option, local-only mutation, explicit main, and the
-equality split remain pending; [current-state.md](../current-state.md)
+**Accepted Target** overall. Dedicated Unit, exact three-arm `if`, typed empty
+lists, and explicit Option/no-nil semantics are **Current**. Local-only mutation,
+explicit main, and the equality split remain pending; [current-state.md](../current-state.md)
 records the exact boundary.
 
 ## Canonicality
@@ -37,7 +37,9 @@ data. `Option T` uses `some/ value /some` or the explicitly typed `none` form.
 `none/ T /none` contains exactly one type expression. `is-some` is the positive
 predicate; absence is `not/is-some/...`, not a second negative alias.
 `unwrap-some` returns the payload or traps explicitly on none. `arg` has type
-`I64 -> Option Str`, including negative and out-of-range indices. An empty list is a typed collection value, not Unit or Option absence. Its
+`I64 -> Option Str`, including negative and out-of-range indices.
+
+An empty list is a typed collection value, not Unit or Option absence. Its
 canonical form contains exactly one element type expression. `empty-list?` is
 the only emptiness predicate and has type `List T -> Bool`; the historical
 `null?` and generic `nil?` spellings are not list aliases. `car` and `cdr` trap
@@ -52,12 +54,11 @@ type, including proven niches, without changing source semantics. The all-zero
 internal value pattern is invalid rather than a semantic default. The reference
 VM uses a dedicated none singleton and a traced wrapper for some.
 
-The Unit and typed-empty-list slices are implemented. `Unit`/`unit` has a
-dedicated VM tag; empty `do`, `while`, `set`, and successful side-effecting
-operations return Unit. `empty-list` has a distinct singleton tag and exact
-`List T` HIR type, and `empty-list?` is canonical. Legacy `nil` remains
-only for temporary absence and internal default state until the Option/no-nil
-slice removes it.
+The Unit, typed-empty-list, and Option/no-nil slices are implemented. Unit,
+empty-list, and none have distinct singleton tags; some is a traced wrapper.
+Empty `do`, `while`, `set`, and successful side-effecting operations return
+Unit. `empty-list` has exact `List T` HIR type, and `empty-list?` is canonical.
+The `Nil` type, `nil` value, `nil?`, and their bytecode operations are removed.
 
 ## Control Flow
 

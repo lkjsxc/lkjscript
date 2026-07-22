@@ -122,9 +122,8 @@ an external project receives the same contract.
 
 ## Accepted Redesign Direction
 
-With resolved typed HIR in place, separate Unit/Option/empty lists, split
-comparisons, establish explicit
-main and effect-free libraries, migrate global editor state into an immutable
+With resolved typed HIR and separate Unit/Option/empty-list semantics in place,
+split comparisons, establish explicit main and effect-free libraries, migrate global editor state into an immutable
 product plus one local var, and remove mutable globals. Typed SSA and an early
 Linux x86-64 AOT backend follow differential VM conformance. Real modules,
 process-safe host services, byte strings/views, compiled-code objects, and

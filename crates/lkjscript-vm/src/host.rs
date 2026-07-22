@@ -7,14 +7,17 @@ use lkjscript_core::{Error, HeapObj, Result, Value};
 use crate::arena::Arena;
 
 pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
-    if v.is_nil() {
-        return Ok("nil".into());
+    if v.is_invalid() {
+        return Err(Error::msg("invalid VM value escaped initialized storage"));
     }
     if v.is_unit() {
         return Ok("unit".into());
     }
     if v.is_empty_list() {
         return Ok("empty-list".into());
+    }
+    if v.is_none() {
+        return Ok("none".into());
     }
     if let Some(b) = v.as_bool() {
         return Ok(b.to_string());
@@ -40,6 +43,7 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
         HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
         HeapObj::ResultOk(x) => Ok(format!("Ok({})", display_value(arena, *x)?)),
         HeapObj::ResultErr(x) => Ok(format!("Err({})", display_value(arena, *x)?)),
+        HeapObj::OptionSome(x) => Ok(format!("some({})", display_value(arena, *x)?)),
     }
 }
 

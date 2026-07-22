@@ -35,9 +35,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
   and return-adjacent tail-frame reuse
-- Semantics: dedicated `Unit`/`unit` and typed `empty-list` have distinct
-  singleton tags; empty `do`, `while`, `set`, and successful side effects return
-  Unit; `if` requires both exact branches; `empty-list?` replaces `null?`
+- Semantics: Unit, typed empty-list, and Option none have distinct singleton
+  tags, while Option some is traced; `nil`, `Nil`, `nil?`, and `null?` are
+  removed; `arg` returns `Option Str`; empty `do`/`while`/`set` return Unit
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
@@ -63,19 +63,18 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. legacy nil still conflates Option absence, falsey/default VM state, and
-   uninitialized mutable globals; explicit Option is not implemented;
-2. mutable values and imports still share one program-global namespace, and
+1. mutable values and imports still share one program-global namespace, and
    top-level execution/initialization remains order-dependent;
-3. out-of-range `arg` still returns Nil despite its declared Str type;
-4. user-call effects are a safe all-effects over-approximation rather than
+2. user-call effects are a safe all-effects over-approximation rather than
    fixed-point summaries;
-5. strings and IO lack a lossless bulk byte contract, and some library file
+3. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-6. public malformed chunks can reach unchecked VM assumptions;
-7. source/import aggregate bytes, depth, count, constants, globals, bytecode,
+4. public malformed chunks are not prevalidated, although stack underflow,
+   uninitialized slots, bad slot indexes, removed opcodes, and non-Bool control
+   now return VM errors instead of semantic fallback values;
+5. source/import aggregate bytes, depth, count, constants, globals, bytecode,
    VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
-8. process exit/terminal state remain process-global, and monotonic handle
+6. process exit/terminal state remain process-global, and monotonic handle
    metadata remains until the VM ends.
 
 ## Evidence
@@ -86,12 +85,12 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 64 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 70 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
 | `check-sources` | passed for all 115 `.lkjscript` sources; the 10 compiled entry closures equal the corpus exactly |
 | source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
-| HIR conformance | duplicate/unknown/collision, BindingId shadowing, source origin, generic resolution, effect facts, global set, exact `if`, typed empty-list, and operation-signature boundaries passed |
+| HIR conformance | duplicate/unknown/collision, BindingId shadowing, generic resolution, effects, global set, exact `if`, typed empty-list, Option, and `arg` boundaries passed |
 | top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields dedicated Unit as typed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
@@ -122,12 +121,10 @@ A gate that did not run did not pass.
 
 The next semantic migration sequence is:
 
-1. add explicit Option values, then remove legacy nil from source semantics and
-   internal default-state behavior;
-2. split value/object/structural/F64-bit equality;
-3. establish explicit main/effect-free libraries, immutable product state and
+1. split value/object/structural/F64-bit equality;
+2. establish explicit main/effect-free libraries, immutable product state and
    local var/set, then remove mutable globals;
-4. validate chunks and return structured VM outcomes before typed SSA and the
+3. validate chunks and return structured VM outcomes before typed SSA and the
    early Linux x86-64 native AOT experiment.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),

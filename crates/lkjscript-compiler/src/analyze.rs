@@ -376,7 +376,7 @@ impl Analyzer {
             | ExprKind::LitBool(_)
             | ExprKind::LitUnit
             | ExprKind::EmptyList
-            | ExprKind::LitNil
+            | ExprKind::LitNone
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => {}
             ExprKind::Load(binding) => {
@@ -493,7 +493,6 @@ impl<'a> Resolver<'a> {
     fn resolve_expr(&mut self, expression: &AstExpr) -> Result<Expr> {
         match expression {
             AstExpr::LitUnit => Ok(self.expression(Type::Unit, ExprKind::LitUnit)),
-            AstExpr::LitNil => Ok(self.expression(Type::Nil, ExprKind::LitNil)),
             AstExpr::LitBool(value) => Ok(self.expression(Type::Bool, ExprKind::LitBool(*value))),
             AstExpr::LitI64(value) => Ok(self.expression(Type::I64, ExprKind::LitI64(*value))),
             AstExpr::LitF64(value) => Ok(self.expression(Type::F64, ExprKind::LitF64(*value))),
@@ -529,6 +528,7 @@ impl<'a> Resolver<'a> {
             "quote" => self.resolve_quote(args),
             "set" => self.resolve_set(args),
             "empty-list" => self.resolve_empty_list(args),
+            "none" => self.resolve_none(args),
             "bind" => Err(self.error("bind is only valid inside let")),
             "fn" | "def" | "sig" | "params" | "forall" | "type" | "import" | "name" => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
@@ -858,6 +858,22 @@ impl<'a> Resolver<'a> {
         Ok(self.expression(Type::List(Box::new(element)), ExprKind::EmptyList))
     }
 
+    fn resolve_none(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let value_type =
+            parse_type_form(args).map_err(|message| self.error(format!("none: {message}")))?;
+        let mut parameters = HashSet::new();
+        collect_type_params(&value_type, &mut parameters);
+        if let Some(parameter) = parameters
+            .into_iter()
+            .find(|parameter| !self.type_variables.contains(*parameter))
+        {
+            return Err(self.error(format!(
+                "none: type parameter {parameter} is not declared by forall"
+            )));
+        }
+        Ok(self.expression(Type::Option(Box::new(value_type)), ExprKind::LitNone))
+    }
+
     fn resolve_quote(&mut self, args: &[AstExpr]) -> Result<Expr> {
         let symbol = match args {
             [AstExpr::Symbol(symbol)] => symbol.clone(),
@@ -911,7 +927,7 @@ impl<'a> Resolver<'a> {
             | ExprKind::LitBool(_)
             | ExprKind::LitUnit
             | ExprKind::EmptyList
-            | ExprKind::LitNil
+            | ExprKind::LitNone
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
             ExprKind::Load(binding) => self
@@ -980,6 +996,7 @@ fn is_contextual_name(name: &str) -> bool {
             | "quote"
             | "set"
             | "empty-list"
+            | "none"
             | "bind"
             | "fn"
             | "def"

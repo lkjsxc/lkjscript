@@ -50,9 +50,9 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   construction.
 - VM host operations block and process exit is not process-safe.
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
-  I64/F64 execution, resolved typed HIR, Unit/strict-if, and typed empty lists
-  have landed. Option/no-nil is the next semantic slice, followed by equality
-  and explicit main/local-state migration. SSA/AOT remain targets, not current
+  I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists, and
+  Option/no-nil have landed. Equality is the next semantic slice, followed by
+  explicit main/local-state migration. SSA/AOT remain targets, not current
   capability.
 
 ## Host Boundary

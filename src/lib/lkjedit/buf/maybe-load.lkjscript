@@ -19,9 +19,11 @@ argc/
 0
 /gt
 ed-load/
+unwrap-some/
 arg/
 0
 /arg
+/unwrap-some
 /ed-load
 unit
 /if

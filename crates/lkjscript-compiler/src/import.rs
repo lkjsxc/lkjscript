@@ -410,7 +410,7 @@ mod tests {
     fn compilation_rejects_a_wide_entry_directory() -> std::io::Result<()> {
         let directory = TempDir::new("wide-entry")?;
         let entry = directory.0.join("main.lkjscript");
-        fs::write(&entry, "do/\nnil\n/do\n")?;
+        fs::write(&entry, "do/\nunit\n/do\n")?;
         for index in 0..16 {
             fs::write(directory.0.join(format!("asset-{index}")), "")?;
         }
@@ -431,7 +431,7 @@ mod tests {
         let package = TempDir::new("package")?;
         let outside = TempDir::new("outside")?;
         fs::create_dir_all(package.0.join("src/std"))?;
-        fs::write(outside.0.join("escaped.lkjscript"), "do/\nnil\n/do\n")?;
+        fs::write(outside.0.join("escaped.lkjscript"), "do/\nunit\n/do\n")?;
         symlink(
             outside.0.join("escaped.lkjscript"),
             package.0.join("escaped.lkjscript"),
@@ -439,7 +439,7 @@ mod tests {
         let entry = package.0.join("main.lkjscript");
         fs::write(
             &entry,
-            "import/\n./escaped.lkjscript\n/import\ndo/\nnil\n/do\n",
+            "import/\n./escaped.lkjscript\n/import\ndo/\nunit\n/do\n",
         )?;
 
         let error = load_program(&entry, &Limits::default())

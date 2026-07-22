@@ -6,7 +6,7 @@ use crate::run::{Frame, Vm};
 
 pub fn make_closure<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     let _caps = vm.read_u16()?;
-    let value = vm.pop();
+    let value = vm.pop()?;
     let proto_id = vm
         .as_i64(value)
         .map_err(|_| Error::msg("MakeClosure expects proto index"))?;
@@ -21,7 +21,7 @@ pub fn make_closure<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub fn car<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let p = vm.pop();
+    let p = vm.pop()?;
     match vm.arena.get(p)? {
         HeapObj::Pair { car, .. } => {
             let c = *car;
@@ -33,7 +33,7 @@ pub fn car<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub fn cdr<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let p = vm.pop();
+    let p = vm.pop()?;
     match vm.arena.get(p)? {
         HeapObj::Pair { cdr, .. } => {
             let c = *cdr;
@@ -45,12 +45,16 @@ pub fn cdr<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
-    let callee = vm.pop();
+    let callee = vm.pop()?;
     let obj = vm.arena.get(callee)?.clone();
     match obj {
         HeapObj::Closure { proto, .. } => {
             vm.jit.observe_call(vm.chunk, proto);
-            let p = &vm.chunk.protos[proto as usize];
+            let p = vm
+                .chunk
+                .protos
+                .get(proto as usize)
+                .ok_or_else(|| Error::msg("call proto index out of range"))?;
             if argc as usize != p.arity as usize {
                 return Err(Error::msg(format!(
                     "arity mismatch for {}: got {argc}, want {}",
@@ -58,14 +62,19 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 )));
             }
             let locals = p.locals;
-            let args_start = vm.stack.len() - argc as usize;
+            let argument_count = usize::from(argc);
+            let args_start = vm
+                .stack
+                .len()
+                .checked_sub(argument_count)
+                .ok_or_else(|| Error::msg("call argument stack underflow"))?;
             if is_tail_position(vm) {
                 let stack_base = vm.frames.last().map(|frame| frame.stack_base).unwrap_or(0);
                 let args = vm.stack[args_start..].to_vec();
                 vm.stack.truncate(stack_base);
                 vm.stack.extend_from_slice(&args);
                 while vm.stack.len() < stack_base + locals as usize {
-                    vm.stack.push(Value::NIL);
+                    vm.stack.push(Value::INVALID);
                 }
                 if let Some(frame) = vm.frames.last_mut() {
                     *frame = Frame {
@@ -78,7 +87,7 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 return Ok(());
             }
             while vm.stack.len() < args_start + locals as usize {
-                vm.stack.push(Value::NIL);
+                vm.stack.push(Value::INVALID);
             }
             vm.frames.push(Frame {
                 proto,

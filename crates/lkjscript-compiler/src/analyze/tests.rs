@@ -221,7 +221,7 @@ mod tests {
         let typed_list = "def/\nname/\nxs\n/name\ntype/\nList\nI64\n/type\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\n/def\ndo/\nset/\nxs\nempty-list/\nI64\n/empty-list\n/set\n/do\n";
         assert!(analyze_one(typed_list).is_ok());
         let nil_list = "def/\nname/\nxs\n/name\ntype/\nList\nI64\n/type\nnil\n/def\n";
-        assert!(analysis_error(nil_list).contains("Nil not assignable to List"));
+        assert!(analysis_error(nil_list).contains("nil was removed"));
     }
 
     #[test]
@@ -272,13 +272,71 @@ mod tests {
     }
 
     #[test]
+    fn explicit_option_values_and_arg_have_exact_types() {
+        let source = "do/\nsome/\n7\n/some\nnone/\nI64\n/none\nis-some/\nnone/\nI64\n/none\n/is-some\nunwrap-some/\nsome/\n9\n/some\n/unwrap-some\narg/\n0\n/arg\nif/\ntrue\nsome/\nstr/\nx\n/str\n/some\nnone/\nStr\n/none\n/if\n/do\n";
+        let program = analyze_one(source).expect("analyze explicit Option values");
+        let TopLevel::Do { expression, .. } = &program.forms[0] else {
+            panic!("expected do");
+        };
+        let ExprKind::Do(expressions) = &expression.kind else {
+            panic!("expected do expression");
+        };
+        assert_eq!(expressions[0].ty, Type::Option(Box::new(Type::I64)));
+        let ExprKind::Operation {
+            operation,
+            resolved_signature,
+            ..
+        } = &expressions[0].kind
+        else {
+            panic!("expected some operation");
+        };
+        assert_eq!(*operation, Operation::Some);
+        assert_eq!(
+            resolved_signature,
+            &Type::Fn {
+                params: vec![Type::I64],
+                ret: Box::new(Type::Option(Box::new(Type::I64))),
+            }
+        );
+        assert_eq!(expressions[1].kind, ExprKind::LitNone);
+        assert_eq!(expressions[1].ty, Type::Option(Box::new(Type::I64)));
+        assert_eq!(expressions[2].ty, Type::Bool);
+        assert_eq!(expressions[3].ty, Type::I64);
+        assert_eq!(expressions[4].ty, Type::Option(Box::new(Type::Str)));
+        assert_eq!(expressions[5].ty, Type::Option(Box::new(Type::Str)));
+
+        let chunk = compile_program(&program).expect("lower explicit Option values");
+        for opcode in [
+            Op::OptionNone,
+            Op::SomeWrap,
+            Op::IsSome,
+            Op::UnwrapSome,
+            Op::Arg,
+        ] {
+            assert!(chunk.main.code.contains(&(opcode as u8)));
+        }
+
+        let generic = "def/\nname/\nmaybe\n/name\nfn/\nforall/\nT\n/forall\nsig/\nT\n->\nOption\nT\n/sig\nparams/\nx\nT\n/params\nif/\ntrue\nsome/\nx\n/some\nnone/\nT\n/none\n/if\n/fn\n/def\n";
+        assert!(analyze_one(generic).is_ok());
+        assert!(analysis_error("do/\nnone/\nT\n/none\n/do\n")
+            .contains("type parameter T is not declared by forall"));
+        assert!(analysis_error("do/\nnone/\n/none\n/do\n").contains("none: expected type"));
+        assert!(analysis_error("do/\nnone/\nI64\nF64\n/none\n/do\n")
+            .contains("trailing tokens"));
+        assert!(analysis_error("do/\nnil?/\nunit\n/nil?\n/do\n")
+            .contains("unknown call nil?"));
+        assert!(analysis_error("def/\nname/\nx\n/name\ntype/\nNil\n/type\nunit\n/def\n")
+            .contains("Nil was removed"));
+    }
+
+    #[test]
     fn operation_names_and_generic_variables_are_resolved_without_capture() {
         assert!(analysis_error("do/\n+\n/do\n").contains("not a first-class value"));
         let collision = "def/\nname/\nprint\n/name\nfn/\nsig/\nStr\n->\nUnit\n/sig\nparams/\ntext\nStr\n/params\nunit\n/fn\n/def\n";
         assert!(analysis_error(collision).contains("collides with a reserved operation"));
 
         assert!(analysis_error("do/\ncar/\nnil\n/car\n/do\n")
-            .contains("cannot instantiate List(Param(\"T\")) from Nil"));
+            .contains("nil was removed"));
         assert!(analysis_error("do/\nok/\n1\n/ok\n/do\n")
             .contains("cannot infer type parameter E"));
 
@@ -298,7 +356,7 @@ mod tests {
         let duplicate_sig = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n";
         assert!(analysis_error(duplicate_sig).contains("multiple sig blocks"));
 
-        let mismatch = "def/\nname/\nf\n/name\nfn/\nsig/\nBuf\n->\nBuf\n/sig\nparams/\nx\nNil\n/params\nx\n/fn\n/def\n";
+        let mismatch = "def/\nname/\nf\n/name\nfn/\nsig/\nBuf\n->\nBuf\n/sig\nparams/\nx\nBool\n/params\nx\n/fn\n/def\n";
         assert!(analysis_error(mismatch).contains("parameter type mismatch"));
 
         assert!(analysis_error("do/\nquote/\n1\n/quote\n/do\n")

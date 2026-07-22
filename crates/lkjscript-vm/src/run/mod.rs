@@ -33,7 +33,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
     pub fn new(chunk: &'a Chunk, jit: J, args: Vec<String>) -> Self {
         Self {
             chunk,
-            globals: vec![Value::NIL; chunk.global_names.len()],
+            globals: vec![Value::INVALID; chunk.global_names.len()],
             stack: Vec::new(),
             frames: Vec::new(),
             arena: Arena::default(),
@@ -52,7 +52,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
             locals_base: 0,
         });
         for _ in 0..self.chunk.main.locals {
-            self.stack.push(Value::NIL);
+            self.stack.push(Value::INVALID);
         }
         loop {
             if let Some(code) = self.exit_code {
@@ -60,7 +60,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
                 std::process::exit(code);
             }
             if self.frames.is_empty() {
-                return Ok(self.pop());
+                return self.pop();
             }
             if self.arena.needs_collect() {
                 let mut roots = self.globals.clone();
@@ -80,7 +80,11 @@ impl<'a, J: JitHook> Vm<'a, J> {
         if fr.proto == u32::MAX {
             Ok(&self.chunk.main.code)
         } else {
-            Ok(&self.chunk.protos[fr.proto as usize].code)
+            self.chunk
+                .protos
+                .get(fr.proto as usize)
+                .map(|proto| proto.code.as_slice())
+                .ok_or_else(|| Error::msg("frame proto index out of range"))
         }
     }
 
@@ -92,7 +96,12 @@ impl<'a, J: JitHook> Vm<'a, J> {
         let code = if proto == u32::MAX {
             &self.chunk.main.code
         } else {
-            &self.chunk.protos[proto as usize].code
+            &self
+                .chunk
+                .protos
+                .get(proto as usize)
+                .ok_or_else(|| Error::msg("frame proto index out of range"))?
+                .code
         };
         let b = *code.get(ip).ok_or_else(|| Error::msg("ip out of range"))?;
         if let Some(fr) = self.frames.last_mut() {
@@ -125,12 +134,27 @@ impl<'a, J: JitHook> Vm<'a, J> {
         }
     }
 
-    pub fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap_or(Value::NIL)
+    pub fn pop(&mut self) -> Result<Value> {
+        let value = self
+            .stack
+            .pop()
+            .ok_or_else(|| Error::msg("VM stack underflow"))?;
+        if value.is_invalid() {
+            return Err(Error::msg("uninitialized VM value"));
+        }
+        Ok(value)
     }
 
-    pub fn peek(&self) -> Value {
-        self.stack.last().copied().unwrap_or(Value::NIL)
+    pub fn peek(&self) -> Result<Value> {
+        let value = self
+            .stack
+            .last()
+            .copied()
+            .ok_or_else(|| Error::msg("VM stack underflow"))?;
+        if value.is_invalid() {
+            return Err(Error::msg("uninitialized VM value"));
+        }
+        Ok(value)
     }
 
     pub fn load_const(&mut self, id: usize) -> Result<Value> {
@@ -161,14 +185,71 @@ impl<'a, J: JitHook> Vm<'a, J> {
             .map(|f| f.ip)
             .ok_or_else(|| Error::msg("no frame"))?;
         if ip >= code_len {
-            let ret = self.pop();
-            if let Some(frame) = self.frames.pop() {
-                self.stack.truncate(frame.stack_base);
-            }
-            self.push(ret);
-            return Ok(());
+            return Err(Error::msg("function ended without Return"));
         }
         let op = self.read_u8()?;
         dispatch::dispatch(self, op)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use lkjscript_core::{Chunk, NullJit, Op};
+
+    use super::Vm;
+
+    fn vm_error(chunk: Chunk) -> String {
+        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        vm.run().expect_err("malformed chunk must fail").to_string()
+    }
+
+    #[test]
+    fn missing_and_uninitialized_vm_values_are_errors() {
+        let mut chunk = Chunk::new();
+        assert!(vm_error(chunk.clone()).contains("without Return"));
+
+        chunk.main.code = vec![Op::Pop as u8, Op::Return as u8];
+        assert!(vm_error(chunk).contains("stack underflow"));
+
+        let mut local = Chunk::new();
+        local.main.locals = 1;
+        local.main.emit_op_u8(Op::LoadLocal, 0);
+        local.main.emit(Op::Return);
+        assert!(vm_error(local).contains("uninitialized slot"));
+
+        let mut global = Chunk::new();
+        global.global_names.push("missing".into());
+        global.main.emit_op_u16(Op::LoadGlobal, 0);
+        global.main.emit(Op::Return);
+        assert!(vm_error(global).contains("uninitialized slot"));
+
+        let mut store = Chunk::new();
+        store.main.emit(Op::Unit);
+        store.main.emit_op_u16(Op::StoreGlobal, 0);
+        store.main.emit(Op::Return);
+        assert!(vm_error(store).contains("StoreGlobal slot out of range"));
+    }
+
+    #[test]
+    fn malformed_conditions_and_removed_nil_opcodes_are_errors() {
+        let mut not = Chunk::new();
+        not.main.emit(Op::Unit);
+        not.main.emit(Op::Not);
+        not.main.emit(Op::Return);
+        assert!(vm_error(not).contains("not expects Bool"));
+
+        let mut branch = Chunk::new();
+        branch.main.emit(Op::Unit);
+        branch.main.emit_op_u16(Op::JumpIfFalse, 0);
+        branch.main.emit(Op::Unit);
+        branch.main.emit(Op::Return);
+        assert!(vm_error(branch).contains("JumpIfFalse expects Bool"));
+
+        for removed in [82, 145] {
+            let mut removed_opcode = Chunk::new();
+            removed_opcode.main.code = vec![removed];
+            assert!(vm_error(removed_opcode).contains("unknown opcode"));
+        }
     }
 }

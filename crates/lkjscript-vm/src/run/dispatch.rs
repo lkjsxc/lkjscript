@@ -8,8 +8,8 @@ use super::Vm;
 use crate::host::{flush_out, print_value, read_byte, write_byte, write_str};
 
 fn eq_values<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let b = vm.pop();
-    let a = vm.pop();
+    let b = vm.pop()?;
+    let a = vm.pop()?;
     if let Some(equal) = numeric_equal(vm, a, b)? {
         vm.push(Value::from_bool(equal));
         return Ok(());
@@ -26,8 +26,8 @@ fn eq_values<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 fn bin_bits<J: JitHook>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
-    let right = vm.pop();
-    let left = vm.pop();
+    let right = vm.pop()?;
+    let left = vm.pop()?;
     let right = vm
         .as_i64(right)
         .map_err(|_| Error::msg("bit op expects I64"))?;
@@ -50,32 +50,58 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if x == Op::LoadLocal as u8 => {
             let slot = vm.read_u8()? as usize;
-            let base = vm.frames.last().map(|f| f.locals_base).unwrap_or(0);
-            vm.push(vm.stack.get(base + slot).copied().unwrap_or(Value::NIL));
+            let base = vm
+                .frames
+                .last()
+                .ok_or_else(|| Error::msg("LoadLocal without frame"))?
+                .locals_base;
+            let value = vm
+                .stack
+                .get(base + slot)
+                .copied()
+                .ok_or_else(|| Error::msg("LoadLocal slot out of range"))?;
+            if value.is_invalid() {
+                return Err(Error::msg("LoadLocal read uninitialized slot"));
+            }
+            vm.push(value);
             Ok(())
         }
         x if x == Op::StoreLocal as u8 => {
             let slot = vm.read_u8()? as usize;
-            let base = vm.frames.last().map(|f| f.locals_base).unwrap_or(0);
-            let v = vm.peek();
-            let idx = base + slot;
-            while vm.stack.len() <= idx {
-                vm.stack.push(Value::NIL);
-            }
-            vm.stack[idx] = v;
+            let base = vm
+                .frames
+                .last()
+                .ok_or_else(|| Error::msg("StoreLocal without frame"))?
+                .locals_base;
+            let value = vm.peek()?;
+            let target = vm
+                .stack
+                .get_mut(base + slot)
+                .ok_or_else(|| Error::msg("StoreLocal slot out of range"))?;
+            *target = value;
             Ok(())
         }
         x if x == Op::LoadGlobal as u8 => {
             let id = vm.read_u16()? as usize;
-            vm.push(vm.globals.get(id).copied().unwrap_or(Value::NIL));
+            let value = vm
+                .globals
+                .get(id)
+                .copied()
+                .ok_or_else(|| Error::msg("LoadGlobal slot out of range"))?;
+            if value.is_invalid() {
+                return Err(Error::msg("LoadGlobal read uninitialized slot"));
+            }
+            vm.push(value);
             Ok(())
         }
         x if x == Op::StoreGlobal as u8 => {
             let id = vm.read_u16()? as usize;
-            let v = vm.peek();
-            if id < vm.globals.len() {
-                vm.globals[id] = v;
-            }
+            let value = vm.peek()?;
+            let target = vm
+                .globals
+                .get_mut(id)
+                .ok_or_else(|| Error::msg("StoreGlobal slot out of range"))?;
+            *target = value;
             Ok(())
         }
         x if x == Op::Add as u8 => bin_arithmetic(vm, Arithmetic::Add),
@@ -85,8 +111,11 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         x if x == Op::Eq as u8 => eq_values(vm),
         x if x == Op::Ne as u8 => {
             eq_values(vm)?;
-            let v = vm.pop();
-            vm.push(Value::from_bool(!v.is_truthy()));
+            let value = vm
+                .pop()?
+                .as_bool()
+                .ok_or_else(|| Error::msg("Ne produced non-Bool"))?;
+            vm.push(Value::from_bool(!value));
             Ok(())
         }
         x if x == Op::Lt as u8 => bin_ordering(vm, Ordering::Less),
@@ -94,8 +123,11 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         x if x == Op::Gt as u8 => bin_ordering(vm, Ordering::Greater),
         x if x == Op::Ge as u8 => bin_ordering(vm, Ordering::GreaterEqual),
         x if x == Op::Not as u8 => {
-            let v = vm.pop();
-            vm.push(Value::from_bool(!v.is_truthy()));
+            let value = vm.pop()?;
+            let value = value
+                .as_bool()
+                .ok_or_else(|| Error::msg("not expects Bool"))?;
+            vm.push(Value::from_bool(!value));
             Ok(())
         }
         x if x == Op::BitAnd as u8 => bin_bits(vm, |a, b| a & b),
@@ -110,10 +142,16 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if x == Op::JumpIfFalse as u8 => {
             let at = vm.read_u16()? as usize;
-            if !vm.pop().is_truthy() {
-                if let Some(fr) = vm.frames.last_mut() {
-                    fr.ip = at;
-                }
+            let condition = vm
+                .pop()?
+                .as_bool()
+                .ok_or_else(|| Error::msg("JumpIfFalse expects Bool"))?;
+            if !condition {
+                let frame = vm
+                    .frames
+                    .last_mut()
+                    .ok_or_else(|| Error::msg("JumpIfFalse without frame"))?;
+                frame.ip = at;
             }
             Ok(())
         }
@@ -123,15 +161,15 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             call(vm, argc)
         }
         x if x == Op::Return as u8 => {
-            let ret = vm.pop();
+            let ret = vm.pop()?;
             let frame = vm.frames.pop().ok_or_else(|| Error::msg("return"))?;
             vm.stack.truncate(frame.stack_base);
             vm.push(ret);
             Ok(())
         }
         x if x == Op::Cons as u8 => {
-            let cdr_v = vm.pop();
-            let car_v = vm.pop();
+            let cdr_v = vm.pop()?;
+            let car_v = vm.pop()?;
             let v = vm.arena.alloc(HeapObj::Pair {
                 car: car_v,
                 cdr: cdr_v,
@@ -141,18 +179,13 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if x == Op::Car as u8 => car(vm),
         x if x == Op::Cdr as u8 => cdr(vm),
-        x if x == Op::IsNil as u8 => {
-            let v = vm.pop();
-            vm.push(Value::from_bool(v.is_nil()));
-            Ok(())
-        }
         x if x == Op::IsEmptyList as u8 => {
-            let v = vm.pop();
+            let v = vm.pop()?;
             vm.push(Value::from_bool(v.is_empty_list()));
             Ok(())
         }
         x if x == Op::Print as u8 => {
-            let v = vm.pop();
+            let v = vm.pop()?;
             print_value(&vm.arena, v)?;
             vm.push(Value::UNIT);
             Ok(())
@@ -169,18 +202,18 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             Ok(())
         }
         x if x == Op::WriteByte as u8 => {
-            let value = vm.pop();
+            let value = vm.pop()?;
             let byte = vm.as_i64(value)?;
             vm.push(write_byte(byte)?);
             Ok(())
         }
         x if x == Op::WriteStr as u8 => {
-            let v = vm.pop();
+            let v = vm.pop()?;
             vm.push(write_str(&vm.arena, v)?);
             Ok(())
         }
         x if x == Op::Exit as u8 => {
-            let value = vm.pop();
+            let value = vm.pop()?;
             let code = vm.as_i64(value)?;
             let code = i32::try_from(code).map_err(|_| Error::msg("exit code out of range"))?;
             vm.exit_code = Some(code);
@@ -188,11 +221,11 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         }
         x if crate::run::ext_ops::dispatch_ext(vm, x)? => Ok(()),
         x if x == Op::Pop as u8 => {
-            let _ = vm.pop();
+            let _ = vm.pop()?;
             Ok(())
         }
         x if x == Op::Dup as u8 => {
-            let v = vm.peek();
+            let v = vm.peek()?;
             vm.push(v);
             Ok(())
         }
@@ -204,16 +237,16 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             vm.push(Value::TRUE);
             Ok(())
         }
-        x if x == Op::Nil as u8 => {
-            vm.push(Value::NIL);
-            Ok(())
-        }
         x if x == Op::Unit as u8 => {
             vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::EmptyList as u8 => {
             vm.push(Value::EMPTY_LIST);
+            Ok(())
+        }
+        x if x == Op::OptionNone as u8 => {
+            vm.push(Value::NONE);
             Ok(())
         }
         other => Err(Error::msg(format!("unknown opcode {other}"))),

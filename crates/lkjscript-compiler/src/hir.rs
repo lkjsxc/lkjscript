@@ -149,7 +149,7 @@ pub enum ExprKind {
     LitBool(bool),
     LitUnit,
     EmptyList,
-    LitNil,
+    LitNone,
     LitStr(String),
     Load(BindingId),
     Call {

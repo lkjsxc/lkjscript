@@ -30,7 +30,6 @@ pub enum Operation {
     BitAnd,
     BitOr,
     BitXor,
-    IsNil,
     And,
     Or,
     WriteStr,
@@ -77,6 +76,9 @@ pub enum Operation {
     IsOk,
     UnwrapOk,
     UnwrapErr,
+    Some,
+    IsSome,
+    UnwrapSome,
 }
 
 impl Operation {
@@ -106,7 +108,6 @@ impl Operation {
         Self::BitAnd,
         Self::BitOr,
         Self::BitXor,
-        Self::IsNil,
         Self::And,
         Self::Or,
         Self::WriteStr,
@@ -153,6 +154,9 @@ impl Operation {
         Self::IsOk,
         Self::UnwrapOk,
         Self::UnwrapErr,
+        Self::Some,
+        Self::IsSome,
+        Self::UnwrapSome,
     ];
 
     pub const LEGACY_GLOBALS: &'static [Self] = &[
@@ -210,7 +214,6 @@ impl Operation {
             Self::BitAnd => "bit-and",
             Self::BitOr => "bit-or",
             Self::BitXor => "bit-xor",
-            Self::IsNil => "nil?",
             Self::And => "and",
             Self::Or => "or",
             Self::WriteStr => "write-str",
@@ -257,6 +260,9 @@ impl Operation {
             Self::IsOk => "is-ok",
             Self::UnwrapOk => "unwrap-ok",
             Self::UnwrapErr => "unwrap-err",
+            Self::Some => "some",
+            Self::IsSome => "is-some",
+            Self::UnwrapSome => "unwrap-some",
         }
     }
 
@@ -295,7 +301,6 @@ impl Operation {
                 numeric_comparison()
             }
             Self::BitAnd | Self::BitOr | Self::BitXor => i64_binary(),
-            Self::IsNil => forall(&["T"], function(vec![Type::Param("T".into())], Type::Bool)),
             Self::Not => function(vec![Type::Bool], Type::Bool),
             Self::And | Self::Or => function(vec![Type::Bool, Type::Bool], Type::Bool),
             Self::Cons => {
@@ -339,7 +344,7 @@ impl Operation {
             Self::Exit => function(vec![Type::I64], Type::Unit),
             Self::EmptyStr => function(Vec::new(), Type::Str),
             Self::ArgCount => function(Vec::new(), Type::I64),
-            Self::Arg => function(vec![Type::I64], Type::Str),
+            Self::Arg => function(vec![Type::I64], Type::Option(Box::new(Type::Str))),
             Self::BufNew => function(vec![Type::I64], Type::Buf),
             Self::BufLen => function(vec![Type::Buf], Type::I64),
             Self::BufRef | Self::BufGetU32 => function(vec![Type::Buf, Type::I64], Type::I64),
@@ -412,6 +417,27 @@ impl Operation {
             Self::UnwrapErr => {
                 let result = generic_result();
                 forall(&["T", "E"], function(vec![result], Type::Param("E".into())))
+            }
+            Self::Some => {
+                let value = Type::Param("T".into());
+                forall(
+                    &["T"],
+                    function(vec![value.clone()], Type::Option(Box::new(value))),
+                )
+            }
+            Self::IsSome => {
+                let value = Type::Param("T".into());
+                forall(
+                    &["T"],
+                    function(vec![Type::Option(Box::new(value))], Type::Bool),
+                )
+            }
+            Self::UnwrapSome => {
+                let value = Type::Param("T".into());
+                forall(
+                    &["T"],
+                    function(vec![Type::Option(Box::new(value.clone()))], value),
+                )
             }
         }
     }
@@ -499,7 +525,8 @@ impl Operation {
             | Self::BufNew
             | Self::BufClone
             | Self::Ok
-            | Self::Err => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
+            | Self::Err
+            | Self::Some => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
             Self::Car
             | Self::Cdr
             | Self::BufRef
@@ -507,9 +534,10 @@ impl Operation {
             | Self::StrRef
             | Self::StrSlice
             | Self::UnwrapOk
-            | Self::UnwrapErr => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
+            | Self::UnwrapErr
+            | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufSet | Self::BufSetU32 => EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP),
-            Self::BufLen | Self::StrLen | Self::IsOk => EffectSet::READS_MEMORY,
+            Self::BufLen | Self::StrLen | Self::IsOk | Self::IsSome => EffectSet::READS_MEMORY,
             Self::Print
             | Self::Flush
             | Self::ReadByte
@@ -553,7 +581,6 @@ impl Operation {
             | Self::BitAnd
             | Self::BitOr
             | Self::BitXor
-            | Self::IsNil
             | Self::And
             | Self::Or
             | Self::IsEmptyList => EffectSet::PURE,

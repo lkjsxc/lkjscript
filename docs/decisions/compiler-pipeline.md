@@ -32,9 +32,9 @@ facts, source origins, canonical operation identities and per-call signatures,
 and conservative effects. Code generation consumes HIR rather than re-parsing
 definitions, parameters, operators, and names independently.
 
-`Unit` is distinct from legacy nil, and every `if` has exactly three operands
-with exactly matching branch types. HIR therefore has no legacy runtime-union
-escape hatch. User calls conservatively carry every effect until fixed-point
+`Unit`, typed empty lists, and Option have exact distinct HIR/runtime semantics,
+and every `if` has exactly three operands with matching branch types. Nil and
+the legacy runtime-union escape hatch are absent. User calls conservatively carry every effect until fixed-point
 function summaries replace the safe over-approximation.
 
 Typed SSA uses explicit basic-block parameters, exact scalar/product types,

@@ -60,8 +60,8 @@ fn push_number<J: JitHook>(vm: &mut Vm<'_, J>, number: Number) {
 }
 
 pub fn bin_arithmetic<J: JitHook>(vm: &mut Vm<'_, J>, operation: Arithmetic) -> Result<()> {
-    let right_value = vm.pop();
-    let left_value = vm.pop();
+    let right_value = vm.pop()?;
+    let left_value = vm.pop()?;
     let right = number(vm, right_value)?;
     let left = number(vm, left_value)?;
     let result = match (left, right) {
@@ -113,8 +113,8 @@ impl Arithmetic {
 }
 
 pub fn bin_ordering<J: JitHook>(vm: &mut Vm<'_, J>, ordering: Ordering) -> Result<()> {
-    let right_value = vm.pop();
-    let left_value = vm.pop();
+    let right_value = vm.pop()?;
+    let left_value = vm.pop()?;
     let right = number(vm, right_value)?;
     let left = number(vm, left_value)?;
     let result = match (left, right) {
@@ -167,12 +167,12 @@ mod tests {
     use crate::run::Vm;
 
     fn pop_i64(vm: &mut Vm<'_, NullJit>) -> i64 {
-        let value = vm.pop();
+        let value = vm.pop().expect("numeric result on stack");
         vm.as_i64(value).expect("I64 result")
     }
 
     fn pop_f64(vm: &mut Vm<'_, NullJit>) -> f64 {
-        let value = vm.pop();
+        let value = vm.pop().expect("numeric result on stack");
         let HeapObj::Float(number) = vm.arena.get(value).expect("F64 result") else {
             panic!("expected F64 result");
         };
@@ -273,7 +273,10 @@ mod tests {
         vm.push(left);
         vm.push(right);
         bin_ordering(&mut vm, Ordering::Less).expect("exact I64 ordering");
-        assert_eq!(vm.pop().as_bool(), Some(true));
+        assert_eq!(
+            vm.pop().expect("comparison result on stack").as_bool(),
+            Some(true)
+        );
 
         let close_left = vm.arena.alloc(HeapObj::Float(1.0));
         let close_right = vm.arena.alloc(HeapObj::Float(1.0 + 5.0e-13));

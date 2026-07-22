@@ -7,21 +7,23 @@ use std::fmt;
 pub struct Value(u64);
 
 const TAG_MASK: u64 = 0b111;
-const TAG_NIL: u64 = 0;
+const TAG_INVALID: u64 = 0;
 const TAG_BOOL: u64 = 1;
 const TAG_INT: u64 = 2;
 const TAG_HEAP: u64 = 3;
 const TAG_HANDLE: u64 = 4;
 const TAG_UNIT: u64 = 5;
 const TAG_EMPTY_LIST: u64 = 6;
+const TAG_NONE: u64 = 7;
 
 pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
 pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
 
 impl Value {
-    pub const NIL: Self = Self(TAG_NIL);
+    pub const INVALID: Self = Self(TAG_INVALID);
     pub const UNIT: Self = Self(TAG_UNIT);
     pub const EMPTY_LIST: Self = Self(TAG_EMPTY_LIST);
+    pub const NONE: Self = Self(TAG_NONE);
     pub const FALSE: Self = Self(TAG_BOOL);
     pub const TRUE: Self = Self((1 << 3) | TAG_BOOL);
 
@@ -48,8 +50,8 @@ impl Value {
         Self(((index as u64) << 3) | TAG_HANDLE)
     }
 
-    pub fn is_nil(self) -> bool {
-        self.0 & TAG_MASK == TAG_NIL
+    pub fn is_invalid(self) -> bool {
+        self.0 == TAG_INVALID
     }
 
     pub fn is_unit(self) -> bool {
@@ -58,6 +60,10 @@ impl Value {
 
     pub fn is_empty_list(self) -> bool {
         self.0 == TAG_EMPTY_LIST
+    }
+
+    pub fn is_none(self) -> bool {
+        self.0 == TAG_NONE
     }
 
     pub fn as_bool(self) -> Option<bool> {
@@ -88,16 +94,6 @@ impl Value {
         Some((self.0 >> 3) as u32)
     }
 
-    pub fn is_truthy(self) -> bool {
-        if self.is_nil() {
-            return false;
-        }
-        if let Some(b) = self.as_bool() {
-            return b;
-        }
-        true
-    }
-
     pub fn raw(self) -> u64 {
         self.0
     }
@@ -105,14 +101,17 @@ impl Value {
 
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_nil() {
-            return write!(f, "nil");
+        if self.is_invalid() {
+            return write!(f, "#<invalid>");
         }
         if self.is_unit() {
             return write!(f, "unit");
         }
         if self.is_empty_list() {
             return write!(f, "empty-list");
+        }
+        if self.is_none() {
+            return write!(f, "none");
         }
         if let Some(b) = self.as_bool() {
             return write!(f, "{b}");
@@ -142,6 +141,7 @@ pub enum HeapObj {
     Buf(Vec<u8>),
     ResultOk(Value),
     ResultErr(Value),
+    OptionSome(Value),
 }
 
 impl HeapObj {
@@ -156,7 +156,7 @@ impl HeapObj {
                     mark(*c);
                 }
             }
-            HeapObj::ResultOk(v) | HeapObj::ResultErr(v) => mark(*v),
+            HeapObj::ResultOk(v) | HeapObj::ResultErr(v) | HeapObj::OptionSome(v) => mark(*v),
             _ => {}
         }
     }
@@ -168,17 +168,18 @@ mod tests {
     use super::{Value, MAX_SMALL_I64, MIN_SMALL_I64};
 
     #[test]
-    fn unit_is_distinct_from_nil() {
+    fn semantic_singletons_are_distinct_from_invalid() {
+        assert!(Value::INVALID.is_invalid());
         assert!(Value::UNIT.is_unit());
-        assert!(!Value::UNIT.is_nil());
-        assert!(Value::NIL.is_nil());
-        assert!(!Value::NIL.is_unit());
-        assert_ne!(Value::UNIT, Value::NIL);
+        assert!(!Value::UNIT.is_invalid());
         assert!(Value::EMPTY_LIST.is_empty_list());
         assert!(!Value::EMPTY_LIST.is_unit());
-        assert!(!Value::EMPTY_LIST.is_nil());
-        assert_ne!(Value::EMPTY_LIST, Value::UNIT);
-        assert_ne!(Value::EMPTY_LIST, Value::NIL);
+        assert!(!Value::EMPTY_LIST.is_invalid());
+        assert!(Value::NONE.is_none());
+        assert!(!Value::NONE.is_invalid());
+        assert_ne!(Value::UNIT, Value::EMPTY_LIST);
+        assert_ne!(Value::UNIT, Value::NONE);
+        assert_ne!(Value::EMPTY_LIST, Value::NONE);
     }
 
     #[test]

@@ -50,8 +50,8 @@ baseline.
    [performance-scorecard.md](performance-scorecard.md).
 2. Use the current resolved typed HIR and canonical operation registry as the
    sole semantic boundary for every migration and backend.
-3. Migrate the semantic core in complete corpus-preserving slices: Unit and
-   strict if; Option and empty lists; comparison split; explicit main; local
+3. Continue the semantic-core migration after the landed Unit, strict-if,
+   Option, and typed-empty-list slices: comparison split; explicit main; local
    mutation and immutable global data.
 4. Validate public chunks and return process-safe VM outcomes.
 5. Lower HIR into typed SSA with explicit block parameters, traps, and effects.

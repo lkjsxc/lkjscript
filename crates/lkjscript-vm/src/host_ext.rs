@@ -295,6 +295,30 @@ pub fn unwrap_err(arena: &Arena, value: Value) -> Result<Value> {
     }
 }
 
+pub fn option_some(arena: &mut Arena, value: Value) -> Value {
+    arena.alloc(HeapObj::OptionSome(value))
+}
+
+pub fn is_some(arena: &Arena, value: Value) -> Result<Value> {
+    if value.is_none() {
+        return Ok(Value::FALSE);
+    }
+    match arena.get(value)? {
+        HeapObj::OptionSome(_) => Ok(Value::TRUE),
+        _ => Err(Error::msg("is-some: expected Option")),
+    }
+}
+
+pub fn unwrap_some(arena: &Arena, value: Value) -> Result<Value> {
+    if value.is_none() {
+        return Err(Error::msg("unwrap-some on none"));
+    }
+    match arena.get(value)? {
+        HeapObj::OptionSome(inner) => Ok(*inner),
+        _ => Err(Error::msg("unwrap-some: expected Option")),
+    }
+}
+
 pub fn str_from_i64(arena: &mut Arena, number: i64) -> Value {
     arena.alloc(HeapObj::Str(number.to_string()))
 }
@@ -307,6 +331,7 @@ pub fn str_from_f64(arena: &mut Arena, number: Value) -> Result<Value> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use std::fs;
     use std::path::PathBuf;
@@ -317,8 +342,8 @@ mod tests {
     use crate::arena::Arena;
 
     use super::{
-        as_str, is_ok, language_result, str_from_f64, str_from_i64, unwrap_err, unwrap_ok,
-        ResourceTable,
+        as_str, is_ok, is_some, language_result, option_some, str_from_f64, str_from_i64,
+        unwrap_err, unwrap_ok, unwrap_some, ResourceTable,
     };
 
     static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
@@ -344,7 +369,7 @@ mod tests {
     #[test]
     fn integer_and_borrowed_handles_cannot_be_closed() {
         let mut table = ResourceTable::default();
-        let integer = Value::from_small_i64(16).unwrap_or(Value::NIL);
+        let integer = Value::from_small_i64(16).expect("16 is an immediate I64");
         assert!(table.close(integer).is_err());
         assert!(table.close(ResourceTable::stdin_handle()).is_err());
     }
@@ -356,7 +381,7 @@ mod tests {
         let mut table = ResourceTable::default();
         let first = table.sys_open_read(&path).ok();
         assert!(first.is_some());
-        let first = first.unwrap_or(Value::NIL);
+        let first = first.expect("open first temporary file");
         assert_ne!(first, ResourceTable::stdin_handle());
         assert!(table.close(first).is_ok());
         assert!(table.close(first).is_err());
@@ -364,7 +389,7 @@ mod tests {
 
         let second = table.sys_open_read(&path).ok();
         assert!(second.is_some());
-        let second = second.unwrap_or(Value::NIL);
+        let second = second.expect("open second temporary file");
         assert_ne!(first, second);
         assert!(table.close(second).is_ok());
         Ok(())
@@ -375,7 +400,9 @@ mod tests {
         let file = TempFile::new()?;
         let path = file.0.to_string_lossy();
         let mut table = ResourceTable::default();
-        let handle = table.sys_open_read(&path).ok().unwrap_or(Value::NIL);
+        let handle = table
+            .sys_open_read(&path)
+            .expect("open temporary file as handle");
         assert!(table.sys_listen(handle, 1).is_err());
         Ok(())
     }
@@ -383,7 +410,7 @@ mod tests {
     #[test]
     fn socket_ranges_are_checked_before_os_calls() {
         let mut table = ResourceTable::default();
-        let socket = table.sys_socket().ok().unwrap_or(Value::NIL);
+        let socket = table.sys_socket().expect("create test socket");
         assert!(table.sys_bind(socket, -1).is_err());
         assert!(table.sys_bind(socket, 65_536).is_err());
         assert!(table.sys_listen(socket, -1).is_err());
@@ -395,7 +422,7 @@ mod tests {
         let mut arena = Arena::default();
         let result = language_result(&mut arena, Err(Error::msg("sys-example: failure")));
         assert_eq!(is_ok(&arena, result).ok(), Some(Value::FALSE));
-        let error = unwrap_err(&arena, result).ok().unwrap_or(Value::NIL);
+        let error = unwrap_err(&arena, result).expect("unwrap Result error");
         assert_eq!(as_str(&arena, error).ok(), Some("sys-example: failure"));
         let unwrapped = unwrap_ok(&arena, result)
             .err()
@@ -407,15 +434,32 @@ mod tests {
     }
 
     #[test]
+    fn option_variants_are_distinct_and_type_checked() {
+        let mut arena = Arena::default();
+        assert_eq!(is_some(&arena, Value::NONE).ok(), Some(Value::FALSE));
+        assert!(unwrap_some(&arena, Value::NONE)
+            .expect_err("none must not unwrap")
+            .to_string()
+            .contains("unwrap-some on none"));
+
+        let payload = Value::from_small_i64(7).expect("7 is an immediate I64");
+        let some = option_some(&mut arena, payload);
+        assert_eq!(is_some(&arena, some).ok(), Some(Value::TRUE));
+        assert_eq!(unwrap_some(&arena, some).ok(), Some(payload));
+        assert!(is_some(&arena, Value::UNIT).is_err());
+        assert!(unwrap_some(&arena, Value::EMPTY_LIST).is_err());
+    }
+
+    #[test]
     fn numeric_string_conversions_are_type_strict_and_exact() {
         let mut arena = Arena::default();
         let text = str_from_i64(&mut arena, i64::MIN);
         assert_eq!(as_str(&arena, text).ok(), Some("-9223372036854775808"));
 
-        let integer = Value::from_small_i64(2).unwrap_or(Value::NIL);
+        let integer = Value::from_small_i64(2).expect("2 is an immediate I64");
         assert!(str_from_f64(&mut arena, integer).is_err());
         let float = arena.alloc(HeapObj::Float(2.0));
-        let text = str_from_f64(&mut arena, float).ok().unwrap_or(Value::NIL);
+        let text = str_from_f64(&mut arena, float).expect("format F64");
         assert_eq!(as_str(&arena, text).ok(), Some("2"));
     }
 }

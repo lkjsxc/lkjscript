@@ -93,6 +93,16 @@ mod tests {
     }
 
     #[test]
+    fn option_some_traces_its_payload() {
+        let mut arena = Arena::default();
+        let payload = arena.alloc(HeapObj::Str("kept by some".into()));
+        let some = arena.alloc(HeapObj::OptionSome(payload));
+        arena.collect(&[some]);
+        assert!(arena.get(some).is_ok());
+        assert!(arena.get(payload).is_ok());
+    }
+
+    #[test]
     fn collection_resets_pressure_for_large_arenas() {
         let mut arena = Arena::default();
         let roots: Vec<_> = (0..4097)
