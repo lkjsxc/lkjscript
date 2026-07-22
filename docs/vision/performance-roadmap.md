@@ -48,8 +48,8 @@ baseline.
 
 1. Establish the category and metadata rules in
    [performance-scorecard.md](performance-scorecard.md).
-2. Replace duplicate AST typechecking/codegen interpretation with resolved typed
-   HIR consumed by bytecode lowering.
+2. Use the current resolved typed HIR and canonical operation registry as the
+   sole semantic boundary for every migration and backend.
 3. Migrate the semantic core in complete corpus-preserving slices: Unit and
    strict if; Option and empty lists; comparison split; explicit main; local
    mutation and immutable global data.

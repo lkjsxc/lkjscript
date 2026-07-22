@@ -40,8 +40,9 @@ The actual dependency edges are:
 | Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` |
 | Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
 | Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
-| Static types | `crates/lkjscript-compiler/src/types/` | `typecheck_program`, inference and prelude |
-| Bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program` |
+| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `hir.rs`, `operation.rs` | `analyze_program`, BindingId, typed operations/effects |
+| Type representation | `crates/lkjscript-compiler/src/types/` | canonical Type parsing and substitution |
+| HIR bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program` |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-vm/src/arena.rs` | `Arena` |
@@ -62,26 +63,26 @@ CLI path
   -> per-file source limits
   -> parse matched forms
   -> validate top-level forms
-  -> install and check global signatures
-  -> lower to Chunk + FunctionProto bytecode
+  -> collect declaration headers
+  -> resolve names and types into owned HIR
+  -> lower resolved HIR to Chunk + FunctionProto bytecode
   -> run_chunk_with_args
 ```
 
 Imported definitions currently share one program-global namespace. Modules,
 exports, package versions, locks, and serialized bytecode are absent.
 
-## Accepted Compiler Pipeline
+## Compiler Pipeline Status
 
-The accepted replacement is parsed AST -> resolved typed HIR -> typed SSA,
-with reference bytecode, native AOT, direct Wasm, and future JIT consuming the
-same semantic IR family. HIR owns binding identity, type, declaration kind,
-canonical operation, source origin, and later effects; codegen no longer
-re-parses declarations or resolves names. Native scalar/product representations
-replace universal tagged values on typed hot paths.
+Parsed AST -> resolved typed HIR -> reference bytecode is **Current**. HIR owns
+binding identity, static/runtime type facts, declaration kind, canonical
+operation and resolved signature, source origin, and conservative effects;
+codegen no longer re-parses declarations or resolves names.
 
+Typed SSA, native AOT, direct Wasm, and future JIT consuming the same semantic
+IR family remain **Accepted Targets**. Native scalar/product representations
+replace universal tagged values only after differential SSA/backend gates.
 See [Typed Compiler Pipeline And Early AOT](../decisions/compiler-pipeline.md).
-This is an **Accepted Target**; the ownership map and compile flow above remain
-current until implementation lands.
 
 ## Runtime Flow
 
@@ -121,8 +122,8 @@ an external project receives the same contract.
 
 ## Accepted Redesign Direction
 
-Implement a behavior-preserving typed HIR before the breaking semantic slices.
-Then separate Unit/Option/empty lists, split comparisons, establish explicit
+With resolved typed HIR in place, separate Unit/Option/empty lists, split
+comparisons, establish explicit
 main and effect-free libraries, migrate global editor state into an immutable
 product plus one local var, and remove mutable globals. Typed SSA and an early
 Linux x86-64 AOT backend follow differential VM conformance. Real modules,

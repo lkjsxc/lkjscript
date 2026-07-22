@@ -1,9 +1,6 @@
-//! Mandatory type language: Type AST, prelude, and checking.
+//! Reusable type representation and annotation parsing.
 
-mod check;
-mod infer;
-mod prelude;
-mod prelude_sys;
 mod ty;
 
-pub use check::typecheck_program;
+pub(crate) use ty::parse_one;
+pub use ty::Type;

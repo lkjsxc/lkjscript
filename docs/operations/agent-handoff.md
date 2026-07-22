@@ -49,11 +49,10 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Current string/file helpers may perform per-byte syscalls or quadratic string
   construction.
 - VM host operations block and process exit is not process-safe.
-- Bounded terminal operations, monotonic stale-safe handles, truthful system
-  Results, and exact I64/F64 execution have landed. A behavior-preserving
-  resolved typed HIR is the next foundation, followed by the Unit/Option/main/
-  mutation migration. Do not add product frameworks or native claims while
-  untyped analysis and lowering can still disagree.
+- Bounded terminal operations, stale-safe handles, truthful Results, exact
+  I64/F64 execution, and resolved typed HIR have landed. Unit/strict-if is the
+  next semantic slice, followed by Option/empty-list/comparison and explicit
+  main/local-state migration. SSA/AOT remain targets, not current capability.
 
 ## Host Boundary
 

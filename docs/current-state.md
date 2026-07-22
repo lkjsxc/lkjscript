@@ -14,7 +14,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 116 language files under `src`; an exact duplicate lkjedit entry was removed
+- Corpus: 115 language files under `src`; duplicate and builtin-shadowing wrappers were removed
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8, and
@@ -24,6 +24,10 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 - Imports: contained `std/`, `lib/`, `examples/`, and `./` paths with installed
   fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
   and canonicalized symlink escapes fail
+- Compiler boundary: one analysis pass collects headers and produces owned,
+  resolved typed HIR with BindingIds, source origins, operation signatures,
+  explicit legacy runtime unions, and conservative effects; bytecode consumes
+  HIR without re-resolving source names or declarations
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
@@ -56,14 +60,14 @@ explicitly labeled **Accepted Target**, **Placeholder**, or **Deferred**.
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. type analysis and bytecode lowering independently reinterpret the untyped
-   AST, including declarations, names, parameters, and operations;
-2. generic Nil conflates Unit, Option absence, empty lists, falsey/default VM
-   state, and uninitialized mutable globals;
-3. `set`, optional `if`, and out-of-range `arg` behavior still have static or
-   lifecycle disagreements;
-4. imports load files but definitions share one global namespace and top-level
-   initialization order can be unsafe;
+1. generic Nil conflates Unit, Option absence, empty lists, falsey/default VM
+   state, and uninitialized mutable globals; Nil-joined if expressions are
+   explicitly marked as legacy runtime unions in HIR;
+2. mutable values and imports still share one program-global namespace, and
+   top-level execution/initialization remains order-dependent;
+3. out-of-range `arg` still returns Nil despite its declared Str type;
+4. user-call effects are a safe all-effects over-approximation rather than
+   fixed-point summaries;
 5. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
 6. public malformed chunks can reach unchecked VM assumptions;
@@ -80,11 +84,13 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 49 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 60 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
-| `check-sources` | passed for all 116 `.lkjscript` sources; the 11 compiled entry closures equal the corpus exactly |
+| `check-sources` | passed for all 115 `.lkjscript` sources; the 10 compiled entry closures equal the corpus exactly |
 | source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
+| HIR conformance | duplicate/unknown/collision, BindingId shadowing, source origin, generic resolution, effect facts, global set, operation signature, and legacy-union boundaries passed |
+| top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields runtime Nil as typed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
 | Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
@@ -100,23 +106,27 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
 | script argument `--help` after `--` | passed through to the script |
 | `.lkjml` CLI run | rejected with canonical-extension diagnostic |
-| Markdown local links/status audit | 36 files, zero broken links, zero missing statuses |
+| HIR diagnostic performance sample | 31 randomized runs: hello 0.990x, Mandelbrot 0.964x, Leibniz 0.984x, Mandelbrot disassembly 0.899x candidate/baseline median; release binary 1.082x size |
+| Markdown local links/status audit | 39 files, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
-| Docker | not run for this numeric cycle |
-| repeated performance comparison | not run |
+| Docker verify profile | passed after the image was corrected to include machine-required `AGENTS.md` |
+| decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
 
 A gate that did not run did not pass.
 
 ## Accepted Next Target
 
-The replanned safety/performance sequence is:
+The next semantic migration sequence is:
 
-1. introduce a behavior-preserving resolved typed HIR and make bytecode lowering
-   consume it instead of independently resolving the AST;
-2. migrate the complete corpus through Unit/strict-if, explicit Option and empty
-   lists, split equality, explicit main, local mutation, and immutable globals;
-3. validate chunks and return structured VM outcomes, then lower typed HIR to
-   SSA and measure an early Linux x86-64 native AOT backend.
+1. replace Nil-as-Unit and optional-if behavior with Unit and exact three-arm
+   branches while retaining typed empty-list and Option migrations as separate
+   reviewable slices;
+2. add explicit Option/empty-list values and split value/object/structural/F64
+   bit equality;
+3. establish explicit main/effect-free libraries, immutable product state and
+   local var/set, then remove mutable globals;
+4. validate chunks and return structured VM outcomes before typed SSA and the
+   early Linux x86-64 native AOT experiment.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),
 [Typed Compiler Pipeline And Early AOT](decisions/compiler-pipeline.md), and the

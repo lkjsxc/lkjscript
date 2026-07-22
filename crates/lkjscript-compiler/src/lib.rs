@@ -1,10 +1,13 @@
 //! Compile canonical line-oriented `.lkjscript` source into bytecode.
 
+mod analyze;
 mod ast;
 mod codegen;
+mod hir;
 mod import;
 mod lex;
 mod limits_check;
+mod operation;
 mod parse;
 mod types;
 
@@ -12,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use lkjscript_core::{Chunk, Limits, Result};
 
+use crate::analyze::analyze_program;
 use crate::ast::Expr;
 use crate::codegen::compile_program;
 use crate::import::load_program;
@@ -32,7 +36,8 @@ pub fn compile_path_with_sources(path: &Path, limits: &Limits) -> Result<(Chunk,
         .iter()
         .map(|source| source.path.clone())
         .collect();
-    let chunk = compile_program(&program)?;
+    let analyzed = analyze_program(&program)?;
+    let chunk = compile_program(&analyzed)?;
     Ok((chunk, sources))
 }
 
@@ -44,7 +49,8 @@ pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<Chunk
         root: fake.clone(),
         files: vec![import::SourceFile { path: fake, forms }],
     };
-    compile_program(&program)
+    let analyzed = analyze_program(&program)?;
+    compile_program(&analyzed)
 }
 
 pub fn validate_source(source: &str, path: &str, limits: &Limits) -> Result<()> {
@@ -133,10 +139,13 @@ mod tests {
             "I32", "U32", "U64", "F32", "I128", "U8", "F16", "i32", "i64", "u32", "u64", "f32",
             "f64", "i128", "Int", "Float",
         ] {
-            let source = format!("def/\nname/ value /name\ntype/ {ty} /type\n1\n/def\n");
+            let source = format!("def/\nname/\nvalue\n/name\ntype/\n{ty}\n/type\n1\n/def\n");
+            let error = compile_source(&source, "removed-type.lkjscript", &Limits::default())
+                .expect_err("removed numeric type must fail")
+                .to_string();
             assert!(
-                compile_source(&source, "removed-type.lkjscript", &Limits::default()).is_err(),
-                "accepted type {ty}"
+                error.contains("unsupported numeric type"),
+                "wrong diagnostic for {ty}: {error}"
             );
         }
         for name in [

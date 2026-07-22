@@ -233,7 +233,6 @@ fn check_sources(root: &Path) -> i32 {
         "src/examples/lkjedit/main.lkjscript",
         "src/std/io/now-ms.lkjscript",
         "src/std/io/wait.lkjscript",
-        "src/std/term/write-str.lkjscript",
     ];
     let mut covered = HashSet::new();
     for entry in entries {

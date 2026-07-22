@@ -33,7 +33,7 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 4. at most 16 immediate entries in every directory under the language `src`
    tree, using the compiler's shared language rule;
 5. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
-6. successful compilation of 11 roots and exact equality between their reported
+6. successful compilation of 10 roots and exact equality between their reported
    import closures and every canonical source in the corpus;
 7. `cargo fmt --all -- --check`;
 8. strict Clippy for the workspace, all targets, and all features;

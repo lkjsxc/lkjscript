@@ -30,9 +30,10 @@ Every function definition has a mandatory signature and typed parameters.
 `forall/` declares annotation-driven type variables. There is no `Any`, trait,
 typeclass, Hindley-Milner inference, or implemented user-defined type alias.
 
-`set` mutates program-global state. The baseline checker does not yet prove
-that its target exists or matches the declared global type; repairing that
-contract is part of the foundation cycle.
+`set` currently mutates program-global state, but resolved HIR now requires an
+existing mutable value target, assignable value type, and a runtime Nil result.
+Global mutation itself remains temporary and is removed by the accepted local
+`var`/`set` redesign.
 
 ## Accepted Semantic Redesign
 
@@ -51,8 +52,9 @@ The AI-first semantic core is an **Accepted Target**, not current syntax:
 - keep Option absence, Result failure, and process-safe VM Trap outcomes
   distinct.
 
-See [AI-First Semantic Core](../decisions/semantic-core.md). A resolved typed HIR
-lands first so typing and lowering cannot interpret these forms differently.
+See [AI-First Semantic Core](../decisions/semantic-core.md). Resolved typed HIR
+is now the current boundary through which these forms will migrate, so typing
+and lowering cannot interpret them differently.
 
 ## Numeric Contract
 

@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt clippy
-COPY Cargo.toml Cargo.lock README.md ./
+COPY Cargo.toml Cargo.lock README.md AGENTS.md ./
 COPY crates ./crates
 COPY meta/config ./meta/config
 COPY docs ./docs
