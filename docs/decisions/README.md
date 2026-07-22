@@ -13,6 +13,7 @@ Index active architecture decisions separately from superseded history.
 - [bytecode-vm.md](bytecode-vm.md): dense Rust bytecode VM
 - [package-imports.md](package-imports.md): package-root source paths
 - [resource-handles.md](resource-handles.md): stale-safe resources and bounded terminal ABI
+- [system-results.md](system-results.md): truthful host failures as language values
 - [limits/essential-limits.md](limits/essential-limits.md): fixed semantic source budgets
 - [source-tree-limit.md](source-tree-limit.md): 16-entry lkjscript source-directory rule
 - [scratch-host.md](scratch-host.md): owned Linux sys layer and thin host policy
