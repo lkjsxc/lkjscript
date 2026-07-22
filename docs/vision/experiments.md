@@ -266,6 +266,60 @@ backend-ready operation identities. No samples were removed. Temporary source
 snapshots, copied binaries, and detailed JSON were deleted after this compact
 record was committed.
 
+## S5 Immutable Nominal Products: Adopted
+
+- Baseline: `e75dae80410c07df7f3ab42b237101e4eb65876f`
+- Candidate: `6452104a098f8aa127a13de44fce3c34615e3f78`
+- Semantic result: zero-to-15-field nominal product declarations, exact ordered
+  construction, typed named access, immutable field replacement, deterministic
+  ProductIds/field descriptors, bytecode/disassembly metadata, precise tracing,
+  and malformed-VM checks are Current. Product declarations add no runtime
+  global or initializer, and all equality families reject Product values.
+- Correctness: 88 tests, exact 127-source/11-root closure, strict Clippy, product
+  source-to-VM execution/disassembly, hello, direct Mandelbrot, Brainfuck smoke,
+  lkjedit, HTTP, release build, and Docker verification passed. Baseline and
+  candidate output bytes were identical for hello, direct Mandelbrot,
+  Leibniz-200000, and folded Brainfuck hello. Candidate Mandelbrot remained
+  1,176 bytes with SHA-256
+  `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907`.
+  A separate full folded Brainfuck Mandelbrot correctness run completed in
+  1,381.302003 seconds and was byte-equal to the independent 6,240-byte oracle
+  with SHA-256
+  `83a0aac65090b3b5e85c22337afac39d8ac17bfd88675f044b33bd55ca0c351b`;
+  its bounded 10-second diagnostic timed out as expected. This one correctness
+  run is not a replacement performance sample. Mandelbrot disassembly
+  intentionally gained empty product metadata tables.
+- Environment: Linux 7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX
+  16-core/32-thread CPU with 20 logical CPUs available to the Python process,
+  32 GiB RAM, Rust/Cargo 1.96.0, Python 3.12.3.
+- Build: locked release builds from one Cargo target tree, run sequentially.
+  Baseline binary SHA-256 was
+  `2e34fa70e7ff579b4f4750762f24b457e2a646c08ce0eaa8165e97d9afc66987`;
+  candidate SHA-256 was
+  `d2c0a10b3d9febe276efcf5643f366b4d45761857db21df4d74ad957ac33c043`.
+- Timing: four warmups per variant/workload followed by 31 samples per variant
+  and workload in deterministic randomized order (seed
+  `0x50524F44554354`, decimal `22608498539184980`); monotonic end-to-end process
+  wall time with stdout
+  discarded. Entries are median / MAD / p95 milliseconds.
+
+| Workload | Pre-product baseline | Nominal products | Candidate / baseline |
+| --- | ---: | ---: | ---: |
+| hello compile + run | 0.496 / 0.064 / 1.344 | 0.501 / 0.050 / 1.386 | 1.011 |
+| Mandelbrot compile + run | 5.547 / 0.162 / 6.932 | 5.252 / 0.086 / 6.460 | 0.947 |
+| Leibniz-200000 compile + run | 72.659 / 1.424 / 86.283 | 72.201 / 1.405 / 75.228 | 0.994 |
+| Mandelbrot compile + disassemble | 0.818 / 0.093 / 2.272 | 0.840 / 0.102 / 1.801 | 1.028 |
+| Brainfuck hello compile + run | 1.799 / 0.160 / 3.056 | 1.763 / 0.079 / 2.705 | 0.980 |
+
+Release binary size increased from 663,888 to 702,160 bytes (1.058x). No
+performance threshold was selected before this semantic prerequisite. The
+runtime sample is diagnostic: sub-millisecond process-startup noise is large,
+Mandelbrot moved faster rather than slower, and no runtime median regression
+exceeded 3%. The 5.8% binary-size increase is retained visibly for later native
+backend/resource scorecards; it does not override the required product-state
+semantics. No samples were discarded. Temporary worktree, copied binaries,
+harness, and detailed JSON are deleted after this compact record is committed.
+
 ## B1 Brainfuck Mandelbrot Interpreter: Adopted
 
 - Question: can a straightforward Brainfuck interpreter authored in canonical

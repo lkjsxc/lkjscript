@@ -50,10 +50,10 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   construction.
 - VM host operations block and process exit is not process-safe.
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
-  I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists, and
-  Option/no-nil and explicit equality families have landed. Explicit
-  main/local-state migration is next, followed by chunk validation and process-safe
-  outcomes. Typed SSA, shared native code objects, runtime JIT, loop OSR, and a
+  I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists,
+  Option/no-nil, explicit equality families, and immutable nominal products have
+  landed. Product-state threading plus explicit main/local mutation is next,
+  followed by chunk validation and process-safe outcomes. Typed SSA, shared native code objects, runtime JIT, loop OSR, and a
   minimal AOT test emitter remain targets, not current capability. Offline PGO
   is rejected by product decision.
 
