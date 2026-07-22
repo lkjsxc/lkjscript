@@ -12,6 +12,8 @@ pub enum Type {
     Buf,
     Symbol,
     Handle,
+    /// Globally unique nominal product declaration name.
+    Product(String),
     /// Type parameter (annotation-driven polymorphism).
     Param(String),
     List(Box<Type>),
@@ -120,6 +122,15 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         "Buf" => Ok((Type::Buf, i + 1)),
         "Symbol" => Ok((Type::Symbol, i + 1)),
         "Handle" => Ok((Type::Handle, i + 1)),
+        "Product" => {
+            let Some(name) = atoms.get(i + 1) else {
+                return Err("Product requires a declared product name".into());
+            };
+            if !is_product_type_name(name) {
+                return Err(format!("invalid product type name {name}"));
+            }
+            Ok((Type::Product(name.clone()), i + 2))
+        }
         "List" => {
             let (inner, next) = parse_one(atoms, i + 1)?;
             Ok((Type::List(Box::new(inner)), next))
@@ -166,15 +177,38 @@ fn is_type_param_name(s: &str) -> bool {
                 | "List"
                 | "Option"
                 | "Result"
+                | "Product"
                 | "Int"
                 | "Float"
                 | "Any"
         )
 }
 
+fn is_product_type_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase())
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_one, Type};
+
+    #[test]
+    fn product_types_are_explicit_and_nominal_by_name() {
+        let atoms = vec!["List".into(), "Product".into(), "Point".into()];
+        assert_eq!(
+            parse_one(&atoms, 0),
+            Ok((Type::List(Box::new(Type::Product("Point".into()))), 3))
+        );
+        assert!(parse_one(&["Product".into()], 0).is_err());
+        assert!(parse_one(&["Product".into(), "lowercase".into()], 0).is_err());
+    }
 
     #[test]
     fn only_canonical_numeric_type_names_are_accepted() {

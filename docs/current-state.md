@@ -18,29 +18,31 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - Corpus: 127 language files under `src`; duplicate and builtin-shadowing wrappers were removed
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
-- Source limits: depth 8, form children 16, tokens 384, top-level forms 8, and
-  16 combined immediate files/directories per source directory
+- Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
+  product fields 15, and 16 combined immediate files/directories per source
+  directory
 - Source-tree scope: the width rule applies to language source directories,
   not Rust, docs, metadata, `.git`, or generated Cargo output
 - Imports: contained `std/`, `lib/`, `examples/`, and `./` paths with installed
   fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
   and canonicalized symlink escapes fail
 - Compiler boundary: one analysis pass collects headers and produces owned,
-  resolved typed HIR with BindingIds, source origins, exact operation/type
-  facts, and conservative effects; bytecode consumes HIR without re-resolving
-  source names or declarations
+  resolved typed HIR with BindingIds, ProductIds, numeric field identities,
+  source origins, exact operation/type facts, and conservative effects; bytecode
+  consumes HIR without re-resolving source names or declarations
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
-  and return-adjacent tail-frame reuse
+  traced immutable product objects, and return-adjacent tail-frame reuse
 - Semantics: Unit, typed empty-list, and Option none have distinct singleton
   tags, while Option some is traced; `nil`, `Nil`, `nil?`, and `null?` are
   removed; `arg` returns `Option Str`; empty `do`/`while`/`set` return Unit;
   universal `eq`/`ne` are removed in favor of exact value, object-identity,
-  bounded structural-list, and F64-bit equality families
+  bounded structural-list, and F64-bit equality families; nominal products have
+  ordered named fields, exact construction, access, and immutable replacement
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
@@ -77,8 +79,9 @@ The highest-priority defects are:
 3. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
 4. public malformed chunks are not prevalidated, although stack underflow,
-   uninitialized slots, bad slot indexes, removed opcodes, and non-Bool control
-   now return VM errors instead of semantic fallback values;
+   uninitialized slots, bad slot indexes, removed opcodes, non-Bool control, and
+   malformed product metadata/descriptor/category/identity boundaries now return
+   VM errors instead of semantic fallback values;
 5. source/import aggregate bytes, depth, count, constants, globals, bytecode,
    VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
 6. process exit/terminal state remain process-global, and monotonic handle
@@ -92,12 +95,12 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 80 workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 88 workspace tests passed |
 | `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
 | documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
 | `check-sources` | passed for all 127 `.lkjscript` sources; the 11 compiled entry closures equal the corpus exactly |
 | source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
-| HIR conformance | duplicate/unknown/collision, BindingId shadowing, generic resolution, effects, global set, exact `if`, typed empty-list, Option, explicit equality, and `arg` boundaries passed |
+| HIR conformance | duplicate/unknown/collision, BindingId shadowing, ProductId/field resolution, generic resolution, effects, global set, exact `if`, typed empty-list, Option, explicit equality, and `arg` boundaries passed |
 | top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields dedicated Unit as typed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
@@ -112,6 +115,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | system Result workload | missing open, repeated close, and negative wait returned errors; later expressions ran; exit 0 |
 | Result unit coverage | malformed path, invalid handle/timeout/range, error text, and canonical names passed |
 | equality conformance | exact scalar/Option/Result value equality, Buf/Handle identity, bounded structural List equality, F64 bit equality, category errors, removed `eq`/`ne`, and retired opcode 21 passed |
+| nominal product conformance | zero/15/16-field boundaries, forward/nested nominal types, declaration/field collisions, exact constructor shape/order/types, access/update typing/effects/order/immutability, equality rejection, GC tracing, disassembly, and malformed VM boundaries passed |
 | numeric conformance | complete I64 boundaries, boxed transition, checked arithmetic/division, IEEE F64 identity/equality, exact F64-bit equality, 64-bit bitwise, byte/u32 narrowing, and removed vocabulary passed |
 | numeric CLI boundary | exact `9007199254740993 + 2`; overflow and `1e3` rejected |
 | `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
@@ -122,7 +126,7 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | typed-empty-list diagnostic sample | 31 randomized runs: hello 1.002x, Mandelbrot 0.979x, Leibniz-200,000 0.937x, Mandelbrot disassembly 1.003x candidate/baseline median; release binary 1.009x size |
 | Option/no-nil diagnostic sample | 31 randomized runs: hello 0.994x, Mandelbrot 1.027x, Leibniz-200,000 1.015x, Mandelbrot disassembly 1.014x candidate/baseline median; release binary 1.012x size |
 | explicit-equality diagnostic sample | 31 randomized runs: hello 1.029x, Mandelbrot 1.003x, Leibniz-200000 0.978x, Mandelbrot disassembly 0.972x, Brainfuck hello 0.998x candidate/baseline median; release binary 1.006x size |
-| Markdown local links/status audit | 41 files, zero broken links, zero missing statuses |
+| Markdown local links/status audit | 71 files scanned, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
 | Docker verify profile | passed; the verification image includes machine-required `AGENTS.md` and committed benchmark documentation link targets |
 | decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
@@ -133,13 +137,11 @@ A gate that did not run did not pass.
 
 The next implementation sequence is:
 
-1. implement the accepted nominal immutable product slice through typed HIR,
-   bytecode, GC, VM, malformed-chunk checks, and differential tests;
-2. use products to establish explicit main/effect-free libraries and local
-   var/set, then remove mutable globals;
-3. compute required effect summaries, validate chunks, and return structured
+1. use current products to establish explicit main/effect-free libraries and
+   local var/set, then remove mutable globals;
+2. compute required effect summaries, validate chunks, and return structured
    process-safe VM outcomes;
-4. implement typed SSA and its verifier/differential oracle before the shared
+3. implement typed SSA and its verifier/differential oracle before the shared
    Linux x86-64 code-object backend and function-triggered baseline JIT.
 
 The contracts are [AI-First Semantic Core](decisions/semantic-core.md),

@@ -1,6 +1,9 @@
 //! Opcode dispatch.
 
-use lkjscript_core::{Error, HeapObj, JitHook, Op, Result, Value, MAX_LIST_EQUAL_STEPS};
+use lkjscript_core::{
+    Error, HeapObj, JitHook, Op, ProductFieldRef, ProductId, Result, Value, MAX_LIST_EQUAL_STEPS,
+    MAX_PRODUCT_FIELDS,
+};
 
 use super::calls::{call, car, cdr, make_closure};
 use super::numeric::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
@@ -162,6 +165,97 @@ fn f64_bits_equal<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
+fn product_metadata<'a, J: JitHook>(
+    vm: &'a Vm<'_, J>,
+    product: ProductId,
+) -> Result<&'a lkjscript_core::ProductMetadata> {
+    let metadata = vm
+        .chunk
+        .products
+        .get(product.index())
+        .filter(|metadata| metadata.id == product)
+        .ok_or_else(|| Error::msg("product metadata index or identity is invalid"))?;
+    if metadata.fields.len() > MAX_PRODUCT_FIELDS {
+        return Err(Error::msg("product metadata exceeds field limit"));
+    }
+    Ok(metadata)
+}
+
+fn product_field_ref<J: JitHook>(vm: &Vm<'_, J>, index: usize) -> Result<ProductFieldRef> {
+    let field_ref = vm
+        .chunk
+        .product_fields
+        .get(index)
+        .copied()
+        .ok_or_else(|| Error::msg("product field descriptor index out of range"))?;
+    let metadata = product_metadata(vm, field_ref.product)?;
+    if usize::from(field_ref.field) >= metadata.fields.len() {
+        return Err(Error::msg("product field index out of range"));
+    }
+    Ok(field_ref)
+}
+
+fn make_product<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+    let product = ProductId::new(vm.read_u16()?);
+    let field_count = product_metadata(vm, product)?.fields.len();
+    let mut fields = Vec::with_capacity(field_count);
+    for _ in 0..field_count {
+        fields.push(vm.pop()?);
+    }
+    fields.reverse();
+    let value = vm.arena.alloc(HeapObj::Product { product, fields });
+    vm.push(value);
+    Ok(())
+}
+
+fn load_product_field<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+    let descriptor = vm.read_u16()? as usize;
+    let field_ref = product_field_ref(vm, descriptor)?;
+    let value = vm.pop()?;
+    if value.as_heap().is_none() {
+        return Err(Error::msg("product field access expects Product"));
+    }
+    let field = match vm.arena.get(value)? {
+        HeapObj::Product { product, fields } if *product == field_ref.product => fields
+            .get(usize::from(field_ref.field))
+            .copied()
+            .ok_or_else(|| Error::msg("product value field count does not match metadata"))?,
+        HeapObj::Product { .. } => {
+            return Err(Error::msg("product field access identity mismatch"));
+        }
+        _ => return Err(Error::msg("product field access expects Product")),
+    };
+    vm.push(field);
+    Ok(())
+}
+
+fn with_product_field<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+    let descriptor = vm.read_u16()? as usize;
+    let field_ref = product_field_ref(vm, descriptor)?;
+    let replacement = vm.pop()?;
+    let value = vm.pop()?;
+    if value.as_heap().is_none() {
+        return Err(Error::msg("product field replacement expects Product"));
+    }
+    let mut fields = match vm.arena.get(value)? {
+        HeapObj::Product { product, fields } if *product == field_ref.product => fields.clone(),
+        HeapObj::Product { .. } => {
+            return Err(Error::msg("product field replacement identity mismatch"));
+        }
+        _ => return Err(Error::msg("product field replacement expects Product")),
+    };
+    let field = fields
+        .get_mut(usize::from(field_ref.field))
+        .ok_or_else(|| Error::msg("product value field count does not match metadata"))?;
+    *field = replacement;
+    let updated = vm.arena.alloc(HeapObj::Product {
+        product: field_ref.product,
+        fields,
+    });
+    vm.push(updated);
+    Ok(())
+}
+
 fn bin_bits<J: JitHook>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
@@ -284,6 +378,9 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             Ok(())
         }
         x if x == Op::MakeClosure as u8 => make_closure(vm),
+        x if x == Op::MakeProduct as u8 => make_product(vm),
+        x if x == Op::LoadProductField as u8 => load_product_field(vm),
+        x if x == Op::WithProductField as u8 => with_product_field(vm),
         x if x == Op::Call as u8 => {
             let argc = vm.read_u8()?;
             call(vm, argc)

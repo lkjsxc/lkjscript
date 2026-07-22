@@ -103,6 +103,30 @@ mod tests {
     }
 
     #[test]
+    fn product_traces_every_nested_payload() {
+        let mut arena = Arena::default();
+        let payload = arena.alloc(HeapObj::Str("nested".into()));
+        let inner_product = arena.alloc(HeapObj::Product {
+            product: lkjscript_core::ProductId::new(1),
+            fields: vec![payload],
+        });
+        let list = arena.alloc(HeapObj::Pair {
+            car: inner_product,
+            cdr: Value::EMPTY_LIST,
+        });
+        let result = arena.alloc(HeapObj::ResultOk(list));
+        let option = arena.alloc(HeapObj::OptionSome(result));
+        let outer_product = arena.alloc(HeapObj::Product {
+            product: lkjscript_core::ProductId::new(0),
+            fields: vec![option],
+        });
+        arena.collect(&[outer_product]);
+        for value in [outer_product, option, result, list, inner_product, payload] {
+            assert!(arena.get(value).is_ok());
+        }
+    }
+
+    #[test]
     fn collection_resets_pressure_for_large_arenas() {
         let mut arena = Arena::default();
         let roots: Vec<_> = (0..4097)

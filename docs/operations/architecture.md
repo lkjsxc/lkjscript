@@ -75,8 +75,9 @@ exports, package versions, locks, and serialized bytecode are absent.
 ## Compiler Pipeline Status
 
 Parsed AST -> resolved typed HIR -> reference bytecode is **Current**. HIR owns
-binding identity, exact static type facts, declaration kind, canonical
-operation and resolved signature, source origin, and conservative effects;
+binding identity, nominal product/field identity, exact static type facts,
+declaration kind, canonical operation and resolved signature, source origin,
+and conservative effects;
 codegen no longer re-parses declarations or resolves names.
 
 Typed SSA, a shared native code-object backend, function/loop-triggered runtime
@@ -140,10 +141,10 @@ an external project receives the same contract.
 
 ## Accepted Redesign Direction
 
-With resolved typed HIR and separate Unit/Option/empty-list semantics plus
-explicit equality families in place, establish explicit main and effect-free
-libraries, migrate global editor state into an immutable product plus one local
-var, remove
+With resolved typed HIR and separate Unit/Option/empty-list/equality semantics
+plus immutable nominal products in place, establish explicit main and
+effect-free libraries, migrate global editor state into a product plus one
+local var, remove
 mutable globals, validate chunks, and make VM outcomes process-safe. Typed SSA,
 its verifier/differential oracle, and a shared Linux x86-64 native code-object
 backend follow. The first adaptive execution target is synchronous baseline

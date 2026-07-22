@@ -141,6 +141,35 @@ fn explicit_equality_families_survive_source_to_vm_lowering() {
 }
 
 #[test]
+fn immutable_nominal_products_preserve_original_values_end_to_end() {
+    let source = "product/\nname/\nPoint\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\ny\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\ndo/\nlet/\nbind/\noriginal\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\n/bind\nbind/\nupdated\nwith-field/\noriginal\nx\n7\n/with-field\n/bind\nand/\nequal-value/\nfield/\noriginal\nx\n/field\n1\n/equal-value\nequal-value/\nfield/\nupdated\nx\n/field\n7\n/equal-value\n/and\n/let\n/do\n";
+    assert_program_bool(source, true);
+
+    let zero_field = "product/\nname/\nMarker\n/name\nfields/\n/fields\n/product\ndo/\nproduct-value/\nMarker\n/product-value\n/do\n";
+    let value = evaluate_program(zero_field).expect("evaluate zero-field product");
+    assert!(value.as_heap().is_some());
+
+    let mut wide = String::from("product/\nname/\nWide\n/name\nfields/\n");
+    for index in 0..15 {
+        wide.push_str(&format!(
+            "field/\nname/\nf{index}\n/name\ntype/\nI64\n/type\n/field\n"
+        ));
+    }
+    wide.push_str("/fields\n/product\ndo/\nequal-value/\nfield/\nproduct-value/\nWide\n");
+    for index in 0..15 {
+        wide.push_str(&format!("field/\nf{index}\n{index}\n/field\n"));
+    }
+    wide.push_str("/product-value\nf14\n/field\n14\n/equal-value\n/do\n");
+    assert_program_bool(&wide, true);
+
+    let constructor_order = "def/\nname/\ncounter\n/name\ntype/\nI64\n/type\n0\n/def\ndef/\nname/\nnext\n/name\nfn/\nsig/\n->\nI64\n/sig\nparams/\n/params\ndo/\nset/\ncounter\n+/\ncounter\n1\n/+\n/set\ncounter\n/do\n/fn\n/def\nproduct/\nname/\nPair\n/name\nfields/\nfield/\nname/\nfirst\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\nsecond\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\ndo/\nlet/\nbind/\npair\nproduct-value/\nPair\nfield/\nfirst\nnext/\n/next\n/field\nfield/\nsecond\nnext/\n/next\n/field\n/product-value\n/bind\nand/\nequal-value/\nfield/\npair\nfirst\n/field\n1\n/equal-value\nequal-value/\nfield/\npair\nsecond\n/field\n2\n/equal-value\n/and\n/let\n/do\n";
+    assert_program_bool(constructor_order, true);
+
+    let replacement_order = "def/\nname/\ncounter\n/name\ntype/\nI64\n/type\n0\n/def\nproduct/\nname/\nBoxed\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\ndef/\nname/\nmake\n/name\nfn/\nsig/\n->\nProduct\nBoxed\n/sig\nparams/\n/params\ndo/\nset/\ncounter\n+/\ncounter\n1\n/+\n/set\nproduct-value/\nBoxed\nfield/\nvalue\ncounter\n/field\n/product-value\n/do\n/fn\n/def\ndef/\nname/\nreplacement\n/name\nfn/\nsig/\n->\nI64\n/sig\nparams/\n/params\ndo/\nset/\ncounter\n+/\ncounter\n1\n/+\n/set\ncounter\n/do\n/fn\n/def\ndo/\nequal-value/\nfield/\nwith-field/\nmake/\n/make\nvalue\nreplacement/\n/replacement\n/with-field\nvalue\n/field\n2\n/equal-value\n/do\n";
+    assert_program_bool(replacement_order, true);
+}
+
+#[test]
 fn invalid_or_removed_equality_categories_fail_during_compilation() {
     for expression in [
         "eq/\n1\n1\n/eq",

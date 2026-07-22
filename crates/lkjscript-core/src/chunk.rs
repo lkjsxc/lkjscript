@@ -1,6 +1,37 @@
 //! Bytecode chunk and function prototypes.
 
 use crate::opcode::Op;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ProductId(u16);
+
+impl ProductId {
+    pub const fn new(raw: u16) -> Self {
+        Self(raw)
+    }
+
+    pub const fn raw(self) -> u16 {
+        self.0
+    }
+
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProductMetadata {
+    pub id: ProductId,
+    pub name: String,
+    pub fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProductFieldRef {
+    pub product: ProductId,
+    pub field: u8,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConstId(pub u16);
 
@@ -28,6 +59,8 @@ pub struct Chunk {
     pub protos: Vec<FunctionProto>,
     pub main: FunctionProto,
     pub global_names: Vec<String>,
+    pub products: Vec<ProductMetadata>,
+    pub product_fields: Vec<ProductFieldRef>,
 }
 
 impl Default for Chunk {
@@ -48,6 +81,8 @@ impl Chunk {
                 code: Vec::new(),
             },
             global_names: Vec::new(),
+            products: Vec::new(),
+            product_fields: Vec::new(),
         }
     }
 

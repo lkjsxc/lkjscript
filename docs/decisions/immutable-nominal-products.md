@@ -7,9 +7,9 @@ state with explicit values passed through helpers.
 
 ## Status
 
-**Accepted Target.** This document is authoritative before implementation.
-Nothing in the current compiler or VM implements `product`, `product-value`,
-`field`, `with-field`, or `Product Name` yet. Current behavior remains recorded
+**Current.** The compiler, resolved typed HIR, bytecode, disassembler, precise
+GC, and reference VM implement this contract. Product state has not yet replaced
+current mutable singleton globals; that follow-on remains an **Accepted Target**
 in [current-state.md](../current-state.md).
 
 ## Decision
@@ -54,6 +54,9 @@ I64
 
 The declaration contract is:
 
+- a product name begins with an ASCII uppercase letter and then contains only
+  ASCII letters, digits, or hyphens; lowercase-leading and underscore names are
+  rejected;
 - product names share the program-global declaration namespace with function
   and value names;
 - a name is unique across the complete import closure and cannot collide with
@@ -167,8 +170,9 @@ not consume a global value slot or execute an initializer.
 
 The VM validates descriptor indexes, product identities, field indexes, operand
 categories, and constructor arity even for malformed public chunks. Construction
-and replacement allocate through the ordinary bounded heap path. Field access
-does not allocate. Display may use a stable opaque product marker until a
+and replacement allocate through the ordinary GC heap path. The later general
+heap/resource-limit phase remains pending. Field access does not allocate.
+Display may use a stable opaque product marker until a
 separate formatting contract exists.
 
 ## Required Conformance

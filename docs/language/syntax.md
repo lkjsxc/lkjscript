@@ -27,9 +27,10 @@ Define expression, type, and import behavior above the physical line format.
 ## Current Special Forms
 
 Implemented control and binding forms include `def`, `fn`, `if`, `while`,
-`let`, `bind`, `set`, `do`, and `quote`. `sig`, `params`, `forall`, `type`, and
-`import` are contextual declaration/loading forms rather than freely evaluable
-runtime calls.
+`let`, `bind`, `set`, `do`, `quote`, `product-value`, `field`, and
+`with-field`. `product`, `fields`, `sig`, `params`, `forall`, `type`, `name`,
+and `import` are contextual declaration/loading forms rather than freely
+evaluable runtime calls.
 
 Every function definition has a mandatory signature and typed parameters.
 `forall/` declares annotation-driven type variables. There is no `Any`, trait,
@@ -44,11 +45,27 @@ existing mutable value target, assignable value type, and returns Unit. Global
 mutation itself remains temporary and is removed by the accepted local
 `var`/`set` redesign.
 
+## Immutable Nominal Products
+
+A top-level `product` declares from zero through 15 ordered, uniquely named,
+explicitly typed fields. Product names begin with ASCII uppercase and continue
+with ASCII letters, digits, or hyphens. The annotation `Product Name` identifies
+exactly that declaration; same-shaped declarations are distinct types. Declarations add
+metadata but no runtime global or initializer.
+
+`product-value` supplies every field once in declaration order. `field` reads a
+statically named field. `with-field` returns a newly allocated product with one
+field replaced and leaves the original unchanged. Missing, extra, duplicate,
+out-of-order, unknown, or wrongly typed fields are compile errors. Products do
+not participate in any current equality family. The exact forms and examples
+are in [Immutable Nominal Products](../decisions/immutable-nominal-products.md).
+
 ## Semantic Migration
 
 The first AI-first semantic slices are **Current**: dedicated `Unit`/`unit`,
-strict three-arm `if`, typed empty lists, Option/no-nil semantics, and explicit
-equality families are enforced from source through HIR and VM. `arg` returns
+strict three-arm `if`, typed empty lists, Option/no-nil semantics, explicit
+equality families, and immutable nominal products are enforced from source
+through HIR and VM. `arg` returns
 `Option Str`; negative or out-of-range indexes return none. The remaining
 semantic core is an
 **Accepted Target**:
@@ -84,8 +101,10 @@ use `not` around a positive operation. See
 
 ## Files And Imports
 
-Top-level forms are `def`, `do`, and `import`, bounded by
-`MAX_TOPLEVEL_FORMS`.
+Top-level forms are `def`, `do`, `import`, and `product`, bounded by
+`MAX_TOPLEVEL_FORMS`. Product declarations are effect-free metadata; arbitrary
+runtime global value definitions and top-level `do` remain current only until
+the accepted explicit-main cutover.
 
 Current path resolution supports:
 

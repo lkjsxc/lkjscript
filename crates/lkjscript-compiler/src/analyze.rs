@@ -2,12 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use lkjscript_core::{Error, Result};
+use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
 use crate::ast::Expr as AstExpr;
 use crate::hir::{
     self, Binding, BindingId, BindingKind, EffectSet, Expr, ExprKind, Function, LocalDefinition,
-    Operation, Origin, Source, SourceId, TopLevel, Type, ValueDefinition,
+    Operation, Origin, ProductDefinition, ProductField, Source, SourceId, TopLevel, Type,
+    ValueDefinition,
 };
 use crate::import::Program as AstProgram;
 use crate::types::parse_one;
@@ -15,6 +16,8 @@ use crate::types::parse_one;
 pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
     let mut analyzer = Analyzer::new(program)?;
     analyzer.install_operations()?;
+    analyzer.collect_product_names(program)?;
+    analyzer.collect_products(program)?;
     let pending = analyzer.collect_headers(program)?;
 
     let mut forms = Vec::with_capacity(pending.len());
@@ -26,6 +29,7 @@ pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
     Ok(hir::Program {
         sources: analyzer.sources,
         bindings: analyzer.bindings,
+        products: analyzer.products,
         forms,
         global_layout,
         main_locals: analyzer.main_locals,
@@ -37,6 +41,8 @@ struct Analyzer {
     bindings: Vec<Binding>,
     globals: HashMap<String, BindingId>,
     operations: HashMap<Operation, BindingId>,
+    product_names: HashMap<String, ProductId>,
+    products: Vec<ProductDefinition>,
     main_locals: u8,
 }
 
@@ -56,6 +62,8 @@ impl Analyzer {
             bindings: Vec::new(),
             globals: HashMap::new(),
             operations: HashMap::new(),
+            product_names: HashMap::new(),
+            products: Vec::new(),
             main_locals: 0,
         })
     }
@@ -73,6 +81,165 @@ impl Analyzer {
         Ok(())
     }
 
+    fn collect_product_names(&mut self, program: &AstProgram) -> Result<()> {
+        for (source_index, file) in program.files.iter().enumerate() {
+            let source_raw = u32::try_from(source_index)
+                .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
+            let source = SourceId::new(source_raw);
+            for form in &file.forms {
+                let AstExpr::Call { name, args } = form else {
+                    continue;
+                };
+                if name != "product" {
+                    continue;
+                }
+                let (product_name, _) =
+                    product_declaration(args).map_err(|message| self.error(source, message))?;
+                if !is_product_declaration_name(&product_name) {
+                    return Err(self.error(
+                        source,
+                        format!("invalid product declaration name {product_name}"),
+                    ));
+                }
+                if Operation::from_name(&product_name).is_some()
+                    || is_contextual_name(&product_name)
+                    || is_builtin_type_name(&product_name)
+                {
+                    return Err(self.error(
+                        source,
+                        format!("product declaration {product_name} collides with a reserved operation, form, or type"),
+                    ));
+                }
+                if self.product_names.contains_key(&product_name) {
+                    return Err(self.error(
+                        source,
+                        format!("duplicate product declaration {product_name}"),
+                    ));
+                }
+                let raw = u16::try_from(self.product_names.len()).map_err(|_| {
+                    self.error(source, "too many product declarations for ProductId")
+                })?;
+                self.product_names.insert(product_name, ProductId::new(raw));
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_products(&mut self, program: &AstProgram) -> Result<()> {
+        for (source_index, file) in program.files.iter().enumerate() {
+            let source_raw = u32::try_from(source_index)
+                .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
+            let source = SourceId::new(source_raw);
+            for form in &file.forms {
+                let AstExpr::Call { name, args } = form else {
+                    continue;
+                };
+                if name != "product" {
+                    continue;
+                }
+                let (product_name, field_forms) =
+                    product_declaration(args).map_err(|message| self.error(source, message))?;
+                if field_forms.len() > MAX_PRODUCT_FIELDS {
+                    return Err(self.error(
+                        source,
+                        format!(
+                            "product {product_name}: too many fields ({} > {MAX_PRODUCT_FIELDS})",
+                            field_forms.len()
+                        ),
+                    ));
+                }
+                let product = self
+                    .product_names
+                    .get(&product_name)
+                    .copied()
+                    .ok_or_else(|| {
+                        self.error(
+                            source,
+                            format!("unknown product declaration {product_name}"),
+                        )
+                    })?;
+                let mut names = HashSet::new();
+                let mut fields = Vec::with_capacity(field_forms.len());
+                for field_form in field_forms {
+                    let (field_name, ty) = parse_product_field(field_form).map_err(|message| {
+                        self.error(source, format!("product {product_name}: {message}"))
+                    })?;
+                    if !names.insert(field_name.clone()) {
+                        return Err(self.error(
+                            source,
+                            format!("product {product_name}: duplicate field {field_name}"),
+                        ));
+                    }
+                    self.validate_product_type(&ty).map_err(|message| {
+                        self.error(
+                            source,
+                            format!("product {product_name} field {field_name}: {message}"),
+                        )
+                    })?;
+                    let mut free = HashSet::new();
+                    collect_type_params(&ty, &mut free);
+                    if let Some(parameter) = free.into_iter().next() {
+                        return Err(self.error(
+                            source,
+                            format!("product {product_name} field {field_name}: type contains unbound parameter {parameter}"),
+                        ));
+                    }
+                    fields.push(ProductField {
+                        name: field_name,
+                        ty,
+                    });
+                }
+                if product.index() != self.products.len() {
+                    return Err(self.error(source, "product declaration order is inconsistent"));
+                }
+                self.products.push(ProductDefinition {
+                    id: product,
+                    name: product_name,
+                    origin: source,
+                    fields,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_product_type(&self, ty: &Type) -> std::result::Result<(), String> {
+        match ty {
+            Type::Product(name) => {
+                if self.product_names.contains_key(name) {
+                    Ok(())
+                } else {
+                    Err(format!("unknown product type {name}"))
+                }
+            }
+            Type::List(inner) | Type::Option(inner) => self.validate_product_type(inner),
+            Type::Result(ok, error) => {
+                self.validate_product_type(ok)?;
+                self.validate_product_type(error)
+            }
+            Type::Fn { params, ret } => {
+                for parameter in params {
+                    self.validate_product_type(parameter)?;
+                }
+                self.validate_product_type(ret)
+            }
+            Type::Forall { body, .. } => self.validate_product_type(body),
+            _ => Ok(()),
+        }
+    }
+
+    fn product_by_name(&self, name: &str) -> Result<&ProductDefinition> {
+        let id = self
+            .product_names
+            .get(name)
+            .copied()
+            .ok_or_else(|| Error::msg(format!("unknown product type {name}")))?;
+        self.products
+            .get(id.index())
+            .filter(|product| product.id == id)
+            .ok_or_else(|| Error::msg(format!("missing HIR product metadata for {name}")))
+    }
+
     fn collect_headers<'a>(&mut self, program: &'a AstProgram) -> Result<Vec<PendingTop<'a>>> {
         let mut pending = Vec::new();
         for (source_index, file) in program.files.iter().enumerate() {
@@ -81,7 +248,7 @@ impl Analyzer {
             let source = SourceId::new(source_raw);
             for form in &file.forms {
                 match form {
-                    AstExpr::Call { name, .. } if name == "import" => {}
+                    AstExpr::Call { name, .. } if name == "import" || name == "product" => {}
                     AstExpr::Call { name, args } if name == "def" => {
                         pending.push(self.collect_definition(source, args)?);
                     }
@@ -117,6 +284,8 @@ impl Analyzer {
             {
                 let ty = parse_type_form(type_args)
                     .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
+                self.validate_product_type(&ty)
+                    .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
                 let mut free = HashSet::new();
                 collect_type_params(&ty, &mut free);
                 if let Some(parameter) = free.into_iter().next() {
@@ -142,6 +311,15 @@ impl Analyzer {
                     .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
                 validate_function_header(&name, &parsed)
                     .map_err(|message| self.error(origin, message))?;
+                for ty in parsed
+                    .signature_params
+                    .iter()
+                    .chain(parsed.param_types.iter())
+                    .chain(std::iter::once(&parsed.signature_return))
+                {
+                    self.validate_product_type(ty)
+                        .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
+                }
                 let monomorphic = Type::Fn {
                     params: parsed.signature_params.clone(),
                     ret: Box::new(parsed.signature_return.clone()),
@@ -181,7 +359,7 @@ impl Analyzer {
                 format!("global declaration {name} collides with a reserved operation or form"),
             ));
         }
-        if self.globals.contains_key(&name) {
+        if self.globals.contains_key(&name) || self.product_names.contains_key(&name) {
             return Err(self.error(origin, format!("duplicate global declaration {name}")));
         }
         let id = self.add_binding(name.clone(), kind, ty, Origin::Source(origin))?;
@@ -422,6 +600,20 @@ impl Analyzer {
                 self.record_expr_globals(value, layout, seen)?;
                 record_global(*target, layout, seen)?;
             }
+            ExprKind::ProductValue { fields, .. } => {
+                for field in fields {
+                    self.record_expr_globals(field, layout, seen)?;
+                }
+            }
+            ExprKind::ProductField { value, .. } => {
+                self.record_expr_globals(value, layout, seen)?;
+            }
+            ExprKind::WithProductField {
+                value, replacement, ..
+            } => {
+                self.record_expr_globals(value, layout, seen)?;
+                self.record_expr_globals(replacement, layout, seen)?;
+            }
         }
         Ok(())
     }
@@ -529,8 +721,12 @@ impl<'a> Resolver<'a> {
             "set" => self.resolve_set(args),
             "empty-list" => self.resolve_empty_list(args),
             "none" => self.resolve_none(args),
+            "product-value" => self.resolve_product_value(args),
+            "field" => self.resolve_product_field(args),
+            "with-field" => self.resolve_with_product_field(args),
             "bind" => Err(self.error("bind is only valid inside let")),
-            "fn" | "def" | "sig" | "params" | "forall" | "type" | "import" | "name" => {
+            "fn" | "def" | "sig" | "params" | "forall" | "type" | "import" | "name" | "product"
+            | "fields" => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
             }
             _ => self.resolve_plain_call(name, args),
@@ -842,8 +1038,162 @@ impl<'a> Resolver<'a> {
         ))
     }
 
+    fn resolve_product_value(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let Some((name_expression, field_forms)) = args.split_first() else {
+            return Err(self.error("product-value expects a product name"));
+        };
+        let product_name = symbolic_name(name_expression)
+            .map_err(|_| self.error("product-value name must be a symbol"))?;
+        let product = self
+            .analyzer
+            .product_by_name(&product_name)
+            .map_err(|_| self.error(format!("unknown product type {product_name}")))?
+            .clone();
+        if field_forms.len() != product.fields.len() {
+            return Err(self.error(format!(
+                "product-value {product_name}: expected {} fields, got {}",
+                product.fields.len(),
+                field_forms.len()
+            )));
+        }
+        let mut fields = Vec::with_capacity(field_forms.len());
+        for (index, (field_form, declared)) in field_forms.iter().zip(&product.fields).enumerate() {
+            let AstExpr::Call { name, args } = field_form else {
+                return Err(self.error(format!(
+                    "product-value {product_name}: field {} must be field/…/field",
+                    declared.name
+                )));
+            };
+            if name != "field" {
+                return Err(self.error(format!(
+                    "product-value {product_name}: field {} must be field/…/field",
+                    declared.name
+                )));
+            }
+            let [name_expression, value_expression] = args.as_slice() else {
+                return Err(self.error(format!(
+                    "product-value {product_name}: constructor field expects name and value"
+                )));
+            };
+            let field_name = symbolic_name(name_expression)
+                .map_err(|_| self.error("constructor field name must be a symbol"))?;
+            if field_name != declared.name {
+                return Err(self.error(format!(
+                    "product-value {product_name}: field {} must be {} in declaration order, got {field_name}",
+                    index + 1,
+                    declared.name
+                )));
+            }
+            let value = self.resolve_expr(value_expression)?;
+            if !Type::unify_assignable(&value.ty, &declared.ty) {
+                return Err(self.error(format!(
+                    "product-value {product_name} field {field_name}: value type {:?} not assignable to {:?}",
+                    value.ty, declared.ty
+                )));
+            }
+            fields.push(value);
+        }
+        Ok(self.expression(
+            Type::Product(product.name),
+            ExprKind::ProductValue {
+                product: product.id,
+                fields,
+            },
+        ))
+    }
+
+    fn resolve_product_field(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let [value_expression, name_expression] = args else {
+            return Err(self.error("field expects a product value and field name"));
+        };
+        let value = self.resolve_expr(value_expression)?;
+        let Type::Product(product_name) = &value.ty else {
+            return Err(self.error("field value must have a concrete Product type"));
+        };
+        let field_name = symbolic_name(name_expression)
+            .map_err(|_| self.error("field name must be a symbol"))?;
+        let product = self
+            .analyzer
+            .product_by_name(product_name)
+            .map_err(|_| self.error(format!("unknown product type {product_name}")))?
+            .clone();
+        let (field_index, field) = product
+            .fields
+            .iter()
+            .enumerate()
+            .find(|(_, field)| field.name == field_name)
+            .ok_or_else(|| {
+                self.error(format!(
+                    "product {} has no field {field_name}",
+                    product.name
+                ))
+            })?;
+        let field_index = u8::try_from(field_index)
+            .map_err(|_| self.error("product field index does not fit u8"))?;
+        Ok(self.expression(
+            field.ty.clone(),
+            ExprKind::ProductField {
+                product: product.id,
+                field: field_index,
+                value: Box::new(value),
+            },
+        ))
+    }
+
+    fn resolve_with_product_field(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let [value_expression, name_expression, replacement_expression] = args else {
+            return Err(
+                self.error("with-field expects a product value, field name, and replacement")
+            );
+        };
+        let value = self.resolve_expr(value_expression)?;
+        let Type::Product(product_name) = &value.ty else {
+            return Err(self.error("with-field value must have a concrete Product type"));
+        };
+        let product_name = product_name.clone();
+        let field_name = symbolic_name(name_expression)
+            .map_err(|_| self.error("with-field name must be a symbol"))?;
+        let product = self
+            .analyzer
+            .product_by_name(&product_name)
+            .map_err(|_| self.error(format!("unknown product type {product_name}")))?
+            .clone();
+        let (field_index, field) = product
+            .fields
+            .iter()
+            .enumerate()
+            .find(|(_, field)| field.name == field_name)
+            .ok_or_else(|| {
+                self.error(format!(
+                    "product {} has no field {field_name}",
+                    product.name
+                ))
+            })?;
+        let field_index = u8::try_from(field_index)
+            .map_err(|_| self.error("product field index does not fit u8"))?;
+        let replacement = self.resolve_expr(replacement_expression)?;
+        if !Type::unify_assignable(&replacement.ty, &field.ty) {
+            return Err(self.error(format!(
+                "with-field {}.{field_name}: replacement type {:?} not assignable to {:?}",
+                product.name, replacement.ty, field.ty
+            )));
+        }
+        Ok(self.expression(
+            Type::Product(product.name),
+            ExprKind::WithProductField {
+                product: product.id,
+                field: field_index,
+                value: Box::new(value),
+                replacement: Box::new(replacement),
+            },
+        ))
+    }
+
     fn resolve_empty_list(&mut self, args: &[AstExpr]) -> Result<Expr> {
         let element = parse_type_form(args)
+            .map_err(|message| self.error(format!("empty-list: {message}")))?;
+        self.analyzer
+            .validate_product_type(&element)
             .map_err(|message| self.error(format!("empty-list: {message}")))?;
         let mut parameters = HashSet::new();
         collect_type_params(&element, &mut parameters);
@@ -861,6 +1211,9 @@ impl<'a> Resolver<'a> {
     fn resolve_none(&mut self, args: &[AstExpr]) -> Result<Expr> {
         let value_type =
             parse_type_form(args).map_err(|message| self.error(format!("none: {message}")))?;
+        self.analyzer
+            .validate_product_type(&value_type)
+            .map_err(|message| self.error(format!("none: {message}")))?;
         let mut parameters = HashSet::new();
         collect_type_params(&value_type, &mut parameters);
         if let Some(parameter) = parameters
@@ -963,6 +1316,17 @@ impl<'a> Resolver<'a> {
                 })
                 .union(body.effects),
             ExprKind::SetGlobal { value, .. } => value.effects.union(EffectSet::WRITES_MEMORY),
+            ExprKind::ProductValue { fields, .. } => {
+                fold_effects(fields).union(EffectSet::ALLOCATES)
+            }
+            ExprKind::ProductField { value, .. } => value.effects.union(EffectSet::READS_MEMORY),
+            ExprKind::WithProductField {
+                value, replacement, ..
+            } => value
+                .effects
+                .union(replacement.effects)
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::ALLOCATES),
         }
     }
 
@@ -997,6 +1361,11 @@ fn is_contextual_name(name: &str) -> bool {
             | "set"
             | "empty-list"
             | "none"
+            | "product"
+            | "fields"
+            | "field"
+            | "product-value"
+            | "with-field"
             | "bind"
             | "fn"
             | "def"
@@ -1006,6 +1375,86 @@ fn is_contextual_name(name: &str) -> bool {
             | "type"
             | "import"
             | "name"
+    )
+}
+
+fn product_declaration(args: &[AstExpr]) -> std::result::Result<(String, &[AstExpr]), String> {
+    let [name_form, fields_form] = args else {
+        return Err("product expects exactly name/ and fields/ forms".into());
+    };
+    let name = match name_form {
+        AstExpr::Call {
+            name,
+            args: name_args,
+        } if name == "name" => match name_args.as_slice() {
+            [AstExpr::LitStr(name)] => name.clone(),
+            _ => return Err("product name must be one non-empty name/ text line".into()),
+        },
+        _ => return Err("product expects name/…/name first".into()),
+    };
+    let fields = match fields_form {
+        AstExpr::Call { name, args } if name == "fields" => args.as_slice(),
+        _ => return Err("product expects fields/…/fields second".into()),
+    };
+    Ok((name, fields))
+}
+
+fn parse_product_field(expression: &AstExpr) -> std::result::Result<(String, Type), String> {
+    let AstExpr::Call { name, args } = expression else {
+        return Err("fields must contain field/…/field forms".into());
+    };
+    if name != "field" {
+        return Err("fields must contain field/…/field forms".into());
+    }
+    let [name_form, type_form] = args.as_slice() else {
+        return Err("field expects exactly name/ and type/ forms".into());
+    };
+    let field_name = match name_form {
+        AstExpr::Call {
+            name,
+            args: name_args,
+        } if name == "name" => match name_args.as_slice() {
+            [AstExpr::LitStr(name)] => name.clone(),
+            _ => return Err("field name must be one non-empty name/ text line".into()),
+        },
+        _ => return Err("field expects name/…/name first".into()),
+    };
+    let ty = match type_form {
+        AstExpr::Call { name, args } if name == "type" => parse_type_form(args)?,
+        _ => return Err("field expects type/…/type second".into()),
+    };
+    Ok((field_name, ty))
+}
+
+fn is_product_declaration_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase())
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+}
+
+fn is_builtin_type_name(name: &str) -> bool {
+    matches!(
+        name,
+        "Unit"
+            | "Bool"
+            | "I64"
+            | "F64"
+            | "Str"
+            | "Buf"
+            | "Symbol"
+            | "Handle"
+            | "List"
+            | "Option"
+            | "Result"
+            | "Product"
+            | "Any"
+            | "Int"
+            | "Float"
     )
 }
 
@@ -1231,6 +1680,9 @@ fn parameter_type(expression: &AstExpr) -> std::result::Result<Type, String> {
             Box::new(parameter_type(&args[0])?),
             Box::new(parameter_type(&args[1])?),
         )),
+        AstExpr::Call { name, args } if name == "Product" && args.len() == 1 => {
+            Ok(Type::Product(symbolic_name(&args[0])?))
+        }
         _ => Err("invalid parameter type expression".into()),
     }
 }

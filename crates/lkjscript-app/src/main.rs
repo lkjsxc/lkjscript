@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use lkjscript_compiler::compile_path;
-use lkjscript_core::{Chunk, FunctionProto, Limits, Op};
+use lkjscript_core::{Chunk, FunctionProto, Limits, Op, ProductMetadata, MAX_PRODUCT_FIELDS};
 use lkjscript_vm::run_chunk_with_args;
 
 fn main() -> ExitCode {
@@ -72,6 +72,25 @@ fn disassemble(chunk: &Chunk) -> Result<(), String> {
     println!("globals ({}):", chunk.global_names.len());
     for (index, name) in chunk.global_names.iter().enumerate() {
         println!("  {index:04} {name}");
+    }
+    println!("products ({}):", chunk.products.len());
+    for (index, product) in chunk.products.iter().enumerate() {
+        if valid_product(chunk, index).is_some() {
+            println!(
+                "  {index:04} {} ({})",
+                product.name,
+                product.fields.join(", ")
+            );
+        } else {
+            println!("  {index:04} INVALID product metadata");
+        }
+    }
+    println!("product fields ({}):", chunk.product_fields.len());
+    for index in 0..chunk.product_fields.len() {
+        let annotation = valid_product_field(chunk, index)
+            .map(|(product, field)| format!("{product}.{field}"))
+            .unwrap_or_else(|| "INVALID product field".to_string());
+        println!("  {index:04} {annotation}");
     }
     disassemble_function(chunk, &chunk.main)?;
     for function in &chunk.protos {
@@ -145,6 +164,21 @@ fn disassemble_function(chunk: &Chunk, function: &FunctionProto) -> Result<(), S
     Ok(())
 }
 
+fn valid_product(chunk: &Chunk, index: usize) -> Option<&ProductMetadata> {
+    let raw = u16::try_from(index).ok()?;
+    chunk
+        .products
+        .get(index)
+        .filter(|product| product.id.raw() == raw && product.fields.len() <= MAX_PRODUCT_FIELDS)
+}
+
+fn valid_product_field(chunk: &Chunk, index: usize) -> Option<(&str, &str)> {
+    let field_ref = chunk.product_fields.get(index)?;
+    let product = valid_product(chunk, field_ref.product.index())?;
+    let field = product.fields.get(usize::from(field_ref.field))?;
+    Some((&product.name, field))
+}
+
 fn operand_annotation(chunk: &Chunk, op: Op, operand: Option<u16>) -> String {
     let Some(index) = operand.map(usize::from) else {
         return String::new();
@@ -165,6 +199,12 @@ fn operand_annotation(chunk: &Chunk, op: Op, operand: Option<u16>) -> String {
             .get(index)
             .map(|function| format!(" ; {}", function.name))
             .unwrap_or_else(|| " ; INVALID prototype index".to_string()),
+        Op::MakeProduct => valid_product(chunk, index)
+            .map(|product| format!(" ; {}", product.name))
+            .unwrap_or_else(|| " ; INVALID product index or metadata".to_string()),
+        Op::LoadProductField | Op::WithProductField => valid_product_field(chunk, index)
+            .map(|(product, field)| format!(" ; {product}.{field}"))
+            .unwrap_or_else(|| " ; INVALID product field index or metadata".to_string()),
         Op::Jump | Op::JumpIfFalse => format!(" ; target byte {index}"),
         Op::LoadLocal | Op::StoreLocal => format!(" ; local {index}"),
         Op::Call => format!(" ; argc {index}"),
@@ -183,4 +223,43 @@ fn print_help() {
     println!();
     println!("Environment:");
     println!("  LKJSCRIPT_ROOT  installed root containing src/std and src/lib");
+}
+
+#[cfg(test)]
+mod tests {
+    use lkjscript_core::{Chunk, Op, ProductFieldRef, ProductId, ProductMetadata};
+
+    use super::{operand_annotation, valid_product, valid_product_field};
+
+    #[test]
+    fn product_disassembly_annotations_reject_malformed_metadata() {
+        let mut chunk = Chunk::new();
+        chunk.products.push(ProductMetadata {
+            id: ProductId::new(0),
+            name: "Point".into(),
+            fields: vec!["x".into()],
+        });
+        chunk.product_fields.push(ProductFieldRef {
+            product: ProductId::new(0),
+            field: 0,
+        });
+        assert_eq!(
+            operand_annotation(&chunk, Op::MakeProduct, Some(0)),
+            " ; Point"
+        );
+        assert_eq!(
+            operand_annotation(&chunk, Op::LoadProductField, Some(0)),
+            " ; Point.x"
+        );
+        assert!(valid_product(&chunk, 0).is_some());
+        assert_eq!(valid_product_field(&chunk, 0), Some(("Point", "x")));
+
+        chunk.products[0].id = ProductId::new(1);
+        assert!(operand_annotation(&chunk, Op::MakeProduct, Some(0)).contains("INVALID"));
+        assert!(operand_annotation(&chunk, Op::LoadProductField, Some(0)).contains("INVALID"));
+
+        chunk.products[0].id = ProductId::new(0);
+        chunk.product_fields[0].field = 1;
+        assert!(operand_annotation(&chunk, Op::WithProductField, Some(0)).contains("INVALID"));
+    }
 }

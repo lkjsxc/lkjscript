@@ -28,6 +28,16 @@ no status, sees no loop backedge or VM state, and cannot install or call code.
 It must not return or imply compilation success until verified callable code
 objects and execution transfer replace it.
 
+## Current Product Bytecode
+
+Chunks carry immutable product names/field names separately from mutable runtime
+globals. `MakeProduct` names a product metadata index;
+`LoadProductField` and `WithProductField` name resolved product/field
+descriptors. The VM validates metadata, descriptor, field, category, and nominal
+identity boundaries before access. Construction and immutable replacement
+allocate traced product objects; access returns an existing field. Product
+metadata never installs a global value or executes initialization code.
+
 ## Tier 0 Target
 
 Normal execution begins in the VM so short commands can finish without JIT

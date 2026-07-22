@@ -38,6 +38,8 @@ mod tests {
         analyze_one(source).expect_err("analysis must fail").to_string()
     }
 
+    const POINT_PRODUCT: &str = "product/\nname/\nPoint\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\ny\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\n";
+
     #[test]
     fn rejects_duplicate_unknown_and_non_function_declarations() {
         let duplicate = "def/\nname/\nx\n/name\ntype/\nI64\n/type\n1\n/def\ndef/\nname/\nx\n/name\ntype/\nI64\n/type\n2\n/def\n";
@@ -412,6 +414,217 @@ mod tests {
             panic!("expected do expression");
         };
         assert_eq!(expressions[0].effects, EffectSet::CONSERVATIVE_CALL);
+    }
+
+    #[test]
+    fn nominal_products_resolve_types_effects_and_exact_bytecode() {
+        let source = format!(
+            "{POINT_PRODUCT}do/\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\n/do\ndo/\nfield/\nproduct-value/\nPoint\nfield/\nx\n3\n/field\nfield/\ny\n4\n/field\n/product-value\nx\n/field\n/do\ndo/\nwith-field/\nproduct-value/\nPoint\nfield/\nx\n5\n/field\nfield/\ny\n6\n/field\n/product-value\ny\n7\n/with-field\n/do\n"
+        );
+        let program = analyze_one(&source).expect("analyze nominal products");
+        assert_eq!(program.products.len(), 1);
+        assert_eq!(program.products[0].name, "Point");
+        assert_eq!(program.products[0].fields.len(), 2);
+        assert!(!program
+            .bindings
+            .iter()
+            .any(|binding| binding.name == "Point"));
+        assert!(!program.global_layout.iter().any(|binding| {
+            program
+                .binding(*binding)
+                .is_some_and(|binding| binding.name == "Point")
+        }));
+
+        let TopLevel::Do { expression, .. } = &program.forms[0] else {
+            panic!("expected constructor do");
+        };
+        let ExprKind::Do(expressions) = &expression.kind else {
+            panic!("expected constructor expression");
+        };
+        assert_eq!(expressions[0].ty, Type::Product("Point".into()));
+        assert_eq!(expressions[0].effects, EffectSet::ALLOCATES);
+        assert!(matches!(
+            expressions[0].kind,
+            ExprKind::ProductValue { .. }
+        ));
+
+        let TopLevel::Do { expression, .. } = &program.forms[1] else {
+            panic!("expected access do");
+        };
+        let ExprKind::Do(expressions) = &expression.kind else {
+            panic!("expected access expression");
+        };
+        assert_eq!(expressions[0].ty, Type::I64);
+        assert_eq!(
+            expressions[0].effects,
+            EffectSet::ALLOCATES.union(EffectSet::READS_MEMORY)
+        );
+
+        let chunk = compile_program(&program).expect("lower nominal products");
+        assert_eq!(chunk.products.len(), 1);
+        assert_eq!(chunk.products[0].name, "Point");
+        assert_eq!(chunk.product_fields.len(), 2);
+        let mut offset = 0;
+        let mut decoded = Vec::new();
+        while let Some(byte) = chunk.main.code.get(offset) {
+            let operation = Op::from_byte(*byte).expect("known product bytecode operation");
+            decoded.push(operation);
+            offset += 1 + operation.operand_width();
+        }
+        assert!(decoded.contains(&Op::MakeProduct));
+        assert!(decoded.contains(&Op::LoadProductField));
+        assert!(decoded.contains(&Op::WithProductField));
+    }
+
+    #[test]
+    fn product_declarations_enforce_nominality_references_and_field_boundaries() {
+        let forward = "product/\nname/\nOuter\n/name\nfields/\nfield/\nname/\ninner\n/name\ntype/\nOption\nProduct\nInner\n/type\n/field\n/fields\n/product\nproduct/\nname/\nInner\n/name\nfields/\n/fields\n/product\n";
+        let program = analyze_one(forward).expect("forward product type");
+        assert_eq!(program.products.len(), 2);
+        assert_eq!(
+            program.products[0].fields[0].ty,
+            Type::Option(Box::new(Type::Product("Inner".into())))
+        );
+        assert_ne!(
+            Type::Product(program.products[0].name.clone()),
+            Type::Product(program.products[1].name.clone())
+        );
+
+        let typed_function = format!(
+            "{POINT_PRODUCT}def/\nname/\nget-x\n/name\nfn/\nsig/\nProduct\nPoint\n->\nI64\n/sig\nparams/\npoint\nProduct/\nPoint\n/Product\n/params\nfield/\npoint\nx\n/field\n/fn\n/def\n"
+        );
+        assert!(analyze_one(&typed_function).is_ok());
+
+        let mut fifteen = String::from("product/\nname/\nWide\n/name\nfields/\n");
+        for index in 0..15 {
+            fifteen.push_str(&format!(
+                "field/\nname/\nf{index}\n/name\ntype/\nI64\n/type\n/field\n"
+            ));
+        }
+        fifteen.push_str("/fields\n/product\n");
+        assert_eq!(
+            analyze_one(&fifteen).expect("15 fields").products[0]
+                .fields
+                .len(),
+            15
+        );
+        let sixteen = fifteen.replacen(
+            "/fields\n/product\n",
+            "field/\nname/\nf15\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\n",
+            1,
+        );
+        assert!(analysis_error(&sixteen).contains("too many fields (16 > 15)"));
+
+        let duplicate_product = format!("{POINT_PRODUCT}{POINT_PRODUCT}");
+        assert!(analysis_error(&duplicate_product).contains("duplicate product declaration Point"));
+        let duplicate_field = "product/\nname/\nBad\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\n";
+        assert!(analysis_error(duplicate_field).contains("duplicate field x"));
+        let unknown_type = "product/\nname/\nBad\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nProduct\nMissing\n/type\n/field\n/fields\n/product\n";
+        assert!(analysis_error(unknown_type).contains("unknown product type Missing"));
+        let collision = "product/\nname/\nI64\n/name\nfields/\n/fields\n/product\n";
+        assert!(analysis_error(collision).contains("collides with a reserved"));
+        for invalid_name in ["point", "Bad_Name"] {
+            let declaration = format!(
+                "product/\nname/\n{invalid_name}\n/name\nfields/\n/fields\n/product\n"
+            );
+            assert!(analysis_error(&declaration).contains("invalid product declaration name"));
+        }
+        let global_collision = format!(
+            "{POINT_PRODUCT}def/\nname/\nPoint\n/name\ntype/\nI64\n/type\n1\n/def\n"
+        );
+        assert!(analysis_error(&global_collision).contains("duplicate global declaration Point"));
+
+        let same_shape = "product/\nname/\nFirst\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\nproduct/\nname/\nSecond\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\ndef/\nname/\naccept-first\n/name\nfn/\nsig/\nProduct\nFirst\n->\nUnit\n/sig\nparams/\nvalue\nProduct/\nFirst\n/Product\n/params\nunit\n/fn\n/def\ndo/\naccept-first/\nproduct-value/\nSecond\nfield/\nx\n1\n/field\n/product-value\n/accept-first\n/do\n";
+        assert!(analysis_error(same_shape).contains("not assignable"));
+
+        let imported_forward = parsed_program(&[
+            (
+                "lib/wrapper.lkjscript",
+                "product/\nname/\nWrapper\n/name\nfields/\nfield/\nname/\nitem\n/name\ntype/\nProduct\nItem\n/type\n/field\n/fields\n/product\n",
+            ),
+            (
+                "app/main.lkjscript",
+                "product/\nname/\nItem\n/name\nfields/\n/fields\n/product\n",
+            ),
+        ])
+        .expect("parse cross-file products");
+        let imported_forward =
+            analyze_program(&imported_forward).expect("resolve cross-file forward product");
+        assert_eq!(imported_forward.products[0].name, "Wrapper");
+        assert_eq!(imported_forward.products[0].id.raw(), 0);
+        assert_eq!(imported_forward.products[1].name, "Item");
+        assert_eq!(imported_forward.products[1].id.raw(), 1);
+    }
+
+    #[test]
+    fn product_construction_access_update_and_equality_fail_exactly() {
+        let valid = format!(
+            "{POINT_PRODUCT}do/\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\n/do\n"
+        );
+        assert!(analyze_one(&valid).is_ok());
+
+        for (expression, expected) in [
+            (
+                "product-value/\nPoint\nfield/\ny\n2\n/field\nfield/\nx\n1\n/field\n/product-value",
+                "must be x in declaration order",
+            ),
+            (
+                "product-value/\nPoint\nfield/\nx\n1\n/field\n/product-value",
+                "expected 2 fields, got 1",
+            ),
+            (
+                "product-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\nfield/\nz\n3\n/field\n/product-value",
+                "expected 2 fields, got 3",
+            ),
+            (
+                "product-value/\nPoint\nfield/\nx\n1\n/field\nfield/\nz\n2\n/field\n/product-value",
+                "must be y in declaration order, got z",
+            ),
+            (
+                "product-value/\nPoint\nfield/\nx\n1\n/field\nfield/\nx\n2\n/field\n/product-value",
+                "must be y in declaration order, got x",
+            ),
+            (
+                "product-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\nstr/\nbad\n/str\n/field\n/product-value",
+                "not assignable",
+            ),
+            (
+                "field/\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\nz\n/field",
+                "has no field z",
+            ),
+            (
+                "with-field/\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\nx\nstr/\nbad\n/str\n/with-field",
+                "replacement type",
+            ),
+            (
+                "equal-value/\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\n/equal-value",
+                "does not support value equality",
+            ),
+        ] {
+            let source = format!("{POINT_PRODUCT}do/\n{expression}\n/do\n");
+            let error = analysis_error(&source);
+            assert!(error.contains(expected), "{expected}: {error}");
+        }
+
+        let product_value = "product-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value";
+        for expression in [
+            format!("same-object/\n{product_value}\n{product_value}\n/same-object"),
+            format!(
+                "equal-value/\nsome/\n{product_value}\n/some\nsome/\n{product_value}\n/some\n/equal-value"
+            ),
+            format!(
+                "equal-value/\nok/\n{product_value}\n/ok\nok/\n{product_value}\n/ok\n/equal-value"
+            ),
+            format!(
+                "list-equal/\ncons/\n{product_value}\nempty-list/\nProduct\nPoint\n/empty-list\n/cons\ncons/\n{product_value}\nempty-list/\nProduct\nPoint\n/empty-list\n/cons\n/list-equal"
+            ),
+        ] {
+            let source = format!("{POINT_PRODUCT}do/\n{expression}\n/do\n");
+            assert!(
+                analyze_one(&source).is_err(),
+                "accepted product equality expression {expression}"
+            );
+        }
     }
 
     #[test]

@@ -16,10 +16,12 @@ next repairs.
   signed 61-bit integers, heap references, and opaque handle tokens; all-zero
   is private invalid/uninitialized state, not a language value.
 - Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
-  closures, buffers, Option some wrappers, and language Result wrappers.
+  closures, buffers, Option some wrappers, language Result wrappers, and
+  immutable nominal products whose complete field vectors are traced.
 - I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64
   arithmetic, exact value/object/F64-bit equality, structural List equality
-  bounded to 1,000,000 pair nodes, and checked narrow host domains.
+  bounded to 1,000,000 pair nodes, immutable product construction/access/update,
+  and checked narrow host domains.
 - Precise non-moving mark-sweep collection after 1,024 allocations.
 - Return-adjacent frame reuse for tail recursion.
 - Synchronous, single-threaded execution with blocking host operations.
@@ -27,8 +29,10 @@ next repairs.
 - Process-global console/terminal behavior and direct process exit.
 
 The VM/compiler boundary is `Chunk`, `FunctionProto`, `Constant`, and `Op` in
-`lkjscript-core`. Public malformed chunks are not fully validated and can reach
-panic-prone assumptions; compiler-produced chunks are the supported path.
+`lkjscript-core`. Product opcodes validate malformed metadata/descriptor indexes,
+field bounds, categories, and nominal identities. Public chunks as a whole are
+not yet fully validated and can still reach panic-prone assumptions elsewhere;
+compiler-produced chunks remain the supported path.
 
 ## Current Resource Boundary
 

@@ -8,8 +8,10 @@ pub const MAX_CHILDREN: u32 = 16;
 pub const MAX_TOKENS_PER_FILE: u32 = 384;
 /// Maximum files plus subdirectories in one lkjscript source directory.
 pub const MAX_DIR_CHILDREN: u32 = 16;
-/// Maximum top-level `def` / `do` / `import` forms per file.
+/// Maximum top-level `def` / `do` / `import` / `product` forms per file.
 pub const MAX_TOPLEVEL_FORMS: u32 = 8;
+/// Maximum fields in one nominal product declaration.
+pub const MAX_PRODUCT_FIELDS: usize = 15;
 /// Maximum pair-node comparisons performed by one structural list equality.
 pub const MAX_LIST_EQUAL_STEPS: usize = 1_000_000;
 
@@ -46,6 +48,7 @@ mod tests {
         assert_eq!(lim.max_tokens_per_file, MAX_TOKENS_PER_FILE);
         assert_eq!(lim.max_dir_children, MAX_DIR_CHILDREN);
         assert_eq!(lim.max_toplevel_forms, MAX_TOPLEVEL_FORMS);
+        assert_eq!(MAX_PRODUCT_FIELDS, 15);
         assert_eq!(MAX_LIST_EQUAL_STEPS, 1_000_000);
     }
 }

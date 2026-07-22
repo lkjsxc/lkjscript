@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use lkjscript_core::{Chunk, Constant, Error, FunctionProto, Op, Result};
+use lkjscript_core::{
+    Chunk, Constant, Error, FunctionProto, Op, ProductFieldRef, ProductId, Result,
+};
 
 use crate::hir::{BindingId, Expr, ExprKind, LocalDefinition, Operation};
 
@@ -77,6 +79,30 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
             cx.proto.emit(Op::Pop);
             cx.proto.emit(Op::Unit);
         }
+        ExprKind::ProductValue { product, fields } => {
+            emit_arguments(cx, fields)?;
+            cx.proto.emit_op_u16(Op::MakeProduct, product.raw());
+        }
+        ExprKind::ProductField {
+            product,
+            field,
+            value,
+        } => {
+            emit_expr(cx, value)?;
+            let operand = intern_product_field(cx.chunk, *product, *field)?;
+            cx.proto.emit_op_u16(Op::LoadProductField, operand);
+        }
+        ExprKind::WithProductField {
+            product,
+            field,
+            value,
+            replacement,
+        } => {
+            emit_expr(cx, value)?;
+            emit_expr(cx, replacement)?;
+            let operand = intern_product_field(cx.chunk, *product, *field)?;
+            cx.proto.emit_op_u16(Op::WithProductField, operand);
+        }
         ExprKind::QuoteSymbol(symbol) => {
             let constant = add_constant(cx.chunk, Constant::Symbol(symbol.clone()))?;
             cx.proto.emit_op_u16(Op::LoadConst, constant);
@@ -110,6 +136,22 @@ pub(crate) fn add_constant(chunk: &mut Chunk, constant: Constant) -> Result<u16>
         .map_err(|_| Error::msg("too many constants for bytecode u16 IDs"))?;
     chunk.constants.push(constant);
     Ok(id)
+}
+
+fn intern_product_field(chunk: &mut Chunk, product: ProductId, field: u8) -> Result<u16> {
+    let field_ref = ProductFieldRef { product, field };
+    if let Some(index) = chunk
+        .product_fields
+        .iter()
+        .position(|existing| *existing == field_ref)
+    {
+        return u16::try_from(index)
+            .map_err(|_| Error::msg("product field descriptor index exceeds u16"));
+    }
+    let index = u16::try_from(chunk.product_fields.len())
+        .map_err(|_| Error::msg("too many product field descriptors for bytecode u16 IDs"))?;
+    chunk.product_fields.push(field_ref);
+    Ok(index)
 }
 
 fn emit_load(cx: &mut Cx<'_>, binding: BindingId) -> Result<()> {

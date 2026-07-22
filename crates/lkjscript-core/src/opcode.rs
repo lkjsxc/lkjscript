@@ -88,6 +88,9 @@ pub enum Op {
     SomeWrap = 148,
     IsSome = 149,
     UnwrapSome = 150,
+    MakeProduct = 151,
+    LoadProductField = 152,
+    WithProductField = 153,
     Pop = 70,
     Dup = 71,
     False = 80,
@@ -188,6 +191,9 @@ impl Op {
             148 => Self::SomeWrap,
             149 => Self::IsSome,
             150 => Self::UnwrapSome,
+            151 => Self::MakeProduct,
+            152 => Self::LoadProductField,
+            153 => Self::WithProductField,
             _ => return None,
         })
     }
@@ -199,7 +205,10 @@ impl Op {
             | Self::StoreGlobal
             | Self::Jump
             | Self::JumpIfFalse
-            | Self::MakeClosure => 2,
+            | Self::MakeClosure
+            | Self::MakeProduct
+            | Self::LoadProductField
+            | Self::WithProductField => 2,
             Self::LoadLocal | Self::StoreLocal | Self::Call => 1,
             _ => 0,
         }
@@ -223,6 +232,18 @@ mod tests {
             Op::from_byte(Op::F64BitsEqual as u8),
             Some(Op::F64BitsEqual)
         );
+        assert_eq!(Op::from_byte(Op::MakeProduct as u8), Some(Op::MakeProduct));
+        assert_eq!(Op::MakeProduct.operand_width(), 2);
+        assert_eq!(
+            Op::from_byte(Op::LoadProductField as u8),
+            Some(Op::LoadProductField)
+        );
+        assert_eq!(Op::LoadProductField.operand_width(), 2);
+        assert_eq!(
+            Op::from_byte(Op::WithProductField as u8),
+            Some(Op::WithProductField)
+        );
+        assert_eq!(Op::WithProductField.operand_width(), 2);
         assert_eq!(Op::from_byte(21), None);
         assert_eq!(Op::from_byte(255), None);
     }

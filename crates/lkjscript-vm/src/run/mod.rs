@@ -190,7 +190,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use lkjscript_core::{Chunk, NullJit, Op};
+    use lkjscript_core::{Chunk, NullJit, Op, ProductFieldRef, ProductId, ProductMetadata};
 
     use super::Vm;
 
@@ -224,6 +224,174 @@ mod tests {
         store.main.emit_op_u16(Op::StoreGlobal, 0);
         store.main.emit(Op::Return);
         assert!(vm_error(store).contains("StoreGlobal slot out of range"));
+    }
+
+    #[test]
+    fn malformed_product_metadata_operands_and_categories_are_errors() {
+        let mut missing_product = Chunk::new();
+        missing_product.main.emit_op_u16(Op::MakeProduct, 0);
+        missing_product.main.emit(Op::Return);
+        assert!(vm_error(missing_product).contains("product metadata"));
+
+        for opcode in [Op::MakeProduct, Op::LoadProductField, Op::WithProductField] {
+            let mut truncated = Chunk::new();
+            truncated.main.code = vec![opcode as u8, 0];
+            assert!(vm_error(truncated).contains("ip out of range"));
+        }
+
+        let mut wrong_metadata_identity = Chunk::new();
+        wrong_metadata_identity.products.push(ProductMetadata {
+            id: ProductId::new(1),
+            name: "Wrong".into(),
+            fields: Vec::new(),
+        });
+        wrong_metadata_identity.main.emit_op_u16(Op::MakeProduct, 0);
+        wrong_metadata_identity.main.emit(Op::Return);
+        assert!(vm_error(wrong_metadata_identity).contains("identity is invalid"));
+
+        let mut too_wide = Chunk::new();
+        too_wide.products.push(ProductMetadata {
+            id: ProductId::new(0),
+            name: "Wide".into(),
+            fields: (0..16).map(|index| format!("f{index}")).collect(),
+        });
+        too_wide.main.emit_op_u16(Op::MakeProduct, 0);
+        too_wide.main.emit(Op::Return);
+        assert!(vm_error(too_wide).contains("exceeds field limit"));
+
+        let product = ProductMetadata {
+            id: ProductId::new(0),
+            name: "Point".into(),
+            fields: vec!["x".into()],
+        };
+
+        let mut missing_value = Chunk::new();
+        missing_value.products.push(product.clone());
+        missing_value.main.emit_op_u16(Op::MakeProduct, 0);
+        missing_value.main.emit(Op::Return);
+        assert!(vm_error(missing_value).contains("stack underflow"));
+
+        let mut missing_descriptor = Chunk::new();
+        missing_descriptor.products.push(product.clone());
+        missing_descriptor.main.emit(Op::Unit);
+        missing_descriptor.main.emit_op_u16(Op::MakeProduct, 0);
+        missing_descriptor.main.emit_op_u16(Op::LoadProductField, 0);
+        missing_descriptor.main.emit(Op::Return);
+        assert!(vm_error(missing_descriptor).contains("descriptor index out of range"));
+
+        let mut bad_field = Chunk::new();
+        bad_field.products.push(product.clone());
+        bad_field.product_fields.push(ProductFieldRef {
+            product: ProductId::new(0),
+            field: 1,
+        });
+        bad_field.main.emit(Op::Unit);
+        bad_field.main.emit_op_u16(Op::MakeProduct, 0);
+        bad_field.main.emit_op_u16(Op::LoadProductField, 0);
+        bad_field.main.emit(Op::Return);
+        assert!(vm_error(bad_field).contains("product field index out of range"));
+
+        let mut wrong_category = Chunk::new();
+        wrong_category.products.push(product.clone());
+        wrong_category.product_fields.push(ProductFieldRef {
+            product: ProductId::new(0),
+            field: 0,
+        });
+        wrong_category.main.emit(Op::Unit);
+        wrong_category.main.emit_op_u16(Op::LoadProductField, 0);
+        wrong_category.main.emit(Op::Return);
+        assert!(vm_error(wrong_category).contains("expects Product"));
+
+        let mut wrong_identity = Chunk::new();
+        wrong_identity.products.push(product);
+        wrong_identity.products.push(ProductMetadata {
+            id: ProductId::new(1),
+            name: "Other".into(),
+            fields: vec!["x".into()],
+        });
+        wrong_identity.product_fields.push(ProductFieldRef {
+            product: ProductId::new(1),
+            field: 0,
+        });
+        wrong_identity.main.emit(Op::Unit);
+        wrong_identity.main.emit_op_u16(Op::MakeProduct, 0);
+        wrong_identity.main.emit_op_u16(Op::LoadProductField, 0);
+        wrong_identity.main.emit(Op::Return);
+        assert!(vm_error(wrong_identity).contains("identity mismatch"));
+
+        let mut replacement_descriptor = Chunk::new();
+        replacement_descriptor.products.push(ProductMetadata {
+            id: ProductId::new(0),
+            name: "Point".into(),
+            fields: vec!["x".into()],
+        });
+        replacement_descriptor.main.emit(Op::Unit);
+        replacement_descriptor.main.emit_op_u16(Op::MakeProduct, 0);
+        replacement_descriptor.main.emit(Op::Unit);
+        replacement_descriptor
+            .main
+            .emit_op_u16(Op::WithProductField, 0);
+        replacement_descriptor.main.emit(Op::Return);
+        assert!(vm_error(replacement_descriptor).contains("descriptor index out of range"));
+
+        let mut replacement_field = Chunk::new();
+        replacement_field.products.push(ProductMetadata {
+            id: ProductId::new(0),
+            name: "Point".into(),
+            fields: vec!["x".into()],
+        });
+        replacement_field.product_fields.push(ProductFieldRef {
+            product: ProductId::new(0),
+            field: 1,
+        });
+        replacement_field.main.emit(Op::Unit);
+        replacement_field.main.emit_op_u16(Op::MakeProduct, 0);
+        replacement_field.main.emit(Op::Unit);
+        replacement_field.main.emit_op_u16(Op::WithProductField, 0);
+        replacement_field.main.emit(Op::Return);
+        assert!(vm_error(replacement_field).contains("product field index out of range"));
+
+        let mut replacement_identity = Chunk::new();
+        replacement_identity.products.push(ProductMetadata {
+            id: ProductId::new(0),
+            name: "Point".into(),
+            fields: vec!["x".into()],
+        });
+        replacement_identity.products.push(ProductMetadata {
+            id: ProductId::new(1),
+            name: "Other".into(),
+            fields: vec!["x".into()],
+        });
+        replacement_identity.product_fields.push(ProductFieldRef {
+            product: ProductId::new(1),
+            field: 0,
+        });
+        replacement_identity.main.emit(Op::Unit);
+        replacement_identity.main.emit_op_u16(Op::MakeProduct, 0);
+        replacement_identity.main.emit(Op::Unit);
+        replacement_identity
+            .main
+            .emit_op_u16(Op::WithProductField, 0);
+        replacement_identity.main.emit(Op::Return);
+        assert!(vm_error(replacement_identity).contains("identity mismatch"));
+
+        let mut replacement_category = Chunk::new();
+        replacement_category.products.push(ProductMetadata {
+            id: ProductId::new(0),
+            name: "Point".into(),
+            fields: vec!["x".into()],
+        });
+        replacement_category.product_fields.push(ProductFieldRef {
+            product: ProductId::new(0),
+            field: 0,
+        });
+        replacement_category.main.emit(Op::Unit);
+        replacement_category.main.emit(Op::Unit);
+        replacement_category
+            .main
+            .emit_op_u16(Op::WithProductField, 0);
+        replacement_category.main.emit(Op::Return);
+        assert!(vm_error(replacement_category).contains("expects Product"));
     }
 
     #[test]

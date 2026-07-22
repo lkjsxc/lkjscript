@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::chunk::ProductId;
+
 /// Low 3 bits are the tag; payload lives in the upper bits or as a heap index.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Value(u64);
@@ -135,13 +137,23 @@ pub enum HeapObj {
     Float(f64),
     Str(String),
     Symbol(String),
-    Pair { car: Value, cdr: Value },
-    Closure { proto: u32, captures: Vec<Value> },
+    Pair {
+        car: Value,
+        cdr: Value,
+    },
+    Closure {
+        proto: u32,
+        captures: Vec<Value>,
+    },
     Builtin(u16),
     Buf(Vec<u8>),
     ResultOk(Value),
     ResultErr(Value),
     OptionSome(Value),
+    Product {
+        product: ProductId,
+        fields: Vec<Value>,
+    },
 }
 
 impl HeapObj {
@@ -157,6 +169,11 @@ impl HeapObj {
                 }
             }
             HeapObj::ResultOk(v) | HeapObj::ResultErr(v) | HeapObj::OptionSome(v) => mark(*v),
+            HeapObj::Product { fields, .. } => {
+                for field in fields {
+                    mark(*field);
+                }
+            }
             _ => {}
         }
     }

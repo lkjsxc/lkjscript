@@ -9,9 +9,9 @@ ambiguity or unchecked hints.
 ## Status
 
 **Accepted Target** overall. Dedicated Unit, exact three-arm `if`, typed empty
-lists, explicit Option/no-nil semantics, and explicit equality families are
-**Current**. Immutable nominal products are the accepted next slice; local-only
-mutation and explicit main remain pending. [current-state.md](../current-state.md)
+lists, explicit Option/no-nil semantics, explicit equality families, and
+immutable nominal products are **Current**. Local-only mutation, product-state
+migration, and explicit main remain pending. [current-state.md](../current-state.md)
 records the exact boundary.
 
 ## Canonicality
@@ -105,9 +105,9 @@ reference type is required when observable shared mutation is intentional.
 
 The current singleton lkjedit globals must migrate to an immutable product
 value passed through helpers and held by one local `var` in executable main.
-The accepted [immutable nominal product contract](immutable-nominal-products.md)
-must become Current before that migration; positional or hidden mutable-cell
-substitutes are rejected.
+The [immutable nominal product contract](immutable-nominal-products.md) is
+Current and provides the required state shape; positional or hidden mutable-cell
+substitutes remain rejected.
 
 ## Declarations And Initialization
 
@@ -138,8 +138,10 @@ families:
 - `f64-bits-equal`: exact `to_bits` equality, distinct from IEEE equality.
 
 Mixed I64/F64 equality, unconstrained generic equality, closure identity, and
-negative aliases are rejected. Use `not` around a positive comparison. Future
-Bytes, product, enum, Cell, and Ref behavior begins only when those types exist.
+negative aliases are rejected. Use `not` around a positive comparison.
+Products are Current but intentionally unsupported by equality pending a later
+recursive-comparability decision. Future Bytes, enum, Cell, and Ref equality
+behavior begins only when those types exist.
 The complete accepted contract is
 [Explicit Equality Families](equality-families.md).
 

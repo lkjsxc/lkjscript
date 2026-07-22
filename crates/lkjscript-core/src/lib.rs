@@ -7,12 +7,14 @@ mod limits;
 mod opcode;
 mod value;
 
-pub use chunk::{Chunk, ConstId, Constant, FunctionProto};
+pub use chunk::{
+    Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
+};
 pub use error::{Error, Result};
 pub use jit::{JitHook, NullJit};
 pub use limits::{
     Limits, MAX_CHILDREN, MAX_DIR_CHILDREN, MAX_LIST_EQUAL_STEPS, MAX_NEST_DEPTH,
-    MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
+    MAX_PRODUCT_FIELDS, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
 };
 
 pub use opcode::Op;

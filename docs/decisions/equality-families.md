@@ -49,10 +49,11 @@ Currently supported types are:
 - `Result T E` when both payload types support `equal-value`: variants must
   match and matching payloads compare recursively.
 
-Future immutable products and enums gain `equal-value` only when their types and
-structural contracts are implemented. Bytes is not yet a current language type.
+Current immutable products do not gain `equal-value` automatically; a later
+recursive-comparability contract must opt them in. Future enums follow the same
+rule. Bytes is not yet a current language type.
 
-`equal-value` is rejected for List, Buf, Handle, Fn, unresolved type parameters,
+`equal-value` is rejected for Product, List, Buf, Handle, Fn, unresolved type parameters,
 and polymorphic schemes. In particular, closure allocation or duplication
 remains unobservable.
 

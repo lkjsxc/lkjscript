@@ -5,7 +5,7 @@ mod emit;
 use std::collections::HashMap;
 
 use emit::{add_constant, emit_expr, emit_sequence, Cx};
-use lkjscript_core::{Chunk, Constant, Error, FunctionProto, Op, Result};
+use lkjscript_core::{Chunk, Constant, Error, FunctionProto, Op, ProductMetadata, Result};
 
 use crate::hir::{BindingId, ExprKind, Function, Program, TopLevel, ValueDefinition};
 
@@ -32,6 +32,30 @@ pub(crate) fn compile_program(program: &Program) -> Result<Chunk> {
 fn initialize_chunk(program: &Program) -> Result<(Chunk, HashMap<BindingId, u16>)> {
     let mut chunk = Chunk::new();
     chunk.main.locals = program.main_locals;
+    for product in &program.products {
+        if product.id.index() != chunk.products.len() {
+            return Err(Error::msg(format!(
+                "HIR product {} has inconsistent ProductId {}",
+                product.name,
+                product.id.raw()
+            )));
+        }
+        let _field_count = u8::try_from(product.fields.len()).map_err(|_| {
+            Error::msg(format!(
+                "HIR product {} has too many bytecode fields",
+                product.name
+            ))
+        })?;
+        chunk.products.push(ProductMetadata {
+            id: product.id,
+            name: product.name.clone(),
+            fields: product
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect(),
+        });
+    }
     let mut globals = HashMap::with_capacity(program.global_layout.len());
     for (index, binding_id) in program.global_layout.iter().copied().enumerate() {
         let slot = u16::try_from(index)

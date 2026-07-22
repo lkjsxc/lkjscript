@@ -17,12 +17,15 @@ Defined in `lkjscript-core/src/limits.rs`:
 - `MAX_TOKENS_PER_FILE`: 384
 - `MAX_TOPLEVEL_FORMS`: 8
 - `MAX_DIR_CHILDREN`: 16 files plus subdirectories in one source directory
+- `MAX_PRODUCT_FIELDS`: 15 fields in one nominal product declaration
 - `MAX_LIST_EQUAL_STEPS`: 1,000,000 pair-node comparisons in one `list-equal`
   call
 
 `MAX_CHILDREN` and `MAX_DIR_CHILDREN` are separate contracts even though both
-values are 16. `MAX_LIST_EQUAL_STEPS` is a runtime semantic bound rather than a
-source-shape bound; reaching another pair after the limit is an error.
+values are 16. The 15-field product limit leaves room for the product name plus
+all constructor fields under the 16-child expression bound.
+`MAX_LIST_EQUAL_STEPS` is a runtime semantic bound rather than a source-shape
+bound; reaching another pair after the limit is an error.
 
 ## Source-Directory Rule
 

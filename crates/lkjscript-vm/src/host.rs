@@ -44,6 +44,7 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
         HeapObj::ResultOk(x) => Ok(format!("Ok({})", display_value(arena, *x)?)),
         HeapObj::ResultErr(x) => Ok(format!("Err({})", display_value(arena, *x)?)),
         HeapObj::OptionSome(x) => Ok(format!("some({})", display_value(arena, *x)?)),
+        HeapObj::Product { product, .. } => Ok(format!("#<product:{}>", product.raw())),
     }
 }
 

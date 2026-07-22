@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+pub use lkjscript_core::ProductId;
+
 pub use crate::operation::Operation;
 pub use crate::types::Type;
 
@@ -73,6 +75,7 @@ pub struct Source {
 pub struct Program {
     pub sources: Vec<Source>,
     pub bindings: Vec<Binding>,
+    pub products: Vec<ProductDefinition>,
     pub forms: Vec<TopLevel>,
     /// Runtime global slots in deterministic bytecode layout order.
     pub global_layout: Vec<BindingId>,
@@ -83,6 +86,20 @@ impl Program {
     pub fn binding(&self, id: BindingId) -> Option<&Binding> {
         id.index().and_then(|index| self.bindings.get(index))
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProductDefinition {
+    pub id: ProductId,
+    pub name: String,
+    pub origin: SourceId,
+    pub fields: Vec<ProductField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProductField {
+    pub name: String,
+    pub ty: Type,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,6 +196,21 @@ pub enum ExprKind {
     SetGlobal {
         target: BindingId,
         value: Box<Expr>,
+    },
+    ProductValue {
+        product: ProductId,
+        fields: Vec<Expr>,
+    },
+    ProductField {
+        product: ProductId,
+        field: u8,
+        value: Box<Expr>,
+    },
+    WithProductField {
+        product: ProductId,
+        field: u8,
+        value: Box<Expr>,
+        replacement: Box<Expr>,
     },
     QuoteSymbol(String),
 }

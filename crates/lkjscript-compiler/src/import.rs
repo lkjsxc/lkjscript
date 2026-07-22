@@ -254,10 +254,11 @@ pub(crate) fn validate_top_level(forms: &[Expr], limits: &Limits, path: &str) ->
     }
     for form in forms {
         match form {
-            Expr::Call { name, .. } if name == "def" || name == "do" || name == "import" => {}
+            Expr::Call { name, .. }
+                if name == "def" || name == "do" || name == "import" || name == "product" => {}
             _ => {
                 return Err(Error::msg(format!(
-                    "{path}: top-level must be def, do, or import"
+                    "{path}: top-level must be def, do, import, or product"
                 )));
             }
         }

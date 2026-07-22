@@ -736,6 +736,7 @@ fn supports_value_equality(ty: &Type) -> bool {
         Type::Result(ok, err) => supports_value_equality(ok) && supports_value_equality(err),
         Type::Buf
         | Type::Handle
+        | Type::Product(_)
         | Type::Param(_)
         | Type::List(_)
         | Type::Fn { .. }
