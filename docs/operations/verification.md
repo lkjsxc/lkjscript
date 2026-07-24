@@ -89,6 +89,7 @@ compile/validation error rather than an `ExecutionOutcome`.
 
 ```sh
 cargo build --workspace --release --locked
+./target/release/lkjscript run src/examples/jit-scalar/main.lkjscript
 ./target/release/lkjscript run --engine vm src/examples/jit-scalar/main.lkjscript
 ./target/release/lkjscript run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
 ./target/release/lkjscript run --engine auto --auto-jit-threshold 2 src/examples/jit-scalar/main.lkjscript
@@ -138,6 +139,24 @@ correctness oracle, randomized repetitions, dispersion, and adoption threshold.
 Use [../vision/experiments.md](../vision/experiments.md). The current
 single-shot C script is diagnostic only.
 
+The retained callable scalar gate is:
+
+```sh
+cargo run --locked -q -p lkjscript-xtask -- quiet verify
+cargo build --workspace --release --locked
+python3 meta/benchmarks/jit/benchmark.py
+```
+
+It rejects fewer than four warmups or 31 samples per VM/forced/auto variant,
+randomizes with a fixed recorded seed, checks exact F64 bits and stream silence,
+polls `/proc` RSS, requires fallback-free forced native entry and successful
+auto later-call entry, and retains every phase/sample. Results at selected
+threshold 64 and alternatives 1/1,024 live under
+`meta/benchmarks/jit/results/`. Implementation commit `025cbb2` measured 46.146x
+native execution, 37.829x forced process wall, and 1.653x auto process wall over
+same-commit VM; the full environment, dispersion, costs, pre-JIT diagnostic,
+and limitations are in [Experiment C4](../vision/experiments.md#c4-callable-scalar-baseline-jit-adopted).
+
 ## Current Baseline-JIT Gates
 
 Focused forced-native tests prove an installed W^X code object, actual generated
@@ -150,8 +169,12 @@ later calls while unsupported code remains VM-correct and retry-suppressed.
 
 The CLI implements `vm`, `auto`, and `baseline-jit`; ordinary `run` defaults to
 `auto` at 64 function entries, while explicit `vm` remains deterministic.
-Machine diagnostics and low-overhead metrics are separate, stderr/file-only,
-and opt-in. Allocation/reference/host paths,
+Tests check both selections. Machine diagnostics and low-overhead metrics are
+separate, stderr/file-only, opt-in, and silent during normal execution. Metrics
+retain exact outcome bits, compile/HIR/effect/SSA/bytecode/native/install/first-
+entry/first-call/VM/native/engine times, tier states and failures/fallbacks,
+entries/direct calls/PollV1, and code/metadata/accounted cache peaks.
+Allocation/reference/host paths,
 recursion, OSR, optimizing JIT, GC-native references, and background compilation
 are outside the current baseline subset. Performance adoption, broader
 malformed/resource equivalence, and native GC evidence remain separate future

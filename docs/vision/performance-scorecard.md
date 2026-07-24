@@ -125,6 +125,36 @@ long-running OSR loop, one-shot HTTP, repeated post-warmup server requests, and
 Brainfuck Mandelbrot interpreted by lkjscript. Reports state when a workload
 cannot benefit before loop OSR exists.
 
+## Retained Callable Scalar Baseline Result
+
+Implementation commit `025cbb2feadbb18fbae51e68e38b9c849798d068`
+meets the aspirational 5x generated-execution target on the supported
+100,000-iteration F64/direct-call workload: forced native execution median was
+7.647935 ms versus same-commit VM execution median 352.918413 ms, a 46.146x
+speedup excluding compilation. Median native lowering/encoding plus relocation/
+W^X installation was 0.076654 ms, so the measured repeated whole-workload
+break-even is one invocation. Process medians, which include source compilation
+and startup, were 354.533038 ms VM, 9.372036 ms forced baseline, and 214.482019
+ms auto at threshold 64: 37.829x forced and 1.653x auto end-to-end speedups.
+
+This is one allocation-free scalar workload, not a general language score.
+Forced mode installed 1,926 code bytes and 2,618 metadata bytes in one 4,096-byte
+accounted mapping. Auto installed only `scalar-step`: 751 code bytes, 1,074
+metadata bytes, and one 4,096-byte mapping. Median polled peak RSS was 2,736 KiB
+VM, 2,724 KiB forced, and 2,808 KiB auto. All four warmups and 31 randomized
+samples per variant, exact outcome `F64 bits 0x401af3ef5a48f5f0`, compiler/JIT
+phase distributions, threshold alternatives, environment, hashes, and every
+unremoved sample are retained under
+[`../../meta/benchmarks/jit/results/`](../../meta/benchmarks/jit/results/).
+
+The pre-JIT `c4c96094260072323f9399fe7f0f7b4a14d1eef6` diagnostic used a
+compatible source with an in-program exact-bit oracle. Current explicit VM
+median was 357.510855 ms versus 364.419240 ms pre-JIT (ratio 0.981); the 6.908 ms
+difference was less than twice the larger 3.939 ms MAD, so no VM regression or
+improvement is claimed. Current binary size was 1,448,584 bytes versus 1,129,440
+bytes (1.283x), and median RSS was 2,756 versus 2,272 KiB. The larger binary and
+RSS remain visible baseline-JIT costs.
+
 ## Claim Policy
 
 Claims are category- and tier-specific: for example, “lowest median cold

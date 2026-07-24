@@ -42,7 +42,16 @@ for `VmRSS`. Every warmup and measured sample, order, exact internal phase
 metrics, code-object/accounting statistics, exit status, environment, hashes,
 and median/MAD/nearest-rank-p95/min/max summaries are retained in
 [`results/callable-baseline-jit-linux-x86_64.json`](results/callable-baseline-jit-linux-x86_64.json).
+The same protocol at auto thresholds 1 and 1,024 is retained in
+[`results/auto-threshold-1.json`](results/auto-threshold-1.json) and
+[`results/auto-threshold-1024.json`](results/auto-threshold-1024.json).
 No sample is discarded.
+
+The diagnostic pre-JIT VM comparison uses the compatible exact-oracle source in
+[`pre-jit-workload/`](pre-jit-workload/) and retains all randomized samples in
+[`results/pre-jit-c4-vm-comparison.json`](results/pre-jit-c4-vm-comparison.json).
+That source returns Unit only after checking the exact F64 bits, so the older CLI
+can prove correctness without metrics or benchmark output.
 
 The release runtime emits metrics only when `LKJSCRIPT_METRICS` is present, as
 one `LKJSCRIPT_METRICS <json>` stderr line. `LKJSCRIPT_METRICS_FILE` instead

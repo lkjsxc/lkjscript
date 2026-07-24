@@ -117,6 +117,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   and native entries. Code objects retain ABI/tier/group, size/accounting,
   relocation/runtime/safepoint/source/outcome, compile/install, invalidation,
   W^X, and entry metadata under bounded synchronous session ownership
+- Retained JIT evidence: opt-in low-overhead JSON metrics are separate from full
+  diagnostics and never use stdout; the standard-library harness polls process
+  RSS, checks exact result bits and stream silence, randomizes at least four
+  warmups plus 31 samples, and retains every sample and distribution under
+  `meta/benchmarks/jit/results/`
 - Native limits: recursion, indirect calls, polymorphic or unsupported
   signatures, references, strings, collections, products, Option/Result,
   buffers, allocation, and host IO are explicit forced-mode engine errors.
@@ -244,7 +249,63 @@ or a performance result.
 
 Docker, full Brainfuck Mandelbrot, performance sampling, OSR, background work,
 optimizing/speculative tiers, native references/allocation/host IO, and
-non-Linux/non-x86-64 acceptance were not run or implemented.
+non-Linux/non-x86-64 acceptance were not run or implemented in that callable
+implementation chain.
+
+The retained measurement/default commit
+`025cbb2feadbb18fbae51e68e38b9c849798d068`, following instrumentation/default
+commit `56535c589998eeefa045fca622720662a2f78662`, was measured from a clean
+isolated worktree on Linux 7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX with 20
+logical CPUs available, 32 GiB RAM, Rust/Cargo 1.96.0, and Python 3.12.3. The
+release binary was 1,448,584 bytes with SHA-256
+`94dec3b623f07333ed57659c67d8461c8ac30e7c13684f147700b72cefd9a638`;
+the 289-byte workload SHA-256 was
+`aa8acecbad8add81f7a3a79b19a69e8f503d36c8af6e1f503b572bfadd14157e`.
+
+| Retained scalar metric | Result |
+| --- | --- |
+| protocol/oracle | four warmups and 31 randomized samples per variant, seed `0x4c4b4a534d455452`, no removed samples; every process returned exact F64 bits `0x401af3ef5a48f5f0` with zero stdout and no unexpected stderr |
+| process wall median / MAD / p95 / min / max | VM 354.533038 / 4.711766 / 362.572659 / 347.360647 / 369.390164 ms; forced 9.372036 / 0.467328 / 10.364211 / 8.711153 / 10.472645 ms; auto-64 214.482019 / 3.352331 / 226.691819 / 206.949992 / 228.798658 ms |
+| generated execution | forced native median 7.647935 ms versus VM execution 352.918413 ms: **46.146x**, meeting the aspirational 5x target |
+| compile/install/entry | native lowering+encoding 0.040096 ms, relocation/W^X install 0.036558 ms, 0.076654 ms combined; forced time to first native entry 0.080141 ms and first-call duration 7.647935 ms; measured whole-workload break-even one invocation |
+| auto-64 | 1.653x process-wall speedup over VM; median time to first native entry 0.297720 ms; 64 expected initial VM entries, 99,936 native entries/PollV1 calls, zero compile failures; main remained VM and no OSR is claimed |
+| forced counts/cache | 100,001 native entries, 100,000 direct calls, 300,002 PollV1 calls, zero fallback/failure; one object, 1,926 code bytes, 2,618 metadata bytes, 4,096 accounted allocation bytes |
+| peak RSS median | VM 2,736 KiB; forced 2,724 KiB; auto 2,808 KiB, polled from `/proc` |
+| threshold decision | auto process medians at thresholds 1/64/1,024 were 211.286082 / 214.482019 / 211.901028 ms with overlapping dispersion; 64 is retained as the middle conservative policy, keeping 63 cold calls in VM while avoiding the 1,024-entry trigger delay |
+| pre-JIT VM diagnostic | compatible exact-oracle source: current VM 357.510855 ms versus `c4c9609` 364.419240 ms (0.981x); difference below twice larger MAD, so no regression/improvement claim; old/current binaries 1,129,440/1,448,584 bytes and median RSS 2,272/2,756 KiB |
+
+Every sample and phase distribution is retained at
+`meta/benchmarks/jit/results/callable-baseline-jit-linux-x86_64.json`,
+`auto-threshold-1.json`, `auto-threshold-1024.json`, and
+`pre-jit-c4-vm-comparison.json`. Temporary `c4c9609` worktree, copied binary,
+and source copy were removed; the compatible source itself is retained under
+`meta/benchmarks/jit/pre-jit-workload/`. Profiling/disassembly improvement was
+not required because the 5x target passed. Docker, full Brainfuck Mandelbrot,
+OSR, non-scalar native semantics, and non-Linux acceptance were not run.
+
+Final-worktree inventory was recalculated rather than copied from older
+records: 96 canonical `src/**/*.lkjscript` files (58,734 bytes, 8,067 physical
+lines) are covered by ten executable roots; two additional compatible benchmark
+sources live under `meta/benchmarks/jit/pre-jit-workload` and are not canonical
+corpus members; the canonical workspace gate reports 126 tests; and `docs/`
+contains 42 Markdown documents. The final release binary retains the
+1,448,584-byte size and SHA-256 above. The four committed result JSON files are
+293,337, 293,879, 293,535, and 29,965 bytes with the exact hashes recorded in
+Experiment C4.
+
+Final acceptance ran `cargo run --locked -q -p lkjscript-xtask -- quiet verify`
+(126 tests), `cargo build --workspace --release --locked`, ordinary/default,
+explicit VM, forced, and threshold-2 auto scalar runs, explicit-VM hello and
+Mandelbrot, `python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke
+--no-build`, and the lkjedit/HTTP smoke scripts. All passed; scalar streams were
+empty, hello was exactly `3628800`, and Mandelbrot remained 1,176 bytes/24 lines
+with SHA-256
+`222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907`.
+Docker and full Brainfuck Mandelbrot were not run. The first aggregate smoke
+wrapper itself exited 1 only because its extra local assertion incorrectly
+expected a newline after the canonical newline-free hello output; every wrapped
+command had exited 0. The corrected complete wrapper was rerun and exited 0,
+so no failed product command is hidden.
 
 ## Accepted Next Target
 

@@ -46,9 +46,12 @@ The VM uses dense bytecode, contiguous stacks, tagged small I64 values, boxed
 wide I64/F64 values, precise non-moving mark-sweep collection, and
 return-adjacent frame reuse. Source is compiled on every CLI invocation. Host
 effects block synchronously. Linux x86-64 now has a callable scalar baseline
-compiler, bounded code objects, and explicit engines. There is no native
-reference/allocation support, OSR, optimizing tier, deoptimization, or retained
-JIT performance result.
+compiler, bounded code objects, explicit engines, and a retained scalar
+performance result. Generated forced execution reached 46.146x same-commit VM
+execution and auto reached 1.653x process-wall speedup at threshold 64 on the
+100,000-call F64 workload. There is no native reference/allocation support,
+OSR, optimizing tier, or deoptimization; the scalar result is not a
+full-language claim.
 
 Historical debug figures and single-shot C comparisons lack preserved machine,
 variance, or artifact data and remain diagnostic rather than baselines. The
@@ -115,10 +118,15 @@ emission alone is still not a JIT claim.
 6. Add forced baseline mode that errors rather than silently falls back.
 7. Measure trigger, compilation, first native execution, end-to-end time,
    steady state, break-even, code cache, and fallbacks before performance
-   claims.
+   claims. **Complete for the retained scalar workload.**
 
 Ordinary `run` now uses `auto` with a conservative 64-entry threshold; explicit
 `vm` remains deterministic, and auto leaves tiny or unsupported work there.
+Thresholds 1/64/1,024 had overlapping process distributions on the retained
+100,000-call workload. The selected middle value protects short programs while
+reaching native code at median 0.297720 ms rather than waiting to the 1,024-call
+median 3.556024 ms. The next performance dependency is loop-triggered OSR, not
+lowering the function-entry threshold to manipulate one benchmark.
 
 ## Phase 5: Loop Hotness And OSR
 
