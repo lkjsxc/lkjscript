@@ -162,28 +162,6 @@ impl Operation {
         Self::UnwrapSome,
     ];
 
-    pub const CORE_GLOBALS: &'static [Self] = &[
-        Self::Add,
-        Self::Subtract,
-        Self::Multiply,
-        Self::Divide,
-        Self::EqualValue,
-        Self::Less,
-        Self::LessEqual,
-        Self::Greater,
-        Self::GreaterEqual,
-        Self::Not,
-        Self::Cons,
-        Self::Car,
-        Self::Cdr,
-        Self::IsEmptyList,
-        Self::Print,
-        Self::Flush,
-        Self::ReadByte,
-        Self::WriteByte,
-        Self::Exit,
-    ];
-
     pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL
             .iter()

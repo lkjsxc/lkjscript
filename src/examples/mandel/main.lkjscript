@@ -1,6 +1,11 @@
 import/
 examples/mandel/draw/grid.lkjscript
 /import
+main/
+sig/
+->
+Unit
+/sig
 do/
 grid/
 0
@@ -8,3 +13,4 @@ grid/
 48
 /grid
 /do
+/main

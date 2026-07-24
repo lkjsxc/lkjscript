@@ -41,6 +41,7 @@ pub fn load_program(path: &Path, limits: &Limits) -> Result<Program> {
         &mut loading,
         &mut done,
         &mut files,
+        true,
     )?;
     Ok(Program { root: entry, files })
 }
@@ -69,6 +70,7 @@ fn load_file(
     loading: &mut HashSet<PathBuf>,
     done: &mut HashSet<PathBuf>,
     files: &mut Vec<SourceFile>,
+    is_root: bool,
 ) -> Result<()> {
     ensure_source_path(path)?;
     let canonical = path
@@ -93,13 +95,22 @@ fn load_file(
     check_file_limits(&tokens, limits, &label)?;
     let forms = parse_tokens(&tokens).map_err(|error| Error::msg(format!("{label}: {error}")))?;
     validate_top_level(&forms, limits, &label)?;
+    if !is_root
+        && forms
+            .iter()
+            .any(|form| matches!(form, Expr::Call { name, .. } if name == "main"))
+    {
+        return Err(Error::msg(format!(
+            "{label}: imported file may contain only imports, function defs, and products; main is forbidden"
+        )));
+    }
 
     for form in &forms {
         if let Expr::Call { name, args } = form {
             if name == "import" {
                 let spec = import_path(args)?;
                 let next = resolve_import(spec, parent, package_root)?;
-                load_file(&next, package_root, limits, loading, done, files)?;
+                load_file(&next, package_root, limits, loading, done, files, false)?;
             }
         }
     }
@@ -255,10 +266,10 @@ pub(crate) fn validate_top_level(forms: &[Expr], limits: &Limits, path: &str) ->
     for form in forms {
         match form {
             Expr::Call { name, .. }
-                if name == "def" || name == "do" || name == "import" || name == "product" => {}
+                if name == "def" || name == "main" || name == "import" || name == "product" => {}
             _ => {
                 return Err(Error::msg(format!(
-                    "{path}: top-level must be def, do, import, or product"
+                    "{path}: top-level must be def, main, import, or product; top-level do was removed"
                 )));
             }
         }
@@ -411,7 +422,7 @@ mod tests {
     fn compilation_rejects_a_wide_entry_directory() -> std::io::Result<()> {
         let directory = TempDir::new("wide-entry")?;
         let entry = directory.0.join("main.lkjscript");
-        fs::write(&entry, "do/\nunit\n/do\n")?;
+        fs::write(&entry, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n")?;
         for index in 0..16 {
             fs::write(directory.0.join(format!("asset-{index}")), "")?;
         }
@@ -440,7 +451,7 @@ mod tests {
         let entry = package.0.join("main.lkjscript");
         fs::write(
             &entry,
-            "import/\n./escaped.lkjscript\n/import\ndo/\nunit\n/do\n",
+            "import/\n./escaped.lkjscript\n/import\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
         )?;
 
         let error = load_program(&entry, &Limits::default())

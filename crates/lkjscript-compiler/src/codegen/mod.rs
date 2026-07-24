@@ -4,34 +4,24 @@ mod emit;
 
 use std::collections::HashMap;
 
-use emit::{add_constant, emit_expr, emit_sequence, Cx};
+use emit::{add_constant, emit_expr, Cx};
 use lkjscript_core::{Chunk, Constant, Error, FunctionProto, Op, ProductMetadata, Result};
 
-use crate::hir::{BindingId, ExprKind, Function, Program, TopLevel, ValueDefinition};
+use crate::hir::{BindingId, Function, Program};
 
 pub(crate) fn compile_program(program: &Program) -> Result<Chunk> {
     let (mut chunk, globals) = initialize_chunk(program)?;
-    for form in &program.forms {
-        match form {
-            TopLevel::Function(function) => {
-                compile_function(&mut chunk, &globals, program, function)?;
-            }
-            TopLevel::Value(value) => {
-                compile_value(&mut chunk, &globals, program, value)?;
-            }
-            TopLevel::Do { expression, .. } => {
-                compile_top_level_do(&mut chunk, &globals, program, expression)?;
-            }
-        }
+    for function in &program.functions {
+        compile_function(&mut chunk, &globals, program, function)?;
     }
-    chunk.main.emit(Op::Unit);
-    chunk.main.emit(Op::Return);
+    compile_main(&mut chunk, &globals, program)?;
     Ok(chunk)
 }
 
 fn initialize_chunk(program: &Program) -> Result<(Chunk, HashMap<BindingId, u16>)> {
     let mut chunk = Chunk::new();
-    chunk.main.locals = program.main_locals;
+    chunk.main.name = "main".into();
+    chunk.main.locals = program.main.local_count;
     for product in &program.products {
         if product.id.index() != chunk.products.len() {
             return Err(Error::msg(format!(
@@ -59,16 +49,16 @@ fn initialize_chunk(program: &Program) -> Result<(Chunk, HashMap<BindingId, u16>
     let mut globals = HashMap::with_capacity(program.global_layout.len());
     for (index, binding_id) in program.global_layout.iter().copied().enumerate() {
         let slot = u16::try_from(index)
-            .map_err(|_| Error::msg("too many HIR globals for bytecode u16 slots"))?;
+            .map_err(|_| Error::msg("too many HIR functions for bytecode u16 slots"))?;
         let binding = program.binding(binding_id).ok_or_else(|| {
             Error::msg(format!(
-                "global layout references unknown HIR binding {}",
+                "function layout references unknown HIR binding {}",
                 binding_id.raw()
             ))
         })?;
         if globals.insert(binding_id, slot).is_some() {
             return Err(Error::msg(format!(
-                "duplicate HIR binding {} in global layout",
+                "duplicate HIR binding {} in function layout",
                 binding_id.raw()
             )));
         }
@@ -90,16 +80,10 @@ fn compile_function(
         ))
     })?;
     let name = binding.name.clone();
-    let mut locals = HashMap::with_capacity(function.params.len());
-    for (index, parameter) in function.params.iter().copied().enumerate() {
-        let slot = u8::try_from(index)
-            .map_err(|_| Error::msg(format!("function {name} has too many parameters")))?;
-        if locals.insert(parameter, slot).is_some() {
-            return Err(Error::msg(format!(
-                "function {name} repeats HIR parameter binding {}",
-                parameter.raw()
-            )));
-        }
+    if usize::from(function.arity) != function.params.len() {
+        return Err(Error::msg(format!(
+            "function {name} has inconsistent HIR arity"
+        )));
     }
     let proto = {
         let proto = FunctionProto {
@@ -108,7 +92,7 @@ fn compile_function(
             locals: function.local_count,
             code: Vec::new(),
         };
-        let mut cx = Cx::new(chunk, globals, locals, 0, proto);
+        let mut cx = Cx::new(chunk, globals, 0, proto);
         emit_expr(&mut cx, &function.body)?;
         cx.proto.emit(Op::Return);
         cx.proto
@@ -126,61 +110,23 @@ fn compile_function(
     Ok(())
 }
 
-fn compile_value(
+fn compile_main(
     chunk: &mut Chunk,
     globals: &HashMap<BindingId, u16>,
     program: &Program,
-    value: &ValueDefinition,
 ) -> Result<()> {
-    let name = program
-        .binding(value.binding)
-        .map(|binding| binding.name.clone())
-        .ok_or_else(|| {
-            Error::msg(format!(
-                "value definition references unknown HIR binding {}",
-                value.binding.raw()
-            ))
-        })?;
     let code_base = u16::try_from(chunk.main.len())
         .map_err(|_| Error::msg("main bytecode offset exceeds u16"))?;
     let mut fragment = {
         let proto = FunctionProto {
-            name,
+            name: "main".into(),
             arity: 0,
-            locals: program.main_locals,
+            locals: program.main.local_count,
             code: Vec::new(),
         };
-        let mut cx = Cx::new(chunk, globals, HashMap::new(), code_base, proto);
-        emit_expr(&mut cx, &value.value)?;
-        let global = global_slot(globals, value.binding)?;
-        cx.proto.emit_op_u16(Op::StoreGlobal, global);
-        cx.proto.code
-    };
-    chunk.main.code.append(&mut fragment);
-    chunk.main.emit(Op::Pop);
-    Ok(())
-}
-
-fn compile_top_level_do(
-    chunk: &mut Chunk,
-    globals: &HashMap<BindingId, u16>,
-    program: &Program,
-    expression: &crate::hir::Expr,
-) -> Result<()> {
-    let ExprKind::Do(expressions) = &expression.kind else {
-        return Err(Error::msg("top-level HIR do does not contain a Do node"));
-    };
-    let code_base = u16::try_from(chunk.main.len())
-        .map_err(|_| Error::msg("main bytecode offset exceeds u16"))?;
-    let mut fragment = {
-        let proto = FunctionProto {
-            name: "<do>".into(),
-            arity: 0,
-            locals: program.main_locals,
-            code: Vec::new(),
-        };
-        let mut cx = Cx::new(chunk, globals, HashMap::new(), code_base, proto);
-        emit_sequence(&mut cx, expressions, false)?;
+        let mut cx = Cx::new(chunk, globals, code_base, proto);
+        emit_expr(&mut cx, &program.main.body)?;
+        cx.proto.emit(Op::Return);
         cx.proto.code
     };
     chunk.main.code.append(&mut fragment);
@@ -190,7 +136,7 @@ fn compile_top_level_do(
 fn global_slot(globals: &HashMap<BindingId, u16>, binding: BindingId) -> Result<u16> {
     globals.get(&binding).copied().ok_or_else(|| {
         Error::msg(format!(
-            "resolved HIR binding {} has no bytecode global slot",
+            "resolved HIR function binding {} has no bytecode slot",
             binding.raw()
         ))
     })

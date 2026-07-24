@@ -6,12 +6,13 @@ use lkjscript_core::{
     Chunk, Constant, Error, FunctionProto, Op, ProductFieldRef, ProductId, Result,
 };
 
-use crate::hir::{BindingId, Expr, ExprKind, LocalDefinition, Operation};
+use crate::hir::{
+    BindingId, BindingRef, BindingStorage, Expr, ExprKind, LocalDefinition, Operation,
+};
 
 pub(crate) struct Cx<'a> {
     chunk: &'a mut Chunk,
     globals: &'a HashMap<BindingId, u16>,
-    locals: HashMap<BindingId, u8>,
     code_base: u16,
     pub(crate) proto: FunctionProto,
 }
@@ -20,14 +21,12 @@ impl<'a> Cx<'a> {
     pub(crate) fn new(
         chunk: &'a mut Chunk,
         globals: &'a HashMap<BindingId, u16>,
-        locals: HashMap<BindingId, u8>,
         code_base: u16,
         proto: FunctionProto,
     ) -> Self {
         Self {
             chunk,
             globals,
-            locals,
             code_base,
             proto,
         }
@@ -72,10 +71,20 @@ pub(crate) fn emit_expr(cx: &mut Cx<'_>, expression: &Expr) -> Result<()> {
         } => emit_if(cx, condition, then_branch, else_branch)?,
         ExprKind::While { condition, body } => emit_while(cx, condition, body)?,
         ExprKind::Let { bindings, body } => emit_let(cx, bindings, body)?,
-        ExprKind::SetGlobal { target, value } => {
+        ExprKind::MutableLocal {
+            slot,
+            initial,
+            body,
+            ..
+        } => {
+            emit_expr(cx, initial)?;
+            cx.proto.emit_op_u8(Op::StoreLocal, *slot);
+            cx.proto.emit(Op::Pop);
+            emit_expr(cx, body)?;
+        }
+        ExprKind::SetLocal { slot, value, .. } => {
             emit_expr(cx, value)?;
-            let slot = global_slot(cx, *target)?;
-            cx.proto.emit_op_u16(Op::StoreGlobal, slot);
+            cx.proto.emit_op_u8(Op::StoreLocal, *slot);
             cx.proto.emit(Op::Pop);
             cx.proto.emit(Op::Unit);
         }
@@ -154,13 +163,14 @@ fn intern_product_field(chunk: &mut Chunk, product: ProductId, field: u8) -> Res
     Ok(index)
 }
 
-fn emit_load(cx: &mut Cx<'_>, binding: BindingId) -> Result<()> {
-    if let Some(slot) = cx.locals.get(&binding).copied() {
-        cx.proto.emit_op_u8(Op::LoadLocal, slot);
-        return Ok(());
+fn emit_load(cx: &mut Cx<'_>, binding: BindingRef) -> Result<()> {
+    match binding.storage {
+        BindingStorage::Local(slot) => cx.proto.emit_op_u8(Op::LoadLocal, slot),
+        BindingStorage::Function => {
+            let slot = global_slot(cx, binding.binding)?;
+            cx.proto.emit_op_u16(Op::LoadGlobal, slot);
+        }
     }
-    let slot = global_slot(cx, binding)?;
-    cx.proto.emit_op_u16(Op::LoadGlobal, slot);
     Ok(())
 }
 
@@ -268,20 +278,10 @@ fn emit_while(cx: &mut Cx<'_>, condition: &Expr, body: &[Expr]) -> Result<()> {
 fn emit_let(cx: &mut Cx<'_>, bindings: &[LocalDefinition], body: &Expr) -> Result<()> {
     for binding in bindings {
         emit_expr(cx, &binding.value)?;
-        if cx.locals.insert(binding.binding, binding.slot).is_some() {
-            return Err(Error::msg(format!(
-                "duplicate HIR local binding {} during bytecode lowering",
-                binding.binding.raw()
-            )));
-        }
         cx.proto.emit_op_u8(Op::StoreLocal, binding.slot);
         cx.proto.emit(Op::Pop);
     }
-    emit_expr(cx, body)?;
-    for binding in bindings {
-        cx.locals.remove(&binding.binding);
-    }
-    Ok(())
+    emit_expr(cx, body)
 }
 
 fn code_offset(cx: &Cx<'_>) -> Result<u16> {

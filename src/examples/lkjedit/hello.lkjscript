@@ -4,9 +4,16 @@ std/term/banner.lkjscript
 import/
 std/io/get-byte.lkjscript
 /import
+main/
+sig/
+->
+Unit
+/sig
 do/
 banner/
 /banner
 get-byte/
 /get-byte
+unit
 /do
+/main

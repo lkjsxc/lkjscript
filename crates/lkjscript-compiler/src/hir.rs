@@ -51,8 +51,8 @@ pub enum Origin {
 pub enum BindingKind {
     Parameter,
     ImmutableLocal,
+    MutableLocal,
     Function,
-    MutableGlobalValue,
     BuiltinOperation(Operation),
 }
 
@@ -76,10 +76,10 @@ pub struct Program {
     pub sources: Vec<Source>,
     pub bindings: Vec<Binding>,
     pub products: Vec<ProductDefinition>,
-    pub forms: Vec<TopLevel>,
-    /// Runtime global slots in deterministic bytecode layout order.
+    pub functions: Vec<Function>,
+    pub main: Main,
+    /// Internal function-closure slots in deterministic bytecode layout order.
     pub global_layout: Vec<BindingId>,
-    pub main_locals: u8,
 }
 
 impl Program {
@@ -103,10 +103,11 @@ pub struct ProductField {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TopLevel {
-    Function(Function),
-    Value(ValueDefinition),
-    Do { origin: SourceId, expression: Expr },
+pub struct Main {
+    pub origin: SourceId,
+    pub return_type: Type,
+    pub local_count: u8,
+    pub body: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -119,13 +120,6 @@ pub struct Function {
     pub body: Expr,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ValueDefinition {
-    pub binding: BindingId,
-    pub origin: SourceId,
-    pub value: Expr,
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EffectSet(u16);
 
@@ -134,10 +128,11 @@ impl EffectSet {
     pub const ALLOCATES: Self = Self(1 << 0);
     pub const READS_MEMORY: Self = Self(1 << 1);
     pub const WRITES_MEMORY: Self = Self(1 << 2);
-    pub const HOST_IO: Self = Self(1 << 3);
-    pub const MAY_TRAP: Self = Self(1 << 4);
-    pub const MAY_EXIT: Self = Self(1 << 5);
-    pub const MAY_DIVERGE: Self = Self(1 << 6);
+    pub const MUTATES_LOCAL: Self = Self(1 << 3);
+    pub const HOST_IO: Self = Self(1 << 4);
+    pub const MAY_TRAP: Self = Self(1 << 5);
+    pub const MAY_EXIT: Self = Self(1 << 6);
+    pub const MAY_DIVERGE: Self = Self(1 << 7);
     pub const CONSERVATIVE_CALL: Self = Self::ALLOCATES
         .union(Self::READS_MEMORY)
         .union(Self::WRITES_MEMORY)
@@ -168,9 +163,9 @@ pub enum ExprKind {
     EmptyList,
     LitNone,
     LitStr(String),
-    Load(BindingId),
+    Load(BindingRef),
     Call {
-        callee: BindingId,
+        callee: BindingRef,
         args: Vec<Expr>,
     },
     Operation {
@@ -193,8 +188,15 @@ pub enum ExprKind {
         bindings: Vec<LocalDefinition>,
         body: Box<Expr>,
     },
-    SetGlobal {
+    MutableLocal {
+        binding: BindingId,
+        slot: u8,
+        initial: Box<Expr>,
+        body: Box<Expr>,
+    },
+    SetLocal {
         target: BindingId,
+        slot: u8,
         value: Box<Expr>,
     },
     ProductValue {
@@ -220,4 +222,16 @@ pub struct LocalDefinition {
     pub binding: BindingId,
     pub slot: u8,
     pub value: Expr,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BindingRef {
+    pub binding: BindingId,
+    pub storage: BindingStorage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingStorage {
+    Local(u8),
+    Function,
 }

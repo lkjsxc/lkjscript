@@ -40,7 +40,7 @@ The actual dependency edges are:
 | Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` |
 | Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
 | Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
-| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `hir.rs`, `operation.rs` | `analyze_program`, BindingId, typed operations/effects |
+| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `hir.rs`, `operation.rs` | `analyze_program`, explicit Main/Function, BindingId, local slots, typed operations/effects |
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical Type parsing and substitution |
 | HIR bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program` |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
@@ -62,23 +62,27 @@ CLI path
   -> lex each source
   -> per-file source limits
   -> parse matched forms
-  -> validate top-level forms
-  -> collect declaration headers
-  -> resolve names and types into owned HIR
-  -> lower resolved HIR to Chunk + FunctionProto bytecode
+  -> enforce one root main and declaration-only imports
+  -> collect immutable function and product headers
+  -> resolve exact types, binding IDs, and local slots into owned HIR
+  -> install internal function closures, then lower explicit main and functions
   -> run_chunk_with_args
 ```
 
-Imported definitions currently share one program-global namespace. Modules,
-exports, package versions, locks, and serialized bytecode are absent.
+Imported immutable function and product declarations share one program
+declaration namespace. Modules, exports, package versions, locks, and
+serialized bytecode are absent. Source runtime globals and imported execution
+are rejected.
 
 ## Compiler Pipeline Status
 
 Parsed AST -> resolved typed HIR -> reference bytecode is **Current**. HIR owns
-binding identity, nominal product/field identity, exact static type facts,
-declaration kind, canonical operation and resolved signature, source origin,
-and conservative effects;
-codegen no longer re-parses declarations or resolves names.
+an explicit Main and Functions, resolved binding IDs and local slot references,
+immutable declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs
+and field indexes, exact static type facts, source origins, canonical operation
+identities and per-call signatures, and conservative effects. Codegen no longer
+re-parses declarations or resolves names. Source SetGlobal and runtime value-
+definition paths are absent.
 
 Typed SSA, the selected owned Linux x86-64 native code-object backend,
 function/loop-triggered runtime JIT, a minimal AOT test emitter, and direct Wasm
@@ -94,7 +98,8 @@ SSA/backend gates. The VM remains the cold tier and oracle. See
 
 ```text
 Chunk main
-  -> install globals and closures
+  -> install internal immutable function closures
+  -> execute the source main body
   -> dense opcode dispatch
   -> stack frames and return-adjacent tail reuse
   -> tagged immediate values or arena objects
@@ -146,15 +151,14 @@ an external project receives the same contract.
 
 ## Accepted Redesign Direction
 
-With resolved typed HIR and separate Unit/Option/empty-list/equality semantics
-plus immutable nominal products in place, establish explicit main and
-effect-free libraries, migrate global editor state into a product plus one
-local var, remove
-mutable globals, validate chunks, and make VM outcomes process-safe. Typed SSA,
-its verifier/differential oracle, and the selected owned Linux x86-64 native
-code-object backend follow. The first adaptive execution target is synchronous baseline
-JIT, followed by loop OSR and proof-based optimizing JIT. Minimal file emission
-remains only for backend tests; offline PGO is rejected. The exact active
-boundary is [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
-Real modules, process-safe host services, byte strings/views, and measured memory strategies
-build on those layers as vertical slices.
+Explicit main, effect-free imported libraries, local-only mutation, and
+product-threaded editor, terminal, and Brainfuck state are now Current. Next,
+infer fixed-point function effects, validate chunks, and make VM outcomes and
+limits process-safe. Typed SSA, its verifier/differential oracle, and the
+selected owned Linux x86-64 native code-object backend then follow. The first
+adaptive execution target remains synchronous callable baseline JIT; loop OSR
+and proof-based optimizing JIT are later. Minimal file emission remains only
+for backend tests, and offline PGO is rejected. The exact active boundary is
+[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+Real modules, process-safe host services, byte strings/views, and measured
+memory strategies build on those layers as vertical slices.

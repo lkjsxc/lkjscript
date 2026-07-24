@@ -8,7 +8,7 @@ pub const MAX_CHILDREN: u32 = 16;
 pub const MAX_TOKENS_PER_FILE: u32 = 384;
 /// Maximum files plus subdirectories in one lkjscript source directory.
 pub const MAX_DIR_CHILDREN: u32 = 16;
-/// Maximum top-level `def` / `do` / `import` / `product` forms per file.
+/// Maximum top-level `def` / `main` / `import` / `product` forms per file.
 pub const MAX_TOPLEVEL_FORMS: u32 = 8;
 /// Maximum fields in one nominal product declaration.
 pub const MAX_PRODUCT_FIELDS: usize = 15;

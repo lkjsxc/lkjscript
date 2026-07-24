@@ -65,6 +65,11 @@ cli
 /do
 /fn
 /def
+main/
+sig/
+->
+Unit
+/sig
 do/
 let/
 bind/
@@ -85,3 +90,4 @@ lis
 /do
 /let
 /do
+/main

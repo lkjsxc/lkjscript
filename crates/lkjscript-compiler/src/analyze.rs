@@ -6,9 +6,9 @@ use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
 use crate::ast::Expr as AstExpr;
 use crate::hir::{
-    self, Binding, BindingId, BindingKind, EffectSet, Expr, ExprKind, Function, LocalDefinition,
-    Operation, Origin, ProductDefinition, ProductField, Source, SourceId, TopLevel, Type,
-    ValueDefinition,
+    self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, EffectSet, Expr, ExprKind,
+    Function, LocalDefinition, Main, Operation, Origin, ProductDefinition, ProductField, Source,
+    SourceId, Type,
 };
 use crate::import::Program as AstProgram;
 use crate::types::parse_one;
@@ -18,21 +18,26 @@ pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
     analyzer.install_operations()?;
     analyzer.collect_product_names(program)?;
     analyzer.collect_products(program)?;
-    let pending = analyzer.collect_headers(program)?;
+    let (pending_functions, pending_main) = analyzer.collect_headers(program)?;
 
-    let mut forms = Vec::with_capacity(pending.len());
-    for form in pending {
-        forms.push(analyzer.resolve_top_level(form)?);
+    let mut functions = Vec::with_capacity(pending_functions.len());
+    for function in pending_functions {
+        functions.push(analyzer.resolve_function(
+            function.binding,
+            function.origin,
+            function.parsed,
+        )?);
     }
-    let global_layout = analyzer.build_global_layout(&forms)?;
+    let main = analyzer.resolve_main(pending_main)?;
+    let global_layout = analyzer.build_global_layout(&functions)?;
 
     Ok(hir::Program {
         sources: analyzer.sources,
         bindings: analyzer.bindings,
         products: analyzer.products,
-        forms,
+        functions,
+        main,
         global_layout,
-        main_locals: analyzer.main_locals,
     })
 }
 
@@ -43,7 +48,6 @@ struct Analyzer {
     operations: HashMap<Operation, BindingId>,
     product_names: HashMap<String, ProductId>,
     products: Vec<ProductDefinition>,
-    main_locals: u8,
 }
 
 impl Analyzer {
@@ -64,7 +68,6 @@ impl Analyzer {
             operations: HashMap::new(),
             product_names: HashMap::new(),
             products: Vec::new(),
-            main_locals: 0,
         })
     }
 
@@ -240,23 +243,52 @@ impl Analyzer {
             .ok_or_else(|| Error::msg(format!("missing HIR product metadata for {name}")))
     }
 
-    fn collect_headers<'a>(&mut self, program: &'a AstProgram) -> Result<Vec<PendingTop<'a>>> {
-        let mut pending = Vec::new();
+    fn collect_headers<'a>(
+        &mut self,
+        program: &'a AstProgram,
+    ) -> Result<(Vec<PendingFunction<'a>>, PendingMain<'a>)> {
+        let mut functions = Vec::new();
+        let mut main = None;
         for (source_index, file) in program.files.iter().enumerate() {
             let source_raw = u32::try_from(source_index)
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             let source = SourceId::new(source_raw);
+            let is_root = file.path == program.root;
             for form in &file.forms {
                 match form {
                     AstExpr::Call { name, .. } if name == "import" || name == "product" => {}
                     AstExpr::Call { name, args } if name == "def" => {
-                        pending.push(self.collect_definition(source, args)?);
+                        functions.push(self.collect_definition(source, args)?);
                     }
-                    AstExpr::Call { name, args } if name == "do" => {
-                        pending.push(PendingTop::Do {
+                    AstExpr::Call { name, args } if name == "main" => {
+                        if !is_root {
+                            return Err(self.error(source, "imported file may not declare main"));
+                        }
+                        if main.is_some() {
+                            return Err(
+                                self.error(source, "executable root declares duplicate main")
+                            );
+                        }
+                        let (return_type, body) = parse_main(args)
+                            .map_err(|message| self.error(source, format!("main: {message}")))?;
+                        self.validate_product_type(&return_type)
+                            .map_err(|message| self.error(source, format!("main: {message}")))?;
+                        let mut free = HashSet::new();
+                        collect_type_params(&return_type, &mut free);
+                        if let Some(parameter) = free.into_iter().next() {
+                            return Err(self.error(
+                                source,
+                                format!("main: return type contains unbound parameter {parameter}"),
+                            ));
+                        }
+                        main = Some(PendingMain {
                             origin: source,
-                            expressions: args,
+                            return_type,
+                            body,
                         });
+                    }
+                    AstExpr::Call { name, .. } if name == "do" => {
+                        return Err(self.error(source, "top-level do was removed; use root main"));
                     }
                     other => {
                         return Err(
@@ -266,84 +298,63 @@ impl Analyzer {
                 }
             }
         }
-        Ok(pending)
+        let main =
+            main.ok_or_else(|| Error::msg("executable root must declare exactly one main"))?;
+        Ok((functions, main))
     }
 
     fn collect_definition<'a>(
         &mut self,
         origin: SourceId,
         args: &'a [AstExpr],
-    ) -> Result<PendingTop<'a>> {
+    ) -> Result<PendingFunction<'a>> {
         let name = definition_name(args).map_err(|message| self.error(origin, message))?;
-        match args {
-            [_, AstExpr::Call {
-                name: tag,
-                args: type_args,
-            }, value]
-                if tag == "type" =>
-            {
-                let ty = parse_type_form(type_args)
-                    .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
-                self.validate_product_type(&ty)
-                    .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
-                let mut free = HashSet::new();
-                collect_type_params(&ty, &mut free);
-                if let Some(parameter) = free.into_iter().next() {
-                    return Err(self.error(
-                        origin,
-                        format!("def {name}: value type contains unbound parameter {parameter}"),
-                    ));
-                }
-                let binding =
-                    self.add_global(origin, name, BindingKind::MutableGlobalValue, ty.clone())?;
-                Ok(PendingTop::Value {
-                    binding,
-                    origin,
-                    declared_type: ty,
-                    value,
-                })
-            }
-            [_, AstExpr::Call {
-                name: tag,
-                args: fn_args,
-            }] if tag == "fn" => {
-                let parsed = parse_function(fn_args)
-                    .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
-                validate_function_header(&name, &parsed)
-                    .map_err(|message| self.error(origin, message))?;
-                for ty in parsed
-                    .signature_params
-                    .iter()
-                    .chain(parsed.param_types.iter())
-                    .chain(std::iter::once(&parsed.signature_return))
-                {
-                    self.validate_product_type(ty)
-                        .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
-                }
-                let monomorphic = Type::Fn {
-                    params: parsed.signature_params.clone(),
-                    ret: Box::new(parsed.signature_return.clone()),
-                };
-                let ty = if parsed.forall_vars.is_empty() {
-                    monomorphic
-                } else {
-                    Type::Forall {
-                        vars: parsed.forall_vars.clone(),
-                        body: Box::new(monomorphic),
-                    }
-                };
-                let binding = self.add_global(origin, name, BindingKind::Function, ty)?;
-                Ok(PendingTop::Function {
-                    binding,
-                    origin,
-                    parsed,
-                })
-            }
-            _ => Err(self.error(
+        let [_, AstExpr::Call {
+            name: tag,
+            args: fn_args,
+        }] = args
+        else {
+            return Err(self.error(
                 origin,
-                format!("def {name}: need fn/…/fn or type/…/type value"),
-            )),
+                format!("def {name}: top-level def must declare an immutable fn"),
+            ));
+        };
+        if tag != "fn" {
+            return Err(self.error(
+                origin,
+                format!("def {name}: top-level def must declare an immutable fn"),
+            ));
         }
+        let parsed = parse_function(fn_args)
+            .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
+        validate_function_header(&name, &parsed).map_err(|message| self.error(origin, message))?;
+        for ty in parsed
+            .signature_params
+            .iter()
+            .chain(parsed.param_types.iter())
+            .chain(std::iter::once(&parsed.signature_return))
+        {
+            self.validate_product_type(ty)
+                .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
+        }
+        let monomorphic = Type::Fn {
+            params: parsed.signature_params.clone(),
+            ret: Box::new(parsed.signature_return.clone()),
+        };
+        let ty = if parsed.forall_vars.is_empty() {
+            monomorphic
+        } else {
+            Type::Forall {
+                vars: parsed.forall_vars.clone(),
+                body: Box::new(monomorphic),
+            }
+        };
+        let binding = self.add_global(origin, name, BindingKind::Function, ty)?;
+        Ok(PendingFunction {
+            binding,
+            origin,
+            parsed,
+        })
     }
 
     fn add_global(
@@ -396,60 +407,35 @@ impl Analyzer {
             .ok_or_else(|| Error::msg(format!("unknown HIR BindingId {}", id.raw())))
     }
 
-    fn resolve_top_level(&mut self, pending: PendingTop<'_>) -> Result<TopLevel> {
-        match pending {
-            PendingTop::Function {
-                binding,
-                origin,
-                parsed,
-            } => self
-                .resolve_function(binding, origin, parsed)
-                .map(TopLevel::Function),
-            PendingTop::Value {
-                binding,
-                origin,
-                declared_type,
-                value,
-            } => {
-                let (value, locals) = {
-                    let mut resolver =
-                        Resolver::new(self, origin, HashMap::new(), HashSet::new(), 0);
-                    let value = resolver.resolve_expr(value)?;
-                    let locals = resolver.local_count()?;
-                    (value, locals)
-                };
-                if !Type::unify_assignable(&value.ty, &declared_type) {
-                    let name = self.binding(binding)?.name.clone();
-                    return Err(self.error(
-                        origin,
-                        format!(
-                            "def {name}: value {:?} not assignable to {declared_type:?}",
-                            value.ty
-                        ),
-                    ));
-                }
-                self.main_locals = self.main_locals.max(locals);
-                Ok(TopLevel::Value(ValueDefinition {
-                    binding,
-                    origin,
-                    value,
-                }))
-            }
-            PendingTop::Do {
-                origin,
-                expressions,
-            } => {
-                let (expression, locals) = {
-                    let mut resolver =
-                        Resolver::new(self, origin, HashMap::new(), HashSet::new(), 0);
-                    let expression = resolver.resolve_do(expressions)?;
-                    let locals = resolver.local_count()?;
-                    (expression, locals)
-                };
-                self.main_locals = self.main_locals.max(locals);
-                Ok(TopLevel::Do { origin, expression })
-            }
+    fn resolve_main(&mut self, pending: PendingMain<'_>) -> Result<Main> {
+        let (body, local_count) = {
+            let mut resolver = Resolver::new(
+                self,
+                pending.origin,
+                HashMap::new(),
+                HashMap::new(),
+                HashSet::new(),
+                0,
+            );
+            let body = resolver.resolve_expr(pending.body)?;
+            let local_count = resolver.local_count()?;
+            (body, local_count)
+        };
+        if body.ty != pending.return_type {
+            return Err(self.error(
+                pending.origin,
+                format!(
+                    "main body type {:?} does not exactly equal declared return {:?}",
+                    body.ty, pending.return_type
+                ),
+            ));
         }
+        Ok(Main {
+            origin: pending.origin,
+            return_type: pending.return_type,
+            local_count,
+            body,
+        })
     }
 
     fn resolve_function(
@@ -466,6 +452,7 @@ impl Analyzer {
         })?;
         let mut params = Vec::with_capacity(parsed.param_names.len());
         let mut scope = HashMap::new();
+        let mut local_slots = HashMap::new();
         for (index, (name, ty)) in parsed
             .param_names
             .iter()
@@ -481,12 +468,25 @@ impl Analyzer {
                 Origin::Source(origin),
             )?;
             scope.insert(name.clone(), id);
+            local_slots.insert(
+                id,
+                u8::try_from(index).map_err(|_| {
+                    self.error(origin, "function has too many parameter local slots")
+                })?,
+            );
             params.push(id);
         }
 
         let (body, local_count) = {
             let type_variables = parsed.forall_vars.iter().cloned().collect();
-            let mut resolver = Resolver::new(self, origin, scope, type_variables, params.len());
+            let mut resolver = Resolver::new(
+                self,
+                origin,
+                scope,
+                local_slots,
+                type_variables,
+                params.len(),
+            );
             let body = resolver.resolve_expr(parsed.body)?;
             let local_count = resolver.local_count()?;
             (body, local_count)
@@ -512,117 +512,13 @@ impl Analyzer {
         })
     }
 
-    fn build_global_layout(&self, forms: &[TopLevel]) -> Result<Vec<BindingId>> {
-        let mut layout = Vec::new();
+    fn build_global_layout(&self, functions: &[Function]) -> Result<Vec<BindingId>> {
+        let mut layout = Vec::with_capacity(functions.len());
         let mut seen = HashSet::new();
-        for operation in Operation::CORE_GLOBALS {
-            let Some(binding) = self.operations.get(operation).copied() else {
-                return Err(Error::msg(format!(
-                    "missing canonical operation binding for {}",
-                    operation.name()
-                )));
-            };
-            record_global(binding, &mut layout, &mut seen)?;
-        }
-        for form in forms {
-            match form {
-                TopLevel::Function(function) => {
-                    self.record_expr_globals(&function.body, &mut layout, &mut seen)?;
-                    record_global(function.binding, &mut layout, &mut seen)?;
-                }
-                TopLevel::Value(value) => {
-                    self.record_expr_globals(&value.value, &mut layout, &mut seen)?;
-                    record_global(value.binding, &mut layout, &mut seen)?;
-                }
-                TopLevel::Do { expression, .. } => {
-                    self.record_expr_globals(expression, &mut layout, &mut seen)?;
-                }
-            }
+        for function in functions {
+            record_global(function.binding, &mut layout, &mut seen)?;
         }
         Ok(layout)
-    }
-
-    fn record_expr_globals(
-        &self,
-        expression: &Expr,
-        layout: &mut Vec<BindingId>,
-        seen: &mut HashSet<BindingId>,
-    ) -> Result<()> {
-        match &expression.kind {
-            ExprKind::LitI64(_)
-            | ExprKind::LitF64(_)
-            | ExprKind::LitBool(_)
-            | ExprKind::LitUnit
-            | ExprKind::EmptyList
-            | ExprKind::LitNone
-            | ExprKind::LitStr(_)
-            | ExprKind::QuoteSymbol(_) => {}
-            ExprKind::Load(binding) => {
-                if self.is_global_storage(*binding)? {
-                    record_global(*binding, layout, seen)?;
-                }
-            }
-            ExprKind::Call { callee, args } => {
-                for argument in args {
-                    self.record_expr_globals(argument, layout, seen)?;
-                }
-                if self.is_global_storage(*callee)? {
-                    record_global(*callee, layout, seen)?;
-                }
-            }
-            ExprKind::Operation { args, .. } | ExprKind::Do(args) => {
-                for argument in args {
-                    self.record_expr_globals(argument, layout, seen)?;
-                }
-            }
-            ExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.record_expr_globals(condition, layout, seen)?;
-                self.record_expr_globals(then_branch, layout, seen)?;
-                self.record_expr_globals(else_branch, layout, seen)?;
-            }
-            ExprKind::While { condition, body } => {
-                self.record_expr_globals(condition, layout, seen)?;
-                for expression in body {
-                    self.record_expr_globals(expression, layout, seen)?;
-                }
-            }
-            ExprKind::Let { bindings, body } => {
-                for binding in bindings {
-                    self.record_expr_globals(&binding.value, layout, seen)?;
-                }
-                self.record_expr_globals(body, layout, seen)?;
-            }
-            ExprKind::SetGlobal { target, value } => {
-                self.record_expr_globals(value, layout, seen)?;
-                record_global(*target, layout, seen)?;
-            }
-            ExprKind::ProductValue { fields, .. } => {
-                for field in fields {
-                    self.record_expr_globals(field, layout, seen)?;
-                }
-            }
-            ExprKind::ProductField { value, .. } => {
-                self.record_expr_globals(value, layout, seen)?;
-            }
-            ExprKind::WithProductField {
-                value, replacement, ..
-            } => {
-                self.record_expr_globals(value, layout, seen)?;
-                self.record_expr_globals(replacement, layout, seen)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn is_global_storage(&self, binding: BindingId) -> Result<bool> {
-        Ok(matches!(
-            self.binding(binding)?.kind,
-            BindingKind::Function | BindingKind::MutableGlobalValue
-        ))
     }
 
     fn error(&self, origin: SourceId, message: impl Into<String>) -> Error {
@@ -654,6 +550,7 @@ struct Resolver<'a> {
     analyzer: &'a mut Analyzer,
     origin: SourceId,
     scopes: Vec<HashMap<String, BindingId>>,
+    local_slots: HashMap<BindingId, u8>,
     type_variables: HashSet<String>,
     next_slot: usize,
     max_slots: usize,
@@ -664,6 +561,7 @@ impl<'a> Resolver<'a> {
         analyzer: &'a mut Analyzer,
         origin: SourceId,
         function_scope: HashMap<String, BindingId>,
+        local_slots: HashMap<BindingId, u8>,
         type_variables: HashSet<String>,
         parameter_count: usize,
     ) -> Self {
@@ -671,6 +569,7 @@ impl<'a> Resolver<'a> {
             analyzer,
             origin,
             scopes: vec![function_scope],
+            local_slots,
             type_variables,
             next_slot: parameter_count,
             max_slots: parameter_count,
@@ -708,6 +607,7 @@ impl<'a> Resolver<'a> {
             )));
         }
         let ty = resolved.ty.clone();
+        let binding = self.binding_ref(binding)?;
         Ok(self.expression(ty, ExprKind::Load(binding)))
     }
 
@@ -717,6 +617,7 @@ impl<'a> Resolver<'a> {
             "while" => self.resolve_while(args),
             "do" => self.resolve_do(args),
             "let" => self.resolve_let(args),
+            "var" => self.resolve_var(args),
             "quote" => self.resolve_quote(args),
             "set" => self.resolve_set(args),
             "empty-list" => self.resolve_empty_list(args),
@@ -725,8 +626,8 @@ impl<'a> Resolver<'a> {
             "field" => self.resolve_product_field(args),
             "with-field" => self.resolve_with_product_field(args),
             "bind" => Err(self.error("bind is only valid inside let")),
-            "fn" | "def" | "sig" | "params" | "forall" | "type" | "import" | "name" | "product"
-            | "fields" => {
+            "fn" | "def" | "main" | "sig" | "params" | "forall" | "type" | "import" | "name"
+            | "product" | "fields" => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
             }
             _ => self.resolve_plain_call(name, args),
@@ -775,6 +676,7 @@ impl<'a> Resolver<'a> {
             ))
         } else {
             let ty = self.call_result(name, callee_type, &resolved_args)?;
+            let callee = self.binding_ref(callee)?;
             Ok(self.expression(
                 ty,
                 ExprKind::Call {
@@ -980,6 +882,7 @@ impl<'a> Resolver<'a> {
                 return Err(self.error("missing lexical scope while resolving let"));
             };
             scope.insert(name, binding_id);
+            self.local_slots.insert(binding_id, slot);
             resolved_bindings.push(LocalDefinition {
                 binding: binding_id,
                 slot,
@@ -999,6 +902,79 @@ impl<'a> Resolver<'a> {
         ))
     }
 
+    fn resolve_var(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let [name_form, type_form, initial_ast, body_ast] = args else {
+            return Err(
+                self.error("var expects name/, type/, initial expression, and body expression")
+            );
+        };
+        let name = declared_name_form(name_form, "var").map_err(|message| self.error(message))?;
+        let AstExpr::Call {
+            name: type_tag,
+            args: type_args,
+        } = type_form
+        else {
+            return Err(self.error("var expects type/…/type second"));
+        };
+        if type_tag != "type" {
+            return Err(self.error("var expects type/…/type second"));
+        }
+        let declared_type = parse_type_form(type_args)
+            .map_err(|message| self.error(format!("var {name}: {message}")))?;
+        self.analyzer
+            .validate_product_type(&declared_type)
+            .map_err(|message| self.error(format!("var {name}: {message}")))?;
+        let mut parameters = HashSet::new();
+        collect_type_params(&declared_type, &mut parameters);
+        if let Some(parameter) = parameters
+            .into_iter()
+            .find(|parameter| !self.type_variables.contains(*parameter))
+        {
+            return Err(self.error(format!(
+                "var {name}: type parameter {parameter} is not declared by forall"
+            )));
+        }
+
+        // The initializer is deliberately resolved before the new binding exists.
+        let initial = self.resolve_expr(initial_ast)?;
+        if initial.ty != declared_type {
+            return Err(self.error(format!(
+                "var {name}: initializer type {:?} does not exactly equal {declared_type:?}",
+                initial.ty
+            )));
+        }
+
+        let saved_slot = self.next_slot;
+        let slot = u8::try_from(self.next_slot)
+            .map_err(|_| self.error("var needs more than 255 bytecode local slots"))?;
+        self.next_slot = self
+            .next_slot
+            .checked_add(1)
+            .ok_or_else(|| self.error("local slot count overflow"))?;
+        self.max_slots = self.max_slots.max(self.next_slot);
+        let binding = self.analyzer.add_binding(
+            name.clone(),
+            BindingKind::MutableLocal,
+            declared_type,
+            Origin::Source(self.origin),
+        )?;
+        self.local_slots.insert(binding, slot);
+        self.scopes.push(HashMap::from([(name, binding)]));
+        let body = self.resolve_expr(body_ast)?;
+        let _removed_scope = self.scopes.pop();
+        self.next_slot = saved_slot;
+        let ty = body.ty.clone();
+        Ok(self.expression(
+            ty,
+            ExprKind::MutableLocal {
+                binding,
+                slot,
+                initial: Box::new(initial),
+                body: Box::new(body),
+            },
+        ))
+    }
+
     fn resolve_set(&mut self, args: &[AstExpr]) -> Result<Expr> {
         let (target_name, value_ast) = match args {
             [target, value] => (
@@ -1007,32 +983,42 @@ impl<'a> Resolver<'a> {
             ),
             _ => return Err(self.error("set needs name and value")),
         };
-        let target = self
-            .analyzer
-            .globals
-            .get(&target_name)
-            .copied()
-            .ok_or_else(|| self.error(format!("unknown set target {target_name}")))?;
+        let target = self.lookup_lexical(&target_name).ok_or_else(|| {
+            if self.analyzer.globals.contains_key(&target_name)
+                || Operation::from_name(&target_name).is_some()
+            {
+                self.error(format!(
+                    "set target {target_name} is not a function-local mutable var"
+                ))
+            } else {
+                self.error(format!("unknown set target {target_name}"))
+            }
+        })?;
         let (kind, target_type) = {
             let binding = self.analyzer.binding(target)?;
             (binding.kind.clone(), binding.ty.clone())
         };
-        if kind != BindingKind::MutableGlobalValue {
+        if kind != BindingKind::MutableLocal {
             return Err(self.error(format!(
-                "set target {target_name} is not a mutable global value"
+                "set target {target_name} is not a function-local mutable var"
             )));
         }
+        let slot =
+            self.local_slots.get(&target).copied().ok_or_else(|| {
+                self.error(format!("set target {target_name} has no HIR local slot"))
+            })?;
         let value = self.resolve_expr(value_ast)?;
-        if !Type::unify_assignable(&value.ty, &target_type) {
+        if value.ty != target_type {
             return Err(self.error(format!(
-                "set target {target_name}: value type {:?} not assignable to {target_type:?}",
+                "set target {target_name}: value type {:?} does not exactly equal {target_type:?}",
                 value.ty
             )));
         }
         Ok(self.expression(
             Type::Unit,
-            ExprKind::SetGlobal {
+            ExprKind::SetLocal {
                 target,
+                slot,
                 value: Box::new(value),
             },
         ))
@@ -1236,6 +1222,21 @@ impl<'a> Resolver<'a> {
         Ok(self.expression(Type::Symbol, ExprKind::QuoteSymbol(symbol)))
     }
 
+    fn binding_ref(&self, binding: BindingId) -> Result<BindingRef> {
+        let storage = match self.analyzer.binding(binding)?.kind {
+            BindingKind::Parameter | BindingKind::ImmutableLocal | BindingKind::MutableLocal => {
+                BindingStorage::Local(self.local_slots.get(&binding).copied().ok_or_else(|| {
+                    self.error(format!("binding {} has no HIR local slot", binding.raw()))
+                })?)
+            }
+            BindingKind::Function => BindingStorage::Function,
+            BindingKind::BuiltinOperation(_) => {
+                return Err(self.error("built-in operation cannot be loaded as a binding"));
+            }
+        };
+        Ok(BindingRef { binding, storage })
+    }
+
     fn lookup(&self, name: &str) -> Option<BindingId> {
         self.lookup_lexical(name)
             .or_else(|| self.analyzer.globals.get(name).copied())
@@ -1283,15 +1284,7 @@ impl<'a> Resolver<'a> {
             | ExprKind::LitNone
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
-            ExprKind::Load(binding) => self
-                .analyzer
-                .binding(*binding)
-                .ok()
-                .and_then(|binding| {
-                    (binding.kind == BindingKind::MutableGlobalValue)
-                        .then_some(EffectSet::READS_MEMORY)
-                })
-                .unwrap_or(EffectSet::PURE),
+            ExprKind::Load(_) => EffectSet::PURE,
             ExprKind::Call { args, .. } => fold_effects(args).union(EffectSet::CONSERVATIVE_CALL),
             ExprKind::Operation {
                 operation, args, ..
@@ -1315,7 +1308,8 @@ impl<'a> Resolver<'a> {
                     effects.union(binding.value.effects)
                 })
                 .union(body.effects),
-            ExprKind::SetGlobal { value, .. } => value.effects.union(EffectSet::WRITES_MEMORY),
+            ExprKind::MutableLocal { initial, body, .. } => initial.effects.union(body.effects),
+            ExprKind::SetLocal { value, .. } => value.effects.union(EffectSet::MUTATES_LOCAL),
             ExprKind::ProductValue { fields, .. } => {
                 fold_effects(fields).union(EffectSet::ALLOCATES)
             }
@@ -1357,6 +1351,7 @@ fn is_contextual_name(name: &str) -> bool {
         "if" | "while"
             | "do"
             | "let"
+            | "var"
             | "quote"
             | "set"
             | "empty-list"
@@ -1369,6 +1364,7 @@ fn is_contextual_name(name: &str) -> bool {
             | "bind"
             | "fn"
             | "def"
+            | "main"
             | "sig"
             | "params"
             | "forall"
@@ -1458,22 +1454,16 @@ fn is_builtin_type_name(name: &str) -> bool {
     )
 }
 
-enum PendingTop<'a> {
-    Function {
-        binding: BindingId,
-        origin: SourceId,
-        parsed: ParsedFunction<'a>,
-    },
-    Value {
-        binding: BindingId,
-        origin: SourceId,
-        declared_type: Type,
-        value: &'a AstExpr,
-    },
-    Do {
-        origin: SourceId,
-        expressions: &'a [AstExpr],
-    },
+struct PendingFunction<'a> {
+    binding: BindingId,
+    origin: SourceId,
+    parsed: ParsedFunction<'a>,
+}
+
+struct PendingMain<'a> {
+    origin: SourceId,
+    return_type: Type,
+    body: &'a AstExpr,
 }
 
 struct ParsedFunction<'a> {
@@ -1494,6 +1484,27 @@ fn definition_name(args: &[AstExpr]) -> std::result::Result<String, String> {
         },
         _ => Err("def expects name/…/name first".into()),
     }
+}
+
+fn parse_main(args: &[AstExpr]) -> std::result::Result<(Type, &AstExpr), String> {
+    let [signature_form, body] = args else {
+        return Err("expected exactly sig/…/sig and one body expression".into());
+    };
+    let AstExpr::Call {
+        name,
+        args: signature_args,
+    } = signature_form
+    else {
+        return Err("expected sig/…/sig first".into());
+    };
+    if name != "sig" {
+        return Err("expected sig/…/sig first".into());
+    }
+    let (params, return_type) = parse_signature(signature_args)?;
+    if !params.is_empty() {
+        return Err("signature must have no parameters".into());
+    }
+    Ok((return_type, body))
 }
 
 fn parse_function(args: &[AstExpr]) -> std::result::Result<ParsedFunction<'_>, String> {
@@ -1693,6 +1704,18 @@ fn atom_type(name: &str) -> std::result::Result<Type, String> {
         Ok(ty)
     } else {
         Err(format!("bad type {name}"))
+    }
+}
+
+fn declared_name_form(expression: &AstExpr, context: &str) -> std::result::Result<String, String> {
+    match expression {
+        AstExpr::Call { name, args } if name == "name" => match args.as_slice() {
+            [AstExpr::LitStr(name)] if !name.is_empty() => Ok(name.clone()),
+            _ => Err(format!(
+                "{context} name must be one non-empty name/ text line"
+            )),
+        },
+        _ => Err(format!("{context} expects name/…/name first")),
     }
 }
 

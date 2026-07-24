@@ -7,7 +7,9 @@ implementation contracts.
 
 ## Status
 
-**Current** for engineering policy. Foundation changes are **Accepted Target**.
+**Current** for engineering policy and the explicit-main/local-mutation
+foundation. Later validation, outcomes, SSA, and native execution remain
+**Accepted Targets**.
 
 ## Product Intent
 
@@ -39,10 +41,12 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 
 ## Current Sharp Edges
 
-- Imports merge definitions into one program-global namespace.
-- Top-level definitions are installed in source order at runtime.
-- `set` is heavily used by lkjedit and remains program-global despite exact
-  target/type checking.
+- Imports merge immutable function and product declarations into one program
+  declaration namespace; there are not yet modules or exports.
+- Function closures are still installed in internal VM global slots before
+  source main, but those slots are not source values or mutable source state.
+- `set` is local-only. It targets the nearest same-function `var` by stable HIR
+  binding and slot; lkjedit, terminal, and Brainfuck state is product-threaded.
 - Raw terminal redraw must emit CR+LF; LF-only output causes staircase display.
 - lkjedit idle must wait without full repaint.
 - Final cursor placement must be followed by a flush.
@@ -51,11 +55,12 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - VM host operations block and process exit is not process-safe.
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
   I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists,
-  Option/no-nil, explicit equality families, and immutable nominal products have
-  landed. The active cycle threads product state through explicit main/local
-  mutation, adds fixed-point effects, chunk validation, process-safe outcomes,
-  verified typed SSA, one measured backend, W^X code objects, and an actually
-  called synchronous Linux x86-64 baseline JIT. Loop OSR, optimizing JIT, and a
+  Option/no-nil, explicit equality families, immutable nominal products,
+  explicit main, declaration-only imports, local-only mutation, and product-
+  threaded workload state have landed. The active cycle next adds fixed-point
+  effects, chunk validation, process-safe outcomes, verified typed SSA, one
+  measured backend, W^X code objects, and an actually called synchronous Linux
+  x86-64 baseline JIT. Loop OSR, optimizing JIT, and a
   minimal AOT test emitter remain later targets, not current capability. Offline
   PGO is rejected by product decision. See
   [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).

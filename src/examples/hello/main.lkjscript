@@ -1,6 +1,11 @@
 import/
 examples/hello/fact.lkjscript
 /import
+main/
+sig/
+->
+Unit
+/sig
 do/
 print/
 str-from-i64/
@@ -10,3 +15,4 @@ fact/
 /str-from-i64
 /print
 /do
+/main

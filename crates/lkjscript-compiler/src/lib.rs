@@ -93,6 +93,10 @@ mod tests {
 
     use super::{compile_source, ensure_source_path};
 
+    fn unit_main(body: &str) -> String {
+        format!("main/\nsig/\n->\nUnit\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
+    }
+
     #[test]
     fn accepts_only_canonical_source_extension() {
         assert!(ensure_source_path(Path::new("main.lkjscript")).is_ok());
@@ -102,26 +106,31 @@ mod tests {
 
     #[test]
     fn bounded_terminal_operations_replace_arbitrary_ioctl() {
-        let canonical = "do/\nsys-tty-get/\nstdin-handle/\n/stdin-handle\nbuf-new/\n60\n/buf-new\n/sys-tty-get\n/do\n";
-        let arbitrary = "do/\nsys-ioctl/\nstdin-handle/\n/stdin-handle\n21505\nbuf-new/\n1\n/buf-new\n/sys-ioctl\n/do\n";
-        assert!(compile_source(canonical, "terminal.lkjscript", &Limits::default()).is_ok());
-        assert!(compile_source(arbitrary, "terminal.lkjscript", &Limits::default()).is_err());
+        let canonical = unit_main(
+            "sys-tty-get/\nstdin-handle/\n/stdin-handle\nbuf-new/\n60\n/buf-new\n/sys-tty-get",
+        );
+        let arbitrary = unit_main(
+            "sys-ioctl/\nstdin-handle/\n/stdin-handle\n21505\nbuf-new/\n1\n/buf-new\n/sys-ioctl",
+        );
+        assert!(compile_source(&canonical, "terminal.lkjscript", &Limits::default()).is_ok());
+        assert!(compile_source(&arbitrary, "terminal.lkjscript", &Limits::default()).is_err());
     }
 
     #[test]
     fn descriptor_names_are_handle_and_result_explicit() {
         let canonical =
-            "do/\nis-ok/\nsys-close/\nstdin-handle/\n/stdin-handle\n/sys-close\n/is-ok\n/do\n";
-        let obsolete = "do/\nclose/\nstdin-handle/\n/stdin-handle\n/close\n/do\n";
-        assert!(compile_source(canonical, "handles.lkjscript", &Limits::default()).is_ok());
-        assert!(compile_source(obsolete, "handles.lkjscript", &Limits::default()).is_err());
+            unit_main("is-ok/\nsys-close/\nstdin-handle/\n/stdin-handle\n/sys-close\n/is-ok");
+        let obsolete = unit_main("close/\nstdin-handle/\n/stdin-handle\n/close");
+        assert!(compile_source(&canonical, "handles.lkjscript", &Limits::default()).is_ok());
+        assert!(compile_source(&obsolete, "handles.lkjscript", &Limits::default()).is_err());
     }
 
     #[test]
     fn bytecode_constants_preserve_numeric_source_types() {
-        let source =
-            "do/\nequal-value/\n9223372036854775807\n9223372036854775807\n/equal-value\n+/\n2.0\n1\n/+\n/do\n";
-        let chunk = compile_source(source, "numeric.lkjscript", &Limits::default())
+        let source = unit_main(
+            "equal-value/\n9223372036854775807\n9223372036854775807\n/equal-value\n+/\n2.0\n1\n/+",
+        );
+        let chunk = compile_source(&source, "numeric.lkjscript", &Limits::default())
             .expect("compile numeric source");
         assert!(chunk
             .constants
@@ -139,7 +148,7 @@ mod tests {
             "I32", "U32", "U64", "F32", "I128", "U8", "F16", "i32", "i64", "u32", "u64", "f32",
             "f64", "i128", "Int", "Float",
         ] {
-            let source = format!("def/\nname/\nvalue\n/name\ntype/\n{ty}\n/type\n1\n/def\n");
+            let source = format!("main/\nsig/\n->\n{ty}\n/sig\n1\n/main\n");
             let error = compile_source(&source, "removed-type.lkjscript", &Limits::default())
                 .expect_err("removed numeric type must fail")
                 .to_string();
@@ -173,13 +182,13 @@ mod tests {
             "i64-from-i32",
             "i32-from-i64",
         ] {
-            let source = format!("do/\n{name}/\n1\n2\n/{name}\n/do\n");
+            let source = unit_main(&format!("{name}/\n1\n2\n/{name}"));
             assert!(
                 compile_source(&source, "removed-op.lkjscript", &Limits::default()).is_err(),
                 "accepted operator {name}"
             );
         }
-        let variadic = "do/\n+/\n1\n2\n3\n/+\n/do\n";
-        assert!(compile_source(variadic, "arity.lkjscript", &Limits::default()).is_err());
+        let variadic = unit_main("+/\n1\n2\n3\n/+");
+        assert!(compile_source(&variadic, "arity.lkjscript", &Limits::default()).is_err());
     }
 }

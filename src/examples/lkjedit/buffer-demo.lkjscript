@@ -1,6 +1,11 @@
 import/
 std/term/redraw.lkjscript
 /import
+main/
+sig/
+->
+Unit
+/sig
 do/
 redraw/
 cons/
@@ -23,3 +28,4 @@ Str
 /cons
 /redraw
 /do
+/main

@@ -6,9 +6,9 @@ Define expression, type, and import behavior above the physical line format.
 
 ## Status
 
-**Current** for the forms explicitly labeled current below. Explicit `main` and
-function-local `var`/`set` are the next breaking **Accepted Target** and are not
-yet accepted by the compiler. The exact numeric contract is
+**Current.** Executable roots use exactly one explicit `main`, imported files
+are declaration-only, and mutation is limited to typed function-local
+`var`/`set`. The exact numeric contract is
 [numeric-semantics.md](../decisions/numeric-semantics.md).
 
 ## Expressions
@@ -23,16 +23,16 @@ yet accepted by the compiler. The exact numeric contract is
 - Calls use matching open and close markers around child expressions.
 - Division is named `div` because slash is structural.
 - Evaluation is eager except for special forms that explicitly control it.
-- Program definitions and mutable global values currently share one global
-  namespace across imported files.
+- Function and product declarations share one immutable program declaration
+  namespace across imported files; source runtime globals do not exist.
 
 ## Current Special Forms
 
-Implemented control and binding forms include `def`, `fn`, `if`, `while`,
-`let`, `bind`, `set`, `do`, `quote`, `product-value`, `field`, and
-`with-field`. `product`, `fields`, `sig`, `params`, `forall`, `type`, `name`,
-and `import` are contextual declaration/loading forms rather than freely
-evaluable runtime calls.
+Implemented control and binding forms include `main`, `def`, `fn`, `if`,
+`while`, `let`, `bind`, `var`, `set`, `do`, `quote`, `product-value`, `field`,
+and `with-field`. `product`, `fields`, `sig`, `params`, `forall`, `type`,
+`name`, and `import` are contextual declaration/loading forms rather than
+freely evaluable runtime calls.
 
 Every function definition has a mandatory signature and typed parameters.
 `forall/` declares annotation-driven type variables. There is no `Any`, trait,
@@ -42,14 +42,12 @@ typeclass, Hindley-Milner inference, or implemented user-defined type alias.
 exactly the same type. There is no omitted branch or nil-based type join.
 Empty `do`, `while`, `set`, and side-effecting operations return Unit.
 
-`set` currently mutates program-global state, but resolved HIR now requires an
-existing mutable value target, assignable value type, and returns Unit. This is
-temporary. The accepted replacement is
-`var/ name/ x /name type/ T /type initial body /var`; the initializer precedes
-the binding's lexical scope. In that body, `set/ x value /set` may target only
-the nearest `var` in the same function, has exact type `Unit`, and cannot target
-a parameter, `let` binding, function, or global. No compatibility form remains
-after cutover.
+`var/ name/ x /name type/ T /type initial body /var` introduces one typed
+mutable local. The initializer is resolved and evaluated before the binding
+enters scope. In the body, `set/ x value /set` targets only the nearest `var`
+in the same main or function, requires exact type equality, and returns Unit.
+Parameters, `let` bindings, functions, globals, and bindings in another
+function cannot be assigned. No source global or compatibility form remains.
 
 ## Immutable Nominal Products
 
@@ -68,20 +66,14 @@ are in [Immutable Nominal Products](../decisions/immutable-nominal-products.md).
 
 ## Semantic Migration
 
-The first AI-first semantic slices are **Current**: dedicated `Unit`/`unit`,
+The implemented AI-first semantic slices include dedicated `Unit`/`unit`,
 strict three-arm `if`, typed empty lists, Option/no-nil semantics, explicit
-equality families, and immutable nominal products are enforced from source
-through HIR and VM. `arg` returns
-`Option Str`; negative or out-of-range indexes return none. The remaining
-semantic core is an
-**Accepted Target**:
-
-- replace global mutation with immutable declarations and function-local
-  `var`/`set`;
-- replace top-level `do` with one explicit executable `main` and prohibit
-  imported initialization effects;
-- keep Option absence, Result failure, and process-safe VM Trap outcomes
-  distinct.
+equality families, immutable nominal products, explicit main, effect-free
+imports, and local-only mutation. `arg` returns `Option Str`; negative or
+out-of-range indexes return none. Product-valued editor, terminal, and
+Brainfuck state is passed through helpers and evolved only by executable or
+function-local vars. Process-safe structured VM outcomes remain an
+**Accepted Target**.
 
 See [AI-First Semantic Core](../decisions/semantic-core.md). Resolved typed HIR
 is now the current boundary through which these forms will migrate, so typing
@@ -107,17 +99,13 @@ use `not` around a positive operation. See
 
 ## Files And Imports
 
-Current top-level forms are `def`, `do`, `import`, and `product`, bounded by
-`MAX_TOPLEVEL_FORMS`. Product declarations are effect-free metadata; arbitrary
-runtime global value definitions and top-level `do` remain current only until
-the accepted explicit-main cutover.
-
-After that cutover, imported files contain only `import`, function `def`, and
-`product`. An executable root additionally contains exactly one
+Imported files contain only `import`, immutable function `def`, and `product`
+declarations. An executable root contains those declarations plus exactly one
 `main/ sig/ -> T /sig body-expression /main`. Main has no parameters, its body
-must have exactly `T`, and `arg` remains the script-argument operation. A main
-in an import, no root main, a duplicate root main, top-level `do`, and non-
-function `def` are compile errors.
+has exactly `T`, and `arg` remains the script-argument operation. A main in an
+import, no root main, a duplicate root main, top-level `do`, and non-function
+`def` are compile errors. All source files remain bounded by
+`MAX_TOPLEVEL_FORMS`.
 
 Current path resolution supports:
 

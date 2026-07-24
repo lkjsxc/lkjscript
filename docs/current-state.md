@@ -15,7 +15,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 127 language files under `src`; duplicate and builtin-shadowing wrappers were removed
+- Corpus: 86 language files under `src`; nine executable roots cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
@@ -26,10 +26,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - Imports: contained `std/`, `lib/`, `examples/`, and `./` paths with installed
   fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
   and canonicalized symlink escapes fail
-- Compiler boundary: one analysis pass collects headers and produces owned,
-  resolved typed HIR with BindingIds, ProductIds, numeric field identities,
-  source origins, exact operation/type facts, and conservative effects; bytecode
-  consumes HIR without re-resolving source names or declarations
+- Compiler boundary: one analysis pass collects immutable headers and produces
+  owned, resolved typed HIR with explicit Main and Functions, BindingIds,
+  local-slot references, MutableLocal/SetLocal, ProductIds, numeric field
+  identities, source origins, exact operation/type facts, and conservative
+  effects; bytecode consumes HIR without re-resolving source names or
+  declarations
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
@@ -37,18 +39,24 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
   traced immutable product objects, and return-adjacent tail-frame reuse
-- Semantics: Unit, typed empty-list, and Option none have distinct singleton
-  tags, while Option some is traced; `nil`, `Nil`, `nil?`, and `null?` are
-  removed; `arg` returns `Option Str`; empty `do`/`while`/`set` return Unit;
-  universal `eq`/`ne` are removed in favor of exact value, object-identity,
-  bounded structural-list, and F64-bit equality families; nominal products have
-  ordered named fields, exact construction, access, and immutable replacement
+- Semantics: executable roots have exactly one no-parameter typed main;
+  imports contain declarations only; top-level `do` and runtime value defs are
+  removed; `var` introduces one exactly typed mutable local and local-only
+  `set` returns Unit; Unit, typed empty-list, and Option none have distinct
+  singleton tags, while Option some is traced; `nil`, `Nil`, `nil?`, and
+  `null?` are removed; `arg` returns `Option Str`; universal `eq`/`ne` are
+  removed in favor of exact value, object-identity, bounded structural-list,
+  and F64-bit equality families; nominal products have ordered named fields,
+  exact construction, access, and immutable replacement
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
 - CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub
   was removed
-- Workloads: hello, native lkjscript Mandelbrot, Brainfuck Mandelbrot interpreted by lkjscript, lkjedit, one-shot HTTP, and Leibniz comparison
+- Workloads: hello, native lkjscript Mandelbrot, Brainfuck interpreted by
+  lkjscript, lkjedit, one-shot HTTP, and Leibniz comparison; Brainfuck,
+  terminal, and editor state is passed explicitly in immutable nominal products
+  and evolved through local vars
 - Resource handles: integers are rejected, stdin uses a reserved borrowed token,
   owned file/socket tokens are monotonic, and closed tokens are never reused
 - Terminal ABI: arbitrary ioctl is absent; fixed `sys-tty-get`/`sys-tty-set`
@@ -75,67 +83,44 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. mutable values and imports still share one program-global namespace, and
-   top-level execution/initialization remains order-dependent;
-2. user-call effects are a safe all-effects over-approximation rather than
+1. user-call effects are a safe all-effects over-approximation rather than
    fixed-point summaries;
-3. strings and IO lack a lossless bulk byte contract, and some library file
+2. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-4. public malformed chunks are not prevalidated, although stack underflow,
-   uninitialized slots, bad slot indexes, removed opcodes, non-Bool control, and
-   malformed product metadata/descriptor/category/identity boundaries now return
-   VM errors instead of semantic fallback values;
-5. source/import aggregate bytes, depth, count, constants, globals, bytecode,
-   VM fuel, heap, handles, output, and wall time are not comprehensively bounded;
-6. process exit/terminal state remain process-global, and monotonic handle
-   metadata remains until the VM ends.
+3. public malformed chunks are not prevalidated, although stack underflow,
+   uninitialized slots, bad slot indexes, removed opcodes, non-Bool control,
+   and malformed product metadata/descriptor/category/identity boundaries
+   return VM errors instead of semantic fallback values;
+4. source/import aggregate bytes, depth, count, constants, internal function
+   slots, bytecode, VM fuel, heap, handles, output, and wall time are not
+   comprehensively bounded;
+5. process exit and terminal restoration remain process-global, and monotonic
+   handle metadata remains until the VM ends.
 
 ## Evidence
 
-The current working tree was checked on Linux x86-64 with Rust/Cargo
-1.96.0. Evidence is command-specific; Docker and performance are not implied.
+The Phase A candidate tree based on `e4c1d0e` was checked on Linux x86-64 with
+Rust/Cargo 1.96.0. Evidence is command-specific; Docker, full Brainfuck
+Mandelbrot, and performance are not implied.
 
 | Command or check | Result |
 | --- | --- |
 | `cargo check --workspace --all-targets --locked` | passed |
-| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; rustfmt, strict Clippy, and 88 workspace tests passed |
-| `check-tree` boundaries | 16 accepted; 17 including a hidden entry rejected |
-| documentation honesty boundaries | missing status, broken local link, and lowercase inert marker rejected; clean tree passed |
-| `check-sources` | passed for all 127 `.lkjscript` sources; the 11 compiled entry closures equal the corpus exactly |
-| source-closure boundary | an otherwise valid orphan source was rejected; clean exact closure passed |
-| HIR conformance | duplicate/unknown/collision, BindingId shadowing, ProductId/field resolution, generic resolution, effects, global set, exact `if`, typed empty-list, Option, explicit equality, and `arg` boundaries passed |
-| top-level control-flow boundary | nonzero-offset short-circuit jumps execute correctly; `set` yields dedicated Unit as typed |
+| focused `lkjscript-compiler` and app HIR/numeric tests | passed; 37 compiler and 10 app integration tests |
+| `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 82 workspace tests |
+| `check-sources` | passed for all 86 `.lkjscript` sources; the nine compiled executable closures equal the corpus exactly |
+| HIR/local mutation conformance | explicit Main/Function, missing/duplicate/imported main, declaration-only imports, rejected top-level effects/value defs, stable BindingId/local-slot shadowing, initializer scope, local-only set rejection and exact typing, same-function isolation, ProductId/field resolution, and StoreLocal execution passed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
 | Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
 | Brainfuck smoke | direct and run-folded correctness/failure boundaries passed |
-| Brainfuck Mandelbrot interpreted by lkjscript | direct implementation exceeded the 1,800-second ceiling; run-folded output matched the 6,240-byte independent oracle; three measured end-to-end release-process runs had 1,281.143690-second median and 6.731340-second MAD; post-equality and post-product full correctness runs remained byte-identical |
-| lkjedit smoke | passed |
+| lkjedit smoke | passed; existing-file insert/save/reopen, missing-file creation, CRLF redraw, and command paint |
 | one-shot HTTP smoke | passed |
-| terminal safety unit tests | wrong-size buffers rejected before FFI; exact size reaches only fixed requests |
-| resource handle unit tests | integer/borrowed close, stale reuse, repeated close, and wrong-kind use rejected |
-| terminal Result workload | 59-byte state returned `ResultErr`; VM continued and exited successfully |
-| system Result workload | missing open, repeated close, and negative wait returned errors; later expressions ran; exit 0 |
-| Result unit coverage | malformed path, invalid handle/timeout/range, error text, and canonical names passed |
-| equality conformance | exact scalar/Option/Result value equality, Buf/Handle identity, bounded structural List equality, F64 bit equality, category errors, removed `eq`/`ne`, and retired opcode 21 passed |
-| nominal product conformance | zero/15/16-field boundaries, forward/nested nominal types, declaration/field collisions, exact constructor shape/order/types, access/update typing/effects/order/immutability, equality rejection, GC tracing, disassembly, and malformed VM boundaries passed |
-| numeric conformance | complete I64 boundaries, boxed transition, checked arithmetic/division, IEEE F64 identity/equality, exact F64-bit equality, 64-bit bitwise, byte/u32 narrowing, and removed vocabulary passed |
-| numeric CLI boundary | exact `9007199254740993 + 2`; overflow and `1e3` rejected |
-| `disasm` hello | passed; 81 lines with decoded offsets, operands, and opcodes |
-| script argument `--help` after `--` | passed through to the script |
-| `.lkjml` CLI run | rejected with canonical-extension diagnostic |
-| HIR diagnostic performance sample | 31 randomized runs: hello 0.990x, Mandelbrot 0.964x, Leibniz 0.984x, Mandelbrot disassembly 0.899x candidate/baseline median; release binary 1.082x size |
-| Unit/strict-if diagnostic sample | 31 randomized runs: hello 0.993x, Mandelbrot 0.985x, Leibniz-200,000 1.004x, Mandelbrot disassembly 1.005x candidate/baseline median; release binary 0.982x size |
-| typed-empty-list diagnostic sample | 31 randomized runs: hello 1.002x, Mandelbrot 0.979x, Leibniz-200,000 0.937x, Mandelbrot disassembly 1.003x candidate/baseline median; release binary 1.009x size |
-| Option/no-nil diagnostic sample | 31 randomized runs: hello 0.994x, Mandelbrot 1.027x, Leibniz-200,000 1.015x, Mandelbrot disassembly 1.014x candidate/baseline median; release binary 1.012x size |
-| explicit-equality diagnostic sample | 31 randomized runs: hello 1.029x, Mandelbrot 1.003x, Leibniz-200000 0.978x, Mandelbrot disassembly 0.972x, Brainfuck hello 0.998x candidate/baseline median; release binary 1.006x size |
-| immutable-product diagnostic sample | 31 randomized runs: hello 1.011x, Mandelbrot 0.947x, Leibniz-200000 0.994x, Mandelbrot disassembly 1.028x, Brainfuck hello 0.980x candidate/baseline median; release binary 1.058x size |
 | native-backend decision spike | 8 randomized warmups plus 31 retained pairs; exact generated calls passed; owned execution median/MAD 48.406374/0.540016 ms versus Cranelift 0.134.2 119.422902/0.566505 ms; temporary artifacts removed; no production backend implemented |
-| Markdown local links/status audit | 43 files scanned, zero broken links, zero missing statuses |
-| `git diff --check` | passed |
-| Docker verify profile | passed; the verification image includes machine-required `AGENTS.md` and committed benchmark documentation link targets |
-| decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
+| Phase A `check-docs` and `git diff --check` | passed |
 
+Earlier decision-grade and diagnostic performance records remain in
+[Experiment Registry](vision/experiments.md); they were not rerun for Phase A.
 A gate that did not run did not pass.
 
 ## Accepted Next Target
@@ -144,21 +129,22 @@ The active engineering cycle must reach a real callable baseline JIT on Linux
 x86-64; documentation, SSA scaffolding, machine-code emission, disassembly, or
 an observation hook alone cannot complete it. The dependency sequence is:
 
-1. replace top-level `do` with exactly one typed root `main`; make imports
-   declaration-only; add lexical typed `var` plus local-only `set`; thread
-   lkjedit, terminal, and Brainfuck state through immutable products; remove
-   source mutable globals;
-2. infer deterministic fixed-point function effects, validate complete chunks
+Phase A is Current: explicit typed main, declaration-only imports, local-only
+mutation, removal of source runtime globals, and product-threaded lkjedit,
+terminal, and Brainfuck state are implemented. The remaining dependency
+sequence is:
+
+1. infer deterministic fixed-point function effects, validate complete chunks
    before execution, and replace process termination/string-only runtime errors
    with structured process-safe outcomes and explicit runtime limits;
-3. lower HIR through verified typed SSA, an independent differential evaluator,
+2. lower HIR through verified typed SSA, an independent differential evaluator,
    and isolated non-speculative normalization; cut reference bytecode over to
    SSA before the native backend becomes authoritative;
-4. implement the selected owned Linux x86-64 emitter with versioned SysV
+3. implement the selected owned Linux x86-64 emitter with versioned SysV
    AMD64/runtime ABIs, bounded code objects, W^X memory in `lkjscript-sys`,
    exact stack-map gates, VM/native and native/native calls, and forced native
    execution;
-5. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
+4. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
    code has been called. Forced mode never falls back; auto uses synchronous
    function-entry tiering and may remain in the VM for unsupported code.
 

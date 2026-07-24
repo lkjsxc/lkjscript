@@ -1,16 +1,17 @@
 #![allow(clippy::expect_used)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{Limits, Op, Value};
+use lkjscript_core::{Limits, Value};
 use lkjscript_vm::run_chunk;
 
-fn evaluate(expression: &str) -> lkjscript_core::Result<Value> {
-    let source = format!("do/\n{expression}\n/do\n");
-    let mut chunk = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
-    let expression_end = chunk.main.code.len().saturating_sub(2);
-    chunk.main.code.truncate(expression_end);
-    chunk.main.emit(Op::Return);
+fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<Value> {
+    let source = format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n");
+    let chunk = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
     run_chunk(&chunk)
+}
+
+fn evaluate(expression: &str) -> lkjscript_core::Result<Value> {
+    evaluate_typed(expression, "Bool")
 }
 
 fn assert_true(expression: &str) {
@@ -32,8 +33,8 @@ fn compiled_i64_arithmetic_is_exact_across_f64_and_immediate_boundaries() {
 
 #[test]
 fn compiled_numeric_failures_and_ieee_equality_are_truthful() {
-    assert!(evaluate("+/\n9223372036854775807\n1\n/+").is_err());
-    assert!(evaluate("div/\n1\n0\n/div").is_err());
+    assert!(evaluate_typed("+/\n9223372036854775807\n1\n/+", "I64").is_err());
+    assert!(evaluate_typed("div/\n1\n0\n/div", "I64").is_err());
     assert_eq!(
         evaluate("equal-value/\n1.0\n1.0000000000005\n/equal-value")
             .expect("IEEE equality")
