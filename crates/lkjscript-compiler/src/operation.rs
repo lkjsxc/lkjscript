@@ -43,6 +43,8 @@ pub enum Operation {
     BufRef,
     BufSet,
     BufClone,
+    BufFromStr,
+    BufToStr,
     BufGetU32,
     BufSetU32,
     StrLen,
@@ -57,6 +59,8 @@ pub enum Operation {
     SysClose,
     SysReadByte,
     SysWriteByte,
+    SysReadInto,
+    SysWriteFrom,
     SysTtyGuardSave,
     SysTtyGuardClear,
     SysOpenRead,
@@ -122,6 +126,8 @@ impl Operation {
         Self::BufRef,
         Self::BufSet,
         Self::BufClone,
+        Self::BufFromStr,
+        Self::BufToStr,
         Self::BufGetU32,
         Self::BufSetU32,
         Self::StrLen,
@@ -136,6 +142,8 @@ impl Operation {
         Self::SysClose,
         Self::SysReadByte,
         Self::SysWriteByte,
+        Self::SysReadInto,
+        Self::SysWriteFrom,
         Self::SysTtyGuardSave,
         Self::SysTtyGuardClear,
         Self::SysOpenRead,
@@ -207,6 +215,8 @@ impl Operation {
             Self::BufRef => "buf-ref",
             Self::BufSet => "buf-set",
             Self::BufClone => "buf-clone",
+            Self::BufFromStr => "buf-from-str",
+            Self::BufToStr => "buf-to-str",
             Self::BufGetU32 => "buf-get-u32",
             Self::BufSetU32 => "buf-set-u32",
             Self::StrLen => "str-len",
@@ -221,6 +231,8 @@ impl Operation {
             Self::SysClose => "sys-close",
             Self::SysReadByte => "sys-read-byte",
             Self::SysWriteByte => "sys-write-byte",
+            Self::SysReadInto => "sys-read-into",
+            Self::SysWriteFrom => "sys-write-from",
             Self::SysTtyGuardSave => "sys-tty-guard-save",
             Self::SysTtyGuardClear => "sys-tty-guard-clear",
             Self::SysOpenRead => "sys-open-read",
@@ -340,6 +352,8 @@ impl Operation {
                 function(vec![Type::Buf, Type::I64, Type::I64], Type::Unit)
             }
             Self::BufClone => function(vec![Type::Buf], Type::Buf),
+            Self::BufFromStr => function(vec![Type::Str], Type::Buf),
+            Self::BufToStr => function(vec![Type::Buf], system_result(Type::Str)),
             Self::StrLen => function(vec![Type::Str], Type::I64),
             Self::StrRef => function(vec![Type::Str, Type::I64], Type::I64),
             Self::StrAppend => function(vec![Type::Str, Type::Str], Type::Str),
@@ -353,6 +367,10 @@ impl Operation {
             Self::SysWriteByte => {
                 function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
             }
+            Self::SysReadInto | Self::SysWriteFrom => function(
+                vec![Type::Handle, Type::Buf, Type::I64, Type::I64],
+                system_result(Type::I64),
+            ),
             Self::SysTtyGuardSave => function(vec![Type::Buf], system_result(Type::Unit)),
             Self::SysTtyGuardClear => function(Vec::new(), system_result(Type::Unit)),
             Self::SysOpenRead | Self::SysOpenWrite => {
@@ -547,6 +565,9 @@ impl Operation {
 
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
+            Self::BufFromStr | Self::BufToStr => EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::Cons
             | Self::StrAppend
             | Self::StrFromByte
@@ -569,6 +590,14 @@ impl Operation {
             | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufSet | Self::BufSetU32 => EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufLen | Self::StrLen | Self::IsOk | Self::IsSome => EffectSet::READS_MEMORY,
+            Self::SysReadInto => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::SysWriteFrom => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::Print
             | Self::Flush
             | Self::ReadByte
@@ -752,7 +781,7 @@ mod tests {
     use crate::hir::EffectSet;
     use crate::types::Type;
 
-    use super::Operation;
+    use super::{function, Operation};
 
     #[test]
     fn explicit_equality_families_enforce_static_categories() {
@@ -816,6 +845,47 @@ mod tests {
         assert!(Operation::F64BitsEqual
             .resolve_types(&[Type::I64, Type::I64])
             .is_err());
+    }
+
+    #[test]
+    fn lossless_bulk_byte_operations_have_exact_signatures_and_effects() {
+        let result_i64 = Type::Result(Box::new(Type::I64), Box::new(Type::Str));
+        let result_str = Type::Result(Box::new(Type::Str), Box::new(Type::Str));
+        assert_eq!(
+            Operation::from_name("buf-from-str"),
+            Some(Operation::BufFromStr)
+        );
+        assert_eq!(
+            Operation::from_name("buf-to-str"),
+            Some(Operation::BufToStr)
+        );
+        assert_eq!(
+            Operation::SysReadInto.resolve_types(&[Type::Handle, Type::Buf, Type::I64, Type::I64]),
+            Ok((
+                function(
+                    vec![Type::Handle, Type::Buf, Type::I64, Type::I64],
+                    result_i64.clone()
+                ),
+                result_i64.clone(),
+            ))
+        );
+        assert_eq!(
+            Operation::BufToStr.resolve_types(&[Type::Buf]),
+            Ok((function(vec![Type::Buf], result_str.clone()), result_str))
+        );
+        assert_eq!(
+            Operation::BufFromStr.effects(),
+            EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP)
+        );
+        assert_eq!(
+            Operation::SysReadInto.effects(),
+            EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP)
+        );
     }
 
     #[test]

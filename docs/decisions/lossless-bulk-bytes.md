@@ -8,7 +8,8 @@ authorization, rendering, and data policy remain `.lkjscript` work.
 
 ## Status
 
-**Accepted Target.** No primitive in this record is implemented yet.
+**Current.** The primitive surface, real `.lkjscript` file-buffer consumer,
+canonical local gate, and Docker verification are implemented and verified.
 
 ## Decision
 
@@ -43,10 +44,11 @@ slice crosses the language boundary.
 
 ## Verification
 
-Cover compiler signatures/effects, opcode type-stack validation, malformed
-chunks, file/socket partial progress, EOF, closed/wrong handles, invalid ranges,
-invalid UTF-8, exact round trips including NUL/non-ASCII, limits, and
-hard-deadline rejection. Existing file and one-shot HTTP examples remain green.
+Compiler signatures/effects, opcode type-stack validation, malformed chunks,
+file/socket progress, EOF, closed/wrong handles, invalid ranges, invalid UTF-8,
+NUL/non-ASCII exact round trips, limits, and hard-deadline rejection pass in
+`cargo run --locked -p lkjscript-xtask -- quiet verify`. The `bulk-bytes` source
+consumer and Docker verification also pass.
 
 ## Rejected
 

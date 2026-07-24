@@ -92,6 +92,18 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             vm.push(r);
             Ok(true)
         }
+        x if x == Op::BufFromStr as u8 => {
+            let value = vm.pop()?;
+            let buffer = crate::host_buf::buf_from_str(&mut vm.arena, value)?;
+            vm.push(buffer);
+            Ok(true)
+        }
+        x if x == Op::BufToStr as u8 => {
+            let value = vm.pop()?;
+            let result = crate::host_buf::buf_to_str(&mut vm.arena, value);
+            push_language_result(vm, result);
+            Ok(true)
+        }
         x if x == Op::SysOpenRead as u8 => {
             vm.ensure_host_deadline_support("sys-open-read", false)?;
             let path = vm.pop()?;
@@ -132,6 +144,44 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             let byte = vm.as_i64(byte)?;
             let result = vm.resources.write_byte(handle, byte);
             push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysReadInto as u8 => {
+            vm.ensure_host_deadline_support("sys-read-into", false)?;
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let handle = vm.pop()?;
+            let result = crate::host_buf::sys_read_into(
+                &mut vm.arena,
+                &vm.resources,
+                handle,
+                buffer,
+                offset,
+                requested,
+            );
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysWriteFrom as u8 => {
+            vm.ensure_host_deadline_support("sys-write-from", false)?;
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let handle = vm.pop()?;
+            let result = crate::host_buf::sys_write_from(
+                &vm.arena,
+                &vm.resources,
+                handle,
+                buffer,
+                offset,
+                requested,
+            );
+            push_i64_result(vm, result);
             Ok(true)
         }
         x if x == Op::Arg as u8 => {

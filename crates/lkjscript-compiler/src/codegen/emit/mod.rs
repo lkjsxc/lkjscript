@@ -339,6 +339,8 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::BufRef => Op::BufRef,
         Operation::BufSet => Op::BufSet,
         Operation::BufClone => Op::BufClone,
+        Operation::BufFromStr => Op::BufFromStr,
+        Operation::BufToStr => Op::BufToStr,
         Operation::BufGetU32 => Op::BufGetU32,
         Operation::BufSetU32 => Op::BufSetU32,
         Operation::StrLen => Op::StrLen,
@@ -353,6 +355,8 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::SysClose => Op::SysClose,
         Operation::SysReadByte => Op::SysReadByte,
         Operation::SysWriteByte => Op::SysWriteByte,
+        Operation::SysReadInto => Op::SysReadInto,
+        Operation::SysWriteFrom => Op::SysWriteFrom,
         Operation::SysTtyGuardSave => Op::SysTtyGuardSave,
         Operation::SysTtyGuardClear => Op::SysTtyGuardClear,
         Operation::SysOpenRead => Op::SysOpenRead,
@@ -379,4 +383,29 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::UnwrapSome => Op::UnwrapSome,
         Operation::And | Operation::Or => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use lkjscript_core::Op;
+
+    use super::operation_opcode;
+    use crate::operation::Operation;
+
+    #[test]
+    fn lossless_bulk_byte_operations_emit_canonical_opcodes() {
+        assert_eq!(
+            operation_opcode(Operation::BufFromStr),
+            Some(Op::BufFromStr)
+        );
+        assert_eq!(operation_opcode(Operation::BufToStr), Some(Op::BufToStr));
+        assert_eq!(
+            operation_opcode(Operation::SysReadInto),
+            Some(Op::SysReadInto)
+        );
+        assert_eq!(
+            operation_opcode(Operation::SysWriteFrom),
+            Some(Op::SysWriteFrom)
+        );
+    }
 }

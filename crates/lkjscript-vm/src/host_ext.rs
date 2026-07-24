@@ -185,6 +185,32 @@ impl ResourceTable {
         Ok(Value::UNIT)
     }
 
+    pub fn read_into(&self, handle: Value, destination: &mut [u8]) -> Result<usize> {
+        let index = self.owned_index(handle, "sys-read-into")?;
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::File(file)) => lkjscript_sys::read_fd(file.as_raw(), destination)
+                .map_err(|error| Error::msg(format!("sys-read-into: {error}"))),
+            Some(OwnedResource::Socket(socket)) => {
+                lkjscript_sys::recv_sock(socket.as_raw(), destination)
+                    .map_err(|error| Error::msg(format!("sys-read-into: {error}")))
+            }
+            None => Err(Error::msg("sys-read-into: stale or unknown handle")),
+        }
+    }
+
+    pub fn write_from(&self, handle: Value, source: &[u8]) -> Result<usize> {
+        let index = self.owned_index(handle, "sys-write-from")?;
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::File(file)) => lkjscript_sys::write_fd(file.as_raw(), source)
+                .map_err(|error| Error::msg(format!("sys-write-from: {error}"))),
+            Some(OwnedResource::Socket(socket)) => {
+                lkjscript_sys::send_sock(socket.as_raw(), source)
+                    .map_err(|error| Error::msg(format!("sys-write-from: {error}")))
+            }
+            None => Err(Error::msg("sys-write-from: stale or unknown handle")),
+        }
+    }
+
     pub fn read_byte(&mut self, handle: Value) -> Result<i64> {
         let mut buffer = [0_u8; 1];
         let count = if handle.as_handle() == Some(STDIN_TOKEN) {

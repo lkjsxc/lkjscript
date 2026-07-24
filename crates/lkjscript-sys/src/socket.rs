@@ -10,6 +10,7 @@ const SOL_SOCKET: i32 = 1;
 const SO_REUSEADDR: i32 = 2;
 const INADDR_ANY: u32 = 0;
 const MSG_NOSIGNAL: i32 = 0x4000;
+const EINTR: i32 = 4;
 
 #[repr(C)]
 struct InAddr {
@@ -106,17 +107,67 @@ pub fn accept_sock(fd: RawFd) -> Result<OwnedFd, SockError> {
 }
 
 pub fn recv_sock(fd: RawFd, buf: &mut [u8]) -> Result<usize, SockError> {
-    let n = unsafe { recv(fd, buf.as_mut_ptr(), buf.len(), 0) };
-    if n < 0 {
-        return Err(FdError(errno()));
+    loop {
+        let n = unsafe { recv(fd, buf.as_mut_ptr(), buf.len(), 0) };
+        if n >= 0 {
+            return Ok(n as usize);
+        }
+        let error = errno();
+        if error != EINTR {
+            return Err(FdError(error));
+        }
     }
-    Ok(n as usize)
 }
 
 pub fn send_sock(fd: RawFd, buf: &[u8]) -> Result<usize, SockError> {
-    let n = unsafe { send(fd, buf.as_ptr(), buf.len(), MSG_NOSIGNAL) };
-    if n < 0 {
-        return Err(FdError(errno()));
+    loop {
+        let n = unsafe { send(fd, buf.as_ptr(), buf.len(), MSG_NOSIGNAL) };
+        if n >= 0 {
+            return Ok(n as usize);
+        }
+        let error = errno();
+        if error != EINTR {
+            return Err(FdError(error));
+        }
     }
-    Ok(n as usize)
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use std::net::{TcpListener, TcpStream};
+    use std::os::fd::AsRawFd;
+    use std::thread;
+
+    use super::{recv_sock, send_sock};
+
+    #[test]
+    fn socket_transfers_exact_binary_bytes_and_reports_partial_progress() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+        let address = listener.local_addr().expect("listener address");
+        let peer = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept client");
+            let mut received = Vec::new();
+            let mut first_count = 0;
+            while received.len() < 5 {
+                let mut part = [0_u8; 2];
+                let count = recv_sock(stream.as_raw_fd(), &mut part).expect("receive bytes");
+                if received.is_empty() {
+                    first_count = count;
+                }
+                received.extend_from_slice(&part[..count]);
+            }
+            (received, first_count)
+        });
+        let stream = TcpStream::connect(address).expect("connect client");
+        let bytes = [0, 0xc3, 0xa9, 0xff, b'x'];
+        assert_eq!(
+            send_sock(stream.as_raw_fd(), &bytes).ok(),
+            Some(bytes.len())
+        );
+        let (received, first_count) = peer.join().expect("join peer");
+        assert!(first_count > 0);
+        assert!(first_count < bytes.len());
+        assert_eq!(received, bytes);
+    }
 }

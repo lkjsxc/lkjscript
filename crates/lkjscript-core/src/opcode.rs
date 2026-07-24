@@ -96,6 +96,10 @@ pub enum Op {
     MakeProduct = 151,
     LoadProductField = 152,
     WithProductField = 153,
+    SysReadInto = 154,
+    SysWriteFrom = 155,
+    BufFromStr = 156,
+    BufToStr = 157,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,6 +264,10 @@ impl Op {
         Self::MakeProduct,
         Self::LoadProductField,
         Self::WithProductField,
+        Self::SysReadInto,
+        Self::SysWriteFrom,
+        Self::BufFromStr,
+        Self::BufToStr,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -350,6 +358,11 @@ impl Op {
                 pops: 2,
                 pushes: 1,
             },
+            Self::SysReadInto | Self::SysWriteFrom => Fixed {
+                required: 4,
+                pops: 4,
+                pushes: 1,
+            },
             Self::BufRef | Self::BufGetU32 => Fixed {
                 required: 2,
                 pops: 2,
@@ -398,7 +411,9 @@ impl Op {
             | Self::SomeWrap
             | Self::IsSome
             | Self::UnwrapSome
-            | Self::LoadProductField => Fixed {
+            | Self::LoadProductField
+            | Self::BufFromStr
+            | Self::BufToStr => Fixed {
                 required: 1,
                 pops: 1,
                 pushes: 1,

@@ -13,6 +13,7 @@ const F_OK: i32 = 0;
 const MODE_0666: u32 = 0o666;
 const ENOENT: i32 = 2;
 const ENOTDIR: i32 = 20;
+const EINTR: i32 = 4;
 
 extern "C" {
     fn open(pathname: *const i8, flags: i32, mode: u32) -> i32;
@@ -45,19 +46,29 @@ pub fn open_write(path: &str) -> Result<OwnedFd, FdError> {
 }
 
 pub fn read_fd(fd: RawFd, buf: &mut [u8]) -> Result<usize, FdError> {
-    let n = unsafe { read(fd, buf.as_mut_ptr(), buf.len()) };
-    if n < 0 {
-        return Err(FdError(errno()));
+    loop {
+        let n = unsafe { read(fd, buf.as_mut_ptr(), buf.len()) };
+        if n >= 0 {
+            return Ok(n as usize);
+        }
+        let error = errno();
+        if error != EINTR {
+            return Err(FdError(error));
+        }
     }
-    Ok(n as usize)
 }
 
 pub fn write_fd(fd: RawFd, buf: &[u8]) -> Result<usize, FdError> {
-    let n = unsafe { write(fd, buf.as_ptr(), buf.len()) };
-    if n < 0 {
-        return Err(FdError(errno()));
+    loop {
+        let n = unsafe { write(fd, buf.as_ptr(), buf.len()) };
+        if n >= 0 {
+            return Ok(n as usize);
+        }
+        let error = errno();
+        if error != EINTR {
+            return Err(FdError(error));
+        }
     }
-    Ok(n as usize)
 }
 
 pub fn path_exists(path: &str) -> Result<bool, FdError> {

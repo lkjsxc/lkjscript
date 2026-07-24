@@ -939,6 +939,14 @@ fn apply_instruction(
             expect_pop(state, Kind::I64, proto, instruction)?;
             state.stack.push(Kind::Buf);
         }
+        Op::BufFromStr => {
+            expect_pop(state, Kind::Str, proto, instruction)?;
+            state.stack.push(Kind::Buf);
+        }
+        Op::BufToStr => {
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
         Op::BufLen | Op::BufClone => {
             expect_pop(state, Kind::Buf, proto, instruction)?;
             state.stack.push(if op == Op::BufLen {
@@ -1038,6 +1046,13 @@ fn apply_instruction(
         }
         Op::SysSend => {
             expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Handle, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysReadInto | Op::SysWriteFrom => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::Buf, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
@@ -1419,6 +1434,7 @@ mod tests {
             (Op::Car, "List"),
             (Op::BufLen, "Buf"),
             (Op::SysClose, "Handle"),
+            (Op::BufToStr, "Buf"),
         ] {
             let mut chunk = unit_chunk();
             chunk.main.code = vec![Op::Unit as u8, operation as u8, Op::Return as u8];
@@ -1428,6 +1444,24 @@ mod tests {
                 "wrong category diagnostic for {operation:?}: {message}"
             );
         }
+    }
+
+    #[test]
+    fn bulk_byte_opcodes_reject_malformed_type_stacks() {
+        let mut read = unit_chunk();
+        read.main.code = vec![
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::SysReadInto as u8,
+            Op::Return as u8,
+        ];
+        assert!(error(read).contains("I64"));
+
+        let mut from = unit_chunk();
+        from.main.code = vec![Op::Unit as u8, Op::BufFromStr as u8, Op::Return as u8];
+        assert!(error(from).contains("Str"));
     }
 
     #[test]

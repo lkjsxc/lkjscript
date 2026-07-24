@@ -15,10 +15,10 @@ pub use chunk::{
 pub use error::{Error, ErrorClass, Result};
 pub use jit::{JitHook, NullJit};
 pub use limits::{
-    ExecutionConfig, Limits, ValidationLimits, MAX_BYTECODE_METADATA_BYTES,
-    MAX_BYTECODE_TABLE_ENTRIES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES, MAX_CONSTANT_DATA_BYTES,
-    MAX_DIR_CHILDREN, MAX_FUNCTION_CODE_BYTES, MAX_LIST_EQUAL_STEPS, MAX_NEST_DEPTH,
-    MAX_PRODUCT_FIELDS, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
+    ExecutionConfig, Limits, ValidationLimits, MAX_BUFFER_BYTES, MAX_BULK_IO_BYTES,
+    MAX_BYTECODE_METADATA_BYTES, MAX_BYTECODE_TABLE_ENTRIES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES,
+    MAX_CONSTANT_DATA_BYTES, MAX_DIR_CHILDREN, MAX_FUNCTION_CODE_BYTES, MAX_LIST_EQUAL_STEPS,
+    MAX_NEST_DEPTH, MAX_PRODUCT_FIELDS, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap};
