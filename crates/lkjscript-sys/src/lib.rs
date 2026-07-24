@@ -5,6 +5,7 @@
 
 #![allow(unsafe_code)]
 
+pub mod executable;
 mod fd;
 mod file;
 mod poll;

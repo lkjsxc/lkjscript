@@ -23,8 +23,15 @@ name = "lkjscript-core"
 version = "0.1.0"
 
 [[package]]
+name = "lkjscript-native"
+version = "0.1.0"
+
+[[package]]
 name = "lkjscript-sys"
 version = "0.1.0"
+dependencies = [
+ "lkjscript-native",
+]
 
 [[package]]
 name = "lkjscript-vm"

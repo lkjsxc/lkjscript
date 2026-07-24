@@ -7,11 +7,13 @@ presenting the selection as an implemented JIT.
 
 ## Status
 
-**Accepted Decision.** The future production baseline tier uses a
-repository-owned x86-64 machine-code emitter. No production emitter, native code
-object, executable-memory API, engine mode, or JIT is implemented by this
-decision commit. The reference VM and observation-only **PLACEHOLDER** remain
-the current runtime boundary.
+**Current Foundation and Accepted Integration Decision.** A repository-owned,
+source-independent Linux x86-64 scalar machine-plan verifier, encoder, opaque
+installable image, and safe bounded `lkjscript-sys` W^X installation boundary
+are implemented. This foundation is exercised by direct intermediate-boundary
+machine calls only. It does not consume canonical source, HIR, SSA, or
+bytecode; it is not connected to the VM, tier state, CLI engines, or a JIT.
+The future production baseline tier remains an **Accepted Target**.
 
 ## Decision
 
@@ -21,16 +23,24 @@ external assembler are not production paths. It follows the versioned System V
 AMD64 and runtime-call ABI defined by the callable-baseline cycle and does not
 reinterpret syntax, HIR, or bytecode.
 
-The backend boundary is:
+The accepted eventual backend boundary is:
 
 ```text
 verified typed SSA
-  -> backend-independent native lowering and ABI plan
+  -> narrow future adapter
+  -> closed backend target-lowering machine plan
   -> owned x86-64 byte encoder and relocations
-  -> uninstalled native code image plus exact metadata
+  -> opaque uninstalled native image plus exact metadata
   -> safe lkjscript-sys W^X installation
   -> bounded native code object
 ```
+
+Only the closed machine-plan-through-installation portion is current. The plan
+is a target-lowering contract, not another language semantic IR. Its safe API
+can name only typed scalar values, private frame locals, verified control flow,
+compatible compiled calls, and allowlisted versioned runtime-call slots. It
+cannot provide machine bytes, addresses, pointer arithmetic, arbitrary memory
+operations, arbitrary call targets, or unchecked control flow.
 
 Pure encoding, relocation descriptions, frame layout, and metadata construction
 remain separate from host effects. Executable allocation, permission changes,
@@ -39,11 +49,14 @@ unsafe implementation details confined behind a safe `lkjscript-sys` API whose
 safe inputs cannot install arbitrary bytes. The temporary experiment's raw
 pointer calls and executable mappings are not that API.
 
-The initial encoder is deliberately Linux x86-64 and baseline-tier scoped. It
-must cover checked I64 arithmetic and division, F64 arithmetic/comparisons,
-branches, loops, locals, direct generated calls, versioned runtime calls,
-structured outcomes, and exact SysV stack alignment without relying on the red
-zone. It is not an optimizing compiler and does not add another semantic IR.
+The current encoder is deliberately Linux x86-64 and scalar-foundation scoped.
+It covers checked I64 arithmetic and division, ordered F64 arithmetic and
+comparisons, Bool operations, branches, loops, private typed locals, compatible
+direct generated calls, one allowlisted versioned runtime identity call,
+structured return/trap/exit status, and exact SysV stack alignment without the
+red zone. Unsupported signatures, operations, plans, metadata, versions, and
+resource sizes fail explicitly. It is not an optimizing compiler and does not
+add another semantic IR.
 
 ## Selection Rule And Result
 
@@ -124,13 +137,28 @@ and required loop backedge. A missing map is a compilation rejection, never a
 conservative scan or unchecked execution. This cost is accepted explicitly and
 is not claimed complete by the spike.
 
-## Integration And Replacement Boundary
+## Foundation, Integration, And Replacement Boundary
 
-The backend consumes only verified typed SSA plus target/ABI configuration and
-returns an uninstalled code image containing bytes, typed relocations, call
-references, frame facts, safepoints/stack maps, source/trap/outcome mappings,
-and size/work accounting. It does not own executable memory, tier state, the VM,
-GC, host services, or CLI policy.
+The current `lkjscript-native` crate consumes only a verified closed machine
+plan assembled through its safe typed builder. There is deliberately no source,
+HIR, SSA, or bytecode input. A future narrow adapter may lower verified typed
+SSA into this plan; that adapter must remain outside the backend and preserve
+SSA semantics rather than reinterpreting another representation.
+
+The crate returns an opaque `InstallableImage` containing read-only code bytes,
+typed symbolic relocations, entries and signatures, runtime-call references,
+frame facts, scalar safepoints with empty reference maps, source/trap/outcome
+mappings, exact size/work accounting, and semantic/native/runtime ABI versions.
+It does not own executable memory, tier state, the VM, GC, host services, or CLI
+policy.
+
+`lkjscript-sys` accepts only that opaque image. On Linux x86-64 it validates
+versions, metadata, typed entries, symbolic relocation targets, and configured
+per-object and aggregate limits; maps RW, copies and relocates, changes the
+mapping to RX, and never patches after sealing. Installed mappings expose only
+typed invocation and a permission probe, remain borrowed from a non-`Send`
+installer, and unmap on drop. Other platforms return an explicit unsupported-
+platform error.
 
 A replacement backend must implement that same narrow input/output contract and
 pass the same differential, ABI, W^X, resource, and forced-native gates. Native

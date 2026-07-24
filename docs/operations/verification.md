@@ -49,6 +49,19 @@ byte robustness without panic, size/index/metadata/product/category/CFG/local
 initialization/return validation, owned returned heap values, independent VMs
 after exit/trap, and structured fuel/stack/frame/heap/allocation/handle/output/
 deadline and hard-deadline-unsupported outcomes.
+
+Native-foundation workspace tests pass only verified closed machine plans to
+the encoder and actually call generated Linux x86-64 code for multi-block
+scalar control flow, a loop, all checked I64 trap families including division
+by zero and `MIN / -1`, F64 arithmetic/bits/all ordered comparisons and NaN
+branches, Bool/Unit, a compatible direct generated call, an allowlisted
+versioned runtime call, and structured return/trap/exit. Boundary tests reject
+invalid plans, unsupported signatures, code/metadata/work and aggregate install
+limits, and ABI mismatches; use a sys-internal `/proc/self/maps` probe to
+observe initial readable/writable/non-executable and sealed readable/non-
+writable/executable phases; and repeat install/invoke/drop while checking
+aggregate accounting returns to zero. These are intermediate machine-boundary
+tests, not canonical source/SSA, VM transfer, an engine mode, or JIT evidence.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.

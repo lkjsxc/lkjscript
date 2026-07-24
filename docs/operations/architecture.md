@@ -12,13 +12,13 @@ that own it.
 ## Crate Graph
 
 ```text
-lkjscript-core
-    ^             ^
-    |             |
-compiler          sys
-    ^             ^
-    |             |
-    +--- app -----+--- vm
+lkjscript-core                 lkjscript-native
+    ^                              ^
+    |                              |
+compiler                     lkjscript-sys
+    ^                              ^
+    |                              |
+    +--- app ----------------------+--- vm
     |
     +--- xtask
 ```
@@ -26,11 +26,14 @@ compiler          sys
 The actual dependency edges are:
 
 - `lkjscript-compiler -> lkjscript-core`
+- `lkjscript-sys -> lkjscript-native`
 - `lkjscript-vm -> lkjscript-core + lkjscript-sys`
 - `lkjscript-app -> compiler + core + vm`
 - `lkjscript-xtask -> compiler + core`
 
-`lkjscript-core` and `lkjscript-sys` have no third-party dependencies.
+`lkjscript-core`, `lkjscript-native`, and `lkjscript-sys` have no third-party
+dependencies. `lkjscript-native` forbids unsafe Rust; executable-memory and
+native-call unsafety remain confined to `lkjscript-sys`.
 
 ## Ownership Map
 
@@ -47,7 +50,8 @@ The actual dependency edges are:
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-vm/src/arena.rs` | `Arena` |
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
-| Linux FFI | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers |
+| Native scalar foundation | `crates/lkjscript-native/src/` | closed machine-plan builder/verifier, x86-64 encoder, opaque `InstallableImage` and metadata |
+| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers plus bounded image installation and typed invocation |
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
 | Language library | `src/std/` | imported `std/...` definitions |
 | Validation package | `src/lib/lkjedit/` | editor state and control loop |
@@ -89,12 +93,14 @@ callee summaries; indirect provenance remains all-effects. Codegen no longer
 re-parses declarations or resolves names. Source SetGlobal and runtime value-
 definition paths are absent.
 
-Typed SSA, the selected owned Linux x86-64 native code-object backend,
-function/loop-triggered runtime JIT, a minimal AOT test emitter, and direct Wasm
-consuming the same semantic IR family remain **Accepted Targets**. Backend
-selection is complete, but no native code is implemented. Native scalar/product
-representations replace universal tagged values only after differential
-SSA/backend gates. The VM remains the cold tier and oracle. See
+Typed SSA, function/loop-triggered runtime JIT, a minimal AOT test emitter, and
+direct Wasm consuming the same semantic IR family remain **Accepted Targets**.
+A source-independent owned Linux x86-64 scalar native foundation is **Current**:
+it verifies a closed target-lowering plan, encodes an opaque metadata-complete
+image, installs it through bounded W^X memory, and supports typed intermediate-
+boundary calls. There is no canonical-source/SSA adapter, VM transfer, tier,
+engine mode, product/native representation cutover, or JIT. The VM remains the
+only language execution tier and oracle. See
 [Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md),
 [Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md), and
 [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
@@ -136,9 +142,12 @@ VM function entry / loop backedge
   -> exact VM fallback or structured outcome
 ```
 
-No part of that flow is current. The existing observation hook sees closure
-calls only and cannot compile or transfer execution. The active cycle ends only
-when synchronous whole-function baseline code is actually called on Linux
+No part of that runtime flow is current. The native scalar foundation calls
+validated generated code only at its isolated intermediate test boundary; those
+calls do not originate in source or SSA and do not constitute a VM transfer or
+JIT. The existing observation hook sees closure calls only and cannot compile
+or transfer execution. The active cycle ends only when synchronous whole-
+function baseline code lowered from verified SSA is actually called on Linux
 x86-64 in truthful forced and automatic modes. Loop OSR, background
 compilation, optimizing tiers, persistent profiles, and persistent code caches
 are not part of that cycle.
@@ -167,11 +176,11 @@ an external project receives the same contract.
 
 Explicit main, effect-free imported libraries, local-only mutation,
 product-threaded editor, terminal, and Brainfuck state, whole-chunk validation,
-structured process-safe outcomes, bounded VM execution, and deterministic
-fixed-point function effects are now Current. Typed SSA, its verifier and
-differential oracle, and the selected owned Linux x86-64 native code-object
-backend follow. The first adaptive execution target remains synchronous
-callable baseline JIT; loop OSR
+structured process-safe outcomes, bounded VM execution, deterministic fixed-
+point function effects, and the isolated owned scalar native/W^X foundation are
+now Current. Typed SSA, its verifier and differential oracle, then the narrow
+SSA-to-machine-plan adapter and runtime integration follow. The first adaptive
+execution target remains synchronous callable baseline JIT; loop OSR
 and proof-based optimizing JIT are later. Minimal file emission remains only
 for backend tests, and offline PGO is rejected. The exact active boundary is
 [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).

@@ -243,11 +243,12 @@ Cranelift is rejected for this production baseline decision but remains a
 future measured replacement candidate under the record's explicit conditions.
 LLVM is not the default fallback.
 
-Selection does not implement the backend. Temporary spike artifacts were
-removed after compact evidence was retained; the implementation still must
-lower verified typed SSA, produce complete code-object metadata, install
-through safe bounded W^X memory, and call generated code through forced-native
-tests.
+Selection is now followed by an isolated source-independent scalar foundation:
+a closed machine-plan verifier, owned encoder, complete installable-image
+metadata, and safe bounded W^X boundary with actual intermediate generated-code
+calls. Temporary spike artifacts remain removed. This does not lower verified
+typed SSA, transfer from the VM, provide an engine or runtime tier, or satisfy
+forced source-derived native/JIT completion.
 
 ## Linux x86-64 ABI And Runtime Calls
 

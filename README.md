@@ -47,7 +47,8 @@ docker compose -f meta/docker-compose.yml --profile verify run --build --rm veri
 - `crates/lkjscript-core`: bytecode and shared value contracts
 - `crates/lkjscript-compiler`: loading, parsing, typing, and code generation
 - `crates/lkjscript-vm`: interpreter, heap, and host-operation dispatch
-- `crates/lkjscript-sys`: owned Linux FFI and the only unsafe Rust
+- `crates/lkjscript-native`: source-independent closed Linux x86-64 scalar native foundation
+- `crates/lkjscript-sys`: owned Linux FFI/W^X boundary and the only unsafe Rust
 - `crates/lkjscript-app`: command-line product
 - `crates/lkjscript-xtask`: repository honesty gates
 - `src/std`: language-level standard library

@@ -32,7 +32,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   identities, source origins, exact operation/type facts, and deterministic
   fixed-point function effect summaries; bytecode consumes HIR without
   re-resolving source names or declarations
-- Host implementation: six Rust workspace crates with no third-party Rust
+- Host implementation: seven Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
@@ -83,9 +83,15 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
   native compilation, engine selector, code object, execution handoff, OSR, or
   deoptimization
-- Native backend decision: a measured called-code experiment selected a future
-  owned Linux x86-64 byte encoder over Cranelift 0.134.2; this is an
-  **Accepted Target**, not an implemented backend or product dependency
+- Native foundation: `lkjscript-native` owns a closed source-independent scalar
+  machine plan, verifier, deterministic stack-slot lowering, x86-64 encoder,
+  symbolic relocations, metadata-complete opaque `InstallableImage`, and exact
+  ABI/accounting records; `lkjscript-sys` alone owns bounded RW-to-RX
+  installation, allowlisted relocation resolution, typed invocation, permission
+  probing, and unmapping. Intermediate tests actually call multi-block, loop,
+  checked-trap, F64, direct-call, and runtime-slot generated code. This is a
+  **Current native foundation**, not canonical source/SSA lowering, VM transfer,
+  a runtime tier, CLI engine, or JIT
 - Adaptive-performance contract: runtime JIT is the **Accepted Target** after
   semantic/outcome and typed-SSA prerequisites; the VM remains the cold tier
   and oracle, and minimal AOT emission is only a shared-backend test surface
@@ -148,9 +154,24 @@ tested or implemented.
 | `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 101 workspace tests |
 | fixed-point effect conformance | passed; pure leaf, direct/transitive propagation, direct and mutual recursion, recursive effects, allocation, memory read/write, local mutation, host IO, process exit, trap, declaration-order independence, generic canonical direct calls, retained argument effects, and conservative indirect calls |
 
+The isolated native foundation in this documentation's containing commit,
+based on `ec2afbb1161eff437370d1e75c9522af9a261342`, was checked on Linux
+7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. These calls start from validated
+machine plans rather than canonical source or SSA, so they are evidence for the
+machine/W^X boundary only and not JIT completion.
+
+| Native-foundation command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-native -p lkjscript-sys` | passed; invalid-plan boundaries plus actual multi-block, loop, checked I64 trap, F64/Bool/Unit, direct generated-call, versioned runtime-call, W^X, limit, version, and repeated install/drop execution |
+| `cargo check --workspace --all-targets --locked` | passed |
+| `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | passed |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 106 workspace tests |
+| W^X permission probe | passed; a sys-internal `/proc/self/maps` probe observed initial readable/writable/non-executable and sealed readable/non-writable/executable phases; no post-seal patch API is exposed |
+| Not tested | Docker, runtime workload smokes, performance, non-Linux execution, canonical source/SSA lowering, VM/native transfer, tiering, engines, GC-reference stack maps, allocation, and JIT |
+
 Earlier decision-grade and diagnostic performance records remain in
-[Experiment Registry](vision/experiments.md); they were not rerun for Phase A
-or Phase B. A gate that did not run did not pass.
+[Experiment Registry](vision/experiments.md); they were not rerun for Phase A,
+Phase B, or this native foundation. A gate that did not run did not pass.
 
 ## Accepted Next Target
 
@@ -165,11 +186,12 @@ function effects are Current. The remaining dependency sequence is:
 
 1. lower HIR through verified typed SSA, an independent differential evaluator,
    and isolated non-speculative normalization; cut reference bytecode over to
-   SSA before the native backend becomes authoritative;
-2. implement the selected owned Linux x86-64 emitter with versioned SysV
-   AMD64/runtime ABIs, bounded code objects, W^X memory in `lkjscript-sys`,
-   exact stack-map gates, VM/native and native/native calls, and forced native
-   execution;
+   SSA before native lowering becomes authoritative;
+2. add a narrow verified SSA adapter to the current closed scalar machine plan,
+   then add complete non-scalar representations, exact reference stack maps,
+   runtime services, VM/native transfers, native resource/deadline behavior,
+   and forced source-derived native execution without reinterpreting HIR or
+   bytecode;
 3. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
    code has been called. Forced mode never falls back; auto uses synchronous
    function-entry tiering and may remain in the VM for unsupported code.
@@ -198,7 +220,7 @@ ephemeral, and not telemetry.
 
 ## Deferred
 
-Native installation and update, package manifests/locks/registry,
+Native runtime integration and update, package manifests/locks/registry,
 supervisor/scheduler, adaptive or generational GC, background JIT compilation,
 guarded runtime specialization/deoptimization, non-Linux native backends,
 browser, general HTTP server/framework, and GUI runtime are later cycles.

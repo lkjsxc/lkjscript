@@ -9,10 +9,13 @@ reinterpret the language.
 ## Status
 
 **Current** for parsed AST -> resolved typed HIR with fixed-point function
-effects -> reference bytecode. Typed SSA, native code objects, baseline JIT,
-proof-based optimizing JIT, minimal AOT test emission, and direct Wasm are
-**Accepted Targets**. Native compilation is not implemented. The future Linux x86-64 backend is the owned encoder selected
-by [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
+effects -> reference bytecode, plus an isolated source-independent Linux x86-64
+scalar native/W^X foundation. Typed SSA, source/SSA native lowering, native code
+objects owned by the runtime, baseline JIT, proof-based optimizing JIT, minimal
+AOT test emission, and direct Wasm are **Accepted Targets**. The current native
+foundation has no canonical-source, HIR, SSA, bytecode, VM, tier, or engine
+linkage. The future integrated Linux x86-64 backend uses the owned encoder
+selected by [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
 **Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
 
@@ -107,9 +110,13 @@ owned byte encoder over Cranelift 0.134.2 from generated-code speed plus visible
 compilation, binary, RSS, dependency, safety, stack-map, W^X, and maintenance
 costs. The decision adds no product dependency and implements no backend.
 
-After typed SSA and differential correctness gates, implement only that selected
-backend behind the shared native code-image/code-object boundary. Callable
-baseline JIT remains the primary adaptive performance path. File emission
+The selected backend's isolated scalar foundation now provides a closed
+verified target-lowering plan, owned encoder, opaque installable image, and safe
+W^X boundary. After typed SSA and differential correctness gates, connect it
+only through a narrow verified SSA adapter and the shared native image/code-
+object boundary. The existing intermediate machine calls are backend-boundary
+tests, not source compilation or a JIT. Callable baseline JIT remains the
+primary adaptive performance path. File emission
 exists only to inspect code, test relocations and ABI behavior, use external
 debuggers, and compare backend output with the VM.
 

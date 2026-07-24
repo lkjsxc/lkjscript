@@ -10,9 +10,11 @@ and the reference VM as the cold tier and correctness oracle.
 
 **Accepted Target** for the runtime architecture and implementation sequence.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
-by measurement. The current implementation remains the reference bytecode VM
-plus an observation-only **PLACEHOLDER** hook; no native code object, JIT
-execution, OSR, or deoptimization exists.
+by measurement. The current language runtime remains the reference bytecode VM
+plus an observation-only **PLACEHOLDER** hook. An isolated source-independent
+Linux x86-64 scalar machine-code/W^X foundation is current, but it has no
+canonical source/SSA linkage, VM transfer, runtime code object or tier, CLI
+engine, JIT execution, OSR, or deoptimization.
 
 ## Decision
 
@@ -80,11 +82,17 @@ The following are **Current**:
 - canonical source -> parsed AST -> resolved typed HIR -> bytecode;
 - dense bytecode execution in the synchronous, single-threaded VM;
 - precise non-moving mark-sweep for VM values;
-- an explicitly labeled observation-only `JitHook` called at closure calls.
+- an explicitly labeled observation-only `JitHook` called at closure calls;
+- a separate closed scalar target-lowering plan, verifier, x86-64 encoder,
+  opaque installable image, and bounded safe W^X system boundary whose focused
+  tests call generated code directly.
 
-The hook cannot compile, install, call, reject, invalidate, or account for
-native code. It observes neither main execution nor loop backedges. It is not a
-JIT execution boundary and must not be described as one.
+The native foundation cannot consume source, HIR, SSA, or bytecode and is not
+reachable from the VM or CLI. Its direct intermediate calls prove only the
+machine boundary. The hook cannot compile, install, call, reject, invalidate,
+or account for native code. It observes neither main execution nor loop
+backedges. Neither boundary is a JIT execution boundary and neither must be
+described as one.
 
 Everything below is an **Accepted Target** unless explicitly labeled Deferred
 or Rejected.
