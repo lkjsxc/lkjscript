@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    Block, BlockId, CallTarget, EffectSet, FailureBehavior, Function, FunctionId, Instruction,
-    InstructionKind, IrError, ProductId, Program, RuntimeOp, Safepoint, Signature, SsaType,
-    Terminator, ValueId,
+    Block, BlockId, CallTarget, EffectSet, FailureBehavior, Function, FunctionId,
+    GenericInstantiation, ImplId, Instruction, InstructionKind, IrError, ProductId, Program,
+    RuntimeOp, Safepoint, Signature, SsaType, Terminator, TraitId, TraitRole, TraitWitnessKind,
+    ValueId,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +24,11 @@ pub fn verify(program: Program) -> crate::Result<VerifiedProgram> {
     verify_program(&program)?;
     Ok(VerifiedProgram(program))
 }
+
+pub const TRAIT_VERIFY_MAX_DEPTH: usize = 32;
+pub const TRAIT_VERIFY_MAX_WORK: usize = 256;
+const TYPE_VERIFY_MAX_DEPTH: usize = 64;
+const TYPE_VERIFY_MAX_WORK: usize = 4_096;
 
 fn verify_program(program: &Program) -> crate::Result<()> {
     if program.sources.iter().enumerate().any(|(index, source)| {
@@ -54,6 +60,7 @@ fn verify_program(program: &Program) -> crate::Result<()> {
             verify_type(program, &field.ty, &[])?;
         }
     }
+    verify_trait_metadata(program)?;
     if program.functions.is_empty() {
         return fail("SSA program has no functions");
     }
@@ -84,6 +91,60 @@ fn verify_program(program: &Program) -> crate::Result<()> {
     Ok(())
 }
 
+fn verify_trait_metadata(program: &Program) -> crate::Result<()> {
+    let core = [
+        (TraitRole::Copy, "Copy"),
+        (TraitRole::Clone, "Clone"),
+        (TraitRole::Drop, "Drop"),
+        (TraitRole::Send, "Send"),
+        (TraitRole::Sync, "Sync"),
+    ];
+    if program.traits.len() < core.len() {
+        return fail("SSA trait metadata is missing compiler-owned core traits");
+    }
+    let mut names = HashSet::new();
+    for (index, trait_metadata) in program.traits.iter().enumerate() {
+        if trait_metadata.id.index() != Some(index)
+            || trait_metadata.name.is_empty()
+            || !names.insert(trait_metadata.name.as_str())
+        {
+            return fail("SSA traits must have dense IDs and unique non-empty names");
+        }
+        if let Some((role, name)) = core.get(index) {
+            if trait_metadata.role != *role
+                || trait_metadata.name != *name
+                || trait_metadata.source.is_some()
+            {
+                return fail("SSA compiler-owned trait identity is not canonical");
+            }
+        } else if trait_metadata.role != TraitRole::User
+            || trait_metadata
+                .source
+                .is_none_or(|source| source as usize >= program.sources.len())
+        {
+            return fail("SSA source trait has invalid role or source identity");
+        }
+    }
+    let mut coherent = HashSet::new();
+    for (index, implementation) in program.implementations.iter().enumerate() {
+        if implementation.id.index() != Some(index) {
+            return fail("SSA implementations must have dense IDs");
+        }
+        let trait_metadata = trait_by_id(program, implementation.trait_id)?;
+        if trait_metadata.role != TraitRole::User {
+            return fail("SSA explicit implementation targets a compiler-owned core trait");
+        }
+        let _product = product_by_id(program, implementation.product)?;
+        if implementation.source as usize >= program.sources.len() {
+            return fail("SSA implementation has an invalid source identity");
+        }
+        if !coherent.insert((implementation.trait_id, implementation.product)) {
+            return fail("SSA has overlapping marker implementations");
+        }
+    }
+    Ok(())
+}
+
 fn verify_function(program: &Program, function: &Function) -> crate::Result<()> {
     let type_parameters: Vec<&str> = function
         .signature
@@ -100,6 +161,28 @@ fn verify_function(program: &Program, function: &Function) -> crate::Result<()> 
             "SSA function {} has invalid type parameters",
             function.name
         ));
+    }
+    let mut seen_bounds = HashSet::new();
+    for bound in &function.signature.bounds {
+        if !type_parameters.contains(&bound.parameter.as_str()) {
+            return fail(format!(
+                "SSA function {} has a bound on undeclared parameter {}",
+                function.name, bound.parameter
+            ));
+        }
+        let trait_metadata = trait_by_id(program, bound.trait_id)?;
+        if matches!(trait_metadata.role, TraitRole::Clone | TraitRole::Drop) {
+            return fail(format!(
+                "SSA function {} uses a core trait that requires unavailable methods",
+                function.name
+            ));
+        }
+        if !seen_bounds.insert((bound.parameter.as_str(), bound.trait_id)) {
+            return fail(format!(
+                "SSA function {} has duplicate trait bounds",
+                function.name
+            ));
+        }
     }
     for ty in &function.signature.parameters {
         verify_type(program, ty, &type_parameters)?;
@@ -328,6 +411,9 @@ fn verify_instruction(
         }
         InstructionKind::FunctionRef(target) => {
             let callee = function_by_id(program, *target)?;
+            if !callee.signature.bounds.is_empty() {
+                return fail("SSA bounded generic function cannot be a first-class value");
+            }
             if instruction.ty != SsaType::Function(Box::new(callee.signature.clone())) {
                 return fail(format!(
                     "SSA value {} function-reference type mismatch",
@@ -349,12 +435,19 @@ fn verify_instruction(
             target,
             arguments,
             signature,
+            instantiation,
         } => {
             verify_resolved_signature(signature, arguments, &instruction.ty, types)?;
             match target {
                 CallTarget::Direct(target) => {
                     let callee = function_by_id(program, *target)?;
-                    verify_call_compatibility(&callee.signature, signature)?;
+                    verify_call_compatibility(
+                        program,
+                        &callee.signature,
+                        signature,
+                        instantiation.as_ref(),
+                        type_parameters,
+                    )?;
                     callee.effects
                 }
                 CallTarget::Indirect(target) => {
@@ -365,7 +458,16 @@ fn verify_instruction(
                             instruction.id.raw()
                         ));
                     };
-                    verify_call_compatibility(target_signature, signature)?;
+                    if !target_signature.bounds.is_empty() {
+                        return fail("SSA indirect call target has unsupported marker bounds");
+                    }
+                    verify_call_compatibility(
+                        program,
+                        target_signature,
+                        signature,
+                        instantiation.as_ref(),
+                        type_parameters,
+                    )?;
                     EffectSet::CONSERVATIVE_CALL
                 }
             }
@@ -757,6 +859,7 @@ fn verify_resolved_signature(
     types: &[SsaType],
 ) -> crate::Result<()> {
     if !signature.type_parameters.is_empty()
+        || !signature.bounds.is_empty()
         || signature.parameters.len() != arguments.len()
         || signature.result.as_ref() != result
     {
@@ -770,7 +873,13 @@ fn verify_resolved_signature(
     Ok(())
 }
 
-fn verify_call_compatibility(declared: &Signature, resolved: &Signature) -> crate::Result<()> {
+fn verify_call_compatibility(
+    program: &Program,
+    declared: &Signature,
+    resolved: &Signature,
+    instantiation: Option<&GenericInstantiation>,
+    caller_type_parameters: &[&str],
+) -> crate::Result<()> {
     if declared.parameters.len() != resolved.parameters.len() {
         return fail("SSA call arity does not match callee");
     }
@@ -787,7 +896,147 @@ fn verify_call_compatibility(declared: &Signature, resolved: &Signature) -> crat
     if expected_result != *resolved.result {
         return fail("SSA call result type does not match callee");
     }
+    if declared.type_parameters.is_empty() {
+        if instantiation.is_some() {
+            return fail("SSA monomorphic call carries generic instantiation facts");
+        }
+        return Ok(());
+    }
+    let instantiation = instantiation
+        .ok_or_else(|| IrError::new("SSA generic call is missing instantiation facts"))?;
+    if instantiation.substitutions.len() != declared.type_parameters.len() {
+        return fail("SSA generic call has a non-canonical substitution count");
+    }
+    for (parameter, fact) in declared
+        .type_parameters
+        .iter()
+        .zip(&instantiation.substitutions)
+    {
+        if fact.parameter != *parameter || substitutions.get(parameter.as_str()) != Some(&fact.ty) {
+            return fail("SSA generic call substitution identity does not match inference");
+        }
+        verify_type(program, &fact.ty, caller_type_parameters)?;
+    }
+    if instantiation.witnesses.len() != declared.bounds.len() {
+        return fail("SSA generic call witness count does not match bounds");
+    }
+    let mut seen = HashSet::new();
+    for (bound, witness) in declared.bounds.iter().zip(&instantiation.witnesses) {
+        let expected_type = substitutions
+            .get(bound.parameter.as_str())
+            .ok_or_else(|| IrError::new("SSA trait bound parameter was not inferred"))?;
+        if witness.trait_id != bound.trait_id || &witness.ty != expected_type {
+            return fail("SSA trait witness type or trait does not match its bound");
+        }
+        if !seen.insert((witness.trait_id, witness.ty.clone())) {
+            return fail("SSA generic call has duplicate trait witnesses");
+        }
+        verify_witness(program, witness)?;
+    }
     Ok(())
+}
+
+fn verify_witness(program: &Program, witness: &crate::TraitWitness) -> crate::Result<()> {
+    let trait_metadata = trait_by_id(program, witness.trait_id)?;
+    match witness.kind {
+        TraitWitnessKind::AutoTrait => {
+            if !trait_metadata.role.is_auto() {
+                return fail("SSA auto-trait witness references a non-auto trait");
+            }
+            let mut work = 0;
+            let mut active = HashSet::new();
+            if !auto_trait_holds(
+                program,
+                trait_metadata.role,
+                &witness.ty,
+                0,
+                &mut work,
+                &mut active,
+            )? {
+                return fail("SSA auto-trait witness asserts an unsupported type fact");
+            }
+        }
+        TraitWitnessKind::Explicit(implementation_id) => {
+            let implementation = impl_by_id(program, implementation_id)?;
+            let SsaType::Product(product) = witness.ty else {
+                return fail("SSA explicit marker witness does not target a product");
+            };
+            if implementation.trait_id != witness.trait_id || implementation.product != product {
+                return fail(
+                    "SSA explicit marker witness identity does not match trait and product",
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn auto_trait_holds(
+    program: &Program,
+    role: TraitRole,
+    ty: &SsaType,
+    depth: usize,
+    work: &mut usize,
+    active: &mut HashSet<ProductId>,
+) -> crate::Result<bool> {
+    if depth > TRAIT_VERIFY_MAX_DEPTH {
+        return fail(format!(
+            "SSA auto-trait verification depth exceeded {TRAIT_VERIFY_MAX_DEPTH}"
+        ));
+    }
+    *work = work
+        .checked_add(1)
+        .ok_or_else(|| IrError::new("SSA auto-trait work overflow"))?;
+    if *work > TRAIT_VERIFY_MAX_WORK {
+        return fail(format!(
+            "SSA auto-trait verification work exceeded {TRAIT_VERIFY_MAX_WORK}"
+        ));
+    }
+    match role {
+        TraitRole::Copy => match ty {
+            SsaType::Unit
+            | SsaType::Bool
+            | SsaType::I64
+            | SsaType::F64
+            | SsaType::Str
+            | SsaType::Symbol => Ok(true),
+            SsaType::Buf | SsaType::Handle | SsaType::Function(_) | SsaType::TypeParameter(_) => {
+                Ok(false)
+            }
+            SsaType::List(inner) | SsaType::Option(inner) => {
+                auto_trait_holds(program, role, inner, depth + 1, work, active)
+            }
+            SsaType::Result(ok, error) => {
+                Ok(
+                    auto_trait_holds(program, role, ok, depth + 1, work, active)?
+                        && auto_trait_holds(program, role, error, depth + 1, work, active)?,
+                )
+            }
+            SsaType::Product(product) => {
+                if !active.insert(*product) {
+                    return fail(format!(
+                        "SSA auto-trait verification encountered product cycle at {}",
+                        product.raw()
+                    ));
+                }
+                let metadata = product_by_id(program, *product)?;
+                let mut result = true;
+                for field in &metadata.fields {
+                    if !auto_trait_holds(program, role, &field.ty, depth + 1, work, active)? {
+                        result = false;
+                        break;
+                    }
+                }
+                active.remove(product);
+                Ok(result)
+            }
+        },
+        TraitRole::Send | TraitRole::Sync => Ok(matches!(
+            ty,
+            SsaType::Unit | SsaType::Bool | SsaType::I64 | SsaType::F64
+        )),
+        TraitRole::Clone | TraitRole::Drop | TraitRole::User => Ok(false),
+    }
 }
 
 fn bind_type<'a>(
@@ -816,13 +1065,26 @@ fn bind_type<'a>(
             bind_type(left_err, right_err, permitted, substitutions)
         }
         (SsaType::Function(left), SsaType::Function(right)) => {
-            if left.parameters.len() != right.parameters.len() {
-                return fail("SSA generic function type arity mismatch");
+            if left.type_parameters != right.type_parameters
+                || left.bounds != right.bounds
+                || left.parameters.len() != right.parameters.len()
+            {
+                return fail("SSA generic function type identity or arity mismatch");
             }
+            let nested_permitted: HashSet<&str> = permitted
+                .iter()
+                .copied()
+                .filter(|name| !left.type_parameters.iter().any(|nested| nested == name))
+                .collect();
             for (left, right) in left.parameters.iter().zip(&right.parameters) {
-                bind_type(left, right, permitted, substitutions)?;
+                bind_type(left, right, &nested_permitted, substitutions)?;
             }
-            bind_type(&left.result, &right.result, permitted, substitutions)
+            bind_type(
+                &left.result,
+                &right.result,
+                &nested_permitted,
+                substitutions,
+            )
         }
         (left, right) if left == right => Ok(()),
         _ => fail("SSA resolved call type is incompatible with declaration"),
@@ -841,15 +1103,28 @@ fn substitute_type(ty: &SsaType, substitutions: &HashMap<&str, SsaType>) -> SsaT
             Box::new(substitute_type(ok, substitutions)),
             Box::new(substitute_type(err, substitutions)),
         ),
-        SsaType::Function(signature) => SsaType::Function(Box::new(Signature {
-            type_parameters: signature.type_parameters.clone(),
-            parameters: signature
-                .parameters
+        SsaType::Function(signature) => {
+            let nested_substitutions: HashMap<&str, SsaType> = substitutions
                 .iter()
-                .map(|ty| substitute_type(ty, substitutions))
-                .collect(),
-            result: Box::new(substitute_type(&signature.result, substitutions)),
-        })),
+                .filter(|(name, _)| {
+                    !signature
+                        .type_parameters
+                        .iter()
+                        .any(|nested| nested == **name)
+                })
+                .map(|(name, ty)| (*name, ty.clone()))
+                .collect();
+            SsaType::Function(Box::new(Signature {
+                type_parameters: signature.type_parameters.clone(),
+                bounds: signature.bounds.clone(),
+                parameters: signature
+                    .parameters
+                    .iter()
+                    .map(|ty| substitute_type(ty, &nested_substitutions))
+                    .collect(),
+                result: Box::new(substitute_type(&signature.result, &nested_substitutions)),
+            }))
+        }
         _ => ty.clone(),
     }
 }
@@ -1122,21 +1397,76 @@ fn is_numeric(ty: &SsaType) -> bool {
 }
 
 fn verify_type(program: &Program, ty: &SsaType, type_parameters: &[&str]) -> crate::Result<()> {
+    let mut work = 0;
+    verify_type_at(program, ty, type_parameters, 0, &mut work)
+}
+
+fn verify_type_at(
+    program: &Program,
+    ty: &SsaType,
+    type_parameters: &[&str],
+    depth: usize,
+    work: &mut usize,
+) -> crate::Result<()> {
+    if depth > TYPE_VERIFY_MAX_DEPTH {
+        return fail(format!("SSA type nesting exceeds {TYPE_VERIFY_MAX_DEPTH}"));
+    }
+    *work = work
+        .checked_add(1)
+        .ok_or_else(|| IrError::new("SSA type verification work overflow"))?;
+    if *work > TYPE_VERIFY_MAX_WORK {
+        return fail(format!(
+            "SSA type verification work exceeds {TYPE_VERIFY_MAX_WORK}"
+        ));
+    }
     match ty {
         SsaType::Product(product) => {
             let _metadata = product_by_id(program, *product)?;
             Ok(())
         }
-        SsaType::List(item) | SsaType::Option(item) => verify_type(program, item, type_parameters),
+        SsaType::List(item) | SsaType::Option(item) => {
+            verify_type_at(program, item, type_parameters, depth + 1, work)
+        }
         SsaType::Result(ok, err) => {
-            verify_type(program, ok, type_parameters)?;
-            verify_type(program, err, type_parameters)
+            verify_type_at(program, ok, type_parameters, depth + 1, work)?;
+            verify_type_at(program, err, type_parameters, depth + 1, work)
         }
         SsaType::Function(signature) => {
-            for parameter in &signature.parameters {
-                verify_type(program, parameter, type_parameters)?;
+            let mut names = HashSet::new();
+            if signature
+                .type_parameters
+                .iter()
+                .any(|name| name.is_empty() || !names.insert(name.as_str()))
+            {
+                return fail("SSA function type has invalid type parameters");
             }
-            verify_type(program, &signature.result, type_parameters)
+            let nested_parameters: Vec<&str> = signature
+                .type_parameters
+                .iter()
+                .map(String::as_str)
+                .collect();
+            let mut nested_scope: Vec<&str> = type_parameters
+                .iter()
+                .copied()
+                .filter(|outer| !nested_parameters.contains(outer))
+                .collect();
+            nested_scope.extend(nested_parameters.iter().copied());
+            let mut bounds = HashSet::new();
+            for bound in &signature.bounds {
+                if !nested_parameters.contains(&bound.parameter.as_str())
+                    || !bounds.insert((bound.parameter.as_str(), bound.trait_id))
+                {
+                    return fail("SSA function type has malformed trait bounds");
+                }
+                let trait_metadata = trait_by_id(program, bound.trait_id)?;
+                if matches!(trait_metadata.role, TraitRole::Clone | TraitRole::Drop) {
+                    return fail("SSA function type uses an unavailable core trait bound");
+                }
+            }
+            for parameter in &signature.parameters {
+                verify_type_at(program, parameter, &nested_scope, depth + 1, work)?;
+            }
+            verify_type_at(program, &signature.result, &nested_scope, depth + 1, work)
         }
         SsaType::TypeParameter(name) => {
             if type_parameters.contains(&name.as_str()) {
@@ -1170,6 +1500,20 @@ fn function_by_id(program: &Program, id: FunctionId) -> crate::Result<&Function>
         .and_then(|index| program.functions.get(index))
         .filter(|function| function.id == id)
         .ok_or_else(|| IrError::new(format!("missing SSA FunctionId {}", id.raw())))
+}
+
+fn trait_by_id(program: &Program, id: TraitId) -> crate::Result<&crate::TraitMetadata> {
+    id.index()
+        .and_then(|index| program.traits.get(index))
+        .filter(|trait_metadata| trait_metadata.id == id)
+        .ok_or_else(|| IrError::new(format!("missing SSA TraitId {}", id.raw())))
+}
+
+fn impl_by_id(program: &Program, id: ImplId) -> crate::Result<&crate::ImplMetadata> {
+    id.index()
+        .and_then(|index| program.implementations.get(index))
+        .filter(|implementation| implementation.id == id)
+        .ok_or_else(|| IrError::new(format!("missing SSA ImplId {}", id.raw())))
 }
 
 fn product_by_id(program: &Program, id: ProductId) -> crate::Result<&crate::ProductMetadata> {

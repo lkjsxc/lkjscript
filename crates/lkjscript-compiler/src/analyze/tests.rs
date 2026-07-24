@@ -9,7 +9,8 @@ mod tests {
     use super::analyze_program;
     use crate::codegen::compile_program;
     use crate::hir::{
-        BindingKind, BindingStorage, EffectSet, ExprKind, Operation, Origin, Type,
+        BindingKind, BindingStorage, CoreTrait, EffectSet, ExprKind, Operation, Origin,
+        TraitWitnessKind, Type,
     };
     use crate::import::{Program as AstProgram, SourceFile};
     use crate::lex::lex;
@@ -81,6 +82,20 @@ mod tests {
     }
 
     const POINT_PRODUCT: &str = "product/\nname/\nPoint\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\ny\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\n";
+
+    fn marker_trait(name: &str) -> String {
+        format!("trait/\nname/\n{name}\n/name\n/trait\n")
+    }
+
+    fn marker_impl(trait_name: &str, product_name: &str) -> String {
+        format!("impl/\ntrait/\n{trait_name}\n/trait\nfor/\nProduct\n{product_name}\n/for\n/impl\n")
+    }
+
+    fn bounded_identity(name: &str, trait_name: &str) -> String {
+        format!(
+            "def/\nname/\n{name}\n/name\nfn/\nforall/\nT\n/forall\nbounds/\nbound/\nT\n{trait_name}\n/bound\n/bounds\nsig/\nT\n->\nT\n/sig\nparams/\nvalue\nT\n/params\nvalue\n/fn\n/def\n"
+        )
+    }
 
     #[test]
     fn explicit_main_is_unique_root_only_and_exactly_typed() {
@@ -455,7 +470,7 @@ mod tests {
         let program = analyze_one(&source).expect("analyze generic direct call");
         let identity = &program.functions[0];
         assert_eq!(identity.summary, EffectSet::PURE);
-        let ExprKind::Call { callee, args } = &program.main.body.kind else {
+        let ExprKind::Call { callee, args, .. } = &program.main.body.kind else {
             panic!("expected generic direct call");
         };
         assert_eq!(callee.binding, identity.binding);
@@ -493,6 +508,263 @@ mod tests {
         ] {
             assert!(EffectSet::CONSERVATIVE_CALL.contains(required));
         }
+    }
+
+    #[test]
+    fn marker_trait_impl_and_bound_resolve_to_dense_canonical_identities() {
+        let source = format!(
+            "{}{}{}{}{}",
+            marker_trait("Marked"),
+            POINT_PRODUCT,
+            marker_impl("Marked", "Point"),
+            bounded_identity("keep-marked", "Marked"),
+            main_source(
+                "Product\nPoint",
+                "keep-marked/\nproduct-value/\nPoint\nfield/\nx\n1\n/field\nfield/\ny\n2\n/field\n/product-value\n/keep-marked"
+            )
+        );
+        let program = analyze_one(&source).expect("analyze marker trait program");
+        assert_eq!(program.traits.len(), CoreTrait::ALL.len() + 1);
+        for (index, core) in CoreTrait::ALL.iter().enumerate() {
+            assert_eq!(program.traits[index].name, core.name());
+            assert_eq!(program.traits[index].id.raw(), index as u32);
+        }
+        let marker = &program.traits[CoreTrait::ALL.len()];
+        assert_eq!(marker.name, "Marked");
+        assert_eq!(program.implementations.len(), 1);
+        assert_eq!(program.implementations[0].trait_id, marker.id);
+        assert_eq!(program.functions[0].bounds[0].trait_id, marker.id);
+        let ExprKind::Call {
+            instantiation: Some(instantiation),
+            ..
+        } = &program.main.body.kind
+        else {
+            panic!("expected resolved bounded generic call");
+        };
+        assert_eq!(instantiation.substitutions[0].ty, Type::Product("Point".into()));
+        assert_eq!(instantiation.witnesses[0].trait_id, marker.id);
+        assert_eq!(
+            instantiation.witnesses[0].kind,
+            TraitWitnessKind::Explicit(program.implementations[0].id)
+        );
+
+        let ssa = lower_program(&program).expect("lower bounded marker program");
+        assert_eq!(ssa.program().traits.len(), CoreTrait::ALL.len() + 1);
+        assert_eq!(ssa.program().implementations.len(), 1);
+        assert_eq!(ssa.program().functions[0].signature.bounds.len(), 1);
+        let call = ssa.program().functions.last().expect("main").blocks.iter()
+            .flat_map(|block| &block.instructions)
+            .find_map(|instruction| match &instruction.kind {
+                lkjscript_ir::InstructionKind::Call { instantiation, .. } => instantiation.as_ref(),
+                _ => None,
+            })
+            .expect("SSA bounded call");
+        assert_eq!(call.witnesses.len(), 1);
+    }
+
+    #[test]
+    fn malformed_marker_declarations_bounds_and_namespace_collisions_are_rejected() {
+        let main = main_source("Unit", "unit");
+        for malformed in [
+            format!("trait/\nname/\nMarked\n/name\nmethod/\nclone\n/method\n/trait\n{main}"),
+            format!("trait/\nname/\nlower\n/name\n/trait\n{main}"),
+            format!("impl/\ntrait/\nMarked\n/trait\nfor/\nI64\n/for\nvalue/\n1\n/value\n/impl\n{main}"),
+        ] {
+            assert!(analyze_one(&malformed).is_err(), "accepted malformed marker declaration");
+        }
+        let duplicate = format!("{}{}{}", marker_trait("Marked"), marker_trait("Marked"), main);
+        assert!(analysis_error(&duplicate).contains("duplicate trait"));
+        let product_collision = format!("{}{}{}", marker_trait("Point"), POINT_PRODUCT, main);
+        assert!(analysis_error(&product_collision).contains("collides with a trait"));
+        let function_collision = format!(
+            "{}{}{}",
+            marker_trait("Marked"),
+            function_source("Marked", &[], "->\nUnit", "", "unit"),
+            main
+        );
+        assert!(analysis_error(&function_collision).contains("duplicate global"));
+        for reserved in ["Copy", "Clone", "Drop", "Send", "Sync", "I64"] {
+            let source = format!("{}{main}", marker_trait(reserved));
+            assert!(analyze_one(&source).is_err(), "accepted reserved trait {reserved}");
+        }
+    }
+
+    #[test]
+    fn impl_coherence_unknown_names_and_core_auto_trait_assertions_are_rejected() {
+        let main = main_source("Unit", "unit");
+        let overlap = format!(
+            "{}{}{}{}{}",
+            marker_trait("Marked"), POINT_PRODUCT,
+            marker_impl("Marked", "Point"), marker_impl("Marked", "Point"), main
+        );
+        assert!(analysis_error(&overlap).contains("overlapping marker impl"));
+        let unknown_trait = format!("{}{}{main}", POINT_PRODUCT, marker_impl("Missing", "Point"));
+        assert!(analysis_error(&unknown_trait).contains("unknown trait"));
+        let unknown_product = format!("{}{}{main}", marker_trait("Marked"), marker_impl("Marked", "Missing"));
+        assert!(analysis_error(&unknown_product).contains("unknown product"));
+        for core in ["Copy", "Clone", "Drop", "Send", "Sync"] {
+            let source = format!("{}{}{main}", POINT_PRODUCT, marker_impl(core, "Point"));
+            assert!(analysis_error(&source).contains("cannot be explicitly implemented"));
+        }
+        let declaration_after_impl = format!(
+            "{}{}{}{}",
+            marker_impl("Marked", "Point"), marker_trait("Marked"), POINT_PRODUCT,
+            main_source("Unit", "unit")
+        );
+        assert!(analyze_one(&declaration_after_impl).is_ok());
+    }
+
+    #[test]
+    fn bounds_require_declared_parameters_known_traits_and_satisfied_facts() {
+        let main = main_source("Unit", "unit");
+        let undeclared = bounded_identity("bad", "Marked").replace("bound/\nT\n", "bound/\nU\n");
+        let source = format!("{}{}{main}", marker_trait("Marked"), undeclared);
+        assert!(analysis_error(&source).contains("not declared by forall"));
+        let unknown = format!("{}{main}", bounded_identity("bad", "Missing"));
+        assert!(analysis_error(&unknown).contains("unknown trait"));
+        let duplicate = bounded_identity("bad", "Copy").replace(
+            "/bounds",
+            "bound/\nT\nCopy\n/bound\n/bounds",
+        );
+        let source = format!("{duplicate}{main}");
+        assert!(analysis_error(&source).contains("duplicate bound"));
+        for unavailable in ["Clone", "Drop"] {
+            let source = format!("{}{main}", bounded_identity("bad", unavailable));
+            assert!(
+                analysis_error(&source).contains("requires methods"),
+                "accepted unavailable core bound {unavailable}"
+            );
+        }
+
+        let satisfied = format!(
+            "{}{}",
+            bounded_identity("copy-value", "Copy"),
+            main_source("I64", "copy-value/\n7\n/copy-value")
+        );
+        let program = analyze_one(&satisfied).expect("Copy bound is structurally satisfied");
+        let ExprKind::Call { instantiation: Some(instantiation), .. } = &program.main.body.kind else {
+            panic!("expected Copy instantiation");
+        };
+        assert_eq!(instantiation.witnesses[0].kind, TraitWitnessKind::AutoTrait);
+
+        let unsatisfied = format!(
+            "{}{}",
+            bounded_identity("copy-value", "Copy"),
+            main_source("Buf", "copy-value/\nbuf-new/\n1\n/buf-new\n/copy-value")
+        );
+        assert!(analysis_error(&unsatisfied).contains("does not satisfy trait Copy"));
+
+        let first_class = format!(
+            "{}{}",
+            bounded_identity("copy-value", "Copy"),
+            main_source(
+                "I64",
+                "let/\nbind/\nf\ncopy-value\n/bind\nf/\n7\n/f\n/let"
+            )
+        );
+        assert!(analysis_error(&first_class).contains("not a first-class value"));
+
+        let forwarding = bounded_identity("forward", "Copy").replace(
+            "\nvalue\n/fn",
+            "\ncopy-value/\nvalue\n/copy-value\n/fn",
+        );
+        let source = format!(
+            "{}{}{}",
+            bounded_identity("copy-value", "Copy"),
+            forwarding,
+            main_source("Unit", "unit")
+        );
+        assert!(analysis_error(&source).contains("generic context is unavailable"));
+    }
+
+    #[test]
+    fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles() {
+        let nested_products = "product/\nname/\nLeaf\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nStr\n/type\n/field\n/fields\n/product\nproduct/\nname/\nNest\n/name\nfields/\nfield/\nname/\nitems\n/name\ntype/\nOption\nResult\nList\nProduct\nLeaf\nI64\n/type\n/field\n/fields\n/product\n";
+        let value = "product-value/\nNest\nfield/\nitems\nnone/\nResult\nList\nProduct\nLeaf\nI64\n/none\n/field\n/product-value";
+        let copy_source = format!(
+            "{nested_products}{}{}",
+            bounded_identity("accept", "Copy"),
+            main_source("Product\nNest", &format!("accept/\n{value}\n/accept"))
+        );
+        analyze_one(&copy_source).expect("nested immutable GC handles are Copy within one worker");
+        for worker_trait in ["Send", "Sync"] {
+            let source = format!(
+                "{nested_products}{}{}",
+                bounded_identity("accept", worker_trait),
+                main_source("Product\nNest", &format!("accept/\n{value}\n/accept"))
+            );
+            assert!(
+                analysis_error(&source).contains("does not satisfy trait"),
+                "worker-local GC product unexpectedly satisfied {worker_trait}"
+            );
+        }
+        for worker_trait in ["Send", "Sync"] {
+            let source = format!(
+                "{}{}",
+                bounded_identity("accept-scalar", worker_trait),
+                main_source("I64", "accept-scalar/\n7\n/accept-scalar")
+            );
+            analyze_one(&source).unwrap_or_else(|error| {
+                panic!("scalar {worker_trait} fact unexpectedly failed: {error}")
+            });
+        }
+        for ty in ["Buf", "Handle"] {
+            let body = if ty == "Buf" { "buf-new/\n0\n/buf-new" } else { "stdin-handle/\n/stdin-handle" };
+            let source = format!(
+                "{}{}",
+                bounded_identity("send-value", "Send"),
+                main_source(ty, &format!("send-value/\n{body}\n/send-value"))
+            );
+            assert!(analysis_error(&source).contains("does not satisfy trait Send"));
+        }
+
+        let recursive = "product/\nname/\nRecursive\n/name\nfields/\nfield/\nname/\nnext\n/name\ntype/\nOption\nProduct\nRecursive\n/type\n/field\n/fields\n/product\n";
+        let source = format!(
+            "{recursive}{}{}",
+            bounded_identity("copy-recursive", "Copy"),
+            main_source("Product\nRecursive", "copy-recursive/\nproduct-value/\nRecursive\nfield/\nnext\nnone/\nProduct\nRecursive\n/none\n/field\n/product-value\n/copy-recursive")
+        );
+        assert!(analysis_error(&source).contains("recursive product cycle"));
+
+        let mut deep = String::new();
+        for index in 0..20 {
+            let field_type = if index == 19 {
+                "I64".to_string()
+            } else {
+                format!("Option\nProduct\nP{}", index + 1)
+            };
+            deep.push_str(&format!(
+                "product/\nname/\nP{index}\n/name\nfields/\nfield/\nname/\nnext\n/name\ntype/\n{field_type}\n/type\n/field\n/fields\n/product\n"
+            ));
+        }
+        deep.push_str(&bounded_identity("copy-deep", "Copy"));
+        deep.push_str(&main_source(
+            "Product\nP0",
+            "copy-deep/\nproduct-value/\nP0\nfield/\nnext\nnone/\nProduct\nP1\n/none\n/field\n/product-value\n/copy-deep",
+        ));
+        let first = analysis_error(&deep);
+        let second = analysis_error(&deep);
+        assert!(first.contains("trait solver depth exceeded"));
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn trait_and_impl_metadata_follow_source_closure_and_declaration_order() {
+        let dependency = format!("{}{}{}", marker_trait("First"), POINT_PRODUCT, marker_impl("First", "Point"));
+        let root = format!("{}{}", marker_trait("Second"), main_source("Unit", "unit"));
+        let first = analyze_program(&parsed_program(&[("dep.lkjscript", &dependency), ("root.lkjscript", &root)]).expect("parse closure"))
+            .expect("analyze closure");
+        let second = analyze_program(&parsed_program(&[("dep.lkjscript", &dependency), ("root.lkjscript", &root)]).expect("parse closure again"))
+            .expect("analyze closure again");
+        let facts = |program: &crate::hir::Program| {
+            (
+                program.traits.iter().map(|definition| (definition.id.raw(), definition.name.clone())).collect::<Vec<_>>(),
+                program.implementations.iter().map(|implementation| (implementation.id.raw(), implementation.trait_id.raw(), implementation.product.raw())).collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(facts(&first), facts(&second));
+        assert_eq!(first.traits[CoreTrait::ALL.len()].name, "First");
+        assert_eq!(first.traits[CoreTrait::ALL.len() + 1].name, "Second");
     }
 
     #[test]

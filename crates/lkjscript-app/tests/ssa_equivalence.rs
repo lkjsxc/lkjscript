@@ -149,6 +149,15 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
     );
 }
 
+#[test]
+fn bounded_marker_generic_is_erased_after_ssa_verification_with_vm_equivalence() {
+    let source = "trait/\nname/\nMarked\n/name\n/trait\nproduct/\nname/\nBoxed\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\nimpl/\ntrait/\nMarked\n/trait\nfor/\nProduct\nBoxed\n/for\n/impl\ndef/\nname/\nkeep-marked\n/name\nfn/\nforall/\nT\n/forall\nbounds/\nbound/\nT\nMarked\n/bound\n/bounds\nsig/\nT\n->\nT\n/sig\nparams/\nvalue\nT\n/params\nvalue\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nfield/\nkeep-marked/\nproduct-value/\nBoxed\nfield/\nvalue\n42\n/field\n/product-value\n/keep-marked\nvalue\n/field\n/main\n";
+    assert_eq!(
+        compare_source(source, "bounded-marker.lkjscript"),
+        ScalarOutcome::I64(42)
+    );
+}
+
 struct Generator(u64);
 
 impl Generator {

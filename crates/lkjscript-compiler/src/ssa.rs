@@ -7,9 +7,10 @@ use lkjscript_core::{Error, Result};
 use lkjscript_ir::{
     verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter, CallTarget,
     Constant, EffectSet, FailureBehavior, FrameLocal, FrameState, Function, FunctionId,
-    Instruction, InstructionKind, InstructionMetadata, Origin, ProductField, ProductId,
-    ProductMetadata, Program, RuntimeOp, Safepoint, Signature, SourceMetadata, SsaType, Terminator,
-    ValueId, VerifiedProgram,
+    GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind, InstructionMetadata,
+    Origin, ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint, Signature,
+    SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
+    TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VerifiedProgram,
 };
 
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
@@ -91,7 +92,15 @@ fn construct_program(program: &hir::Program) -> Result<Program> {
                 function.binding.raw()
             ))
         })?;
-        let signature = signature_from_type(&binding.ty, &product_ids)?;
+        let mut signature = signature_from_type(&binding.ty, &product_ids)?;
+        signature.bounds = function
+            .bounds
+            .iter()
+            .map(|bound| TraitBound {
+                parameter: bound.parameter.clone(),
+                trait_id: TraitId::new(bound.trait_id.raw()),
+            })
+            .collect();
         let mut builder = FunctionBuilder::new(
             &product_ids,
             &function_ids,
@@ -186,6 +195,36 @@ fn construct_program(program: &hir::Program) -> Result<Program> {
                 })
             })
             .collect::<Result<Vec<_>>>()?,
+        traits: program
+            .traits
+            .iter()
+            .map(|definition| TraitMetadata {
+                id: TraitId::new(definition.id.raw()),
+                name: definition.name.clone(),
+                role: match definition.core {
+                    Some(hir::CoreTrait::Copy) => TraitRole::Copy,
+                    Some(hir::CoreTrait::Clone) => TraitRole::Clone,
+                    Some(hir::CoreTrait::Drop) => TraitRole::Drop,
+                    Some(hir::CoreTrait::Send) => TraitRole::Send,
+                    Some(hir::CoreTrait::Sync) => TraitRole::Sync,
+                    None => TraitRole::User,
+                },
+                source: match definition.origin {
+                    hir::Origin::Source(source) => Some(source.raw()),
+                    hir::Origin::Builtin => None,
+                },
+            })
+            .collect(),
+        implementations: program
+            .implementations
+            .iter()
+            .map(|implementation| ImplMetadata {
+                id: ImplId::new(implementation.id.raw()),
+                trait_id: TraitId::new(implementation.trait_id.raw()),
+                product: ProductId::new(implementation.product.raw()),
+                source: implementation.origin.raw(),
+            })
+            .collect(),
         functions,
         main: main_id,
     })
@@ -424,7 +463,11 @@ impl<'a> FunctionBuilder<'a> {
                 expression.origin,
             )?,
             ExprKind::Load(binding) => return self.lower_load(*binding, expression),
-            ExprKind::Call { callee, args } => {
+            ExprKind::Call {
+                callee,
+                args,
+                instantiation,
+            } => {
                 let Some(arguments) = self.lower_arguments(args)? else {
                     return Ok(None);
                 };
@@ -469,6 +512,10 @@ impl<'a> FunctionBuilder<'a> {
                         target,
                         arguments,
                         signature,
+                        instantiation: instantiation
+                            .as_ref()
+                            .map(|instantiation| self.lower_instantiation(instantiation))
+                            .transpose()?,
                     },
                     call_effects,
                     expression.origin,
@@ -658,6 +705,40 @@ impl<'a> FunctionBuilder<'a> {
                 .map(Some)
             }
         }
+    }
+
+    fn lower_instantiation(
+        &self,
+        instantiation: &hir::GenericInstantiation,
+    ) -> Result<GenericInstantiation> {
+        Ok(GenericInstantiation {
+            substitutions: instantiation
+                .substitutions
+                .iter()
+                .map(|substitution| {
+                    Ok(TypeSubstitution {
+                        parameter: substitution.parameter.clone(),
+                        ty: lower_type(&substitution.ty, self.product_ids)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            witnesses: instantiation
+                .witnesses
+                .iter()
+                .map(|witness| {
+                    Ok(TraitWitness {
+                        trait_id: TraitId::new(witness.trait_id.raw()),
+                        ty: lower_type(&witness.ty, self.product_ids)?,
+                        kind: match witness.kind {
+                            hir::TraitWitnessKind::AutoTrait => TraitWitnessKind::AutoTrait,
+                            hir::TraitWitnessKind::Explicit(id) => {
+                                TraitWitnessKind::Explicit(ImplId::new(id.raw()))
+                            }
+                        },
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+        })
     }
 
     fn lower_arguments(&mut self, arguments: &[Expr]) -> Result<Option<Vec<ValueId>>> {
@@ -1114,6 +1195,7 @@ fn signature_from_type(ty: &Type, products: &HashMap<String, ProductId>) -> Resu
             };
             Ok(Signature {
                 type_parameters: vars.clone(),
+                bounds: Vec::new(),
                 parameters: params
                     .iter()
                     .map(|parameter| lower_type(parameter, products))

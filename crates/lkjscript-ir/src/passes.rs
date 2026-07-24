@@ -273,10 +273,12 @@ pub fn direct_call_resolution(verified: &VerifiedProgram) -> crate::Result<Verif
                         target: CallTarget::Indirect(value),
                         arguments,
                         signature,
+                        instantiation,
                     } => references.get(value).map(|target| InstructionKind::Call {
                         target: CallTarget::Direct(*target),
                         arguments: arguments.clone(),
                         signature: signature.clone(),
+                        instantiation: instantiation.clone(),
                     }),
                     _ => None,
                 };

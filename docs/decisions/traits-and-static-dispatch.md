@@ -7,10 +7,12 @@ collections, static method dispatch, and future self-hosting.
 
 ## Status
 
-Current annotation-driven generic functions have no trait declarations,
-implementation selection, methods, associated types, or auto traits. The system
-below is an **Accepted Target** and becomes Current only as implemented syntax,
-resolution, HIR/SSA identity, and conformance tests land together.
+The bounded **Initial Coherent Slice** below is **Current**: declaration-only
+marker traits, exact nominal-product impls, generic marker bounds, structural
+`Copy`/`Send`/`Sync` facts, and verified erased witness identities. Trait
+methods, associated types/values, generic or blanket impls, package orphan
+rules, specialization, dynamic dispatch, and native monomorphization remain an
+**Accepted Target** or **Deferred** as identified below.
 
 ## Syntax Candidates
 
@@ -124,10 +126,11 @@ values, synchronized wrappers, unique containers, and trait bounds. A
 worker-local GC reference is neither `Send` nor `Sync`; an exclusive reference
 is not `Sync`; immutable shared bytes may be both under their audited contract.
 
-User `Copy` implementations are accepted only when every stored component is
-`Copy`, no `Drop` implementation exists, and the compiler layout rule approves
-the type. `Clone` and `Drop` bodies are ordinary statically dispatched
-functions subject to effects and ownership checking.
+In the Current marker slice, every explicit core-trait implementation is
+rejected. `Copy`, `Send`, and `Sync` facts are compiler-derived only; `Clone`
+and `Drop` bounds are rejected until executable methods/drop elaboration exist.
+Audited user `Copy` implementations and executable `Clone`/`Drop` bodies are an
+**Accepted Target** for the ownership/method slice, not Current behavior.
 
 ## Native Dispatch And Monomorphization
 
@@ -143,13 +146,60 @@ cycle.
 
 ## Initial Coherent Slice
 
-The first slice implements nominal marker traits, explicit non-overlapping
-implementations, generic bounds, deterministic selection, resolved witness
-identity, bounded solving/cycle diagnostics, and compiler-derived `Send`/`Sync`
-for current scalar and nominal product types. Methods and associated types land
-in the next coherent slice before collection/future abstractions require them.
-Until then, syntax that declares a method or associated type is rejected rather
-than stored inertly.
+The first slice is declaration-only nominal marker traits. A `trait/` contains
+exactly one `name/`; an `impl/` contains exactly one `trait/` and one `for/`
+whose target is an exact monomorphic nominal product. Generic `fn/` declarations
+may place one `bounds/` block after `forall/` and before `sig/`; every
+`bound/ T TraitName /bound` names a declared type parameter and a resolved
+trait, with no duplicate `(parameter, trait)` pair. Imported traits and impls
+are declarations; imported execution and imported `main` remain forbidden.
+
+Dense trait identities begin with compiler-owned `Copy`, `Clone`, `Drop`,
+`Send`, and `Sync`, followed by source traits in source-closure/declaration
+order. Explicit implementation identities follow source-closure/declaration
+order. Until packages exist, the exact loaded program closure is the coherence
+domain: duplicate `(trait, product)` implementations are rejected independent
+of declaration order. Source cannot declare a core trait, implement `Copy`,
+`Send`, or `Sync`, or assert auto-trait facts.
+
+The bounded marker solver derives `Copy`, `Send`, and `Sync`. Unit, Bool, I64,
+and F64 have all three facts. Str and Symbol are `Copy` within one worker but,
+like List, Option, Result, and nominal products, are worker-local GC references
+and therefore do not derive `Send` or `Sync`; structurally eligible contained
+values still determine their `Copy` fact. Buf, Handle, and function types have
+no automatic facts in this slice. Exact repeated product recursion and solver
+depth/work exhaustion are deterministic compile errors rather than optimistic
+inference. Other user marker bounds require one exact explicit product
+implementation.
+
+Bounded generic functions are callable only at concrete direct-call sites and
+are not first-class values in this slice; generic-context bound forwarding and
+loading one for an indirect call are rejected because an abstract caller-bound
+witness is not yet represented. Resolved concrete generic HIR calls retain canonical
+ordered substitutions and one erased witness per bound: either an auto-trait fact or an exact implementation
+identity. `Clone` and `Drop` bounds are unavailable until their method/drop
+contracts are implemented. Typed SSA retains trait/implementation metadata, signature bounds,
+and the same call instantiation and witness identities; verification rejects
+unknown, duplicate, mismatched, unbounded type nesting, core-trait assertions,
+or non-canonical facts before evaluator,
+bytecode, or native consumers can erase marker witnesses. Methods, associated
+types/values, generic impls, specialization, dynamic dispatch, blanket impls,
+and overlapping impls remain absent and their syntax is rejected rather than
+stored inertly.
+
+## Current Slice Evidence
+
+The Current marker slice is covered by compiler declaration/coherence/solver
+tests, IR canonical/malformed-witness verification tests, and evaluator/VM
+equivalence for an exact bounded generic marker call. The implementation tree based on `5c6ba38` passed focused compiler/IR/app
+tests, rustfmt check,
+strict Clippy for the touched compiler/IR/JIT/app crates, the 151-test canonical
+workspace gate, locked release build, all current runtime smokes, and Docker
+`result=ok` on Linux x86-64 with Rust/Cargo 1.96.0. Full Brainfuck Mandelbrot,
+performance, Miri, sanitizers, methods, associated items, ownership, package
+coherence, and native generic monomorphization were not tested or implemented.
+Exact commands are recorded in
+[Current State](../current-state.md#evidence).
 
 ## Deferred And Rejected
 

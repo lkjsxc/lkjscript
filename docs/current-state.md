@@ -30,12 +30,14 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - Compiler boundary: one analysis pass collects immutable headers and produces
   owned, resolved typed HIR with explicit Main and Functions, BindingIds,
   local-slot references, MutableLocal/SetLocal, ProductIds, numeric field
-  identities, source origins, exact operation/type facts, and deterministic
-  fixed-point function effect summaries; HIR lowers once into verified typed
+  identities, dense TraitIds/ImplIds, resolved marker bounds and witnesses,
+  source origins, exact operation/type facts, and deterministic fixed-point
+  function effect summaries; HIR lowers once into verified typed
   SSA, deterministic baseline normalization, and then reference bytecode
 - Typed SSA: dependency-free `lkjscript-ir` owns dense function/block/value
-  identities, exact types and nominal product metadata, explicit block
-  parameters and terminators, direct/indirect/runtime calls, effects,
+  identities, exact types, nominal product metadata, dense trait/impl metadata,
+  generic signature bounds, canonical substitutions and erased marker witness
+  identities, explicit block parameters and terminators, direct/indirect/runtime calls, effects,
   safepoints, frame states, source origins, verification, an independent
   bounded evaluator, deterministic isolated baseline passes, and bytecode link
   metadata; SSA conversion renames local mutation and uses stable BindingId-
@@ -71,6 +73,21 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   removed in favor of exact value, object-identity, bounded structural-list,
   and F64-bit equality families; nominal products have ordered named fields,
   exact construction, access, and immutable replacement
+- Marker traits: declaration-only top-level traits and exact nominal-product
+  impls are Current across imports; generic `bounds/` are solved at concrete
+  calls with exact explicit ImplId or structural auto-trait witnesses. Core
+  `Copy`/`Clone`/`Drop`/`Send`/`Sync` identities are reserved and no core-trait
+  implementation may be asserted by source in this slice. Unit/Bool/I64/F64,
+  Str/Symbol, and structurally eligible List/Option/Result/product composition
+  derive `Copy`; only Unit/Bool/I64/F64 currently derive `Send`/`Sync` because
+  every heap reference is worker-local. Buf/Handle/function types derive none
+  of those facts. Solver and verifier depth/work are bounded,
+  recursive product cycles are deterministic errors, and the exact loaded
+  source closure is the temporary coherence domain. Bounded generics require a
+  concrete direct call; generic-context forwarding and first-class bounded
+  function values are explicitly rejected in this slice. Methods,
+  associated items, generic/blanket impls, specialization, dynamic dispatch,
+  and package orphan rules are not Current
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
@@ -159,10 +176,12 @@ do not establish application durability or migration behavior.
 
 ## Accepted Platform Direction
 
-The next implementation sequence is sound ownership and coherent static traits,
-then exact native frames/roots, allocation-capable baseline execution, and a
-distinct proof-based optimizing tier with measured process-local promotion.
-These are **Accepted Targets**, not Current behavior. The authoritative records
+The marker-trait foundation is Current, but sound ownership and full static
+trait methods/associated items are not. The next implementation sequence is
+sound ownership and the next coherent static-trait slice, then exact native
+frames/roots, allocation-capable baseline execution, and a distinct proof-based
+optimizing tier with measured process-local promotion. These remaining steps
+are **Accepted Targets**, not Current behavior. The authoritative records
 are [Ownership And Borrowing](decisions/ownership-and-borrowing.md), [Coherent
 Traits And Static Dispatch](decisions/traits-and-static-dispatch.md), [Native
 References, Frames, And Exact GC Stack Maps](decisions/native-references-and-gc-stack-maps.md),
@@ -195,6 +214,25 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The marker-trait implementation tree based on `5c6ba38` was checked on Linux
+7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0:
+
+| Marker-trait command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-compiler -p lkjscript-ir -p lkjscript-app` | passed; declaration/coherence/bound solving, structural auto traits, malformed SSA witnesses, and evaluator/VM marker-call equivalence |
+| `cargo fmt --all -- --check` | passed |
+| `cargo clippy --locked -p lkjscript-ir -p lkjscript-compiler -p lkjscript-jit -p lkjscript-app --all-targets --all-features -- -D warnings` | passed |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs/tree/source closure, rustfmt, strict workspace Clippy, and all 151 workspace tests |
+| `cargo build --workspace --release --locked` plus Brainfuck, lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smokes | passed |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | passed with `result=ok`; rebuilt release runtime and reran the configured gates/smokes |
+| Not tested | full Brainfuck Mandelbrot, performance, Miri, sanitizers, or non-Linux targets |
+
+This evidence establishes only marker declarations, exact nominal impls,
+generic marker bounds, bounded structural Copy/Send/Sync solving, and verified
+erased witness identity. It does not establish trait methods, associated items,
+ownership, package coherence/orphan rules, dynamic dispatch, specialization, or
+native generic monomorphization.
 
 The lossless bulk-byte and durable-file changes in this documentation's
 containing commits were checked on Linux x86-64 with Rust/Cargo 1.96.0:

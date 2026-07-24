@@ -6,10 +6,14 @@ use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
 use crate::ast::Expr as AstExpr;
 use crate::hir::{
-    self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, EffectSet, Expr, ExprKind,
-    Function, LocalDefinition, Main, Operation, Origin, ProductDefinition, ProductField, Source,
-    SourceId, Type,
+    self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, CoreTrait, EffectSet, Expr,
+    ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LocalDefinition, Main,
+    Operation, Origin, ProductDefinition, ProductField, Source, SourceId, TraitBound,
+    TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type, TypeSubstitution,
 };
+
+pub const TRAIT_SOLVER_MAX_DEPTH: usize = 32;
+pub const TRAIT_SOLVER_MAX_WORK: usize = 256;
 use crate::import::Program as AstProgram;
 use crate::types::parse_one;
 
@@ -22,8 +26,11 @@ pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
 pub(crate) fn analyze_program_without_effects(program: &AstProgram) -> Result<hir::Program> {
     let mut analyzer = Analyzer::new(program)?;
     analyzer.install_operations()?;
+    analyzer.install_core_traits()?;
+    analyzer.collect_trait_names(program)?;
     analyzer.collect_product_names(program)?;
     analyzer.collect_products(program)?;
+    analyzer.collect_implementations(program)?;
     let (pending_functions, pending_main) = analyzer.collect_headers(program)?;
 
     let mut functions = Vec::with_capacity(pending_functions.len());
@@ -32,6 +39,7 @@ pub(crate) fn analyze_program_without_effects(program: &AstProgram) -> Result<hi
             function.binding,
             function.origin,
             function.parsed,
+            function.bounds,
         )?);
     }
     let main = analyzer.resolve_main(pending_main)?;
@@ -41,6 +49,8 @@ pub(crate) fn analyze_program_without_effects(program: &AstProgram) -> Result<hi
         sources: analyzer.sources,
         bindings: analyzer.bindings,
         products: analyzer.products,
+        traits: analyzer.traits,
+        implementations: analyzer.implementations,
         functions,
         main,
         global_layout,
@@ -55,6 +65,11 @@ struct Analyzer {
     operations: HashMap<Operation, BindingId>,
     product_names: HashMap<String, ProductId>,
     products: Vec<ProductDefinition>,
+    trait_names: HashMap<String, TraitId>,
+    traits: Vec<TraitDefinition>,
+    implementations: Vec<ImplDefinition>,
+    implementation_index: HashMap<(TraitId, ProductId), ImplId>,
+    function_bounds: HashMap<BindingId, Vec<TraitBound>>,
 }
 
 impl Analyzer {
@@ -75,6 +90,11 @@ impl Analyzer {
             operations: HashMap::new(),
             product_names: HashMap::new(),
             products: Vec::new(),
+            trait_names: HashMap::new(),
+            traits: Vec::new(),
+            implementations: Vec::new(),
+            implementation_index: HashMap::new(),
+            function_bounds: HashMap::new(),
         })
     }
 
@@ -87,6 +107,77 @@ impl Analyzer {
                 Origin::Builtin,
             )?;
             self.operations.insert(*operation, id);
+        }
+        Ok(())
+    }
+
+    fn install_core_traits(&mut self) -> Result<()> {
+        for core in CoreTrait::ALL {
+            let raw = u32::try_from(self.traits.len())
+                .map_err(|_| Error::msg("too many traits for HIR TraitId"))?;
+            let id = TraitId::new(raw);
+            let name = core.name().to_string();
+            self.trait_names.insert(name.clone(), id);
+            self.traits.push(TraitDefinition {
+                id,
+                name,
+                origin: Origin::Builtin,
+                core: Some(core),
+            });
+        }
+        Ok(())
+    }
+
+    fn collect_trait_names(&mut self, program: &AstProgram) -> Result<()> {
+        for (source_index, file) in program.files.iter().enumerate() {
+            let source = SourceId::new(
+                u32::try_from(source_index)
+                    .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
+            );
+            for form in &file.forms {
+                let AstExpr::Call { name, args } = form else {
+                    continue;
+                };
+                if name != "trait" {
+                    continue;
+                }
+                let trait_name =
+                    trait_declaration(args).map_err(|message| self.error(source, message))?;
+                if !is_declaration_type_name(&trait_name) {
+                    return Err(self.error(
+                        source,
+                        format!("invalid trait declaration name {trait_name}"),
+                    ));
+                }
+                if CoreTrait::ALL.iter().any(|core| core.name() == trait_name) {
+                    return Err(self.error(
+                        source,
+                        format!("trait {trait_name} is compiler-owned and cannot be declared"),
+                    ));
+                }
+                if Operation::from_name(&trait_name).is_some()
+                    || is_contextual_name(&trait_name)
+                    || is_builtin_type_name(&trait_name)
+                {
+                    return Err(self.error(source, format!("trait declaration {trait_name} collides with a reserved operation, form, or type")));
+                }
+                if self.trait_names.contains_key(&trait_name) {
+                    return Err(
+                        self.error(source, format!("duplicate trait declaration {trait_name}"))
+                    );
+                }
+                let id =
+                    TraitId::new(u32::try_from(self.traits.len()).map_err(|_| {
+                        self.error(source, "too many trait declarations for TraitId")
+                    })?);
+                self.trait_names.insert(trait_name.clone(), id);
+                self.traits.push(TraitDefinition {
+                    id,
+                    name: trait_name,
+                    origin: Origin::Source(source),
+                    core: None,
+                });
+            }
         }
         Ok(())
     }
@@ -105,7 +196,7 @@ impl Analyzer {
                 }
                 let (product_name, _) =
                     product_declaration(args).map_err(|message| self.error(source, message))?;
-                if !is_product_declaration_name(&product_name) {
+                if !is_declaration_type_name(&product_name) {
                     return Err(self.error(
                         source,
                         format!("invalid product declaration name {product_name}"),
@@ -124,6 +215,14 @@ impl Analyzer {
                     return Err(self.error(
                         source,
                         format!("duplicate product declaration {product_name}"),
+                    ));
+                }
+                if self.trait_names.contains_key(&product_name) {
+                    return Err(self.error(
+                        source,
+                        format!(
+                            "product declaration {product_name} collides with a trait declaration"
+                        ),
                     ));
                 }
                 let raw = u16::try_from(self.product_names.len()).map_err(|_| {
@@ -213,6 +312,70 @@ impl Analyzer {
         Ok(())
     }
 
+    fn collect_implementations(&mut self, program: &AstProgram) -> Result<()> {
+        let mut coherent = HashSet::new();
+        for (source_index, file) in program.files.iter().enumerate() {
+            let source = SourceId::new(
+                u32::try_from(source_index)
+                    .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
+            );
+            for form in &file.forms {
+                let AstExpr::Call { name, args } = form else {
+                    continue;
+                };
+                if name != "impl" {
+                    continue;
+                }
+                let (trait_name, target) =
+                    impl_declaration(args).map_err(|message| self.error(source, message))?;
+                let trait_id = self.trait_names.get(&trait_name).copied().ok_or_else(|| {
+                    self.error(
+                        source,
+                        format!("impl references unknown trait {trait_name}"),
+                    )
+                })?;
+                let trait_definition = self
+                    .traits
+                    .get(trait_id.index().unwrap_or(usize::MAX))
+                    .ok_or_else(|| self.error(source, "impl resolved an unknown TraitId"))?;
+                if trait_definition.core.is_some() {
+                    return Err(self.error(source, format!("core trait {trait_name} cannot be explicitly implemented in the marker-trait slice")));
+                }
+                let Type::Product(product_name) = target else {
+                    return Err(self.error(
+                        source,
+                        "marker impl target must be one exact nominal Product type",
+                    ));
+                };
+                let product = self
+                    .product_names
+                    .get(&product_name)
+                    .copied()
+                    .ok_or_else(|| {
+                        self.error(
+                            source,
+                            format!("impl references unknown product {product_name}"),
+                        )
+                    })?;
+                if !coherent.insert((trait_id, product)) {
+                    return Err(self.error(source, format!("overlapping marker impl for trait {trait_name} and product {product_name} in the current program closure")));
+                }
+                let id = ImplId::new(
+                    u32::try_from(self.implementations.len())
+                        .map_err(|_| self.error(source, "too many implementations for ImplId"))?,
+                );
+                self.implementations.push(ImplDefinition {
+                    id,
+                    trait_id,
+                    product,
+                    origin: source,
+                });
+                self.implementation_index.insert((trait_id, product), id);
+            }
+        }
+        Ok(())
+    }
+
     fn validate_product_type(&self, ty: &Type) -> std::result::Result<(), String> {
         match ty {
             Type::Product(name) => {
@@ -263,7 +426,8 @@ impl Analyzer {
             let is_root = file.path == program.root;
             for form in &file.forms {
                 match form {
-                    AstExpr::Call { name, .. } if name == "import" || name == "product" => {}
+                    AstExpr::Call { name, .. }
+                        if matches!(name.as_str(), "import" | "product" | "trait" | "impl") => {}
                     AstExpr::Call { name, args } if name == "def" => {
                         functions.push(self.collect_definition(source, args)?);
                     }
@@ -357,10 +521,65 @@ impl Analyzer {
             }
         };
         let binding = self.add_global(origin, name, BindingKind::Function, ty)?;
+        let mut bounds = Vec::with_capacity(parsed.bounds.len());
+        let mut seen = HashSet::new();
+        for bound in &parsed.bounds {
+            if !parsed
+                .forall_vars
+                .iter()
+                .any(|variable| variable == &bound.parameter)
+            {
+                return Err(self.error(
+                    origin,
+                    format!(
+                        "bound parameter {} is not declared by forall",
+                        bound.parameter
+                    ),
+                ));
+            }
+            let trait_id = self
+                .trait_names
+                .get(&bound.trait_name)
+                .copied()
+                .ok_or_else(|| {
+                    self.error(
+                        origin,
+                        format!("bound references unknown trait {}", bound.trait_name),
+                    )
+                })?;
+            let trait_definition = self
+                .traits
+                .get(trait_id.index().unwrap_or(usize::MAX))
+                .ok_or_else(|| self.error(origin, "bound resolved an unknown TraitId"))?;
+            if matches!(
+                trait_definition.core,
+                Some(CoreTrait::Clone | CoreTrait::Drop)
+            ) {
+                return Err(self.error(
+                    origin,
+                    format!(
+                        "core trait {} requires methods and is unavailable in the marker-trait slice",
+                        trait_definition.name
+                    ),
+                ));
+            }
+            if !seen.insert((bound.parameter.as_str(), trait_id)) {
+                return Err(self.error(
+                    origin,
+                    format!("duplicate bound {} {}", bound.parameter, bound.trait_name),
+                ));
+            }
+            bounds.push(TraitBound {
+                parameter: bound.parameter.clone(),
+                trait_id,
+            });
+        }
+        self.function_bounds.insert(binding, bounds.clone());
         Ok(PendingFunction {
             binding,
             origin,
             parsed,
+            bounds,
         })
     }
 
@@ -377,7 +596,10 @@ impl Analyzer {
                 format!("global declaration {name} collides with a reserved operation or form"),
             ));
         }
-        if self.globals.contains_key(&name) || self.product_names.contains_key(&name) {
+        if self.globals.contains_key(&name)
+            || self.product_names.contains_key(&name)
+            || self.trait_names.contains_key(&name)
+        {
             return Err(self.error(origin, format!("duplicate global declaration {name}")));
         }
         let id = self.add_binding(name.clone(), kind, ty, Origin::Source(origin))?;
@@ -450,6 +672,7 @@ impl Analyzer {
         binding: BindingId,
         origin: SourceId,
         parsed: ParsedFunction<'_>,
+        bounds: Vec<TraitBound>,
     ) -> Result<Function> {
         let arity = u8::try_from(parsed.param_names.len()).map_err(|_| {
             self.error(
@@ -513,6 +736,7 @@ impl Analyzer {
             binding,
             origin,
             params,
+            bounds,
             arity,
             local_count,
             summary: EffectSet::PURE,
@@ -614,6 +838,17 @@ impl<'a> Resolver<'a> {
                 "operation {name} is not a first-class value; call it directly"
             )));
         }
+        if resolved.kind == BindingKind::Function
+            && self
+                .analyzer
+                .function_bounds
+                .get(&binding)
+                .is_some_and(|bounds| !bounds.is_empty())
+        {
+            return Err(self.error(format!(
+                "bounded generic function {name} is not a first-class value in the marker slice; call it directly"
+            )));
+        }
         let ty = resolved.ty.clone();
         let binding = self.binding_ref(binding)?;
         Ok(self.expression(ty, ExprKind::Load(binding)))
@@ -634,8 +869,8 @@ impl<'a> Resolver<'a> {
             "field" => self.resolve_product_field(args),
             "with-field" => self.resolve_with_product_field(args),
             "bind" => Err(self.error("bind is only valid inside let")),
-            "fn" | "def" | "main" | "sig" | "params" | "forall" | "type" | "import" | "name"
-            | "product" | "fields" => {
+            "fn" | "def" | "main" | "sig" | "params" | "forall" | "bounds" | "bound" | "type"
+            | "import" | "name" | "product" | "fields" | "trait" | "impl" | "for" => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
             }
             _ => self.resolve_plain_call(name, args),
@@ -683,20 +918,28 @@ impl<'a> Resolver<'a> {
                 },
             ))
         } else {
-            let ty = self.call_result(name, callee_type, &resolved_args)?;
+            let (ty, instantiation) =
+                self.call_result(name, callee, callee_type, &resolved_args)?;
             let callee = self.binding_ref(callee)?;
             Ok(self.expression(
                 ty,
                 ExprKind::Call {
                     callee,
                     args: resolved_args,
+                    instantiation,
                 },
             ))
         }
     }
 
-    fn call_result(&self, name: &str, callable: Type, args: &[Expr]) -> Result<Type> {
-        let instantiated = self.instantiate(name, callable, args)?;
+    fn call_result(
+        &self,
+        name: &str,
+        callee: BindingId,
+        callable: Type,
+        args: &[Expr],
+    ) -> Result<(Type, Option<GenericInstantiation>)> {
+        let (instantiated, substitutions) = self.instantiate(name, callable, args)?;
         let Type::Fn { params, ret } = instantiated else {
             return Err(self.error(format!("{name} is not a function")));
         };
@@ -715,18 +958,62 @@ impl<'a> Resolver<'a> {
                 )));
             }
         }
-        Ok(*ret)
+        let instantiation = if substitutions.is_empty() {
+            None
+        } else {
+            let bounds = self
+                .analyzer
+                .function_bounds
+                .get(&callee)
+                .cloned()
+                .unwrap_or_default();
+            if !bounds.is_empty() {
+                for substitution in &substitutions {
+                    let mut unresolved = HashSet::new();
+                    collect_type_params(&substitution.ty, &mut unresolved);
+                    if !unresolved.is_empty() {
+                        return Err(self.error(format!(
+                            "{name}: forwarding bounded calls from a generic context is unavailable in the marker-trait slice"
+                        )));
+                    }
+                }
+            }
+            let mut witnesses = Vec::with_capacity(bounds.len());
+            for bound in bounds {
+                let ty = substitutions
+                    .iter()
+                    .find(|substitution| substitution.parameter == bound.parameter)
+                    .map(|substitution| substitution.ty.clone())
+                    .ok_or_else(|| {
+                        self.error(format!(
+                            "{name}: missing substitution for bound parameter {}",
+                            bound.parameter
+                        ))
+                    })?;
+                witnesses.push(self.solve_trait_bound(name, bound.trait_id, &ty)?);
+            }
+            Some(GenericInstantiation {
+                substitutions,
+                witnesses,
+            })
+        };
+        Ok((*ret, instantiation))
     }
 
-    fn instantiate(&self, name: &str, callable: Type, args: &[Expr]) -> Result<Type> {
+    fn instantiate(
+        &self,
+        name: &str,
+        callable: Type,
+        args: &[Expr],
+    ) -> Result<(Type, Vec<TypeSubstitution>)> {
         let Type::Forall { vars, body } = callable else {
-            return Ok(callable);
+            return Ok((callable, Vec::new()));
         };
         let Type::Fn { params, ret } = *body else {
             return Err(self.error("forall body must be a function type"));
         };
         if params.len() != args.len() {
-            return Ok(Type::Fn { params, ret });
+            return Ok((Type::Fn { params, ret }, Vec::new()));
         }
         let mut substitutions = HashMap::new();
         for (pattern, argument) in params.iter().zip(args) {
@@ -739,13 +1026,170 @@ impl<'a> Resolver<'a> {
                 )));
             }
         }
-        Ok(Type::Fn {
-            params: params
-                .iter()
-                .map(|parameter| parameter.subst(&substitutions))
-                .collect(),
-            ret: Box::new(ret.subst(&substitutions)),
+        let canonical = vars
+            .iter()
+            .map(|parameter| TypeSubstitution {
+                parameter: parameter.clone(),
+                ty: substitutions
+                    .get(parameter)
+                    .cloned()
+                    .unwrap_or(Type::Param(parameter.clone())),
+            })
+            .collect();
+        Ok((
+            Type::Fn {
+                params: params
+                    .iter()
+                    .map(|parameter| parameter.subst(&substitutions))
+                    .collect(),
+                ret: Box::new(ret.subst(&substitutions)),
+            },
+            canonical,
+        ))
+    }
+
+    fn solve_trait_bound(
+        &self,
+        function: &str,
+        trait_id: TraitId,
+        ty: &Type,
+    ) -> Result<TraitWitness> {
+        let definition = self
+            .analyzer
+            .traits
+            .get(trait_id.index().unwrap_or(usize::MAX))
+            .filter(|definition| definition.id == trait_id)
+            .ok_or_else(|| {
+                self.error(format!(
+                    "{function}: bound references unknown TraitId {}",
+                    trait_id.raw()
+                ))
+            })?;
+        let kind = if let Some(core_trait) = definition.core.filter(|role| role.is_auto()) {
+            let mut work = 0;
+            let mut active = HashSet::new();
+            let mut memo = HashMap::new();
+            match self.auto_trait_holds(core_trait, ty, 0, &mut work, &mut active, &mut memo)? {
+                true => TraitWitnessKind::AutoTrait,
+                false => {
+                    return Err(self.error(format!(
+                        "{function}: type {ty:?} does not satisfy trait {}",
+                        definition.name
+                    )))
+                }
+            }
+        } else {
+            let Type::Product(name) = ty else {
+                return Err(self.error(format!(
+                    "{function}: type {ty:?} has no exact implementation of trait {}",
+                    definition.name
+                )));
+            };
+            let product = self
+                .analyzer
+                .product_names
+                .get(name)
+                .copied()
+                .ok_or_else(|| self.error(format!("{function}: unknown product type {name}")))?;
+            let implementation = self
+                .analyzer
+                .implementation_index
+                .get(&(trait_id, product))
+                .copied()
+                .ok_or_else(|| {
+                    self.error(format!(
+                        "{function}: product {name} does not implement trait {}",
+                        definition.name
+                    ))
+                })?;
+            TraitWitnessKind::Explicit(implementation)
+        };
+        Ok(TraitWitness {
+            trait_id,
+            ty: ty.clone(),
+            kind,
         })
+    }
+
+    fn auto_trait_holds(
+        &self,
+        core_trait: CoreTrait,
+        ty: &Type,
+        depth: usize,
+        work: &mut usize,
+        active: &mut HashSet<ProductId>,
+        memo: &mut HashMap<Type, bool>,
+    ) -> Result<bool> {
+        if let Some(result) = memo.get(ty) {
+            return Ok(*result);
+        }
+        if depth > TRAIT_SOLVER_MAX_DEPTH {
+            return Err(self.error(format!(
+                "trait solver depth exceeded {TRAIT_SOLVER_MAX_DEPTH}"
+            )));
+        }
+        *work = work
+            .checked_add(1)
+            .ok_or_else(|| self.error("trait solver work overflow"))?;
+        if *work > TRAIT_SOLVER_MAX_WORK {
+            return Err(self.error(format!(
+                "trait solver work exceeded {TRAIT_SOLVER_MAX_WORK}"
+            )));
+        }
+        let result = match core_trait {
+            CoreTrait::Copy => match ty {
+                Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
+                Type::Buf
+                | Type::Handle
+                | Type::Fn { .. }
+                | Type::Forall { .. }
+                | Type::Param(_) => false,
+                Type::List(inner) | Type::Option(inner) => {
+                    self.auto_trait_holds(core_trait, inner, depth + 1, work, active, memo)?
+                }
+                Type::Result(ok, error) => {
+                    self.auto_trait_holds(core_trait, ok, depth + 1, work, active, memo)?
+                        && self.auto_trait_holds(
+                            core_trait,
+                            error,
+                            depth + 1,
+                            work,
+                            active,
+                            memo,
+                        )?
+                }
+                Type::Product(name) => {
+                    let product = self.analyzer.product_by_name(name)?;
+                    if !active.insert(product.id) {
+                        return Err(self.error(format!(
+                            "trait solver encountered recursive product cycle at {name}"
+                        )));
+                    }
+                    let mut result = true;
+                    for field in &product.fields {
+                        if !self.auto_trait_holds(
+                            core_trait,
+                            &field.ty,
+                            depth + 1,
+                            work,
+                            active,
+                            memo,
+                        )? {
+                            result = false;
+                            break;
+                        }
+                    }
+                    active.remove(&product.id);
+                    result
+                }
+            },
+            CoreTrait::Send | CoreTrait::Sync => {
+                matches!(ty, Type::Unit | Type::Bool | Type::I64 | Type::F64)
+            }
+            CoreTrait::Clone | CoreTrait::Drop => false,
+        };
+        memo.insert(ty.clone(), result);
+        Ok(result)
     }
 
     fn bind_type_params(
@@ -1376,10 +1820,40 @@ fn is_contextual_name(name: &str) -> bool {
             | "sig"
             | "params"
             | "forall"
+            | "bounds"
+            | "bound"
+            | "trait"
+            | "impl"
+            | "for"
             | "type"
             | "import"
             | "name"
     )
+}
+
+fn trait_declaration(args: &[AstExpr]) -> std::result::Result<String, String> {
+    let [name_form] = args else {
+        return Err("marker trait expects exactly one name/ form; methods and associated types are unsupported".into());
+    };
+    declared_name_form(name_form, "trait")
+}
+
+fn impl_declaration(args: &[AstExpr]) -> std::result::Result<(String, Type), String> {
+    let [trait_form, for_form] = args else {
+        return Err("marker impl expects exactly trait/ and for/ forms; methods, associated values, and generics are unsupported".into());
+    };
+    let trait_name = match trait_form {
+        AstExpr::Call { name, args } if name == "trait" => match args.as_slice() {
+            [trait_name] => symbolic_name(trait_name)?,
+            _ => return Err("impl trait/ must contain exactly one trait name".into()),
+        },
+        _ => return Err("marker impl expects trait/ first".into()),
+    };
+    let target = match for_form {
+        AstExpr::Call { name, args } if name == "for" => parse_type_form(args)?,
+        _ => return Err("marker impl expects for/ second".into()),
+    };
+    Ok((trait_name, target))
 }
 
 fn product_declaration(args: &[AstExpr]) -> std::result::Result<(String, &[AstExpr]), String> {
@@ -1430,7 +1904,7 @@ fn parse_product_field(expression: &AstExpr) -> std::result::Result<(String, Typ
     Ok((field_name, ty))
 }
 
-fn is_product_declaration_name(name: &str) -> bool {
+fn is_declaration_type_name(name: &str) -> bool {
     !name.is_empty()
         && name
             .chars()
@@ -1466,12 +1940,18 @@ struct PendingFunction<'a> {
     binding: BindingId,
     origin: SourceId,
     parsed: ParsedFunction<'a>,
+    bounds: Vec<TraitBound>,
 }
 
 struct PendingMain<'a> {
     origin: SourceId,
     return_type: Type,
     body: &'a AstExpr,
+}
+
+struct ParsedBound {
+    parameter: String,
+    trait_name: String,
 }
 
 struct ParsedFunction<'a> {
@@ -1481,6 +1961,7 @@ struct ParsedFunction<'a> {
     param_types: Vec<Type>,
     body: &'a AstExpr,
     forall_vars: Vec<String>,
+    bounds: Vec<ParsedBound>,
 }
 
 fn definition_name(args: &[AstExpr]) -> std::result::Result<String, String> {
@@ -1516,54 +1997,70 @@ fn parse_main(args: &[AstExpr]) -> std::result::Result<(Type, &AstExpr), String>
 }
 
 fn parse_function(args: &[AstExpr]) -> std::result::Result<ParsedFunction<'_>, String> {
-    let mut signature = None;
-    let mut params = None;
-    let mut body = None;
+    let mut index = 0;
     let mut forall_vars = Vec::new();
-    let mut saw_forall = false;
-    for argument in args {
-        match argument {
-            AstExpr::Call { name, args } if name == "forall" => {
-                if saw_forall {
-                    return Err("fn has multiple forall blocks".into());
-                }
-                saw_forall = true;
-                for variable in args {
-                    forall_vars.push(symbolic_name(variable)?);
-                }
+    if let Some(AstExpr::Call { name, args }) = args.get(index) {
+        if name == "forall" {
+            if args.is_empty() {
+                return Err("forall must declare at least one type parameter".into());
             }
-            AstExpr::Call { name, args } if name == "sig" => {
-                if signature.is_some() {
-                    return Err("fn has multiple sig blocks".into());
-                }
-                signature = Some(parse_signature(args)?);
+            for variable in args {
+                forall_vars.push(symbolic_name(variable)?);
             }
-            AstExpr::Call { name, args } if name == "params" => {
-                if params.is_some() {
-                    return Err("fn has multiple params blocks".into());
-                }
-                params = Some(parse_typed_params(args)?);
-            }
-            other => {
-                if body.is_some() {
-                    return Err("fn has multiple body expressions; wrap in do/".into());
-                }
-                body = Some(other);
-            }
+            index += 1;
         }
     }
-    let (signature_params, signature_return) =
-        signature.ok_or_else(|| "fn missing mandatory sig/…/sig".to_string())?;
-    let (param_names, param_types) =
-        params.ok_or_else(|| "fn missing params/…/params".to_string())?;
-    let body = body.ok_or_else(|| "fn missing body".to_string())?;
+
+    let mut bounds = Vec::new();
+    if let Some(AstExpr::Call { name, args }) = args.get(index) {
+        if name == "bounds" {
+            if args.is_empty() {
+                return Err("bounds must contain at least one bound/ form".into());
+            }
+            for expression in args {
+                let AstExpr::Call { name, args } = expression else {
+                    return Err("bounds may contain only bound/ forms".into());
+                };
+                if name != "bound" {
+                    return Err("bounds may contain only bound/ forms".into());
+                }
+                let [parameter, trait_name] = args.as_slice() else {
+                    return Err("bound expects exactly a type parameter and trait name".into());
+                };
+                bounds.push(ParsedBound {
+                    parameter: symbolic_name(parameter)?,
+                    trait_name: symbolic_name(trait_name)?,
+                });
+            }
+            index += 1;
+        }
+    }
+
+    let signature = match args.get(index) {
+        Some(AstExpr::Call { name, args }) if name == "sig" => parse_signature(args)?,
+        _ => return Err("fn expects sig/ after optional forall/ and bounds/".into()),
+    };
+    index += 1;
+    let params = match args.get(index) {
+        Some(AstExpr::Call { name, args }) if name == "params" => parse_typed_params(args)?,
+        _ => return Err("fn expects params/ immediately after sig/".into()),
+    };
+    index += 1;
+    let Some(body) = args.get(index) else {
+        return Err("fn missing body".into());
+    };
+    index += 1;
+    if index != args.len() {
+        return Err("fn has extra children or multiple body expressions; wrap executable expressions in do/".into());
+    }
     Ok(ParsedFunction {
-        signature_params,
-        signature_return,
-        param_names,
-        param_types,
+        signature_params: signature.0,
+        signature_return: signature.1,
+        param_names: params.0,
+        param_types: params.1,
         body,
         forall_vars,
+        bounds,
     })
 }
 

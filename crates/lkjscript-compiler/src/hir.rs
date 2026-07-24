@@ -7,6 +7,31 @@ pub use lkjscript_core::ProductId;
 pub use crate::operation::Operation;
 pub use crate::types::Type;
 
+macro_rules! dense_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name(u32);
+
+        impl $name {
+            pub(crate) const fn new(raw: u32) -> Self {
+                Self(raw)
+            }
+
+            pub const fn raw(self) -> u32 {
+                self.0
+            }
+
+            #[allow(dead_code)]
+            pub(crate) fn index(self) -> Option<usize> {
+                usize::try_from(self.0).ok()
+            }
+        }
+    };
+}
+
+dense_id!(TraitId);
+dense_id!(ImplId);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(u32);
 
@@ -76,6 +101,8 @@ pub struct Program {
     pub sources: Vec<Source>,
     pub bindings: Vec<Binding>,
     pub products: Vec<ProductDefinition>,
+    pub traits: Vec<TraitDefinition>,
+    pub implementations: Vec<ImplDefinition>,
     pub functions: Vec<Function>,
     pub main: Main,
     /// Internal function-closure slots in deterministic bytecode layout order.
@@ -86,6 +113,80 @@ impl Program {
     pub fn binding(&self, id: BindingId) -> Option<&Binding> {
         id.index().and_then(|index| self.bindings.get(index))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CoreTrait {
+    Copy,
+    Clone,
+    Drop,
+    Send,
+    Sync,
+}
+
+impl CoreTrait {
+    pub const ALL: [Self; 5] = [Self::Copy, Self::Clone, Self::Drop, Self::Send, Self::Sync];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Copy => "Copy",
+            Self::Clone => "Clone",
+            Self::Drop => "Drop",
+            Self::Send => "Send",
+            Self::Sync => "Sync",
+        }
+    }
+
+    pub const fn is_auto(self) -> bool {
+        matches!(self, Self::Copy | Self::Send | Self::Sync)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraitDefinition {
+    pub id: TraitId,
+    pub name: String,
+    pub origin: Origin,
+    pub core: Option<CoreTrait>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplDefinition {
+    pub id: ImplId,
+    pub trait_id: TraitId,
+    pub product: ProductId,
+    pub origin: SourceId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraitBound {
+    pub parameter: String,
+    pub trait_id: TraitId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeSubstitution {
+    pub parameter: String,
+    pub ty: Type,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraitWitnessKind {
+    AutoTrait,
+    Explicit(ImplId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraitWitness {
+    pub trait_id: TraitId,
+    pub ty: Type,
+    pub kind: TraitWitnessKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenericInstantiation {
+    pub substitutions: Vec<TypeSubstitution>,
+    pub witnesses: Vec<TraitWitness>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +216,7 @@ pub struct Function {
     pub binding: BindingId,
     pub origin: SourceId,
     pub params: Vec<BindingId>,
+    pub bounds: Vec<TraitBound>,
     pub arity: u8,
     pub local_count: u8,
     pub summary: EffectSet,
@@ -177,6 +279,7 @@ pub enum ExprKind {
     Call {
         callee: BindingRef,
         args: Vec<Expr>,
+        instantiation: Option<GenericInstantiation>,
     },
     Operation {
         binding: BindingId,

@@ -1075,10 +1075,30 @@ mod tests {
     use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
     use lkjscript_ir::{
         verify, Block, BlockId, BlockMetadata, EffectSet, Function, FunctionId, Origin, Program,
-        Signature, SourceMetadata, SsaType, StructuredOutcome, Terminator,
+        Signature, SourceMetadata, SsaType, StructuredOutcome, Terminator, TraitId, TraitMetadata,
+        TraitRole,
     };
 
     use super::{execute_forced, JitConfig};
+
+    fn core_traits() -> Vec<TraitMetadata> {
+        [
+            ("Copy", TraitRole::Copy),
+            ("Clone", TraitRole::Clone),
+            ("Drop", TraitRole::Drop),
+            ("Send", TraitRole::Send),
+            ("Sync", TraitRole::Sync),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (name, role))| TraitMetadata {
+            id: TraitId::new(index as u32),
+            name: name.into(),
+            role,
+            source: None,
+        })
+        .collect()
+    }
 
     fn terminal_program(
         terminator: Terminator,
@@ -1090,6 +1110,8 @@ mod tests {
                 path: "terminal.lkjscript".into(),
             }],
             products: Vec::new(),
+            traits: core_traits(),
+            implementations: Vec::new(),
             functions: vec![Function {
                 id: FunctionId::new(0),
                 name: "main".into(),

@@ -130,7 +130,7 @@ fn load_file(path: &Path, is_root: bool, state: &mut LoadState<'_>) -> Result<()
             .any(|form| matches!(form, Expr::Call { name, .. } if name == "main"))
     {
         return Err(Error::msg(format!(
-            "{label}: imported file may contain only imports, function defs, and products; main is forbidden"
+            "{label}: imported file may contain only imports and function, product, trait, or impl declarations; main is forbidden"
         )));
     }
     state.metrics.parsing = state
@@ -304,10 +304,13 @@ pub(crate) fn validate_top_level(forms: &[Expr], limits: &Limits, path: &str) ->
     for form in forms {
         match form {
             Expr::Call { name, .. }
-                if name == "def" || name == "main" || name == "import" || name == "product" => {}
+                if matches!(
+                    name.as_str(),
+                    "def" | "main" | "import" | "product" | "trait" | "impl"
+                ) => {}
             _ => {
                 return Err(Error::msg(format!(
-                    "{path}: top-level must be def, main, import, or product; top-level do was removed"
+                    "{path}: top-level must be def, main, import, product, trait, or impl; top-level do was removed"
                 )));
             }
         }
@@ -470,6 +473,25 @@ mod tests {
         assert!(error
             .as_deref()
             .is_some_and(|text| text.contains("17 entries (max 16)")));
+        Ok(())
+    }
+
+    #[test]
+    fn imported_trait_and_impl_forms_are_declarations() -> std::io::Result<()> {
+        let directory = TempDir::new("trait-declarations")?;
+        let dependency = directory.0.join("traits.lkjscript");
+        fs::write(
+            &dependency,
+            "trait/\nname/\nMarked\n/name\n/trait\nproduct/\nname/\nItem\n/name\nfields/\n/fields\n/product\nimpl/\ntrait/\nMarked\n/trait\nfor/\nProduct\nItem\n/for\n/impl\n",
+        )?;
+        let entry = directory.0.join("main.lkjscript");
+        fs::write(
+            &entry,
+            "import/\n./traits.lkjscript\n/import\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+        )?;
+        let program = load_program(&entry, &Limits::default())
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        assert_eq!(program.files.len(), 2);
         Ok(())
     }
 

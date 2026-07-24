@@ -44,6 +44,8 @@ dense_id!(BlockId, u32);
 dense_id!(ValueId, u32);
 dense_id!(ProductId, u16);
 dense_id!(BindingId, u32);
+dense_id!(TraitId, u32);
+dense_id!(ImplId, u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Origin {
@@ -61,6 +63,7 @@ impl Origin {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Signature {
     pub type_parameters: Vec<String>,
+    pub bounds: Vec<TraitBound>,
     pub parameters: Vec<SsaType>,
     pub result: Box<SsaType>,
 }
@@ -69,6 +72,7 @@ impl Signature {
     pub fn monomorphic(parameters: Vec<SsaType>, result: SsaType) -> Self {
         Self {
             type_parameters: Vec::new(),
+            bounds: Vec::new(),
             parameters,
             result: Box::new(result),
         }
@@ -91,6 +95,69 @@ pub enum SsaType {
     Result(Box<SsaType>, Box<SsaType>),
     Function(Box<Signature>),
     TypeParameter(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TraitBound {
+    pub parameter: String,
+    pub trait_id: TraitId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TraitRole {
+    Copy,
+    Clone,
+    Drop,
+    Send,
+    Sync,
+    User,
+}
+
+impl TraitRole {
+    pub const fn is_auto(self) -> bool {
+        matches!(self, Self::Copy | Self::Send | Self::Sync)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraitMetadata {
+    pub id: TraitId,
+    pub name: String,
+    pub role: TraitRole,
+    pub source: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplMetadata {
+    pub id: ImplId,
+    pub trait_id: TraitId,
+    pub product: ProductId,
+    pub source: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeSubstitution {
+    pub parameter: String,
+    pub ty: SsaType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TraitWitnessKind {
+    AutoTrait,
+    Explicit(ImplId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TraitWitness {
+    pub trait_id: TraitId,
+    pub ty: SsaType,
+    pub kind: TraitWitnessKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericInstantiation {
+    pub substitutions: Vec<TypeSubstitution>,
+    pub witnesses: Vec<TraitWitness>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -469,6 +536,7 @@ pub enum InstructionKind {
         target: CallTarget,
         arguments: Vec<ValueId>,
         signature: Signature,
+        instantiation: Option<GenericInstantiation>,
     },
     ProductValue {
         product: ProductId,
@@ -492,7 +560,22 @@ impl InstructionKind {
         match self {
             Self::Constant(_) | Self::FunctionRef(_) => Vec::new(),
             Self::Copy(value) => vec![*value],
-            Self::Runtime { arguments, .. } | Self::Call { arguments, .. } => arguments.clone(),
+            Self::Runtime { arguments, .. }
+            | Self::Call {
+                target: CallTarget::Direct(_),
+                arguments,
+                ..
+            } => arguments.clone(),
+            Self::Call {
+                target: CallTarget::Indirect(target),
+                arguments,
+                ..
+            } => {
+                let mut operands = Vec::with_capacity(arguments.len().saturating_add(1));
+                operands.push(*target);
+                operands.extend(arguments.iter().copied());
+                operands
+            }
             Self::ProductValue { fields, .. } => fields.clone(),
             Self::ProductField { value, .. } => vec![*value],
             Self::WithProductField {
@@ -608,6 +691,8 @@ pub struct Function {
 pub struct Program {
     pub sources: Vec<SourceMetadata>,
     pub products: Vec<ProductMetadata>,
+    pub traits: Vec<TraitMetadata>,
+    pub implementations: Vec<ImplMetadata>,
     pub functions: Vec<Function>,
     pub main: FunctionId,
 }

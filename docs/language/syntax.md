@@ -30,13 +30,14 @@ are declaration-only, and mutation is limited to typed function-local
 
 Implemented control and binding forms include `main`, `def`, `fn`, `if`,
 `while`, `let`, `bind`, `var`, `set`, `do`, `quote`, `product-value`, `field`,
-and `with-field`. `product`, `fields`, `sig`, `params`, `forall`, `type`,
-`name`, and `import` are contextual declaration/loading forms rather than
-freely evaluable runtime calls.
+and `with-field`. `product`, `trait`, `impl`, `fields`, `sig`, `params`,
+`forall`, `bounds`, `bound`, `type`, `name`, and `import` are contextual
+declaration/loading forms rather than freely evaluable runtime calls.
 
 Every function definition has a mandatory signature and typed parameters.
-`forall/` declares annotation-driven type variables. There is no `Any`, trait,
-typeclass, Hindley-Milner inference, or implemented user-defined type alias.
+`forall/` declares annotation-driven type variables. The Current trait slice is
+bounded declaration-only markers described below. There is no `Any`,
+Hindley-Milner inference, or implemented user-defined type alias.
 
 `if` requires exactly three operands: a Bool condition and two branches with
 exactly the same type. There is no omitted branch or nil-based type join.
@@ -64,6 +65,48 @@ out-of-order, unknown, or wrongly typed fields are compile errors. Products do
 not participate in any current equality family. The exact forms and examples
 are in [Immutable Nominal Products](../decisions/immutable-nominal-products.md).
 
+## Marker Traits And Bounds
+
+A marker declaration contains exactly one name:
+
+```text
+trait/
+name/
+Serializable
+/name
+/trait
+```
+
+An implementation contains exactly one resolved marker trait and one exact
+nominal product target:
+
+```text
+impl/
+trait/
+Serializable
+/trait
+for/
+Product
+Record
+/for
+/impl
+```
+
+A generic function may place one `bounds/` child after `forall/` and before
+`sig/`; every child is exactly `bound/ T Serializable /bound`. The complete
+loaded source closure is the temporary coherence domain and permits at most one
+implementation for a trait/product pair. Bounds are solved at each concrete
+direct call and retained as verified HIR/SSA witness identities.
+
+`Copy`, `Clone`, `Drop`, `Send`, and `Sync` are compiler-owned names. Source
+cannot implement them in this marker slice. `Copy`, `Send`, and `Sync` have the
+exact compiler-derived facts documented in [Coherent Traits And Static
+Dispatch](../decisions/traits-and-static-dispatch.md); `Clone` and `Drop` bounds
+are unavailable until their executable method/drop contracts exist. Trait
+methods, associated items, generic or blanket impls, dynamic dispatch,
+specialization, generic-context bound forwarding, and first-class bounded
+generic function values are rejected.
+
 ## Semantic Migration
 
 The implemented AI-first semantic slices include dedicated `Unit`/`unit`,
@@ -72,8 +115,8 @@ equality families, immutable nominal products, explicit main, effect-free
 imports, and local-only mutation. `arg` returns `Option Str`; negative or
 out-of-range indexes return none. Product-valued editor, terminal, and
 Brainfuck state is passed through helpers and evolved only by executable or
-function-local vars. Process-safe structured VM outcomes remain an
-**Accepted Target**.
+function-local vars. Process-safe structured VM outcomes and declaration-only
+marker traits with bounded generic witnesses are Current.
 
 See [AI-First Semantic Core](../decisions/semantic-core.md). Resolved typed HIR
 is now the current boundary through which these forms will migrate, so typing
@@ -99,8 +142,9 @@ use `not` around a positive operation. See
 
 ## Files And Imports
 
-Imported files contain only `import`, immutable function `def`, and `product`
-declarations. An executable root contains those declarations plus exactly one
+Imported files contain only `import`, immutable function `def`, `product`,
+marker `trait`, and exact marker `impl` declarations. An executable root
+contains those declarations plus exactly one
 `main/ sig/ -> T /sig body-expression /main`. Main has no parameters, its body
 has exactly `T`, and `arg` remains the script-argument operation. A main in an
 import, no root main, a duplicate root main, top-level `do`, and non-function
@@ -124,7 +168,9 @@ and unrelated extensions are rejected before parsing.
 
 ## Strings And Bytes
 
-Strings are UTF-8 host strings but many operations index bytes. Arbitrary file
-and network bytes do not currently have a complete round-trip-safe contract.
-A distinct bulk byte path is deferred; current APIs must document byte indexing
-and reject invalid UTF-8 boundaries rather than imply character indexing.
+Strings are UTF-8 host strings and many string operations index bytes. `Buf`
+is the Current lossless bounded byte-storage path for file, socket, entropy,
+SHA-256, and SQLite blob operations. Offset/length checks and partial-progress
+counts are exact. `buf-slice` allocates and copies its selected range; it is not
+the future borrowed `Slice T`. String APIs continue to reject invalid UTF-8
+boundaries rather than imply character indexing.

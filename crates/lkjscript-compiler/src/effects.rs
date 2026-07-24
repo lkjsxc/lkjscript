@@ -118,7 +118,7 @@ fn collect_direct_callees(
         | ExprKind::LitStr(_)
         | ExprKind::Load(_)
         | ExprKind::QuoteSymbol(_) => {}
-        ExprKind::Call { callee, args } => {
+        ExprKind::Call { callee, args, .. } => {
             if callee.storage == BindingStorage::Function {
                 if let Some(function_index) = callee
                     .binding
@@ -216,7 +216,7 @@ fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSet>]) -> Eff
         | ExprKind::LitStr(_)
         | ExprKind::Load(_)
         | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
-        ExprKind::Call { callee, args } => {
+        ExprKind::Call { callee, args, .. } => {
             let callee_effects = if callee.storage == BindingStorage::Function {
                 callee
                     .binding
