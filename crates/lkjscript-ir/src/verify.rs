@@ -223,9 +223,6 @@ fn collect_values(
             }
         }
     }
-    if values.is_empty() {
-        return fail(format!("SSA function {} defines no values", function.name));
-    }
     let mut types = vec![SsaType::Unit; values.len()];
     let mut definitions = HashMap::with_capacity(values.len());
     for raw in 0..values.len() {

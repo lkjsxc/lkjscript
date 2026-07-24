@@ -191,8 +191,8 @@ impl Evaluator<'_> {
             })
             .filter_map(ValueId::index)
             .max()
-            .and_then(|maximum| maximum.checked_add(1))
-            .ok_or_else(|| Flow::Trap("evaluator function has no values".into()))?;
+            .map_or(Some(0), |maximum| maximum.checked_add(1))
+            .ok_or_else(|| Flow::Trap("evaluator function value count overflow".into()))?;
         let mut values = vec![None; value_count];
         assign_parameters(&mut values, &entry.parameters, arguments)?;
         let mut current = function.entry;

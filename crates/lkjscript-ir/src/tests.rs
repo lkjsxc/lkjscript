@@ -413,6 +413,7 @@ fn evaluator_executes_result_construction_and_projection_without_vm_helpers() {
 #[test]
 fn evaluator_bounds_and_explicit_trap_exit_outcomes_are_deterministic() {
     let mut trapped = one_block_program();
+    trapped.functions[0].blocks[0].instructions.clear();
     trapped.functions[0].blocks[0].terminator = Terminator::Trap {
         message: "explicit trap".into(),
     };
