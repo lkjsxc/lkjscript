@@ -111,6 +111,12 @@ crates, docs, metadata, and source:
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
 ```
 
+This exact command passed on the final Linux x86-64 implementation tree with
+`result=ok`; it rebuilt the image and reran the canonical workspace gate plus
+release hello, Mandelbrot, lkjedit, and HTTP acceptance. Full Brainfuck
+Mandelbrot remains intentionally unrun because it is the next-cycle OSR
+workload.
+
 For an external project, first build the runtime image from the repository,
 then run the project from its own directory:
 

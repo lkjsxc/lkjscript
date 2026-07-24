@@ -301,8 +301,13 @@ Mandelbrot, `python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke
 empty, hello was exactly `3628800`, and Mandelbrot remained 1,176 bytes/24 lines
 with SHA-256
 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907`.
-Docker and full Brainfuck Mandelbrot were not run. The first aggregate smoke
-wrapper itself exited 1 only because its extra local assertion incorrectly
+The exact final implementation-tree command
+`docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify`
+passed with `result=ok`; the image reran the canonical gate and release hello,
+Mandelbrot, lkjedit, and HTTP boundaries. Separate final commands for rustfmt,
+strict workspace Clippy, docs/tree/source checks, locked release build, and
+`git diff --check` also exited 0. Full Brainfuck Mandelbrot was not run. The
+first aggregate smoke wrapper itself exited 1 only because its extra local assertion incorrectly
 expected a newline after the canonical newline-free hello output; every wrapped
 command had exited 0. The corrected complete wrapper was rerun and exited 0,
 so no failed product command is hidden.
