@@ -4,6 +4,9 @@ lib/lkjedit/keys.lkjscript
 import/
 lib/lkjedit/command.lkjscript
 /import
+import/
+lib/lkjedit/insert.lkjscript
+/import
 def/
 name/
 editor-handle-key

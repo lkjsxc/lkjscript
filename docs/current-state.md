@@ -15,7 +15,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 86 language files under `src`; nine executable roots cover the exact corpus closure
+- Corpus: 94 language files under `src`; nine executable roots cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
@@ -109,7 +109,7 @@ Mandelbrot, and performance are not implied.
 | `cargo check --workspace --all-targets --locked` | passed |
 | focused `lkjscript-compiler` and app HIR/numeric tests | passed; 37 compiler and 10 app integration tests |
 | `cargo run --locked -p lkjscript-xtask --quiet -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 82 workspace tests |
-| `check-sources` | passed for all 86 `.lkjscript` sources; the nine compiled executable closures equal the corpus exactly |
+| `check-sources` | passed for all 94 `.lkjscript` sources; the nine compiled executable closures equal the corpus exactly |
 | HIR/local mutation conformance | explicit Main/Function, missing/duplicate/imported main, declaration-only imports, rejected top-level effects/value defs, stable BindingId/local-slot shadowing, initializer scope, local-only set rejection and exact typing, same-function isolation, ProductId/field resolution, and StoreLocal execution passed |
 | `cargo build --workspace --release --locked` | passed |
 | canonical hello | passed; output `3628800` |
