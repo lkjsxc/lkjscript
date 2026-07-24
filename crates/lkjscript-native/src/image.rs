@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::marker::PhantomData;
+use std::rc::Rc;
 
 use crate::plan::{
     FunctionId, ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId, SourceOrigin,
@@ -58,12 +60,21 @@ impl Default for AbiVersions {
     }
 }
 
-/// Typed stable handle word. The opaque word is never interpreted as an
-/// object address by the native ABI.
+/// Copyable, worker-local runtime-adapter token. The opaque word is never
+/// interpreted as an object address by the native ABI. The ownership marker
+/// intentionally makes this token non-Send and non-Sync; it is not a source
+/// reference or an independently owned heap value.
+///
+/// ```compile_fail
+/// use lkjscript_native::NativeReference;
+/// let reference = NativeReference::buf(7);
+/// std::thread::spawn(move || reference.opaque_word());
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NativeReference {
     reference_type: ReferenceType,
     opaque_word: u64,
+    worker_owner: PhantomData<Rc<()>>,
 }
 
 impl NativeReference {
@@ -72,6 +83,7 @@ impl NativeReference {
         Self {
             reference_type,
             opaque_word,
+            worker_owner: PhantomData,
         }
     }
 
@@ -326,6 +338,13 @@ pub struct Safepoint {
     stack_map: ExactStackMap,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RootMapRequirement {
+    id: u32,
+    function: FunctionId,
+    roots: Vec<RootLocation>,
+}
+
 impl Safepoint {
     #[must_use]
     pub const fn id(&self) -> u32 {
@@ -471,6 +490,7 @@ pub enum ImageIntegrityError {
     RelocationTarget,
     FrameFacts,
     Safepoint,
+    RootRequirement,
     SourceMap,
     TrapMap,
     OutcomeMap,
@@ -491,6 +511,9 @@ impl fmt::Display for ImageIntegrityError {
             Self::RelocationTarget => "installable image relocation target is invalid",
             Self::FrameFacts => "installable image frame facts are invalid",
             Self::Safepoint => "installable image safepoint is invalid",
+            Self::RootRequirement => {
+                "installable image stack map disagrees with its verifier requirement"
+            }
             Self::SourceMap => "installable image source map is invalid",
             Self::TrapMap => "installable image trap map is invalid",
             Self::OutcomeMap => "installable image outcome map is invalid",
@@ -510,6 +533,7 @@ pub struct InstallableImage {
     runtime_calls: Box<[RuntimeCallSlot]>,
     frames: Box<[FrameFacts]>,
     safepoints: Box<[Safepoint]>,
+    root_requirements: Box<[RootMapRequirement]>,
     source_map: Box<[SourceMapEntry]>,
     trap_map: Box<[TrapMapEntry]>,
     outcome_map: Box<[OutcomeMapEntry]>,
@@ -586,6 +610,7 @@ impl InstallableImage {
             runtime_calls: &self.runtime_calls,
             frames: &self.frames,
             safepoints: &self.safepoints,
+            root_requirements: &self.root_requirements,
             source_map: &self.source_map,
             trap_map: &self.trap_map,
             outcome_map: &self.outcome_map,
@@ -675,6 +700,17 @@ impl InstallableImage {
                 return Err(ImageIntegrityError::Safepoint);
             }
         }
+        if self.root_requirements.len() != self.safepoints.len()
+            || self.root_requirements.iter().zip(&self.safepoints).any(
+                |(requirement, safepoint)| {
+                    requirement.id != safepoint.id
+                        || requirement.function != safepoint.function
+                        || requirement.roots != safepoint.stack_map.roots
+                },
+            )
+        {
+            return Err(ImageIntegrityError::RootRequirement);
+        }
         for source in &self.source_map {
             if source.code_start >= source.code_end
                 || !range_in_function(
@@ -707,6 +743,7 @@ impl InstallableImage {
             runtime_calls: &parts.runtime_calls,
             frames: &parts.frames,
             safepoints: &parts.safepoints,
+            root_requirements: &parts.root_requirements,
             source_map: &parts.source_map,
             trap_map: &parts.trap_map,
             outcome_map: &parts.outcome_map,
@@ -721,6 +758,7 @@ impl InstallableImage {
             runtime_calls: parts.runtime_calls.into_boxed_slice(),
             frames: parts.frames.into_boxed_slice(),
             safepoints: parts.safepoints.into_boxed_slice(),
+            root_requirements: parts.root_requirements.into_boxed_slice(),
             source_map: parts.source_map.into_boxed_slice(),
             trap_map: parts.trap_map.into_boxed_slice(),
             outcome_map: parts.outcome_map.into_boxed_slice(),
@@ -743,6 +781,7 @@ pub(crate) struct ImageParts {
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,
     pub(crate) frames: Vec<FrameFacts>,
     pub(crate) safepoints: Vec<Safepoint>,
+    pub(crate) root_requirements: Vec<RootMapRequirement>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) trap_map: Vec<TrapMapEntry>,
     pub(crate) outcome_map: Vec<OutcomeMapEntry>,
@@ -821,6 +860,18 @@ pub(crate) fn exact_safepoint(
         function,
         code_offset,
         stack_map: ExactStackMap { roots },
+    }
+}
+
+pub(crate) fn root_map_requirement(
+    id: u32,
+    function: FunctionId,
+    roots: Vec<RootLocation>,
+) -> RootMapRequirement {
+    RootMapRequirement {
+        id,
+        function,
+        roots,
     }
 }
 
@@ -965,6 +1016,7 @@ struct MetadataSlices<'a> {
     runtime_calls: &'a [RuntimeCallSlot],
     frames: &'a [FrameFacts],
     safepoints: &'a [Safepoint],
+    root_requirements: &'a [RootMapRequirement],
     source_map: &'a [SourceMapEntry],
     trap_map: &'a [TrapMapEntry],
     outcome_map: &'a [OutcomeMapEntry],
@@ -985,6 +1037,10 @@ fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
     bytes = add_records(bytes, parts.safepoints.len(), 24)?;
     for safepoint in parts.safepoints {
         bytes = add_records(bytes, safepoint.stack_map.roots.len(), 16)?;
+    }
+    bytes = add_records(bytes, parts.root_requirements.len(), 16)?;
+    for requirement in parts.root_requirements {
+        bytes = add_records(bytes, requirement.roots.len(), 16)?;
     }
     bytes = add_records(bytes, parts.source_map.len(), 24)?;
     bytes = add_records(bytes, parts.trap_map.len(), 16)?;
@@ -1038,6 +1094,14 @@ mod tests {
         assert_eq!(
             image.validate_integrity(),
             Err(super::ImageIntegrityError::Safepoint)
+        );
+        image.safepoints[0].stack_map.roots[0].rbp_displacement =
+            image.root_requirements[0].roots[0].rbp_displacement;
+        let _omitted_live_root = image.safepoints[0].stack_map.roots.pop();
+        image.accounting.metadata_bytes -= 16;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(super::ImageIntegrityError::RootRequirement)
         );
         Ok(())
     }

@@ -213,11 +213,13 @@ impl fmt::Display for InvocationError {
 
 impl std::error::Error for InvocationError {}
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativeResourceLimitKind {
     PollFuel,
     ActiveFrames,
     MaterializedRoots,
+    RuntimeService,
+    NativeStackBytes,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -235,6 +237,8 @@ pub struct NativeInvocationConfig {
     poll_fuel: u64,
     wall_time: Option<Duration>,
     max_active_frames: usize,
+    max_native_stack_bytes: usize,
+    max_native_frame_bytes: usize,
 }
 
 impl NativeInvocationConfig {
@@ -244,12 +248,25 @@ impl NativeInvocationConfig {
             poll_fuel,
             wall_time,
             max_active_frames: MAX_ACTIVE_FRAMES,
+            max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
+            max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
         }
     }
 
     #[must_use]
     pub const fn with_max_active_frames(mut self, maximum: usize) -> Self {
         self.max_active_frames = maximum;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_native_stack_limits(
+        mut self,
+        maximum_aggregate_bytes: usize,
+        maximum_frame_bytes: usize,
+    ) -> Self {
+        self.max_native_stack_bytes = maximum_aggregate_bytes;
+        self.max_native_frame_bytes = maximum_frame_bytes;
         self
     }
 }
@@ -331,6 +348,8 @@ pub struct InvocationReport {
     collection_calls: u64,
     maximum_roots: usize,
     exact_root_counts: Vec<usize>,
+    peak_native_stack_bytes: usize,
+    reserved_native_stack_bytes: usize,
 }
 
 impl InvocationReport {
@@ -372,6 +391,16 @@ impl InvocationReport {
     #[must_use]
     pub fn exact_root_counts(&self) -> &[usize] {
         &self.exact_root_counts
+    }
+
+    #[must_use]
+    pub const fn peak_native_stack_bytes(&self) -> usize {
+        self.peak_native_stack_bytes
+    }
+
+    #[must_use]
+    pub const fn reserved_native_stack_bytes(&self) -> usize {
+        self.reserved_native_stack_bytes
     }
 }
 
@@ -588,7 +617,12 @@ impl InstalledImage {
         if state.active_depth != 0 {
             let leaked = state.active_depth;
             state.active_depth = 0;
+            state.pending_reservation = None;
+            state.reserved_native_stack_bytes = 0;
             return Err(InvocationError::LeakedActiveFrames(leaked));
+        }
+        if state.pending_reservation.is_some() || state.reserved_native_stack_bytes != 0 {
+            return Err(InvocationError::InvalidActiveFrame);
         }
         let outcome = match state.status {
             0 => InvocationOutcome::Returned(raw.into_value(entry.signature().result())?),
@@ -604,6 +638,8 @@ impl InstalledImage {
                 1 => NativeResourceLimitKind::PollFuel,
                 2 => NativeResourceLimitKind::ActiveFrames,
                 3 => NativeResourceLimitKind::MaterializedRoots,
+                4 => NativeResourceLimitKind::RuntimeService,
+                5 => NativeResourceLimitKind::NativeStackBytes,
                 _ => return Err(InvocationError::InvalidNativeStatus(state.status)),
             }),
             5 => InvocationOutcome::HostFailure,
@@ -633,6 +669,8 @@ impl InstalledImage {
             collection_calls: state.collection_calls,
             maximum_roots: state.maximum_roots,
             exact_root_counts: state.exact_root_counts.clone(),
+            peak_native_stack_bytes: state.peak_native_stack_bytes,
+            reserved_native_stack_bytes: state.reserved_native_stack_bytes,
         })
     }
 
@@ -669,6 +707,9 @@ const MAX_NATIVE_ENTRY_COUNTS: usize = 64;
 const MAX_ACTIVE_FRAMES: usize = 64;
 const MAX_MATERIALIZED_ROOTS: usize = 65_536;
 const MAX_COLLECTION_REPORTS: usize = 65_536;
+const DEFAULT_MAX_NATIVE_STACK_BYTES: usize = 4 * 1024 * 1024;
+const DEFAULT_MAX_NATIVE_FRAME_BYTES: usize = 1024 * 1024;
+const NATIVE_STACK_GUARD_BYTES: usize = 16 * 1024;
 const INVALID_SAFEPOINT: u32 = u32::MAX;
 
 #[derive(Clone, Copy)]
@@ -676,13 +717,22 @@ struct ActiveFrame {
     function_ordinal: u32,
     rbp: *mut u8,
     safepoint: u32,
+    reserved_bytes: usize,
 }
 
 const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
     function_ordinal: u32::MAX,
     rbp: std::ptr::null_mut(),
     safepoint: INVALID_SAFEPOINT,
+    reserved_bytes: 0,
 };
+
+#[derive(Clone, Copy)]
+struct PendingFrameReservation {
+    function_ordinal: u32,
+    rbp: *mut u8,
+    frame_bytes: usize,
+}
 
 #[derive(Clone, Copy)]
 struct RootAddress {
@@ -690,6 +740,12 @@ struct RootAddress {
     original_word: u64,
     reference_type: ReferenceType,
     frame_index: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MaterializeRootError {
+    InvalidFrame,
+    Capacity,
 }
 
 #[repr(C)]
@@ -700,6 +756,8 @@ struct NativeCallState<'a> {
     status: u32,
     trap: u32,
     payload: i64,
+    _scratch_integer_arguments: [u64; 2],
+    _scratch_float_arguments: [u64; 2],
     poll_fuel_remaining: u64,
     deadline_ms: i64,
     poll_count: u64,
@@ -709,6 +767,11 @@ struct NativeCallState<'a> {
     active_frames: [ActiveFrame; MAX_ACTIVE_FRAMES],
     active_depth: usize,
     maximum_active_frames: usize,
+    maximum_native_stack_bytes: usize,
+    maximum_native_frame_bytes: usize,
+    pending_reservation: Option<PendingFrameReservation>,
+    reserved_native_stack_bytes: usize,
+    peak_native_stack_bytes: usize,
     peak_active_depth: usize,
     collection_calls: u64,
     maximum_roots: usize,
@@ -731,25 +794,22 @@ impl<'a> NativeCallState<'a> {
             .map(|safepoint| safepoint.stack_map().roots().len())
             .max()
             .unwrap_or(0);
-        let root_capacity = maximum_map_roots
-            .checked_mul(maximum_active_frames)
-            .filter(|capacity| *capacity <= MAX_MATERIALIZED_ROOTS)
-            .ok_or(InvocationError::RootCapacityExceeded)?;
+        let initial_root_capacity = maximum_map_roots.min(MAX_MATERIALIZED_ROOTS);
         let mut roots = Vec::new();
         let mut root_addresses = Vec::new();
         let mut exact_root_counts = Vec::new();
         roots
-            .try_reserve_exact(root_capacity)
+            .try_reserve_exact(initial_root_capacity)
             .map_err(|_| InvocationError::RootCapacityExceeded)?;
         root_addresses
-            .try_reserve_exact(root_capacity)
+            .try_reserve_exact(initial_root_capacity)
             .map_err(|_| InvocationError::RootCapacityExceeded)?;
         if image
             .runtime_calls()
             .contains(&RuntimeCallSlot::CollectReferenceV1)
         {
             exact_root_counts
-                .try_reserve_exact(MAX_COLLECTION_REPORTS)
+                .try_reserve(1)
                 .map_err(|_| InvocationError::RootCapacityExceeded)?;
         }
         let (deadline_ms, status) = match config.wall_time {
@@ -766,6 +826,8 @@ impl<'a> NativeCallState<'a> {
             status,
             trap: 0,
             payload: 0,
+            _scratch_integer_arguments: [0; 2],
+            _scratch_float_arguments: [0; 2],
             poll_fuel_remaining: config.poll_fuel,
             deadline_ms,
             poll_count: 0,
@@ -775,6 +837,11 @@ impl<'a> NativeCallState<'a> {
             active_frames: [EMPTY_ACTIVE_FRAME; MAX_ACTIVE_FRAMES],
             active_depth: 0,
             maximum_active_frames,
+            maximum_native_stack_bytes: config.max_native_stack_bytes,
+            maximum_native_frame_bytes: config.max_native_frame_bytes,
+            pending_reservation: None,
+            reserved_native_stack_bytes: 0,
+            peak_native_stack_bytes: 0,
             peak_active_depth: 0,
             collection_calls: 0,
             maximum_roots: 0,
@@ -785,24 +852,8 @@ impl<'a> NativeCallState<'a> {
         })
     }
 
-    fn register_frame(&mut self, function_ordinal: u32, rbp: *mut u8) {
+    fn reserve_frame(&mut self, function_ordinal: u32, frame_bytes: u64, rbp: *mut u8) {
         if self.status != 0 {
-            return;
-        }
-        let ordinal = function_ordinal as usize;
-        let valid_descriptor = self
-            .image
-            .entries()
-            .get(ordinal)
-            .and_then(|entry| {
-                self.image
-                    .frames()
-                    .iter()
-                    .find(|frame| frame.function() == entry.function())
-            })
-            .is_some();
-        if !valid_descriptor || rbp.is_null() || !(rbp as usize).is_multiple_of(16) {
-            self.invalidate_active_frame();
             return;
         }
         if self.active_depth >= self.maximum_active_frames {
@@ -810,10 +861,81 @@ impl<'a> NativeCallState<'a> {
             self.payload = 2;
             return;
         }
+        if self.pending_reservation.is_some() {
+            self.invalidate_active_frame();
+            return;
+        }
+        let Some(entry) = self.image.entries().get(function_ordinal as usize) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let Some(descriptor_bytes) = self
+            .image
+            .frames()
+            .iter()
+            .find(|frame| frame.function() == entry.function())
+            .map(|frame| frame.frame_bytes())
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let Ok(frame_bytes) = usize::try_from(frame_bytes) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        if usize::try_from(descriptor_bytes).ok() != Some(frame_bytes)
+            || rbp.is_null()
+            || !(rbp as usize).is_multiple_of(16)
+        {
+            self.invalidate_active_frame();
+            return;
+        }
+        let Some(next_reserved_bytes) = self.reserved_native_stack_bytes.checked_add(frame_bytes)
+        else {
+            self.status = 4;
+            self.payload = 5;
+            return;
+        };
+        if frame_bytes > self.maximum_native_frame_bytes
+            || next_reserved_bytes > self.maximum_native_stack_bytes
+            || !platform::native_stack_reservation_fits(rbp, frame_bytes, NATIVE_STACK_GUARD_BYTES)
+        {
+            self.status = 4;
+            self.payload = 5;
+            return;
+        }
+        self.pending_reservation = Some(PendingFrameReservation {
+            function_ordinal,
+            rbp,
+            frame_bytes,
+        });
+        self.reserved_native_stack_bytes = next_reserved_bytes;
+        self.peak_native_stack_bytes = self
+            .peak_native_stack_bytes
+            .max(self.reserved_native_stack_bytes);
+    }
+
+    fn register_frame(&mut self, function_ordinal: u32, rbp: *mut u8) {
+        if self.status != 0 {
+            return;
+        }
+        let Some(reservation) = self.pending_reservation else {
+            self.invalidate_active_frame();
+            return;
+        };
+        if reservation.function_ordinal != function_ordinal
+            || reservation.rbp != rbp
+            || self.active_depth >= self.maximum_active_frames
+        {
+            self.invalidate_active_frame();
+            return;
+        }
+        self.pending_reservation = None;
         self.active_frames[self.active_depth] = ActiveFrame {
             function_ordinal,
             rbp,
             safepoint: INVALID_SAFEPOINT,
+            reserved_bytes: reservation.frame_bytes,
         };
         self.active_depth += 1;
         self.peak_active_depth = self.peak_active_depth.max(self.active_depth);
@@ -856,8 +978,16 @@ impl<'a> NativeCallState<'a> {
             self.invalidate_active_frame();
             return;
         }
+        let Some(next_reserved_bytes) = self
+            .reserved_native_stack_bytes
+            .checked_sub(frame.reserved_bytes)
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
         self.active_frames[index] = EMPTY_ACTIVE_FRAME;
         self.active_depth = index;
+        self.reserved_native_stack_bytes = next_reserved_bytes;
     }
 
     fn collect_references(&mut self, argument: u64) -> u64 {
@@ -867,13 +997,23 @@ impl<'a> NativeCallState<'a> {
         self.roots.clear();
         self.root_addresses.clear();
         for frame_index in 0..self.active_depth {
-            if !self.materialize_frame_roots(frame_index) {
-                self.invalidate_active_frame();
-                return argument;
+            match self.materialize_frame_roots(frame_index) {
+                Ok(()) => {}
+                Err(MaterializeRootError::InvalidFrame) => {
+                    self.invalidate_active_frame();
+                    return argument;
+                }
+                Err(MaterializeRootError::Capacity) => {
+                    self.status = 4;
+                    self.payload = 3;
+                    return argument;
+                }
             }
         }
         let root_count = self.roots.len();
-        if self.exact_root_counts.len() == MAX_COLLECTION_REPORTS {
+        if self.exact_root_counts.len() == MAX_COLLECTION_REPORTS
+            || self.exact_root_counts.try_reserve(1).is_err()
+        {
             self.status = 4;
             self.payload = 3;
             return argument;
@@ -885,7 +1025,7 @@ impl<'a> NativeCallState<'a> {
             Ok(()) => {}
             Err(NativeServiceError::ResourceLimitExceeded) => {
                 self.status = 4;
-                self.payload = 3;
+                self.payload = 4;
                 return argument;
             }
             Err(NativeServiceError::HostFailure) => {
@@ -914,15 +1054,15 @@ impl<'a> NativeCallState<'a> {
             .map_or(argument, |(_, root)| root.opaque_word)
     }
 
-    fn materialize_frame_roots(&mut self, frame_index: usize) -> bool {
+    fn materialize_frame_roots(&mut self, frame_index: usize) -> Result<(), MaterializeRootError> {
         let Some(frame) = self.active_frames.get(frame_index).copied() else {
-            return false;
+            return Err(MaterializeRootError::InvalidFrame);
         };
         if frame.rbp.is_null() || frame.safepoint == INVALID_SAFEPOINT {
-            return false;
+            return Err(MaterializeRootError::InvalidFrame);
         }
         let Some(entry) = self.image.entries().get(frame.function_ordinal as usize) else {
-            return false;
+            return Err(MaterializeRootError::InvalidFrame);
         };
         let Some(frame_facts) = self
             .image
@@ -930,13 +1070,35 @@ impl<'a> NativeCallState<'a> {
             .iter()
             .find(|facts| facts.function() == entry.function())
         else {
-            return false;
+            return Err(MaterializeRootError::InvalidFrame);
         };
         let Some(safepoint) = self.image.safepoints().get(frame.safepoint as usize) else {
-            return false;
+            return Err(MaterializeRootError::InvalidFrame);
         };
         if safepoint.id() != frame.safepoint || safepoint.function() != entry.function() {
-            return false;
+            return Err(MaterializeRootError::InvalidFrame);
+        }
+        let additional = safepoint.stack_map().roots().len();
+        let next_root_count = self
+            .roots
+            .len()
+            .checked_add(additional)
+            .filter(|count| *count <= MAX_MATERIALIZED_ROOTS)
+            .ok_or(MaterializeRootError::Capacity)?;
+        let root_additional = next_root_count
+            .checked_sub(self.roots.len())
+            .ok_or(MaterializeRootError::Capacity)?;
+        let address_additional = next_root_count
+            .checked_sub(self.root_addresses.len())
+            .ok_or(MaterializeRootError::Capacity)?;
+        if (root_additional != 0 && self.roots.try_reserve_exact(root_additional).is_err())
+            || (address_additional != 0
+                && self
+                    .root_addresses
+                    .try_reserve_exact(address_additional)
+                    .is_err())
+        {
+            return Err(MaterializeRootError::Capacity);
         }
         for root in safepoint.stack_map().roots() {
             let displacement = root.rbp_displacement();
@@ -951,8 +1113,8 @@ impl<'a> NativeCallState<'a> {
                         && home.rbp_displacement() == displacement
                         && home.value_type() == ValueType::Reference(root.reference_type())
                 });
-            if !in_frame || self.roots.len() == self.roots.capacity() {
-                return false;
+            if !in_frame {
+                return Err(MaterializeRootError::InvalidFrame);
             }
             // SAFETY: the retained descriptor bounds the negative displacement
             // within this registered generated frame. Homes are aligned words.
@@ -970,10 +1132,15 @@ impl<'a> NativeCallState<'a> {
                 frame_index,
             });
         }
-        true
+        Ok(())
     }
 
     fn invalidate_active_frame(&mut self) {
+        if let Some(reservation) = self.pending_reservation.take() {
+            self.reserved_native_stack_bytes = self
+                .reserved_native_stack_bytes
+                .saturating_sub(reservation.frame_bytes);
+        }
         self.metadata_invalid = true;
         self.status = 5;
     }
@@ -1061,6 +1228,7 @@ fn runtime_symbol(slot: RuntimeCallSlot) -> usize {
         RuntimeCallSlot::PollV1 => runtime_poll_v1 as *const () as usize,
         RuntimeCallSlot::EnterFunctionV1 => runtime_enter_function_v1 as *const () as usize,
         RuntimeCallSlot::CollectReferenceV1 => runtime_collect_reference_v1 as *const () as usize,
+        RuntimeCallSlot::ReserveFrameV1 => runtime_reserve_frame_v1 as *const () as usize,
         RuntimeCallSlot::RegisterFrameV1 => runtime_register_frame_v1 as *const () as usize,
         RuntimeCallSlot::PublishSafepointV1 => runtime_publish_safepoint_v1 as *const () as usize,
         RuntimeCallSlot::UnregisterFrameV1 => runtime_unregister_frame_v1 as *const () as usize,
@@ -1114,6 +1282,25 @@ extern "C" fn runtime_enter_function_v1(state: *mut NativeCallState<'_>, functio
         return;
     };
     *entries = entries.saturating_add(1);
+}
+
+extern "C" fn runtime_reserve_frame_v1(
+    state: *mut NativeCallState<'_>,
+    function_ordinal: u64,
+    frame_bytes: u64,
+    rbp: *mut u8,
+) -> *mut NativeCallState<'_> {
+    // SAFETY: generated ABI-2 minimal prologues pass their invocation context
+    // and current frame base before touching generated-frame storage.
+    let Some(invocation) = (unsafe { state.as_mut() }) else {
+        return state;
+    };
+    let Ok(function_ordinal) = u32::try_from(function_ordinal) else {
+        invocation.invalidate_active_frame();
+        return state;
+    };
+    invocation.reserve_frame(function_ordinal, frame_bytes, rbp);
+    state
 }
 
 extern "C" fn runtime_register_frame_v1(
@@ -1263,6 +1450,64 @@ mod platform {
         fn mprotect(address: *mut c_void, length: usize, protection: i32) -> i32;
         fn munmap(address: *mut c_void, length: usize) -> i32;
         fn sysconf(name: i32) -> isize;
+        fn pthread_self() -> usize;
+        fn pthread_getattr_np(thread: usize, attributes: *mut c_void) -> i32;
+        fn pthread_attr_getstack(
+            attributes: *const c_void,
+            stack_address: *mut *mut c_void,
+            stack_size: *mut usize,
+        ) -> i32;
+        fn pthread_attr_destroy(attributes: *mut c_void) -> i32;
+    }
+
+    pub(super) fn native_stack_reservation_fits(
+        rbp: *mut u8,
+        frame_bytes: usize,
+        guard_bytes: usize,
+    ) -> bool {
+        // pthread_attr_t is opaque here. This word-aligned buffer is larger
+        // than the Linux x86-64 glibc and musl objects passed to these APIs.
+        let mut attributes = [0_usize; 16];
+        // SAFETY: pthread_self has no arguments; pthread_getattr_np initializes
+        // the oversized aligned opaque storage for the current live thread.
+        let initialized =
+            unsafe { pthread_getattr_np(pthread_self(), attributes.as_mut_ptr().cast::<c_void>()) }
+                == 0;
+        if !initialized {
+            return false;
+        }
+        let mut stack_address = std::ptr::null_mut();
+        let mut stack_size = 0_usize;
+        // SAFETY: successful pthread_getattr_np initialized the attributes;
+        // both output pointers are valid for writes during this call.
+        let stack_result = unsafe {
+            pthread_attr_getstack(
+                attributes.as_ptr().cast::<c_void>(),
+                &mut stack_address,
+                &mut stack_size,
+            )
+        };
+        // SAFETY: initialized pthread attributes are destroyed exactly once.
+        let destroy_result =
+            unsafe { pthread_attr_destroy(attributes.as_mut_ptr().cast::<c_void>()) };
+        if stack_result != 0 || destroy_result != 0 {
+            return false;
+        }
+        let stack_low = stack_address as usize;
+        let Some(stack_high) = stack_low.checked_add(stack_size) else {
+            return false;
+        };
+        let frame_base = rbp as usize;
+        let Some(requested_low) = frame_base.checked_sub(frame_bytes) else {
+            return false;
+        };
+        let Some(guarded_low) = stack_low.checked_add(guard_bytes) else {
+            return false;
+        };
+        stack_low < stack_high
+            && stack_low <= frame_base
+            && frame_base < stack_high
+            && guarded_low <= requested_low
     }
 
     const SC_PAGESIZE: i32 = 30;
@@ -1637,6 +1882,14 @@ mod platform {
         InstallError, InvocationError, MappingPermissions, NativeCallState, NativeValue,
         PermissionProbeError, RawReturn, Signature,
     };
+
+    pub(super) fn native_stack_reservation_fits(
+        _rbp: *mut u8,
+        _frame_bytes: usize,
+        _guard_bytes: usize,
+    ) -> bool {
+        false
+    }
 
     #[derive(Debug)]
     pub(super) struct Mapping;

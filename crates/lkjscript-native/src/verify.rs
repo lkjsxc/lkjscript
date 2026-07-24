@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt;
 
 use crate::plan::{
-    BlockId, FunctionDeclaration, FunctionId, FunctionPlan, LocalId, Operation, RuntimeCallSlot,
-    Signature, Terminator, ValueDefinition, ValueId, ValueType,
+    BlockId, FunctionDeclaration, FunctionId, FunctionPlan, LocalId, Operation, ReferenceType,
+    RuntimeCallSlot, Signature, Terminator, ValueDefinition, ValueId, ValueType,
 };
 use crate::BackendLimits;
 
@@ -75,9 +75,18 @@ impl fmt::Display for VerificationError {
 
 impl std::error::Error for VerificationError {}
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) struct CertifiedRoot {
+    pub(crate) kind: crate::FrameHomeKind,
+    pub(crate) reference_type: ReferenceType,
+}
+
+pub(crate) type FunctionRootRequirements = Vec<Option<Vec<CertifiedRoot>>>;
+
 #[derive(Clone, Debug)]
 pub struct VerifiedMachinePlan {
     pub(crate) functions: Vec<FunctionPlan>,
+    pub(crate) root_requirements: Vec<FunctionRootRequirements>,
     pub(crate) limits: BackendLimits,
     pub(crate) work_units: u64,
 }
@@ -122,6 +131,9 @@ fn verify_plan_inner(
     let mut total_blocks = 0_usize;
     let mut total_values = 0_usize;
     let mut total_work = 0_u64;
+    let mut total_root_records = 0_u64;
+    let maximum_root_records = limits.max_metadata_bytes() / ROOT_RECORD_METADATA_BYTES;
+    let mut root_requirements = Vec::with_capacity(declarations.len());
 
     for declaration in declarations {
         if !source_functions.insert(declaration.source_function) {
@@ -156,11 +168,20 @@ fn verify_plan_inner(
         if total_work > limits.max_work_units() {
             return Err(VerificationError::LimitExceeded("work units"));
         }
+        let requirements = derive_call_root_requirements(
+            &function,
+            &mut total_work,
+            limits.max_work_units(),
+            &mut total_root_records,
+            maximum_root_records,
+        )?;
+        root_requirements.push(requirements);
         functions.push(function);
     }
 
     Ok(VerifiedMachinePlan {
         functions,
+        root_requirements,
         limits,
         work_units: total_work,
     })
@@ -447,7 +468,11 @@ fn verify_instruction(
         }
         Operation::RuntimeCall(slot, arguments) => {
             verify_runtime_slot(*slot)?;
-            let signature = slot.signature();
+            let signature = slot
+                .plan_signature()
+                .ok_or(VerificationError::TypeMismatch(
+                    "encoder-owned runtime call",
+                ))?;
             verify_arguments(function, arguments, &signature, "runtime call")?;
             require_output(instruction, signature.result(), "runtime call")
         }
@@ -463,7 +488,11 @@ fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), VerificationError> {
             "encoder-owned runtime call",
         ));
     }
-    let signature = slot.signature();
+    let signature = slot
+        .plan_signature()
+        .ok_or(VerificationError::TypeMismatch(
+            "encoder-owned runtime call",
+        ))?;
     match slot {
         RuntimeCallSlot::CollectReferenceV1
             if signature.parameters() == [ValueType::Reference(crate::ReferenceType::Buf)]
@@ -476,7 +505,8 @@ fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), VerificationError> {
         RuntimeCallSlot::IdentityI64V1
         | RuntimeCallSlot::PollV1
         | RuntimeCallSlot::EnterFunctionV1 => {}
-        RuntimeCallSlot::RegisterFrameV1
+        RuntimeCallSlot::ReserveFrameV1
+        | RuntimeCallSlot::RegisterFrameV1
         | RuntimeCallSlot::PublishSafepointV1
         | RuntimeCallSlot::UnregisterFrameV1 => {
             return Err(VerificationError::TypeMismatch(
@@ -615,4 +645,281 @@ fn block_index(function: &FunctionPlan, block: BlockId) -> Result<usize, Verific
         return Err(VerificationError::InvalidTarget(block));
     }
     Ok(index)
+}
+
+const ROOT_RECORD_METADATA_BYTES: u64 = 32;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum LiveHome {
+    Local(u32),
+    Value(u32),
+}
+
+fn derive_call_root_requirements(
+    function: &FunctionPlan,
+    work: &mut u64,
+    maximum_work: u64,
+    root_records: &mut u64,
+    maximum_root_records: u64,
+) -> Result<FunctionRootRequirements, VerificationError> {
+    let mut live_in = vec![BTreeSet::new(); function.blocks.len()];
+    loop {
+        let mut changed = false;
+        for block_index_value in (0..function.blocks.len()).rev() {
+            charge_liveness(work, maximum_work)?;
+            let block = &function.blocks[block_index_value];
+            let mut live = successor_reference_live(block, &live_in, work, maximum_work)?;
+            add_terminator_references(function, block, &mut live, work, maximum_work)?;
+            for instruction in block.instructions.iter().rev() {
+                transfer_reference_liveness(function, instruction, &mut live, work, maximum_work)?;
+                charge_liveness(work, maximum_work)?;
+            }
+            if live != live_in[block_index_value] {
+                live_in[block_index_value] = live;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mut call_roots = Vec::new();
+    call_roots
+        .try_reserve_exact(function.values.len())
+        .map_err(|_| VerificationError::LimitExceeded("stack-map certificate storage"))?;
+    call_roots.resize_with(function.values.len(), || None);
+    for block in &function.blocks {
+        let mut live = successor_reference_live(block, &live_in, work, maximum_work)?;
+        add_terminator_references(function, block, &mut live, work, maximum_work)?;
+        for instruction in block.instructions.iter().rev() {
+            if matches!(
+                &instruction.operation,
+                Operation::Call(_, _) | Operation::RuntimeCall(_, _)
+            ) {
+                let output_home = LiveHome::Value(instruction.output.index);
+                let mut roots = Vec::new();
+                for home in live.iter().copied().filter(|home| *home != output_home) {
+                    push_certified_root(
+                        function,
+                        home,
+                        &mut roots,
+                        work,
+                        maximum_work,
+                        root_records,
+                        maximum_root_records,
+                    )?;
+                }
+                for operand in instruction.operation.operands() {
+                    if value_reference_type(function, operand).is_none() {
+                        continue;
+                    }
+                    let home = LiveHome::Value(operand.index);
+                    if home != output_home && live.contains(&home) {
+                        continue;
+                    }
+                    let kind = crate::FrameHomeKind::Value(operand.index);
+                    if roots.iter().any(|root| root.kind == kind) {
+                        continue;
+                    }
+                    push_certified_root(
+                        function,
+                        home,
+                        &mut roots,
+                        work,
+                        maximum_work,
+                        root_records,
+                        maximum_root_records,
+                    )?;
+                }
+                roots.sort_unstable();
+                let slot = call_roots
+                    .get_mut(instruction.output.index as usize)
+                    .ok_or(VerificationError::InvalidValue(instruction.output))?;
+                *slot = Some(roots);
+            }
+            transfer_reference_liveness(function, instruction, &mut live, work, maximum_work)?;
+            charge_liveness(work, maximum_work)?;
+        }
+    }
+    Ok(call_roots)
+}
+
+fn successor_reference_live(
+    block: &crate::plan::Block,
+    live_in: &[BTreeSet<LiveHome>],
+    work: &mut u64,
+    maximum_work: u64,
+) -> Result<BTreeSet<LiveHome>, VerificationError> {
+    let mut live = BTreeSet::new();
+    let terminator = block
+        .terminator
+        .as_ref()
+        .ok_or(VerificationError::MissingTerminator(block.id))?;
+    let successors: Vec<BlockId> = match terminator {
+        Terminator::Branch(target) => vec![*target],
+        Terminator::BranchIf {
+            when_true,
+            when_false,
+            ..
+        } => vec![*when_true, *when_false],
+        Terminator::Return(_)
+        | Terminator::Trap(_)
+        | Terminator::Exit(_)
+        | Terminator::Outcome(_) => Vec::new(),
+    };
+    for successor in successors {
+        let successor_live = live_in
+            .get(successor.index as usize)
+            .ok_or(VerificationError::InvalidTarget(successor))?;
+        for home in successor_live {
+            charge_liveness(work, maximum_work)?;
+            live.insert(*home);
+        }
+    }
+    Ok(live)
+}
+
+fn add_terminator_references(
+    function: &FunctionPlan,
+    block: &crate::plan::Block,
+    live: &mut BTreeSet<LiveHome>,
+    work: &mut u64,
+    maximum_work: u64,
+) -> Result<(), VerificationError> {
+    let terminator = block
+        .terminator
+        .as_ref()
+        .ok_or(VerificationError::MissingTerminator(block.id))?;
+    for operand in terminator.operands() {
+        if value_reference_type(function, operand).is_some() {
+            charge_liveness(work, maximum_work)?;
+            live.insert(LiveHome::Value(operand.index));
+        }
+    }
+    Ok(())
+}
+
+fn transfer_reference_liveness(
+    function: &FunctionPlan,
+    instruction: &crate::plan::Instruction,
+    live: &mut BTreeSet<LiveHome>,
+    work: &mut u64,
+    maximum_work: u64,
+) -> Result<(), VerificationError> {
+    let output_live = instruction.output_type.reference_type().is_some()
+        && live.remove(&LiveHome::Value(instruction.output.index));
+    match &instruction.operation {
+        Operation::WriteLocal(local, value) => {
+            if function.locals[local.index as usize]
+                .value_type
+                .reference_type()
+                .is_some()
+            {
+                live.remove(&LiveHome::Local(local.index));
+            }
+            insert_reference_value(function, *value, live, work, maximum_work)?;
+        }
+        Operation::ReadLocal(local) if output_live => {
+            if function.locals[local.index as usize]
+                .value_type
+                .reference_type()
+                .is_some()
+            {
+                charge_liveness(work, maximum_work)?;
+                live.insert(LiveHome::Local(local.index));
+            }
+        }
+        Operation::Call(_, arguments) | Operation::RuntimeCall(_, arguments) => {
+            for operand in arguments {
+                insert_reference_value(function, *operand, live, work, maximum_work)?;
+            }
+        }
+        _ if output_live => {
+            for operand in instruction.operation.operands() {
+                insert_reference_value(function, operand, live, work, maximum_work)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn insert_reference_value(
+    function: &FunctionPlan,
+    value: ValueId,
+    live: &mut BTreeSet<LiveHome>,
+    work: &mut u64,
+    maximum_work: u64,
+) -> Result<(), VerificationError> {
+    if value_reference_type(function, value).is_some() {
+        charge_liveness(work, maximum_work)?;
+        live.insert(LiveHome::Value(value.index));
+    }
+    Ok(())
+}
+
+fn value_reference_type(function: &FunctionPlan, value: ValueId) -> Option<ReferenceType> {
+    function
+        .values
+        .get(value.index as usize)
+        .and_then(|fact| fact.value_type.reference_type())
+}
+
+fn push_certified_root(
+    function: &FunctionPlan,
+    home: LiveHome,
+    roots: &mut Vec<CertifiedRoot>,
+    work: &mut u64,
+    maximum_work: u64,
+    root_records: &mut u64,
+    maximum_root_records: u64,
+) -> Result<(), VerificationError> {
+    charge_liveness(work, maximum_work)?;
+    *root_records = root_records
+        .checked_add(1)
+        .ok_or(VerificationError::LimitExceeded("stack-map root metadata"))?;
+    if *root_records > maximum_root_records {
+        return Err(VerificationError::LimitExceeded("stack-map root metadata"));
+    }
+    roots
+        .try_reserve(1)
+        .map_err(|_| VerificationError::LimitExceeded("stack-map root metadata"))?;
+    let (kind, reference_type) = match home {
+        LiveHome::Local(index) => {
+            let reference_type = function
+                .locals
+                .get(index as usize)
+                .and_then(|fact| fact.value_type.reference_type())
+                .ok_or(VerificationError::InvalidLocal(LocalId {
+                    function: function.id,
+                    index,
+                }))?;
+            (crate::FrameHomeKind::Local(index), reference_type)
+        }
+        LiveHome::Value(index) => {
+            let value = ValueId {
+                function: function.id,
+                index,
+            };
+            let reference_type = value_reference_type(function, value)
+                .ok_or(VerificationError::InvalidValue(value))?;
+            (crate::FrameHomeKind::Value(index), reference_type)
+        }
+    };
+    roots.push(CertifiedRoot {
+        kind,
+        reference_type,
+    });
+    Ok(())
+}
+
+fn charge_liveness(work: &mut u64, maximum: u64) -> Result<(), VerificationError> {
+    *work = work
+        .checked_add(1)
+        .ok_or(VerificationError::LimitExceeded("stack-map liveness work"))?;
+    if *work > maximum {
+        return Err(VerificationError::LimitExceeded("stack-map liveness work"));
+    }
+    Ok(())
 }

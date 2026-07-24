@@ -50,7 +50,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bytecode link metadata |
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
-| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verification, bounded liveness, exact typed maps, ABI-2 encoding, opaque installable image |
+| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, ABI-2 reservation/encoding, opaque installable image |
 | Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar eligibility, deterministic lowering, code objects, tier state, forced/auto execution |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
@@ -166,7 +166,8 @@ forced main or hot VM function entry
   -> verified scalar eligibility and acyclic reachable group
   -> synchronous typed-SSA lowering at a safepoint
   -> bounded W^X callable ABI-2 baseline code object
-  -> initialized registered frame and exact scalar or typed-reference call map
+  -> descriptor/budget/pthread-bounds frame reservation before stack subtraction
+  -> initialized registered frame and verifier-certified exact scalar or typed-reference call map
   -> exact VM/native scalar adapter or unboxed direct closed-plan call
   -> PollV1/CollectReferenceV1 and structured return/trap/exit/deadline/resource/host status
   -> exactly one unregister on every registered outcome

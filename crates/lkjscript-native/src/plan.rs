@@ -194,31 +194,106 @@ pub enum RuntimeCallSlot {
     /// Collecting reference round trip used by the closed ABI-2 plan slice.
     CollectReferenceV1,
     /// Encoder-owned frame-chain operations. Plans cannot name these slots.
+    ReserveFrameV1,
     RegisterFrameV1,
     PublishSafepointV1,
     UnregisterFrameV1,
 }
 
-impl RuntimeCallSlot {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InternalMachineArgument {
+    InvocationContext,
+    FunctionOrdinal,
+    FrameBytes,
+    FramePointer,
+    SafepointId,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InternalMachineResult {
+    Unit,
+    InvocationContext,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InternalRuntimeSignature {
+    parameters: &'static [InternalMachineArgument],
+    result: InternalMachineResult,
+}
+
+impl InternalRuntimeSignature {
     #[must_use]
-    pub fn signature(self) -> Signature {
+    pub const fn parameters(self) -> &'static [InternalMachineArgument] {
+        self.parameters
+    }
+
+    #[must_use]
+    pub const fn result(self) -> InternalMachineResult {
+        self.result
+    }
+}
+
+impl RuntimeCallSlot {
+    /// Returns the typed machine-plan signature. Encoder-owned slots have no
+    /// plan signature; use `internal_abi_signature` for their private ABI.
+    #[must_use]
+    pub fn plan_signature(self) -> Option<Signature> {
         match self {
-            Self::IdentityI64V1 => Signature {
+            Self::IdentityI64V1 => Some(Signature {
                 parameters: vec![ValueType::I64],
                 result: ValueType::I64,
-            },
-            Self::PollV1 | Self::UnregisterFrameV1 => Signature {
+            }),
+            Self::PollV1 => Some(Signature {
                 parameters: Vec::new(),
                 result: ValueType::Unit,
-            },
-            Self::EnterFunctionV1 | Self::RegisterFrameV1 | Self::PublishSafepointV1 => Signature {
+            }),
+            Self::EnterFunctionV1 => Some(Signature {
                 parameters: vec![ValueType::I64],
                 result: ValueType::Unit,
-            },
-            Self::CollectReferenceV1 => Signature {
+            }),
+            Self::CollectReferenceV1 => Some(Signature {
                 parameters: vec![ValueType::Reference(ReferenceType::Buf)],
                 result: ValueType::Reference(ReferenceType::Buf),
-            },
+            }),
+            Self::ReserveFrameV1
+            | Self::RegisterFrameV1
+            | Self::PublishSafepointV1
+            | Self::UnregisterFrameV1 => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn internal_abi_signature(self) -> Option<InternalRuntimeSignature> {
+        const FRAME_PARAMETERS: &[InternalMachineArgument] = &[
+            InternalMachineArgument::InvocationContext,
+            InternalMachineArgument::FunctionOrdinal,
+            InternalMachineArgument::FramePointer,
+        ];
+        match self {
+            Self::ReserveFrameV1 => Some(InternalRuntimeSignature {
+                parameters: &[
+                    InternalMachineArgument::InvocationContext,
+                    InternalMachineArgument::FunctionOrdinal,
+                    InternalMachineArgument::FrameBytes,
+                    InternalMachineArgument::FramePointer,
+                ],
+                result: InternalMachineResult::InvocationContext,
+            }),
+            Self::RegisterFrameV1 | Self::UnregisterFrameV1 => Some(InternalRuntimeSignature {
+                parameters: FRAME_PARAMETERS,
+                result: InternalMachineResult::Unit,
+            }),
+            Self::PublishSafepointV1 => Some(InternalRuntimeSignature {
+                parameters: &[
+                    InternalMachineArgument::InvocationContext,
+                    InternalMachineArgument::SafepointId,
+                ],
+                result: InternalMachineResult::Unit,
+            }),
+            Self::IdentityI64V1
+            | Self::PollV1
+            | Self::EnterFunctionV1
+            | Self::CollectReferenceV1 => None,
         }
     }
 
@@ -258,6 +333,7 @@ pub enum PlanError {
     UnknownValue,
     UnknownLocal,
     BlockAlreadyTerminated,
+    EncoderOwnedRuntimeCall,
 }
 
 impl fmt::Display for PlanError {
@@ -282,6 +358,9 @@ impl fmt::Display for PlanError {
             Self::UnknownLocal => formatter.write_str("unknown machine-plan local"),
             Self::BlockAlreadyTerminated => {
                 formatter.write_str("machine-plan block is already terminated")
+            }
+            Self::EncoderOwnedRuntimeCall => {
+                formatter.write_str("runtime call is owned by the native encoder")
             }
         }
     }
@@ -925,9 +1004,12 @@ impl FunctionBuilder {
         for argument in &arguments {
             self.check_value(*argument)?;
         }
+        let signature = slot
+            .plan_signature()
+            .ok_or(PlanError::EncoderOwnedRuntimeCall)?;
         self.append(
             block,
-            slot.signature().result(),
+            signature.result(),
             Operation::RuntimeCall(slot, arguments),
             None,
         )

@@ -155,9 +155,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   invokes generated System V AMD64 entries; direct native calls stay unboxed
 - Native runtime ABI: semantic/runtime versions remain 1 and native ABI 2 is
   required. Enum-identified `EnterFunctionV1` and `PollV1` calls record entries
-  and enforce cooperative fuel/deadlines; generated ABI-2 prologues initialize
-  homes/context before bounded frame registration, collecting calls publish a
-  dense safepoint, and every structured return/trap/exit/deadline/resource/host
+  and enforce cooperative fuel/deadlines; generated ABI-2 prologues call the
+  encoder-owned `ReserveFrameV1` after only minimal ABI setup and before frame
+  subtraction/initialization. Sys validates descriptor bytes, configured
+  aggregate/per-frame limits, active-frame capacity, and guarded current pthread
+  stack bounds, then tracks exact reservation/release. Collecting calls publish
+  a dense safepoint, and every structured return/trap/exit/deadline/resource/host
   edge unregisters before status returns to the execution owner
 - Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; ordinary `run`
   defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
@@ -178,14 +181,19 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   `meta/benchmarks/jit/results/`
 - Closed-plan native references: typed opaque stable-handle words use exact
   Buf/Str/List/Option/Result/product layout identities and GPR marshalling, not
-  raw object pointers. Checked RBP homes and bounded backward-CFG liveness
-  derive sorted/deduplicated typed maps for every direct/runtime call;
-  `CollectReferenceV1` exercises exact non-empty Buf roots while Poll/Enter stay
-  non-collecting. `lkjscript-sys` alone retains raw active-frame addresses,
-  validates the installed image/chain/maps, copies typed roots to safe runtime
-  services, writes back handles, and reports peak/zero-final depth plus exact
-  collection root counts. Caller/callee chains, dead-root exclusion, bounds,
-  structured failures/outcomes, W^X, and repeated installation are tested
+  raw object pointers; the Copy runtime-adapter token is non-Send/non-Sync.
+  Bounded verifier-owned backward-CFG liveness charges every retained root
+  before allocation and certificates sorted/deduplicated typed requirements for
+  every direct/runtime call. The encoder consumes the certificate, and private
+  structural image requirements prevent omitted/stale public maps from
+  validating. `CollectReferenceV1` exercises exact non-empty Buf roots while
+  Poll/Enter stay non-collecting. `lkjscript-sys` alone retains raw active-frame
+  addresses, validates the installed image/chain/maps, grows root capacity
+  dynamically under an aggregate cap, copies typed roots to safe runtime
+  services, writes back handles, and reports exact stack/frame/root outcomes.
+  Runtime-service limits are distinct from materialization limits. Caller/callee
+  chains, dead-root exclusion, bounds, structured failures/outcomes, W^X, and
+  repeated installation are tested
 - Native source limits: the callable SSA adapter still rejects recursion,
   indirect calls, polymorphic or unsupported signatures, references, strings,
   collections, products, Option/Result, buffers, allocation, and host IO.
@@ -251,6 +259,26 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The exact native-root repair in this document's containing commit, based on
+`cc7ad01c9365b659a8cf909c400788aadde4770a`, was checked in isolated worktree
+`/tmp/pi-agent-0917730b-997b-416-8744f760` on Linux 7.0.0-27-generic x86-64
+with Rust/Cargo 1.96.0. It establishes pre-touch guarded frame reservation,
+verifier-certified root completeness with a private image check, bounded root
+construction, exact runtime-service resource classification, and dynamic
+shallow-root capacity. It does not establish source-level native allocation or
+a shared VM/native heap.
+
+| Exact native-root repair command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-native -p lkjscript-sys` | passed; verifier certificate/adversarial width, omitted-live-root corruption, 64 KiB thread stack rejection, zero-frame bound, configured byte limits, exact reservation release, runtime-service classification, and a valid shallow 1,025-root map plus existing native/sys coverage |
+| `cargo clippy --locked -p lkjscript-native -p lkjscript-sys -p lkjscript-jit --all-targets --all-features -- -D warnings` | passed |
+| `cargo run --locked -p lkjscript-xtask -- check-docs` | passed |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; formatting, strict workspace Clippy, docs/tree/source closure, 179 unit/integration tests, and one compile-fail doctest proving the Copy adapter token is non-Send |
+| `cargo build --workspace --release --locked`; default hello, forced scalar JIT, Mandelbrot, Brainfuck, lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smokes | passed; Mandelbrot retained its exact 1,176-byte output and SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | passed with `result=ok`, 179 tests plus the compile-fail doctest, and all configured smokes |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | source-level native allocation, shared VM/native collection, performance, full Brainfuck Mandelbrot, Miri, sanitizers, or non-Linux targets |
 
 The closed-machine-plan native-reference/active-frame implementation in this
 document's containing commit, based on HEAD

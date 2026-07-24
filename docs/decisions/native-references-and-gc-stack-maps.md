@@ -32,23 +32,41 @@ native object pointer. Moving the VM arena into a pure shared runtime layer is
 part of the later source-allocation slice, not this Current claim.
 
 Native plans identify each GC reference by an exact reference/layout identity.
-Frame descriptors enumerate every reference-capable value/local home. A bounded
-backward CFG analysis derives the sorted typed live-root subset at each
-collecting call, and independent machine-plan/image validation rejects omitted,
-out-of-frame, mistyped, duplicate, unsorted, or stale roots. Registers are not
-roots in the first slice: references are homed before collection and reloaded
+Frame descriptors enumerate every reference-capable value/local home. The
+machine-plan verifier runs bounded backward CFG reference liveness and retains a
+per-call sorted typed root-requirement certificate. It charges analysis work
+and every retained root record before allocation against the backend work and
+metadata-derived root budgets. The encoder must consume that certificate, and
+the private image requirement is retained independently of the public stack
+map so structural integrity validation rejects omitted or stale roots as well
+as out-of-frame, mistyped, duplicate, or unsorted roots. Registers are not roots
+in the first slice: references are homed before collection and reloaded
 afterward.
 
-Generated prologues reserve bounded frame bytes, initialize storage and
-context, home arguments, and then register one frame. A collecting call first
-publishes its dense safepoint identity. The sys trampoline validates the active
-chain and stack map, materializes only exact live roots for the safe runtime
-service, and writes back updated handles before generated execution resumes.
-Every registered return, trap, exit, deadline, resource, host-failure, and
-propagated-callee edge unregisters once; bounded frame reservation failure uses
-an unregistered epilogue. Reports retain peak depth, collection calls, maximum
-roots, and the exact root count for every collection; completed outcomes report
-zero active depth.
+Generated prologues establish only the minimal ABI frame, save incoming machine
+arguments in invocation-owned scratch, and call the encoder-owned
+`ReserveFrameV1` before subtracting or initializing generated-frame storage.
+The sys reservation validates the exact function descriptor and requested frame
+bytes, configured aggregate and per-frame native-stack budgets (4 MiB and 1 MiB
+by default), active-frame capacity, and the current Linux pthread stack bounds
+with a 16 KiB guard margin. Reservation failure reports exact `ActiveFrames` or
+`NativeStackBytes` resource outcomes through an unregistered epilogue. Successful reservations are tracked
+and released byte-for-byte by matching registration/unregistration. A
+collecting call first publishes its dense safepoint identity. The sys trampoline
+validates the active chain and stack map, materializes only exact live roots for
+the safe runtime service, and writes back updated handles before generated
+execution resumes. Root vectors grow only under their aggregate cap; invocation
+setup does not multiply one shallow map by the maximum possible frame depth.
+Runtime-service resource rejection is reported as `RuntimeService`, distinct
+from `MaterializedRoots`. `RuntimeCallSlot::plan_signature` exposes only
+plan-callable typed signatures; encoder-owned Reserve/Register/Publish/
+Unregister slots instead expose their exact context/ordinal/byte/pointer/ID
+machine arguments through `internal_abi_signature`. Every registered return,
+trap, exit, deadline, resource, host-failure, and propagated-callee edge
+unregisters once. Reports
+retain peak depth and native-stack bytes, collection calls, maximum roots, and
+the exact root count for every collection; completed outcomes report zero
+active depth and zero reserved native-stack bytes.
 
 ## Reference Representation
 
@@ -59,10 +77,12 @@ indexes runtime-owned storage and therefore remains valid if a future moving
 collector relocates the object behind that storage.
 
 GC references may be copied within one worker according to their type contract,
-but are not automatically `Send`, cannot be converted to an integer or native
-pointer in safe source, and cannot outlive their owning runtime session. Lexical
-shared/exclusive borrows, uniquely owned values, immutable cross-worker bytes,
-and explicitly pinned values are distinct categories.
+but the current `NativeReference` adapter token is explicitly non-`Send` and
+non-`Sync` even though it remains `Copy`. It is a runtime-adapter token, not a
+source-language reference or an independently owned heap value; it cannot be
+converted to a native pointer in safe source or outlive its owning runtime
+session. Lexical shared/exclusive borrows, uniquely owned values, immutable
+cross-worker bytes, and explicitly pinned values are distinct categories.
 
 ## Native Frame Chain
 
@@ -76,9 +96,12 @@ The record identifies:
 - caller record;
 - source/outcome/frame-state metadata.
 
-Generated prologues register the frame only after its descriptor and storage are
-valid. Every normal, trap, exit, deadline, resource, and host-failure edge
-unregisters exactly once. Registration is non-reentrant and bounded. Platform
+Generated prologues reserve against descriptor, configured byte limits, active
+frame count, and actual guarded pthread stack bounds before they subtract or
+initialize the requested storage. They register the frame only after its
+descriptor and storage are valid. Reservation and registration are matched, and
+every normal, trap, exit, deadline, resource, and host-failure edge unregisters
+and releases exactly once. Registration is non-reentrant and bounded. Platform
 unwinding heuristics and conservative stack walking are not semantic root
 mechanisms.
 
@@ -104,8 +127,8 @@ Registers containing references are either described explicitly or spilled to
 an exact home before a collecting call. A root is included only while live, but
 must not be omitted because the current collector is non-moving. Duplicates are
 permitted only if verifier-normalized as aliases to the same live handle.
-Metadata validation checks frame bounds, alignment, location kind, liveness,
-reference type, safepoint ownership, and code offset.
+Metadata validation checks frame bounds, alignment, location kind, verifier-
+certificate equality, reference type, safepoint ownership, and code offset.
 
 A future moving collector may update every listed root. Generated code reloads
 live references after a collecting call rather than relying on stale registers.

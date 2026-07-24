@@ -1,8 +1,9 @@
 #![allow(clippy::panic)]
 
 use lkjscript_native::{
-    encode, BackendLimits, EncodingConfig, FrameHomeKind, MachinePlanBuilder, NativeError,
-    ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId, ValueType, VerificationError,
+    encode, BackendLimits, EncodingConfig, FrameHomeKind, InternalMachineArgument,
+    InternalMachineResult, MachinePlanBuilder, NativeError, PlanError, ReferenceType,
+    RuntimeCallSlot, Signature, SourceFunctionId, ValueType, VerificationError,
 };
 
 #[test]
@@ -214,5 +215,118 @@ fn derives_non_empty_exact_reference_maps_without_dead_slots(
         .iter()
         .any(|root| root.kind() == FrameHomeKind::Value(1)));
     assert!(roots.windows(2).all(|pair| pair[0] < pair[1]));
+    Ok(())
+}
+
+#[test]
+fn rejects_adversarial_wide_root_certificates_before_metadata_allocation(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ValueType::Reference(ReferenceType::Buf);
+    let mut plan = MachinePlanBuilder::new();
+    let sink = plan.declare_function(
+        SourceFunctionId::new(30),
+        Signature::new(vec![buf, buf], ValueType::Unit)?,
+    )?;
+    let wide = plan.declare_function(SourceFunctionId::new(31), Signature::new(vec![buf], buf)?)?;
+
+    let mut sink_builder = plan.function_builder(sink)?;
+    let sink_entry = sink_builder.create_block()?;
+    sink_builder.set_entry(sink_entry)?;
+    let unit = sink_builder.unit(sink_entry)?;
+    sink_builder.return_value(sink_entry, unit)?;
+    plan.define_function(sink_builder.finish())?;
+
+    let mut builder = plan.function_builder(wide)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let input = builder.parameter(0)?;
+    let mut locals = Vec::new();
+    for _ in 0..128 {
+        let local = builder.create_local(buf)?;
+        let _write = builder.write_local(entry, local, input)?;
+        locals.push(local);
+    }
+    let collected =
+        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![input])?;
+    for pair in locals.chunks_exact(2) {
+        let first = builder.read_local(entry, pair[0])?;
+        let second = builder.read_local(entry, pair[1])?;
+        let _call = builder.call(entry, sink, vec![first, second])?;
+    }
+    builder.return_value(entry, collected)?;
+    plan.define_function(builder.finish())?;
+
+    let limits = BackendLimits::new(2, 2, 512, 128, 1024 * 1024, 1024, 1_000_000);
+    assert!(matches!(
+        plan.verify(limits),
+        Err(NativeError::Verification(VerificationError::LimitExceeded(
+            "stack-map root metadata"
+        )))
+    ));
+    Ok(())
+}
+
+#[test]
+fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let missing = |message| std::io::Error::other(message);
+    let reserve = RuntimeCallSlot::ReserveFrameV1
+        .internal_abi_signature()
+        .ok_or_else(|| missing("missing reserve ABI"))?;
+    assert_eq!(
+        reserve.parameters(),
+        &[
+            InternalMachineArgument::InvocationContext,
+            InternalMachineArgument::FunctionOrdinal,
+            InternalMachineArgument::FrameBytes,
+            InternalMachineArgument::FramePointer,
+        ]
+    );
+    assert_eq!(reserve.result(), InternalMachineResult::InvocationContext);
+    assert!(RuntimeCallSlot::ReserveFrameV1.plan_signature().is_none());
+    assert_eq!(
+        RuntimeCallSlot::RegisterFrameV1
+            .internal_abi_signature()
+            .ok_or_else(|| missing("missing register ABI"))?
+            .parameters(),
+        &[
+            InternalMachineArgument::InvocationContext,
+            InternalMachineArgument::FunctionOrdinal,
+            InternalMachineArgument::FramePointer,
+        ]
+    );
+    assert_eq!(
+        RuntimeCallSlot::PublishSafepointV1
+            .internal_abi_signature()
+            .ok_or_else(|| missing("missing publish ABI"))?
+            .parameters(),
+        &[
+            InternalMachineArgument::InvocationContext,
+            InternalMachineArgument::SafepointId,
+        ]
+    );
+    assert_eq!(
+        RuntimeCallSlot::UnregisterFrameV1
+            .internal_abi_signature()
+            .ok_or_else(|| missing("missing unregister ABI"))?
+            .parameters(),
+        RuntimeCallSlot::RegisterFrameV1
+            .internal_abi_signature()
+            .ok_or_else(|| missing("missing register ABI"))?
+            .parameters()
+    );
+
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(32),
+        Signature::new(Vec::new(), ValueType::Unit)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    assert_eq!(
+        builder.runtime_call(entry, RuntimeCallSlot::RegisterFrameV1, Vec::new()),
+        Err(PlanError::EncoderOwnedRuntimeCall)
+    );
     Ok(())
 }

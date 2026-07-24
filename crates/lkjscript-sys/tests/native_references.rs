@@ -6,8 +6,8 @@ use lkjscript_native::{
     RuntimeOutcome, Signature, SourceFunctionId, TrapCode, ValueType,
 };
 use lkjscript_sys::executable::{
-    ExecutableInstaller, InvocationOutcome, NativeInvocationConfig, NativeResourceLimitKind,
-    NativeRoot, NativeRuntimeServices, NativeServiceError,
+    ExecutableInstaller, ExecutableLimits, InvocationOutcome, NativeInvocationConfig,
+    NativeResourceLimitKind, NativeRoot, NativeRuntimeServices, NativeServiceError,
 };
 
 #[derive(Clone, Copy)]
@@ -218,6 +218,8 @@ fn generated_collection_materializes_only_live_exact_roots(
     assert_eq!(report.maximum_roots(), 2);
     assert_eq!(report.peak_active_frame_depth(), 1);
     assert_eq!(report.active_frame_depth(), 0);
+    assert!(report.peak_native_stack_bytes() > 0);
+    assert_eq!(report.reserved_native_stack_bytes(), 0);
     assert_eq!(services.observed.len(), 1);
     assert_eq!(services.observed[0].len(), 2);
     assert!(services.observed[0]
@@ -266,6 +268,23 @@ fn service_failure_and_all_structured_paths_unregister_frames(
     assert_eq!(failed.outcome(), InvocationOutcome::HostFailure);
     assert_eq!(failed.peak_active_frame_depth(), 2);
     assert_eq!(failed.active_frame_depth(), 0);
+
+    services.failure = Some(NativeServiceError::ResourceLimitExceeded);
+    let service_limited = installed.invoke_with_services(
+        entries.caller,
+        &[buf(1)],
+        &NativeInvocationConfig::default(),
+        &mut services,
+    )?;
+    assert_eq!(
+        service_limited.outcome(),
+        InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::RuntimeService)
+    );
+    assert_ne!(
+        service_limited.outcome(),
+        InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::MaterializedRoots)
+    );
+    assert_eq!(service_limited.active_frame_depth(), 0);
 
     let expected = [
         (
@@ -321,5 +340,185 @@ fn active_frame_bound_uses_unregistered_epilogue_and_reference_images_repeat(
         drop(installed);
         assert_eq!(installer.usage().objects(), 0);
     }
+    Ok(())
+}
+
+fn large_frame_image() -> Result<(InstallableImage, FunctionId), Box<dyn std::error::Error>> {
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(40),
+        Signature::new(Vec::new(), ValueType::I64)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let returned = builder.i64_const(entry, 7)?;
+    for value in 1..10_000 {
+        let _unused = builder.i64_const(entry, i64::from(value))?;
+    }
+    builder.return_value(entry, returned)?;
+    plan.define_function(builder.finish())?;
+    let limits = BackendLimits::new(1, 1, 12_000, 0, 1024 * 1024, 1024 * 1024, 200_000);
+    Ok((
+        encode(plan.verify(limits)?, EncodingConfig::default())?,
+        function,
+    ))
+}
+
+fn shallow_wide_root_image() -> Result<(InstallableImage, FunctionId), Box<dyn std::error::Error>> {
+    let buf = ValueType::Reference(ReferenceType::Buf);
+    let mut plan = MachinePlanBuilder::new();
+    let sink = plan.declare_function(
+        SourceFunctionId::new(41),
+        Signature::new(vec![buf, buf], ValueType::Unit)?,
+    )?;
+    let wide = plan.declare_function(SourceFunctionId::new(42), Signature::new(vec![buf], buf)?)?;
+
+    let mut sink_builder = plan.function_builder(sink)?;
+    let sink_entry = sink_builder.create_block()?;
+    sink_builder.set_entry(sink_entry)?;
+    let unit = sink_builder.unit(sink_entry)?;
+    sink_builder.return_value(sink_entry, unit)?;
+    plan.define_function(sink_builder.finish())?;
+
+    let mut builder = plan.function_builder(wide)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let input = builder.parameter(0)?;
+    let mut locals = Vec::new();
+    for _ in 0..1024 {
+        let local = builder.create_local(buf)?;
+        let _write = builder.write_local(entry, local, input)?;
+        locals.push(local);
+    }
+    let collected =
+        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![input])?;
+    for pair in locals.chunks_exact(2) {
+        let first = builder.read_local(entry, pair[0])?;
+        let second = builder.read_local(entry, pair[1])?;
+        let _call = builder.call(entry, sink, vec![first, second])?;
+    }
+    builder.return_value(entry, collected)?;
+    plan.define_function(builder.finish())?;
+    let limits = BackendLimits::new(
+        2,
+        2,
+        4_096,
+        1_024,
+        4 * 1024 * 1024,
+        32 * 1024 * 1024,
+        2_000_000,
+    );
+    Ok((
+        encode(plan.verify(limits)?, EncodingConfig::default())?,
+        wide,
+    ))
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn large_frame_reservation_fails_safely_on_small_thread_stack_and_zero_frame_cap(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let handle =
+        std::thread::Builder::new()
+            .stack_size(64 * 1024)
+            .spawn(|| -> Result<(), String> {
+                let (image, entry) = large_frame_image().map_err(|error| error.to_string())?;
+                let installed = ExecutableInstaller::default()
+                    .install(image)
+                    .map_err(|error| error.to_string())?;
+                let stack_limited = installed
+                    .invoke_with_config(
+                        entry,
+                        &[],
+                        &NativeInvocationConfig::default()
+                            .with_native_stack_limits(usize::MAX, usize::MAX),
+                    )
+                    .map_err(|error| error.to_string())?;
+                assert_eq!(
+                    stack_limited.outcome(),
+                    InvocationOutcome::ResourceLimitExceeded(
+                        NativeResourceLimitKind::NativeStackBytes
+                    )
+                );
+                assert_eq!(stack_limited.peak_native_stack_bytes(), 0);
+                assert_eq!(stack_limited.reserved_native_stack_bytes(), 0);
+
+                for config in [
+                    NativeInvocationConfig::default().with_native_stack_limits(0, usize::MAX),
+                    NativeInvocationConfig::default().with_native_stack_limits(usize::MAX, 0),
+                ] {
+                    let budget_limited = installed
+                        .invoke_with_config(entry, &[], &config)
+                        .map_err(|error| error.to_string())?;
+                    assert_eq!(
+                        budget_limited.outcome(),
+                        InvocationOutcome::ResourceLimitExceeded(
+                            NativeResourceLimitKind::NativeStackBytes
+                        )
+                    );
+                    assert_eq!(budget_limited.reserved_native_stack_bytes(), 0);
+                }
+
+                let frame_limited = installed
+                    .invoke_with_config(
+                        entry,
+                        &[],
+                        &NativeInvocationConfig::default()
+                            .with_max_active_frames(0)
+                            .with_native_stack_limits(usize::MAX, usize::MAX),
+                    )
+                    .map_err(|error| error.to_string())?;
+                assert_eq!(
+                    frame_limited.outcome(),
+                    InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::ActiveFrames)
+                );
+                assert_eq!(frame_limited.peak_active_frame_depth(), 0);
+                assert_eq!(frame_limited.reserved_native_stack_bytes(), 0);
+                Ok(())
+            })?;
+    let result = handle
+        .join()
+        .map_err(|_| std::io::Error::other("small-stack native thread panicked"))?;
+    result.map_err(std::io::Error::other)?;
+    Ok(())
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn shallow_1025_root_map_reserves_dynamically_under_aggregate_cap(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (image, entry) = shallow_wide_root_image()?;
+    assert_eq!(
+        image
+            .safepoints()
+            .iter()
+            .map(|safepoint| safepoint.stack_map().roots().len())
+            .max(),
+        Some(1025)
+    );
+    let unlimited_install = ExecutableLimits::new(
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+        u64::MAX,
+    );
+    let installed = ExecutableInstaller::new(unlimited_install).install(image)?;
+    let mut services = RecordingServices::default();
+    let report = installed.invoke_with_services(
+        entry,
+        &[buf(55)],
+        &NativeInvocationConfig::default(),
+        &mut services,
+    )?;
+    assert_eq!(report.outcome(), InvocationOutcome::Returned(buf(55)));
+    assert_eq!(report.exact_root_counts(), &[1025]);
+    assert_eq!(report.maximum_roots(), 1025);
+    assert_eq!(report.reserved_native_stack_bytes(), 0);
+    assert_eq!(services.observed.len(), 1);
+    assert_eq!(services.observed[0].len(), 1025);
     Ok(())
 }

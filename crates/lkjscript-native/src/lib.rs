@@ -22,9 +22,9 @@ pub use image::{
 };
 pub use plan::{
     BlockId, BoolComparison, F64Comparison, FunctionBuilder, FunctionId, FunctionPlan,
-    I64Comparison, LayoutIdentity, LocalId, MachinePlanBuilder, PlanError, ReferenceType,
-    RuntimeCallSlot, RuntimeOutcome, Signature, SourceFunctionId, SourceOrigin, TrapCode, ValueId,
-    ValueType,
+    I64Comparison, InternalMachineArgument, InternalMachineResult, InternalRuntimeSignature,
+    LayoutIdentity, LocalId, MachinePlanBuilder, PlanError, ReferenceType, RuntimeCallSlot,
+    RuntimeOutcome, Signature, SourceFunctionId, SourceOrigin, TrapCode, ValueId, ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 
