@@ -1,13 +1,9 @@
 [package]
-name = "lkjscript-compiler"
+name = "lkjscript-ir"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-
-[dependencies]
-lkjscript-core = { path = "../lkjscript-core" }
-lkjscript-ir = { path = "../lkjscript-ir" }
 
 [lints]
 workspace = true

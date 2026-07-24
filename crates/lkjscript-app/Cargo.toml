@@ -14,5 +14,8 @@ lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-vm = { path = "../lkjscript-vm" }
 
+[dev-dependencies]
+lkjscript-ir = { path = "../lkjscript-ir" }
+
 [lints]
 workspace = true
