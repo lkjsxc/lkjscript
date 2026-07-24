@@ -36,6 +36,7 @@ RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/regis
     && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/http-smoke.sh \
     && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/bulk-bytes-smoke.sh \
     && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/durable-files-smoke.sh \
+    && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/sha256-smoke.sh \
     && printf 'result=ok\n' > /tmp/lkjscript-verification-result
 
 FROM debian:bookworm-slim AS runtime

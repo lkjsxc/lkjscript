@@ -562,6 +562,40 @@ mod tests {
     }
 
     #[test]
+    fn sha256_opcode_returns_language_results_for_valid_and_invalid_ranges() {
+        let mut valid = Chunk::new();
+        let zero = valid.add_const(Constant::I64(0));
+        valid.main.emit_op_u16(Op::LoadConst, zero.0);
+        valid.main.emit(Op::BufNew);
+        valid.main.emit_op_u16(Op::LoadConst, zero.0);
+        valid.main.emit_op_u16(Op::LoadConst, zero.0);
+        valid.main.emit(Op::SysSha256);
+        valid.main.emit(Op::IsOk);
+        valid.main.emit(Op::Return);
+        let valid = validate(valid);
+        assert!(matches!(
+            Vm::new(&valid, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+            ExecutionOutcome::Returned(value) if value.as_bool() == Some(true)
+        ));
+
+        let mut invalid = Chunk::new();
+        let zero = invalid.add_const(Constant::I64(0));
+        let one = invalid.add_const(Constant::I64(1));
+        invalid.main.emit_op_u16(Op::LoadConst, zero.0);
+        invalid.main.emit(Op::BufNew);
+        invalid.main.emit_op_u16(Op::LoadConst, zero.0);
+        invalid.main.emit_op_u16(Op::LoadConst, one.0);
+        invalid.main.emit(Op::SysSha256);
+        invalid.main.emit(Op::IsOk);
+        invalid.main.emit(Op::Return);
+        let invalid = validate(invalid);
+        assert!(matches!(
+            Vm::new(&invalid, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+            ExecutionOutcome::Returned(value) if value.as_bool() == Some(false)
+        ));
+    }
+
+    #[test]
     fn configured_handle_and_wall_limits_are_structured() {
         let socket = validated(&[Op::SysSocket, Op::Return]);
         let mut handles = ExecutionConfig::default();

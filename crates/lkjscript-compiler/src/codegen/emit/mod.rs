@@ -368,6 +368,7 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::SysTruncate => Op::SysTruncate,
         Operation::SysRename => Op::SysRename,
         Operation::SysRandomFill => Op::SysRandomFill,
+        Operation::SysSha256 => Op::SysSha256,
         Operation::SysPathExists => Op::SysPathExists,
         Operation::SysWaitMs => Op::SysWaitMs,
         Operation::SysNowMs => Op::SysNowMs,
@@ -423,5 +424,6 @@ mod tests {
             operation_opcode(Operation::SysRandomFill),
             Some(Op::SysRandomFill)
         );
+        assert_eq!(operation_opcode(Operation::SysSha256), Some(Op::SysSha256));
     }
 }

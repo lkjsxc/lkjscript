@@ -226,6 +226,16 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             push_language_result(vm, result);
             Ok(true)
         }
+        x if x == Op::SysSha256 as u8 => {
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let result = crate::host_buf::sys_sha256(&mut vm.arena, buffer, offset, requested);
+            push_language_result(vm, result);
+            Ok(true)
+        }
         x if x == Op::SysWriteFrom as u8 => {
             vm.ensure_host_deadline_support("sys-write-from", false)?;
             let requested = vm.pop()?;

@@ -107,6 +107,7 @@ pub enum Op {
     SysTruncate = 162,
     SysRename = 163,
     SysRandomFill = 164,
+    SysSha256 = 165,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -282,6 +283,7 @@ impl Op {
         Self::SysTruncate,
         Self::SysRename,
         Self::SysRandomFill,
+        Self::SysSha256,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -380,6 +382,11 @@ impl Op {
                 pushes: 1,
             },
             Self::SysRandomFill => Fixed {
+                required: 3,
+                pops: 3,
+                pushes: 1,
+            },
+            Self::SysSha256 => Fixed {
                 required: 3,
                 pops: 3,
                 pushes: 1,

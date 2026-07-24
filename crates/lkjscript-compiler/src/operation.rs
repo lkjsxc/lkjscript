@@ -72,6 +72,7 @@ pub enum Operation {
     SysTruncate,
     SysRename,
     SysRandomFill,
+    SysSha256,
     SysPathExists,
     SysWaitMs,
     SysNowMs,
@@ -162,6 +163,7 @@ impl Operation {
         Self::SysTruncate,
         Self::SysRename,
         Self::SysRandomFill,
+        Self::SysSha256,
         Self::SysPathExists,
         Self::SysWaitMs,
         Self::SysNowMs,
@@ -258,6 +260,7 @@ impl Operation {
             Self::SysTruncate => "sys-truncate",
             Self::SysRename => "sys-rename",
             Self::SysRandomFill => "sys-random-fill",
+            Self::SysSha256 => "sys-sha256",
             Self::SysPathExists => "sys-path-exists",
             Self::SysWaitMs => "sys-wait-ms",
             Self::SysNowMs => "sys-now-ms",
@@ -405,6 +408,10 @@ impl Operation {
             Self::SysRandomFill => function(
                 vec![Type::Buf, Type::I64, Type::I64],
                 system_result(Type::Unit),
+            ),
+            Self::SysSha256 => function(
+                vec![Type::Buf, Type::I64, Type::I64],
+                system_result(Type::Buf),
             ),
             Self::SysPathExists => function(vec![Type::Str], system_result(Type::Bool)),
             Self::SysWaitMs => function(vec![Type::I64], system_result(Type::Unit)),
@@ -626,6 +633,9 @@ impl Operation {
                 .union(EffectSet::MAY_TRAP),
             Self::SysWriteFrom => EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::SysSha256 => EffectSet::ALLOCATES
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::MAY_TRAP),
             Self::Print
@@ -962,6 +972,31 @@ mod tests {
             Operation::SysFsync.effects(),
             EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
+                .union(EffectSet::MAY_TRAP)
+        );
+    }
+
+    #[test]
+    fn sha256_has_an_exact_signature_and_memory_effects() {
+        let result_buf = Type::Result(Box::new(Type::Buf), Box::new(Type::Str));
+        assert_eq!(
+            Operation::from_name("sys-sha256"),
+            Some(Operation::SysSha256)
+        );
+        assert_eq!(
+            Operation::SysSha256.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
+            Ok((
+                function(vec![Type::Buf, Type::I64, Type::I64], result_buf.clone()),
+                result_buf,
+            ))
+        );
+        assert!(Operation::SysSha256
+            .resolve_types(&[Type::Buf, Type::I64])
+            .is_err());
+        assert_eq!(
+            Operation::SysSha256.effects(),
+            EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::MAY_TRAP)
         );
     }

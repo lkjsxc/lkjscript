@@ -56,6 +56,7 @@ fn check_docs(root: &Path) -> i32 {
         "docs/decisions/runtime-jit-instead-of-offline-pgo.md",
         "docs/decisions/numeric-semantics.md",
         "docs/decisions/semantic-core.md",
+        "docs/decisions/sha256.md",
         "docs/vision/performance-scorecard.md",
     ];
     let mut failures = 0;
@@ -232,6 +233,7 @@ fn check_sources(root: &Path) -> i32 {
         "src/examples/brainfuck/main.lkjscript",
         "src/examples/bulk-bytes/main.lkjscript",
         "src/examples/durable-files/main.lkjscript",
+        "src/examples/sha256/main.lkjscript",
         "src/examples/hello/main.lkjscript",
         "src/examples/http/hello.lkjscript",
         "src/examples/mandel/main.lkjscript",

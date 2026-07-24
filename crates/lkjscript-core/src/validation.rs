@@ -1065,7 +1065,7 @@ fn apply_instruction(
             expect_pop(state, Kind::Handle, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
-        Op::SysRandomFill => {
+        Op::SysRandomFill | Op::SysSha256 => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Buf, proto, instruction)?;
@@ -1492,6 +1492,16 @@ mod tests {
             Op::Return as u8,
         ];
         assert!(error(random).contains("I64"));
+
+        let mut sha256 = unit_chunk();
+        sha256.main.code = vec![
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::SysSha256 as u8,
+            Op::Return as u8,
+        ];
+        assert!(error(sha256).contains("I64"));
 
         let mut fsync = unit_chunk();
         fsync.main.code = vec![Op::Unit as u8, Op::SysFsync as u8, Op::Return as u8];

@@ -15,7 +15,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 96 language files under `src`; 11 executable roots cover the exact corpus closure
+- Corpus: 97 language files under `src`; 12 executable roots cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
@@ -82,6 +82,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - Durable files and entropy: append/create-new/directory handles, sync,
   truncate, same-filesystem rename, and Linux `getrandom` buffer fill are
   Current; application framing/recovery policy remains in language code
+- SHA-256: fixed bounded-buffer digest is Current for verifier/integrity
+  consumers; HMAC, password KDF, encryption, and WebAuthn remain absent
 - Canonical resource names: `stdin-handle`, `sys-close`, `sys-read-byte`,
   `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
