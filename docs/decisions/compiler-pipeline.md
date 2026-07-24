@@ -8,10 +8,10 @@ reinterpret the language.
 
 ## Status
 
-**Current** for parsed AST -> resolved typed HIR -> reference bytecode. Typed
-SSA, native code objects, baseline JIT, proof-based optimizing JIT, minimal AOT
-test emission, and direct Wasm are **Accepted Targets**. Native compilation is
-not implemented. The future Linux x86-64 backend is the owned encoder selected
+**Current** for parsed AST -> resolved typed HIR with fixed-point function
+effects -> reference bytecode. Typed SSA, native code objects, baseline JIT,
+proof-based optimizing JIT, minimal AOT test emission, and direct Wasm are
+**Accepted Targets**. Native compilation is not implemented. The future Linux x86-64 backend is the owned encoder selected
 by [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
 **Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
@@ -36,17 +36,19 @@ canonical source
 
 Typed HIR currently owns resolved binding IDs, declaration kinds, nominal
 product IDs and field indexes, exact static type facts, source origins,
-canonical operation identities and per-call signatures, and conservative
-effects. Code generation consumes HIR rather than
-re-parsing definitions, parameters, operators, and names independently.
+canonical operation identities and per-call signatures, per-expression
+effects, and compact per-function effect summaries. Code generation consumes
+HIR rather than re-parsing definitions, parameters, operators, and names
+independently.
 
 `Unit`, typed empty lists, Option, immutable nominal products, and the explicit
 value/object/list/F64-bit equality families have distinct exact HIR/runtime
 semantics, and every `if` has
 exactly three operands with matching branch types. Nil, universal equality, and
-the legacy runtime-union escape hatch are absent. User calls conservatively
-carry every effect until fixed-point function summaries replace the safe
-over-approximation.
+the legacy runtime-union escape hatch are absent. Direct calls through resolved
+function storage use the canonical callee's inferred summary; calls through
+parameters or locals, and any missing provenance, conservatively carry every
+effect. Call arguments always retain their independently inferred effects.
 
 Typed SSA uses explicit basic-block parameters, exact scalar/product types,
 trap edges, calls, and effects. It is the sole optimization authority for
@@ -66,6 +68,9 @@ optimization ownership.
 - Binding kind distinguishes immutable local, local var, parameter, function,
   const, static, capability, and future explicit reference cells.
 - Calls resolve to canonical operations or declarations before codegen.
+- Function summaries are the least monotone finite-bitset fixed point in stable
+  BindingId order; call cycles add divergence without unrelated effects.
+- Every expression effect is recomputed from final summaries, including main.
 - Types and arity attach to HIR nodes and are not recomputed by backends.
 - Imported source origin remains available for machine-readable diagnostics.
 

@@ -29,9 +29,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - Compiler boundary: one analysis pass collects immutable headers and produces
   owned, resolved typed HIR with explicit Main and Functions, BindingIds,
   local-slot references, MutableLocal/SetLocal, ProductIds, numeric field
-  identities, source origins, exact operation/type facts, and conservative
-  effects; bytecode consumes HIR without re-resolving source names or
-  declarations
+  identities, source origins, exact operation/type facts, and deterministic
+  fixed-point function effect summaries; bytecode consumes HIR without
+  re-resolving source names or declarations
 - Host implementation: six Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
@@ -95,18 +95,16 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. user-call effects are a safe all-effects over-approximation rather than
-   fixed-point summaries;
-2. strings and IO lack a lossless bulk byte contract, and some library file
+1. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-3. source/import aggregate bytes and counts are not comprehensively bounded;
+2. source/import aggregate bytes and counts are not comprehensively bounded;
    bytecode tables/data/code/metadata and VM execution resources are bounded;
-4. cooperative deadlines can overrun inside filesystem, console-write,
+3. cooperative deadlines can overrun inside filesystem, console-write,
    send/write, terminal-cleanup, or other non-cancellable wrappers;
    hard-deadline mode reports those operations as unsupported `HostFailure`
    before effects; live-heap accounting is estimated at VM instruction
    boundaries, and `print` builds its host-format string before the output check;
-5. stdin/stdout and the terminal guard remain process-global, so concurrent VM
+4. stdin/stdout and the terminal guard remain process-global, so concurrent VM
    supervision is unsupported; handle metadata is VM-local and bounded but
    monotonically allocated until that VM ends.
 
@@ -136,9 +134,23 @@ Mandelbrot, and performance are not implied.
 | native-backend decision spike | 8 randomized warmups plus 31 retained pairs; exact generated calls passed; owned execution median/MAD 48.406374/0.540016 ms versus Cranelift 0.134.2 119.422902/0.566505 ms; temporary artifacts removed; no production backend implemented |
 | Phase A `check-docs` and `git diff --check` | passed |
 
+Phase B fixed-point effect inference in this documentation's containing commit,
+based on `061f7c51c74412fcb19cd43df8385ac692a26367`, was checked on Linux x86-64
+with Rust/Cargo 1.96.0. Only effect inference and its HIR facts changed; typed
+SSA, native code, runtime JIT, runtime smokes, Docker, and performance were not
+tested or implemented.
+
+| Phase B command or check | Result |
+| --- | --- |
+| `cargo test --locked -q -p lkjscript-compiler` | passed; 44 compiler tests |
+| `cargo check --workspace --all-targets --locked` | passed |
+| `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | passed |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 101 workspace tests |
+| fixed-point effect conformance | passed; pure leaf, direct/transitive propagation, direct and mutual recursion, recursive effects, allocation, memory read/write, local mutation, host IO, process exit, trap, declaration-order independence, generic canonical direct calls, retained argument effects, and conservative indirect calls |
+
 Earlier decision-grade and diagnostic performance records remain in
-[Experiment Registry](vision/experiments.md); they were not rerun for Phase A.
-A gate that did not run did not pass.
+[Experiment Registry](vision/experiments.md); they were not rerun for Phase A
+or Phase B. A gate that did not run did not pass.
 
 ## Accepted Next Target
 
@@ -148,18 +160,17 @@ an observation hook alone cannot complete it. The dependency sequence is:
 
 Explicit typed main, declaration-only imports, local-only mutation, removal of
 source runtime globals, product-threaded workload state, whole-chunk validation,
-structured outcomes, and bounded VM execution are Current. The remaining
-dependency sequence is:
+structured outcomes, bounded VM execution, and deterministic fixed-point
+function effects are Current. The remaining dependency sequence is:
 
-1. infer deterministic fixed-point function effects;
-2. lower HIR through verified typed SSA, an independent differential evaluator,
+1. lower HIR through verified typed SSA, an independent differential evaluator,
    and isolated non-speculative normalization; cut reference bytecode over to
    SSA before the native backend becomes authoritative;
-3. implement the selected owned Linux x86-64 emitter with versioned SysV
+2. implement the selected owned Linux x86-64 emitter with versioned SysV
    AMD64/runtime ABIs, bounded code objects, W^X memory in `lkjscript-sys`,
    exact stack-map gates, VM/native and native/native calls, and forced native
    execution;
-4. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
+3. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
    code has been called. Forced mode never falls back; auto uses synchronous
    function-entry tiering and may remain in the VM for unsupported code.
 

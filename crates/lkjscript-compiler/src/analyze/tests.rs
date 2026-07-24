@@ -42,6 +42,38 @@ mod tests {
         format!("main/\nsig/\n->\n{return_type}\n/sig\n{body}\n/main\n")
     }
 
+    fn function_source(
+        name: &str,
+        forall: &[&str],
+        signature: &str,
+        params: &str,
+        body: &str,
+    ) -> String {
+        let forall = if forall.is_empty() {
+            String::new()
+        } else {
+            format!("forall/\n{}\n/forall\n", forall.join("\n"))
+        };
+        format!(
+            "def/\nname/\n{name}\n/name\nfn/\n{forall}sig/\n{signature}\n/sig\nparams/\n{params}\n/params\n{body}\n/fn\n/def\n"
+        )
+    }
+
+    fn summary(program: &crate::hir::Program, name: &str) -> EffectSet {
+        let binding = program
+            .bindings
+            .iter()
+            .find(|binding| binding.name == name)
+            .expect("named function binding")
+            .id;
+        program
+            .functions
+            .iter()
+            .find(|function| function.binding == binding)
+            .expect("named HIR function")
+            .summary
+    }
+
     const POINT_PRODUCT: &str = "product/\nname/\nPoint\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\ny\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\n";
 
     #[test]
@@ -243,6 +275,218 @@ mod tests {
                 .map(|source| &source.path),
             Some(&PathBuf::from("imports/dependency.lkjscript"))
         );
+    }
+
+    #[test]
+    fn pure_leaf_and_direct_transitive_calls_remain_exact() {
+        let pure_leaf = function_source("pure-leaf", &[], "->\nI64", "", "7");
+        let pure_middle = function_source(
+            "pure-middle",
+            &[],
+            "->\nI64",
+            "",
+            "pure-leaf/\n/pure-leaf",
+        );
+        let source = format!(
+            "{pure_leaf}{pure_middle}{}",
+            main_source("I64", "pure-middle/\n/pure-middle")
+        );
+        let program = analyze_one(&source).expect("analyze pure direct calls");
+        assert_eq!(summary(&program, "pure-leaf"), EffectSet::PURE);
+        assert_eq!(summary(&program, "pure-middle"), EffectSet::PURE);
+        assert_eq!(program.main.body.effects, EffectSet::PURE);
+
+        let trap_leaf = function_source("trap-leaf", &[], "->\nI64", "", "div/\n8\n2\n/div");
+        let middle = function_source(
+            "middle",
+            &[],
+            "->\nI64",
+            "",
+            "trap-leaf/\n/trap-leaf",
+        );
+        let outer = function_source("outer", &[], "->\nI64", "", "middle/\n/middle");
+        let source = format!(
+            "{trap_leaf}{middle}{outer}{}",
+            main_source("I64", "outer/\n/outer")
+        );
+        let program = analyze_one(&source).expect("analyze transitive direct effects");
+        assert_eq!(summary(&program, "trap-leaf"), EffectSet::MAY_TRAP);
+        assert_eq!(summary(&program, "middle"), EffectSet::MAY_TRAP);
+        assert_eq!(summary(&program, "outer"), EffectSet::MAY_TRAP);
+        assert_eq!(program.main.body.effects, EffectSet::MAY_TRAP);
+    }
+
+    #[test]
+    fn pure_direct_recursion_adds_only_divergence() {
+        let recurse = function_source(
+            "recurse",
+            &[],
+            "->\nUnit",
+            "",
+            "recurse/\n/recurse",
+        );
+        let source = format!(
+            "{recurse}{}",
+            main_source("Unit", "recurse/\n/recurse")
+        );
+        let program = analyze_one(&source).expect("analyze pure recursion");
+        assert_eq!(summary(&program, "recurse"), EffectSet::MAY_DIVERGE);
+        assert_eq!(program.functions[0].body.effects, EffectSet::MAY_DIVERGE);
+        assert_eq!(program.main.body.effects, EffectSet::MAY_DIVERGE);
+    }
+
+    #[test]
+    fn effectful_recursion_retains_only_its_real_effects_and_divergence() {
+        let recurse = function_source(
+            "recurse",
+            &[],
+            "->\nUnit",
+            "",
+            "do/\ndiv/\n8\n2\n/div\nrecurse/\n/recurse\n/do",
+        );
+        let source = format!("{recurse}{}", main_source("Unit", "unit"));
+        let program = analyze_one(&source).expect("analyze effectful recursion");
+        assert_eq!(
+            summary(&program, "recurse"),
+            EffectSet::MAY_TRAP.union(EffectSet::MAY_DIVERGE)
+        );
+    }
+
+    #[test]
+    fn mutual_recursion_and_declaration_order_have_identical_summaries() {
+        let a = function_source("a", &[], "->\nUnit", "", "b/\n/b");
+        let b = function_source("b", &[], "->\nUnit", "", "a/\n/a");
+        let caller = function_source("caller", &[], "->\nUnit", "", "a/\n/a");
+        let main = main_source("Unit", "caller/\n/caller");
+        let first = analyze_one(&format!("{a}{b}{caller}{main}"))
+            .expect("analyze mutual recursion in first declaration order");
+        let second = analyze_one(&format!("{b}{caller}{a}{main}"))
+            .expect("analyze mutual recursion in second declaration order");
+        for name in ["a", "b", "caller"] {
+            assert_eq!(summary(&first, name), EffectSet::MAY_DIVERGE);
+            assert_eq!(summary(&first, name), summary(&second, name));
+        }
+        assert_eq!(first.main.body.effects, EffectSet::MAY_DIVERGE);
+        assert_eq!(first.main.body.effects, second.main.body.effects);
+    }
+
+    #[test]
+    fn direct_effect_categories_are_inferred_without_unrelated_bits() {
+        let allocation = function_source(
+            "allocation",
+            &[],
+            "->\nList\nI64",
+            "",
+            "cons/\n1\nempty-list/\nI64\n/empty-list\n/cons",
+        );
+        let trap = function_source("trap", &[], "->\nI64", "", "div/\n8\n2\n/div");
+        let host = function_source(
+            "host",
+            &[],
+            "->\nUnit",
+            "",
+            "print/\nstr/\nhello\n/str\n/print",
+        );
+        let outcome = function_source("outcome", &[], "->\nUnit", "", "exit/\n0\n/exit");
+        let mutation = function_source(
+            "mutation",
+            &[],
+            "->\nUnit",
+            "",
+            "var/\nname/\nx\n/name\ntype/\nI64\n/type\n0\nset/\nx\n1\n/set\n/var",
+        );
+        let read = function_source(
+            "memory-read",
+            &[],
+            "Buf\n->\nI64",
+            "value\nBuf",
+            "buf-len/\nvalue\n/buf-len",
+        );
+        let write = function_source(
+            "memory-write",
+            &[],
+            "Buf\n->\nUnit",
+            "value\nBuf",
+            "buf-set/\nvalue\n0\n1\n/buf-set",
+        );
+        let source = format!(
+            "{allocation}{trap}{host}{outcome}{mutation}{read}{write}{}",
+            main_source("Unit", "unit")
+        );
+        let program = analyze_one(&source).expect("analyze direct effect categories");
+        assert_eq!(
+            summary(&program, "allocation"),
+            EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP)
+        );
+        assert_eq!(summary(&program, "trap"), EffectSet::MAY_TRAP);
+        assert_eq!(
+            summary(&program, "host"),
+            EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::MAY_TRAP)
+        );
+        assert_eq!(
+            summary(&program, "outcome"),
+            EffectSet::HOST_IO
+                .union(EffectSet::MAY_EXIT)
+                .union(EffectSet::MAY_TRAP)
+        );
+        assert_eq!(summary(&program, "mutation"), EffectSet::MUTATES_LOCAL);
+        assert_eq!(summary(&program, "memory-read"), EffectSet::READS_MEMORY);
+        assert_eq!(
+            summary(&program, "memory-write"),
+            EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
+        );
+    }
+
+    #[test]
+    fn generic_direct_call_uses_canonical_binding_and_keeps_argument_effects() {
+        let identity = function_source("identity", &["T"], "T\n->\nT", "value\nT", "value");
+        let source = format!(
+            "{identity}{}",
+            main_source("I64", "identity/\ndiv/\n8\n2\n/div\n/identity")
+        );
+        let program = analyze_one(&source).expect("analyze generic direct call");
+        let identity = &program.functions[0];
+        assert_eq!(identity.summary, EffectSet::PURE);
+        let ExprKind::Call { callee, args } = &program.main.body.kind else {
+            panic!("expected generic direct call");
+        };
+        assert_eq!(callee.binding, identity.binding);
+        assert_eq!(callee.storage, BindingStorage::Function);
+        assert_eq!(args[0].effects, EffectSet::MAY_TRAP);
+        assert_eq!(program.main.body.effects, EffectSet::MAY_TRAP);
+    }
+
+    #[test]
+    fn indirect_local_call_is_conservative_and_loses_no_effect_bit() {
+        let leaf = function_source("leaf", &[], "->\nI64", "", "7");
+        let indirect = function_source(
+            "indirect",
+            &[],
+            "->\nI64",
+            "",
+            "let/\nbind/\nf\nleaf\n/bind\nf/\n/f\n/let",
+        );
+        let source = format!("{leaf}{indirect}{}", main_source("Unit", "unit"));
+        let program = analyze_one(&source).expect("analyze indirect local call");
+        assert_eq!(summary(&program, "leaf"), EffectSet::PURE);
+        assert_eq!(
+            summary(&program, "indirect"),
+            EffectSet::CONSERVATIVE_CALL
+        );
+        for required in [
+            EffectSet::ALLOCATES,
+            EffectSet::READS_MEMORY,
+            EffectSet::WRITES_MEMORY,
+            EffectSet::MUTATES_LOCAL,
+            EffectSet::HOST_IO,
+            EffectSet::MAY_TRAP,
+            EffectSet::MAY_EXIT,
+            EffectSet::MAY_DIVERGE,
+        ] {
+            assert!(EffectSet::CONSERVATIVE_CALL.contains(required));
+        }
     }
 
     #[test]

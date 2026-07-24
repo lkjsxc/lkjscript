@@ -9,9 +9,10 @@ ambiguity or unchecked hints.
 ## Status
 
 **Accepted Target** overall. Dedicated Unit, exact three-arm `if`, typed empty
-lists, explicit Option/no-nil semantics, explicit equality families, and
-immutable nominal products are **Current**. Local-only mutation, product-state
-migration, and explicit main remain pending. [current-state.md](../current-state.md)
+lists, explicit Option/no-nil semantics, explicit equality families, immutable
+nominal products, local-only mutation, product-state migration, explicit main,
+and fixed-point function effects are **Current**. Typed SSA, native execution,
+and runtime JIT remain accepted targets. [current-state.md](../current-state.md)
 records the exact boundary.
 
 ## Canonicality
@@ -107,11 +108,11 @@ Global mutable values are forbidden. Immutable values may be captured by a
 closure. Mutable capture is forbidden; a future explicit `Cell T` or another
 reference type is required when observable shared mutation is intentional.
 
-The current singleton lkjedit globals must migrate to an immutable product
-value passed through helpers and held by one local `var` in executable main.
-The [immutable nominal product contract](immutable-nominal-products.md) is
-Current and provides the required state shape; positional or hidden mutable-cell
-substitutes remain rejected.
+The former singleton lkjedit globals are migrated to an immutable product value
+passed through helpers and held by a local `var` in executable main. The
+[immutable nominal product contract](immutable-nominal-products.md) is Current
+and provides the state shape; positional or hidden mutable-cell substitutes
+remain rejected.
 
 ## Declarations And Initialization
 
@@ -169,12 +170,17 @@ explicit persistent structure.
 
 Typed IR records allocation, memory reads/writes, local mutation, host IO,
 possible trap, explicit exit/outcome change, and possible divergence. Effect
-declarations are inferred and checked, not trusted. Direct user calls receive
-the least monotone fixed-point summary of their resolved callees, including
-recursive strongly connected components; unresolved call provenance remains
-conservatively all-effects. Summary identity and iteration order are stable and
-deterministic. This enables compile-time evaluation, code motion, ownership
-analysis, and safe host boundaries.
+summaries are **Current** and compiler-inferred, not source-declared or trusted.
+Direct user calls receive the least monotone fixed-point summary of their
+resolved canonical callee; recursive strongly connected components add
+possible divergence without inventing unrelated effects. Calls through locals
+or parameters and unresolved provenance remain conservatively all-effects,
+including local mutation, while argument effects are retained. Summary
+identity and iteration order use stable compiler BindingIds rather than hash
+iteration, and every stored expression effect is recomputed from final
+summaries. These facts are available to later compile-time evaluation, code
+motion, ownership analysis, and host-boundary work; those optimizations are not
+made Current by this effect slice.
 
 The complete active-cycle contract is
 [Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).

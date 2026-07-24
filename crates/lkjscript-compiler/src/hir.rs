@@ -117,6 +117,7 @@ pub struct Function {
     pub params: Vec<BindingId>,
     pub arity: u8,
     pub local_count: u8,
+    pub summary: EffectSet,
     pub body: Expr,
 }
 
@@ -136,6 +137,7 @@ impl EffectSet {
     pub const CONSERVATIVE_CALL: Self = Self::ALLOCATES
         .union(Self::READS_MEMORY)
         .union(Self::WRITES_MEMORY)
+        .union(Self::MUTATES_LOCAL)
         .union(Self::HOST_IO)
         .union(Self::MAY_TRAP)
         .union(Self::MAY_EXIT)
@@ -143,6 +145,10 @@ impl EffectSet {
 
     pub const fn union(self, other: Self) -> Self {
         Self(self.0 | other.0)
+    }
+
+    pub const fn contains(self, effects: Self) -> bool {
+        self.0 & effects.0 == effects.0
     }
 }
 

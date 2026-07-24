@@ -3,6 +3,7 @@
 mod analyze;
 mod ast;
 mod codegen;
+mod effects;
 mod hir;
 mod import;
 mod lex;

@@ -31,14 +31,16 @@ pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
     let main = analyzer.resolve_main(pending_main)?;
     let global_layout = analyzer.build_global_layout(&functions)?;
 
-    Ok(hir::Program {
+    let mut program = hir::Program {
         sources: analyzer.sources,
         bindings: analyzer.bindings,
         products: analyzer.products,
         functions,
         main,
         global_layout,
-    })
+    };
+    crate::effects::infer(&mut program);
+    Ok(program)
 }
 
 struct Analyzer {
@@ -508,6 +510,7 @@ impl Analyzer {
             params,
             arity,
             local_count,
+            summary: EffectSet::PURE,
             body,
         })
     }

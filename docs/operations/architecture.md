@@ -40,7 +40,7 @@ The actual dependency edges are:
 | Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` |
 | Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
 | Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
-| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `hir.rs`, `operation.rs` | `analyze_program`, explicit Main/Function, BindingId, local slots, typed operations/effects |
+| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `effects.rs`, `hir.rs`, `operation.rs` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects |
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical Type parsing and substitution |
 | HIR bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program` |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
@@ -65,6 +65,7 @@ CLI path
   -> enforce one root main and declaration-only imports
   -> collect immutable function and product headers
   -> resolve exact types, binding IDs, and local slots into owned HIR
+  -> infer stable fixed-point function effects and recompute expression effects
   -> install internal function closures, then lower explicit main and functions
   -> mutable Chunk builder
   -> validate_chunk -> opaque immutable ValidatedChunk
@@ -82,7 +83,9 @@ Parsed AST -> resolved typed HIR -> reference bytecode is **Current**. HIR owns
 an explicit Main and Functions, resolved binding IDs and local slot references,
 immutable declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs
 and field indexes, exact static type facts, source origins, canonical operation
-identities and per-call signatures, and conservative effects. Codegen no longer
+identities and per-call signatures, compact fixed-point function summaries, and
+final per-expression effects. Direct resolved function calls use canonical
+callee summaries; indirect provenance remains all-effects. Codegen no longer
 re-parses declarations or resolves names. Source SetGlobal and runtime value-
 definition paths are absent.
 
@@ -162,12 +165,13 @@ an external project receives the same contract.
 
 ## Accepted Redesign Direction
 
-Explicit main, effect-free imported libraries, local-only mutation, and
+Explicit main, effect-free imported libraries, local-only mutation,
 product-threaded editor, terminal, and Brainfuck state, whole-chunk validation,
-structured process-safe outcomes, and bounded VM execution are now Current.
-Next, infer fixed-point function effects. Typed SSA, its verifier/differential oracle, and the
-selected owned Linux x86-64 native code-object backend then follow. The first
-adaptive execution target remains synchronous callable baseline JIT; loop OSR
+structured process-safe outcomes, bounded VM execution, and deterministic
+fixed-point function effects are now Current. Typed SSA, its verifier and
+differential oracle, and the selected owned Linux x86-64 native code-object
+backend follow. The first adaptive execution target remains synchronous
+callable baseline JIT; loop OSR
 and proof-based optimizing JIT are later. Minimal file emission remains only
 for backend tests, and offline PGO is rejected. The exact active boundary is
 [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
