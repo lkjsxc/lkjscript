@@ -9,9 +9,11 @@ seam under the runtime-JIT-first plan.
 
 Dense Rust bytecode lowered from verified normalized typed SSA, tagged values,
 precise mark-sweep, whole-chunk validation, structured process-safe outcomes,
-and configured VM resource limits are **Current**. The call-observation JIT hook is explicitly **Placeholder**.
-Bounded hotness, callable code objects, tiering, and OSR are **Accepted
-Targets** and are not implemented.
+configured VM resource limits, bounded function-entry hotness, and callable
+allocation-free scalar Linux x86-64 baseline code objects are **Current**. The
+old observation hook is removed. Loop hotness/OSR, native references and
+allocation, and optimizing tiers remain **Accepted Targets** and are not
+implemented.
 
 ## Decision
 
@@ -25,10 +27,10 @@ with the later runtime JIT, minimal AOT test emitter, and Wasm. The obsolete
 sibling HIR semantic emitter is deleted. A native backend must not reinterpret
 bytecode semantics independently of typed SSA.
 
-The placeholder `JitHook::observe_call` is not an execution boundary. It returns
-no status, sees no loop backedge or VM state, and cannot install or call code.
-It must not return or imply compilation success until verified callable code
-objects and execution transfer replace it.
+The former `JitHook::observe_call` placeholder is removed. VM call dispatch now
+uses a real `RuntimeTier`: auto entry counts can synchronously compile a verified
+scalar function group, and later calls can transfer exact scalar values to an
+installed entry. VM-only dispatch remains a no-tier implementation.
 
 ## Current Validated Execution Boundary
 
@@ -81,9 +83,9 @@ identity boundaries before access. Construction and immutable replacement
 allocate traced product objects; access returns an existing field. Product
 metadata never installs a global value or executes initialization code.
 
-## Tier 0 Target
+## Tier 0 Current Boundary
 
-Normal execution begins in the VM so short commands can finish without JIT
+Normal auto execution begins in the VM so short commands can finish without JIT
 cost. Tier 0 eventually records only bounded saturating function-entry and
 loop-backedge events, with optional selected block counts after baseline JIT
 works. It does not profile every ordinary instruction. Counters are process-
@@ -103,13 +105,14 @@ loop-header OSR. Compiling only for a later call is not OSR.
 - Runtime semantics and process outcomes must be normalized before native calls.
 - Public chunks need validation before arbitrary construction is supported.
 - Tagged `Value` remains a reference-VM representation, not the typed native ABI.
-- Native frames require exact stack maps before allocation-capable code executes.
+- Current scalar native frames have exact empty reference stack maps; nonempty
+  maps remain required before allocation-capable code executes.
 - VM/native transitions preserve traps, roots, handles, metering, deadlines,
   output, and arguments.
 - Runtime JIT measurements include trigger, compilation, warmup, fallback, and
   whole-program cost rather than only steady state.
-- The observation hook remains in code only as explicitly labeled incomplete
-  behavior until a complete replacement lands.
+- The observation hook and its null public type are removed; explicit runtime
+  tier state owns compilation and transfer.
 
 The accepted tiering, code-object, W^X, cache, OSR, and adoption contract is
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).

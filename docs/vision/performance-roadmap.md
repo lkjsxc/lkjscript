@@ -8,11 +8,10 @@ without turning aspiration into a current release claim.
 ## Status
 
 The reference bytecode VM, exact I64/F64 execution, precise mark-sweep, resolved
-typed HIR, and tail-frame reuse are **Current**. The observation-only JIT hook
-is **Placeholder**. Remaining semantic prerequisites, typed SSA, native code
-objects, the selected owned Linux x86-64 backend, baseline JIT, OSR,
-proof-based optimizing JIT, and direct Wasm are **Accepted Targets**. Backend
-selection is complete, but no native backend is implemented. Guarded
+typed HIR, verified normalized SSA, selected owned Linux x86-64 backend, bounded
+code objects, and callable allocation-free scalar baseline JIT are **Current**.
+The old observation hook is removed. Native references/allocation, loop OSR,
+proof-based optimizing JIT, and direct Wasm are **Accepted Targets**. Guarded
 specialization is **Deferred** until justified. Offline PGO is **Rejected by
 Product Decision**.
 
@@ -46,8 +45,10 @@ engine-selection, and rejection contract is
 The VM uses dense bytecode, contiguous stacks, tagged small I64 values, boxed
 wide I64/F64 values, precise non-moving mark-sweep collection, and
 return-adjacent frame reuse. Source is compiled on every CLI invocation. Host
-effects block synchronously. There is no native compiler, callable code object,
-engine selector, OSR, deoptimization, or JIT performance result.
+effects block synchronously. Linux x86-64 now has a callable scalar baseline
+compiler, bounded code objects, and explicit engines. There is no native
+reference/allocation support, OSR, optimizing tier, deoptimization, or retained
+JIT performance result.
 
 Historical debug figures and single-shot C comparisons lack preserved machine,
 variance, or artifact data and remain diagnostic rather than baselines. The
@@ -60,27 +61,18 @@ The planning cutover now rejects offline PGO, makes runtime JIT the primary
 adaptive strategy, defines the VM/baseline/proof-based/guarded tiers, and fixes
 the contracts for local ephemeral hotness, synchronous compilation, states,
 fallback, resource budgets, code objects, W^X, safepoints, OSR, and forced
-testing. Runtime behavior is unchanged: the hook remains explicitly
-**PLACEHOLDER** and no inert engine flag was added.
+testing. That policy is now realized by callable scalar forced/auto engines; the former
+observation hook is removed.
 
-## Phase 1: Semantic And Runtime Prerequisites — Accepted Next Target
+## Phase 1: Semantic And Runtime Prerequisites — Current
 
-The value/object/list/F64-bit equality split is **Current**. Remaining work is:
+Explicit main/effect-free imports, local-only `var`/`set`, product-threaded
+state, fixed-point effects, whole-chunk validation, and structured process-safe
+outcomes are Current prerequisites. Native eligibility remains narrower than
+the VM and rejects any path whose GC roots, host effect, or resource behavior is
+not implemented exactly.
 
-1. Add explicit main and effect-free imported libraries.
-2. Add local `var`/`set`, thread immutable product values through helpers, hold
-   the evolving state in main-local vars, and remove mutable globals.
-3. Compute fixed-point effect summaries where native movement needs them.
-4. Validate public chunks before execution.
-5. Return structured process-safe outcomes for success, exit, traps, deadlines,
-   and resource limits.
-
-Callable native code does not begin while generated code could bypass exact
-outcomes, stack/local initialization, GC roots, resource safety, or host cleanup.
-Each semantic slice retains focused VM evidence and diagnostic performance
-comparison against its prior commit.
-
-## Phase 2: Typed SSA
+## Phase 2: Typed SSA — Current
 
 1. Lower resolved HIR to blocks with explicit parameters, exact types, effects,
    calls, and trap edges.
@@ -94,36 +86,38 @@ comparison against its prior commit.
 Typed SSA is the only optimization authority. No independent
 bytecode-to-machine-code semantic compiler is accepted.
 
-## Phase 3: Native Code Objects
+## Phase 3: Native Code Objects — Current Scalar Subset
 
 1. Define semantic and native ABI versions and typed representations.
-2. Implement only the owned emitter selected by
-   [Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md);
-   the measured selection is complete, but implementation has not begun.
-3. Retain a non-PGO file-emission harness for disassembly, debugger, ABI, and
-   differential tests.
+2. Use only the implemented owned emitter selected by
+   [Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md).
+3. Retain opt-in generated-byte dumps for external disassembly/debugging and
+   ABI/differential tests; there is no offline PGO or persistent cache.
 4. Implement versioned runtime-call adapters and VM/native transitions.
 5. Implement W^X executable memory through the safe `lkjscript-sys` boundary.
 6. Add precise safepoints and stack maps before allocation-capable native paths.
 7. Bound executable bytes, object count, compile time, work, and metadata.
 
-The minimum callable code object owns entry, code size, source/tier identity,
-relocations, safepoints, stack maps, traps/side exits, OSR entries when present,
-resource accounting, and invalidation state. Emitting machine code is not yet a
-JIT claim; a forced test must call it.
+Current scalar code objects own entries, code/page-accounted size,
+source-group/tier identity, ABI versions, relocations, runtime calls, scalar
+safepoints and exact empty reference maps, source/trap/outcome maps, compile and
+resource accounting, invalidation, and native entries. Forced tests call them;
+emission alone is still not a JIT claim.
 
-## Phase 4: Function-Triggered Baseline JIT
+## Phase 4: Function-Triggered Baseline JIT — Current Scalar Subset
 
 1. Add bounded saturating function-entry counters.
 2. Compile whole eligible functions synchronously at a safepoint.
 3. Install and call baseline code objects.
-4. Support VM-to-native, native-to-VM, and direct native-to-native calls.
+4. Support exact scalar VM/native entry/return adapters and direct unboxed
+   native-to-native calls inside a compatible compiled group.
 5. Keep optimizations inexpensive and non-speculative.
 6. Add forced baseline mode that errors rather than silently falls back.
 7. Measure trigger, compilation, first native execution, end-to-end time,
-   steady state, break-even, code cache, and fallbacks.
+   steady state, break-even, code cache, and fallbacks before performance
+   claims.
 
-Short commands remain in the VM when compilation cannot repay its cost.
+The current default is explicit `vm`; auto leaves short/unsupported work there.
 
 ## Phase 5: Loop Hotness And OSR
 

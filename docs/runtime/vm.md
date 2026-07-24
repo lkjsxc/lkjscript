@@ -82,13 +82,22 @@ is attempted, and stdout is flushed before the CLI translates the outcome.
 The numeric representation and behavior are specified by
 [Exact I64 And F64 Semantics](../decisions/numeric-semantics.md).
 
-## Accepted Target
+## Current Baseline Tier Boundary
 
-Typed SSA and callable native execution must consume the same validated semantic
-object, outcome categories, owned-value boundary, host cleanup, and resource
-configuration. Native execution may not weaken any limit or silently fall back
-in forced mode.
+Typed SSA and callable native execution consume the compiler's same verified
+semantic program and structured outcome/resource configuration. The Linux
+x86-64 allocation-free scalar subset uses exact VM/native boxing only at VM
+entries and returns; compatible native calls remain unboxed. Forced mode
+compiles before main effects and never falls back. Auto observes bounded
+function entries and uses installed code only on later calls. The complete
+subset and unsupported reference/allocation/host boundary are in
+[Callable Baseline JIT](baseline-jit.md).
+
+Native PollV1 applies cooperative deadline and native-poll fuel limits. VM
+instruction fuel and native poll fuel are separately placed safepoint measures;
+they preserve the same structured resource category but do not claim identical
+instruction-by-instruction exhaustion points.
 
 Host-service injection, instruction quanta, fully cancellable filesystem and
-output services, terminal leases, and generation-reused handle slots remain
-**Deferred** to later measured cycles.
+output services, terminal leases, generation-reused handle slots, loop OSR, and
+native reference/allocation paths remain **Deferred** to later measured cycles.

@@ -7,10 +7,13 @@ runtime tier without describing planned work as current behavior.
 
 ## Status
 
-**Accepted Target.** The cycle is complete only when machine code lowered from
-verified typed SSA for a canonical lkjscript program is installed in W^X memory
-and actually called on Linux x86-64. The current implementation boundary is
-recorded in [Current State](../current-state.md).
+**Current** for the Linux x86-64 allocation-free scalar MVP: machine code
+lowered from verified typed SSA for canonical lkjscript programs is installed in
+W^X memory and actually called. Exact current coverage and unsupported native
+semantics are recorded in [Current State](../current-state.md) and
+[Callable Baseline JIT](../runtime/baseline-jit.md). Native references,
+allocation, host IO, recursion, OSR, background work, and optimizing tiers are
+not made Current by this completion.
 
 ## Platform And Tier Decision
 
@@ -243,12 +246,12 @@ Cranelift is rejected for this production baseline decision but remains a
 future measured replacement candidate under the record's explicit conditions.
 LLVM is not the default fallback.
 
-Selection is now followed by an isolated source-independent scalar foundation:
-a closed machine-plan verifier, owned encoder, complete installable-image
-metadata, and safe bounded W^X boundary with actual intermediate generated-code
-calls. Temporary spike artifacts remain removed. This does not lower verified
-typed SSA, transfer from the VM, provide an engine or runtime tier, or satisfy
-forced source-derived native/JIT completion.
+Selection was followed by the source-independent scalar foundation and is now
+integrated through a narrow verified-SSA adapter, owned bounded code objects,
+safe W^X installation, forced main calls, and automatic later-call VM/native
+transfer. Temporary spike artifacts remain removed. The integration retains the
+closed plan boundary and explicitly rejects every reference/allocation/host
+path rather than broadening the foundation into another semantic IR.
 
 ## Linux x86-64 ABI And Runtime Calls
 
@@ -320,14 +323,15 @@ native entries, last structured failure, object identity, and configuration or
 resource epoch. Compilation is non-reentrant. A known failure is not retried in
 the same epoch; a changed epoch permits only a bounded retry.
 
-After acceptance, `auto` becomes the ordinary run default. Tests can select a
-low deterministic threshold or disable tiering. Diagnostics and native counts
-never contaminate ordinary program stdout.
+The current ordinary run default remains `vm`; all three modes are explicit.
+Tests can select a low deterministic auto threshold or disable auto tiering,
+without disabling forced mode. Diagnostics and native counts never contaminate
+ordinary program stdout.
 
 ## Completion And Evidence
 
-Completion requires a meaningful multi-block or multi-function canonical
-program and a long scalar/numeric workload to execute generated code. Required
+The current focused source-native gate uses meaningful multi-block,
+multi-function, loop-heavy scalar programs that execute generated code. Current
 coverage includes checked I64 arithmetic/division, Bool/comparisons, branches,
 loops, locals, direct calls, Unit, F64 arithmetic/comparisons, structured
 return/trap/exit, VM/native transitions, native/native calls for compatible

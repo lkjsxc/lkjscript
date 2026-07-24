@@ -14,14 +14,17 @@ the current acceptance platform.
 
 Current capabilities and known defects are recorded in
 [docs/current-state.md](docs/current-state.md). Future installation, update,
-package, GUI, browser, server, and native-performance work is direction rather
-than current product behavior.
+package, GUI, browser, server, loop-OSR, optimizing-JIT, and full-language
+native work remains direction rather than current product behavior. The exact
+current allocation-free scalar baseline tier is documented separately.
 
 ## Development Commands
 
 ```sh
-cargo run --locked -p lkjscript-app -- run src/examples/hello/main.lkjscript
-cargo run --locked -p lkjscript-app -- run src/examples/mandel/main.lkjscript
+cargo run --locked -p lkjscript-app -- run --engine vm src/examples/hello/main.lkjscript
+cargo run --locked -p lkjscript-app -- run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
+cargo run --locked -p lkjscript-app -- run --engine auto --auto-jit-threshold 2 src/examples/jit-scalar/main.lkjscript
+cargo run --locked -p lkjscript-app -- run --engine vm src/examples/mandel/main.lkjscript
 cargo run --locked -p lkjscript-app -- run src/examples/lkjedit/main.lkjscript path/to/file
 cargo run --locked -p lkjscript-app -- run src/examples/http/hello.lkjscript
 cargo run --locked -p lkjscript-app -- disasm src/examples/hello/main.lkjscript
@@ -45,9 +48,11 @@ docker compose -f meta/docker-compose.yml --profile verify run --build --rm veri
 ## Architecture
 
 - `crates/lkjscript-core`: bytecode and shared value contracts
-- `crates/lkjscript-compiler`: loading, parsing, typing, and code generation
-- `crates/lkjscript-vm`: interpreter, heap, and host-operation dispatch
-- `crates/lkjscript-native`: source-independent closed Linux x86-64 scalar native foundation
+- `crates/lkjscript-ir`: verified typed SSA, evaluator, and baseline passes
+- `crates/lkjscript-compiler`: loading, parsing, typing, SSA, and bytecode lowering
+- `crates/lkjscript-vm`: interpreter, heap, host operations, and auto entry transfer
+- `crates/lkjscript-native`: source-independent closed Linux x86-64 scalar foundation
+- `crates/lkjscript-jit`: verified scalar SSA adapter, code objects, and tier state
 - `crates/lkjscript-sys`: owned Linux FFI/W^X boundary and the only unsafe Rust
 - `crates/lkjscript-app`: command-line product
 - `crates/lkjscript-xtask`: repository honesty gates

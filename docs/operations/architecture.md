@@ -15,10 +15,10 @@ that own it.
 lkjscript-ir      lkjscript-core      lkjscript-native
       ^                 ^                    ^
       |                 |                    |
-      +--- compiler ----+              lkjscript-sys
-               ^                         ^
-               |                         |
-               +------ app --- vm -------+
+      +--- compiler ----+--- lkjscript-jit --+--- lkjscript-sys
+               ^                   ^                    ^
+               |                   |                    |
+               +------ app --------+------ vm ----------+
                |
                +------ xtask
 ```
@@ -28,8 +28,9 @@ The actual product dependency edges are:
 - `lkjscript-ir` and `lkjscript-native` have no dependencies
 - `lkjscript-compiler -> lkjscript-ir + lkjscript-core`
 - `lkjscript-sys -> lkjscript-native`
-- `lkjscript-vm -> lkjscript-core + lkjscript-sys`
-- `lkjscript-app -> compiler + core + vm`
+- `lkjscript-jit -> ir + core + native + sys`
+- `lkjscript-vm -> core + jit + sys`
+- `lkjscript-app -> compiler + ir + core + jit + vm`
 - `lkjscript-xtask -> compiler + core`
 
 The app test target also uses `lkjscript-ir` for evaluator/VM differential
@@ -49,6 +50,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
 | Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar machine plan, verification, encoding, opaque installable image |
+| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar eligibility, deterministic lowering, code objects, tier state, forced/auto execution |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-vm/src/arena.rs` | `Arena` |
@@ -80,7 +82,9 @@ CLI path
   -> mutable Chunk builder
   -> validate_chunk -> opaque immutable ValidatedChunk
   -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
-  -> run_chunk_with_args(program.bytecode(), ExecutionConfig)
+      +-> vm: run_chunk_with_args(program.bytecode(), ExecutionConfig)
+      +-> baseline-jit: verified scalar group -> code object -> native main
+      +-> auto: VM entries -> bounded hotness -> later native function calls
 ```
 
 Imported immutable function and product declarations share one program
@@ -107,11 +111,12 @@ The dependency-free SSA evaluator is the differential oracle for host-
 independent semantics and does not call bytecode, VM, native, or host helpers.
 Console, filesystem, sockets, terminal, time, and handle operations are
 explicitly unsupported in it. The selected owned Linux x86-64 closed scalar
-machine plan, encoder, metadata, and safe W^X installation/invocation boundary
-are a **Current native foundation**. It does not yet consume SSA or participate
-in VM execution. SSA-to-native lowering, function/loop-triggered runtime JIT, a
-minimal AOT test emitter, and direct Wasm remain **Accepted Targets**. The VM
-remains the cold tier and runtime oracle. See
+machine plan, encoder, metadata, safe W^X boundary, verified SSA adapter,
+bounded code objects, and callable function-entry baseline tier are **Current**
+for allocation-free Unit/Bool/I64/F64 acyclic direct-call groups. Forced and
+auto engines execute real entries. Native references/allocation, loop OSR, an
+optimizing tier, minimal AOT file emission, and direct Wasm remain **Accepted
+Targets** or later work. The VM remains the cold tier and runtime oracle. See
 [Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md),
 [Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md), and
 [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
@@ -142,23 +147,22 @@ supervision. Cooperative deadlines can overrun inside current filesystem and
 write/send wrappers; hard-deadline mode rejects those operations before effects
 rather than claiming cancellation.
 
-The accepted later native flow is:
+The current native flow is:
 
 ```text
-VM function entry / loop backedge
-  -> bounded process-local saturating hotness
-  -> synchronous typed-SSA compilation at a safepoint
-  -> bounded callable native code object
-  -> VM/native or OSR transfer
-  -> exact VM fallback or structured outcome
+forced main or hot VM function entry
+  -> verified scalar eligibility and acyclic reachable group
+  -> synchronous typed-SSA lowering at a safepoint
+  -> bounded W^X callable baseline code object
+  -> exact VM/native adapter or unboxed direct native call
+  -> PollV1 and structured return/trap/exit/deadline/resource/host status
 ```
 
-No part of that flow is current. The existing observation hook sees closure
-calls only and cannot compile or transfer execution. The active cycle ends only
-when synchronous whole-function baseline code is actually called on Linux
-x86-64 in truthful forced and automatic modes. Loop OSR, background
-compilation, optimizing tiers, persistent profiles, and persistent code caches
-are not part of that cycle.
+Forced mode enters generated main and never falls back. Auto compiles at one
+function entry and uses the object only on later calls; unsupported code stays
+VM-correct with same-epoch retry suppression. The old observation-only hook is
+removed. Loop OSR, background compilation, optimizing tiers, native references
+or allocation, persistent profiles, and persistent code caches are absent.
 
 ## Source Layout Rule
 
@@ -190,8 +194,9 @@ baseline normalization, reference-bytecode cutover, and the owned low-level
 x86-64/W^X foundation are now Current. SSA-to-native lowering and exact VM/code-
 object tier ownership follow. The first adaptive execution target remains
 synchronous callable baseline JIT; loop OSR
-and proof-based optimizing JIT are later. Minimal file emission remains only
-for backend tests, and offline PGO is rejected. The exact active boundary is
+and proof-based optimizing JIT are later. The allocation-free scalar callable
+baseline tier is Current; minimal file emission remains only for diagnostics
+and backend tests, and offline PGO is rejected. The exact active boundary is
 [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
 Real modules, process-safe host services, byte strings/views, and measured
 memory strategies build on those layers as vertical slices.

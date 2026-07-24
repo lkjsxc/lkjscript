@@ -8,13 +8,13 @@ and the reference VM as the cold tier and correctness oracle.
 
 ## Status
 
-**Accepted Target** for the runtime architecture and implementation sequence.
+**Current** for the reference VM plus synchronous allocation-free scalar Linux
+x86-64 baseline tier and **Accepted Target** for later OSR/optimizing sequence.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
-by measurement. The current language runtime remains the reference bytecode VM
-plus an observation-only **PLACEHOLDER** hook. An isolated source-independent
-Linux x86-64 scalar machine-code/W^X foundation is current, but it has no
-canonical source/SSA linkage, VM transfer, runtime code object or tier, CLI
-engine, JIT execution, OSR, or deoptimization.
+by measurement. Canonical source/verified-SSA linkage, bounded code objects,
+VM/native transfer, `vm`/`auto`/`baseline-jit`, PollV1, and actual generated
+calls are implemented. Native references/allocation, recursion, OSR,
+optimizing/speculative tiers, background work, and deoptimization are absent.
 
 ## Decision
 
@@ -79,23 +79,25 @@ backend-selection, ABI, safety, coverage, and evidence contract is
 
 The following are **Current**:
 
-- canonical source -> parsed AST -> resolved typed HIR -> bytecode;
-- dense bytecode execution in the synchronous, single-threaded VM;
-- precise non-moving mark-sweep for VM values;
-- an explicitly labeled observation-only `JitHook` called at closure calls;
-- a separate closed scalar target-lowering plan, verifier, x86-64 encoder,
-  opaque installable image, and bounded safe W^X system boundary whose focused
-  tests call generated code directly.
+- canonical source -> typed HIR -> verified normalized SSA -> bytecode;
+- dense synchronous reference-VM execution and precise non-moving VM GC;
+- a closed scalar target-lowering plan, x86-64 encoder, opaque image, owned
+  bounded W^X system lease, and typed invocation;
+- a separate verified-SSA adapter for allocation-free Unit/Bool/I64/F64 CFG,
+  acyclic direct calls, checked numerics, branches/loops, and outcomes;
+- bounded code objects and explicit per-function baseline tier states;
+- forced generated main execution with no fallback, and automatic synchronous
+  function-entry compilation used by later calls;
+- enum-identified EnterFunctionV1/PollV1 calls with native entry, fuel,
+  deadline, and structured-status accounting.
 
-The native foundation cannot consume source, HIR, SSA, or bytecode and is not
-reachable from the VM or CLI. Its direct intermediate calls prove only the
-machine boundary. The hook cannot compile, install, call, reject, invalidate,
-or account for native code. It observes neither main execution nor loop
-backedges. Neither boundary is a JIT execution boundary and neither must be
-described as one.
+The old observation hook is removed. The native backend foundation still does
+not consume source/HIR/SSA itself; only the narrow adapter consumes
+`VerifiedProgram`. Unsupported reference/allocation/host/recursive code remains
+an engine error in forced mode and VM-correct in auto.
 
-Everything below is an **Accepted Target** unless explicitly labeled Deferred
-or Rejected.
+Later OSR and optimizing sections below remain **Accepted Targets** unless
+explicitly labeled Deferred or Rejected.
 
 ## Rejected Offline PGO
 
@@ -367,9 +369,8 @@ formats.
 
 ## Engine Selection Contract
 
-The current CLI has only `run` and `disasm`; `run` always executes the VM and
-has no engine flag. Engine selection is an **Accepted Target** only after a real
-native execution boundary exists. The accepted syntax is:
+The current CLI implements the following three baseline-cycle modes; the
+`optimizing-jit` line remains a future target. Default run behavior is `vm`:
 
 ```text
 lkjscript run --engine vm <file.lkjscript> [--] [script-args...]

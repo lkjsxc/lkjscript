@@ -7,13 +7,14 @@ presenting the selection as an implemented JIT.
 
 ## Status
 
-**Current Foundation and Accepted Integration Decision.** A repository-owned,
+**Current Foundation and Current Scalar Integration.** The repository-owned,
 source-independent Linux x86-64 scalar machine-plan verifier, encoder, opaque
-installable image, and safe bounded `lkjscript-sys` W^X installation boundary
-are implemented. This foundation is exercised by direct intermediate-boundary
-machine calls only. It does not consume canonical source, HIR, SSA, or
-bytecode; it is not connected to the VM, tier state, CLI engines, or a JIT.
-The future production baseline tier remains an **Accepted Target**.
+installable image, and safe bounded `lkjscript-sys` W^X boundary remain the
+backend foundation. A separate narrow `lkjscript-jit` adapter now consumes only
+verified typed SSA and provides callable allocation-free scalar code objects,
+VM/native transfer, tier state, and `vm`/`auto`/`baseline-jit` engines. Native
+references/allocation, host operations, recursion, OSR, and optimizing tiers
+remain outside current coverage.
 
 ## Decision
 
@@ -35,7 +36,8 @@ verified typed SSA
   -> bounded native code object
 ```
 
-Only the closed machine-plan-through-installation portion is current. The plan
+The closed machine-plan-through-installation portion and its narrow scalar SSA
+integration are current. The plan
 is a target-lowering contract, not another language semantic IR. Its safe API
 can name only typed scalar values, private frame locals, verified control flow,
 compatible compiled calls, and allowlisted versioned runtime-call slots. It
@@ -141,9 +143,9 @@ is not claimed complete by the spike.
 
 The current `lkjscript-native` crate consumes only a verified closed machine
 plan assembled through its safe typed builder. There is deliberately no source,
-HIR, SSA, or bytecode input. A future narrow adapter may lower verified typed
-SSA into this plan; that adapter must remain outside the backend and preserve
-SSA semantics rather than reinterpreting another representation.
+HIR, SSA, or bytecode input. The current narrow `lkjscript-jit` adapter lowers verified typed SSA into this
+plan. It remains outside the backend and preserves SSA semantics rather than
+reinterpreting another representation.
 
 The crate returns an opaque `InstallableImage` containing read-only code bytes,
 typed symbolic relocations, entries and signatures, runtime-call references,
@@ -155,9 +157,9 @@ policy.
 `lkjscript-sys` accepts only that opaque image. On Linux x86-64 it validates
 versions, metadata, typed entries, symbolic relocation targets, and configured
 per-object and aggregate limits; maps RW, copies and relocates, changes the
-mapping to RX, and never patches after sealing. Installed mappings expose only
-typed invocation and a permission probe, remain borrowed from a non-`Send`
-installer, and unmap on drop. Other platforms return an explicit unsupported-
+mapping to RX, and never patches after sealing. Installed mappings expose only typed invocation, accounted allocation size, and
+a permission probe. Each owns a non-`Send` bounded installer lease and unmaps on
+drop, so a session can retain code objects without self-referential borrowing. Other platforms return an explicit unsupported-
 platform error.
 
 A replacement backend must implement that same narrow input/output contract and

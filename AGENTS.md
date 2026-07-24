@@ -8,10 +8,11 @@ Define the working contract for automated engineering in this repository.
 
 `lkjscript` is a typed, line-oriented, AI-authored language implemented by a
 small Rust compiler and reference bytecode VM. Canonical explicit source feeds
-a resolved typed pipeline intended for VM, runtime JIT, a minimal native/AOT
-test surface, and Wasm. The active cycle must reach a real callable synchronous
-baseline JIT on Linux x86-64; code emission, disassembly, SSA scaffolding, or an
-observation hook is insufficient.
+a resolved typed pipeline for the VM and current allocation-free scalar runtime
+baseline JIT, with later native reference/allocation, minimal AOT tests, and
+Wasm. Linux x86-64 baseline evidence requires real synchronous calls from
+verified SSA; code emission, disassembly, SSA scaffolding, or observation alone
+is insufficient.
 The canonical accepted extension is `.lkjscript`; `.lkjml` is rejected without
 a compatibility mode. Linux x86-64 is the current acceptance platform.
 Portability is a design constraint, not a current support claim.

@@ -36,8 +36,8 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
    tree, using the compiler's shared language rule;
 5. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
 6. successful compilation through verified normalized SSA and validated
-   bytecode for nine roots, with exact equality between their reported import
-   closures and all 94 canonical sources in the corpus;
+   bytecode for ten roots, with exact equality between their reported import
+   closures and all 96 canonical sources in the corpus;
 7. `cargo fmt --all -- --check`;
 8. strict Clippy for the workspace, all targets, and all features;
 9. workspace unit tests with the locked Cargo graph.
@@ -59,16 +59,22 @@ deadline and hard-deadline-unsupported outcomes.
 
 Native-foundation workspace tests pass only verified closed machine plans to
 the encoder and actually call generated Linux x86-64 code for multi-block
-scalar control flow, a loop, all checked I64 trap families including division
-by zero and `MIN / -1`, F64 arithmetic/bits/all ordered comparisons and NaN
-branches, Bool/Unit, a compatible direct generated call, an allowlisted
-versioned runtime call, and structured return/trap/exit. Boundary tests reject
-invalid plans, unsupported signatures, code/metadata/work and aggregate install
-limits, and ABI mismatches; use a sys-internal `/proc/self/maps` probe to
-observe initial readable/writable/non-executable and sealed readable/non-
-writable/executable phases; and repeat install/invoke/drop while checking
-aggregate accounting returns to zero. These are intermediate machine-boundary
-tests, not canonical source/SSA, VM transfer, an engine mode, or JIT evidence.
+scalar control flow, loops, checked I64 trap families, F64 arithmetic/bits/all
+ordered comparisons and NaN branches, Bool/Unit, direct generated calls, and
+versioned runtime calls. Boundary tests reject invalid plans, unsupported
+signatures, code/metadata/work and aggregate install limits, and ABI mismatches;
+observe RW then RX permissions through a sys-internal `/proc/self/maps` probe;
+and repeat owned install/invoke/drop accounting.
+
+Source-native tests additionally prove canonical source -> HIR -> verified
+normalized SSA -> scalar machine plan -> encoded image -> RW/RX install ->
+actual native entry. They assert installed code/W^X metadata, nonzero native
+main and callee entries, direct native call counts, PollV1 counts, zero forced
+fallbacks, and exact evaluator/VM/native scalar values or outcome categories.
+Focused cases cover I64 multi-block loops/calls/overflow/division, F64 bits,
+IEEE comparisons and mixed conversion, exit, deadline/fuel/code limits,
+unsupported allocation/product/host semantics, recursion, and auto later-call
+native transfer with same-epoch unsupported retry suppression.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.
@@ -83,8 +89,11 @@ compile/validation error rather than an `ExecutionOutcome`.
 
 ```sh
 cargo build --workspace --release --locked
-./target/release/lkjscript run src/examples/hello/main.lkjscript
-./target/release/lkjscript run src/examples/mandel/main.lkjscript
+./target/release/lkjscript run --engine vm src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine auto --auto-jit-threshold 2 src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine vm src/examples/hello/main.lkjscript
+./target/release/lkjscript run --engine vm src/examples/mandel/main.lkjscript
 python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
@@ -129,24 +138,22 @@ correctness oracle, randomized repetitions, dispersion, and adoption threshold.
 Use [../vision/experiments.md](../vision/experiments.md). The current
 single-shot C script is diagnostic only.
 
-## Accepted JIT Gates
+## Current Baseline-JIT Gates
 
-No JIT gate is current. The active cycle must add dedicated forced-native tests
-that prove a code object was installed, its generated entry was called, its
-native count is nonzero, no required user function fell back, and exact output,
-value, structured trap/outcome, malformed-input behavior, GC, and resource
-limits equal explicit VM mode. Forced JIT fails rather than silently falling
-back. Retained results include compilation/warmup cost, trigger and first-native
-latency, fallback counts, code/metadata/cache size, RSS, repetitions,
-dispersion, tails, and cleanup; OSR counts remain absent until a later cycle.
+Focused forced-native tests prove an installed W^X code object, actual generated
+main and callee entries, direct relocatable native calls, versioned PollV1
+calls, nonzero counts, no fallback, and exact evaluator/VM/native scalar values
+or structured outcome categories. Forced unsupported semantics and native
+resource failures are engine errors rather than VM fallback. Auto tests use a
+low deterministic threshold and prove compilation at one call is used only by
+later calls while unsupported code remains VM-correct and retry-suppressed.
 
-The current CLI has no engine selector and always runs the VM. The accepted
-future syntax and semantics for `vm`, `auto`, `baseline-jit`, and
-`optimizing-jit` are defined in
-[Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
-Do not add inert flags before native execution exists. The mandatory cycle gate
-and Linux x86-64 boundary are in
-[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+The CLI implements `vm`, `auto`, and `baseline-jit`; default remains `vm`.
+Machine diagnostics are stderr-only and opt-in. Allocation/reference/host paths,
+recursion, OSR, optimizing JIT, GC-native references, and background compilation
+are outside the current baseline subset. Performance adoption, broader
+malformed/resource equivalence, and native GC evidence remain separate future
+gates rather than implied by scalar callable completion.
 
 ## Rule
 

@@ -11,11 +11,11 @@ reinterpret the language.
 **Current** for parsed AST -> resolved typed HIR with fixed-point function
 effects -> verified typed SSA -> verified baseline normalization -> reference
 bytecode. The independent bounded SSA evaluator and bytecode link metadata are
-also Current. The selected owned Linux x86-64 scalar machine-plan encoder and
-safe W^X installation boundary are a **Current native foundation**, but verified
-SSA is not connected to them and no source/VM native transfer or engine exists.
-Baseline JIT, proof-based optimizing JIT, minimal AOT test emission, and direct
-Wasm are **Accepted Targets**. The backend is specified by
+also Current. The selected owned Linux x86-64 scalar machine-plan encoder, safe W^X boundary,
+narrow verified-SSA adapter, bounded code objects, and forced/automatic callable
+allocation-free scalar baseline tier are **Current**. Native references and
+allocation, loop OSR, proof-based optimizing JIT, minimal AOT test emission,
+and direct Wasm are **Accepted Targets**. The backend is specified by
 [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
 **Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
@@ -145,10 +145,12 @@ multi-block, loop, direct-call, allowlisted-runtime-call, exact I64/F64,
 trap/exit code. Safe APIs expose no arbitrary bytes, addresses, mappings, or
 function pointers; unsafe memory and invocation remain in `lkjscript-sys`.
 
-This foundation does not consume SSA, source, HIR, or bytecode and is not a JIT.
-Next, lower verified SSA into the closed plan, complete versioned runtime calls,
-and attach code-object/VM tier ownership. Callable baseline JIT remains the
-primary adaptive performance path. File emission exists only to inspect code,
+The foundation itself remains source/SSA-independent. The separate
+`lkjscript-jit` adapter now consumes only `VerifiedProgram`, lowers eligible
+scalar groups into the closed plan, attaches versioned PollV1/entry calls and
+bounded code-object/VM tier ownership, and executes generated entries. Callable
+baseline JIT is the current first adaptive performance path for this exact
+subset. File emission exists only to inspect code,
 test relocations and ABI behavior, use external debuggers, and compare backend
 output with the VM.
 
@@ -159,9 +161,10 @@ ABI boundaries must avoid accidental x86-specific semantic assumptions.
 
 ## Runtime Tiering
 
-All normal execution starts in the VM. Bounded saturating function-entry and
-loop-backedge counters eventually identify hot code without per-instruction
-profiling. The accepted native sequence is:
+Normal `auto` execution starts in the VM. Bounded saturating function-entry
+counters currently identify hot scalar functions without per-instruction
+profiling. Loop-backedge tier counters are not implemented. The accepted native
+sequence is:
 
 1. synchronous whole-function baseline JIT with low-cost non-speculative passes;
 2. loop-triggered compilation and verified loop-header OSR;

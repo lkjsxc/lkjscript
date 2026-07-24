@@ -15,7 +15,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 94 language files under `src`; nine executable roots cover the exact corpus closure
+- Corpus: 96 language files under `src`; ten executable roots cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
@@ -39,7 +39,7 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   bounded evaluator, deterministic isolated baseline passes, and bytecode link
   metadata; SSA conversion renames local mutation and uses stable BindingId-
   ordered block parameters at branch and loop joins
-- Host implementation: eight Rust workspace crates with no third-party Rust
+- Host implementation: nine Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
@@ -96,22 +96,32 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   host-independent buffers, traps, exits, and explicit fuel/frame/allocation/
   buffer/list bounds; console, filesystem, sockets, terminal, time, and handle
   operations return explicit unsupported-evaluator outcomes
-- Native foundation: dependency-free `lkjscript-native` verifies a closed
-  scalar machine plan and emits owned Linux x86-64 bytes, relocations, ABI/frame
-  facts, safepoints, empty scalar stack maps, and opaque installable images;
-  `lkjscript-sys` alone owns bounded RW-to-RX installation and typed invocation;
-  generated multi-block, loop, direct-call, runtime-call, exact I64/F64/trap/
-  exit code has been called in boundary tests, but no SSA adapter or VM transfer
-  exists yet
-- JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
-  source-to-native compilation, engine selector, VM/native execution handoff,
-  tier state, OSR, or deoptimization
-- Native backend decision: the measured owned Linux x86-64 encoder selected over
-  Cranelift 0.134.2 is now the Current low-level foundation; the production
-  baseline JIT remains an **Accepted Target**
-- Adaptive-performance contract: runtime JIT is the **Accepted Target** after
-  semantic/outcome and typed-SSA prerequisites; the VM remains the cold tier
-  and oracle, and minimal AOT emission is only a shared-backend test surface
+- Callable baseline JIT: `lkjscript-jit` consumes only `VerifiedProgram`,
+  rejects every reference/allocation/host path, lowers allocation-free scalar
+  Unit/Bool/I64/F64 CFG and acyclic direct calls to `lkjscript-native`, installs
+  bounded owned non-Send code objects through `lkjscript-sys`, and actually
+  invokes generated System V AMD64 entries; direct native calls stay unboxed
+- Native runtime ABI: enum-identified `EnterFunctionV1` and `PollV1` calls record
+  per-source-function entries and enforce cooperative native poll fuel and a
+  monotonic deadline; structured return/trap/exit/deadline/resource/host status
+  returns to the execution owner and generated code never exits the process
+- Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; `vm` remains the
+  default, forced baseline compiles the complete reachable supported group
+  before main effects and never falls back, while auto compiles synchronously at
+  a hot function entry for later calls and keeps unsupported code in the VM
+- Tier/code ownership: the former observation hook is removed. Per-function
+  states are `VmOnly`, `Observed`, `BaselineCompiling`, `BaselineNative`, or
+  `Disabled` with saturating calls, bounded attempts, epoch/failure/object facts,
+  and native entries. Code objects retain ABI/tier/group, size/accounting,
+  relocation/runtime/safepoint/source/outcome, compile/install, invalidation,
+  W^X, and entry metadata under bounded synchronous session ownership
+- Native limits: recursion, indirect calls, polymorphic or unsupported
+  signatures, references, strings, collections, products, Option/Result,
+  buffers, allocation, and host IO are explicit forced-mode engine errors.
+  Empty native stack maps are exact for this allocation-free scalar subset
+- Deferred tiers: loop OSR, background compilation, optimizing/speculative
+  tiers, deoptimization, native references/allocation, persistent profiles, and
+  persistent code caches remain absent
 
 ## Known Defects
 
@@ -208,23 +218,15 @@ tested for Phase C.
 
 ## Accepted Next Target
 
-The active engineering cycle must reach a real callable baseline JIT on Linux
-x86-64; documentation, typed SSA, machine-code emission, disassembly, or an
-observation hook alone cannot complete it. The dependency sequence is:
+The real callable allocation-free scalar baseline-JIT cycle is Current on Linux
+x86-64. Emission alone did not complete it: canonical source now reaches actual
+installed calls with nonzero main/callee/PollV1 counts and no forced fallback.
+The next dependency sequence is:
 
-Explicit typed main, declaration-only imports, local-only mutation, removal of
-source runtime globals, product-threaded workload state, whole-chunk validation,
-structured outcomes, bounded VM execution, deterministic fixed-point function
-effects, verified typed SSA, the independent differential evaluator, isolated
-baseline normalization, and reference-bytecode cutover are Current. The
-remaining dependency sequence is:
-
-1. lower verified SSA into the selected owned encoder, add the remaining
-   versioned runtime calls and code-object/tier ownership, and implement exact
-   VM/native and native/native calls plus forced source-to-native execution;
-2. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
-   code has been called. Forced mode never falls back; auto uses synchronous
-   function-entry tiering and may remain in the VM for unsupported code.
+1. retain and broaden exact scalar baseline evidence without weakening forced
+   errors or bounded code-object ownership;
+2. design loop-header state transfer separately before making any OSR claim.
+   Native references/allocation require exact live-reference maps first.
 
 OSR, background compilation, optimizing JIT, guards, deoptimization, persistent
 profiles/caches, offline PGO, and non-Linux/non-x86-64 acceptance are outside

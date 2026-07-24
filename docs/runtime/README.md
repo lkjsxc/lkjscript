@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Describe the current VM and explicitly incomplete native-code boundary.
+Describe the reference VM and the exact callable Linux x86-64 baseline tier.
 
 ## Status
 
-The validated, bounded bytecode VM and structured execution outcomes are
-**Current**. Native JIT execution is **Placeholder** and must not be described
-as implemented. Runtime-JIT-first tiering is an **Accepted Target**; offline PGO
-is rejected.
+The validated bounded bytecode VM, structured outcomes, and allocation-free
+scalar callable baseline JIT are **Current**. The VM is the default and
+full-language oracle. Native references, allocation, host operations, recursion,
+OSR, optimizing compilation, and background work are not implemented.
 
 ## Table of Contents
 
 - [vm.md](vm.md): validation, outcomes, limits, values, frames, heap, and host boundary
-- [jit-hook.md](jit-hook.md): explicitly labeled observation-only placeholder
-- [../decisions/callable-baseline-jit.md](../decisions/callable-baseline-jit.md): required Linux x86-64 callable-baseline cycle
-- [../decisions/runtime-jit-instead-of-offline-pgo.md](../decisions/runtime-jit-instead-of-offline-pgo.md): accepted tiers, OSR, code-object, and no-PGO contract
+- [baseline-jit.md](baseline-jit.md): exact callable scalar coverage, engines, PollV1, code objects, W^X, and unsupported boundaries
+- [../decisions/callable-baseline-jit.md](../decisions/callable-baseline-jit.md): Linux x86-64 callable-baseline contract
+- [../decisions/runtime-jit-instead-of-offline-pgo.md](../decisions/runtime-jit-instead-of-offline-pgo.md): accepted later tiers, OSR, and no-PGO contract
