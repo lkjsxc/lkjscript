@@ -305,6 +305,9 @@ pub enum OutcomeKind {
     Return,
     Trap(TrapCode),
     Exit,
+    DeadlineExceeded,
+    ResourceLimitExceeded,
+    HostFailure,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

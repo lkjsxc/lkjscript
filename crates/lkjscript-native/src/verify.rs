@@ -216,7 +216,10 @@ fn verify_function(
                 when_false,
                 ..
             } => vec![*when_true, *when_false],
-            Terminator::Return(_) | Terminator::Trap(_) | Terminator::Exit(_) => Vec::new(),
+            Terminator::Return(_)
+            | Terminator::Trap(_)
+            | Terminator::Exit(_)
+            | Terminator::Outcome(_) => Vec::new(),
         };
         for target in targets {
             let target_index = block_index(function, target)?;
@@ -380,9 +383,16 @@ fn verify_instruction(
         Operation::I64Add(left, right)
         | Operation::I64Sub(left, right)
         | Operation::I64Mul(left, right)
-        | Operation::I64Div(left, right) => {
+        | Operation::I64Div(left, right)
+        | Operation::I64BitAnd(left, right)
+        | Operation::I64BitOr(left, right)
+        | Operation::I64BitXor(left, right) => {
             require_types(function, [*left, *right], ValueType::I64, "I64 arithmetic")?;
             require_output(instruction, ValueType::I64, "I64 arithmetic")
+        }
+        Operation::I64ToF64(value) => {
+            require_types(function, [*value], ValueType::I64, "I64 to F64 conversion")?;
+            require_output(instruction, ValueType::F64, "I64 to F64 conversion")
         }
         Operation::F64Add(left, right)
         | Operation::F64Sub(left, right)
@@ -395,7 +405,7 @@ fn verify_instruction(
             require_types(function, [*left, *right], ValueType::I64, "I64 comparison")?;
             require_output(instruction, ValueType::Bool, "I64 comparison")
         }
-        Operation::F64Compare(_, left, right) => {
+        Operation::F64Compare(_, left, right) | Operation::F64BitsEqual(left, right) => {
             require_types(function, [*left, *right], ValueType::F64, "F64 comparison")?;
             require_output(instruction, ValueType::Bool, "F64 comparison")
         }
@@ -492,7 +502,7 @@ fn verify_terminator(
                 return Err(VerificationError::InvalidReturn(function.id));
             }
         }
-        Terminator::Trap(_) => {}
+        Terminator::Trap(_) | Terminator::Outcome(_) => {}
         Terminator::Exit(code) => {
             if value_type(function, *code)? != ValueType::I64 {
                 return Err(VerificationError::TypeMismatch("exit status"));

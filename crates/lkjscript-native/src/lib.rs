@@ -21,8 +21,8 @@ pub use image::{
 };
 pub use plan::{
     BlockId, BoolComparison, F64Comparison, FunctionBuilder, FunctionId, FunctionPlan,
-    I64Comparison, LocalId, MachinePlanBuilder, PlanError, RuntimeCallSlot, Signature,
-    SourceFunctionId, SourceOrigin, TrapCode, ValueId, ValueType,
+    I64Comparison, LocalId, MachinePlanBuilder, PlanError, RuntimeCallSlot, RuntimeOutcome,
+    Signature, SourceFunctionId, SourceOrigin, TrapCode, ValueId, ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 

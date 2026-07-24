@@ -7,7 +7,7 @@ use crate::image::{
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
-    Operation, RuntimeCallSlot, Terminator, TrapCode, ValueId, ValueType,
+    Operation, RuntimeCallSlot, RuntimeOutcome, Terminator, TrapCode, ValueId, ValueType,
 };
 use crate::verify::VerifiedMachinePlan;
 use crate::{EncodeError, NativeError};
@@ -130,6 +130,8 @@ pub fn encode(
     let mut runtime_calls: Vec<_> = runtime_call_set.into_iter().collect();
     runtime_calls.sort_by_key(|slot| match slot {
         RuntimeCallSlot::IdentityI64V1 => 1_u8,
+        RuntimeCallSlot::PollV1 => 2_u8,
+        RuntimeCallSlot::EnterFunctionV1 => 3_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -289,6 +291,18 @@ impl FunctionEncoder<'_> {
             Operation::I64Div(left, right) => {
                 self.emit_checked_i64_division(instruction.output, *left, *right)?;
             }
+            Operation::I64BitAnd(left, right) => {
+                self.emit_i64_bitwise(instruction.output, *left, *right, 0x23)?;
+            }
+            Operation::I64BitOr(left, right) => {
+                self.emit_i64_bitwise(instruction.output, *left, *right, 0x0b)?;
+            }
+            Operation::I64BitXor(left, right) => {
+                self.emit_i64_bitwise(instruction.output, *left, *right, 0x33)?;
+            }
+            Operation::I64ToF64(value) => {
+                self.emit_i64_to_f64(instruction.output, *value)?;
+            }
             Operation::F64Add(left, right) => {
                 self.emit_f64_binary(instruction.output, *left, *right, 0x58)?;
             }
@@ -318,6 +332,9 @@ impl FunctionEncoder<'_> {
             }
             Operation::F64Compare(comparison, left, right) => {
                 self.emit_f64_comparison(instruction.output, *left, *right, *comparison)?;
+            }
+            Operation::F64BitsEqual(left, right) => {
+                self.emit_integer_comparison(instruction.output, *left, *right, 0x94)?;
             }
             Operation::BoolNot(value) => {
                 self.load_rax(self.value_offset(*value)?)?;
@@ -406,6 +423,25 @@ impl FunctionEncoder<'_> {
         self.emit(&[0x48, 0xf7, 0xbd])?;
         self.emit_displacement(self.value_offset(right)?)?;
         self.store_rax(self.value_offset(output)?)
+    }
+
+    fn emit_i64_bitwise(
+        &mut self,
+        output: ValueId,
+        left: ValueId,
+        right: ValueId,
+        opcode: u8,
+    ) -> Result<(), NativeError> {
+        self.load_rax(self.value_offset(left)?)?;
+        self.emit(&[0x48, opcode, 0x85])?;
+        self.emit_displacement(self.value_offset(right)?)?;
+        self.store_rax(self.value_offset(output)?)
+    }
+
+    fn emit_i64_to_f64(&mut self, output: ValueId, value: ValueId) -> Result<(), NativeError> {
+        self.emit(&[0xf2, 0x48, 0x0f, 0x2a, 0x85])?;
+        self.emit_displacement(self.value_offset(value)?)?;
+        self.store_xmm0(self.value_offset(output)?)
     }
 
     fn emit_f64_binary(
@@ -556,6 +592,27 @@ impl FunctionEncoder<'_> {
                 self.emit(&[0xc7, 0x01])?;
                 self.emit(&2_u32.to_le_bytes())?;
                 self.emit(&[0x48, 0x89, 0x41, 0x08])?;
+                self.emit_zero_return()
+            }
+            Terminator::Outcome(outcome) => {
+                let offset = self.bytes.len();
+                self.outcome_map.push(outcome_map_entry(
+                    self.function.id,
+                    to_u32(offset)?,
+                    match outcome {
+                        RuntimeOutcome::DeadlineExceeded => OutcomeKind::DeadlineExceeded,
+                        RuntimeOutcome::ResourceLimitExceeded => OutcomeKind::ResourceLimitExceeded,
+                        RuntimeOutcome::HostFailure => OutcomeKind::HostFailure,
+                    },
+                ));
+                let status = match outcome {
+                    RuntimeOutcome::DeadlineExceeded => 3_u32,
+                    RuntimeOutcome::ResourceLimitExceeded => 4_u32,
+                    RuntimeOutcome::HostFailure => 5_u32,
+                };
+                self.load_integer_register(1, self.context_offset())?;
+                self.emit(&[0xc7, 0x01])?;
+                self.emit(&status.to_le_bytes())?;
                 self.emit_zero_return()
             }
         }

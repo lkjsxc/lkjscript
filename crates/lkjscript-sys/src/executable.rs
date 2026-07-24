@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::time::Duration;
 
 use lkjscript_native::{
     AbiVersions, FunctionId, ImageIntegrityError, InstallableImage, NativeValue, RelocationTarget,
@@ -198,10 +199,82 @@ impl fmt::Display for InvocationError {
 impl std::error::Error for InvocationError {}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NativeResourceLimitKind {
+    PollFuel,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InvocationOutcome {
     Returned(NativeValue),
     Trapped(TrapCode),
     Exited(i64),
+    DeadlineExceeded,
+    ResourceLimitExceeded(NativeResourceLimitKind),
+    HostFailure,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeInvocationConfig {
+    poll_fuel: u64,
+    wall_time: Option<Duration>,
+}
+
+impl NativeInvocationConfig {
+    #[must_use]
+    pub const fn new(poll_fuel: u64, wall_time: Option<Duration>) -> Self {
+        Self {
+            poll_fuel,
+            wall_time,
+        }
+    }
+}
+
+impl Default for NativeInvocationConfig {
+    fn default() -> Self {
+        Self::new(u64::MAX, None)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeEntryCount {
+    source_function: u32,
+    entries: u64,
+}
+
+impl NativeEntryCount {
+    #[must_use]
+    pub const fn source_function(self) -> u32 {
+        self.source_function
+    }
+
+    #[must_use]
+    pub const fn entries(self) -> u64 {
+        self.entries
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InvocationReport {
+    outcome: InvocationOutcome,
+    poll_count: u64,
+    native_entries: Vec<NativeEntryCount>,
+}
+
+impl InvocationReport {
+    #[must_use]
+    pub const fn outcome(&self) -> InvocationOutcome {
+        self.outcome
+    }
+
+    #[must_use]
+    pub const fn poll_count(&self) -> u64 {
+        self.poll_count
+    }
+
+    #[must_use]
+    pub fn native_entries(&self) -> &[NativeEntryCount] {
+        &self.native_entries
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -256,9 +329,16 @@ impl fmt::Display for PermissionProbeError {
 impl std::error::Error for PermissionProbeError {}
 
 #[derive(Debug)]
-pub struct ExecutableInstaller {
+struct InstallerState {
     limits: ExecutableLimits,
     usage: Cell<ExecutableUsage>,
+}
+
+/// Bounded non-Send executable allocation session. Installed images retain an
+/// owned lease on this state, so mappings cannot outlive their accounting.
+#[derive(Clone, Debug)]
+pub struct ExecutableInstaller {
+    state: Rc<InstallerState>,
     not_send_or_sync: PhantomData<Rc<()>>,
 }
 
@@ -266,21 +346,20 @@ impl ExecutableInstaller {
     #[must_use]
     pub fn new(limits: ExecutableLimits) -> Self {
         Self {
-            limits,
-            usage: Cell::new(ExecutableUsage::default()),
+            state: Rc::new(InstallerState {
+                limits,
+                usage: Cell::new(ExecutableUsage::default()),
+            }),
             not_send_or_sync: PhantomData,
         }
     }
 
     #[must_use]
     pub fn usage(&self) -> ExecutableUsage {
-        self.usage.get()
+        self.state.usage.get()
     }
 
-    pub fn install<'installer>(
-        &'installer self,
-        image: InstallableImage,
-    ) -> Result<InstalledImage<'installer>, InstallError> {
+    pub fn install(&self, image: InstallableImage) -> Result<InstalledImage, InstallError> {
         if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             return Err(InstallError::UnsupportedPlatform);
         }
@@ -297,20 +376,20 @@ impl ExecutableInstaller {
         let accounting = image.accounting();
         check_object_limit(
             accounting.code_bytes(),
-            self.limits.max_object_code_bytes,
+            self.state.limits.max_object_code_bytes,
             ExecutableLimitKind::ObjectCodeBytes,
         )?;
         check_object_limit(
             accounting.metadata_bytes(),
-            self.limits.max_object_metadata_bytes,
+            self.state.limits.max_object_metadata_bytes,
             ExecutableLimitKind::ObjectMetadataBytes,
         )?;
         check_object_limit(
             accounting.work_units(),
-            self.limits.max_object_work_units,
+            self.state.limits.max_object_work_units,
             ExecutableLimitKind::ObjectWorkUnits,
         )?;
-        let next_usage = checked_usage(self.usage.get(), accounting, self.limits)?;
+        let next_usage = checked_usage(self.state.usage.get(), accounting, self.state.limits)?;
         let mut mapping = platform::Mapping::allocate_rw(image.bytes().len())?;
         mapping.copy_from(image.bytes())?;
         for item in image.relocations() {
@@ -328,9 +407,9 @@ impl ExecutableInstaller {
             mapping.write_absolute64(item.offset() as usize, address)?;
         }
         mapping.seal_rx()?;
-        self.usage.set(next_usage);
+        self.state.usage.set(next_usage);
         Ok(InstalledImage {
-            installer: self,
+            installer: Rc::clone(&self.state),
             image,
             mapping,
             usage: ExecutableUsage {
@@ -351,15 +430,15 @@ impl Default for ExecutableInstaller {
 }
 
 #[derive(Debug)]
-pub struct InstalledImage<'installer> {
-    installer: &'installer ExecutableInstaller,
+pub struct InstalledImage {
+    installer: Rc<InstallerState>,
     image: InstallableImage,
     mapping: platform::Mapping,
     usage: ExecutableUsage,
     not_send_or_sync: PhantomData<Rc<()>>,
 }
 
-impl InstalledImage<'_> {
+impl InstalledImage {
     #[must_use]
     pub fn entries(&self) -> &[lkjscript_native::EntryMetadata] {
         self.image.entries()
@@ -370,6 +449,16 @@ impl InstalledImage<'_> {
         entry: FunctionId,
         arguments: &[NativeValue],
     ) -> Result<InvocationOutcome, InvocationError> {
+        self.invoke_with_config(entry, arguments, &NativeInvocationConfig::default())
+            .map(|report| report.outcome)
+    }
+
+    pub fn invoke_with_config(
+        &self,
+        entry: FunctionId,
+        arguments: &[NativeValue],
+        config: &NativeInvocationConfig,
+    ) -> Result<InvocationReport, InvocationError> {
         let entry = self
             .image
             .entries()
@@ -377,30 +466,56 @@ impl InstalledImage<'_> {
             .find(|candidate| candidate.function() == entry)
             .ok_or(InvocationError::UnknownEntry)?;
         validate_arguments(entry.signature(), arguments)?;
-        let mut state = NativeCallState::default();
+        let mut state = NativeCallState::new(config);
         let raw = self.mapping.invoke(
             entry.offset() as usize,
             entry.signature(),
             arguments,
             &mut state,
         )?;
-        match state.status {
-            0 => Ok(InvocationOutcome::Returned(
-                raw.into_value(entry.signature().result())?,
-            )),
-            1 => Ok(InvocationOutcome::Trapped(match state.trap {
+        let outcome = match state.status {
+            0 => InvocationOutcome::Returned(raw.into_value(entry.signature().result())?),
+            1 => InvocationOutcome::Trapped(match state.trap {
                 1 => TrapCode::I64Overflow,
                 2 => TrapCode::DivisionByZero,
                 3 => TrapCode::Explicit,
                 other => return Err(InvocationError::InvalidNativeTrap(other)),
-            })),
-            2 => Ok(InvocationOutcome::Exited(state.payload)),
-            other => Err(InvocationError::InvalidNativeStatus(other)),
-        }
+            }),
+            2 => InvocationOutcome::Exited(state.payload),
+            3 => InvocationOutcome::DeadlineExceeded,
+            4 => InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::PollFuel),
+            5 => InvocationOutcome::HostFailure,
+            other => return Err(InvocationError::InvalidNativeStatus(other)),
+        };
+        let native_entries = state
+            .native_entries
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, entries)| *entries != 0)
+            .filter_map(|(source_function, entries)| {
+                u32::try_from(source_function)
+                    .ok()
+                    .map(|source_function| NativeEntryCount {
+                        source_function,
+                        entries,
+                    })
+            })
+            .collect();
+        Ok(InvocationReport {
+            outcome,
+            poll_count: state.poll_count,
+            native_entries,
+        })
     }
 
     pub fn permissions(&self) -> Result<MappingPermissions, PermissionProbeError> {
         self.mapping.permissions()
+    }
+
+    #[must_use]
+    pub fn accounted_allocation_bytes(&self) -> u64 {
+        u64::try_from(self.mapping.allocation_length()).unwrap_or(u64::MAX)
     }
 
     #[must_use]
@@ -409,7 +524,7 @@ impl InstalledImage<'_> {
     }
 }
 
-impl Drop for InstalledImage<'_> {
+impl Drop for InstalledImage {
     fn drop(&mut self) {
         let current = self.installer.usage.get();
         self.installer.usage.set(ExecutableUsage {
@@ -423,12 +538,43 @@ impl Drop for InstalledImage<'_> {
     }
 }
 
+const MAX_NATIVE_ENTRY_COUNTS: usize = 64;
+
 #[repr(C)]
-#[derive(Default)]
 struct NativeCallState {
+    // These first three fields are the stable native ABI consumed by emitted
+    // code. New runtime-call state is append-only within ABI version 1.
     status: u32,
     trap: u32,
     payload: i64,
+    poll_fuel_remaining: u64,
+    deadline_ms: i64,
+    poll_count: u64,
+    native_entries: [u64; MAX_NATIVE_ENTRY_COUNTS],
+}
+
+impl NativeCallState {
+    fn new(config: &NativeInvocationConfig) -> Self {
+        let (deadline_ms, status) = match config.wall_time {
+            Some(duration) => match crate::now_ms_monotonic() {
+                Ok(now) => {
+                    let delta = i64::try_from(duration.as_millis()).unwrap_or(i64::MAX);
+                    (now.saturating_add(delta), 0)
+                }
+                Err(_) => (-1, 5),
+            },
+            None => (-1, 0),
+        };
+        Self {
+            status,
+            trap: 0,
+            payload: 0,
+            poll_fuel_remaining: config.poll_fuel,
+            deadline_ms,
+            poll_count: 0,
+            native_entries: [0; MAX_NATIVE_ENTRY_COUNTS],
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -504,11 +650,57 @@ fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgument> {
 fn runtime_symbol(slot: RuntimeCallSlot) -> usize {
     match slot {
         RuntimeCallSlot::IdentityI64V1 => runtime_identity_i64_v1 as *const () as usize,
+        RuntimeCallSlot::PollV1 => runtime_poll_v1 as *const () as usize,
+        RuntimeCallSlot::EnterFunctionV1 => runtime_enter_function_v1 as *const () as usize,
     }
 }
 
 extern "C" fn runtime_identity_i64_v1(_state: *mut NativeCallState, value: u64) -> u64 {
     value
+}
+
+extern "C" fn runtime_poll_v1(state: *mut NativeCallState) {
+    // SAFETY: generated runtime calls receive the live invocation state as the
+    // implicit first argument. The mapping and call cannot outlive this stack
+    // value, and generated code cannot replace the context pointer.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return;
+    };
+    if state.status != 0 {
+        return;
+    }
+    state.poll_count = state.poll_count.saturating_add(1);
+    if state.poll_fuel_remaining == 0 {
+        state.status = 4;
+        return;
+    }
+    state.poll_fuel_remaining -= 1;
+    if state.deadline_ms >= 0 {
+        match crate::now_ms_monotonic() {
+            Ok(now) if now >= state.deadline_ms => state.status = 3,
+            Ok(_) => {}
+            Err(_) => state.status = 5,
+        }
+    }
+}
+
+extern "C" fn runtime_enter_function_v1(state: *mut NativeCallState, function: u64) {
+    // SAFETY: the context provenance is identical to runtime_poll_v1.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return;
+    };
+    if state.status != 0 {
+        return;
+    }
+    let Ok(index) = usize::try_from(function) else {
+        state.status = 5;
+        return;
+    };
+    let Some(entries) = state.native_entries.get_mut(index) else {
+        state.status = 5;
+        return;
+    };
+    *entries = entries.saturating_add(1);
 }
 
 fn check_object_limit(
@@ -603,12 +795,16 @@ mod platform {
         ) -> *mut c_void;
         fn mprotect(address: *mut c_void, length: usize, protection: i32) -> i32;
         fn munmap(address: *mut c_void, length: usize) -> i32;
+        fn sysconf(name: i32) -> isize;
     }
+
+    const SC_PAGESIZE: i32 = 30;
 
     #[derive(Debug)]
     pub(super) struct Mapping {
         base: NonNull<u8>,
         length: usize,
+        allocation_length: usize,
         sealed: bool,
         wx_transition_verified: bool,
     }
@@ -618,12 +814,24 @@ mod platform {
             if length == 0 {
                 return Err(InstallError::AllocationFailed);
             }
-            // SAFETY: The null hint, anonymous descriptor, zero offset, and nonzero
-            // length satisfy mmap. The returned mapping is checked before ownership.
+            // SAFETY: SC_PAGESIZE has no pointer contract and returns one
+            // process page-size value.
+            let page_size = unsafe { sysconf(SC_PAGESIZE) };
+            let page_size = usize::try_from(page_size)
+                .ok()
+                .filter(|value| *value > 0)
+                .ok_or(InstallError::AllocationFailed)?;
+            let allocation_length = length
+                .checked_add(page_size - 1)
+                .map(|value| value / page_size * page_size)
+                .ok_or(InstallError::AllocationFailed)?;
+            // SAFETY: The null hint, anonymous descriptor, zero offset, and
+            // nonzero page-rounded length satisfy mmap. The returned mapping is
+            // checked before ownership.
             let pointer = unsafe {
                 mmap(
                     std::ptr::null_mut(),
-                    length,
+                    allocation_length,
                     PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANONYMOUS,
                     -1,
@@ -637,6 +845,7 @@ mod platform {
             Ok(Self {
                 base,
                 length,
+                allocation_length,
                 sealed: false,
                 wx_transition_verified: false,
             })
@@ -699,7 +908,7 @@ mod platform {
             let result = unsafe {
                 mprotect(
                     self.base.as_ptr().cast::<c_void>(),
-                    self.length,
+                    self.allocation_length,
                     PROT_READ | PROT_EXEC,
                 )
             };
@@ -712,6 +921,10 @@ mod platform {
             });
             self.wx_transition_verified = writable_phase_verified && executable_phase_verified;
             Ok(())
+        }
+
+        pub(super) fn allocation_length(&self) -> usize {
+            self.allocation_length
         }
 
         pub(super) fn wx_transition_verified(&self) -> bool {
@@ -784,7 +997,7 @@ mod platform {
     impl Drop for Mapping {
         fn drop(&mut self) {
             // SAFETY: This Mapping owns this still-live mmap range exactly once.
-            let _ = unsafe { munmap(self.base.as_ptr().cast::<c_void>(), self.length) };
+            let _ = unsafe { munmap(self.base.as_ptr().cast::<c_void>(), self.allocation_length) };
         }
     }
 
@@ -996,6 +1209,10 @@ mod platform {
 
         pub(super) fn permissions(&self) -> Result<MappingPermissions, PermissionProbeError> {
             Err(PermissionProbeError::UnsupportedPlatform)
+        }
+
+        pub(super) fn allocation_length(&self) -> usize {
+            0
         }
 
         pub(super) fn wx_transition_verified(&self) -> bool {

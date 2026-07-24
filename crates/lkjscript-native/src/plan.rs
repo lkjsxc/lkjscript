@@ -147,6 +147,11 @@ impl TrapCode {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RuntimeCallSlot {
     IdentityI64V1,
+    /// Cooperative deadline and native fuel poll. The execution context is the
+    /// implicit first ABI argument; no language value is boxed for this call.
+    PollV1,
+    /// Records entry to a source function for exact native-tier accounting.
+    EnterFunctionV1,
 }
 
 impl RuntimeCallSlot {
@@ -157,15 +162,30 @@ impl RuntimeCallSlot {
                 parameters: vec![ValueType::I64],
                 result: ValueType::I64,
             },
+            Self::PollV1 => Signature {
+                parameters: Vec::new(),
+                result: ValueType::Unit,
+            },
+            Self::EnterFunctionV1 => Signature {
+                parameters: vec![ValueType::I64],
+                result: ValueType::Unit,
+            },
         }
     }
 
     #[must_use]
     pub const fn version(self) -> u16 {
         match self {
-            Self::IdentityI64V1 => 1,
+            Self::IdentityI64V1 | Self::PollV1 | Self::EnterFunctionV1 => 1,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum RuntimeOutcome {
+    DeadlineExceeded,
+    ResourceLimitExceeded,
+    HostFailure,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -220,12 +240,17 @@ pub(crate) enum Operation {
     I64Sub(ValueId, ValueId),
     I64Mul(ValueId, ValueId),
     I64Div(ValueId, ValueId),
+    I64BitAnd(ValueId, ValueId),
+    I64BitOr(ValueId, ValueId),
+    I64BitXor(ValueId, ValueId),
+    I64ToF64(ValueId),
     F64Add(ValueId, ValueId),
     F64Sub(ValueId, ValueId),
     F64Mul(ValueId, ValueId),
     F64Div(ValueId, ValueId),
     I64Compare(I64Comparison, ValueId, ValueId),
     F64Compare(F64Comparison, ValueId, ValueId),
+    F64BitsEqual(ValueId, ValueId),
     BoolCompare(BoolComparison, ValueId, ValueId),
     BoolNot(ValueId),
     ReadLocal(LocalId),
@@ -242,17 +267,23 @@ impl Operation {
             | Self::BoolConst(_)
             | Self::Unit
             | Self::ReadLocal(_) => Vec::new(),
-            Self::BoolNot(value) | Self::WriteLocal(_, value) => vec![*value],
+            Self::BoolNot(value) | Self::I64ToF64(value) | Self::WriteLocal(_, value) => {
+                vec![*value]
+            }
             Self::I64Add(left, right)
             | Self::I64Sub(left, right)
             | Self::I64Mul(left, right)
             | Self::I64Div(left, right)
+            | Self::I64BitAnd(left, right)
+            | Self::I64BitOr(left, right)
+            | Self::I64BitXor(left, right)
             | Self::F64Add(left, right)
             | Self::F64Sub(left, right)
             | Self::F64Mul(left, right)
             | Self::F64Div(left, right)
             | Self::I64Compare(_, left, right)
             | Self::F64Compare(_, left, right)
+            | Self::F64BitsEqual(left, right)
             | Self::BoolCompare(_, left, right) => vec![*left, *right],
             Self::Call(_, arguments) | Self::RuntimeCall(_, arguments) => arguments.clone(),
         }
@@ -278,12 +309,13 @@ pub(crate) enum Terminator {
     Return(ValueId),
     Trap(TrapCode),
     Exit(ValueId),
+    Outcome(RuntimeOutcome),
 }
 
 impl Terminator {
     pub(crate) fn operands(&self) -> Vec<ValueId> {
         match self {
-            Self::Branch(_) | Self::Trap(_) => Vec::new(),
+            Self::Branch(_) | Self::Trap(_) | Self::Outcome(_) => Vec::new(),
             Self::BranchIf { condition, .. } | Self::Return(condition) | Self::Exit(condition) => {
                 vec![*condition]
             }
@@ -600,6 +632,56 @@ impl FunctionBuilder {
         )
     }
 
+    pub fn i64_bit_and(
+        &mut self,
+        block: BlockId,
+        left: ValueId,
+        right: ValueId,
+    ) -> Result<ValueId, PlanError> {
+        self.append_binary(
+            block,
+            ValueType::I64,
+            Operation::I64BitAnd(left, right),
+            left,
+            right,
+        )
+    }
+
+    pub fn i64_bit_or(
+        &mut self,
+        block: BlockId,
+        left: ValueId,
+        right: ValueId,
+    ) -> Result<ValueId, PlanError> {
+        self.append_binary(
+            block,
+            ValueType::I64,
+            Operation::I64BitOr(left, right),
+            left,
+            right,
+        )
+    }
+
+    pub fn i64_bit_xor(
+        &mut self,
+        block: BlockId,
+        left: ValueId,
+        right: ValueId,
+    ) -> Result<ValueId, PlanError> {
+        self.append_binary(
+            block,
+            ValueType::I64,
+            Operation::I64BitXor(left, right),
+            left,
+            right,
+        )
+    }
+
+    pub fn i64_to_f64(&mut self, block: BlockId, value: ValueId) -> Result<ValueId, PlanError> {
+        self.check_value(value)?;
+        self.append(block, ValueType::F64, Operation::I64ToF64(value), None)
+    }
+
     pub fn f64_add(
         &mut self,
         block: BlockId,
@@ -687,6 +769,21 @@ impl FunctionBuilder {
             block,
             ValueType::Bool,
             Operation::F64Compare(comparison, left, right),
+            left,
+            right,
+        )
+    }
+
+    pub fn f64_bits_equal(
+        &mut self,
+        block: BlockId,
+        left: ValueId,
+        right: ValueId,
+    ) -> Result<ValueId, PlanError> {
+        self.append_binary(
+            block,
+            ValueType::Bool,
+            Operation::F64BitsEqual(left, right),
             left,
             right,
         )
@@ -838,6 +935,10 @@ impl FunctionBuilder {
     pub fn exit(&mut self, block: BlockId, code: ValueId) -> Result<(), PlanError> {
         self.check_value(code)?;
         self.terminate(block, Terminator::Exit(code))
+    }
+
+    pub fn outcome(&mut self, block: BlockId, outcome: RuntimeOutcome) -> Result<(), PlanError> {
+        self.terminate(block, Terminator::Outcome(outcome))
     }
 
     #[must_use]
