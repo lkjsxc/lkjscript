@@ -1,6 +1,6 @@
 //! Pure session-owned stable-index mark/sweep heap shared by VM and JIT.
 
-use crate::{Error, HeapObj, OwnedValue, Result, Value};
+use crate::{Error, HeapObj, OwnedValue, ResourceLimitKind, Result, Value};
 
 /// Bounded heap policy. Collection pressure is deterministic and may be forced
 /// before every allocation for exact-root stress testing.
@@ -27,9 +27,12 @@ impl Default for GcConfig {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GcStats {
     pub allocations: u64,
+    /// Cumulative deterministic object-size estimate, not allocator/RSS bytes.
     pub allocated_bytes: u64,
     pub collections: u64,
+    /// Current deterministic object-size estimate, not allocator/RSS bytes.
     pub live_heap_bytes: usize,
+    /// Peak deterministic object-size estimate, not allocator/RSS bytes.
     pub peak_live_heap_bytes: usize,
 }
 
@@ -45,7 +48,6 @@ pub enum GcLimit {
 #[derive(Debug)]
 pub struct GcHeap {
     objs: Vec<Option<HeapObj>>,
-    free: Vec<u32>,
     layout_tags: Vec<Option<u64>>,
     allocs_since_gc: u32,
     config: GcConfig,
@@ -63,7 +65,6 @@ impl GcHeap {
     pub const fn new(config: GcConfig) -> Self {
         Self {
             objs: Vec::new(),
-            free: Vec::new(),
             layout_tags: Vec::new(),
             allocs_since_gc: 0,
             config,
@@ -96,7 +97,9 @@ impl GcHeap {
     /// allocation and live-byte bounds. Callers collect first when
     /// `collect_before_allocation` is true.
     pub fn try_alloc(&mut self, object: HeapObj) -> std::result::Result<Value, GcLimit> {
-        if self.stats.allocations >= self.config.max_allocations {
+        if self.stats.allocations >= self.config.max_allocations
+            || self.objs.len() > u32::MAX as usize
+        {
             return Err(GcLimit::Allocations);
         }
         let bytes = estimated_object_bytes(&object);
@@ -118,7 +121,9 @@ impl GcHeap {
         object: HeapObj,
         layout: u64,
     ) -> std::result::Result<Value, GcLimit> {
-        if self.stats.allocations >= self.config.max_allocations {
+        if self.stats.allocations >= self.config.max_allocations
+            || self.objs.len() > u32::MAX as usize
+        {
             return Err(GcLimit::Allocations);
         }
         let bytes = estimated_object_bytes(&object);
@@ -150,11 +155,9 @@ impl GcHeap {
             .stats
             .peak_live_heap_bytes
             .max(self.stats.live_heap_bytes);
-        if let Some(index) = self.free.pop() {
-            self.objs[index as usize] = Some(object);
-            self.layout_tags[index as usize] = layout;
-            return Value::from_heap(index);
-        }
+        // Handles are never reused during a heap session. The language value
+        // has no generation bits, so monotonic indices are the only sound way
+        // to prevent a swept stale handle from resolving to a later object.
         let index = u32::try_from(self.objs.len()).unwrap_or(u32::MAX);
         self.objs.push(Some(object));
         self.layout_tags.push(layout);
@@ -171,14 +174,80 @@ impl GcHeap {
             .ok_or_else(|| Error::msg("bad heap index"))
     }
 
-    pub fn get_mut(&mut self, value: Value) -> Result<&mut HeapObj> {
+    /// Transactionally mutate one object while preserving deterministic
+    /// estimated-byte accounting. The old object is restored if the closure
+    /// fails, accounting overflows, or the configured live-heap limit would be
+    /// exceeded. Positive growth contributes to aggregate allocated bytes;
+    /// shrinkage reduces only current live bytes.
+    pub fn mutate<T>(
+        &mut self,
+        value: Value,
+        mutation: impl FnOnce(&mut HeapObj) -> Result<T>,
+    ) -> Result<T> {
         let index = value
             .as_heap()
             .ok_or_else(|| Error::msg("expected heap value"))? as usize;
-        self.objs
-            .get_mut(index)
-            .and_then(Option::as_mut)
-            .ok_or_else(|| Error::msg("bad heap index"))
+        let old = self
+            .objs
+            .get(index)
+            .and_then(Option::as_ref)
+            .map(clone_object_for_transaction)
+            .ok_or_else(|| Error::msg("bad heap index"))?;
+        let old_bytes = estimated_object_bytes(&old);
+        let result = {
+            let object = self
+                .objs
+                .get_mut(index)
+                .and_then(Option::as_mut)
+                .ok_or_else(|| Error::msg("bad heap index"))?;
+            mutation(object)
+        };
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                self.objs[index] = Some(old);
+                return Err(error);
+            }
+        };
+        let new_object = self
+            .objs
+            .get(index)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| Error::msg("bad heap index"))?;
+        if !same_object_layout(&old, new_object) {
+            self.objs[index] = Some(old);
+            return Err(Error::msg("heap mutation changed object layout"));
+        }
+        let new_bytes = estimated_object_bytes(new_object);
+        if new_bytes > old_bytes {
+            let growth = new_bytes - old_bytes;
+            let Some(next_live) = self.stats.live_heap_bytes.checked_add(growth) else {
+                self.objs[index] = Some(old);
+                return Err(Error::resource(
+                    ResourceLimitKind::HeapBytes,
+                    "heap mutation byte accounting overflow",
+                ));
+            };
+            if next_live > self.config.max_heap_bytes {
+                self.objs[index] = Some(old);
+                return Err(Error::resource(
+                    ResourceLimitKind::HeapBytes,
+                    "heap mutation exceeds live heap byte limit",
+                ));
+            }
+            self.stats.live_heap_bytes = next_live;
+            self.stats.peak_live_heap_bytes = self.stats.peak_live_heap_bytes.max(next_live);
+            self.stats.allocated_bytes = self
+                .stats
+                .allocated_bytes
+                .saturating_add(u64::try_from(growth).unwrap_or(u64::MAX));
+        } else {
+            self.stats.live_heap_bytes = self
+                .stats
+                .live_heap_bytes
+                .saturating_sub(old_bytes - new_bytes);
+        }
+        Ok(result)
     }
 
     /// Mark/sweep from exact roots. Invalid/category checking belongs to the
@@ -198,7 +267,6 @@ impl GcHeap {
                 }
             }
         }
-        self.free.clear();
         for (index, slot) in self.objs.iter_mut().enumerate() {
             if let Some(object) = slot.as_ref().filter(|_| !marked[index]) {
                 self.stats.live_heap_bytes = self
@@ -207,7 +275,6 @@ impl GcHeap {
                     .saturating_sub(estimated_object_bytes(object));
                 *slot = None;
                 self.layout_tags[index] = None;
-                self.free.push(index as u32);
             }
         }
         self.allocs_since_gc = 0;
@@ -225,6 +292,7 @@ impl GcHeap {
         self.collect_before_allocation()
     }
 
+    /// Current deterministic object-size estimate, not allocator/RSS bytes.
     #[must_use]
     pub const fn heap_bytes(&self) -> usize {
         self.stats.live_heap_bytes
@@ -235,6 +303,7 @@ impl GcHeap {
         self.stats.allocations
     }
 
+    /// Cumulative deterministic object-size estimate, not allocator/RSS bytes.
     #[must_use]
     pub const fn total_allocated_bytes(&self) -> u64 {
         self.stats.allocated_bytes
@@ -245,6 +314,7 @@ impl GcHeap {
         self.stats.collections
     }
 
+    /// Peak deterministic object-size estimate, not allocator/RSS bytes.
     #[must_use]
     pub const fn peak_live_heap_bytes(&self) -> usize {
         self.stats.peak_live_heap_bytes
@@ -272,9 +342,104 @@ impl GcHeap {
         OwnedValue::from_vm_snapshot(root, self.objs)
     }
 
-    /// Build an owned reachable snapshot without consuming the session heap.
+    /// Build an owned transitive reachable snapshot without consuming the
+    /// session heap. Stable indices are preserved and every unreachable slot
+    /// remains absent from the returned storage.
     pub fn snapshot(&self, root: Value) -> Result<OwnedValue> {
-        OwnedValue::from_vm_snapshot(root, self.objs.clone())
+        let marked = self.marked(&[root]);
+        let snapshot = self
+            .objs
+            .iter()
+            .zip(marked)
+            .map(|(object, retain)| retain.then(|| object.clone()).flatten())
+            .collect();
+        OwnedValue::from_vm_snapshot(root, snapshot)
+    }
+
+    fn marked(&self, roots: &[Value]) -> Vec<bool> {
+        let mut marked = vec![false; self.objs.len()];
+        let mut pending = roots.to_vec();
+        while let Some(value) = pending.pop() {
+            let Some(index) = value.as_heap().map(|index| index as usize) else {
+                continue;
+            };
+            if index >= self.objs.len() || marked[index] {
+                continue;
+            }
+            let Some(object) = self.objs[index].as_ref() else {
+                continue;
+            };
+            marked[index] = true;
+            object.trace(&mut |child| pending.push(child));
+        }
+        marked
+    }
+}
+
+fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
+    match (old, new) {
+        (HeapObj::Int(_), HeapObj::Int(_))
+        | (HeapObj::Float(_), HeapObj::Float(_))
+        | (HeapObj::Str(_), HeapObj::Str(_))
+        | (HeapObj::Symbol(_), HeapObj::Symbol(_))
+        | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
+        | (HeapObj::Closure { .. }, HeapObj::Closure { .. })
+        | (HeapObj::Builtin(_), HeapObj::Builtin(_))
+        | (HeapObj::Buf(_), HeapObj::Buf(_))
+        | (HeapObj::ResultOk(_), HeapObj::ResultOk(_))
+        | (HeapObj::ResultErr(_), HeapObj::ResultErr(_))
+        | (HeapObj::OptionSome(_), HeapObj::OptionSome(_)) => true,
+        (
+            HeapObj::Product {
+                product: old_product,
+                ..
+            },
+            HeapObj::Product {
+                product: new_product,
+                ..
+            },
+        ) => old_product == new_product,
+        _ => false,
+    }
+}
+
+fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
+    fn clone_string(text: &str, capacity: usize) -> String {
+        let mut clone = String::with_capacity(capacity);
+        clone.push_str(text);
+        clone
+    }
+    fn clone_values(values: &[Value], capacity: usize) -> Vec<Value> {
+        let mut clone = Vec::with_capacity(capacity);
+        clone.extend_from_slice(values);
+        clone
+    }
+    match object {
+        HeapObj::Int(value) => HeapObj::Int(*value),
+        HeapObj::Float(value) => HeapObj::Float(*value),
+        HeapObj::Str(text) => HeapObj::Str(clone_string(text, text.capacity())),
+        HeapObj::Symbol(text) => HeapObj::Symbol(clone_string(text, text.capacity())),
+        HeapObj::Pair { car, cdr } => HeapObj::Pair {
+            car: *car,
+            cdr: *cdr,
+        },
+        HeapObj::Closure { proto, captures } => HeapObj::Closure {
+            proto: *proto,
+            captures: clone_values(captures, captures.capacity()),
+        },
+        HeapObj::Builtin(value) => HeapObj::Builtin(*value),
+        HeapObj::Buf(bytes) => {
+            let mut clone = Vec::with_capacity(bytes.capacity());
+            clone.extend_from_slice(bytes);
+            HeapObj::Buf(clone)
+        }
+        HeapObj::ResultOk(value) => HeapObj::ResultOk(*value),
+        HeapObj::ResultErr(value) => HeapObj::ResultErr(*value),
+        HeapObj::OptionSome(value) => HeapObj::OptionSome(*value),
+        HeapObj::Product { product, fields } => HeapObj::Product {
+            product: *product,
+            fields: clone_values(fields, fields.capacity()),
+        },
     }
 }
 
@@ -301,6 +466,7 @@ fn estimated_object_bytes(object: &HeapObj) -> usize {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -343,5 +509,106 @@ mod tests {
             Err(GcLimit::Allocations)
         );
         assert_eq!(heap.total_allocations(), 1);
+    }
+
+    #[test]
+    fn swept_same_layout_handle_is_never_reused() {
+        let mut heap = GcHeap::default();
+        let stale = heap
+            .try_alloc_with_layout(HeapObj::Buf(vec![1]), 77)
+            .expect("first typed allocation");
+        heap.collect(&[]);
+        let current = heap
+            .try_alloc_with_layout(HeapObj::Buf(vec![2]), 77)
+            .expect("second typed allocation");
+        assert_ne!(stale.as_heap(), current.as_heap());
+        assert!(heap.get(stale).is_err());
+        assert!(matches!(heap.get(current), Ok(HeapObj::Buf(bytes)) if bytes == &[2]));
+    }
+
+    #[test]
+    fn mutation_growth_is_bounded_and_failure_rolls_back_every_object_kind() {
+        for object in [
+            HeapObj::Buf(vec![1]),
+            HeapObj::Str("x".into()),
+            HeapObj::Product {
+                product: crate::ProductId::new(0),
+                fields: vec![Value::UNIT],
+            },
+        ] {
+            let mut heap = GcHeap::default();
+            let value = heap.alloc(object.clone());
+            heap.set_config(GcConfig {
+                max_heap_bytes: heap.heap_bytes(),
+                ..heap.config()
+            });
+            let result = heap.mutate(value, |current| {
+                match current {
+                    HeapObj::Buf(bytes) => bytes.extend_from_slice(&[2; 128]),
+                    HeapObj::Str(text) => text.push_str(&"y".repeat(128)),
+                    HeapObj::Product { fields, .. } => fields.extend([Value::UNIT; 128]),
+                    _ => return Err(Error::msg("unexpected test object")),
+                }
+                Ok(())
+            });
+            assert!(matches!(
+                result,
+                Err(ref error)
+                    if error.class() == crate::ErrorClass::Resource(ResourceLimitKind::HeapBytes)
+            ));
+            assert_eq!(heap.get(value).ok(), Some(&object));
+        }
+
+        let mut heap = GcHeap::default();
+        let value = heap.alloc(HeapObj::Buf(vec![1]));
+        let before_growth = heap.stats();
+        heap.mutate(value, |object| {
+            let HeapObj::Buf(bytes) = object else {
+                return Err(Error::msg("unexpected test object"));
+            };
+            bytes.extend_from_slice(&[2; 128]);
+            Ok(())
+        })
+        .expect("bounded mutation growth");
+        let after_growth = heap.stats();
+        assert!(after_growth.live_heap_bytes > before_growth.live_heap_bytes);
+        assert!(after_growth.allocated_bytes > before_growth.allocated_bytes);
+        assert!(after_growth.peak_live_heap_bytes >= after_growth.live_heap_bytes);
+
+        let mut heap = GcHeap::default();
+        let value = heap.alloc(HeapObj::Buf(vec![1, 2]));
+        let before = heap.stats();
+        let result: Result<()> = heap.mutate(value, |object| {
+            let HeapObj::Buf(bytes) = object else {
+                return Err(Error::msg("unexpected test object"));
+            };
+            bytes.push(3);
+            Err(Error::msg("reject mutation"))
+        });
+        assert!(result.is_err());
+        assert_eq!(heap.get(value).ok(), Some(&HeapObj::Buf(vec![1, 2])));
+        assert_eq!(heap.stats(), before);
+
+        let result = heap.mutate(value, |object| {
+            *object = HeapObj::Str("wrong layout".into());
+            Ok(())
+        });
+        assert!(
+            matches!(result, Err(ref error) if error.as_str() == "heap mutation changed object layout")
+        );
+        assert_eq!(heap.get(value).ok(), Some(&HeapObj::Buf(vec![1, 2])));
+        assert_eq!(heap.stats(), before);
+    }
+
+    #[test]
+    fn snapshot_clones_only_transitively_reachable_objects() {
+        let mut heap = GcHeap::default();
+        let child = heap.alloc(HeapObj::Str("child".into()));
+        let root = heap.alloc(HeapObj::OptionSome(child));
+        let _unreachable = heap.alloc(HeapObj::Str("unreachable".into()));
+        let snapshot = heap.snapshot(root).expect("reachable snapshot");
+        assert_eq!(snapshot.snapshot_object_count(), 2);
+        assert!(heap.get(root).is_ok());
+        assert_eq!(heap.total_allocations(), 3);
     }
 }

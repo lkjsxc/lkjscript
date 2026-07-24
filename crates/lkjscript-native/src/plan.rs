@@ -30,7 +30,7 @@ pub enum ReferenceType {
     Str,
     List(LayoutIdentity),
     Option(LayoutIdentity),
-    Result(LayoutIdentity),
+    Result(LayoutIdentity, LayoutIdentity),
     Product(LayoutIdentity),
 }
 
@@ -51,6 +51,31 @@ impl ValueType {
             Self::I64 | Self::F64 | Self::Bool | Self::Unit => None,
         }
     }
+
+    /// Deterministic structural identity used by List/Option/Result payload
+    /// facts. This identifies language value layout, not an object address.
+    #[must_use]
+    pub const fn layout_identity(self) -> LayoutIdentity {
+        let raw = match self {
+            Self::Unit => 1,
+            Self::Bool => 2,
+            Self::I64 => 3,
+            Self::F64 => 4,
+            Self::Reference(ReferenceType::Str) => 5,
+            Self::Reference(ReferenceType::Buf) => 7,
+            Self::Reference(ReferenceType::Product(product)) => mix_layout(8, product.get()),
+            Self::Reference(ReferenceType::List(payload)) => mix_layout(9, payload.get()),
+            Self::Reference(ReferenceType::Option(payload)) => mix_layout(10, payload.get()),
+            Self::Reference(ReferenceType::Result(ok, error)) => {
+                mix_layout(mix_layout(11, ok.get()), error.get())
+            }
+        };
+        LayoutIdentity::new(if raw == 0 { 1 } else { raw })
+    }
+}
+
+const fn mix_layout(state: u32, value: u32) -> u32 {
+    state.wrapping_mul(16_777_619) ^ value
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -207,9 +232,20 @@ pub enum HeapOperation {
     EmptyStr,
     EmptyList,
     None,
-    ProductValue { product: u32, fields: u8 },
-    ProductField { product: u32, field: u8 },
-    WithProductField { product: u32, field: u8 },
+    ProductValue {
+        product: u32,
+        fields: u8,
+    },
+    ProductField {
+        product: u32,
+        field: u8,
+        field_type: ValueType,
+    },
+    WithProductField {
+        product: u32,
+        field: u8,
+        field_type: ValueType,
+    },
     Cons,
     Car,
     Cdr,
@@ -311,7 +347,7 @@ impl HeapCallDescriptor {
             allocation,
             store,
         };
-        if !descriptor.classes_are_valid() {
+        if !descriptor.canonical_facts_are_valid() {
             return Err(PlanError::InvalidHeapCall);
         }
         Ok(descriptor)
@@ -342,7 +378,7 @@ impl HeapCallDescriptor {
         self.store
     }
 
-    pub(crate) fn classes_are_valid(&self) -> bool {
+    pub(crate) fn canonical_facts_are_valid(&self) -> bool {
         let allocates = matches!(
             self.operation,
             HeapOperation::ConstantStr(_)
@@ -374,7 +410,143 @@ impl HeapCallDescriptor {
             _ if allocates => StoreClass::Initialization,
             _ => StoreClass::None,
         };
-        self.allocation == expected_allocation && self.store == expected_store
+        self.allocation == expected_allocation
+            && self.store == expected_store
+            && self.operation_types_are_valid()
+    }
+
+    fn operation_types_are_valid(&self) -> bool {
+        use HeapOperation as Op;
+        use ReferenceType as Ref;
+        use ValueType as Ty;
+
+        let inputs = self.input_types.as_slice();
+        let result = self.result_type;
+        match &self.operation {
+            Op::ConstantStr(_) | Op::EmptyStr => {
+                inputs.is_empty() && result == Ty::Reference(Ref::Str)
+            }
+            Op::EmptyList => inputs.is_empty() && matches!(result, Ty::Reference(Ref::List(_))),
+            Op::None => inputs.is_empty() && matches!(result, Ty::Reference(Ref::Option(_))),
+            Op::ProductValue { product, fields } => {
+                usize::from(*fields) == inputs.len()
+                    && usize::from(*fields) <= 15
+                    && u16::try_from(*product).is_ok()
+                    && result
+                        == Ty::Reference(Ref::Product(LayoutIdentity::new(
+                            product.saturating_add(1),
+                        )))
+            }
+            Op::ProductField {
+                product,
+                field,
+                field_type,
+            } => {
+                *field < 15
+                    && u16::try_from(*product).is_ok()
+                    && result == *field_type
+                    && matches!(inputs, [Ty::Reference(Ref::Product(layout))]
+                        if layout.get() == product.saturating_add(1))
+            }
+            Op::WithProductField {
+                product,
+                field,
+                field_type,
+            } => {
+                *field < 15
+                    && u16::try_from(*product).is_ok()
+                    && matches!(inputs, [Ty::Reference(Ref::Product(layout)), replacement]
+                        if layout.get() == product.saturating_add(1) && replacement == field_type)
+                    && result
+                        == Ty::Reference(Ref::Product(LayoutIdentity::new(
+                            product.saturating_add(1),
+                        )))
+            }
+            Op::Cons => matches!(inputs, [payload, list]
+                if *list == result
+                    && matches!(result, Ty::Reference(Ref::List(identity))
+                        if identity == payload.layout_identity())),
+            Op::Car => matches!(inputs, [Ty::Reference(Ref::List(identity))]
+                if *identity == result.layout_identity()),
+            Op::Cdr => {
+                matches!(inputs, [list] if *list == result && matches!(result, Ty::Reference(Ref::List(_))))
+            }
+            Op::IsEmptyList => {
+                matches!(inputs, [Ty::Reference(Ref::List(_))]) && result == Ty::Bool
+            }
+            Op::Some => matches!(inputs, [payload]
+                if result == Ty::Reference(Ref::Option(payload.layout_identity()))),
+            Op::IsSome => matches!(inputs, [Ty::Reference(Ref::Option(_))]) && result == Ty::Bool,
+            Op::UnwrapSome => matches!(inputs, [Ty::Reference(Ref::Option(payload))]
+                if *payload == result.layout_identity()),
+            Op::Ok => matches!(inputs, [payload]
+                if matches!(result, Ty::Reference(Ref::Result(ok, _)) if ok == payload.layout_identity())),
+            Op::Err => matches!(inputs, [payload]
+                if matches!(result, Ty::Reference(Ref::Result(_, error)) if error == payload.layout_identity())),
+            Op::IsOk => matches!(inputs, [Ty::Reference(Ref::Result(_, _))]) && result == Ty::Bool,
+            Op::UnwrapOk => matches!(inputs, [Ty::Reference(Ref::Result(ok, _))]
+                if *ok == result.layout_identity()),
+            Op::UnwrapErr => matches!(inputs, [Ty::Reference(Ref::Result(_, error))]
+                if *error == result.layout_identity()),
+            Op::BufNew => inputs == [Ty::I64] && result == Ty::Reference(Ref::Buf),
+            Op::BufLen => inputs == [Ty::Reference(Ref::Buf)] && result == Ty::I64,
+            Op::BufRef | Op::BufGetU32 => {
+                inputs == [Ty::Reference(Ref::Buf), Ty::I64] && result == Ty::I64
+            }
+            Op::BufSet | Op::BufSetU32 => {
+                inputs == [Ty::Reference(Ref::Buf), Ty::I64, Ty::I64] && result == Ty::Unit
+            }
+            Op::BufClone => {
+                inputs == [Ty::Reference(Ref::Buf)] && result == Ty::Reference(Ref::Buf)
+            }
+            Op::BufFromStr => {
+                inputs == [Ty::Reference(Ref::Str)] && result == Ty::Reference(Ref::Buf)
+            }
+            Op::BufToStr => {
+                inputs == [Ty::Reference(Ref::Buf)]
+                    && result
+                        == Ty::Reference(Ref::Result(
+                            Ty::Reference(Ref::Str).layout_identity(),
+                            Ty::Reference(Ref::Str).layout_identity(),
+                        ))
+            }
+            Op::BufSlice => {
+                inputs == [Ty::Reference(Ref::Buf), Ty::I64, Ty::I64]
+                    && result
+                        == Ty::Reference(Ref::Result(
+                            Ty::Reference(Ref::Buf).layout_identity(),
+                            Ty::Reference(Ref::Str).layout_identity(),
+                        ))
+            }
+            Op::StrLen => inputs == [Ty::Reference(Ref::Str)] && result == Ty::I64,
+            Op::StrRef => inputs == [Ty::Reference(Ref::Str), Ty::I64] && result == Ty::I64,
+            Op::StrAppend => {
+                inputs == [Ty::Reference(Ref::Str), Ty::Reference(Ref::Str)]
+                    && result == Ty::Reference(Ref::Str)
+            }
+            Op::StrSlice => {
+                inputs == [Ty::Reference(Ref::Str), Ty::I64, Ty::I64]
+                    && result == Ty::Reference(Ref::Str)
+            }
+            Op::StrFromByte | Op::StrFromI64 => {
+                inputs == [Ty::I64] && result == Ty::Reference(Ref::Str)
+            }
+            Op::StrFromF64 => inputs == [Ty::F64] && result == Ty::Reference(Ref::Str),
+            Op::EqualValue => {
+                matches!(
+                    inputs,
+                    [left @ Ty::Reference(Ref::Str | Ref::Option(_) | Ref::Result(_, _)), right]
+                        if left == right
+                ) && result == Ty::Bool
+            }
+            Op::SameObject => {
+                inputs == [Ty::Reference(Ref::Buf), Ty::Reference(Ref::Buf)] && result == Ty::Bool
+            }
+            Op::ListEqual => {
+                matches!(inputs, [Ty::Reference(Ref::List(left)), Ty::Reference(Ref::List(right))] if left == right)
+                    && result == Ty::Bool
+            }
+        }
     }
 }
 
@@ -657,7 +829,10 @@ pub(crate) enum Terminator {
         when_false: BlockId,
     },
     Return(ValueId),
-    Trap(TrapCode),
+    Trap {
+        trap: TrapCode,
+        site: Option<u32>,
+    },
     Exit(ValueId),
     Outcome(RuntimeOutcome),
 }
@@ -665,7 +840,7 @@ pub(crate) enum Terminator {
 impl Terminator {
     pub(crate) fn operands(&self) -> Vec<ValueId> {
         match self {
-            Self::Branch(_) | Self::Trap(_) | Self::Outcome(_) => Vec::new(),
+            Self::Branch(_) | Self::Trap { .. } | Self::Outcome(_) => Vec::new(),
             Self::BranchIf { condition, .. } | Self::Return(condition) | Self::Exit(condition) => {
                 vec![*condition]
             }
@@ -1312,7 +1487,17 @@ impl FunctionBuilder {
     }
 
     pub fn trap(&mut self, block: BlockId, trap: TrapCode) -> Result<(), PlanError> {
-        self.terminate(block, Terminator::Trap(trap))
+        self.terminate(block, Terminator::Trap { trap, site: None })
+    }
+
+    pub fn trap_at(&mut self, block: BlockId, trap: TrapCode, site: u32) -> Result<(), PlanError> {
+        self.terminate(
+            block,
+            Terminator::Trap {
+                trap,
+                site: Some(site),
+            },
+        )
     }
 
     pub fn exit(&mut self, block: BlockId, code: ValueId) -> Result<(), PlanError> {

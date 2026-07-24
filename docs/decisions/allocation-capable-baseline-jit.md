@@ -55,20 +55,30 @@ them.
 ## Current Host-Independent Slice
 
 `GcHeap` is the pure stable-index mark/sweep heap in `lkjscript-core`; VM and
-forced JIT sessions use that implementation with exact allocation, accounted
-heap-byte, collection, peak-live, and stress-collection APIs. ABI-2 images
-retain bounded `HeapDispatchV1` sites with exact operation, input/result type
-and layout, source, allocation/store class, safepoint, and verified frame homes.
-The sys trampoline alone reads raw homes, copies typed arguments and roots into
-a safe service, writes exact roots/results back, and propagates structured
-status. Empty List and None use only the exact zero niche; other references
+forced JIT sessions use that implementation with exact allocation counts,
+deterministic estimated object-byte accounting, collection counts, estimated
+peak-live bytes, and stress-collection APIs. Because a language `Value` has no
+generation field, swept object indices are never reused within a session.
+Mutation is transactional and layout-preserving: growth is estimated and
+checked before accounting commits, and closure, layout, or limit failure
+restores the prior object. ABI-2 images
+retain bounded `HeapDispatchV1` sites with canonical operation-specific
+input/result/layout/allocation/store facts, including nominal product field
+facts and List/Option/Result payload identities, plus source, safepoint, and
+verified frame homes. The sys trampoline alone reads raw homes, copies typed
+arguments and roots into a safe service, writes exact roots/results back,
+re-materializes arguments after any moving root writeback, and propagates
+structured status. Empty List and None use only the exact zero niche; other references
 reject zero and every nonzero handle is category/layout checked.
 
 Forced lowering covers Str, legacy Buf, Product, List, Option, Result, their
 listed constructors/accessors/mutations/conversions/equality families, and
 recursive SCCs. Runtime ABI calls are generated execution, not fallback.
-Automatic mode deliberately keeps reference-typed entries in the VM because
-native/VM reference transfer is not Current. Symbol, Handle/host IO, indirect
+Automatic mode deliberately keeps reference-signature entries in the VM
+because native/VM reference transfer is not Current. Such a helper may still
+be installed inside a supported generated direct-call group, but its per-
+function auto-entry eligibility remains false, so a later direct VM call cannot
+be mislabeled native. Symbol, Handle/host IO, indirect
 calls, and lexical ownership references reject deterministically.
 
 ## Required Surface
@@ -117,10 +127,13 @@ frames and releases resources before CLI status translation.
 
 ## Metrics
 
-Retained metrics add allocation count/bytes, collections, pause distribution,
-peak live heap, root count, barrier count, native frame depth, runtime calls,
-and transition counts to the existing compiler/native/code-cache accounting.
-Normal execution remains silent; metrics are opt-in and never use stdout.
+Current retained metrics include allocation counts, deterministic estimated
+object bytes, collections, estimated peak-live object bytes, root count,
+barrier count, native frame depth, distinct attempted and successful heap
+runtime calls, and transition counts in addition to compiler/native/code-cache
+accounting. Normal execution remains silent; metrics are opt-in and never use
+stdout. Collection pause distribution remains an acceptance target and is not
+currently measured or emitted.
 
 ## Acceptance
 

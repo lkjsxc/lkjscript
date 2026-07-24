@@ -86,6 +86,8 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 let mut execution = vm.config.clone();
                 execution.instruction_fuel = vm.fuel_remaining;
                 execution.wall_time = vm.remaining_wall_time()?;
+                execution.max_stack_values =
+                    execution.max_stack_values.saturating_sub(vm.stack.len());
                 match vm
                     .jit
                     .invoke_scalar(function, &native_arguments, &execution)
@@ -99,8 +101,8 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                                 vm.push(value);
                                 return Ok(());
                             }
-                            ScalarInvocationOutcome::Trapped(trap) => {
-                                let message = vm.jit.trap_message(function, trap);
+                            ScalarInvocationOutcome::Trapped(trap, site) => {
+                                let message = vm.jit.trap_message(function, trap, site);
                                 return Err(Error::msg(message));
                             }
                             ScalarInvocationOutcome::Exited(code) => {

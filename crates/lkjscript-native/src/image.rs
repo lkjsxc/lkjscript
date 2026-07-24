@@ -452,6 +452,7 @@ pub struct TrapMapEntry {
     function: FunctionId,
     code_offset: u32,
     trap: TrapCode,
+    site: Option<u32>,
 }
 
 impl TrapMapEntry {
@@ -468,6 +469,11 @@ impl TrapMapEntry {
     #[must_use]
     pub const fn trap(self) -> TrapCode {
         self.trap
+    }
+
+    #[must_use]
+    pub const fn site(self) -> Option<u32> {
+        self.site
     }
 }
 
@@ -793,7 +799,7 @@ impl InstallableImage {
                     })
                 || site.result.value_type != site.descriptor.result_type()
                 || !frame.homes.contains(&site.result)
-                || !site.descriptor.classes_are_valid()
+                || !site.descriptor.canonical_facts_are_valid()
             {
                 return Err(ImageIntegrityError::HeapRuntimeSite);
             }
@@ -815,8 +821,12 @@ impl InstallableImage {
                 return Err(ImageIntegrityError::SourceMap);
             }
         }
+        let mut explicit_sites = HashSet::new();
         for trap in &self.trap_map {
-            if !offset_in_function(&self.entries, trap.function, trap.code_offset) {
+            if !offset_in_function(&self.entries, trap.function, trap.code_offset)
+                || trap.site.is_some() && trap.trap != TrapCode::Explicit
+                || trap.site.is_some_and(|site| !explicit_sites.insert(site))
+            {
                 return Err(ImageIntegrityError::TrapMap);
             }
         }
@@ -1020,11 +1030,13 @@ pub(crate) fn trap_map_entry(
     function: FunctionId,
     code_offset: u32,
     trap: TrapCode,
+    site: Option<u32>,
 ) -> TrapMapEntry {
     TrapMapEntry {
         function,
         code_offset,
         trap,
+        site,
     }
 }
 

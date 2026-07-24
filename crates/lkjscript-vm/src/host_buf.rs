@@ -5,13 +5,6 @@ use lkjscript_core::{
     Error, GcHeap as Arena, HeapObj, Result, Value, MAX_BUFFER_BYTES, MAX_BULK_IO_BYTES,
 };
 
-fn as_buf_mut(arena: &mut Arena, value: Value) -> Result<&mut Vec<u8>> {
-    match arena.get_mut(value)? {
-        HeapObj::Buf(buffer) => Ok(buffer),
-        _ => Err(Error::msg("expected buf")),
-    }
-}
-
 pub fn as_buf(arena: &Arena, value: Value) -> Result<&[u8]> {
     match arena.get(value)? {
         HeapObj::Buf(buffer) => Ok(buffer.as_slice()),
@@ -42,12 +35,16 @@ pub fn buf_ref(arena: &Arena, value: Value, index: i64) -> Result<i64> {
 pub fn buf_set(arena: &mut Arena, value: Value, index: i64, byte: i64) -> Result<Value> {
     let index = buffer_index(index, "buf-set")?;
     let byte = u8::try_from(byte).map_err(|_| Error::msg("buf-set byte out of range"))?;
-    let buffer = as_buf_mut(arena, value)?;
-    let slot = buffer
-        .get_mut(index)
-        .ok_or_else(|| Error::msg("buf-set out of bounds"))?;
-    *slot = byte;
-    Ok(Value::UNIT)
+    arena.mutate(value, |object| {
+        let HeapObj::Buf(buffer) = object else {
+            return Err(Error::msg("expected buf"));
+        };
+        let slot = buffer
+            .get_mut(index)
+            .ok_or_else(|| Error::msg("buf-set out of bounds"))?;
+        *slot = byte;
+        Ok(Value::UNIT)
+    })
 }
 
 pub fn buf_get_u32(arena: &Arena, value: Value, index: i64) -> Result<i64> {
@@ -69,11 +66,16 @@ pub fn buf_set_u32(arena: &mut Arena, value: Value, index: i64, number: i64) -> 
         .checked_add(4)
         .ok_or_else(|| Error::msg("buf-set-u32 index overflow"))?;
     let number = u32::try_from(number).map_err(|_| Error::msg("buf-set-u32 value out of range"))?;
-    let destination = as_buf_mut(arena, value)?
-        .get_mut(index..end)
-        .ok_or_else(|| Error::msg("buf-set-u32 out of bounds"))?;
-    destination.copy_from_slice(&number.to_le_bytes());
-    Ok(Value::UNIT)
+    arena.mutate(value, |object| {
+        let HeapObj::Buf(buffer) = object else {
+            return Err(Error::msg("expected buf"));
+        };
+        let destination = buffer
+            .get_mut(index..end)
+            .ok_or_else(|| Error::msg("buf-set-u32 out of bounds"))?;
+        destination.copy_from_slice(&number.to_le_bytes());
+        Ok(Value::UNIT)
+    })
 }
 
 pub fn buf_clone(arena: &mut Arena, value: Value) -> Result<Value> {
@@ -113,10 +115,15 @@ pub fn sys_read_into(
     requested: i64,
 ) -> Result<i64> {
     let range = bulk_range(arena, buffer, offset, requested, "sys-read-into")?;
-    let destination = as_buf_mut(arena, buffer)?
-        .get_mut(range)
-        .ok_or_else(|| Error::msg("sys-read-into range is invalid"))?;
-    let count = handles.read_into(handle, destination)?;
+    let count = arena.mutate(buffer, |object| {
+        let HeapObj::Buf(bytes) = object else {
+            return Err(Error::msg("expected buf"));
+        };
+        let destination = bytes
+            .get_mut(range)
+            .ok_or_else(|| Error::msg("sys-read-into range is invalid"))?;
+        handles.read_into(handle, destination)
+    })?;
     i64::try_from(count).map_err(|_| Error::msg("sys-read-into count out of range"))
 }
 
@@ -143,12 +150,17 @@ pub fn sys_random_fill(
     requested: i64,
 ) -> Result<Value> {
     let range = bulk_range(arena, buffer, offset, requested, "sys-random-fill")?;
-    let destination = as_buf_mut(arena, buffer)?
-        .get_mut(range)
-        .ok_or_else(|| Error::msg("sys-random-fill range is invalid"))?;
-    lkjscript_sys::random_fill(destination)
-        .map_err(|error| Error::msg(format!("sys-random-fill: {error}")))?;
-    Ok(Value::UNIT)
+    arena.mutate(buffer, |object| {
+        let HeapObj::Buf(bytes) = object else {
+            return Err(Error::msg("expected buf"));
+        };
+        let destination = bytes
+            .get_mut(range)
+            .ok_or_else(|| Error::msg("sys-random-fill range is invalid"))?;
+        lkjscript_sys::random_fill(destination)
+            .map_err(|error| Error::msg(format!("sys-random-fill: {error}")))?;
+        Ok(Value::UNIT)
+    })
 }
 
 pub fn sys_sha256(arena: &mut Arena, buffer: Value, offset: i64, requested: i64) -> Result<Value> {
@@ -167,10 +179,14 @@ pub fn sys_tty_get(
     buffer: Value,
 ) -> Result<Value> {
     let raw = handles.raw_fd(handle, "sys-tty-get")?;
-    let state = as_buf_mut(arena, buffer)?;
-    lkjscript_sys::tty_get(raw, state)
-        .map_err(|error| Error::msg(format!("sys-tty-get: {error}")))?;
-    Ok(Value::UNIT)
+    arena.mutate(buffer, |object| {
+        let HeapObj::Buf(state) = object else {
+            return Err(Error::msg("expected buf"));
+        };
+        lkjscript_sys::tty_get(raw, state)
+            .map_err(|error| Error::msg(format!("sys-tty-get: {error}")))?;
+        Ok(Value::UNIT)
+    })
 }
 
 pub fn sys_tty_set(

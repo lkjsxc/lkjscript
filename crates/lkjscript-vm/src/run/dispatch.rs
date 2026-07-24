@@ -502,7 +502,7 @@ pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use lkjscript_core::{ExecutionConfig, HeapObj, Op, Value};
+    use lkjscript_core::{ExecutionConfig, HeapObj, Op, Value, MAX_LIST_EQUAL_STEPS};
 
     use crate::run::NoTier as NullJit;
 
@@ -674,6 +674,29 @@ mod tests {
         vm.push(one);
         vm.push(improper);
         assert!(dispatch(&mut vm, Op::ListEqual as u8).is_err());
+    }
+
+    #[test]
+    fn list_equality_accepts_exact_global_limit_and_rejects_one_more() {
+        let mut vm = test_vm();
+        let mut at_limit = Value::EMPTY_LIST;
+        for _ in 0..MAX_LIST_EQUAL_STEPS {
+            at_limit = vm.arena.alloc(HeapObj::Pair {
+                car: Value::UNIT,
+                cdr: at_limit,
+            });
+        }
+        assert_eq!(
+            list_values_equal(&vm.arena, at_limit, at_limit, MAX_LIST_EQUAL_STEPS).ok(),
+            Some(true)
+        );
+        let over_limit = vm.arena.alloc(HeapObj::Pair {
+            car: Value::UNIT,
+            cdr: at_limit,
+        });
+        assert!(
+            list_values_equal(&vm.arena, over_limit, over_limit, MAX_LIST_EQUAL_STEPS).is_err()
+        );
     }
 
     #[test]

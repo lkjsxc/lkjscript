@@ -238,7 +238,7 @@ fn verify_function(
                 ..
             } => vec![*when_true, *when_false],
             Terminator::Return(_)
-            | Terminator::Trap(_)
+            | Terminator::Trap { .. }
             | Terminator::Exit(_)
             | Terminator::Outcome(_) => Vec::new(),
         };
@@ -477,7 +477,7 @@ fn verify_instruction(
             require_output(instruction, signature.result(), "runtime call")
         }
         Operation::HeapCall(descriptor, arguments) => {
-            if !descriptor.classes_are_valid()
+            if !descriptor.canonical_facts_are_valid()
                 || descriptor.input_types().len() != arguments.len()
                 || descriptor.input_types().len() != descriptor.operation().expected_arity()
                 || arguments
@@ -574,7 +574,7 @@ fn verify_terminator(
                 return Err(VerificationError::InvalidReturn(function.id));
             }
         }
-        Terminator::Trap(_) | Terminator::Outcome(_) => {}
+        Terminator::Trap { .. } | Terminator::Outcome(_) => {}
         Terminator::Exit(code) => {
             if value_type(function, *code)? != ValueType::I64 {
                 return Err(VerificationError::TypeMismatch("exit status"));
@@ -780,7 +780,7 @@ fn successor_reference_live(
             ..
         } => vec![*when_true, *when_false],
         Terminator::Return(_)
-        | Terminator::Trap(_)
+        | Terminator::Trap { .. }
         | Terminator::Exit(_)
         | Terminator::Outcome(_) => Vec::new(),
     };

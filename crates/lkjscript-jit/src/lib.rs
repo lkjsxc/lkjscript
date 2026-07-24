@@ -12,8 +12,9 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap, GcLimit, HeapObj, HostError, OwnedValue,
-    ProductId, ResourceLimitKind, Trap, Value, MAX_BUFFER_BYTES, MAX_LIST_EQUAL_STEPS,
+    Error as CoreError, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap, GcLimit,
+    HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, Trap, Value, MAX_BUFFER_BYTES,
+    MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_ir::{BytecodeLinkMetadata, Signature as IrSignature, SsaType, VerifiedProgram};
 use lkjscript_native::{
@@ -180,6 +181,7 @@ pub struct FunctionTierRecord {
     code_object: Option<u64>,
     epoch: u64,
     native_entries: u64,
+    auto_entry_eligible: bool,
 }
 
 impl FunctionTierRecord {
@@ -217,6 +219,10 @@ impl FunctionTierRecord {
 
     pub const fn native_entries(&self) -> u64 {
         self.native_entries
+    }
+
+    pub const fn auto_entry_eligible(&self) -> bool {
+        self.auto_entry_eligible
     }
 }
 
@@ -259,7 +265,7 @@ pub struct CodeObject {
     outcome_map: Vec<OutcomeMapEntry>,
     compile_stats: CompileStats,
     invalidated: bool,
-    explicit_traps: Vec<String>,
+    explicit_traps: Vec<(u32, String)>,
     diagnostic_machine_code: Option<Vec<u8>>,
     native_entry_count: u64,
     installed: InstalledImage,
@@ -383,11 +389,12 @@ pub struct JitStats {
     pub metadata_cache_peak_bytes: u64,
     pub accounted_allocation_peak_bytes: u64,
     pub allocations: u64,
-    pub allocation_bytes: u64,
+    pub allocation_bytes_estimate: u64,
     pub collections: u64,
-    pub peak_live_heap_bytes: usize,
+    pub peak_live_heap_bytes_estimate: usize,
     pub maximum_roots: usize,
-    pub runtime_heap_calls: u64,
+    pub runtime_heap_attempts: u64,
+    pub runtime_heap_successes: u64,
     pub barrier_count: u64,
     pub peak_native_frame_depth: usize,
     pub vm_to_native_transitions: u64,
@@ -425,7 +432,7 @@ pub enum EntryDecision {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ScalarInvocationOutcome {
     Returned(NativeValue),
-    Trapped(TrapCode),
+    Trapped(TrapCode, Option<u32>),
     Exited(i64),
     DeadlineExceeded,
     ResourceLimitExceeded(ResourceLimitKind),
@@ -460,7 +467,8 @@ pub struct JitSession {
     diagnostic_bytes: u64,
     heap: GcHeap,
     maximum_roots: usize,
-    runtime_heap_calls: u64,
+    runtime_heap_attempts: u64,
+    runtime_heap_successes: u64,
     barrier_count: u64,
     peak_native_frame_depth: usize,
     vm_to_native_transitions: u64,
@@ -508,6 +516,12 @@ impl JitSession {
                 code_object: None,
                 epoch: config.epoch,
                 native_entries: 0,
+                auto_entry_eligible: function
+                    .signature
+                    .parameters
+                    .iter()
+                    .chain(std::iter::once(function.signature.result.as_ref()))
+                    .all(|ty| native_type(ty).is_some()),
             })
             .collect();
         Self {
@@ -532,7 +546,8 @@ impl JitSession {
             diagnostic_bytes: 0,
             heap: GcHeap::default(),
             maximum_roots: 0,
-            runtime_heap_calls: 0,
+            runtime_heap_attempts: 0,
+            runtime_heap_successes: 0,
             barrier_count: 0,
             peak_native_frame_depth: 0,
             vm_to_native_transitions: 0,
@@ -556,6 +571,13 @@ impl JitSession {
             return EntryDecision::Interpret;
         };
         record.call_count = record.call_count.saturating_add(1);
+        if !record.auto_entry_eligible {
+            // A supported compilation group may contain reference-signature
+            // helpers for direct generated calls. Until VM/native reference
+            // adapters exist, those helpers are never eligible VM entries.
+            self.vm_fallbacks = self.vm_fallbacks.saturating_add(1);
+            return EntryDecision::Interpret;
+        }
         if record.state == TierState::BaselineNative {
             return EntryDecision::Native(function);
         }
@@ -643,8 +665,13 @@ impl JitSession {
         }
     }
 
-    pub fn trap_message_for(&self, function: FunctionId, trap: TrapCode) -> String {
-        self.trap_message(function, trap)
+    pub fn trap_message_for(
+        &self,
+        function: FunctionId,
+        trap: TrapCode,
+        site: Option<u32>,
+    ) -> String {
+        self.trap_message(function, trap, site)
     }
 
     pub fn invoke_scalar(
@@ -704,7 +731,8 @@ impl JitSession {
         self.last_runtime_trap = None;
         self.last_runtime_resource = None;
         let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time)
-            .with_max_active_frames(execution.max_frames);
+            .with_max_active_frames(execution.max_frames)
+            .with_max_active_values(execution.max_stack_values);
         if self.time_to_first_native_entry.is_none() {
             self.time_to_first_native_entry = self.metrics_started.map(|started| started.elapsed());
         }
@@ -736,9 +764,12 @@ impl JitSession {
         let report = report.map_err(|error| invocation_error(function, error))?;
         self.poll_v1_calls = self.poll_v1_calls.saturating_add(report.poll_count());
         self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
-        self.runtime_heap_calls = self
-            .runtime_heap_calls
-            .saturating_add(report.heap_operation_calls());
+        self.runtime_heap_attempts = self
+            .runtime_heap_attempts
+            .saturating_add(report.heap_operation_attempts());
+        self.runtime_heap_successes = self
+            .runtime_heap_successes
+            .saturating_add(report.heap_operation_successes());
         self.barrier_count = self.barrier_count.saturating_add(report.barrier_count());
         self.peak_native_frame_depth = self
             .peak_native_frame_depth
@@ -761,7 +792,9 @@ impl JitSession {
             .saturating_add(invocation_entries);
         let outcome = match report.outcome() {
             InvocationOutcome::Returned(value) => ScalarInvocationOutcome::Returned(value),
-            InvocationOutcome::Trapped(trap) => ScalarInvocationOutcome::Trapped(trap),
+            InvocationOutcome::Trapped(trap) => {
+                ScalarInvocationOutcome::Trapped(trap, report.trap_site())
+            }
             InvocationOutcome::Exited(code) => ScalarInvocationOutcome::Exited(code),
             InvocationOutcome::DeadlineExceeded => ScalarInvocationOutcome::DeadlineExceeded,
             InvocationOutcome::ResourceLimitExceeded(kind) => {
@@ -769,7 +802,8 @@ impl JitSession {
                     NativeResourceLimitKind::PollFuel => ResourceLimitKind::InstructionFuel,
                     NativeResourceLimitKind::ActiveFrames
                     | NativeResourceLimitKind::NativeStackBytes => ResourceLimitKind::FrameDepth,
-                    NativeResourceLimitKind::MaterializedRoots => ResourceLimitKind::StackValues,
+                    NativeResourceLimitKind::MaterializedRoots
+                    | NativeResourceLimitKind::ActiveValues => ResourceLimitKind::StackValues,
                     NativeResourceLimitKind::RuntimeService => self
                         .last_runtime_resource
                         .unwrap_or(ResourceLimitKind::Allocations),
@@ -873,11 +907,12 @@ impl JitSession {
             metadata_cache_peak_bytes,
             accounted_allocation_peak_bytes,
             allocations: self.heap.total_allocations(),
-            allocation_bytes: self.heap.total_allocated_bytes(),
+            allocation_bytes_estimate: self.heap.total_allocated_bytes(),
             collections: self.heap.collections(),
-            peak_live_heap_bytes: self.heap.peak_live_heap_bytes(),
+            peak_live_heap_bytes_estimate: self.heap.peak_live_heap_bytes(),
             maximum_roots: self.maximum_roots,
-            runtime_heap_calls: self.runtime_heap_calls,
+            runtime_heap_attempts: self.runtime_heap_attempts,
+            runtime_heap_successes: self.runtime_heap_successes,
             barrier_count: self.barrier_count,
             peak_native_frame_depth: self.peak_native_frame_depth,
             vm_to_native_transitions: self.vm_to_native_transitions,
@@ -1008,11 +1043,13 @@ impl JitSession {
         for function in lowered.functions {
             if let Some(index) = function.index() {
                 if let Some(record) = self.functions.get_mut(index) {
-                    record.attempts = record.attempts.max(1);
-                    record.state = TierState::BaselineNative;
-                    record.last_failure = None;
                     record.code_object = Some(identity);
                     record.epoch = self.config.epoch;
+                    if self.links.is_none() || record.auto_entry_eligible {
+                        record.attempts = record.attempts.max(1);
+                        record.state = TierState::BaselineNative;
+                        record.last_failure = None;
+                    }
                 }
             }
         }
@@ -1034,7 +1071,7 @@ impl JitSession {
         Ok(identity)
     }
 
-    fn trap_message(&self, function: FunctionId, trap: TrapCode) -> String {
+    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String {
         match trap {
             TrapCode::I64Overflow => "checked I64 overflow".to_string(),
             TrapCode::DivisionByZero => "div: I64 division by zero".to_string(),
@@ -1050,8 +1087,15 @@ impl JitSession {
                                 .iter()
                                 .find(|object| object.identity == identity)
                         })
-                        .and_then(|object| object.explicit_traps.first())
-                        .cloned()
+                        .and_then(|object| {
+                            let site = site?;
+                            object
+                                .explicit_traps
+                                .iter()
+                                .find_map(|(candidate, message)| {
+                                    (*candidate == site).then(|| message.clone())
+                                })
+                        })
                 })
                 .unwrap_or_else(|| "explicit SSA trap".to_string()),
         }
@@ -1069,12 +1113,18 @@ pub fn execute_forced(
     let invocation = session.invoke_scalar(main, &[], execution)?;
     let outcome = scalar_to_execution(&session, main, invocation.outcome)?;
     let stats = session.stats();
-    if stats.native_entries == 0
-        || stats
-            .functions
-            .iter()
-            .filter(|record| record.code_object.is_some())
-            .any(|record| record.state != TierState::BaselineNative)
+    let pre_entry_limit = matches!(
+        outcome,
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+            | ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
+    );
+    if !pre_entry_limit
+        && (stats.native_entries == 0
+            || stats
+                .functions
+                .iter()
+                .filter(|record| record.code_object.is_some())
+                .any(|record| record.state != TierState::BaselineNative))
     {
         return Err(EngineError::new(
             FailureCode::InvocationFailure,
@@ -1116,8 +1166,8 @@ fn scalar_to_execution(
             };
             ExecutionOutcome::Returned(owned)
         }
-        ScalarInvocationOutcome::Trapped(trap) => {
-            ExecutionOutcome::Trapped(Trap::new(session.trap_message(function, trap)))
+        ScalarInvocationOutcome::Trapped(trap, site) => {
+            ExecutionOutcome::Trapped(Trap::new(session.trap_message(function, trap, site)))
         }
         ScalarInvocationOutcome::Exited(code) => match i32::try_from(code) {
             Ok(code) => ExecutionOutcome::Exited(code),
@@ -1210,6 +1260,35 @@ impl<'a> JitHeapServices<'a> {
                 });
                 NativeServiceError::ResourceLimitExceeded
             })
+    }
+
+    fn mutate<T>(
+        &mut self,
+        value: Value,
+        mutation: impl FnOnce(&mut HeapObj) -> lkjscript_core::Result<T>,
+    ) -> Result<T, NativeServiceError> {
+        self.heap.mutate(value, mutation).map_err(|error| {
+            if error.class() == ErrorClass::Resource(ResourceLimitKind::HeapBytes) {
+                self.last_resource = Some(ResourceLimitKind::HeapBytes);
+                NativeServiceError::ResourceLimitExceeded
+            } else {
+                self.last_trap = Some(error.to_string());
+                NativeServiceError::Trap
+            }
+        })
+    }
+
+    fn result_error(
+        &mut self,
+        message: &str,
+        result_type: ValueType,
+    ) -> Result<NativeValue, NativeServiceError> {
+        let payload = self.allocate(HeapObj::Str(message.into()), ReferenceType::Str)?;
+        let reference_type = result_type
+            .reference_type()
+            .ok_or(NativeServiceError::HostFailure)?;
+        let result = self.allocate(HeapObj::ResultErr(payload), reference_type)?;
+        self.native_from_value(result, result_type)
     }
 
     fn value_from_native(&mut self, value: NativeValue) -> Result<Value, NativeServiceError> {
@@ -1341,7 +1420,7 @@ impl<'a> JitHeapServices<'a> {
                 )?;
                 self.native_from_value(value, result_type)
             }
-            HeapOperation::ProductField { product, field } => {
+            HeapOperation::ProductField { product, field, .. } => {
                 let product_value = native_reference_value(self.heap, as_reference(argument(0)?)?)
                     .map_err(|message| {
                         self.last_trap = Some(message);
@@ -1362,7 +1441,7 @@ impl<'a> JitHeapServices<'a> {
                 })?;
                 self.native_from_value(value, result_type)
             }
-            HeapOperation::WithProductField { product, field } => {
+            HeapOperation::WithProductField { product, field, .. } => {
                 let source = native_reference_value(self.heap, as_reference(argument(0)?)?)
                     .map_err(|message| {
                         self.last_trap = Some(message);
@@ -1417,9 +1496,9 @@ impl<'a> JitHeapServices<'a> {
                 )?;
                 if list.is_empty_list() {
                     return self.trap(if matches!(descriptor.operation(), HeapOperation::Car) {
-                        "car of empty list"
+                        "car expects pair"
                     } else {
-                        "cdr of empty list"
+                        "cdr expects pair"
                     });
                 }
                 let value = match self.heap.get(list) {
@@ -1430,7 +1509,13 @@ impl<'a> JitHeapServices<'a> {
                             *cdr
                         }
                     }
-                    _ => return self.trap("list operand category mismatch"),
+                    _ => {
+                        return self.trap(if matches!(descriptor.operation(), HeapOperation::Car) {
+                            "car expects pair"
+                        } else {
+                            "cdr expects pair"
+                        })
+                    }
                 };
                 self.native_from_value(value, result_type)
             }
@@ -1500,8 +1585,12 @@ impl<'a> JitHeapServices<'a> {
                 let inner = match (descriptor.operation(), self.heap.get(value)) {
                     (HeapOperation::UnwrapOk, Ok(HeapObj::ResultOk(inner)))
                     | (HeapOperation::UnwrapErr, Ok(HeapObj::ResultErr(inner))) => *inner,
-                    (HeapOperation::UnwrapOk, Ok(HeapObj::ResultErr(_))) => {
-                        return self.trap("unwrap-ok on Err")
+                    (HeapOperation::UnwrapOk, Ok(HeapObj::ResultErr(error))) => {
+                        let message = match self.heap.get(*error) {
+                            Ok(HeapObj::Str(message)) => format!("unwrap-ok: {message}"),
+                            _ => "unwrap-ok on Err".to_string(),
+                        };
+                        return self.trap(message);
                     }
                     (HeapOperation::UnwrapErr, Ok(HeapObj::ResultOk(_))) => {
                         return self.trap("unwrap-err on Ok")
@@ -1577,29 +1666,33 @@ impl<'a> JitHeapServices<'a> {
                         self.last_trap = Some(message);
                         NativeServiceError::Trap
                     })?;
-                let index_value = as_i64(argument(1)?)?;
                 let number = as_i64(argument(2)?)?;
-                let index = index(index_value, "buf-set").map_err(|message| {
+                let operation = if matches!(descriptor.operation(), HeapOperation::BufSet) {
+                    "buf-set"
+                } else {
+                    "buf-set-u32"
+                };
+                let index = index(as_i64(argument(1)?)?, operation).map_err(|message| {
                     self.last_trap = Some(message);
                     NativeServiceError::Trap
                 })?;
-                let HeapObj::Buf(bytes) = self
-                    .heap
-                    .get_mut(value)
-                    .map_err(|_| NativeServiceError::Trap)?
-                else {
-                    return self.trap("expected buf");
-                };
                 if matches!(descriptor.operation(), HeapOperation::BufSet) {
                     let byte = u8::try_from(number).map_err(|_| {
                         self.last_trap = Some("buf-set byte out of range".into());
                         NativeServiceError::Trap
                     })?;
-                    let slot = bytes.get_mut(index).ok_or_else(|| {
-                        self.last_trap = Some("buf-set out of bounds".into());
-                        NativeServiceError::Trap
+                    match self.heap.get(value) {
+                        Ok(HeapObj::Buf(bytes)) if index < bytes.len() => {}
+                        Ok(HeapObj::Buf(_)) => return self.trap("buf-set out of bounds"),
+                        _ => return self.trap("expected buf"),
+                    }
+                    self.mutate(value, |object| {
+                        let HeapObj::Buf(bytes) = object else {
+                            return Err(CoreError::msg("expected buf"));
+                        };
+                        bytes[index] = byte;
+                        Ok(())
                     })?;
-                    *slot = byte;
                 } else {
                     let end = index.checked_add(4).ok_or_else(|| {
                         self.last_trap = Some("buf-set-u32 index overflow".into());
@@ -1609,11 +1702,18 @@ impl<'a> JitHeapServices<'a> {
                         self.last_trap = Some("buf-set-u32 value out of range".into());
                         NativeServiceError::Trap
                     })?;
-                    let destination = bytes.get_mut(index..end).ok_or_else(|| {
-                        self.last_trap = Some("buf-set-u32 out of bounds".into());
-                        NativeServiceError::Trap
+                    match self.heap.get(value) {
+                        Ok(HeapObj::Buf(bytes)) if end <= bytes.len() => {}
+                        Ok(HeapObj::Buf(_)) => return self.trap("buf-set-u32 out of bounds"),
+                        _ => return self.trap("expected buf"),
+                    }
+                    self.mutate(value, |object| {
+                        let HeapObj::Buf(bytes) = object else {
+                            return Err(CoreError::msg("expected buf"));
+                        };
+                        bytes[index..end].copy_from_slice(&number.to_le_bytes());
+                        Ok(())
                     })?;
-                    destination.copy_from_slice(&number.to_le_bytes());
                 }
                 Ok(NativeValue::Unit)
             }
@@ -1640,7 +1740,7 @@ impl<'a> JitHeapServices<'a> {
                     }
                 };
                 if bytes.len() > MAX_BUFFER_BYTES {
-                    return self.trap("buffer exceeds limit");
+                    return self.trap("buf-from-str string exceeds buffer limit");
                 }
                 let reference_type = result_type
                     .reference_type()
@@ -1661,25 +1761,29 @@ impl<'a> JitHeapServices<'a> {
                 let (success, payload_type) = match descriptor.operation() {
                     HeapOperation::BufToStr => match String::from_utf8(bytes) {
                         Ok(text) => (Ok(HeapObj::Str(text)), ReferenceType::Str),
-                        Err(_) => (Err("buf-to-str invalid UTF-8"), ReferenceType::Str),
+                        Err(_) => (Err("buf-to-str: invalid UTF-8"), ReferenceType::Str),
                     },
                     HeapOperation::BufSlice => {
-                        let offset =
-                            index(as_i64(argument(1)?)?, "buf-slice").map_err(|message| {
-                                self.last_trap = Some(message);
-                                NativeServiceError::Trap
-                            })?;
-                        let length =
-                            index(as_i64(argument(2)?)?, "buf-slice").map_err(|message| {
-                                self.last_trap = Some(message);
-                                NativeServiceError::Trap
-                            })?;
-                        match offset
-                            .checked_add(length)
-                            .and_then(|end| bytes.get(offset..end))
-                        {
+                        let offset = match usize::try_from(as_i64(argument(1)?)?) {
+                            Ok(offset) => offset,
+                            Err(_) => {
+                                return self
+                                    .result_error("buf-slice offset out of range", result_type)
+                            }
+                        };
+                        let length = match usize::try_from(as_i64(argument(2)?)?) {
+                            Ok(length) => length,
+                            Err(_) => {
+                                return self
+                                    .result_error("buf-slice length out of range", result_type)
+                            }
+                        };
+                        let Some(end) = offset.checked_add(length) else {
+                            return self.result_error("buf-slice range overflow", result_type);
+                        };
+                        match bytes.get(offset..end) {
                             Some(slice) => (Ok(HeapObj::Buf(slice.to_vec())), ReferenceType::Buf),
-                            None => (Err("buf-slice out of bounds"), ReferenceType::Str),
+                            None => (Err("buf-slice range out of bounds"), ReferenceType::Str),
                         }
                     }
                     _ => return Err(NativeServiceError::HostFailure),
@@ -1750,12 +1854,12 @@ impl<'a> JitHeapServices<'a> {
                     };
                     text.push_str(right);
                 } else {
-                    let start = index(as_i64(argument(1)?)?, "str-slice").map_err(|message| {
-                        self.last_trap = Some(message);
+                    let start = usize::try_from(as_i64(argument(1)?)?).map_err(|_| {
+                        self.last_trap = Some("str-slice start out of range".into());
                         NativeServiceError::Trap
                     })?;
-                    let end = index(as_i64(argument(2)?)?, "str-slice").map_err(|message| {
-                        self.last_trap = Some(message);
+                    let end = usize::try_from(as_i64(argument(2)?)?).map_err(|_| {
+                        self.last_trap = Some("str-slice end out of range".into());
                         NativeServiceError::Trap
                     })?;
                     let bytes = text.as_bytes().get(start..end).ok_or_else(|| {
@@ -1809,37 +1913,23 @@ impl<'a> JitHeapServices<'a> {
                 Ok(NativeValue::Bool(left.opaque_word() == right.opaque_word()))
             }
             HeapOperation::ListEqual => {
-                let mut left = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                let left = native_reference_value(self.heap, as_reference(argument(0)?)?).map_err(
+                    |message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    },
+                )?;
+                let right = native_reference_value(self.heap, as_reference(argument(1)?)?)
                     .map_err(|message| {
                         self.last_trap = Some(message);
                         NativeServiceError::Trap
                     })?;
-                let mut right = native_reference_value(self.heap, as_reference(argument(1)?)?)
+                let equal = list_values_equal(self.heap, left, right, MAX_LIST_EQUAL_STEPS)
                     .map_err(|message| {
                         self.last_trap = Some(message);
                         NativeServiceError::Trap
                     })?;
-                for _ in 0..MAX_LIST_EQUAL_STEPS {
-                    if left.is_empty_list() || right.is_empty_list() {
-                        return Ok(NativeValue::Bool(
-                            left.is_empty_list() && right.is_empty_list(),
-                        ));
-                    }
-                    let (left_car, left_cdr) = match self.heap.get(left) {
-                        Ok(HeapObj::Pair { car, cdr }) => (*car, *cdr),
-                        _ => return self.trap("list-equal category mismatch"),
-                    };
-                    let (right_car, right_cdr) = match self.heap.get(right) {
-                        Ok(HeapObj::Pair { car, cdr }) => (*car, *cdr),
-                        _ => return self.trap("list-equal category mismatch"),
-                    };
-                    if !value_equal(self.heap, left_car, right_car).unwrap_or(false) {
-                        return Ok(NativeValue::Bool(false));
-                    }
-                    left = left_cdr;
-                    right = right_cdr;
-                }
-                self.trap("list-equal step limit exceeded")
+                Ok(NativeValue::Bool(equal))
             }
         }
     }
@@ -1907,7 +1997,9 @@ fn reference_layout_key(reference_type: ReferenceType) -> u64 {
         ReferenceType::Str => 2_u64 << 56,
         ReferenceType::List(layout) => (3_u64 << 56) | u64::from(layout.get()),
         ReferenceType::Option(layout) => (4_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Result(layout) => (5_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Result(ok, error) => {
+            (5_u64 << 56) | u64::from(ok.get().wrapping_mul(16_777_619) ^ error.get())
+        }
         ReferenceType::Product(layout) => (6_u64 << 56) | u64::from(layout.get()),
     }
 }
@@ -1935,7 +2027,7 @@ fn native_reference_value(
         | (ReferenceType::Str, Ok(HeapObj::Str(_)))
         | (ReferenceType::List(_), Ok(HeapObj::Pair { .. }))
         | (ReferenceType::Option(_), Ok(HeapObj::OptionSome(_)))
-        | (ReferenceType::Result(_), Ok(HeapObj::ResultOk(_) | HeapObj::ResultErr(_))) => true,
+        | (ReferenceType::Result(_, _), Ok(HeapObj::ResultOk(_) | HeapObj::ResultErr(_))) => true,
         (ReferenceType::Product(layout), Ok(HeapObj::Product { product, .. })) => {
             layout.get() == u32::from(product.raw()).saturating_add(1)
         }
@@ -1967,6 +2059,37 @@ fn reference_native_value(
 
 fn index(value: i64, operation: &str) -> Result<usize, String> {
     usize::try_from(value).map_err(|_| format!("{operation} index out of range"))
+}
+
+fn list_values_equal(
+    heap: &GcHeap,
+    mut left: Value,
+    mut right: Value,
+    limit: usize,
+) -> Result<bool, String> {
+    for _ in 0..limit {
+        if left.is_empty_list() || right.is_empty_list() {
+            return Ok(left.is_empty_list() && right.is_empty_list());
+        }
+        let (left_car, left_cdr) = match heap.get(left) {
+            Ok(HeapObj::Pair { car, cdr }) => (*car, *cdr),
+            _ => return Err("list-equal expects proper List values".into()),
+        };
+        let (right_car, right_cdr) = match heap.get(right) {
+            Ok(HeapObj::Pair { car, cdr }) => (*car, *cdr),
+            _ => return Err("list-equal expects proper List values".into()),
+        };
+        if !value_equal(heap, left_car, right_car)? {
+            return Ok(false);
+        }
+        left = left_cdr;
+        right = right_cdr;
+    }
+    if left.is_empty_list() || right.is_empty_list() {
+        Ok(left.is_empty_list() && right.is_empty_list())
+    } else {
+        Err("list-equal step limit exceeded".into())
+    }
 }
 
 fn value_equal(heap: &GcHeap, left: Value, right: Value) -> Result<bool, String> {
@@ -2024,11 +2147,14 @@ pub fn native_type(ty: &SsaType) -> Option<ValueType> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
+    use lkjscript_core::{
+        ExecutionConfig, ExecutionOutcome, GcHeap, HeapObj, Value, MAX_LIST_EQUAL_STEPS,
+    };
     use lkjscript_ir::{
-        verify, Block, BlockId, BlockMetadata, EffectSet, Function, FunctionId, Origin, Program,
-        Signature, SourceMetadata, SsaType, StructuredOutcome, Terminator, TraitId, TraitMetadata,
-        TraitRole,
+        verify, Block, BlockId, BlockMetadata, BlockParameter, CallTarget, Constant, EffectSet,
+        FailureBehavior, FrameState, Function, FunctionId, Instruction, InstructionKind,
+        InstructionMetadata, Origin, Program, Safepoint as IrSafepoint, Signature, SourceMetadata,
+        SsaType, StructuredOutcome, Terminator, TraitId, TraitMetadata, TraitRole, ValueId,
     };
 
     use super::{execute_forced, JitConfig};
@@ -2087,6 +2213,159 @@ mod tests {
             main: FunctionId::new(0),
         })
         .expect("verify terminal SSA")
+    }
+
+    #[test]
+    fn generated_list_equality_accepts_exact_limit_and_rejects_limit_plus_one() {
+        let mut heap = GcHeap::default();
+        let mut at_limit = Value::EMPTY_LIST;
+        for _ in 0..MAX_LIST_EQUAL_STEPS {
+            at_limit = heap.alloc(HeapObj::Pair {
+                car: Value::UNIT,
+                cdr: at_limit,
+            });
+        }
+        assert_eq!(
+            super::list_values_equal(&heap, at_limit, at_limit, MAX_LIST_EQUAL_STEPS),
+            Ok(true)
+        );
+        let over_limit = heap.alloc(HeapObj::Pair {
+            car: Value::UNIT,
+            cdr: at_limit,
+        });
+        assert_eq!(
+            super::list_values_equal(&heap, over_limit, over_limit, MAX_LIST_EQUAL_STEPS),
+            Err("list-equal step limit exceeded".into())
+        );
+    }
+
+    #[test]
+    fn selected_conditional_callee_trap_retains_exact_site_message() {
+        let metadata = |effects, safepoint, failure| InstructionMetadata {
+            origin: Origin::SYNTHETIC,
+            effects,
+            safepoint,
+            failure,
+            frame_state: (safepoint == IrSafepoint::Required).then_some(FrameState {
+                bytecode_position: 0,
+                locals: Vec::new(),
+                operand_stack: Vec::new(),
+            }),
+        };
+        let block_metadata = || BlockMetadata {
+            loop_header: false,
+            origin: Origin::SYNTHETIC,
+            frame_state: None,
+        };
+        let callee_signature = Signature::monomorphic(vec![SsaType::Bool], SsaType::I64);
+        let program = verify(Program {
+            sources: vec![SourceMetadata {
+                id: 0,
+                path: "selected-trap.lkjscript".into(),
+            }],
+            products: Vec::new(),
+            traits: core_traits(),
+            implementations: Vec::new(),
+            functions: vec![
+                Function {
+                    id: FunctionId::new(0),
+                    name: "choose".into(),
+                    signature: callee_signature.clone(),
+                    places: Vec::new(),
+                    effects: EffectSet::MAY_TRAP,
+                    entry: BlockId::new(0),
+                    blocks: vec![
+                        Block {
+                            id: BlockId::new(0),
+                            parameters: vec![BlockParameter {
+                                id: ValueId::new(0),
+                                ty: SsaType::Bool,
+                                owner_place: None,
+                                origin: Origin::SYNTHETIC,
+                            }],
+                            instructions: Vec::new(),
+                            terminator: Terminator::ConditionalBranch {
+                                condition: ValueId::new(0),
+                                true_target: BlockId::new(1),
+                                true_arguments: Vec::new(),
+                                false_target: BlockId::new(2),
+                                false_arguments: Vec::new(),
+                            },
+                            metadata: block_metadata(),
+                        },
+                        Block {
+                            id: BlockId::new(1),
+                            parameters: Vec::new(),
+                            instructions: Vec::new(),
+                            terminator: Terminator::Trap {
+                                message: "first trap".into(),
+                            },
+                            metadata: block_metadata(),
+                        },
+                        Block {
+                            id: BlockId::new(2),
+                            parameters: Vec::new(),
+                            instructions: Vec::new(),
+                            terminator: Terminator::Trap {
+                                message: "selected callee trap".into(),
+                            },
+                            metadata: block_metadata(),
+                        },
+                    ],
+                    origin: Origin::SYNTHETIC,
+                },
+                Function {
+                    id: FunctionId::new(1),
+                    name: "main".into(),
+                    signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+                    places: Vec::new(),
+                    effects: EffectSet::MAY_TRAP,
+                    entry: BlockId::new(0),
+                    blocks: vec![Block {
+                        id: BlockId::new(0),
+                        parameters: Vec::new(),
+                        instructions: vec![
+                            Instruction {
+                                id: ValueId::new(0),
+                                ty: SsaType::Bool,
+                                kind: InstructionKind::Constant(Constant::Bool(false)),
+                                metadata: metadata(
+                                    EffectSet::PURE,
+                                    IrSafepoint::None,
+                                    FailureBehavior::None,
+                                ),
+                            },
+                            Instruction {
+                                id: ValueId::new(1),
+                                ty: SsaType::I64,
+                                kind: InstructionKind::Call {
+                                    target: CallTarget::Direct(FunctionId::new(0)),
+                                    arguments: vec![ValueId::new(0)],
+                                    signature: callee_signature,
+                                    instantiation: None,
+                                },
+                                metadata: metadata(
+                                    EffectSet::MAY_TRAP,
+                                    IrSafepoint::Required,
+                                    FailureBehavior::Trap,
+                                ),
+                            },
+                        ],
+                        terminator: Terminator::Return(ValueId::new(1)),
+                        metadata: block_metadata(),
+                    }],
+                    origin: Origin::SYNTHETIC,
+                },
+            ],
+            main: FunctionId::new(1),
+        })
+        .expect("verify selected trap SSA");
+        let executed = execute_forced(&program, &ExecutionConfig::default(), JitConfig::default())
+            .expect("execute selected native trap");
+        assert!(matches!(
+            executed.outcome,
+            ExecutionOutcome::Trapped(trap) if trap.as_str() == "selected callee trap"
+        ));
     }
 
     #[test]

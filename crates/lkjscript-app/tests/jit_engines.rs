@@ -235,8 +235,57 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     assert_eq!(executed.stats.vm_fallbacks, 0);
     assert_eq!(executed.stats.allocations, 1);
     assert_eq!(executed.stats.collections, 1);
-    assert_eq!(executed.stats.runtime_heap_calls, 1);
+    assert_eq!(executed.stats.runtime_heap_attempts, 1);
+    assert_eq!(executed.stats.runtime_heap_successes, 1);
     assert!(executed.stats.native_entries > 0);
+}
+
+#[test]
+fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
+    let cases = [
+        (
+            "buf-slice-negative-offset.lkjscript",
+            "equal-value/\nunwrap-err/\nbuf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n/buf-slice\n/unwrap-err\nstr/\nbuf-slice offset out of range\n/str\n/equal-value",
+        ),
+        (
+            "buf-slice-negative-length.lkjscript",
+            "equal-value/\nunwrap-err/\nbuf-slice/\nbuf-new/\n1\n/buf-new\n0\n-1\n/buf-slice\n/unwrap-err\nstr/\nbuf-slice length out of range\n/str\n/equal-value",
+        ),
+        (
+            "buf-slice-out-of-range.lkjscript",
+            "equal-value/\nunwrap-err/\nbuf-slice/\nbuf-new/\n1\n/buf-new\n1\n1\n/buf-slice\n/unwrap-err\nstr/\nbuf-slice range out of bounds\n/str\n/equal-value",
+        ),
+    ];
+    for (name, expression) in cases {
+        let source = format!("main/\nsig/\n->\nBool\n/sig\n{expression}\n/main\n");
+        let program = compile(&source, name);
+        let expected = Scalar::Bool(true);
+        assert_eq!(
+            evaluator(evaluate(program.ssa(), &EvalConfig::default())),
+            expected
+        );
+        assert_eq!(
+            execution(run_chunk(program.bytecode(), &ExecutionConfig::default())),
+            expected
+        );
+        assert_eq!(execution(forced(&source, name).outcome), expected);
+    }
+
+    let invalid_utf8 = "main/\nsig/\n->\nBool\n/sig\nvar/\nname/\nb\n/name\ntype/\nBuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set/\nb\n0\n255\n/buf-set\nequal-value/\nunwrap-err/\nbuf-to-str/\nb\n/buf-to-str\n/unwrap-err\nstr/\nbuf-to-str: invalid UTF-8\n/str\n/equal-value\n/do\n/var\n/main\n";
+    let program = compile(invalid_utf8, "buf-to-str-error.lkjscript");
+    let expected = Scalar::Bool(true);
+    assert_eq!(
+        evaluator(evaluate(program.ssa(), &EvalConfig::default())),
+        expected
+    );
+    assert_eq!(
+        execution(run_chunk(program.bytecode(), &ExecutionConfig::default())),
+        expected
+    );
+    assert_eq!(
+        execution(forced(invalid_utf8, "buf-to-str-error.lkjscript").outcome),
+        expected
+    );
 }
 
 #[test]
@@ -256,7 +305,11 @@ fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
     assert!(native.stats.allocations >= 7);
     assert!(native.stats.collections >= 7);
     assert!(native.stats.maximum_roots > 0);
-    assert!(native.stats.runtime_heap_calls >= 14);
+    assert!(native.stats.runtime_heap_attempts >= 14);
+    assert_eq!(
+        native.stats.runtime_heap_attempts,
+        native.stats.runtime_heap_successes
+    );
     assert!(native.stats.barrier_count >= 4);
 }
 
@@ -296,6 +349,34 @@ fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames()
 }
 
 #[test]
+fn auto_group_reference_helper_remains_vm_entry_ineligible() {
+    let source = "def/\nname/\ntext\n/name\nfn/\nsig/\n->\nStr\n/sig\nparams/\n/params\nempty-str/\n/empty-str\n/fn\n/def\ndef/\nname/\nsize\n/name\nfn/\nsig/\n->\nI64\n/sig\nparams/\n/params\nstr-len/\ntext/\n/text\n/str-len\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\ndo/\nsize/\n/size\ntext/\n/text\nsize/\n/size\n/do\n/main\n";
+    let program = compile(source, "auto-reference-helper.lkjscript");
+    let mut config = JitConfig::default();
+    config.auto_threshold = 1;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &[],
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0)));
+    let helper = stats
+        .functions
+        .iter()
+        .find(|function| function.name() == "text")
+        .expect("reference helper tier record");
+    assert!(!helper.auto_entry_eligible());
+    assert_ne!(helper.state(), TierState::BaselineNative);
+    assert!(
+        helper.native_entries() > 0,
+        "native direct calls remain supported"
+    );
+    assert_eq!(stats.compile_failures, 0);
+}
+
+#[test]
 fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     let program = compile(F64_LOOP, "limits.lkjscript");
     let mut deadline = ExecutionConfig::default();
@@ -309,6 +390,18 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     let outcome = execute_forced(program.ssa(), &fuel, JitConfig::default())
         .expect("fuel is a language outcome");
     assert_eq!(execution(outcome.outcome), Scalar::Fuel);
+
+    for maximum in [0, 1] {
+        let mut stack = ExecutionConfig::default();
+        stack.max_stack_values = maximum;
+        let outcome = execute_forced(program.ssa(), &stack, JitConfig::default())
+            .expect("native active-value limit is a language outcome");
+        assert_eq!(
+            outcome.outcome,
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+        );
+        assert_eq!(outcome.stats.peak_native_frame_depth, 0);
+    }
 
     let allocation = compile(
         "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
@@ -382,8 +475,9 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
         .iter()
         .find(|function| function.name() == "allocate")
         .expect("allocation tier record");
-    assert_eq!(allocate.state(), TierState::Disabled);
-    assert_eq!(allocate.attempts(), 1);
+    assert_eq!(allocate.state(), TierState::VmOnly);
+    assert!(!allocate.auto_entry_eligible());
+    assert_eq!(allocate.attempts(), 0);
     assert_eq!(allocate.native_entries(), 0);
-    assert_eq!(stats.compile_failures, 1);
+    assert_eq!(stats.compile_failures, 0);
 }

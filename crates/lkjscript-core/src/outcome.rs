@@ -174,6 +174,12 @@ impl OwnedValue {
         }
     }
 
+    /// Test/diagnostic inspection of retained reachable snapshot storage.
+    #[doc(hidden)]
+    pub fn snapshot_object_count(&self) -> usize {
+        self.heap.iter().flatten().count()
+    }
+
     fn object(&self) -> Option<&HeapObj> {
         let index = usize::try_from(self.root.as_heap()?).ok()?;
         self.heap.get(index)?.as_ref()

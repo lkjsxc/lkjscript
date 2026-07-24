@@ -54,7 +54,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, `GcHeap` runtime services, code objects, tier state, forced/auto execution |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
-| Heap/GC | `crates/lkjscript-core/src/gc.rs` | pure session-owned stable-index `GcHeap`, exact bounded counters/collection policy, VM and forced-JIT use |
+| Heap/GC | `crates/lkjscript-core/src/gc.rs` | pure session-owned non-reusing stable-index `GcHeap`, transactional estimated-byte-accounted mutation, transitive snapshots, bounded counters/collection policy, VM and forced-JIT use |
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
 | Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers, safe bounded executable installation/invocation, private raw active-frame chain, copied typed-root service callback |
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
@@ -168,15 +168,18 @@ forced main or hot scalar VM function entry
   -> bounded W^X callable ABI-2 baseline code object
   -> descriptor/budget/pthread-bounds frame reservation before stack subtraction
   -> initialized registered frame and verifier-certified exact scalar or typed-reference call map
-  -> unboxed direct call or verified-home HeapDispatchV1 safe runtime service
-  -> GcHeap collection/allocation with root writeback and exact owned return snapshot
+  -> unboxed direct call or canonical-fact verified-home HeapDispatchV1 safe runtime service
+  -> GcHeap collection/allocation with root writeback, argument re-materialization,
+     transactional mutation, and transitive owned return snapshot
   -> PollV1/CollectReferenceV1 and structured return/trap/exit/deadline/resource/host status
   -> exactly one unregister on every registered outcome
 ```
 
 Forced mode enters generated main and never falls back. Auto compiles at one
-function entry and uses the object only on later calls; unsupported code stays
-VM-correct with same-epoch retry suppression. The old observation-only hook is
+eligible scalar-adapter function entry and uses the object only on later calls;
+reference-signature helpers may be generated direct callees but remain
+ineligible VM/native entries. Unsupported code stays VM-correct with same-epoch
+retry suppression. The old observation-only hook is
 removed. Closed plans retain exact Buf-reference collection. Forced SSA/source execution
 also supports Str, legacy Buf, Product, List, Option, and Result allocation and
 direct/mutual recursion. Auto intentionally keeps reference-typed functions in

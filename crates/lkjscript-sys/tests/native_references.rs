@@ -44,6 +44,89 @@ impl NativeRuntimeServices for FailingHeapService {
     }
 }
 
+struct MovingHeapService {
+    expected_word: u64,
+    observed_word: Option<u64>,
+}
+
+impl NativeRuntimeServices for MovingHeapService {
+    fn collect_references(&mut self, _roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
+        Ok(())
+    }
+
+    fn prepare_heap_operation(
+        &mut self,
+        _site: &HeapRuntimeSite,
+        _arguments: &[NativeValue],
+        roots: &mut [NativeRoot],
+    ) -> Result<bool, NativeServiceError> {
+        for root in roots {
+            root.set_opaque_word(self.expected_word);
+        }
+        Ok(true)
+    }
+
+    fn heap_operation(
+        &mut self,
+        _site: &HeapRuntimeSite,
+        arguments: &[NativeValue],
+    ) -> Result<NativeValue, NativeServiceError> {
+        self.observed_word = arguments.first().and_then(|argument| match argument {
+            NativeValue::Reference(reference) => Some(reference.opaque_word()),
+            _ => None,
+        });
+        Ok(NativeValue::I64(7))
+    }
+}
+
+#[test]
+fn heap_dispatch_rematerializes_moved_argument_after_root_writeback(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let buffer = ValueType::Reference(ReferenceType::Buf);
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(41),
+        Signature::new(vec![buffer], ValueType::I64)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let input = builder.parameter(0)?;
+    let descriptor = HeapCallDescriptor::new(
+        HeapOperation::BufLen,
+        vec![buffer],
+        ValueType::I64,
+        AllocationClass::None,
+        StoreClass::None,
+    )?;
+    let result = builder.heap_call(entry, descriptor, vec![input])?;
+    builder.return_value(entry, result)?;
+    plan.define_function(builder.finish())?;
+    let image = encode(
+        plan.verify(BackendLimits::default())?,
+        EncodingConfig::default(),
+    )?;
+    let installed = ExecutableInstaller::default().install(image)?;
+    let mut service = MovingHeapService {
+        expected_word: 99,
+        observed_word: None,
+    };
+    let report = installed.invoke_with_services(
+        function,
+        &[buf(11)],
+        &NativeInvocationConfig::default(),
+        &mut service,
+    )?;
+    assert_eq!(
+        report.outcome(),
+        InvocationOutcome::Returned(NativeValue::I64(7))
+    );
+    assert_eq!(service.observed_word, Some(99));
+    assert_eq!(report.heap_operation_attempts(), 1);
+    assert_eq!(report.heap_operation_successes(), 1);
+    Ok(())
+}
+
 #[test]
 fn generic_heap_dispatch_propagates_service_status_and_unwinds(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -100,6 +183,8 @@ fn generic_heap_dispatch_propagates_service_status_and_unwinds(
         assert_eq!(report.outcome(), expected);
         assert_eq!(report.active_frame_depth(), 0);
         assert_eq!(report.reserved_native_stack_bytes(), 0);
+        assert_eq!(report.heap_operation_attempts(), 1);
+        assert_eq!(report.heap_operation_successes(), 0);
         assert_eq!(service.calls, 1);
     }
     Ok(())
@@ -339,6 +424,8 @@ fn collecting_callee_exposes_caller_and_callee_chain() -> Result<(), Box<dyn std
     assert_eq!(report.outcome(), InvocationOutcome::Returned(buf(44)));
     assert_eq!(report.peak_active_frame_depth(), 2);
     assert_eq!(report.active_frame_depth(), 0);
+    assert!(report.peak_active_value_homes() > 0);
+    assert_eq!(report.active_value_homes(), 0);
     assert_eq!(report.exact_root_counts(), &[2]);
     assert_eq!(services.observed[0].len(), 2);
     Ok(())

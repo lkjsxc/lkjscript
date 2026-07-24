@@ -64,8 +64,10 @@ remain outcomes; forced mode never silently falls back to the
 VM.
 
 `auto` begins in the VM. Saturating function-entry counts synchronously compile
-a hot supported scalar function at its entry safepoint, and that call
-still runs in the VM. Later calls use installed native code. Unsupported or
+a hot function whose VM/native entry signature has an implemented scalar
+adapter, and that call still runs in the VM. A compiled group may contain a
+reference-signature helper for generated direct calls, but that helper remains
+explicitly auto-entry-ineligible; later direct VM entries stay in the VM. Later calls use installed native code. Unsupported or
 resource-limited compilation remains VM-correct and is retry-suppressed in the
 same epoch. A changed epoch permits only the configured bounded retry. Auto can
 be disabled or given a deterministic threshold. This is whole-function entry
@@ -89,7 +91,8 @@ A bounded non-Send execution session owns installed mappings and accounting.
 An installed code object retains function-group identity, baseline tier,
 semantic/native/runtime ABI versions, entries, code and page-accounted
 allocation sizes, relocations, runtime-call identities, typed frame homes,
-safepoints with exact derived stack maps, source/trap/outcome maps,
+safepoints with exact derived stack maps, source maps, exact explicit trap-site
+identities/messages, and outcome maps,
 compile/install statistics, invalidation state, metadata bytes, and native entry
 counts. Limits cover per-object and aggregate code, metadata, work, object
 count, diagnostic bytes, and compilation wall time. There is no persistence,
@@ -99,10 +102,13 @@ Safe sys APIs accept only opaque images emitted from verified closed plans.
 Mappings transition RW to RX, are never RWX, expose no raw entry address, and
 remain owned for every invocation. Scalar paths retain exactly empty maps. Reference paths home values and carry
 verifier-certified non-empty exact maps. Generic bounded `HeapDispatchV1` sites
-retain arbitrary argument homes (up to the language/backend bound), exact
-input/result layouts, operation/source identity, allocation/store class, and
-safepoint. Sys alone accesses raw frames; safe services receive copied typed
-arguments/roots and return an exact typed value. No raw stack or object pointer
+retain arbitrary argument homes (up to the language/backend bound), canonical
+operation-specific input/result/layout facts (including product field and
+collection payload identities), operation/source identity, allocation/store
+class, and safepoint. Sys alone accesses raw frames; safe services receive
+copied typed arguments/roots and return an exact typed value. After a service
+rewrites moving roots, sys writes them home and re-materializes arguments before
+the heap operation. No raw stack or object pointer
 crosses that boundary.
 
 ## Unsupported Native Semantics
@@ -124,7 +130,10 @@ on stderr; `LKJSCRIPT_METRICS_FILE` writes that line to an explicit file instead
 The versioned record includes exact scalar outcome bits, every compiler phase,
 VM/engine/native durations, time to first native entry, first-call duration,
 compile/install durations, tier states/counts/failures/fallbacks, code and
-metadata/cache accounting, direct calls, and PollV1 calls. Collection is
+metadata/cache accounting, direct calls, PollV1 calls, allocation counts,
+deterministic estimated object bytes, estimated peak-live bytes, collections,
+and distinct attempted/successful heap calls. It does not currently report a
+collection-pause distribution. Collection is
 conditional; ordinary native-call hot paths do not read the clock. Normal
 program stdout is never used for JIT diagnostics or metrics.
 
@@ -141,7 +150,9 @@ separate docs/tree/source checks, `quiet verify` (182 unit/integration tests plu
 one compile-fail doctest), a locked workspace release build, scalar
 VM/forced/auto smokes, Brainfuck smoke, and a forced allocation-graph smoke.
 The graph smoke returned exact I64 `1` with 3 native entries, 7 allocations, 6
-collections, maximum 3 roots, 14 heap calls, 6 barriers, and zero VM fallback.
+collections, maximum 3 roots, 14 successful heap calls, 6 barriers, and zero VM
+fallback. This is historical evidence for that commit; attempted/successful
+heap-call counters were separated later.
 Docker, performance, and full Brainfuck Mandelbrot were not run.
 
 ## Native-Reference Boundary
@@ -152,6 +163,10 @@ generated frames, and enum-identified runtime-ABI-1 frame and collection calls.
 `CollectReferenceV1` remains valid for its closed Buf-reference certificate.
 `HeapDispatchV1` adds verified frame-home dispatch for source Str, legacy Buf,
 Product, List, Option, and Result operations. Session-owned stable handles use
-exact category/layout checks and zero only for EmptyList/None. Host
+exact category/layout checks and zero only for EmptyList/None. Swept indices
+are never reused in a session, so same-layout stale handles cannot exhibit ABA.
+Returned snapshots retain only the transitive reachable graph. Transactional
+heap mutation preserves the old object and counters on closure or estimated-
+heap-limit failure. Host
 capabilities, lexical ownership references, native/VM reference transitions,
 OSR, and optimization are not smuggled into this slice.

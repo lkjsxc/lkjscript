@@ -76,7 +76,7 @@ pub(crate) struct LoweredGroup {
     pub(crate) image: InstallableImage,
     pub(crate) functions: Vec<FunctionId>,
     pub(crate) native_functions: Vec<(FunctionId, lkjscript_native::FunctionId)>,
-    pub(crate) explicit_traps: Vec<String>,
+    pub(crate) explicit_traps: Vec<(u32, String)>,
 }
 
 pub(crate) fn reachable_group(
@@ -432,13 +432,14 @@ fn lower_type(function: FunctionId, ty: &SsaType) -> Result<ValueType, LoweringE
             LayoutIdentity::new(u32::from(product.raw()).saturating_add(1)),
         ))),
         SsaType::List(element) => Ok(ValueType::Reference(ReferenceType::List(
-            LayoutIdentity::new(layout_identity(1, element)),
+            LayoutIdentity::new(layout_identity(element)),
         ))),
         SsaType::Option(element) => Ok(ValueType::Reference(ReferenceType::Option(
-            LayoutIdentity::new(layout_identity(2, element)),
+            LayoutIdentity::new(layout_identity(element)),
         ))),
         SsaType::Result(ok, error) => Ok(ValueType::Reference(ReferenceType::Result(
-            LayoutIdentity::new(layout_identity_pair(3, ok, error)),
+            LayoutIdentity::new(layout_identity(ok)),
+            LayoutIdentity::new(layout_identity(error)),
         ))),
         SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
@@ -453,39 +454,33 @@ fn lower_type(function: FunctionId, ty: &SsaType) -> Result<ValueType, LoweringE
     }
 }
 
-fn layout_identity(seed: u32, ty: &SsaType) -> u32 {
+fn layout_identity(ty: &SsaType) -> u32 {
     fn mix(state: u32, value: u32) -> u32 {
         state.wrapping_mul(16_777_619) ^ value
     }
-    fn visit(state: u32, ty: &SsaType) -> u32 {
-        match ty {
-            SsaType::Unit => mix(state, 1),
-            SsaType::Bool => mix(state, 2),
-            SsaType::I64 => mix(state, 3),
-            SsaType::F64 => mix(state, 4),
-            SsaType::Str => mix(state, 5),
-            SsaType::Symbol => mix(state, 6),
-            SsaType::Buf => mix(state, 7),
-            SsaType::Product(product) => mix(mix(state, 8), u32::from(product.raw())),
-            SsaType::List(inner) => visit(mix(state, 9), inner),
-            SsaType::Option(inner) => visit(mix(state, 10), inner),
-            SsaType::Result(ok, error) => visit(visit(mix(state, 11), ok), error),
-            SsaType::Owned(inner) => visit(mix(state, 12), inner),
-            SsaType::Ref(inner) => visit(mix(state, 13), inner),
-            SsaType::RefMut(inner) => visit(mix(state, 14), inner),
-            SsaType::Handle => mix(state, 15),
-            SsaType::Function(_) => mix(state, 16),
-            SsaType::TypeParameter(name) => name
-                .as_bytes()
-                .iter()
-                .fold(mix(state, 17), |state, byte| mix(state, u32::from(*byte))),
-        }
-    }
-    visit(2_166_136_261 ^ seed, ty).max(1)
-}
-
-fn layout_identity_pair(seed: u32, left: &SsaType, right: &SsaType) -> u32 {
-    layout_identity(layout_identity(seed, left), right)
+    let identity = match ty {
+        SsaType::Unit => 1,
+        SsaType::Bool => 2,
+        SsaType::I64 => 3,
+        SsaType::F64 => 4,
+        SsaType::Str => 5,
+        SsaType::Symbol => 6,
+        SsaType::Buf => 7,
+        SsaType::Product(product) => mix(8, u32::from(product.raw()).saturating_add(1)),
+        SsaType::List(inner) => mix(9, layout_identity(inner)),
+        SsaType::Option(inner) => mix(10, layout_identity(inner)),
+        SsaType::Result(ok, error) => mix(mix(11, layout_identity(ok)), layout_identity(error)),
+        SsaType::Owned(inner) => mix(12, layout_identity(inner)),
+        SsaType::Ref(inner) => mix(13, layout_identity(inner)),
+        SsaType::RefMut(inner) => mix(14, layout_identity(inner)),
+        SsaType::Handle => 15,
+        SsaType::Function(_) => 16,
+        SsaType::TypeParameter(name) => name
+            .as_bytes()
+            .iter()
+            .fold(17, |state, byte| mix(state, u32::from(*byte))),
+    };
+    identity.max(1)
 }
 
 #[derive(Clone, Copy)]
@@ -499,7 +494,7 @@ fn lower_function(
     function: &Function,
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
     builder: &mut FunctionBuilder,
-    explicit_traps: &mut Vec<String>,
+    explicit_traps: &mut Vec<(u32, String)>,
 ) -> Result<(), LoweringError> {
     let value_types = collect_value_types(function)?;
     let mut locals = Vec::with_capacity(value_types.len());
@@ -788,6 +783,7 @@ fn lower_instruction(
                     HeapOperation::ProductField {
                         product: u32::from(product.raw()),
                         field: *field,
+                        field_type: value_type(value_types, instruction.id)?,
                     },
                     vec![value_type(value_types, *value)?],
                     value_type(value_types, instruction.id)?,
@@ -809,6 +805,7 @@ fn lower_instruction(
                     HeapOperation::WithProductField {
                         product: u32::from(product.raw()),
                         field: *field,
+                        field_type: value_type(value_types, *replacement)?,
                     },
                     vec![
                         value_type(value_types, *value)?,
@@ -1101,7 +1098,7 @@ fn lower_terminator(
     block: &Block,
     context: TerminatorContext<'_>,
     builder: &mut FunctionBuilder,
-    explicit_traps: &mut Vec<String>,
+    explicit_traps: &mut Vec<(u32, String)>,
 ) -> Result<(), LoweringError> {
     let native_block = context.native_block;
     let edges = context.edges;
@@ -1154,9 +1151,16 @@ fn lower_terminator(
                 .map_err(LoweringError::backend)?;
         }
         Terminator::Trap { message } => {
-            explicit_traps.push(message.clone());
+            let site = u32::try_from(explicit_traps.len()).map_err(|_| {
+                LoweringError::new(
+                    LoweringFailureCode::Backend,
+                    Some(function.id),
+                    "explicit trap-site identity space exhausted",
+                )
+            })?;
+            explicit_traps.push((site, message.clone()));
             builder
-                .trap(native_block, TrapCode::Explicit)
+                .trap_at(native_block, TrapCode::Explicit, site)
                 .map_err(LoweringError::backend)?;
         }
         Terminator::Exit { code } => {

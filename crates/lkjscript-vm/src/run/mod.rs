@@ -8,8 +8,8 @@ mod numeric;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, GcHeap as Arena, HeapObj,
-    HostError, ResourceLimitKind, Result, Trap, ValidatedChunk, Value,
+    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap as Arena,
+    HeapObj, HostError, ResourceLimitKind, Result, Trap, ValidatedChunk, Value,
 };
 use lkjscript_jit::{
     EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,
@@ -39,7 +39,7 @@ pub trait RuntimeTier {
         arguments: &[NativeValue],
         execution: &ExecutionConfig,
     ) -> std::result::Result<ScalarInvocation, EngineError>;
-    fn trap_message(&self, function: FunctionId, trap: TrapCode) -> String;
+    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String;
     fn record_invocation_failure(&mut self, function: FunctionId);
 }
 
@@ -64,7 +64,7 @@ impl RuntimeTier for NoTier {
         Err(EngineError::new_unavailable(function))
     }
 
-    fn trap_message(&self, _function: FunctionId, _trap: TrapCode) -> String {
+    fn trap_message(&self, _function: FunctionId, _trap: TrapCode, _site: Option<u32>) -> String {
         "native tier is unavailable".to_string()
     }
 
@@ -89,8 +89,8 @@ impl RuntimeTier for JitSession {
         JitSession::invoke_scalar(self, function, arguments, execution)
     }
 
-    fn trap_message(&self, function: FunctionId, trap: TrapCode) -> String {
-        self.trap_message_for(function, trap)
+    fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String {
+        self.trap_message_for(function, trap, site)
     }
 
     fn record_invocation_failure(&mut self, function: FunctionId) {
@@ -126,7 +126,11 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             globals: vec![Value::INVALID; chunk.global_names().len()],
             stack: Vec::new(),
             frames: Vec::new(),
-            arena: Arena::default(),
+            arena: Arena::new(GcConfig {
+                max_allocations: config.max_allocations,
+                max_heap_bytes: config.max_heap_bytes,
+                ..GcConfig::default()
+            }),
             jit,
             exit_code: None,
             args,

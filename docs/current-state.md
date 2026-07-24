@@ -49,10 +49,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode lowered only from normalized SSA, contiguous stacks,
   pure session-owned stable-index `GcHeap` in `lkjscript-core`, precise
-  non-moving mark-sweep shared as the VM/JIT heap implementation, traced
-  immutable products, exact bounded allocation/accounted-byte/collection
-  counters and stress policy, explicit validated `Trap`, and return-adjacent
-  tail-frame reuse
+  non-moving mark-sweep shared as the VM/JIT heap implementation, monotonic
+  non-reused session indices preventing stable-handle ABA, traced immutable
+  products, transactional mutation with rollback and checked deterministic
+  estimated-object-byte deltas, transitive-only returned snapshots, bounded
+  allocation/estimated-byte/collection counters and stress policy, explicit
+  validated `Trap`, and return-adjacent tail-frame reuse
 - Execution boundary: mutable `Chunk` is builder-only for malformed-bytecode
   construction; one whole-chunk validator produces opaque immutable
   `ValidatedChunk`, and VM, disassembly, and the JIT observation seam accept
@@ -162,16 +164,18 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   and enforce cooperative fuel/deadlines; generated ABI-2 prologues call the
   encoder-owned `ReserveFrameV1` after only minimal ABI setup and before frame
   subtraction/initialization. Sys validates descriptor bytes, configured
-  aggregate/per-frame limits, active-frame capacity, and guarded current pthread
-  stack bounds, then tracks exact reservation/release. Collecting calls publish
+  aggregate/per-frame limits, active-frame capacity, the exact configured
+  active value/home/root budget, and guarded current pthread stack bounds, then
+  tracks exact reservation/release across nested frames. Collecting calls publish
   a dense safepoint, and every structured return/trap/exit/deadline/resource/host
   edge unregisters before status returns to the execution owner
 - Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; ordinary `run`
   defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
   remains deterministic, forced baseline compiles the complete reachable
   supported SCC group before main effects and never falls back, and auto
-  compiles scalar hot entries for later calls while conservatively retaining
-  reference-typed and unsupported code in VM
+  compiles scalar-adapter hot entries for later calls while conservatively
+  retaining reference-signature and unsupported VM entries; compiled groups
+  may contain reference helpers only as direct generated callees
 - Tier/code ownership: the former observation hook is removed. Per-function
   states are `VmOnly`, `Observed`, `BaselineCompiling`, `BaselineNative`, or
   `Disabled` with saturating calls, bounded attempts, epoch/failure/object facts,
@@ -179,10 +183,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   relocation/runtime/safepoint/source/outcome, compile/install, invalidation,
   W^X, and entry metadata under bounded synchronous session ownership
 - Retained JIT evidence: opt-in low-overhead JSON metrics are separate from full
-  diagnostics and never use stdout; the standard-library harness polls process
-  RSS, checks exact result bits and stream silence, randomizes at least four
-  warmups plus 31 samples, and retains every sample and distribution under
-  `meta/benchmarks/jit/results/`
+  diagnostics and never use stdout; allocation/object byte fields are labeled
+  deterministic estimates, heap operation attempts and successes are distinct,
+  and no collection-pause distribution is claimed. The standard-library harness
+  polls process RSS, checks exact result bits and stream silence, randomizes at
+  least four warmups plus 31 samples, and retains every sample and distribution
+  under `meta/benchmarks/jit/results/`
 - Native references and heap sites: typed opaque stable-handle words use exact
   Buf/Str/List/Option/Result/product layout identities and verified frame homes,
   not raw object pointers; zero is accepted only for EmptyList/None; the Copy runtime-adapter token is non-Send/non-Sync.
@@ -196,17 +202,22 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   dynamically under an aggregate cap, copies typed roots to safe runtime
   services, writes back handles, and reports exact stack/frame/root outcomes.
   Runtime-service limits are distinct from materialization limits. Generic
-  `HeapDispatchV1` sites retain exact operation, arbitrary bounded typed
-  arguments/result homes, allocation/store class, source identity and
-  safepoint; sys copies values/roots into safe `GcHeap` services and writes back
-  exact roots/results. Caller/callee chains, dead-root exclusion, bounds,
+  `HeapDispatchV1` sites retain canonical operation-specific
+  input/result/layout/allocation/store facts, including nominal product field
+  and List/Option/Result payload identities, plus arbitrary bounded typed
+  arguments/result homes, source identity, and safepoint; sys copies
+  values/roots into safe `GcHeap` services, writes roots back, re-materializes
+  moved arguments, and writes exact results. Caller/callee chains, dead-root
+  exclusion, bounds,
   structured failures/outcomes, W^X, and repeated installation are tested
 - Native source limits: the callable SSA adapter rejects indirect calls,
   polymorphic/unsupported signatures, Symbol, Handle/host IO, and lexical
   Owned/Ref/RefMut. Scalar ABI-2 maps remain exactly empty; supported
   host-independent reference operations have exact non-empty maps. Native/VM
-  reference transitions are absent, so auto never labels a reference VM call
-  native
+  reference transitions are absent, so per-function auto-entry eligibility
+  prevents a compiled reference helper from ever labeling a direct VM call
+  native. Explicit trap sites carry deterministic selected message identity
+  through lowering, image metadata, sys outcome, and JIT lookup
 - Deferred tiers/surfaces: loop OSR, background compilation,
   optimizing/speculative tiers, deoptimization, Handle/host native allocation,
   native/VM reference transitions, persistent profiles, and persistent code
@@ -269,6 +280,22 @@ The highest-priority defects are:
 
 ## Evidence
 
+The adversarial allocation-baseline repair in this document's containing
+commit, based on `3467137b3e2ad9cf15ff55cd4cf38a134126e373`, was checked in
+an isolated worktree on Linux x86-64 with Rust/Cargo 1.96.0. It repairs the
+Current host-independent slice; Handle/host calls, native/VM reference
+transitions, the complete allocation-capable decision, and collection-pause
+measurement remain outside this evidence.
+
+| Adversarial repair command or check | Result |
+| --- | --- |
+| focused core/native/sys/JIT/VM/app tests | passed; auto reference-helper entry gating, non-reused same-layout stale handles, canonical malformed heap descriptors, moving-service argument re-materialization, buffer Result boundaries, MAX/MAX+1 list equality, selected callee trap identity, zero/tiny native active values, transactional mutation rollback/limits, reachable-only snapshots, and attempted/successful heap-call metrics plus retained prior coverage |
+| strict workspace Clippy, all targets/features | passed with `-D warnings` |
+| separate docs/tree/source checks and `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; formatting, strict Clippy, exact source closure, 193 unit/integration tests, and one compile-fail doctest |
+| locked workspace release build; default/VM/forced/threshold-2-auto scalar, VM hello, forced allocation-graph metrics, and Brainfuck smoke | passed; scalar streams were empty, hello was exact `3628800`, allocation graph returned I64 `1` with 14 attempted/14 successful heap calls, 7 allocations, estimated-byte keys, and zero fallback, and Brainfuck direct/run-folded correctness/failure boundaries passed |
+| metrics parser correction | the first local parser invocation failed because the metrics file intentionally begins with `LKJSCRIPT_METRICS `; the generated program had exited successfully. A corrected prefix-aware parser was run and passed |
+| Not tested | Docker, performance sampling, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
+
 The host-independent source allocation/recursion slice in this document's
 containing commit, based on `0daa7a0d3064ad487cee2154d91f9db0a0fc0c82`,
 was checked in isolated worktree
@@ -281,7 +308,7 @@ with Rust/Cargo 1.96.0. Canonical Brainfuck source was unchanged.
 | `cargo clippy --locked -p lkjscript-core -p lkjscript-native -p lkjscript-sys -p lkjscript-jit -p lkjscript-vm -p lkjscript-app --all-targets --all-features -- -D warnings` | passed |
 | separate `check-docs`, `check-tree`, and `check-sources` | passed; canonical language sources, including Brainfuck, were unchanged |
 | `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; formatting, strict workspace Clippy, docs/tree/source closure, 182 unit/integration tests, and one compile-fail doctest |
-| `cargo build --workspace --release --locked`; scalar default/VM/forced/threshold-2-auto, explicit-VM hello, Brainfuck smoke, and forced allocation-graph metrics smoke | passed; allocation graph returned exact I64 `1`, recorded 3 native entries, 7 allocations, 6 collections, maximum 3 roots, 14 heap calls, 6 barriers, zero fallback, and empty stdout |
+| `cargo build --workspace --release --locked`; scalar default/VM/forced/threshold-2-auto, explicit-VM hello, Brainfuck smoke, and forced allocation-graph metrics smoke | passed; allocation graph returned exact I64 `1`, recorded 3 native entries, 7 allocations, 6 collections, maximum 3 roots, 14 successful heap calls, 6 barriers, zero fallback, and empty stdout |
 | `cargo fmt --all -- --check`; `git diff --check` | passed |
 | Not tested | Docker, performance sampling, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
 

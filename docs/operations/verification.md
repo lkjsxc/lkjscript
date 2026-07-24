@@ -89,10 +89,12 @@ install -> actual native entry and typed heap runtime sites. They assert install
 main and callee entries, direct native call counts, PollV1 counts, zero forced
 fallbacks, and exact evaluator/VM/native scalar values or outcome categories.
 Focused cases cover I64 multi-block loops/calls/overflow/division, F64 bits,
-IEEE comparisons and mixed conversion, exit, deadline/fuel/code/heap/allocation
+IEEE comparisons and mixed conversion, exact selected conditional/callee trap
+messages, exit, deadline/fuel/code/heap/allocation and zero/tiny active-value
 limits, unsupported ownership/host semantics, direct and mutual recursion with
-live references, nested Product/Option/Result/List/Str/Buf graphs, and auto
-scalar later-call transfer with reference retry suppression.
+live references, exact/MAX+1 bounded list equality, native buffer Result error
+boundaries, nested Product/Option/Result/List/Str/Buf graphs, and auto scalar
+later-call transfer while compiled reference helpers remain entry-ineligible.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.
@@ -201,8 +203,10 @@ Tests check both selections. Machine diagnostics and low-overhead metrics are
 separate, stderr/file-only, opt-in, and silent during normal execution. Metrics retain exact outcome bits,
 compile/HIR/effect/SSA/bytecode/native/install/first-entry/first-call/VM/native/
 engine times, tier states and failures/fallbacks, entries/direct calls/PollV1,
-code/metadata/cache peaks, allocations/bytes/collections/peak live heap, roots,
-heap runtime calls, barriers, peak native frame depth, and transition counts.
+code/metadata/cache peaks, allocations/deterministic estimated object
+bytes/collections/estimated peak live heap, roots, distinct attempted and
+successful heap runtime calls, barriers, peak native frame depth, and transition
+counts. Collection pause distribution is not currently measured.
 Owned-buffer/lexical-reference, Handle/host paths, native/VM reference
 transitions, OSR, optimizing JIT, and background compilation are outside the
 current baseline subset. Host-independent GC references/allocation and

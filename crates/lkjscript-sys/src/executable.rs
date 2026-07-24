@@ -221,6 +221,7 @@ pub enum NativeResourceLimitKind {
     MaterializedRoots,
     RuntimeService,
     NativeStackBytes,
+    ActiveValues,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -238,6 +239,7 @@ pub struct NativeInvocationConfig {
     poll_fuel: u64,
     wall_time: Option<Duration>,
     max_active_frames: usize,
+    max_active_values: usize,
     max_native_stack_bytes: usize,
     max_native_frame_bytes: usize,
 }
@@ -249,6 +251,7 @@ impl NativeInvocationConfig {
             poll_fuel,
             wall_time,
             max_active_frames: MAX_ACTIVE_FRAMES,
+            max_active_values: usize::MAX,
             max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
             max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
         }
@@ -257,6 +260,12 @@ impl NativeInvocationConfig {
     #[must_use]
     pub const fn with_max_active_frames(mut self, maximum: usize) -> Self {
         self.max_active_frames = maximum;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_max_active_values(mut self, maximum: usize) -> Self {
+        self.max_active_values = maximum;
         self
     }
 
@@ -362,6 +371,7 @@ impl NativeRuntimeServices for NoopNativeRuntimeServices {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InvocationReport {
     outcome: InvocationOutcome,
+    trap_site: Option<u32>,
     poll_count: u64,
     native_entries: Vec<NativeEntryCount>,
     peak_active_frame_depth: usize,
@@ -371,14 +381,22 @@ pub struct InvocationReport {
     exact_root_counts: Vec<usize>,
     peak_native_stack_bytes: usize,
     reserved_native_stack_bytes: usize,
-    heap_operation_calls: u64,
+    heap_operation_attempts: u64,
+    heap_operation_successes: u64,
     barrier_count: u64,
+    peak_active_value_homes: usize,
+    active_value_homes: usize,
 }
 
 impl InvocationReport {
     #[must_use]
     pub const fn outcome(&self) -> InvocationOutcome {
         self.outcome
+    }
+
+    #[must_use]
+    pub const fn trap_site(&self) -> Option<u32> {
+        self.trap_site
     }
 
     #[must_use]
@@ -427,13 +445,28 @@ impl InvocationReport {
     }
 
     #[must_use]
-    pub const fn heap_operation_calls(&self) -> u64 {
-        self.heap_operation_calls
+    pub const fn heap_operation_attempts(&self) -> u64 {
+        self.heap_operation_attempts
+    }
+
+    #[must_use]
+    pub const fn heap_operation_successes(&self) -> u64 {
+        self.heap_operation_successes
     }
 
     #[must_use]
     pub const fn barrier_count(&self) -> u64 {
         self.barrier_count
+    }
+
+    #[must_use]
+    pub const fn peak_active_value_homes(&self) -> usize {
+        self.peak_active_value_homes
+    }
+
+    #[must_use]
+    pub const fn active_value_homes(&self) -> usize {
+        self.active_value_homes
     }
 }
 
@@ -652,11 +685,18 @@ impl InstalledImage {
             state.active_depth = 0;
             state.pending_reservation = None;
             state.reserved_native_stack_bytes = 0;
+            state.active_value_homes = 0;
             return Err(InvocationError::LeakedActiveFrames(leaked));
         }
-        if state.pending_reservation.is_some() || state.reserved_native_stack_bytes != 0 {
+        if state.pending_reservation.is_some()
+            || state.reserved_native_stack_bytes != 0
+            || state.active_value_homes != 0
+        {
             return Err(InvocationError::InvalidActiveFrame);
         }
+        let trap_site = (state.status == 1 && state.trap == TrapCode::Explicit.as_u32())
+            .then(|| u32::try_from(state.payload).ok())
+            .flatten();
         let outcome = match state.status {
             0 => InvocationOutcome::Returned(raw.into_value(entry.signature().result())?),
             1 => InvocationOutcome::Trapped(match state.trap {
@@ -673,6 +713,7 @@ impl InstalledImage {
                 3 => NativeResourceLimitKind::MaterializedRoots,
                 4 => NativeResourceLimitKind::RuntimeService,
                 5 => NativeResourceLimitKind::NativeStackBytes,
+                6 => NativeResourceLimitKind::ActiveValues,
                 _ => return Err(InvocationError::InvalidNativeStatus(state.status)),
             }),
             5 => InvocationOutcome::HostFailure,
@@ -695,6 +736,7 @@ impl InstalledImage {
             .collect();
         Ok(InvocationReport {
             outcome,
+            trap_site,
             poll_count: state.poll_count,
             native_entries,
             peak_active_frame_depth: state.peak_active_depth,
@@ -704,8 +746,11 @@ impl InstalledImage {
             exact_root_counts: state.exact_root_counts.clone(),
             peak_native_stack_bytes: state.peak_native_stack_bytes,
             reserved_native_stack_bytes: state.reserved_native_stack_bytes,
-            heap_operation_calls: state.heap_operation_calls,
+            heap_operation_attempts: state.heap_operation_attempts,
+            heap_operation_successes: state.heap_operation_successes,
             barrier_count: state.barrier_count,
+            peak_active_value_homes: state.peak_active_value_homes,
+            active_value_homes: state.active_value_homes,
         })
     }
 
@@ -753,6 +798,7 @@ struct ActiveFrame {
     rbp: *mut u8,
     safepoint: u32,
     reserved_bytes: usize,
+    value_homes: usize,
 }
 
 const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
@@ -760,6 +806,7 @@ const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
     rbp: std::ptr::null_mut(),
     safepoint: INVALID_SAFEPOINT,
     reserved_bytes: 0,
+    value_homes: 0,
 };
 
 #[derive(Clone, Copy)]
@@ -767,6 +814,7 @@ struct PendingFrameReservation {
     function_ordinal: u32,
     rbp: *mut u8,
     frame_bytes: usize,
+    value_homes: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -802,19 +850,23 @@ struct NativeCallState<'a> {
     active_frames: [ActiveFrame; MAX_ACTIVE_FRAMES],
     active_depth: usize,
     maximum_active_frames: usize,
+    maximum_active_values: usize,
     maximum_native_stack_bytes: usize,
     maximum_native_frame_bytes: usize,
     pending_reservation: Option<PendingFrameReservation>,
     reserved_native_stack_bytes: usize,
     peak_native_stack_bytes: usize,
     peak_active_depth: usize,
+    active_value_homes: usize,
+    peak_active_value_homes: usize,
     collection_calls: u64,
     maximum_roots: usize,
     exact_root_counts: Vec<usize>,
     roots: Vec<NativeRoot>,
     root_addresses: Vec<RootAddress>,
     heap_arguments: Vec<NativeValue>,
-    heap_operation_calls: u64,
+    heap_operation_attempts: u64,
+    heap_operation_successes: u64,
     barrier_count: u64,
     metadata_invalid: bool,
 }
@@ -868,7 +920,7 @@ impl<'a> NativeCallState<'a> {
         Ok(Self {
             status,
             trap: 0,
-            payload: 0,
+            payload: -1,
             _scratch_integer_arguments: [0; 2],
             _scratch_float_arguments: [0; 2],
             poll_fuel_remaining: config.poll_fuel,
@@ -880,19 +932,23 @@ impl<'a> NativeCallState<'a> {
             active_frames: [EMPTY_ACTIVE_FRAME; MAX_ACTIVE_FRAMES],
             active_depth: 0,
             maximum_active_frames,
+            maximum_active_values: config.max_active_values,
             maximum_native_stack_bytes: config.max_native_stack_bytes,
             maximum_native_frame_bytes: config.max_native_frame_bytes,
             pending_reservation: None,
             reserved_native_stack_bytes: 0,
             peak_native_stack_bytes: 0,
             peak_active_depth: 0,
+            active_value_homes: 0,
+            peak_active_value_homes: 0,
             collection_calls: 0,
             maximum_roots: 0,
             exact_root_counts,
             roots,
             root_addresses,
             heap_arguments,
-            heap_operation_calls: 0,
+            heap_operation_attempts: 0,
+            heap_operation_successes: 0,
             barrier_count: 0,
             metadata_invalid: false,
         })
@@ -915,12 +971,12 @@ impl<'a> NativeCallState<'a> {
             self.invalidate_active_frame();
             return;
         };
-        let Some(descriptor_bytes) = self
+        let Some((descriptor_bytes, value_homes)) = self
             .image
             .frames()
             .iter()
             .find(|frame| frame.function() == entry.function())
-            .map(|frame| frame.frame_bytes())
+            .map(|frame| (frame.frame_bytes(), frame.homes().len()))
         else {
             self.invalidate_active_frame();
             return;
@@ -934,6 +990,16 @@ impl<'a> NativeCallState<'a> {
             || !(rbp as usize).is_multiple_of(16)
         {
             self.invalidate_active_frame();
+            return;
+        }
+        let Some(next_active_values) = self.active_value_homes.checked_add(value_homes) else {
+            self.status = 4;
+            self.payload = 6;
+            return;
+        };
+        if next_active_values > self.maximum_active_values {
+            self.status = 4;
+            self.payload = 6;
             return;
         }
         let Some(next_reserved_bytes) = self.reserved_native_stack_bytes.checked_add(frame_bytes)
@@ -954,8 +1020,11 @@ impl<'a> NativeCallState<'a> {
             function_ordinal,
             rbp,
             frame_bytes,
+            value_homes,
         });
         self.reserved_native_stack_bytes = next_reserved_bytes;
+        self.active_value_homes = next_active_values;
+        self.peak_active_value_homes = self.peak_active_value_homes.max(next_active_values);
         self.peak_native_stack_bytes = self
             .peak_native_stack_bytes
             .max(self.reserved_native_stack_bytes);
@@ -982,6 +1051,7 @@ impl<'a> NativeCallState<'a> {
             rbp,
             safepoint: INVALID_SAFEPOINT,
             reserved_bytes: reservation.frame_bytes,
+            value_homes: reservation.value_homes,
         };
         self.active_depth += 1;
         self.peak_active_depth = self.peak_active_depth.max(self.active_depth);
@@ -1031,9 +1101,15 @@ impl<'a> NativeCallState<'a> {
             self.invalidate_active_frame();
             return;
         };
+        let Some(next_active_values) = self.active_value_homes.checked_sub(frame.value_homes)
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
         self.active_frames[index] = EMPTY_ACTIVE_FRAME;
         self.active_depth = index;
         self.reserved_native_stack_bytes = next_reserved_bytes;
+        self.active_value_homes = next_active_values;
     }
 
     fn collect_references(&mut self, argument: u64) -> u64 {
@@ -1145,40 +1221,9 @@ impl<'a> NativeCallState<'a> {
             self.invalidate_active_frame();
             return;
         };
-        self.heap_arguments.clear();
-        for home in site.arguments() {
-            if !facts.homes().contains(home) {
-                self.invalidate_active_frame();
-                return;
-            }
-            // SAFETY: image integrity and the active descriptor validate this
-            // aligned home inside the currently registered generated frame.
-            let address = unsafe {
-                frame
-                    .rbp
-                    .offset(home.rbp_displacement() as isize)
-                    .cast::<u64>()
-            };
-            // SAFETY: the exact home above is initialized before dispatch.
-            let word = unsafe { address.read() };
-            let value = match home.value_type() {
-                ValueType::I64 => NativeValue::I64(word as i64),
-                ValueType::F64 => NativeValue::F64Bits(word),
-                ValueType::Bool if word <= 1 => NativeValue::Bool(word == 1),
-                ValueType::Bool => {
-                    self.invalidate_active_frame();
-                    return;
-                }
-                ValueType::Unit if word == 0 => NativeValue::Unit,
-                ValueType::Unit => {
-                    self.invalidate_active_frame();
-                    return;
-                }
-                ValueType::Reference(reference_type) => {
-                    NativeValue::Reference(NativeReference::new(reference_type, word))
-                }
-            };
-            self.heap_arguments.push(value);
+        if !self.materialize_heap_arguments(&site, &facts, frame) {
+            self.invalidate_active_frame();
+            return;
         }
         self.roots.clear();
         self.root_addresses.clear();
@@ -1224,6 +1269,13 @@ impl<'a> NativeCallState<'a> {
             // SAFETY: root addresses came only from validated active homes.
             unsafe { address.address.write(root.opaque_word) };
         }
+        // A collecting service may move a live argument and rewrite its frame
+        // home through the root set. Re-read every verified argument home only
+        // after root writeback so heap_operation never receives stale words.
+        if !self.materialize_heap_arguments(&site, &facts, frame) {
+            self.invalidate_active_frame();
+            return;
+        }
         if collected {
             let count = self.roots.len();
             if self.exact_root_counts.len() == MAX_COLLECTION_REPORTS
@@ -1237,6 +1289,7 @@ impl<'a> NativeCallState<'a> {
             self.maximum_roots = self.maximum_roots.max(count);
             self.exact_root_counts.push(count);
         }
+        self.heap_operation_attempts = self.heap_operation_attempts.saturating_add(1);
         let result = self.services.heap_operation(&site, &self.heap_arguments);
         let result = match result {
             Ok(result) => result,
@@ -1277,10 +1330,47 @@ impl<'a> NativeCallState<'a> {
                 .cast::<u64>()
                 .write(word)
         };
-        self.heap_operation_calls = self.heap_operation_calls.saturating_add(1);
+        self.heap_operation_successes = self.heap_operation_successes.saturating_add(1);
         if site.descriptor().store() != StoreClass::None {
             self.barrier_count = self.barrier_count.saturating_add(1);
         }
+    }
+
+    fn materialize_heap_arguments(
+        &mut self,
+        site: &HeapRuntimeSite,
+        facts: &lkjscript_native::FrameFacts,
+        frame: ActiveFrame,
+    ) -> bool {
+        self.heap_arguments.clear();
+        for home in site.arguments() {
+            if !facts.homes().contains(home) {
+                return false;
+            }
+            // SAFETY: retained image integrity and the active descriptor bind
+            // this aligned home to the currently registered generated frame.
+            let address = unsafe {
+                frame
+                    .rbp
+                    .offset(home.rbp_displacement() as isize)
+                    .cast::<u64>()
+            };
+            // SAFETY: each verified argument home is initialized at this site.
+            let word = unsafe { address.read() };
+            let value = match home.value_type() {
+                ValueType::I64 => NativeValue::I64(word as i64),
+                ValueType::F64 => NativeValue::F64Bits(word),
+                ValueType::Bool if word <= 1 => NativeValue::Bool(word == 1),
+                ValueType::Bool => return false,
+                ValueType::Unit if word == 0 => NativeValue::Unit,
+                ValueType::Unit => return false,
+                ValueType::Reference(reference_type) => {
+                    NativeValue::Reference(NativeReference::new(reference_type, word))
+                }
+            };
+            self.heap_arguments.push(value);
+        }
+        true
     }
 
     fn materialize_frame_roots(&mut self, frame_index: usize) -> Result<(), MaterializeRootError> {
@@ -1312,7 +1402,9 @@ impl<'a> NativeCallState<'a> {
             .roots
             .len()
             .checked_add(additional)
-            .filter(|count| *count <= MAX_MATERIALIZED_ROOTS)
+            .filter(|count| {
+                *count <= MAX_MATERIALIZED_ROOTS && *count <= self.maximum_active_values
+            })
             .ok_or(MaterializeRootError::Capacity)?;
         let root_additional = next_root_count
             .checked_sub(self.roots.len())
@@ -1369,6 +1461,9 @@ impl<'a> NativeCallState<'a> {
             self.reserved_native_stack_bytes = self
                 .reserved_native_stack_bytes
                 .saturating_sub(reservation.frame_bytes);
+            self.active_value_homes = self
+                .active_value_homes
+                .saturating_sub(reservation.value_homes);
         }
         self.metadata_invalid = true;
         self.status = 5;

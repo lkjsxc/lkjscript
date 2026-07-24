@@ -233,8 +233,12 @@ impl FunctionEncoder<'_> {
         ] {
             let offset = self.bytes.len();
             self.trap_offsets[trap_index(trap)] = Some(offset);
-            self.trap_map
-                .push(trap_map_entry(self.function.id, to_u32(offset)?, trap));
+            self.trap_map.push(trap_map_entry(
+                self.function.id,
+                to_u32(offset)?,
+                trap,
+                None,
+            ));
             self.outcome_map.push(outcome_map_entry(
                 self.function.id,
                 to_u32(offset)?,
@@ -756,7 +760,26 @@ impl FunctionEncoder<'_> {
                 }
                 self.emit_epilogue()
             }
-            Terminator::Trap(trap) => self.emit_jump(FixupTarget::Trap(*trap)),
+            Terminator::Trap { trap, site } => {
+                if let Some(site) = site {
+                    let offset = self.bytes.len();
+                    self.trap_map.push(trap_map_entry(
+                        self.function.id,
+                        to_u32(offset)?,
+                        *trap,
+                        Some(*site),
+                    ));
+                    self.outcome_map.push(outcome_map_entry(
+                        self.function.id,
+                        to_u32(offset)?,
+                        OutcomeKind::Trap(*trap),
+                    ));
+                    self.load_integer_register(1, self.context_offset())?;
+                    self.emit(&[0x48, 0xc7, 0x41, 0x08])?;
+                    self.emit(&site.to_le_bytes())?;
+                }
+                self.emit_jump(FixupTarget::Trap(*trap))
+            }
             Terminator::Exit(code) => {
                 let offset = self.bytes.len();
                 self.outcome_map.push(outcome_map_entry(

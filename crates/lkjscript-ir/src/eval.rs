@@ -382,15 +382,11 @@ impl Evaluator<'_> {
                 let (EvalValue::List(left), EvalValue::List(right)) = (left, right) else {
                     return Err(Flow::Trap("list-equal category mismatch".into()));
                 };
-                if left.len().max(right.len()) > self.config.max_list_equal_steps {
-                    return Err(Flow::Trap("list-equal step limit exceeded".into()));
-                }
-                let equal = left.len() == right.len()
-                    && left
-                        .iter()
-                        .zip(right)
-                        .all(|(left, right)| value_equal(left, right).unwrap_or(false));
-                Ok(EvalValue::Bool(equal))
+                Ok(EvalValue::Bool(list_values_equal(
+                    left,
+                    right,
+                    self.config.max_list_equal_steps,
+                )?))
             }),
             Op::F64BitsEqual => binary(&arguments, |left, right| {
                 Ok(EvalValue::Bool(
@@ -425,16 +421,16 @@ impl Evaluator<'_> {
                 EvalValue::List(items) => items
                     .first()
                     .cloned()
-                    .ok_or_else(|| Flow::Trap("car of empty list".into())),
-                _ => Err(Flow::Trap("car operand is not a list".into())),
+                    .ok_or_else(|| Flow::Trap("car expects pair".into())),
+                _ => Err(Flow::Trap("car expects pair".into())),
             }),
             Op::Cdr => unary(&arguments, |list| match list {
                 EvalValue::List(items) if !items.is_empty() => {
                     self.allocate()?;
                     Ok(EvalValue::List(items[1..].to_vec()))
                 }
-                EvalValue::List(_) => Err(Flow::Trap("cdr of empty list".into())),
-                _ => Err(Flow::Trap("cdr operand is not a list".into())),
+                EvalValue::List(_) => Err(Flow::Trap("cdr expects pair".into())),
+                _ => Err(Flow::Trap("cdr expects pair".into())),
             }),
             Op::IsEmptyList => unary(&arguments, |list| match list {
                 EvalValue::List(items) => Ok(EvalValue::Bool(items.is_empty())),
@@ -529,14 +525,28 @@ impl Evaluator<'_> {
                 match String::from_utf8(buffer.bytes.borrow().clone()) {
                     Ok(text) => Ok(EvalValue::Ok(Box::new(EvalValue::Str(text)))),
                     Err(_) => Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                        "buf-to-str invalid UTF-8".into(),
+                        "buf-to-str: invalid UTF-8".into(),
                     )))),
                 }
             }),
             Op::BufSlice => ternary(&arguments, |buffer, offset, length| {
                 let buffer = as_buffer(buffer)?;
-                let offset = index_value(offset, "buf-slice")?;
-                let length = index_value(length, "buf-slice")?;
+                let offset = match usize::try_from(as_i64(offset)?) {
+                    Ok(offset) => offset,
+                    Err(_) => {
+                        return Ok(EvalValue::Err(Box::new(EvalValue::Str(
+                            "buf-slice offset out of range".into(),
+                        ))))
+                    }
+                };
+                let length = match usize::try_from(as_i64(length)?) {
+                    Ok(length) => length,
+                    Err(_) => {
+                        return Ok(EvalValue::Err(Box::new(EvalValue::Str(
+                            "buf-slice length out of range".into(),
+                        ))))
+                    }
+                };
                 let Some(end) = offset.checked_add(length) else {
                     return Ok(EvalValue::Err(Box::new(EvalValue::Str(
                         "buf-slice range overflow".into(),
@@ -546,7 +556,7 @@ impl Evaluator<'_> {
                     let bytes = buffer.bytes.borrow();
                     let Some(bytes) = bytes.get(offset..end) else {
                         return Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                            "buf-slice out of bounds".into(),
+                            "buf-slice range out of bounds".into(),
                         ))));
                     };
                     bytes.to_vec()
@@ -649,7 +659,13 @@ impl Evaluator<'_> {
             }),
             Op::UnwrapOk => unary(&arguments, |value| match value {
                 EvalValue::Ok(value) => Ok(value.as_ref().clone()),
-                EvalValue::Err(_) => Err(Flow::Trap("unwrap-ok on Err".into())),
+                EvalValue::Err(error) => {
+                    let message = match error.as_ref() {
+                        EvalValue::Str(message) => format!("unwrap-ok: {message}"),
+                        _ => "unwrap-ok on Err".into(),
+                    };
+                    Err(Flow::Trap(message))
+                }
                 _ => Err(Flow::Trap("unwrap-ok operand is not Result".into())),
             }),
             Op::UnwrapErr => unary(&arguments, |value| match value {
@@ -973,6 +989,21 @@ fn as_buffer(value: &EvalValue) -> std::result::Result<&EvalBuffer, Flow> {
     }
 }
 
+fn list_values_equal(
+    left: &[EvalValue],
+    right: &[EvalValue],
+    limit: usize,
+) -> std::result::Result<bool, Flow> {
+    if left.len().max(right.len()) > limit {
+        return Err(Flow::Trap("list-equal step limit exceeded".into()));
+    }
+    Ok(left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| value_equal(left, right).unwrap_or(false)))
+}
+
 fn index_value(value: &EvalValue, operation: &str) -> std::result::Result<usize, Flow> {
     usize::try_from(as_i64(value)?)
         .map_err(|_| Flow::Trap(format!("{operation} index out of range")))
@@ -981,4 +1012,20 @@ fn index_value(value: &EvalValue, operation: &str) -> std::result::Result<usize,
 #[allow(dead_code)]
 fn _block_id_is_used(id: BlockId) -> BlockId {
     id
+}
+
+#[cfg(test)]
+mod boundary_tests {
+    use super::{list_values_equal, EvalValue};
+
+    #[test]
+    fn evaluator_list_equality_accepts_limit_and_rejects_limit_plus_one() {
+        let limit = 1_000_000;
+        let values = vec![EvalValue::Unit; limit + 1];
+        assert_eq!(
+            list_values_equal(&values[..limit], &values[..limit], limit).ok(),
+            Some(true)
+        );
+        assert!(list_values_equal(&values, &values, limit).is_err());
+    }
 }
