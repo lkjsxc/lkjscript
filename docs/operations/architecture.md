@@ -114,12 +114,17 @@ explicitly unsupported in it. The selected owned Linux x86-64 closed scalar
 machine plan, encoder, metadata, safe W^X boundary, verified SSA adapter,
 bounded code objects, and callable function-entry baseline tier are **Current**
 for allocation-free Unit/Bool/I64/F64 acyclic direct-call groups. Forced and
-auto engines execute real entries. Native references/allocation, loop OSR, an
-optimizing tier, minimal AOT file emission, and direct Wasm remain **Accepted
-Targets** or later work. The VM remains the cold tier and runtime oracle. See
-[Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md),
-[Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md), and
-[Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
+auto engines execute real entries. Ownership/traits, native references/allocation, loop OSR, an optimizing tier,
+minimal AOT file emission, and direct Wasm remain **Accepted Targets** or later
+work. The VM remains the cold tier and runtime oracle. See [Ownership And
+Borrowing](../decisions/ownership-and-borrowing.md), [Coherent Traits And Static
+Dispatch](../decisions/traits-and-static-dispatch.md), [Native References,
+Frames, And Exact GC Stack Maps](../decisions/native-references-and-gc-stack-maps.md),
+[Allocation-Capable Baseline JIT](../decisions/allocation-capable-baseline-jit.md),
+[Proof-Based Optimizing JIT](../decisions/proof-based-optimizing-jit.md), [Typed
+Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md), [Linux
+x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md), and [Runtime
+JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
 
 ## Runtime Flow
 
@@ -193,10 +198,13 @@ fixed-point function effects, typed SSA, verification, independent evaluation,
 baseline normalization, reference-bytecode cutover, and the owned low-level
 x86-64/W^X foundation are now Current. SSA-to-native lowering and exact VM/code-
 object tier ownership follow. The first adaptive execution target remains
-synchronous callable baseline JIT; loop OSR
-and proof-based optimizing JIT are later. The allocation-free scalar callable
-baseline tier is Current; minimal file emission remains only for diagnostics
-and backend tests, and offline PGO is rejected. The exact active boundary is
-[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+synchronous callable baseline JIT. Exact native roots/allocation and a
+proof-based optimizing tier now precede later loop OSR in the accepted sequence.
+The allocation-free scalar callable baseline tier is Current; minimal file
+emission remains only for diagnostics and backend tests, and offline PGO is
+rejected. The exact active boundary is [Callable Linux x86-64 Baseline JIT
+Cycle](../decisions/callable-baseline-jit.md); the next contracts are
+[Allocation-Capable Baseline JIT](../decisions/allocation-capable-baseline-jit.md)
+and [Proof-Based Optimizing JIT](../decisions/proof-based-optimizing-jit.md).
 Real modules, process-safe host services, byte strings/views, and measured
 memory strategies build on those layers as vertical slices.

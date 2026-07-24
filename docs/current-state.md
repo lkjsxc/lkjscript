@@ -157,6 +157,25 @@ The SQLite implementation tree was verified on Linux x86-64 with the system
 These are VM and generic host-boundary results. They are not JIT evidence and
 do not establish application durability or migration behavior.
 
+## Accepted Platform Direction
+
+The next implementation sequence is sound ownership and coherent static traits,
+then exact native frames/roots, allocation-capable baseline execution, and a
+distinct proof-based optimizing tier with measured process-local promotion.
+These are **Accepted Targets**, not Current behavior. The authoritative records
+are [Ownership And Borrowing](decisions/ownership-and-borrowing.md), [Coherent
+Traits And Static Dispatch](decisions/traits-and-static-dispatch.md), [Native
+References, Frames, And Exact GC Stack Maps](decisions/native-references-and-gc-stack-maps.md),
+[Allocation-Capable Baseline JIT](decisions/allocation-capable-baseline-jit.md),
+and [Proof-Based Optimizing JIT](decisions/proof-based-optimizing-jit.md).
+
+Longer-term accepted sequences for [staged self-hosting](decisions/self-hosted-platform-roadmap.md),
+[modules and reproducible packages](decisions/modules-and-packages.md),
+[isolates and structured concurrency](decisions/isolates-and-structured-concurrency.md),
+[the Web platform](decisions/web-platform-roadmap.md), and [the first-party
+relational database](decisions/relational-database-roadmap.md) are explicitly
+not Current implementation claims.
+
 ## Known Defects
 
 The source identity cutover does not make the runtime semantically complete.

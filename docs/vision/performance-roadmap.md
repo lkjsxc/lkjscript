@@ -10,8 +10,9 @@ without turning aspiration into a current release claim.
 The reference bytecode VM, exact I64/F64 execution, precise mark-sweep, resolved
 typed HIR, verified normalized SSA, selected owned Linux x86-64 backend, bounded
 code objects, and callable allocation-free scalar baseline JIT are **Current**.
-The old observation hook is removed. Native references/allocation, loop OSR,
-proof-based optimizing JIT, and direct Wasm are **Accepted Targets**. Guarded
+The old observation hook is removed. Ownership/traits, native
+references/allocation, proof-based optimizing JIT, later loop OSR, and direct
+Wasm are **Accepted Targets**. Guarded
 specialization is **Deferred** until justified. Offline PGO is **Rejected by
 Product Decision**.
 
@@ -25,9 +26,11 @@ truthful semantics and safety
   -> chunk validation and structured VM outcomes
   -> typed SSA, verifier, and differential evaluator
   -> owned Linux x86-64 native code-object backend
-  -> function-triggered baseline JIT
-  -> loop-triggered baseline JIT and OSR
-  -> proof-based optimizing JIT
+  -> function-triggered scalar baseline JIT
+  -> ownership, coherent traits, and exact native roots
+  -> allocation-capable baseline JIT
+  -> proof-based optimizing JIT and measured automatic promotion
+  -> loop-triggered JIT and OSR in a later cycle
   -> guarded specialization and deoptimization only when justified
   -> direct Wasm and additional targets
 ```
@@ -125,26 +128,28 @@ Ordinary `run` now uses `auto` with a conservative 64-entry threshold; explicit
 Thresholds 1/64/1,024 had overlapping process distributions on the retained
 100,000-call workload. The selected middle value protects short programs while
 reaching native code at median 0.297720 ms rather than waiting to the 1,024-call
-median 3.556024 ms. The next performance dependency is loop-triggered OSR, not
-lowering the function-entry threshold to manipulate one benchmark.
+median 3.556024 ms. The next dependency is exact ownership-aware native roots
+and allocation, not lowering the function-entry threshold to manipulate one
+benchmark.
 
-## Phase 5: Loop Hotness And OSR
+## Phase 5: Ownership, Native Roots, And Allocation
 
-1. Add bounded saturating loop-backedge counters without ordinary
-   per-instruction counters.
-2. Trigger compilation from long-running loops.
-3. Define verified loop-header mappings from bytecode VM state to typed SSA and
-   native frame locations.
-4. Transfer exactly representable loops into baseline native code.
-5. Leave unsupported loop shapes in the VM.
-6. Validate GC, traps, deadlines, metering, output, resources, and arguments
-   during and after transfer.
-7. Measure OSR latency and whole-program benefit on long loops, especially
-   Brainfuck Mandelbrot interpreted by lkjscript.
+1. Establish sound affine ownership, lexical borrow, drop, and coherent core
+   trait facts before exposing unrestricted references.
+2. Extend typed SSA and verification with ownership, regions, alias classes,
+   allocation, barriers, and exact frame/root facts.
+3. Register every active native frame explicitly and validate non-empty stack
+   maps at collecting safepoints.
+4. Add versioned allocation and write-barrier runtime calls, then force
+   collection while generated frames retain live references.
+5. Add products, Option/Result, Str, Buf, List, Handle runtime paths and bounded
+   recursion without weakening forced-mode behavior.
+6. Retain scalar native performance as a regression gate and measure general
+   allocation/reference workloads against same-commit VM.
 
-OSR is required rather than cosmetic. Compiling only for the next function
-invocation is not OSR, and reports must state when a workload cannot benefit
-before OSR exists.
+The exact completion boundary is [Allocation-Capable Baseline
+JIT](../decisions/allocation-capable-baseline-jit.md). A helper call or emitted
+root metadata without active native collection is not completion.
 
 ## Phase 6: Proof-Based Optimizing JIT
 
@@ -157,10 +162,29 @@ vectorization only where target and alias facts permit and measurements retain
 them.
 
 Promotion uses bounded current-process observations that are discarded on exit.
-This tier remains non-speculative where possible and does not imply general
-deoptimization.
+This tier is non-speculative and does not imply general deoptimization. The
+exact pass and forced-engine boundary is [Proof-Based Optimizing
+JIT](../decisions/proof-based-optimizing-jit.md).
 
-## Phase 7: Guarded Specialization
+## Phase 7: Loop Hotness And OSR — Later Cycle
+
+1. Add bounded saturating loop-backedge counters without ordinary
+   per-instruction counters.
+2. Trigger compilation from long-running loops.
+3. Define verified loop-header mappings from bytecode VM state to typed SSA and
+   native frame locations.
+4. Transfer exactly representable loops into native code.
+5. Leave unsupported loop shapes in the VM.
+6. Validate GC, traps, deadlines, metering, output, resources, and arguments
+   during and after transfer.
+7. Measure OSR latency and whole-program benefit on long loops, including
+   unmodified Brainfuck Mandelbrot where a final diagnostic is justified.
+
+Function-entry promotion does not accelerate one already-running invocation and
+must never be labeled OSR. OSR is not required in the allocation/optimizing
+cycle.
+
+## Phase 8: Guarded Specialization
 
 Proceed only when retained evidence shows proof-based optimization is
 insufficient. Every value/shape specialization has an explicit guard, exact
@@ -172,7 +196,7 @@ Background compilation remains deferred until runtime ownership, cancellation,
 heap access, code-cache synchronization, and outcomes are process-safe.
 Persistent cross-run profiles and native-code caches remain outside the plan.
 
-## Phase 8: Portability And Product Work
+## Phase 9: Portability And Product Work
 
 Only after Linux x86-64 correctness and callable-JIT acceptance, validate Linux
 AArch64 ABI assumptions, keep

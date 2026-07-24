@@ -9,10 +9,11 @@ Define the working contract for automated engineering in this repository.
 `lkjscript` is a typed, line-oriented, AI-authored language implemented by a
 small Rust compiler and reference bytecode VM. Canonical explicit source feeds
 a resolved typed pipeline for the VM and current allocation-free scalar runtime
-baseline JIT, with later native reference/allocation, minimal AOT tests, and
-Wasm. Linux x86-64 baseline evidence requires real synchronous calls from
-verified SSA; code emission, disassembly, SSA scaffolding, or observation alone
-is insufficient.
+baseline JIT. The accepted sequence is sound ownership/coherent traits, exact
+native references/allocation/GC roots, and a distinct proof-based optimizing
+JIT, with later OSR, minimal AOT tests, and Wasm. Linux x86-64 tier evidence
+requires real synchronous calls from verified SSA; code emission, disassembly,
+SSA scaffolding, or observation alone is insufficient.
 The canonical accepted extension is `.lkjscript`; `.lkjml` is rejected without
 a compatibility mode. Linux x86-64 is the current acceptance platform.
 Portability is a design constraint, not a current support claim.
@@ -64,12 +65,17 @@ Portability is a design constraint, not a current support claim.
 5. [docs/decisions/equality-families.md](docs/decisions/equality-families.md)
 6. [docs/decisions/immutable-nominal-products.md](docs/decisions/immutable-nominal-products.md)
 7. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
-8. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
-9. [docs/decisions/callable-baseline-jit.md](docs/decisions/callable-baseline-jit.md)
-10. [docs/operations/verification.md](docs/operations/verification.md)
-11. [docs/vision/README.md](docs/vision/README.md)
-12. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
-13. [docs/vision/experiments.md](docs/vision/experiments.md)
+8. [docs/decisions/ownership-and-borrowing.md](docs/decisions/ownership-and-borrowing.md)
+9. [docs/decisions/traits-and-static-dispatch.md](docs/decisions/traits-and-static-dispatch.md)
+10. [docs/decisions/native-references-and-gc-stack-maps.md](docs/decisions/native-references-and-gc-stack-maps.md)
+11. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
+12. [docs/decisions/callable-baseline-jit.md](docs/decisions/callable-baseline-jit.md)
+13. [docs/decisions/allocation-capable-baseline-jit.md](docs/decisions/allocation-capable-baseline-jit.md)
+14. [docs/decisions/proof-based-optimizing-jit.md](docs/decisions/proof-based-optimizing-jit.md)
+15. [docs/operations/verification.md](docs/operations/verification.md)
+16. [docs/vision/README.md](docs/vision/README.md)
+17. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
+18. [docs/vision/experiments.md](docs/vision/experiments.md)
 
 ## Development Loop
 

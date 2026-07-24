@@ -8,8 +8,10 @@ implementation contracts.
 ## Status
 
 **Current** for engineering policy, the semantic/outcome foundation, verified
-typed SSA, independent evaluation/baseline normalization, and reference-
-bytecode cutover. Native execution remains an **Accepted Target**.
+typed SSA, independent evaluation/baseline normalization, reference-bytecode
+cutover, and the callable scalar Linux x86-64 baseline tier. Ownership/traits,
+native allocation/GC roots, and optimizing execution remain **Accepted
+Targets**.
 
 ## Product Intent
 
@@ -61,20 +63,25 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Final cursor placement must be followed by a flush.
 - Current string/file helpers may perform per-byte syscalls or quadratic string
   construction.
-- VM host operations block and process exit is not process-safe.
+- VM host operations block; stdin/stdout, terminal guard, and some host
+  wrappers remain process-global, so concurrent VM supervision is unsupported.
+  Core exit is a structured outcome rather than process termination.
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
   I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists,
   Option/no-nil, explicit equality families, immutable nominal products,
   explicit main, declaration-only imports, local-only mutation, product-
   threaded workload state, fixed-point effects, chunk validation, structured
   process-safe outcomes, verified typed SSA, differential evaluation, baseline
-  passes, measured backend selection, and SSA-to-bytecode cutover have landed.
-  The active cycle next implements the selected owned backend, W^X code
-  objects, and an actually called synchronous Linux x86-64 baseline JIT. Do not
-  add engine flags before generated code is called. Loop OSR, optimizing JIT,
-  and a minimal AOT test emitter remain later targets, not current capability.
-  Offline PGO is rejected by product decision. See
-  [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+  passes, measured backend selection, SSA-to-bytecode cutover, bounded W^X code
+  objects, and an actually called synchronous Linux x86-64 scalar baseline JIT
+  have landed. The active sequence is ownership and coherent traits, exact
+  native frame roots/allocation/collection, and then a distinct proof-based
+  optimizing tier with measured process-local promotion. Do not add inert
+  engine flags or label baseline code optimizing. Loop OSR and a minimal AOT
+  test emitter remain later targets, not current capability. Offline PGO is
+  rejected by product decision. See [Allocation-Capable Baseline
+  JIT](../decisions/allocation-capable-baseline-jit.md) and [Proof-Based
+  Optimizing JIT](../decisions/proof-based-optimizing-jit.md).
 
 ## Host Boundary
 

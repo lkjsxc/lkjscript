@@ -17,3 +17,10 @@ Separate the long-term direction from current product capability.
 - [performance-scorecard.md](performance-scorecard.md): category-specific evidence and claim rules
 - [experiments.md](experiments.md): hypotheses, combinations, and decision records
 - [process-supervisor.md](process-supervisor.md): experimental one-runtime design
+
+Accepted platform sequences are split into focused decisions rather than one
+aspirational implementation claim: [staged self-hosting](../decisions/self-hosted-platform-roadmap.md),
+[modules/packages](../decisions/modules-and-packages.md), [isolates and structured
+concurrency](../decisions/isolates-and-structured-concurrency.md), [the Web
+platform](../decisions/web-platform-roadmap.md), and [the first-party relational
+database](../decisions/relational-database-roadmap.md).

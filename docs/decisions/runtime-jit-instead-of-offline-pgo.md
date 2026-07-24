@@ -9,12 +9,14 @@ and the reference VM as the cold tier and correctness oracle.
 ## Status
 
 **Current** for the reference VM plus synchronous allocation-free scalar Linux
-x86-64 baseline tier and **Accepted Target** for later OSR/optimizing sequence.
+x86-64 baseline tier and **Accepted Target** for ownership, allocation-capable
+baseline execution, a proof-based optimizing tier, and later OSR in that order.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
 by measurement. Canonical source/verified-SSA linkage, bounded code objects,
 VM/native transfer, `vm`/`auto`/`baseline-jit`, PollV1, and actual generated
-calls are implemented. Native references/allocation, recursion, OSR,
-optimizing/speculative tiers, background work, and deoptimization are absent.
+calls are implemented. Ownership/traits, native references/allocation,
+recursion, OSR, optimizing/speculative tiers, background work, and
+deoptimization are absent.
 
 ## Decision
 
@@ -58,9 +60,9 @@ effects, or optimization ownership.
 A separate bytecode-to-machine-code compiler that independently reinterprets
 language semantics is rejected.
 
-## Active Callable-Baseline Cycle
+## Current Callable-Baseline Cycle
 
-The required next completion point is a real callable synchronous baseline JIT
+The completed first native point is a real callable synchronous baseline JIT
 on Linux x86-64. Generated native code must be lowered from verified typed SSA,
 installed through bounded W^X memory, entered by the runtime, perform meaningful
 language computation, and return the same value or structured outcome as the
@@ -68,10 +70,11 @@ VM. Forced mode proves a nonzero native entry count and cannot silently fall
 back. Emission, object bytes, assembly text, disassembly, a Rust simulation,
 hotness counters, or the observation hook are insufficient.
 
-Only whole-function function-entry tiering is in this cycle. Background
-compilation, loop OSR, proof-based optimizing promotion, guards,
-deoptimization, persistent profiles/caches, and non-Linux/non-x86-64 platforms
-remain later or rejected as classified below. The detailed prerequisite,
+Only whole-function function-entry tiering is Current. Ownership, native
+allocation/collection, proof-based optimizing promotion, and then loop OSR
+remain later; background compilation, guards, deoptimization, persistent
+profiles/caches, and non-Linux/non-x86-64 platforms remain later or rejected as
+classified below. The detailed prerequisite,
 backend-selection, ABI, safety, coverage, and evidence contract is
 [Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).
 
@@ -96,8 +99,14 @@ not consume source/HIR/SSA itself; only the narrow adapter consumes
 `VerifiedProgram`. Unsupported reference/allocation/host/recursive code remains
 an engine error in forced mode and VM-correct in auto.
 
-Later OSR and optimizing sections below remain **Accepted Targets** unless
-explicitly labeled Deferred or Rejected.
+Ownership/traits, allocation-capable baseline execution, the optimizing
+sections below, and later OSR remain **Accepted Targets** unless explicitly
+labeled Deferred or Rejected. Their exact contracts are [Ownership And
+Borrowing](ownership-and-borrowing.md), [Coherent Traits And Static
+Dispatch](traits-and-static-dispatch.md), [Native References, Frames, And Exact
+GC Stack Maps](native-references-and-gc-stack-maps.md), [Allocation-Capable
+Baseline JIT](allocation-capable-baseline-jit.md), and [Proof-Based Optimizing
+JIT](proof-based-optimizing-jit.md).
 
 ## Rejected Offline PGO
 
@@ -465,11 +474,15 @@ implied by a non-speculative optimizing tier.
    tests, runtime calls, and precise stack maps before allocation paths.
 4. Add bounded call counters and synchronous function-triggered baseline JIT,
    VM/native calls, direct native calls, and forced baseline testing.
-5. Add bounded loop-backedge counters and verified baseline OSR, measured first
-   on long-loop workloads including Brainfuck Mandelbrot.
-6. Add proof-based optimizing-tier promotion and current-process layout data.
-7. Consider guarded specialization and deoptimization only from measured need.
-8. Validate Linux AArch64, direct Wasm, and server policies later; background
+5. Add sound ownership/coherent traits, exact native frame roots, allocation,
+   barriers, recursion, and collection exercised while generated frames are
+   active.
+6. Add a distinct proof-based optimizing engine and measured process-local
+   promotion with current-process layout data.
+7. Add bounded loop-backedge counters and verified OSR in a later cycle; use
+   unmodified Brainfuck Mandelbrot only as an appropriate long-loop diagnostic.
+8. Consider guarded specialization and deoptimization only from measured need.
+9. Validate Linux AArch64, direct Wasm, and server policies later; background
    compilation and persistent profiling require their own prerequisites or a
    new decision.
 
