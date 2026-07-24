@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, OwnedValue};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, Op, OwnedValue};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue, RuntimeOp};
 use lkjscript_vm::run_chunk;
 
@@ -122,6 +122,25 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
         compare_source(recursion, "recursion.lkjscript"),
         ScalarOutcome::I64(40_320)
     );
+
+    let tail_recursion = "def/\nname/\ncount-down\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\nif/\nlte/\nn\n0\n/lte\nn\ncount-down/\n-/\nn\n1\n/-\n/count-down\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\ncount-down/\n100\n/count-down\n/main\n";
+    let tail_program = compile_source(
+        tail_recursion,
+        "tail-recursion.lkjscript",
+        &Limits::default(),
+    )
+    .expect("compile tail recursion");
+    assert_eq!(
+        evaluator_outcome(evaluate(tail_program.ssa(), &EvalConfig::default())),
+        vm_outcome(run_chunk(
+            tail_program.bytecode(),
+            &ExecutionConfig::default(),
+        ))
+    );
+    assert!(tail_program.bytecode().protos()[0]
+        .code
+        .windows(3)
+        .any(|bytes| bytes == [Op::Call as u8, 1, Op::Return as u8]));
 
     let product = "product/\nname/\nPairState\n/name\nfields/\nfield/\nname/\nleft\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\nright\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\nmain/\nsig/\n->\nI64\n/sig\nfield/\nwith-field/\nproduct-value/\nPairState\nfield/\nleft\n3\n/field\nfield/\nright\n4\n/field\n/product-value\nleft\n9\n/with-field\nleft\n/field\n/main\n";
     assert_eq!(
