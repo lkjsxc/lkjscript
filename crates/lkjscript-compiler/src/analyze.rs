@@ -14,6 +14,12 @@ use crate::import::Program as AstProgram;
 use crate::types::parse_one;
 
 pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
+    let mut program = analyze_program_without_effects(program)?;
+    crate::effects::infer(&mut program);
+    Ok(program)
+}
+
+pub(crate) fn analyze_program_without_effects(program: &AstProgram) -> Result<hir::Program> {
     let mut analyzer = Analyzer::new(program)?;
     analyzer.install_operations()?;
     analyzer.collect_product_names(program)?;
@@ -31,7 +37,7 @@ pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
     let main = analyzer.resolve_main(pending_main)?;
     let global_layout = analyzer.build_global_layout(&functions)?;
 
-    let mut program = hir::Program {
+    let program = hir::Program {
         sources: analyzer.sources,
         bindings: analyzer.bindings,
         products: analyzer.products,
@@ -39,7 +45,6 @@ pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
         main,
         global_layout,
     };
-    crate::effects::infer(&mut program);
     Ok(program)
 }
 

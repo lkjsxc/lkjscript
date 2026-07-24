@@ -323,9 +323,11 @@ native entries, last structured failure, object identity, and configuration or
 resource epoch. Compilation is non-reentrant. A known failure is not retried in
 the same epoch; a changed epoch permits only a bounded retry.
 
-The current ordinary run default remains `vm`; all three modes are explicit.
-Tests can select a low deterministic auto threshold or disable auto tiering,
-without disabling forced mode. Diagnostics and native counts never contaminate
+Ordinary `run` defaults to `auto` with the conservative measured threshold of
+64 function entries. Explicit `--engine vm` remains deterministic and never
+compiles native code; all three modes remain explicit. Tests can select another
+deterministic auto threshold or disable auto tiering without disabling forced
+mode. Diagnostics, retained metrics, and native counts never contaminate
 ordinary program stdout.
 
 ## Completion And Evidence

@@ -141,6 +141,7 @@ pub struct JitConfig {
     pub auto_enabled: bool,
     pub max_attempts_per_function: u8,
     pub retain_machine_code_diagnostics: bool,
+    pub collect_metrics: bool,
     pub max_diagnostic_bytes: u64,
     pub epoch: u64,
 }
@@ -156,6 +157,7 @@ impl Default for JitConfig {
             auto_enabled: true,
             max_attempts_per_function: 2,
             retain_machine_code_diagnostics: false,
+            collect_metrics: false,
             max_diagnostic_bytes: 16 * 1024 * 1024,
             epoch: 1,
         }
@@ -365,6 +367,15 @@ pub struct JitStats {
     pub poll_v1_calls: u64,
     pub vm_fallbacks: u64,
     pub compile_failures: u64,
+    pub native_invocations: u64,
+    pub first_native_call: Option<Duration>,
+    pub native_execution: Duration,
+    pub auto_threshold: u64,
+    pub auto_enabled: bool,
+    pub code_cache_peak_objects: u64,
+    pub code_cache_peak_bytes: u64,
+    pub metadata_cache_peak_bytes: u64,
+    pub accounted_allocation_peak_bytes: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -425,6 +436,9 @@ pub struct JitSession {
     poll_v1_calls: u64,
     vm_fallbacks: u64,
     compile_failures: u64,
+    native_invocations: u64,
+    first_native_call: Option<Duration>,
+    native_execution: Duration,
     diagnostic_bytes: u64,
 }
 
@@ -483,6 +497,9 @@ impl JitSession {
             poll_v1_calls: 0,
             vm_fallbacks: 0,
             compile_failures: 0,
+            native_invocations: 0,
+            first_native_call: None,
+            native_execution: Duration::ZERO,
             diagnostic_bytes: 0,
         }
     }
@@ -641,10 +658,19 @@ impl JitSession {
                 )
             })?;
         let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time);
+        let invocation_started = self.config.collect_metrics.then(Instant::now);
         let report = self.objects[object_index]
             .installed
-            .invoke_with_config(native, arguments, &config)
-            .map_err(|error| invocation_error(function, error))?;
+            .invoke_with_config(native, arguments, &config);
+        if let Some(started) = invocation_started {
+            let elapsed = started.elapsed();
+            self.native_invocations = self.native_invocations.saturating_add(1);
+            self.native_execution = self.native_execution.saturating_add(elapsed);
+            if self.first_native_call.is_none() {
+                self.first_native_call = Some(elapsed);
+            }
+        }
+        let report = report.map_err(|error| invocation_error(function, error))?;
         self.poll_v1_calls = self.poll_v1_calls.saturating_add(report.poll_count());
         let mut invocation_entries = 0_u64;
         for count in report.native_entries() {
@@ -714,6 +740,16 @@ impl JitSession {
     }
 
     pub fn stats(&self) -> JitStats {
+        let code_cache_peak_objects = u64::try_from(self.objects.len()).unwrap_or(u64::MAX);
+        let code_cache_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
+            total.saturating_add(object.accounting.code_bytes())
+        });
+        let metadata_cache_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
+            total.saturating_add(object.accounting.metadata_bytes())
+        });
+        let accounted_allocation_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
+            total.saturating_add(object.accounted_allocation_bytes)
+        });
         JitStats {
             functions: self.functions.clone(),
             code_objects: self
@@ -746,6 +782,15 @@ impl JitSession {
             poll_v1_calls: self.poll_v1_calls,
             vm_fallbacks: self.vm_fallbacks,
             compile_failures: self.compile_failures,
+            native_invocations: self.native_invocations,
+            first_native_call: self.first_native_call,
+            native_execution: self.native_execution,
+            auto_threshold: self.config.auto_threshold,
+            auto_enabled: self.config.auto_enabled,
+            code_cache_peak_objects,
+            code_cache_peak_bytes,
+            metadata_cache_peak_bytes,
+            accounted_allocation_peak_bytes,
         }
     }
 

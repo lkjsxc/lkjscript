@@ -1,6 +1,7 @@
 //! Lower resolved typed HIR into backend-independent typed SSA.
 
 use std::collections::{BTreeMap, HashMap};
+use std::time::{Duration, Instant};
 
 use lkjscript_core::{Error, Result};
 use lkjscript_ir::{
@@ -14,7 +15,40 @@ use lkjscript_ir::{
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
 use crate::types::Type;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct SsaMetrics {
+    pub construction: Duration,
+    pub verification: Duration,
+    pub normalization: Duration,
+}
+
 pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
+    lower_program_with_metrics(program).map(|(program, _)| program)
+}
+
+pub(crate) fn lower_program_with_metrics(
+    program: &hir::Program,
+) -> Result<(VerifiedProgram, SsaMetrics)> {
+    let construction_started = Instant::now();
+    let ssa = construct_program(program)?;
+    let construction = construction_started.elapsed();
+    let verification_started = Instant::now();
+    let verified = verify(ssa).map_err(ir_error)?;
+    let verification = verification_started.elapsed();
+    let normalization_started = Instant::now();
+    let normalized = lkjscript_ir::normalize_baseline(&verified).map_err(ir_error)?;
+    let normalization = normalization_started.elapsed();
+    Ok((
+        normalized,
+        SsaMetrics {
+            construction,
+            verification,
+            normalization,
+        },
+    ))
+}
+
+fn construct_program(program: &hir::Program) -> Result<Program> {
     let product_ids: HashMap<String, ProductId> = program
         .products
         .iter()
@@ -123,7 +157,7 @@ pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
     }
     functions.push(builder.finish()?);
 
-    let ssa = Program {
+    Ok(Program {
         sources: program
             .sources
             .iter()
@@ -154,9 +188,7 @@ pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
             .collect::<Result<Vec<_>>>()?,
         functions,
         main: main_id,
-    };
-    let verified = verify(ssa).map_err(ir_error)?;
-    lkjscript_ir::normalize_baseline(&verified).map_err(ir_error)
+    })
 }
 
 struct PendingBlock {

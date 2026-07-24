@@ -105,10 +105,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   per-source-function entries and enforce cooperative native poll fuel and a
   monotonic deadline; structured return/trap/exit/deadline/resource/host status
   returns to the execution owner and generated code never exits the process
-- Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; `vm` remains the
-  default, forced baseline compiles the complete reachable supported group
-  before main effects and never falls back, while auto compiles synchronously at
-  a hot function entry for later calls and keeps unsupported code in the VM
+- Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; ordinary `run`
+  defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
+  remains deterministic, forced baseline compiles the complete reachable
+  supported group before main effects and never falls back, and auto compiles
+  synchronously at a hot function entry for later calls while keeping
+  unsupported code in the VM
 - Tier/code ownership: the former observation hook is removed. Per-function
   states are `VmOnly`, `Observed`, `BaselineCompiling`, `BaselineNative`, or
   `Disabled` with saturating calls, bounded attempts, epoch/failure/object facts,

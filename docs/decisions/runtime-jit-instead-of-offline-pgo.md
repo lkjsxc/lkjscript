@@ -370,7 +370,9 @@ formats.
 ## Engine Selection Contract
 
 The current CLI implements the following three baseline-cycle modes; the
-`optimizing-jit` line remains a future target. Default run behavior is `vm`:
+`optimizing-jit` line remains a future target. Ordinary `run` defaults to
+`auto` with a conservative 64-entry threshold, while explicit `vm` remains the
+deterministic path:
 
 ```text
 lkjscript run --engine vm <file.lkjscript> [--] [script-args...]

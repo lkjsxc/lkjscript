@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use crate::ast::Expr;
 use crate::ensure_source_path;
@@ -25,25 +26,54 @@ pub struct Program {
     pub files: Vec<SourceFile>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct LoadMetrics {
+    pub source_loading: Duration,
+    pub parsing: Duration,
+}
+
+struct LoadState<'a> {
+    package_root: &'a Path,
+    limits: &'a Limits,
+    loading: &'a mut HashSet<PathBuf>,
+    done: &'a mut HashSet<PathBuf>,
+    files: &'a mut Vec<SourceFile>,
+    metrics: &'a mut LoadMetrics,
+}
+
 pub fn load_program(path: &Path, limits: &Limits) -> Result<Program> {
+    load_program_with_metrics(path, limits).map(|(program, _)| program)
+}
+
+pub(crate) fn load_program_with_metrics(
+    path: &Path,
+    limits: &Limits,
+) -> Result<(Program, LoadMetrics)> {
     ensure_source_path(path)?;
+    let mut metrics = LoadMetrics::default();
+    let loading_started = Instant::now();
     let entry = path
         .canonicalize()
         .map_err(|error| Error::msg(format!("cannot open {}: {error}", path.display())))?;
     let package_root = find_package_root(&entry);
+    metrics.source_loading = metrics
+        .source_loading
+        .saturating_add(loading_started.elapsed());
     let mut loading = HashSet::new();
     let mut done = HashSet::new();
     let mut files = Vec::new();
-    load_file(
-        &entry,
-        &package_root,
-        limits,
-        &mut loading,
-        &mut done,
-        &mut files,
-        true,
-    )?;
-    Ok(Program { root: entry, files })
+    {
+        let mut state = LoadState {
+            package_root: &package_root,
+            limits,
+            loading: &mut loading,
+            done: &mut done,
+            files: &mut files,
+            metrics: &mut metrics,
+        };
+        load_file(&entry, true, &mut state)?;
+    }
+    Ok((Program { root: entry, files }, metrics))
 }
 
 pub fn validate_source_tree(root: &Path, limits: &Limits) -> Result<()> {
@@ -63,23 +93,16 @@ fn find_package_root(entry: &Path) -> PathBuf {
     }
 }
 
-fn load_file(
-    path: &Path,
-    package_root: &Path,
-    limits: &Limits,
-    loading: &mut HashSet<PathBuf>,
-    done: &mut HashSet<PathBuf>,
-    files: &mut Vec<SourceFile>,
-    is_root: bool,
-) -> Result<()> {
+fn load_file(path: &Path, is_root: bool, state: &mut LoadState<'_>) -> Result<()> {
     ensure_source_path(path)?;
+    let loading_started = Instant::now();
     let canonical = path
         .canonicalize()
         .map_err(|error| Error::msg(format!("cannot open {}: {error}", path.display())))?;
-    if done.contains(&canonical) {
+    if state.done.contains(&canonical) {
         return Ok(());
     }
-    if !loading.insert(canonical.clone()) {
+    if !state.loading.insert(canonical.clone()) {
         return Err(Error::msg(format!(
             "cyclic import involving {}",
             canonical.display()
@@ -87,14 +110,20 @@ fn load_file(
     }
 
     let parent = canonical.parent().unwrap_or_else(|| Path::new("."));
-    validate_source_directory(parent, limits.max_dir_children)?;
+    validate_source_directory(parent, state.limits.max_dir_children)?;
     let source = fs::read_to_string(&canonical)
         .map_err(|error| Error::msg(format!("read {}: {error}", canonical.display())))?;
+    state.metrics.source_loading = state
+        .metrics
+        .source_loading
+        .saturating_add(loading_started.elapsed());
+
+    let parsing_started = Instant::now();
     let label = canonical.display().to_string();
     let tokens = lex(&source).map_err(|error| Error::msg(format!("{label}: {error}")))?;
-    check_file_limits(&tokens, limits, &label)?;
+    check_file_limits(&tokens, state.limits, &label)?;
     let forms = parse_tokens(&tokens).map_err(|error| Error::msg(format!("{label}: {error}")))?;
-    validate_top_level(&forms, limits, &label)?;
+    validate_top_level(&forms, state.limits, &label)?;
     if !is_root
         && forms
             .iter()
@@ -104,20 +133,29 @@ fn load_file(
             "{label}: imported file may contain only imports, function defs, and products; main is forbidden"
         )));
     }
+    state.metrics.parsing = state
+        .metrics
+        .parsing
+        .saturating_add(parsing_started.elapsed());
 
     for form in &forms {
         if let Expr::Call { name, args } = form {
             if name == "import" {
                 let spec = import_path(args)?;
-                let next = resolve_import(spec, parent, package_root)?;
-                load_file(&next, package_root, limits, loading, done, files, false)?;
+                let loading_started = Instant::now();
+                let next = resolve_import(spec, parent, state.package_root)?;
+                state.metrics.source_loading = state
+                    .metrics
+                    .source_loading
+                    .saturating_add(loading_started.elapsed());
+                load_file(&next, false, state)?;
             }
         }
     }
 
-    loading.remove(&canonical);
-    done.insert(canonical.clone());
-    files.push(SourceFile {
+    state.loading.remove(&canonical);
+    state.done.insert(canonical.clone());
+    state.files.push(SourceFile {
         path: canonical,
         forms,
     });

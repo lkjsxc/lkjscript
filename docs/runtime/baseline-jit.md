@@ -8,7 +8,8 @@ language native coverage or future OSR behavior.
 ## Status
 
 **Current on Linux x86-64** for the exact allocation-free scalar subset below.
-The reference VM remains the default engine and the full-language oracle.
+Ordinary `run` uses automatic tiering; the reference VM remains the cold tier,
+full-language oracle, and deterministic explicit engine.
 
 ## Implemented Pipeline
 
@@ -50,8 +51,9 @@ lkjscript run --engine baseline-jit file.lkjscript
 lkjscript run --engine auto file.lkjscript
 ```
 
-`vm` is the current default and never compiles or invokes machine code.
-`baseline-jit` verifies, compiles, installs, and invokes main plus its complete
+Ordinary `run` selects `auto` with a 64-entry threshold. Explicit `vm` never
+compiles or invokes machine code. `baseline-jit` verifies, compiles, installs,
+and invokes main plus its complete
 statically reachable direct-call group before main effects. Unsupported
 semantics, recursion, compilation failure, ABI failure, or native resource
 exhaustion is an `EngineError`; forced mode never silently falls back to the

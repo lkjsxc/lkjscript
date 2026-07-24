@@ -148,8 +148,10 @@ resource failures are engine errors rather than VM fallback. Auto tests use a
 low deterministic threshold and prove compilation at one call is used only by
 later calls while unsupported code remains VM-correct and retry-suppressed.
 
-The CLI implements `vm`, `auto`, and `baseline-jit`; default remains `vm`.
-Machine diagnostics are stderr-only and opt-in. Allocation/reference/host paths,
+The CLI implements `vm`, `auto`, and `baseline-jit`; ordinary `run` defaults to
+`auto` at 64 function entries, while explicit `vm` remains deterministic.
+Machine diagnostics and low-overhead metrics are separate, stderr/file-only,
+and opt-in. Allocation/reference/host paths,
 recursion, OSR, optimizing JIT, GC-native references, and background compilation
 are outside the current baseline subset. Performance adoption, broader
 malformed/resource equivalence, and native GC evidence remain separate future

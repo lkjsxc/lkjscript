@@ -117,7 +117,8 @@ emission alone is still not a JIT claim.
    steady state, break-even, code cache, and fallbacks before performance
    claims.
 
-The current default is explicit `vm`; auto leaves short/unsupported work there.
+Ordinary `run` now uses `auto` with a conservative 64-entry threshold; explicit
+`vm` remains deterministic, and auto leaves tiny or unsupported work there.
 
 ## Phase 5: Loop Hotness And OSR
 
