@@ -152,6 +152,7 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions, String> {
 
 fn diagnostics_enabled() -> bool {
     env::var_os("LKJSCRIPT_JIT_DIAGNOSTICS").is_some()
+        || env::var_os("LKJSCRIPT_JIT_DUMP_DIR").is_some()
 }
 
 fn print_jit_diagnostics(program: &lkjscript_ir::VerifiedProgram, stats: &JitStats) {
