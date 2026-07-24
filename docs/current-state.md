@@ -217,7 +217,7 @@ Brainfuck Mandelbrot, source-to-native execution, and performance were not
 tested for Phase C.
 
 The callable scalar baseline implementation chain through
-`3117819d890cd1b3eda8651b9fae104a6ec31214`, based on current-main
+`a9d0584ad0106817c4eac5de7dbc9191e7537105`, based on current-main
 `c4c96094260072323f9399fe7f0f7b4a14d1eef6`, was checked in isolated worktree
 `/tmp/pi-agent-a98a8be7-b37a-422-f33e779d` on Linux
 `7.0.0-27-generic` x86-64 with Rust/Cargo 1.96.0. The evidence establishes the
