@@ -457,6 +457,14 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             vm.exit_code = Some(code);
             Ok(())
         }
+        x if x == Op::Trap as u8 => {
+            let diagnostic = usize::from(vm.read_u16()?);
+            let message = match vm.chunk.constants().get(diagnostic) {
+                Some(lkjscript_core::Constant::Str(message)) => message.clone(),
+                _ => return Err(Error::msg("Trap diagnostic is not a Str constant")),
+            };
+            Err(Error::msg(message))
+        }
         x if crate::run::ext_ops::dispatch_ext(vm, x)? => Ok(()),
         x if x == Op::Pop as u8 => {
             let _ = vm.pop()?;

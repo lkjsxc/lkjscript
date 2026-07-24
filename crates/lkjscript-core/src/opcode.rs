@@ -96,6 +96,7 @@ pub enum Op {
     MakeProduct = 151,
     LoadProductField = 152,
     WithProductField = 153,
+    Trap = 154,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +117,7 @@ pub enum ControlFlow {
     Branch,
     Return,
     Exit,
+    Trap,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,6 +262,7 @@ impl Op {
         Self::MakeProduct,
         Self::LoadProductField,
         Self::WithProductField,
+        Self::Trap,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -267,7 +270,7 @@ impl Op {
     }
 
     pub const fn info(self) -> OpInfo {
-        use ControlFlow::{Branch, Exit, Jump, Next, Return};
+        use ControlFlow::{Branch, Exit, Jump, Next, Return, Trap};
         use StackEffect::{Call, Fixed, MakeProduct};
 
         let operand_width = match self {
@@ -279,7 +282,8 @@ impl Op {
             | Self::MakeClosure
             | Self::MakeProduct
             | Self::LoadProductField
-            | Self::WithProductField => 2,
+            | Self::WithProductField
+            | Self::Trap => 2,
             Self::LoadLocal | Self::StoreLocal | Self::Call => 1,
             _ => 0,
         };
@@ -288,10 +292,11 @@ impl Op {
             Self::JumpIfFalse => Branch,
             Self::Return => Return,
             Self::Exit => Exit,
+            Self::Trap => Trap,
             _ => Next,
         };
         let stack = match self {
-            Self::Nop => Fixed {
+            Self::Nop | Self::Trap => Fixed {
                 required: 0,
                 pops: 0,
                 pushes: 0,

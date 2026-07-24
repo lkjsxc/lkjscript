@@ -368,6 +368,12 @@ fn validate_instruction_operands(
                     return operand_error(proto, op, at, "constant index out of range");
                 }
             }
+            Op::Trap => {
+                let index = operand_index(operand, proto, op, at)?;
+                if !matches!(chunk.constants.get(index), Some(Constant::Str(_))) {
+                    return operand_error(proto, op, at, "trap diagnostic must be a Str constant");
+                }
+            }
             Op::LoadLocal | Op::StoreLocal => {
                 let index = operand_index(operand, proto, op, at)?;
                 if index >= usize::from(proto.locals) {
@@ -523,7 +529,9 @@ fn successors(
         })
     };
     match instruction.op().info().control {
-        crate::ControlFlow::Return | crate::ControlFlow::Exit => Ok(Vec::new()),
+        crate::ControlFlow::Return | crate::ControlFlow::Exit | crate::ControlFlow::Trap => {
+            Ok(Vec::new())
+        }
         crate::ControlFlow::Jump => Ok(vec![target()?]),
         crate::ControlFlow::Branch => {
             let next = index
@@ -687,7 +695,7 @@ fn apply_instruction(
     }
 
     match op {
-        Op::Nop | Op::Jump => {}
+        Op::Nop | Op::Jump | Op::Trap => {}
         Op::LoadConst => {
             let constant = instruction
                 .operand()
@@ -1308,6 +1316,21 @@ mod tests {
             Op::Return as u8,
         ];
         assert!(error(product).contains("product operation category"));
+    }
+
+    #[test]
+    fn explicit_trap_requires_a_string_diagnostic_and_terminates_control_flow() {
+        let mut valid = Chunk::new();
+        valid.constants.push(Constant::Str("explicit trap".into()));
+        valid.main.emit_op_u16(Op::Trap, 0);
+        let validated =
+            validate_chunk(valid, &ValidationLimits::default()).expect("explicit trap validates");
+        assert_eq!(validated.main_instructions()[0].op(), Op::Trap);
+
+        let mut wrong = Chunk::new();
+        wrong.constants.push(Constant::I64(7));
+        wrong.main.emit_op_u16(Op::Trap, 0);
+        assert!(error(wrong).contains("trap diagnostic"));
     }
 
     #[test]
