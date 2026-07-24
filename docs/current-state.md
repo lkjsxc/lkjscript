@@ -226,10 +226,10 @@ or a performance result.
 
 | Callable baseline command or check | Result |
 | --- | --- |
-| focused IR/compiler/native/sys/JIT/VM/app tests | passed; the final canonical workspace gate reports 116 tests, including 7 source-engine and 1 direct verified-SSA JIT tests |
+| focused IR/compiler/native/sys/JIT/VM/app tests | passed; the final canonical workspace gate reports 125 tests, including 7 source-engine and 1 direct verified-SSA JIT tests |
 | strict workspace Clippy, all targets/features | passed with `-D warnings` |
 | `check-docs`, `check-tree`, `check-sources` | passed; ten roots exactly cover all 96 canonical sources |
-| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs/tree/source closure, rustfmt, strict Clippy, and all 116 tests |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs/tree/source closure, rustfmt, strict Clippy, and all 125 tests |
 | `cargo build --workspace --release --locked` | passed in the shared target tree |
 | scalar workload, explicit `vm` / `baseline-jit` / threshold-2 `auto` | all exited 0 with empty stdout and exact test-oracle F64 bits |
 | forced scalar diagnostics | one installed W^X object; compiled `scalar-step` and `main`; 100,001 native entries, 100,000 direct native calls, 300,002 PollV1 calls, zero VM fallbacks/failures |
