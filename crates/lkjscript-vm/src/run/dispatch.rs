@@ -10,7 +10,7 @@ use super::numeric::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
 use super::{RuntimeTier, Vm};
 use crate::host::{display_value, flush_out, read_byte, write_byte, write_output, write_str};
 
-fn maybe_i64(arena: &crate::arena::Arena, value: Value) -> Result<Option<i64>> {
+fn maybe_i64(arena: &lkjscript_core::GcHeap, value: Value) -> Result<Option<i64>> {
     if let Some(number) = value.as_small_i64() {
         return Ok(Some(number));
     }
@@ -23,7 +23,7 @@ fn maybe_i64(arena: &crate::arena::Arena, value: Value) -> Result<Option<i64>> {
     }
 }
 
-fn value_equal(arena: &crate::arena::Arena, mut left: Value, mut right: Value) -> Result<bool> {
+fn value_equal(arena: &lkjscript_core::GcHeap, mut left: Value, mut right: Value) -> Result<bool> {
     loop {
         if left.is_unit() || right.is_unit() {
             return if left.is_unit() && right.is_unit() {
@@ -103,7 +103,7 @@ fn same_object<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn list_node(arena: &crate::arena::Arena, value: Value) -> Result<Option<(Value, Value)>> {
+fn list_node(arena: &lkjscript_core::GcHeap, value: Value) -> Result<Option<(Value, Value)>> {
     if value.is_empty_list() {
         return Ok(None);
     }
@@ -114,7 +114,7 @@ fn list_node(arena: &crate::arena::Arena, value: Value) -> Result<Option<(Value,
 }
 
 fn list_values_equal(
-    arena: &crate::arena::Arena,
+    arena: &lkjscript_core::GcHeap,
     mut left: Value,
     mut right: Value,
     limit: usize,

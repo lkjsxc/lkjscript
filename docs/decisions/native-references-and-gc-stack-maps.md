@@ -7,13 +7,14 @@ allocate or carry heap references across a collecting safepoint.
 
 ## Status
 
-The closed machine-plan native-reference and active-frame slice is **Current**
-on Linux x86-64. Native ABI 2 carries typed stable reference words, derives
-exact typed maps, registers generated frames, and forces collection through a
-safe copied-root callback. Source-level native allocation, a shared VM/native
-heap, barriers, reference-capable SSA/JIT lowering, and recursive source groups
-remain **Accepted Targets**. The Current slice does not claim those later
-surfaces.
+The closed machine-plan boundary and host-independent source allocation slice
+are **Current** on Linux x86-64. Native ABI 2 carries typed stable reference
+words, derives exact typed maps, registers generated frames, and reaches
+`GcHeap` through safe copied-root/typed-operation callbacks. Reference-capable
+SSA/JIT lowering, initialization/scalar-store classification, and direct/mutual
+recursive source groups are Current for Str, legacy Buf, Product, List, Option,
+and Result. Handle/host-capability allocation, lexical ownership references,
+and native/VM reference transitions remain **Accepted Targets**.
 
 ## Selected Implementation Contract
 
@@ -23,13 +24,15 @@ native ABI version 2. Runtime ABI version 1 has enum-identified V1 frame and
 collection-dispatch calls; ABI-1 objects are rejected rather than reinterpreted
 as ABI 2.
 
-`lkjscript-native` owns pure typed handle, frame-home, liveness, and exact-map
-metadata. `lkjscript-sys` alone retains installed metadata beside the active
-invocation, holds raw generated-frame addresses, validates every active map,
-and copies typed handle words into the safe `NativeRuntimeServices` callback.
+`lkjscript-native` owns pure typed handle, frame-home, liveness, exact-map, and
+bounded generic heap-site metadata. `lkjscript-sys` alone retains installed
+metadata beside the active invocation, holds raw generated-frame addresses,
+validates every active map and heap argument/result home, and copies typed
+values/handles into the safe `NativeRuntimeServices` callback.
 Code installation remains owned RW-then-RX and no heap word is exposed as a
-native object pointer. Moving the VM arena into a pure shared runtime layer is
-part of the later source-allocation slice, not this Current claim.
+native object pointer. The former VM arena now lives in `lkjscript-core` as session-owned `GcHeap` and
+is used by both execution implementations. Automatic reference transitions are
+still absent, so auto conservatively retains reference-typed functions in VM.
 
 Native plans identify each GC reference by an exact reference/layout identity.
 Frame descriptors enumerate every reference-capable value/local home. The
@@ -180,7 +183,7 @@ caller/callee active chain, writes back copied handles, covers callback failure
 and every structured epilogue, enforces frame bounds, and repeats W^X
 install/invoke/drop. It does not allocate a language object.
 
-Source-level native allocation becomes Current only when tests force collection with roots
+Source-level host-independent native allocation is Current after tests force collection with roots
 in arguments and spill slots, across native/native and native/runtime calls,
 through recursion, immediately before return, and around a native/VM
 transition. Tests include live/dead product, Option, Result, string, buffer, and

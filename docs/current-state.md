@@ -48,8 +48,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode lowered only from normalized SSA, contiguous stacks,
-  precise non-moving mark-sweep, traced immutable product objects, explicit
-  validated `Trap`, and return-adjacent tail-frame reuse
+  pure session-owned stable-index `GcHeap` in `lkjscript-core`, precise
+  non-moving mark-sweep shared as the VM/JIT heap implementation, traced
+  immutable products, exact bounded allocation/accounted-byte/collection
+  counters and stress policy, explicit validated `Trap`, and return-adjacent
+  tail-frame reuse
 - Execution boundary: mutable `Chunk` is builder-only for malformed-bytecode
   construction; one whole-chunk validator produces opaque immutable
   `ValidatedChunk`, and VM, disassembly, and the JIT observation seam accept
@@ -149,10 +152,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   buffer/list bounds; console, filesystem, sockets, terminal, time, and handle
   operations return explicit unsupported-evaluator outcomes
 - Callable baseline JIT: `lkjscript-jit` consumes only `VerifiedProgram`,
-  rejects every reference/allocation/host path, lowers allocation-free scalar
-  Unit/Bool/I64/F64 CFG and acyclic direct calls to `lkjscript-native`, installs
-  bounded owned non-Send code objects through `lkjscript-sys`, and actually
-  invokes generated System V AMD64 entries; direct native calls stay unboxed
+  lowers scalar Unit/Bool/I64/F64 plus host-independent Str, legacy Buf,
+  Product, List, Option, and Result semantics and direct recursive SCC groups to
+  `lkjscript-native`, installs bounded owned non-Send code objects through
+  `lkjscript-sys`, and actually invokes generated System V AMD64 entries;
+  scalar/direct native behavior stays unboxed and unchanged
 - Native runtime ABI: semantic/runtime versions remain 1 and native ABI 2 is
   required. Enum-identified `EnterFunctionV1` and `PollV1` calls record entries
   and enforce cooperative fuel/deadlines; generated ABI-2 prologues call the
@@ -165,9 +169,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; ordinary `run`
   defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
   remains deterministic, forced baseline compiles the complete reachable
-  supported group before main effects and never falls back, and auto compiles
-  synchronously at a hot function entry for later calls while keeping
-  unsupported code in the VM
+  supported SCC group before main effects and never falls back, and auto
+  compiles scalar hot entries for later calls while conservatively retaining
+  reference-typed and unsupported code in VM
 - Tier/code ownership: the former observation hook is removed. Per-function
   states are `VmOnly`, `Observed`, `BaselineCompiling`, `BaselineNative`, or
   `Disabled` with saturating calls, bounded attempts, epoch/failure/object facts,
@@ -179,9 +183,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   RSS, checks exact result bits and stream silence, randomizes at least four
   warmups plus 31 samples, and retains every sample and distribution under
   `meta/benchmarks/jit/results/`
-- Closed-plan native references: typed opaque stable-handle words use exact
-  Buf/Str/List/Option/Result/product layout identities and GPR marshalling, not
-  raw object pointers; the Copy runtime-adapter token is non-Send/non-Sync.
+- Native references and heap sites: typed opaque stable-handle words use exact
+  Buf/Str/List/Option/Result/product layout identities and verified frame homes,
+  not raw object pointers; zero is accepted only for EmptyList/None; the Copy runtime-adapter token is non-Send/non-Sync.
   Bounded verifier-owned backward-CFG liveness charges every retained root
   before allocation and certificates sorted/deduplicated typed requirements for
   every direct/runtime call. The encoder consumes the certificate, and private
@@ -191,17 +195,22 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   addresses, validates the installed image/chain/maps, grows root capacity
   dynamically under an aggregate cap, copies typed roots to safe runtime
   services, writes back handles, and reports exact stack/frame/root outcomes.
-  Runtime-service limits are distinct from materialization limits. Caller/callee
-  chains, dead-root exclusion, bounds, structured failures/outcomes, W^X, and
-  repeated installation are tested
-- Native source limits: the callable SSA adapter still rejects recursion,
-  indirect calls, polymorphic or unsupported signatures, references, strings,
-  collections, products, Option/Result, buffers, allocation, and host IO.
-  Scalar ABI-2 stack maps are therefore exactly empty even though the closed
-  machine-plan/sys foundation supports typed references
-- Deferred tiers: loop OSR, background compilation, optimizing/speculative
-  tiers, deoptimization, source-level native allocation and a shared VM/native
-  heap, persistent profiles, and persistent code caches remain absent
+  Runtime-service limits are distinct from materialization limits. Generic
+  `HeapDispatchV1` sites retain exact operation, arbitrary bounded typed
+  arguments/result homes, allocation/store class, source identity and
+  safepoint; sys copies values/roots into safe `GcHeap` services and writes back
+  exact roots/results. Caller/callee chains, dead-root exclusion, bounds,
+  structured failures/outcomes, W^X, and repeated installation are tested
+- Native source limits: the callable SSA adapter rejects indirect calls,
+  polymorphic/unsupported signatures, Symbol, Handle/host IO, and lexical
+  Owned/Ref/RefMut. Scalar ABI-2 maps remain exactly empty; supported
+  host-independent reference operations have exact non-empty maps. Native/VM
+  reference transitions are absent, so auto never labels a reference VM call
+  native
+- Deferred tiers/surfaces: loop OSR, background compilation,
+  optimizing/speculative tiers, deoptimization, Handle/host native allocation,
+  native/VM reference transitions, persistent profiles, and persistent code
+  caches remain absent
 
 ## SQLite Evidence
 
@@ -219,10 +228,10 @@ do not establish application durability or migration behavior.
 
 ## Accepted Platform Direction
 
-The marker-trait foundation, initial `Owned Buf` ownership safe island, and
-closed-plan exact ABI-2 native frames/roots are Current, but general ownership,
-full static trait methods/associated items, shared native heap objects, and
-source-level native allocation are not. The next implementation sequence
+The marker-trait foundation, initial `Owned Buf` ownership safe island, exact
+ABI-2 frames/roots, and host-independent source allocation/recursive SCC slice
+are Current. General ownership, full static trait methods/associated items,
+Handle/host native calls, and native/VM reference transitions are not. The next implementation sequence
 broadens only proved ownership and the next coherent static-trait slice, then
 allocation-capable baseline execution and a distinct proof-based
 optimizing tier with measured process-local promotion. These remaining steps
@@ -259,6 +268,26 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The host-independent source allocation/recursion slice in this document's
+containing commit, based on `0daa7a0d3064ad487cee2154d91f9db0a0fc0c82`,
+was checked in isolated worktree
+`/tmp/pi-agent-d9f4b948-568f-497-2a12ad4f` on Linux 7.0.0-27-generic x86-64
+with Rust/Cargo 1.96.0. Canonical Brainfuck source was unchanged.
+
+| Source allocation/recursion command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-core -p lkjscript-native -p lkjscript-sys -p lkjscript-jit -p lkjscript-vm -p lkjscript-app` | passed; shared heap boundaries, malformed heap sites/classes/homes, generic three-argument frame-home dispatch, service trap/resource/host propagation, existing CollectReferenceV1 certificates, source forced collection through direct/mutual recursive live-reference frames, nested Product/Option/Result/List/Str/Buf evaluator/VM/native equality, tiny allocation/heap limits, ownership rejection, W^X and existing scalar gates |
+| `cargo clippy --locked -p lkjscript-core -p lkjscript-native -p lkjscript-sys -p lkjscript-jit -p lkjscript-vm -p lkjscript-app --all-targets --all-features -- -D warnings` | passed |
+| separate `check-docs`, `check-tree`, and `check-sources` | passed; canonical language sources, including Brainfuck, were unchanged |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; formatting, strict workspace Clippy, docs/tree/source closure, 182 unit/integration tests, and one compile-fail doctest |
+| `cargo build --workspace --release --locked`; scalar default/VM/forced/threshold-2-auto, explicit-VM hello, Brainfuck smoke, and forced allocation-graph metrics smoke | passed; allocation graph returned exact I64 `1`, recorded 3 native entries, 7 allocations, 6 collections, maximum 3 roots, 14 heap calls, 6 barriers, zero fallback, and empty stdout |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | Docker, performance sampling, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
+
+This evidence makes only the host-independent source allocation/recursion slice
+Current. It does not establish the full allocation-capable target, an optimizing
+tier, or OSR.
 
 The exact native-root repair in this document's containing commit, based on
 `cc7ad01c9365b659a8cf909c400788aadde4770a`, was checked in isolated worktree
@@ -513,8 +542,8 @@ The next dependency sequence is:
 
 1. retain and broaden exact scalar baseline evidence without weakening forced
    errors or bounded code-object ownership;
-2. build source-level native allocation and the shared stable-handle heap on the
-   now-Current exact ABI-2 root/frame boundary;
+2. add Handle/host capability calls and explicit native/VM reference
+   transitions without weakening the Current host-independent heap slice;
 3. design loop-header state transfer separately before making any OSR claim.
 
 OSR, background compilation, optimizing JIT, guards, deoptimization, persistent

@@ -8,16 +8,18 @@ and the reference VM as the cold tier and correctness oracle.
 
 ## Status
 
-**Current** for the reference VM plus synchronous allocation-free scalar Linux
-x86-64 baseline tier and **Accepted Target** for ownership, allocation-capable
-baseline execution, a proof-based optimizing tier, and later OSR in that order.
+**Current** for the reference VM plus synchronous scalar and host-independent
+allocation/recursion Linux x86-64 baseline tier. Handle/host-capability
+allocation, lexical ownership adapters, native/VM reference transitions, a
+proof-based optimizing tier, and later OSR remain **Accepted Targets**.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
 by measurement. Canonical source/verified-SSA linkage, bounded code objects,
 VM/native transfer, `vm`/`auto`/`baseline-jit`, PollV1, and actual generated
 calls are implemented. Closed machine plans also have ABI-2 exact typed
-reference frames/maps and a collecting Buf-reference slot. Source-level native
-references/allocation, recursion, OSR, optimizing/speculative tiers, background
-work, and deoptimization are absent.
+reference frames/maps and a collecting Buf-reference slot. Source-level host-independent native references/allocation and recursive SCCs
+are implemented. Handle/host calls, lexical ownership adapters, native/VM
+reference transitions, OSR, optimizing/speculative tiers, background work, and
+deoptimization are absent.
 
 ## Decision
 
@@ -71,9 +73,9 @@ VM. Forced mode proves a nonzero native entry count and cannot silently fall
 back. Emission, object bytes, assembly text, disassembly, a Rust simulation,
 hotness counters, or the observation hook are insufficient.
 
-Only whole-function function-entry tiering is Current. Ownership, native
-allocation/collection, proof-based optimizing promotion, and then loop OSR
-remain later; background compilation, guards, deoptimization, persistent
+Only whole-function function-entry tiering is Current. Host-independent native
+allocation/collection is Current in forced mode; ownership/host-capability
+adapters, proof-based optimizing promotion, and then loop OSR remain later; background compilation, guards, deoptimization, persistent
 profiles/caches, and non-Linux/non-x86-64 platforms remain later or rejected as
 classified below. The detailed prerequisite,
 backend-selection, ABI, safety, coverage, and evidence contract is
@@ -87,8 +89,9 @@ The following are **Current**:
 - dense synchronous reference-VM execution and precise non-moving VM GC;
 - a closed scalar target-lowering plan, x86-64 encoder, opaque image, owned
   bounded W^X system lease, and typed invocation;
-- a separate verified-SSA adapter for allocation-free Unit/Bool/I64/F64 CFG,
-  acyclic direct calls, checked numerics, branches/loops, and outcomes;
+- a verified-SSA adapter for Unit/Bool/I64/F64 plus host-independent Str, legacy
+  Buf, Product, List, Option, Result allocation/operations, direct recursive
+  SCCs, checked numerics, branches/loops, and outcomes;
 - bounded code objects and explicit per-function baseline tier states;
 - forced generated main execution with no fallback, and automatic synchronous
   function-entry compilation used by later calls;
@@ -97,10 +100,11 @@ The following are **Current**:
 
 The old observation hook is removed. The native backend foundation still does
 not consume source/HIR/SSA itself; only the narrow adapter consumes
-`VerifiedProgram`. Unsupported reference/allocation/host/recursive code remains
-an engine error in forced mode and VM-correct in auto.
+`VerifiedProgram`. Unsupported ownership/Handle/host/indirect code remains an
+engine error in forced mode. Auto conservatively retains reference-typed and
+unsupported functions in VM.
 
-Ownership/traits, allocation-capable baseline execution, the optimizing
+Broader ownership/traits, host-capability allocation, the optimizing
 sections below, and later OSR remain **Accepted Targets** unless explicitly
 labeled Deferred or Rejected. Their exact contracts are [Ownership And
 Borrowing](ownership-and-borrowing.md), [Coherent Traits And Static

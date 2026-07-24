@@ -2,9 +2,7 @@
 
 use std::io::{self, Read, Write};
 
-use lkjscript_core::{Error, HeapObj, Result, Value};
-
-use crate::arena::Arena;
+use lkjscript_core::{Error, GcHeap as Arena, HeapObj, Result, Value};
 
 pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if v.is_invalid() {

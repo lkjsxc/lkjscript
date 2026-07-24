@@ -84,14 +84,15 @@ observe RW then RX permissions through a sys-internal `/proc/self/maps` probe;
 and repeat owned install/invoke/drop accounting.
 
 Source-native tests additionally prove canonical source -> HIR -> verified
-normalized SSA -> scalar machine plan -> encoded image -> RW/RX install ->
-actual native entry. They assert installed code/W^X metadata, nonzero native
+normalized SSA -> scalar/reference machine plan -> encoded image -> RW/RX
+install -> actual native entry and typed heap runtime sites. They assert installed code/W^X metadata, nonzero native
 main and callee entries, direct native call counts, PollV1 counts, zero forced
 fallbacks, and exact evaluator/VM/native scalar values or outcome categories.
 Focused cases cover I64 multi-block loops/calls/overflow/division, F64 bits,
-IEEE comparisons and mixed conversion, exit, deadline/fuel/code limits,
-unsupported allocation/product/host semantics, recursion, and auto later-call
-native transfer with same-epoch unsupported retry suppression.
+IEEE comparisons and mixed conversion, exit, deadline/fuel/code/heap/allocation
+limits, unsupported ownership/host semantics, direct and mutual recursion with
+live references, nested Product/Option/Result/List/Str/Buf graphs, and auto
+scalar later-call transfer with reference retry suppression.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.
@@ -197,15 +198,21 @@ later calls while unsupported code remains VM-correct and retry-suppressed.
 The CLI implements `vm`, `auto`, and `baseline-jit`; ordinary `run` defaults to
 `auto` at 64 function entries, while explicit `vm` remains deterministic.
 Tests check both selections. Machine diagnostics and low-overhead metrics are
-separate, stderr/file-only, opt-in, and silent during normal execution. Metrics
-retain exact outcome bits, compile/HIR/effect/SSA/bytecode/native/install/first-
-entry/first-call/VM/native/engine times, tier states and failures/fallbacks,
-entries/direct calls/PollV1, and code/metadata/accounted cache peaks.
-Owned-buffer and other allocation/reference/host paths,
-recursion, OSR, optimizing JIT, GC-native references, and background compilation
-are outside the current baseline subset. Performance adoption, broader
-malformed/resource equivalence, and native GC evidence remain separate future
-gates rather than implied by scalar callable completion.
+separate, stderr/file-only, opt-in, and silent during normal execution. Metrics retain exact outcome bits,
+compile/HIR/effect/SSA/bytecode/native/install/first-entry/first-call/VM/native/
+engine times, tier states and failures/fallbacks, entries/direct calls/PollV1,
+code/metadata/cache peaks, allocations/bytes/collections/peak live heap, roots,
+heap runtime calls, barriers, peak native frame depth, and transition counts.
+Owned-buffer/lexical-reference, Handle/host paths, native/VM reference
+transitions, OSR, optimizing JIT, and background compilation are outside the
+current baseline subset. Host-independent GC references/allocation and
+recursive SCCs are Current only in forced mode; auto remains conservative. The containing host-independent allocation commit based on `0daa7a0` passed
+focused core/native/sys/JIT/VM/app tests, strict affected Clippy, separate
+docs/tree/source checks, `quiet verify` with 182 unit/integration tests plus one
+compile-fail doctest, a locked release build, scalar/hello/Brainfuck smokes, and
+a forced allocation-graph metrics smoke. Docker, performance, and full
+Brainfuck Mandelbrot were not run. Broader host-capability/native-transition
+and performance evidence remain separate gates.
 
 ## Rule
 

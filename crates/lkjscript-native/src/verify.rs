@@ -476,6 +476,21 @@ fn verify_instruction(
             verify_arguments(function, arguments, &signature, "runtime call")?;
             require_output(instruction, signature.result(), "runtime call")
         }
+        Operation::HeapCall(descriptor, arguments) => {
+            if !descriptor.classes_are_valid()
+                || descriptor.input_types().len() != arguments.len()
+                || descriptor.input_types().len() != descriptor.operation().expected_arity()
+                || arguments
+                    .iter()
+                    .zip(descriptor.input_types())
+                    .any(|(argument, expected)| {
+                        value_type(function, *argument).ok() != Some(*expected)
+                    })
+            {
+                return Err(VerificationError::TypeMismatch("heap runtime call"));
+            }
+            require_output(instruction, descriptor.result_type(), "heap runtime call")
+        }
     }
 }
 
@@ -505,7 +520,8 @@ fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), VerificationError> {
         RuntimeCallSlot::IdentityI64V1
         | RuntimeCallSlot::PollV1
         | RuntimeCallSlot::EnterFunctionV1 => {}
-        RuntimeCallSlot::ReserveFrameV1
+        RuntimeCallSlot::HeapDispatchV1
+        | RuntimeCallSlot::ReserveFrameV1
         | RuntimeCallSlot::RegisterFrameV1
         | RuntimeCallSlot::PublishSafepointV1
         | RuntimeCallSlot::UnregisterFrameV1 => {
@@ -695,7 +711,7 @@ fn derive_call_root_requirements(
         for instruction in block.instructions.iter().rev() {
             if matches!(
                 &instruction.operation,
-                Operation::Call(_, _) | Operation::RuntimeCall(_, _)
+                Operation::Call(_, _) | Operation::RuntimeCall(_, _) | Operation::HeapCall(_, _)
             ) {
                 let output_home = LiveHome::Value(instruction.output.index);
                 let mut roots = Vec::new();
@@ -830,7 +846,9 @@ fn transfer_reference_liveness(
                 live.insert(LiveHome::Local(local.index));
             }
         }
-        Operation::Call(_, arguments) | Operation::RuntimeCall(_, arguments) => {
+        Operation::Call(_, arguments)
+        | Operation::RuntimeCall(_, arguments)
+        | Operation::HeapCall(_, arguments) => {
             for operand in arguments {
                 insert_reference_value(function, *operand, live, work, maximum_work)?;
             }

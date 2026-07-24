@@ -5,8 +5,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use lkjscript_native::{
-    AbiVersions, FunctionId, ImageIntegrityError, InstallableImage, NativeReference, NativeValue,
-    ReferenceType, RelocationTarget, RuntimeCallSlot, Signature, TrapCode, ValueType,
+    AbiVersions, FunctionId, HeapRuntimeSite, ImageIntegrityError, InstallableImage,
+    NativeReference, NativeValue, ReferenceType, RelocationTarget, RuntimeCallSlot, Signature,
+    StoreClass, TrapCode, ValueType,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -319,14 +320,34 @@ impl NativeRoot {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativeServiceError {
+    Trap,
     ResourceLimitExceeded,
     HostFailure,
 }
 
-/// Safe collection boundary. Implementations receive copied typed handles;
-/// frame addresses and stack traversal remain private to this crate.
+/// Safe runtime boundary. Implementations receive only copied typed values and
+/// roots; frame addresses and stack traversal remain private to this crate.
 pub trait NativeRuntimeServices {
     fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError>;
+
+    /// Optionally collect for a verified site. Sys writes any updated roots
+    /// back to generated homes before calling `heap_operation`.
+    fn prepare_heap_operation(
+        &mut self,
+        _site: &HeapRuntimeSite,
+        _arguments: &[NativeValue],
+        _roots: &mut [NativeRoot],
+    ) -> Result<bool, NativeServiceError> {
+        Ok(false)
+    }
+
+    fn heap_operation(
+        &mut self,
+        _site: &HeapRuntimeSite,
+        _arguments: &[NativeValue],
+    ) -> Result<NativeValue, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
 }
 
 #[derive(Default)]
@@ -350,6 +371,8 @@ pub struct InvocationReport {
     exact_root_counts: Vec<usize>,
     peak_native_stack_bytes: usize,
     reserved_native_stack_bytes: usize,
+    heap_operation_calls: u64,
+    barrier_count: u64,
 }
 
 impl InvocationReport {
@@ -401,6 +424,16 @@ impl InvocationReport {
     #[must_use]
     pub const fn reserved_native_stack_bytes(&self) -> usize {
         self.reserved_native_stack_bytes
+    }
+
+    #[must_use]
+    pub const fn heap_operation_calls(&self) -> u64 {
+        self.heap_operation_calls
+    }
+
+    #[must_use]
+    pub const fn barrier_count(&self) -> u64 {
+        self.barrier_count
     }
 }
 
@@ -671,6 +704,8 @@ impl InstalledImage {
             exact_root_counts: state.exact_root_counts.clone(),
             peak_native_stack_bytes: state.peak_native_stack_bytes,
             reserved_native_stack_bytes: state.reserved_native_stack_bytes,
+            heap_operation_calls: state.heap_operation_calls,
+            barrier_count: state.barrier_count,
         })
     }
 
@@ -778,6 +813,9 @@ struct NativeCallState<'a> {
     exact_root_counts: Vec<usize>,
     roots: Vec<NativeRoot>,
     root_addresses: Vec<RootAddress>,
+    heap_arguments: Vec<NativeValue>,
+    heap_operation_calls: u64,
+    barrier_count: u64,
     metadata_invalid: bool,
 }
 
@@ -798,6 +836,7 @@ impl<'a> NativeCallState<'a> {
         let mut roots = Vec::new();
         let mut root_addresses = Vec::new();
         let mut exact_root_counts = Vec::new();
+        let mut heap_arguments = Vec::new();
         roots
             .try_reserve_exact(initial_root_capacity)
             .map_err(|_| InvocationError::RootCapacityExceeded)?;
@@ -807,11 +846,15 @@ impl<'a> NativeCallState<'a> {
         if image
             .runtime_calls()
             .contains(&RuntimeCallSlot::CollectReferenceV1)
+            || !image.heap_runtime_sites().is_empty()
         {
             exact_root_counts
                 .try_reserve(1)
                 .map_err(|_| InvocationError::RootCapacityExceeded)?;
         }
+        heap_arguments
+            .try_reserve_exact(16)
+            .map_err(|_| InvocationError::RootCapacityExceeded)?;
         let (deadline_ms, status) = match config.wall_time {
             Some(duration) => match crate::now_ms_monotonic() {
                 Ok(now) => {
@@ -848,6 +891,9 @@ impl<'a> NativeCallState<'a> {
             exact_root_counts,
             roots,
             root_addresses,
+            heap_arguments,
+            heap_operation_calls: 0,
+            barrier_count: 0,
             metadata_invalid: false,
         })
     }
@@ -1023,6 +1069,11 @@ impl<'a> NativeCallState<'a> {
         self.exact_root_counts.push(root_count);
         match self.services.collect_references(&mut self.roots) {
             Ok(()) => {}
+            Err(NativeServiceError::Trap) => {
+                self.status = 1;
+                self.trap = TrapCode::Explicit.as_u32();
+                return argument;
+            }
             Err(NativeServiceError::ResourceLimitExceeded) => {
                 self.status = 4;
                 self.payload = 4;
@@ -1052,6 +1103,184 @@ impl<'a> NativeCallState<'a> {
                     && address.reference_type == ReferenceType::Buf
             })
             .map_or(argument, |(_, root)| root.opaque_word)
+    }
+
+    fn dispatch_heap_operation(&mut self, site_id: u32) {
+        if self.status != 0 {
+            return;
+        }
+        let Some(site) = self
+            .image
+            .heap_runtime_sites()
+            .get(site_id as usize)
+            .cloned()
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
+        if site.id() != site_id || site.safepoint() as usize >= self.image.safepoints().len() {
+            self.invalidate_active_frame();
+            return;
+        }
+        let Some(frame_index) = self.active_depth.checked_sub(1) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let frame = self.active_frames[frame_index];
+        let Some(entry) = self.image.entries().get(frame.function_ordinal as usize) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        if entry.function() != site.function() || frame.safepoint != site.safepoint() {
+            self.invalidate_active_frame();
+            return;
+        }
+        let Some(facts) = self
+            .image
+            .frames()
+            .iter()
+            .find(|facts| facts.function() == site.function())
+            .cloned()
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
+        self.heap_arguments.clear();
+        for home in site.arguments() {
+            if !facts.homes().contains(home) {
+                self.invalidate_active_frame();
+                return;
+            }
+            // SAFETY: image integrity and the active descriptor validate this
+            // aligned home inside the currently registered generated frame.
+            let address = unsafe {
+                frame
+                    .rbp
+                    .offset(home.rbp_displacement() as isize)
+                    .cast::<u64>()
+            };
+            // SAFETY: the exact home above is initialized before dispatch.
+            let word = unsafe { address.read() };
+            let value = match home.value_type() {
+                ValueType::I64 => NativeValue::I64(word as i64),
+                ValueType::F64 => NativeValue::F64Bits(word),
+                ValueType::Bool if word <= 1 => NativeValue::Bool(word == 1),
+                ValueType::Bool => {
+                    self.invalidate_active_frame();
+                    return;
+                }
+                ValueType::Unit if word == 0 => NativeValue::Unit,
+                ValueType::Unit => {
+                    self.invalidate_active_frame();
+                    return;
+                }
+                ValueType::Reference(reference_type) => {
+                    NativeValue::Reference(NativeReference::new(reference_type, word))
+                }
+            };
+            self.heap_arguments.push(value);
+        }
+        self.roots.clear();
+        self.root_addresses.clear();
+        for active in 0..self.active_depth {
+            match self.materialize_frame_roots(active) {
+                Ok(()) => {}
+                Err(MaterializeRootError::InvalidFrame) => {
+                    self.invalidate_active_frame();
+                    return;
+                }
+                Err(MaterializeRootError::Capacity) => {
+                    self.status = 4;
+                    self.payload = 3;
+                    return;
+                }
+            }
+        }
+        let collected =
+            self.services
+                .prepare_heap_operation(&site, &self.heap_arguments, &mut self.roots);
+        let collected = match collected {
+            Ok(collected) => collected,
+            Err(NativeServiceError::Trap) => {
+                self.status = 1;
+                self.trap = TrapCode::Explicit.as_u32();
+                return;
+            }
+            Err(NativeServiceError::ResourceLimitExceeded) => {
+                self.status = 4;
+                self.payload = 4;
+                return;
+            }
+            Err(NativeServiceError::HostFailure) => {
+                self.status = 5;
+                return;
+            }
+        };
+        for (root, address) in self.roots.iter().zip(&self.root_addresses) {
+            if root.reference_type != address.reference_type {
+                self.invalidate_active_frame();
+                return;
+            }
+            // SAFETY: root addresses came only from validated active homes.
+            unsafe { address.address.write(root.opaque_word) };
+        }
+        if collected {
+            let count = self.roots.len();
+            if self.exact_root_counts.len() == MAX_COLLECTION_REPORTS
+                || self.exact_root_counts.try_reserve(1).is_err()
+            {
+                self.status = 4;
+                self.payload = 3;
+                return;
+            }
+            self.collection_calls = self.collection_calls.saturating_add(1);
+            self.maximum_roots = self.maximum_roots.max(count);
+            self.exact_root_counts.push(count);
+        }
+        let result = self.services.heap_operation(&site, &self.heap_arguments);
+        let result = match result {
+            Ok(result) => result,
+            Err(NativeServiceError::Trap) => {
+                self.status = 1;
+                self.trap = TrapCode::Explicit.as_u32();
+                return;
+            }
+            Err(NativeServiceError::ResourceLimitExceeded) => {
+                self.status = 4;
+                self.payload = 4;
+                return;
+            }
+            Err(NativeServiceError::HostFailure) => {
+                self.status = 5;
+                return;
+            }
+        };
+        if result.value_type() != site.descriptor().result_type() {
+            self.invalidate_active_frame();
+            return;
+        }
+        let Some(word) = native_value_word(result, site.descriptor().result_type()) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let result_home = site.result();
+        if !facts.homes().contains(&result_home) {
+            self.invalidate_active_frame();
+            return;
+        }
+        // SAFETY: retained site integrity binds this exact initialized result
+        // home to the current active generated frame.
+        unsafe {
+            frame
+                .rbp
+                .offset(result_home.rbp_displacement() as isize)
+                .cast::<u64>()
+                .write(word)
+        };
+        self.heap_operation_calls = self.heap_operation_calls.saturating_add(1);
+        if site.descriptor().store() != StoreClass::None {
+            self.barrier_count = self.barrier_count.saturating_add(1);
+        }
     }
 
     fn materialize_frame_roots(&mut self, frame_index: usize) -> Result<(), MaterializeRootError> {
@@ -1179,6 +1408,19 @@ impl RawReturn {
     }
 }
 
+fn native_value_word(value: NativeValue, expected: ValueType) -> Option<u64> {
+    if value.value_type() != expected {
+        return None;
+    }
+    Some(match value {
+        NativeValue::I64(value) => value as u64,
+        NativeValue::F64Bits(bits) => bits,
+        NativeValue::Bool(value) => u64::from(value),
+        NativeValue::Unit => 0,
+        NativeValue::Reference(reference) => reference.opaque_word(),
+    })
+}
+
 fn validate_arguments(
     signature: &Signature,
     arguments: &[NativeValue],
@@ -1228,6 +1470,7 @@ fn runtime_symbol(slot: RuntimeCallSlot) -> usize {
         RuntimeCallSlot::PollV1 => runtime_poll_v1 as *const () as usize,
         RuntimeCallSlot::EnterFunctionV1 => runtime_enter_function_v1 as *const () as usize,
         RuntimeCallSlot::CollectReferenceV1 => runtime_collect_reference_v1 as *const () as usize,
+        RuntimeCallSlot::HeapDispatchV1 => runtime_heap_dispatch_v1 as *const () as usize,
         RuntimeCallSlot::ReserveFrameV1 => runtime_reserve_frame_v1 as *const () as usize,
         RuntimeCallSlot::RegisterFrameV1 => runtime_register_frame_v1 as *const () as usize,
         RuntimeCallSlot::PublishSafepointV1 => runtime_publish_safepoint_v1 as *const () as usize,
@@ -1346,6 +1589,19 @@ extern "C" fn runtime_unregister_frame_v1(
         return;
     };
     state.unregister_frame(function_ordinal, rbp);
+}
+
+extern "C" fn runtime_heap_dispatch_v1(state: *mut NativeCallState<'_>, site: u64) {
+    // SAFETY: generated heap sites publish and pass their retained dense site
+    // identity. Raw frame homes are validated and accessed only in this module.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return;
+    };
+    let Ok(site) = u32::try_from(site) else {
+        state.invalidate_active_frame();
+        return;
+    };
+    state.dispatch_heap_operation(site);
 }
 
 extern "C" fn runtime_collect_reference_v1(state: *mut NativeCallState<'_>, reference: u64) -> u64 {

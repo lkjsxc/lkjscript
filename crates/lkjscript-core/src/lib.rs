@@ -2,6 +2,7 @@
 
 mod chunk;
 mod error;
+mod gc;
 mod limits;
 mod opcode;
 mod outcome;
@@ -12,6 +13,7 @@ pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
 };
 pub use error::{Error, ErrorClass, Result};
+pub use gc::{GcConfig, GcHeap, GcLimit, GcStats};
 pub use limits::{
     ExecutionConfig, Limits, ValidationLimits, MAX_BUFFER_BYTES, MAX_BULK_IO_BYTES,
     MAX_BYTECODE_METADATA_BYTES, MAX_BYTECODE_TABLE_ENTRIES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES,

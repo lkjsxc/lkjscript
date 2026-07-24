@@ -1,14 +1,109 @@
 #![allow(clippy::panic)]
 
 use lkjscript_native::{
-    encode, AbiVersions, BackendLimits, EncodingConfig, FunctionId, InstallableImage,
+    encode, AbiVersions, AllocationClass, BackendLimits, EncodingConfig, FunctionId,
+    HeapCallDescriptor, HeapOperation, HeapRuntimeSite, InstallableImage, LayoutIdentity,
     MachinePlanBuilder, NativeReference, NativeValue, ReferenceType, RuntimeCallSlot,
-    RuntimeOutcome, Signature, SourceFunctionId, TrapCode, ValueType,
+    RuntimeOutcome, Signature, SourceFunctionId, StoreClass, TrapCode, ValueType,
 };
 use lkjscript_sys::executable::{
     ExecutableInstaller, ExecutableLimits, InvocationOutcome, NativeInvocationConfig,
     NativeResourceLimitKind, NativeRoot, NativeRuntimeServices, NativeServiceError,
 };
+
+#[derive(Clone, Copy)]
+enum HeapFailure {
+    Trap,
+    Resource,
+    Host,
+}
+
+struct FailingHeapService {
+    failure: HeapFailure,
+    calls: usize,
+}
+
+impl NativeRuntimeServices for FailingHeapService {
+    fn collect_references(&mut self, _roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
+        Ok(())
+    }
+
+    fn heap_operation(
+        &mut self,
+        site: &HeapRuntimeSite,
+        arguments: &[NativeValue],
+    ) -> Result<NativeValue, NativeServiceError> {
+        assert_eq!(arguments.len(), 3);
+        assert_eq!(site.arguments().len(), 3);
+        self.calls += 1;
+        Err(match self.failure {
+            HeapFailure::Trap => NativeServiceError::Trap,
+            HeapFailure::Resource => NativeServiceError::ResourceLimitExceeded,
+            HeapFailure::Host => NativeServiceError::HostFailure,
+        })
+    }
+}
+
+#[test]
+fn generic_heap_dispatch_propagates_service_status_and_unwinds(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::new(1)));
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(42),
+        Signature::new(Vec::new(), product)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let values = [
+        builder.i64_const(entry, 1)?,
+        builder.i64_const(entry, 2)?,
+        builder.i64_const(entry, 3)?,
+    ];
+    let descriptor = HeapCallDescriptor::new(
+        HeapOperation::ProductValue {
+            product: 0,
+            fields: 3,
+        },
+        vec![ValueType::I64; 3],
+        product,
+        AllocationClass::Bounded,
+        StoreClass::Initialization,
+    )?;
+    let result = builder.heap_call(entry, descriptor, values.to_vec())?;
+    builder.return_value(entry, result)?;
+    plan.define_function(builder.finish())?;
+    let image = encode(
+        plan.verify(BackendLimits::default())?,
+        EncodingConfig::default(),
+    )?;
+    let installed = ExecutableInstaller::default().install(image)?;
+    for (failure, expected) in [
+        (
+            HeapFailure::Trap,
+            InvocationOutcome::Trapped(TrapCode::Explicit),
+        ),
+        (
+            HeapFailure::Resource,
+            InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::RuntimeService),
+        ),
+        (HeapFailure::Host, InvocationOutcome::HostFailure),
+    ] {
+        let mut service = FailingHeapService { failure, calls: 0 };
+        let report = installed.invoke_with_services(
+            function,
+            &[],
+            &NativeInvocationConfig::default(),
+            &mut service,
+        )?;
+        assert_eq!(report.outcome(), expected);
+        assert_eq!(report.active_frame_depth(), 0);
+        assert_eq!(report.reserved_native_stack_bytes(), 0);
+        assert_eq!(service.calls, 1);
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy)]
 struct ReferenceEntries {

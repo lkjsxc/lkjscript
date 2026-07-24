@@ -7,26 +7,27 @@ to references, allocation, recursion, and versioned host/runtime calls.
 
 ## Status
 
-The allocation-free Unit/Bool/I64/F64 baseline tier is **Current**. This record
-is an **Accepted Target** until forced generated execution allocates, survives
-collection with active exact native frames, and passes the gates below. It does
-not supersede the current scalar contract prematurely.
+The allocation-free Unit/Bool/I64/F64 tier and the host-independent source
+allocation/recursion slice are **Current** on Linux x86-64. The complete target
+in this record remains an **Accepted Target**: Handle/host-capability calls,
+lexical `Owned`/`Ref`/`RefMut` adapters, and native/VM reference transitions are
+not Current. This status does not claim an optimizing tier or OSR.
 
 ## Selected Delivery Slices
 
 The implementation proceeds through separately honest boundaries:
 
-1. native ABI 2 typed references, exact non-empty stack maps, bounded active
-   generated frames, and a safe collection-dispatch boundary, tested first with
-   closed machine plans;
-2. source-to-generated host-independent allocation for Str, Buf, products,
-   List, Option, and Result, including field/tag/read/write operations, direct
-   and mutual recursion, forced collection, and VM/evaluator/native equality;
-3. versioned Handle and host-capability calls, native/VM continuation, complete
-   metrics, and same-commit allocation workload measurement.
+1. **Current:** native ABI 2 typed references, exact non-empty stack maps,
+   bounded active generated frames, and a safe collection-dispatch boundary;
+2. **Current:** source-to-generated host-independent allocation for Str, legacy
+   Buf, products, List, Option, and Result, including field/tag/read/write
+   operations, direct and mutual recursion, forced collection, and
+   VM/evaluator/native equality;
+3. **Accepted Target:** versioned Handle and host-capability calls, native/VM
+   reference continuation, and same-commit allocation workload measurement.
 
-Slices 1 and 2 may become Current without claiming the complete target in this
-record. Slice 3 and every item in **Required Surface** remain required before
+Slices 1 and 2 are Current without claiming the complete target in this record.
+Slice 3 and every uncovered item in **Required Surface** remain required before
 “full allocation-capable baseline JIT” is a valid unqualified claim. `Owned`,
 `Ref`, and `RefMut` lexical values are not silently relabeled GC references;
 the ownership safe island retains a deterministic generated-tier rejection
@@ -50,6 +51,25 @@ The JIT does not interpret source names and does not create a second memory IR.
 Linux x86-64 is the only acceptance platform. IR, ABI, layouts, and metadata
 use target-independent identities where a later Linux AArch64 backend will need
 them.
+
+## Current Host-Independent Slice
+
+`GcHeap` is the pure stable-index mark/sweep heap in `lkjscript-core`; VM and
+forced JIT sessions use that implementation with exact allocation, accounted
+heap-byte, collection, peak-live, and stress-collection APIs. ABI-2 images
+retain bounded `HeapDispatchV1` sites with exact operation, input/result type
+and layout, source, allocation/store class, safepoint, and verified frame homes.
+The sys trampoline alone reads raw homes, copies typed arguments and roots into
+a safe service, writes exact roots/results back, and propagates structured
+status. Empty List and None use only the exact zero niche; other references
+reject zero and every nonzero handle is category/layout checked.
+
+Forced lowering covers Str, legacy Buf, Product, List, Option, Result, their
+listed constructors/accessors/mutations/conversions/equality families, and
+recursive SCCs. Runtime ABI calls are generated execution, not fallback.
+Automatic mode deliberately keeps reference-typed entries in the VM because
+native/VM reference transfer is not Current. Symbol, Handle/host IO, indirect
+calls, and lexical ownership references reject deterministically.
 
 ## Required Surface
 

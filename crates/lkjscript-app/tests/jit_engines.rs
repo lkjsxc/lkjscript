@@ -175,12 +175,8 @@ fn f64_bits_ieee_comparisons_and_mixed_conversion_are_exact() {
 }
 
 #[test]
-fn forced_mode_rejects_references_allocation_products_host_io_and_recursion() {
+fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallback() {
     let unsupported = [
-        (
-            "allocation.lkjscript",
-            "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
-        ),
         (
             "host.lkjscript",
             "main/\nsig/\n->\nUnit\n/sig\nflush/\n/flush\n/main\n",
@@ -188,10 +184,6 @@ fn forced_mode_rejects_references_allocation_products_host_io_and_recursion() {
         (
             "owned-buffer.lkjscript",
             "main/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-ref/\nborrow/\nb\n/borrow\n0\n/owned-buf-ref\n/let\n/main\n",
-        ),
-        (
-            "product.lkjscript",
-            "product/\nname/\nBoxed\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\nmain/\nsig/\n->\nProduct\nBoxed\n/sig\nproduct-value/\nBoxed\nfield/\nvalue\n1\n/field\n/product-value\n/main\n",
         ),
     ];
     for (name, source) in unsupported {
@@ -217,13 +209,90 @@ fn forced_mode_rejects_references_allocation_products_host_io_and_recursion() {
 
     let recursion = "def/\nname/\nrecur\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\nif/\nlte/\nn\n0\n/lte\n0\nrecur/\n-/\nn\n1\n/-\n/recur\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nrecur/\n3\n/recur\n/main\n";
     let program = compile(recursion, "recursion.lkjscript");
-    let error = execute_forced(
+    let executed = execute_forced(
         program.ssa(),
         &ExecutionConfig::default(),
         JitConfig::default(),
     )
-    .expect_err("recursion is an explicit MVP boundary");
-    assert_eq!(error.code(), FailureCode::RecursionUnsupported);
+    .expect("direct recursion is a bounded native SCC");
+    assert!(
+        matches!(executed.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0))
+    );
+    assert!(executed.stats.direct_native_calls >= 3);
+    assert_eq!(executed.stats.vm_fallbacks, 0);
+
+    let allocation = compile(
+        "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
+        "allocation.lkjscript",
+    );
+    let mut config = JitConfig::default();
+    config.force_gc_before_allocation = true;
+    let executed = execute_forced(allocation.ssa(), &ExecutionConfig::default(), config)
+        .expect("source allocation reaches generated heap dispatch");
+    assert!(
+        matches!(executed.outcome, ExecutionOutcome::Returned(value) if value.as_str() == Some(""))
+    );
+    assert_eq!(executed.stats.vm_fallbacks, 0);
+    assert_eq!(executed.stats.allocations, 1);
+    assert_eq!(executed.stats.collections, 1);
+    assert_eq!(executed.stats.runtime_heap_calls, 1);
+    assert!(executed.stats.native_entries > 0);
+}
+
+#[test]
+fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
+    let source = include_str!("fixtures/allocation-graph.lkjscript");
+    let program = compile(source, "allocation-graph.lkjscript");
+    let expected = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
+    let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let mut config = JitConfig::default();
+    config.force_gc_before_allocation = true;
+    let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+        .expect("nested graph executes through generated heap sites");
+    assert_eq!(expected, Scalar::I64(1));
+    assert_eq!(vm, expected);
+    assert_eq!(execution(native.outcome), expected);
+    assert_eq!(native.stats.vm_fallbacks, 0);
+    assert!(native.stats.allocations >= 7);
+    assert!(native.stats.collections >= 7);
+    assert!(native.stats.maximum_roots > 0);
+    assert!(native.stats.runtime_heap_calls >= 14);
+    assert!(native.stats.barrier_count >= 4);
+}
+
+#[test]
+fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames() {
+    let source = "def/\nname/\nwalk\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\nwalk/\ntext\n-/\ndepth\n1\n/-\n/walk\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nwalk/\nempty-str/\n/empty-str\n4\n/walk\n/main\n";
+    let program = compile(source, "recursive-roots.lkjscript");
+    let vm = run_chunk(program.bytecode(), &ExecutionConfig::default());
+    let mut config = JitConfig::default();
+    config.force_gc_before_allocation = true;
+    let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+        .expect("recursive generated reference execution");
+    assert_eq!(execution(native.outcome), execution(vm));
+    assert_eq!(native.stats.vm_fallbacks, 0);
+    assert!(native.stats.native_entries >= 6);
+    assert!(native.stats.peak_native_frame_depth >= 6);
+    assert!(native.stats.collections >= 2);
+    assert!(native.stats.maximum_roots >= 5);
+    assert!(native
+        .stats
+        .code_objects
+        .iter()
+        .any(|object| !object.exact_scalar_stack_maps));
+
+    let mutual = "def/\nname/\neven\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\nodd/\ntext\n-/\ndepth\n1\n/-\n/odd\n/if\n/fn\n/def\ndef/\nname/\nodd\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\neven/\ntext\n-/\ndepth\n1\n/-\n/even\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\neven/\nempty-str/\n/empty-str\n5\n/even\n/main\n";
+    let program = compile(mutual, "mutual-recursive-roots.lkjscript");
+    let mut config = JitConfig::default();
+    config.force_gc_before_allocation = true;
+    let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+        .expect("mutual recursive SCC with live reference executes natively");
+    assert!(
+        matches!(native.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0))
+    );
+    assert_eq!(native.stats.vm_fallbacks, 0);
+    assert!(native.stats.peak_native_frame_depth >= 7);
+    assert!(native.stats.maximum_roots >= 6);
 }
 
 #[test]
@@ -240,6 +309,27 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     let outcome = execute_forced(program.ssa(), &fuel, JitConfig::default())
         .expect("fuel is a language outcome");
     assert_eq!(execution(outcome.outcome), Scalar::Fuel);
+
+    let allocation = compile(
+        "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
+        "tiny-allocation-limit.lkjscript",
+    );
+    let mut no_allocations = ExecutionConfig::default();
+    no_allocations.max_allocations = 0;
+    let outcome = execute_forced(allocation.ssa(), &no_allocations, JitConfig::default())
+        .expect("allocation limit is structured");
+    assert!(matches!(
+        outcome.outcome,
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
+    ));
+    let mut tiny_heap = ExecutionConfig::default();
+    tiny_heap.max_heap_bytes = 1;
+    let outcome = execute_forced(allocation.ssa(), &tiny_heap, JitConfig::default())
+        .expect("heap limit is structured");
+    assert!(matches!(
+        outcome.outcome,
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
+    ));
 
     let mut limited = JitConfig::default();
     limited.backend_limits =

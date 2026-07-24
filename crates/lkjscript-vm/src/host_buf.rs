@@ -1,9 +1,9 @@
 //! Byte-buffer and bounded terminal/poll host helpers.
 
-use lkjscript_core::{Error, HeapObj, Result, Value, MAX_BUFFER_BYTES, MAX_BULK_IO_BYTES};
-
-use crate::arena::Arena;
 use crate::host_ext::ResourceTable;
+use lkjscript_core::{
+    Error, GcHeap as Arena, HeapObj, Result, Value, MAX_BUFFER_BYTES, MAX_BULK_IO_BYTES,
+};
 
 fn as_buf_mut(arena: &mut Arena, value: Value) -> Result<&mut Vec<u8>> {
     match arena.get_mut(value)? {
@@ -269,8 +269,8 @@ mod tests {
 
     use lkjscript_core::{Value, MAX_BULK_IO_BYTES};
 
-    use crate::arena::Arena;
     use crate::host_ext::ResourceTable;
+    use lkjscript_core::GcHeap as Arena;
 
     use super::{
         as_buf, buf_from_str, buf_new, buf_set, buf_set_u32, buf_slice, buf_to_str, sys_poll,

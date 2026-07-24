@@ -368,7 +368,7 @@ fn jit_metrics_json(stats: &JitStats) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "{{\"compile_failures\":{},\"vm_fallbacks\":{},\"native_entries\":{},\"direct_native_calls\":{},\"poll_v1_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},\"auto_enabled\":{},\"code_cache_peak_objects\":{},\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},\"accounted_allocation_peak_bytes\":{},\"functions\":[{}],\"objects\":[{}]}}",
+        "{{\"compile_failures\":{},\"vm_fallbacks\":{},\"native_entries\":{},\"direct_native_calls\":{},\"poll_v1_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},\"auto_enabled\":{},\"code_cache_peak_objects\":{},\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},\"accounted_allocation_peak_bytes\":{},\"allocations\":{},\"allocation_bytes\":{},\"collections\":{},\"peak_live_heap_bytes\":{},\"maximum_roots\":{},\"runtime_heap_calls\":{},\"barrier_count\":{},\"peak_native_frame_depth\":{},\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},\"functions\":[{}],\"objects\":[{}]}}",
         stats.compile_failures,
         stats.vm_fallbacks,
         stats.native_entries,
@@ -381,6 +381,16 @@ fn jit_metrics_json(stats: &JitStats) -> String {
         stats.code_cache_peak_bytes,
         stats.metadata_cache_peak_bytes,
         stats.accounted_allocation_peak_bytes,
+        stats.allocations,
+        stats.allocation_bytes,
+        stats.collections,
+        stats.peak_live_heap_bytes,
+        stats.maximum_roots,
+        stats.runtime_heap_calls,
+        stats.barrier_count,
+        stats.peak_native_frame_depth,
+        stats.vm_to_native_transitions,
+        stats.native_to_vm_transitions,
         functions,
         objects,
     )

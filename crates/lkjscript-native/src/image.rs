@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::plan::{
-    FunctionId, ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId, SourceOrigin,
-    TrapCode, ValueType,
+    FunctionId, HeapCallDescriptor, ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId,
+    SourceOrigin, TrapCode, ValueType,
 };
 
 pub const CURRENT_SEMANTIC_ABI_VERSION: u16 = 1;
@@ -367,6 +367,56 @@ impl Safepoint {
     }
 }
 
+/// One generic heap-dispatch site whose arguments and result are copied only
+/// through verified generated-frame homes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeapRuntimeSite {
+    id: u32,
+    function: FunctionId,
+    safepoint: u32,
+    descriptor: HeapCallDescriptor,
+    arguments: Vec<FrameHome>,
+    result: FrameHome,
+    source: Option<SourceOrigin>,
+}
+
+impl HeapRuntimeSite {
+    #[must_use]
+    pub const fn id(&self) -> u32 {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn function(&self) -> FunctionId {
+        self.function
+    }
+
+    #[must_use]
+    pub const fn safepoint(&self) -> u32 {
+        self.safepoint
+    }
+
+    #[must_use]
+    pub const fn descriptor(&self) -> &HeapCallDescriptor {
+        &self.descriptor
+    }
+
+    #[must_use]
+    pub fn arguments(&self) -> &[FrameHome] {
+        &self.arguments
+    }
+
+    #[must_use]
+    pub const fn result(&self) -> FrameHome {
+        self.result
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> Option<SourceOrigin> {
+        self.source
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SourceMapEntry {
     function: FunctionId,
@@ -491,6 +541,7 @@ pub enum ImageIntegrityError {
     FrameFacts,
     Safepoint,
     RootRequirement,
+    HeapRuntimeSite,
     SourceMap,
     TrapMap,
     OutcomeMap,
@@ -514,6 +565,7 @@ impl fmt::Display for ImageIntegrityError {
             Self::RootRequirement => {
                 "installable image stack map disagrees with its verifier requirement"
             }
+            Self::HeapRuntimeSite => "installable image heap runtime site is invalid",
             Self::SourceMap => "installable image source map is invalid",
             Self::TrapMap => "installable image trap map is invalid",
             Self::OutcomeMap => "installable image outcome map is invalid",
@@ -534,6 +586,7 @@ pub struct InstallableImage {
     frames: Box<[FrameFacts]>,
     safepoints: Box<[Safepoint]>,
     root_requirements: Box<[RootMapRequirement]>,
+    heap_runtime_sites: Box<[HeapRuntimeSite]>,
     source_map: Box<[SourceMapEntry]>,
     trap_map: Box<[TrapMapEntry]>,
     outcome_map: Box<[OutcomeMapEntry]>,
@@ -570,6 +623,11 @@ impl InstallableImage {
     #[must_use]
     pub fn safepoints(&self) -> &[Safepoint] {
         &self.safepoints
+    }
+
+    #[must_use]
+    pub fn heap_runtime_sites(&self) -> &[HeapRuntimeSite] {
+        &self.heap_runtime_sites
     }
 
     #[must_use]
@@ -611,6 +669,7 @@ impl InstallableImage {
             frames: &self.frames,
             safepoints: &self.safepoints,
             root_requirements: &self.root_requirements,
+            heap_runtime_sites: &self.heap_runtime_sites,
             source_map: &self.source_map,
             trap_map: &self.trap_map,
             outcome_map: &self.outcome_map,
@@ -711,6 +770,39 @@ impl InstallableImage {
         {
             return Err(ImageIntegrityError::RootRequirement);
         }
+        for (expected_id, site) in self.heap_runtime_sites.iter().enumerate() {
+            let frame = self
+                .frames
+                .iter()
+                .find(|frame| frame.function == site.function)
+                .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
+            let safepoint = self
+                .safepoints
+                .get(site.safepoint as usize)
+                .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
+            if site.id as usize != expected_id
+                || safepoint.id != site.safepoint
+                || safepoint.function != site.function
+                || site.arguments.len() != site.descriptor.input_types().len()
+                || site
+                    .arguments
+                    .iter()
+                    .zip(site.descriptor.input_types())
+                    .any(|(home, expected)| {
+                        home.value_type != *expected || !frame.homes.contains(home)
+                    })
+                || site.result.value_type != site.descriptor.result_type()
+                || !frame.homes.contains(&site.result)
+                || !site.descriptor.classes_are_valid()
+            {
+                return Err(ImageIntegrityError::HeapRuntimeSite);
+            }
+        }
+        if self.heap_runtime_sites.is_empty()
+            == runtime_calls.contains(&RuntimeCallSlot::HeapDispatchV1)
+        {
+            return Err(ImageIntegrityError::HeapRuntimeSite);
+        }
         for source in &self.source_map {
             if source.code_start >= source.code_end
                 || !range_in_function(
@@ -744,6 +836,7 @@ impl InstallableImage {
             frames: &parts.frames,
             safepoints: &parts.safepoints,
             root_requirements: &parts.root_requirements,
+            heap_runtime_sites: &parts.heap_runtime_sites,
             source_map: &parts.source_map,
             trap_map: &parts.trap_map,
             outcome_map: &parts.outcome_map,
@@ -759,6 +852,7 @@ impl InstallableImage {
             frames: parts.frames.into_boxed_slice(),
             safepoints: parts.safepoints.into_boxed_slice(),
             root_requirements: parts.root_requirements.into_boxed_slice(),
+            heap_runtime_sites: parts.heap_runtime_sites.into_boxed_slice(),
             source_map: parts.source_map.into_boxed_slice(),
             trap_map: parts.trap_map.into_boxed_slice(),
             outcome_map: parts.outcome_map.into_boxed_slice(),
@@ -782,6 +876,7 @@ pub(crate) struct ImageParts {
     pub(crate) frames: Vec<FrameFacts>,
     pub(crate) safepoints: Vec<Safepoint>,
     pub(crate) root_requirements: Vec<RootMapRequirement>,
+    pub(crate) heap_runtime_sites: Vec<HeapRuntimeSite>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) trap_map: Vec<TrapMapEntry>,
     pub(crate) outcome_map: Vec<OutcomeMapEntry>,
@@ -884,6 +979,26 @@ pub(crate) const fn root_location(
         rbp_displacement,
         kind,
         reference_type,
+    }
+}
+
+pub(crate) fn heap_runtime_site(
+    id: u32,
+    function: FunctionId,
+    safepoint: u32,
+    descriptor: HeapCallDescriptor,
+    arguments: Vec<FrameHome>,
+    result: FrameHome,
+    source: Option<SourceOrigin>,
+) -> HeapRuntimeSite {
+    HeapRuntimeSite {
+        id,
+        function,
+        safepoint,
+        descriptor,
+        arguments,
+        result,
+        source,
     }
 }
 
@@ -1017,6 +1132,7 @@ struct MetadataSlices<'a> {
     frames: &'a [FrameFacts],
     safepoints: &'a [Safepoint],
     root_requirements: &'a [RootMapRequirement],
+    heap_runtime_sites: &'a [HeapRuntimeSite],
     source_map: &'a [SourceMapEntry],
     trap_map: &'a [TrapMapEntry],
     outcome_map: &'a [OutcomeMapEntry],
@@ -1042,6 +1158,14 @@ fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
     for requirement in parts.root_requirements {
         bytes = add_records(bytes, requirement.roots.len(), 16)?;
     }
+    bytes = add_records(bytes, parts.heap_runtime_sites.len(), 48)?;
+    for site in parts.heap_runtime_sites {
+        bytes = add_records(bytes, site.arguments.len(), 16)?;
+        bytes = add_records(bytes, site.descriptor.input_types().len(), 1)?;
+        if let crate::HeapOperation::ConstantStr(text) = site.descriptor.operation() {
+            bytes = add_records(bytes, text.len(), 1)?;
+        }
+    }
     bytes = add_records(bytes, parts.source_map.len(), 24)?;
     bytes = add_records(bytes, parts.trap_map.len(), 16)?;
     add_records(bytes, parts.outcome_map.len(), 16)
@@ -1055,9 +1179,54 @@ fn add_records(bytes: u64, count: usize, record_bytes: u64) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        encode, BackendLimits, EncodingConfig, MachinePlanBuilder, ReferenceType, RuntimeCallSlot,
-        Signature, SourceFunctionId, ValueType,
+        encode, AllocationClass, BackendLimits, EncodingConfig, HeapCallDescriptor, HeapOperation,
+        MachinePlanBuilder, ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId,
+        StoreClass, ValueType,
     };
+
+    #[test]
+    fn integrity_rejects_malformed_heap_site_home_and_safepoint(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let buffer = ValueType::Reference(ReferenceType::Buf);
+        let mut plan = MachinePlanBuilder::new();
+        let function = plan.declare_function(
+            SourceFunctionId::new(9),
+            Signature::new(vec![buffer], ValueType::Unit)?,
+        )?;
+        let mut builder = plan.function_builder(function)?;
+        let entry = builder.create_block()?;
+        builder.set_entry(entry)?;
+        let input = builder.parameter(0)?;
+        let index = builder.i64_const(entry, 0)?;
+        let byte = builder.i64_const(entry, 1)?;
+        let descriptor = HeapCallDescriptor::new(
+            HeapOperation::BufSet,
+            vec![buffer, ValueType::I64, ValueType::I64],
+            ValueType::Unit,
+            AllocationClass::None,
+            StoreClass::Scalar,
+        )?;
+        let result = builder.heap_call(entry, descriptor, vec![input, index, byte])?;
+        builder.return_value(entry, result)?;
+        plan.define_function(builder.finish())?;
+        let mut image = encode(
+            plan.verify(BackendLimits::default())?,
+            EncodingConfig::default(),
+        )?;
+        let original = image.heap_runtime_sites[0].result.rbp_displacement;
+        image.heap_runtime_sites[0].result.rbp_displacement = -8;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(super::ImageIntegrityError::HeapRuntimeSite)
+        );
+        image.heap_runtime_sites[0].result.rbp_displacement = original;
+        image.heap_runtime_sites[0].safepoint = u32::MAX;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(super::ImageIntegrityError::HeapRuntimeSite)
+        );
+        Ok(())
+    }
 
     #[test]
     fn integrity_rejects_out_of_frame_root_without_accounting_change(

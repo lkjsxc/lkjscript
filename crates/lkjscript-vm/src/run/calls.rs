@@ -1,6 +1,6 @@
 //! Call and pair opcodes.
 
-use lkjscript_core::{Error, HeapObj, Op, ResourceLimitKind, Result, Value};
+use lkjscript_core::{Error, HeapObj, Op, Result, Value};
 use lkjscript_jit::{EntryDecision, NativeValue, ScalarInvocationOutcome, ValueType};
 
 use crate::run::{Frame, RuntimeTier, Vm};
@@ -115,10 +115,10 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                                     "execution wall deadline exceeded in native PollV1",
                                 ));
                             }
-                            ScalarInvocationOutcome::ResourceLimitExceeded => {
+                            ScalarInvocationOutcome::ResourceLimitExceeded(kind) => {
                                 return Err(Error::resource(
-                                    ResourceLimitKind::InstructionFuel,
-                                    "native PollV1 fuel exhausted",
+                                    kind,
+                                    "native execution resource limit exceeded",
                                 ));
                             }
                             ScalarInvocationOutcome::HostFailure => {

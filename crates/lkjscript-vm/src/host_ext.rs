@@ -2,10 +2,8 @@
 
 use std::os::fd::RawFd;
 
-use lkjscript_core::{Error, HeapObj, Result, Value};
+use lkjscript_core::{Error, GcHeap as Arena, HeapObj, Result, Value};
 use lkjscript_sys::OwnedFd;
-
-use crate::arena::Arena;
 
 const STDIN_TOKEN: u32 = 1;
 const FIRST_OWNED_TOKEN: u32 = 16;
@@ -821,7 +819,7 @@ mod tests {
 
     use lkjscript_core::{Error, HeapObj, Value};
 
-    use crate::arena::Arena;
+    use lkjscript_core::GcHeap as Arena;
 
     use super::{
         as_str, is_ok, is_some, language_result, option_some, str_from_f64, str_from_i64,

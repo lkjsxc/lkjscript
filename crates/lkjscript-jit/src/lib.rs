@@ -12,17 +12,19 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    ExecutionConfig, ExecutionOutcome, HeapObj, HostError, OwnedValue, ResourceLimitKind, Trap,
-    Value,
+    ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap, GcLimit, HeapObj, HostError, OwnedValue,
+    ProductId, ResourceLimitKind, Trap, Value, MAX_BUFFER_BYTES, MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_ir::{BytecodeLinkMetadata, Signature as IrSignature, SsaType, VerifiedProgram};
 use lkjscript_native::{
-    AbiVersions, BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, OutcomeMapEntry,
-    Relocation, RuntimeCallSlot, Safepoint, SourceMapEntry, TrapMapEntry,
+    AbiVersions, BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation,
+    HeapRuntimeSite, OutcomeMapEntry, ReferenceType, Relocation, RuntimeCallSlot, Safepoint,
+    SourceMapEntry, TrapMapEntry,
 };
 use lkjscript_sys::executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
-    InvocationOutcome, NativeInvocationConfig,
+    InvocationOutcome, NativeInvocationConfig, NativeResourceLimitKind, NativeRoot,
+    NativeRuntimeServices, NativeServiceError,
 };
 
 pub use lkjscript_ir::FunctionId;
@@ -144,6 +146,8 @@ pub struct JitConfig {
     pub collect_metrics: bool,
     pub max_diagnostic_bytes: u64,
     pub epoch: u64,
+    /// Force exact-root collection before every allocation-capable heap site.
+    pub force_gc_before_allocation: bool,
 }
 
 impl Default for JitConfig {
@@ -160,6 +164,7 @@ impl Default for JitConfig {
             collect_metrics: false,
             max_diagnostic_bytes: 16 * 1024 * 1024,
             epoch: 1,
+            force_gc_before_allocation: false,
         }
     }
 }
@@ -377,6 +382,16 @@ pub struct JitStats {
     pub code_cache_peak_bytes: u64,
     pub metadata_cache_peak_bytes: u64,
     pub accounted_allocation_peak_bytes: u64,
+    pub allocations: u64,
+    pub allocation_bytes: u64,
+    pub collections: u64,
+    pub peak_live_heap_bytes: usize,
+    pub maximum_roots: usize,
+    pub runtime_heap_calls: u64,
+    pub barrier_count: u64,
+    pub peak_native_frame_depth: usize,
+    pub vm_to_native_transitions: u64,
+    pub native_to_vm_transitions: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -413,7 +428,7 @@ pub enum ScalarInvocationOutcome {
     Trapped(TrapCode),
     Exited(i64),
     DeadlineExceeded,
-    ResourceLimitExceeded,
+    ResourceLimitExceeded(ResourceLimitKind),
     HostFailure,
 }
 
@@ -443,6 +458,15 @@ pub struct JitSession {
     first_native_call: Option<Duration>,
     native_execution: Duration,
     diagnostic_bytes: u64,
+    heap: GcHeap,
+    maximum_roots: usize,
+    runtime_heap_calls: u64,
+    barrier_count: u64,
+    peak_native_frame_depth: usize,
+    vm_to_native_transitions: u64,
+    native_to_vm_transitions: u64,
+    last_runtime_trap: Option<String>,
+    last_runtime_resource: Option<ResourceLimitKind>,
 }
 
 impl fmt::Debug for JitSession {
@@ -506,6 +530,15 @@ impl JitSession {
             first_native_call: None,
             native_execution: Duration::ZERO,
             diagnostic_bytes: 0,
+            heap: GcHeap::default(),
+            maximum_roots: 0,
+            runtime_heap_calls: 0,
+            barrier_count: 0,
+            peak_native_frame_depth: 0,
+            vm_to_native_transitions: 0,
+            native_to_vm_transitions: 0,
+            last_runtime_trap: None,
+            last_runtime_resource: None,
         }
     }
 
@@ -662,14 +695,36 @@ impl JitSession {
                     "code object has no source-function entry",
                 )
             })?;
-        let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time);
+        self.heap.set_config(GcConfig {
+            max_allocations: execution.max_allocations,
+            max_heap_bytes: execution.max_heap_bytes,
+            collect_before_every_allocation: self.config.force_gc_before_allocation,
+            ..self.heap.config()
+        });
+        self.last_runtime_trap = None;
+        self.last_runtime_resource = None;
+        let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time)
+            .with_max_active_frames(execution.max_frames);
         if self.time_to_first_native_entry.is_none() {
             self.time_to_first_native_entry = self.metrics_started.map(|started| started.elapsed());
         }
         let invocation_started = self.config.collect_metrics.then(Instant::now);
-        let report = self.objects[object_index]
-            .installed
-            .invoke_with_config(native, arguments, &config);
+        if self.links.is_some() {
+            self.vm_to_native_transitions = self.vm_to_native_transitions.saturating_add(1);
+        }
+        let force_collection = self.config.force_gc_before_allocation;
+        let mut services = JitHeapServices::new(&mut self.heap, force_collection);
+        let report = self.objects[object_index].installed.invoke_with_services(
+            native,
+            arguments,
+            &config,
+            &mut services,
+        );
+        self.last_runtime_trap = services.last_trap.take();
+        self.last_runtime_resource = services.last_resource;
+        if self.links.is_some() {
+            self.native_to_vm_transitions = self.native_to_vm_transitions.saturating_add(1);
+        }
         if let Some(started) = invocation_started {
             let elapsed = started.elapsed();
             self.native_invocations = self.native_invocations.saturating_add(1);
@@ -680,6 +735,14 @@ impl JitSession {
         }
         let report = report.map_err(|error| invocation_error(function, error))?;
         self.poll_v1_calls = self.poll_v1_calls.saturating_add(report.poll_count());
+        self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
+        self.runtime_heap_calls = self
+            .runtime_heap_calls
+            .saturating_add(report.heap_operation_calls());
+        self.barrier_count = self.barrier_count.saturating_add(report.barrier_count());
+        self.peak_native_frame_depth = self
+            .peak_native_frame_depth
+            .max(report.peak_active_frame_depth());
         let mut invocation_entries = 0_u64;
         for count in report.native_entries() {
             invocation_entries = invocation_entries.saturating_add(count.entries());
@@ -701,8 +764,17 @@ impl JitSession {
             InvocationOutcome::Trapped(trap) => ScalarInvocationOutcome::Trapped(trap),
             InvocationOutcome::Exited(code) => ScalarInvocationOutcome::Exited(code),
             InvocationOutcome::DeadlineExceeded => ScalarInvocationOutcome::DeadlineExceeded,
-            InvocationOutcome::ResourceLimitExceeded(_) => {
-                ScalarInvocationOutcome::ResourceLimitExceeded
+            InvocationOutcome::ResourceLimitExceeded(kind) => {
+                let kind = match kind {
+                    NativeResourceLimitKind::PollFuel => ResourceLimitKind::InstructionFuel,
+                    NativeResourceLimitKind::ActiveFrames
+                    | NativeResourceLimitKind::NativeStackBytes => ResourceLimitKind::FrameDepth,
+                    NativeResourceLimitKind::MaterializedRoots => ResourceLimitKind::StackValues,
+                    NativeResourceLimitKind::RuntimeService => self
+                        .last_runtime_resource
+                        .unwrap_or(ResourceLimitKind::Allocations),
+                };
+                ScalarInvocationOutcome::ResourceLimitExceeded(kind)
             }
             InvocationOutcome::HostFailure => ScalarInvocationOutcome::HostFailure,
         };
@@ -800,6 +872,16 @@ impl JitSession {
             code_cache_peak_bytes,
             metadata_cache_peak_bytes,
             accounted_allocation_peak_bytes,
+            allocations: self.heap.total_allocations(),
+            allocation_bytes: self.heap.total_allocated_bytes(),
+            collections: self.heap.collections(),
+            peak_live_heap_bytes: self.heap.peak_live_heap_bytes(),
+            maximum_roots: self.maximum_roots,
+            runtime_heap_calls: self.runtime_heap_calls,
+            barrier_count: self.barrier_count,
+            peak_native_frame_depth: self.peak_native_frame_depth,
+            vm_to_native_transitions: self.vm_to_native_transitions,
+            native_to_vm_transitions: self.native_to_vm_transitions,
         }
     }
 
@@ -816,6 +898,13 @@ impl JitSession {
     }
 
     fn compile_group(&mut self, root: FunctionId) -> Result<u64, EngineError> {
+        if self.links.is_some() && self.scalar_signature(root).is_none() {
+            return Err(EngineError::new(
+                FailureCode::UnsupportedType,
+                Some(root),
+                "automatic tiering conservatively keeps reference-typed functions in the VM",
+            ));
+        }
         let started = Instant::now();
         let lowered = lower::lower_group(&self.program, root, self.config.backend_limits)?;
         let lowering_and_encoding = started.elapsed();
@@ -950,16 +1039,20 @@ impl JitSession {
             TrapCode::I64Overflow => "checked I64 overflow".to_string(),
             TrapCode::DivisionByZero => "div: I64 division by zero".to_string(),
             TrapCode::Explicit => self
-                .functions
-                .get(function.index().unwrap_or(usize::MAX))
-                .and_then(|record| record.code_object)
-                .and_then(|identity| {
-                    self.objects
-                        .iter()
-                        .find(|object| object.identity == identity)
+                .last_runtime_trap
+                .clone()
+                .or_else(|| {
+                    self.functions
+                        .get(function.index().unwrap_or(usize::MAX))
+                        .and_then(|record| record.code_object)
+                        .and_then(|identity| {
+                            self.objects
+                                .iter()
+                                .find(|object| object.identity == identity)
+                        })
+                        .and_then(|object| object.explicit_traps.first())
+                        .cloned()
                 })
-                .and_then(|object| object.explicit_traps.first())
-                .cloned()
                 .unwrap_or_else(|| "explicit SSA trap".to_string()),
         }
     }
@@ -999,13 +1092,29 @@ fn scalar_to_execution(
 ) -> Result<ExecutionOutcome, EngineError> {
     Ok(match outcome {
         ScalarInvocationOutcome::Returned(value) => {
-            ExecutionOutcome::Returned(owned_scalar(value).map_err(|error| {
-                EngineError::new(
-                    FailureCode::InvocationFailure,
-                    Some(function),
-                    error.to_string(),
-                )
-            })?)
+            let owned = match value {
+                NativeValue::Reference(reference) => {
+                    let value =
+                        native_reference_value(&session.heap, reference).map_err(|error| {
+                            EngineError::new(FailureCode::InvocationFailure, Some(function), error)
+                        })?;
+                    session.heap.snapshot(value).map_err(|error| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            error.to_string(),
+                        )
+                    })?
+                }
+                scalar => owned_scalar(scalar).map_err(|error| {
+                    EngineError::new(
+                        FailureCode::InvocationFailure,
+                        Some(function),
+                        error.to_string(),
+                    )
+                })?,
+            };
+            ExecutionOutcome::Returned(owned)
         }
         ScalarInvocationOutcome::Trapped(trap) => {
             ExecutionOutcome::Trapped(Trap::new(session.trap_message(function, trap)))
@@ -1015,8 +1124,8 @@ fn scalar_to_execution(
             Err(_) => ExecutionOutcome::Trapped(Trap::new("exit code out of range")),
         },
         ScalarInvocationOutcome::DeadlineExceeded => ExecutionOutcome::DeadlineExceeded,
-        ScalarInvocationOutcome::ResourceLimitExceeded => {
-            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel)
+        ScalarInvocationOutcome::ResourceLimitExceeded(kind) => {
+            ExecutionOutcome::ResourceLimitExceeded(kind)
         }
         ScalarInvocationOutcome::HostFailure => {
             ExecutionOutcome::HostFailure(HostError::new("native PollV1 host clock failure"))
@@ -1043,6 +1152,846 @@ fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedValue> {
         NativeValue::Reference(_) => Err(lkjscript_core::Error::msg(
             "scalar JIT cannot return a native reference",
         )),
+    }
+}
+
+struct JitHeapServices<'a> {
+    heap: &'a mut GcHeap,
+    force_collection: bool,
+    last_trap: Option<String>,
+    last_resource: Option<ResourceLimitKind>,
+}
+
+impl<'a> JitHeapServices<'a> {
+    fn new(heap: &'a mut GcHeap, force_collection: bool) -> Self {
+        Self {
+            heap,
+            force_collection,
+            last_trap: None,
+            last_resource: None,
+        }
+    }
+
+    fn trap<T>(&mut self, message: impl Into<String>) -> Result<T, NativeServiceError> {
+        self.last_trap = Some(message.into());
+        Err(NativeServiceError::Trap)
+    }
+
+    fn roots(&mut self, roots: &[NativeRoot]) -> Result<Vec<Value>, NativeServiceError> {
+        roots
+            .iter()
+            .map(|root| {
+                native_reference_value(
+                    self.heap,
+                    lkjscript_native::NativeReference::new(
+                        root.reference_type(),
+                        root.opaque_word(),
+                    ),
+                )
+                .map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                })
+            })
+            .collect()
+    }
+
+    fn allocate(
+        &mut self,
+        object: HeapObj,
+        reference_type: ReferenceType,
+    ) -> Result<Value, NativeServiceError> {
+        self.heap
+            .try_alloc_with_layout(object, reference_layout_key(reference_type))
+            .map_err(|limit| {
+                self.last_resource = Some(match limit {
+                    GcLimit::Allocations => ResourceLimitKind::Allocations,
+                    GcLimit::HeapBytes => ResourceLimitKind::HeapBytes,
+                });
+                NativeServiceError::ResourceLimitExceeded
+            })
+    }
+
+    fn value_from_native(&mut self, value: NativeValue) -> Result<Value, NativeServiceError> {
+        match value {
+            NativeValue::Unit => Ok(Value::UNIT),
+            NativeValue::Bool(value) => Ok(Value::from_bool(value)),
+            NativeValue::I64(value) => match Value::from_small_i64(value) {
+                Some(value) => Ok(value),
+                None => self.allocate(HeapObj::Int(value), scalar_box_layout(1)),
+            },
+            NativeValue::F64Bits(bits) => {
+                self.allocate(HeapObj::Float(f64::from_bits(bits)), scalar_box_layout(2))
+            }
+            NativeValue::Reference(reference) => native_reference_value(self.heap, reference)
+                .map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                }),
+        }
+    }
+
+    fn native_from_value(
+        &mut self,
+        value: Value,
+        expected: ValueType,
+    ) -> Result<NativeValue, NativeServiceError> {
+        match expected {
+            ValueType::Unit if value.is_unit() => Ok(NativeValue::Unit),
+            ValueType::Bool => value.as_bool().map(NativeValue::Bool).ok_or_else(|| {
+                self.last_trap = Some("heap operation produced non-Bool".into());
+                NativeServiceError::Trap
+            }),
+            ValueType::I64 => {
+                let number = if let Some(number) = value.as_small_i64() {
+                    Some(number)
+                } else {
+                    match self.heap.get(value) {
+                        Ok(HeapObj::Int(number)) => Some(*number),
+                        _ => None,
+                    }
+                };
+                number.map(NativeValue::I64).ok_or_else(|| {
+                    self.last_trap = Some("heap operation produced non-I64".into());
+                    NativeServiceError::Trap
+                })
+            }
+            ValueType::F64 => match self.heap.get(value) {
+                Ok(HeapObj::Float(number)) => Ok(NativeValue::F64Bits(number.to_bits())),
+                _ => self.trap("heap operation produced non-F64"),
+            },
+            ValueType::Reference(reference_type) => {
+                reference_native_value(self.heap, value, reference_type).map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                })
+            }
+            _ => self.trap("heap operation result category mismatch"),
+        }
+    }
+
+    fn execute(
+        &mut self,
+        site: &HeapRuntimeSite,
+        arguments: &[NativeValue],
+    ) -> Result<NativeValue, NativeServiceError> {
+        let descriptor = site.descriptor();
+        let result_type = descriptor.result_type();
+        let argument = |index: usize| {
+            arguments
+                .get(index)
+                .copied()
+                .ok_or(NativeServiceError::HostFailure)
+        };
+        let as_i64 = |value: NativeValue| match value {
+            NativeValue::I64(value) => Ok(value),
+            _ => Err(NativeServiceError::HostFailure),
+        };
+        let as_f64 = |value: NativeValue| match value {
+            NativeValue::F64Bits(bits) => Ok(f64::from_bits(bits)),
+            _ => Err(NativeServiceError::HostFailure),
+        };
+        let as_reference = |value: NativeValue| match value {
+            NativeValue::Reference(reference) => Ok(reference),
+            _ => Err(NativeServiceError::HostFailure),
+        };
+        match descriptor.operation() {
+            HeapOperation::ConstantStr(text) => {
+                let ValueType::Reference(reference_type) = result_type else {
+                    return self.trap("string constant result layout mismatch");
+                };
+                let value = self.allocate(HeapObj::Str(text.clone()), reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::EmptyStr => {
+                let ValueType::Reference(reference_type) = result_type else {
+                    return self.trap("empty-str result layout mismatch");
+                };
+                let value = self.allocate(HeapObj::Str(String::new()), reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::EmptyList | HeapOperation::None => Ok(NativeValue::Reference(
+                lkjscript_native::NativeReference::new(
+                    result_type
+                        .reference_type()
+                        .ok_or(NativeServiceError::HostFailure)?,
+                    0,
+                ),
+            )),
+            HeapOperation::ProductValue { product, fields } => {
+                if usize::from(*fields) != arguments.len() {
+                    return self.trap("product field count mismatch");
+                }
+                let fields = arguments
+                    .iter()
+                    .copied()
+                    .map(|value| self.value_from_native(value))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(
+                    HeapObj::Product {
+                        product: ProductId::new(
+                            u16::try_from(*product).map_err(|_| NativeServiceError::HostFailure)?,
+                        ),
+                        fields,
+                    },
+                    reference_type,
+                )?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::ProductField { product, field } => {
+                let product_value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let value = match self.heap.get(product_value) {
+                    Ok(HeapObj::Product {
+                        product: actual,
+                        fields,
+                    }) if u32::from(actual.raw()) == *product => {
+                        fields.get(usize::from(*field)).copied()
+                    }
+                    _ => return self.trap("product field identity mismatch"),
+                }
+                .ok_or_else(|| {
+                    self.last_trap = Some("product field out of bounds".into());
+                    NativeServiceError::Trap
+                })?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::WithProductField { product, field } => {
+                let source = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let replacement = self.value_from_native(argument(1)?)?;
+                let mut fields = match self.heap.get(source) {
+                    Ok(HeapObj::Product {
+                        product: actual,
+                        fields,
+                    }) if u32::from(actual.raw()) == *product => fields.clone(),
+                    _ => return self.trap("product replacement identity mismatch"),
+                };
+                let Some(slot) = fields.get_mut(usize::from(*field)) else {
+                    return self.trap("product replacement field out of bounds");
+                };
+                *slot = replacement;
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(
+                    HeapObj::Product {
+                        product: ProductId::new(
+                            u16::try_from(*product).map_err(|_| NativeServiceError::HostFailure)?,
+                        ),
+                        fields,
+                    },
+                    reference_type,
+                )?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::Cons => {
+                let car = self.value_from_native(argument(0)?)?;
+                let cdr = native_reference_value(self.heap, as_reference(argument(1)?)?).map_err(
+                    |message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    },
+                )?;
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let pair = self.allocate(HeapObj::Pair { car, cdr }, reference_type)?;
+                self.native_from_value(pair, result_type)
+            }
+            HeapOperation::Car | HeapOperation::Cdr => {
+                let list = native_reference_value(self.heap, as_reference(argument(0)?)?).map_err(
+                    |message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    },
+                )?;
+                if list.is_empty_list() {
+                    return self.trap(if matches!(descriptor.operation(), HeapOperation::Car) {
+                        "car of empty list"
+                    } else {
+                        "cdr of empty list"
+                    });
+                }
+                let value = match self.heap.get(list) {
+                    Ok(HeapObj::Pair { car, cdr }) => {
+                        if matches!(descriptor.operation(), HeapOperation::Car) {
+                            *car
+                        } else {
+                            *cdr
+                        }
+                    }
+                    _ => return self.trap("list operand category mismatch"),
+                };
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::IsEmptyList => {
+                let reference = as_reference(argument(0)?)?;
+                let value = native_reference_value(self.heap, reference).map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                })?;
+                Ok(NativeValue::Bool(value.is_empty_list()))
+            }
+            HeapOperation::Some | HeapOperation::Ok | HeapOperation::Err => {
+                let inner = self.value_from_native(argument(0)?)?;
+                let object = match descriptor.operation() {
+                    HeapOperation::Some => HeapObj::OptionSome(inner),
+                    HeapOperation::Ok => HeapObj::ResultOk(inner),
+                    HeapOperation::Err => HeapObj::ResultErr(inner),
+                    _ => return Err(NativeServiceError::HostFailure),
+                };
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(object, reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::IsSome => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                Ok(NativeValue::Bool(!value.is_none()))
+            }
+            HeapOperation::UnwrapSome => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                if value.is_none() {
+                    return self.trap("unwrap-some on none");
+                }
+                let inner = match self.heap.get(value) {
+                    Ok(HeapObj::OptionSome(inner)) => *inner,
+                    _ => return self.trap("unwrap-some operand is not Option"),
+                };
+                self.native_from_value(inner, result_type)
+            }
+            HeapOperation::IsOk => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                match self.heap.get(value) {
+                    Ok(HeapObj::ResultOk(_)) => Ok(NativeValue::Bool(true)),
+                    Ok(HeapObj::ResultErr(_)) => Ok(NativeValue::Bool(false)),
+                    _ => self.trap("is-ok operand is not Result"),
+                }
+            }
+            HeapOperation::UnwrapOk | HeapOperation::UnwrapErr => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let inner = match (descriptor.operation(), self.heap.get(value)) {
+                    (HeapOperation::UnwrapOk, Ok(HeapObj::ResultOk(inner)))
+                    | (HeapOperation::UnwrapErr, Ok(HeapObj::ResultErr(inner))) => *inner,
+                    (HeapOperation::UnwrapOk, Ok(HeapObj::ResultErr(_))) => {
+                        return self.trap("unwrap-ok on Err")
+                    }
+                    (HeapOperation::UnwrapErr, Ok(HeapObj::ResultOk(_))) => {
+                        return self.trap("unwrap-err on Ok")
+                    }
+                    _ => return self.trap("unwrap Result category mismatch"),
+                };
+                self.native_from_value(inner, result_type)
+            }
+            HeapOperation::BufNew => {
+                let size = usize::try_from(as_i64(argument(0)?)?).map_err(|_| {
+                    self.last_trap = Some("buf-new size out of range".into());
+                    NativeServiceError::Trap
+                })?;
+                if size > MAX_BUFFER_BYTES {
+                    return self.trap("buf-new size out of range");
+                }
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(HeapObj::Buf(vec![0; size]), reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::BufLen | HeapOperation::BufRef | HeapOperation::BufGetU32 => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let HeapObj::Buf(bytes) =
+                    self.heap.get(value).map_err(|_| NativeServiceError::Trap)?
+                else {
+                    return self.trap("expected buf");
+                };
+                match descriptor.operation() {
+                    HeapOperation::BufLen => Ok(NativeValue::I64(
+                        i64::try_from(bytes.len()).map_err(|_| NativeServiceError::Trap)?,
+                    )),
+                    HeapOperation::BufRef => {
+                        let index = index(as_i64(argument(1)?)?, "buf-ref").map_err(|message| {
+                            self.last_trap = Some(message);
+                            NativeServiceError::Trap
+                        })?;
+                        let byte = bytes.get(index).copied().ok_or_else(|| {
+                            self.last_trap = Some("buf-ref out of bounds".into());
+                            NativeServiceError::Trap
+                        })?;
+                        Ok(NativeValue::I64(i64::from(byte)))
+                    }
+                    HeapOperation::BufGetU32 => {
+                        let index =
+                            index(as_i64(argument(1)?)?, "buf-get-u32").map_err(|message| {
+                                self.last_trap = Some(message);
+                                NativeServiceError::Trap
+                            })?;
+                        let end = index.checked_add(4).ok_or_else(|| {
+                            self.last_trap = Some("buf-get-u32 index overflow".into());
+                            NativeServiceError::Trap
+                        })?;
+                        let slice = bytes.get(index..end).ok_or_else(|| {
+                            self.last_trap = Some("buf-get-u32 out of bounds".into());
+                            NativeServiceError::Trap
+                        })?;
+                        let mut word = [0; 4];
+                        word.copy_from_slice(slice);
+                        Ok(NativeValue::I64(i64::from(u32::from_le_bytes(word))))
+                    }
+                    _ => Err(NativeServiceError::HostFailure),
+                }
+            }
+            HeapOperation::BufSet | HeapOperation::BufSetU32 => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let index_value = as_i64(argument(1)?)?;
+                let number = as_i64(argument(2)?)?;
+                let index = index(index_value, "buf-set").map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                })?;
+                let HeapObj::Buf(bytes) = self
+                    .heap
+                    .get_mut(value)
+                    .map_err(|_| NativeServiceError::Trap)?
+                else {
+                    return self.trap("expected buf");
+                };
+                if matches!(descriptor.operation(), HeapOperation::BufSet) {
+                    let byte = u8::try_from(number).map_err(|_| {
+                        self.last_trap = Some("buf-set byte out of range".into());
+                        NativeServiceError::Trap
+                    })?;
+                    let slot = bytes.get_mut(index).ok_or_else(|| {
+                        self.last_trap = Some("buf-set out of bounds".into());
+                        NativeServiceError::Trap
+                    })?;
+                    *slot = byte;
+                } else {
+                    let end = index.checked_add(4).ok_or_else(|| {
+                        self.last_trap = Some("buf-set-u32 index overflow".into());
+                        NativeServiceError::Trap
+                    })?;
+                    let number = u32::try_from(number).map_err(|_| {
+                        self.last_trap = Some("buf-set-u32 value out of range".into());
+                        NativeServiceError::Trap
+                    })?;
+                    let destination = bytes.get_mut(index..end).ok_or_else(|| {
+                        self.last_trap = Some("buf-set-u32 out of bounds".into());
+                        NativeServiceError::Trap
+                    })?;
+                    destination.copy_from_slice(&number.to_le_bytes());
+                }
+                Ok(NativeValue::Unit)
+            }
+            HeapOperation::BufClone | HeapOperation::BufFromStr => {
+                let bytes = if matches!(descriptor.operation(), HeapOperation::BufClone) {
+                    let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                        .map_err(|message| {
+                            self.last_trap = Some(message);
+                            NativeServiceError::Trap
+                        })?;
+                    match self.heap.get(value) {
+                        Ok(HeapObj::Buf(bytes)) => bytes.clone(),
+                        _ => return self.trap("expected buf"),
+                    }
+                } else {
+                    let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                        .map_err(|message| {
+                            self.last_trap = Some(message);
+                            NativeServiceError::Trap
+                        })?;
+                    match self.heap.get(value) {
+                        Ok(HeapObj::Str(text)) => text.as_bytes().to_vec(),
+                        _ => return self.trap("expected string"),
+                    }
+                };
+                if bytes.len() > MAX_BUFFER_BYTES {
+                    return self.trap("buffer exceeds limit");
+                }
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(HeapObj::Buf(bytes), reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::BufToStr | HeapOperation::BufSlice => {
+                let buffer = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let bytes = match self.heap.get(buffer) {
+                    Ok(HeapObj::Buf(bytes)) => bytes.clone(),
+                    _ => return self.trap("expected buf"),
+                };
+                let (success, payload_type) = match descriptor.operation() {
+                    HeapOperation::BufToStr => match String::from_utf8(bytes) {
+                        Ok(text) => (Ok(HeapObj::Str(text)), ReferenceType::Str),
+                        Err(_) => (Err("buf-to-str invalid UTF-8"), ReferenceType::Str),
+                    },
+                    HeapOperation::BufSlice => {
+                        let offset =
+                            index(as_i64(argument(1)?)?, "buf-slice").map_err(|message| {
+                                self.last_trap = Some(message);
+                                NativeServiceError::Trap
+                            })?;
+                        let length =
+                            index(as_i64(argument(2)?)?, "buf-slice").map_err(|message| {
+                                self.last_trap = Some(message);
+                                NativeServiceError::Trap
+                            })?;
+                        match offset
+                            .checked_add(length)
+                            .and_then(|end| bytes.get(offset..end))
+                        {
+                            Some(slice) => (Ok(HeapObj::Buf(slice.to_vec())), ReferenceType::Buf),
+                            None => (Err("buf-slice out of bounds"), ReferenceType::Str),
+                        }
+                    }
+                    _ => return Err(NativeServiceError::HostFailure),
+                };
+                let is_ok = success.is_ok();
+                let payload = match success {
+                    Ok(object) => self.allocate(object, payload_type)?,
+                    Err(message) => {
+                        self.allocate(HeapObj::Str(message.into()), ReferenceType::Str)?
+                    }
+                };
+                let result_reference = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let wrapper = if is_ok {
+                    HeapObj::ResultOk(payload)
+                } else {
+                    HeapObj::ResultErr(payload)
+                };
+                let value = self.allocate(wrapper, result_reference)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::StrLen | HeapOperation::StrRef => {
+                let value = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let text = match self.heap.get(value) {
+                    Ok(HeapObj::Str(text)) => text,
+                    _ => return self.trap("expected string"),
+                };
+                if matches!(descriptor.operation(), HeapOperation::StrLen) {
+                    Ok(NativeValue::I64(
+                        i64::try_from(text.len()).map_err(|_| NativeServiceError::Trap)?,
+                    ))
+                } else {
+                    let index = index(as_i64(argument(1)?)?, "str-ref").map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                    let byte = text.as_bytes().get(index).copied().ok_or_else(|| {
+                        self.last_trap = Some("str-ref out of bounds".into());
+                        NativeServiceError::Trap
+                    })?;
+                    Ok(NativeValue::I64(i64::from(byte)))
+                }
+            }
+            HeapOperation::StrAppend | HeapOperation::StrSlice => {
+                let first = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let mut text = match self.heap.get(first) {
+                    Ok(HeapObj::Str(text)) => text.clone(),
+                    _ => return self.trap("expected string"),
+                };
+                if matches!(descriptor.operation(), HeapOperation::StrAppend) {
+                    let second = native_reference_value(self.heap, as_reference(argument(1)?)?)
+                        .map_err(|message| {
+                            self.last_trap = Some(message);
+                            NativeServiceError::Trap
+                        })?;
+                    let right = match self.heap.get(second) {
+                        Ok(HeapObj::Str(text)) => text,
+                        _ => return self.trap("expected string"),
+                    };
+                    text.push_str(right);
+                } else {
+                    let start = index(as_i64(argument(1)?)?, "str-slice").map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                    let end = index(as_i64(argument(2)?)?, "str-slice").map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                    let bytes = text.as_bytes().get(start..end).ok_or_else(|| {
+                        self.last_trap = Some("str-slice out of bounds".into());
+                        NativeServiceError::Trap
+                    })?;
+                    text = std::str::from_utf8(bytes)
+                        .map_err(|_| {
+                            self.last_trap = Some("str-slice splits UTF-8".into());
+                            NativeServiceError::Trap
+                        })?
+                        .to_owned();
+                }
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(HeapObj::Str(text), reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::StrFromByte | HeapOperation::StrFromI64 | HeapOperation::StrFromF64 => {
+                let text = match descriptor.operation() {
+                    HeapOperation::StrFromByte => {
+                        let byte = u8::try_from(as_i64(argument(0)?)?).map_err(|_| {
+                            self.last_trap = Some("str-from-byte out of range".into());
+                            NativeServiceError::Trap
+                        })?;
+                        String::from(char::from(byte))
+                    }
+                    HeapOperation::StrFromI64 => as_i64(argument(0)?)?.to_string(),
+                    HeapOperation::StrFromF64 => as_f64(argument(0)?)?.to_string(),
+                    _ => return Err(NativeServiceError::HostFailure),
+                };
+                let reference_type = result_type
+                    .reference_type()
+                    .ok_or(NativeServiceError::HostFailure)?;
+                let value = self.allocate(HeapObj::Str(text), reference_type)?;
+                self.native_from_value(value, result_type)
+            }
+            HeapOperation::EqualValue => {
+                let left = self.value_from_native(argument(0)?)?;
+                let right = self.value_from_native(argument(1)?)?;
+                let equal = value_equal(self.heap, left, right).map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                })?;
+                Ok(NativeValue::Bool(equal))
+            }
+            HeapOperation::SameObject => {
+                let left = as_reference(argument(0)?)?;
+                let right = as_reference(argument(1)?)?;
+                Ok(NativeValue::Bool(left.opaque_word() == right.opaque_word()))
+            }
+            HeapOperation::ListEqual => {
+                let mut left = native_reference_value(self.heap, as_reference(argument(0)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                let mut right = native_reference_value(self.heap, as_reference(argument(1)?)?)
+                    .map_err(|message| {
+                        self.last_trap = Some(message);
+                        NativeServiceError::Trap
+                    })?;
+                for _ in 0..MAX_LIST_EQUAL_STEPS {
+                    if left.is_empty_list() || right.is_empty_list() {
+                        return Ok(NativeValue::Bool(
+                            left.is_empty_list() && right.is_empty_list(),
+                        ));
+                    }
+                    let (left_car, left_cdr) = match self.heap.get(left) {
+                        Ok(HeapObj::Pair { car, cdr }) => (*car, *cdr),
+                        _ => return self.trap("list-equal category mismatch"),
+                    };
+                    let (right_car, right_cdr) = match self.heap.get(right) {
+                        Ok(HeapObj::Pair { car, cdr }) => (*car, *cdr),
+                        _ => return self.trap("list-equal category mismatch"),
+                    };
+                    if !value_equal(self.heap, left_car, right_car).unwrap_or(false) {
+                        return Ok(NativeValue::Bool(false));
+                    }
+                    left = left_cdr;
+                    right = right_cdr;
+                }
+                self.trap("list-equal step limit exceeded")
+            }
+        }
+    }
+}
+
+impl NativeRuntimeServices for JitHeapServices<'_> {
+    fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
+        let values = self.roots(roots)?;
+        self.heap.collect(&values);
+        Ok(())
+    }
+
+    fn prepare_heap_operation(
+        &mut self,
+        site: &HeapRuntimeSite,
+        arguments: &[NativeValue],
+        roots: &mut [NativeRoot],
+    ) -> Result<bool, NativeServiceError> {
+        if arguments.len() != site.descriptor().input_types().len()
+            || arguments
+                .iter()
+                .zip(site.descriptor().input_types())
+                .any(|(value, expected)| value.value_type() != *expected)
+        {
+            return self.trap("heap runtime argument metadata mismatch");
+        }
+        for value in arguments {
+            if let NativeValue::Reference(reference) = value {
+                native_reference_value(self.heap, *reference).map_err(|message| {
+                    self.last_trap = Some(message);
+                    NativeServiceError::Trap
+                })?;
+            }
+        }
+        let root_values = self.roots(roots)?;
+        // The baseline slice deliberately uses the bounded slow path for every
+        // source allocation. This collects before publication; stress mode
+        // additionally collects at non-allocating heap sites.
+        let collected = self.force_collection
+            || site.descriptor().allocation() == lkjscript_native::AllocationClass::Bounded;
+        if collected {
+            self.heap.collect(&root_values);
+        }
+        Ok(collected)
+    }
+
+    fn heap_operation(
+        &mut self,
+        site: &HeapRuntimeSite,
+        arguments: &[NativeValue],
+    ) -> Result<NativeValue, NativeServiceError> {
+        self.execute(site, arguments)
+    }
+}
+
+fn scalar_box_layout(discriminator: u32) -> ReferenceType {
+    ReferenceType::Product(lkjscript_native::LayoutIdentity::new(
+        u32::MAX - discriminator,
+    ))
+}
+
+fn reference_layout_key(reference_type: ReferenceType) -> u64 {
+    match reference_type {
+        ReferenceType::Buf => 1_u64 << 56,
+        ReferenceType::Str => 2_u64 << 56,
+        ReferenceType::List(layout) => (3_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Option(layout) => (4_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Result(layout) => (5_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Product(layout) => (6_u64 << 56) | u64::from(layout.get()),
+    }
+}
+
+fn native_reference_value(
+    heap: &GcHeap,
+    reference: lkjscript_native::NativeReference,
+) -> Result<Value, String> {
+    let reference_type = reference.reference_type();
+    let word = reference.opaque_word();
+    if word == 0 {
+        return match reference_type {
+            ReferenceType::List(_) => Ok(Value::EMPTY_LIST),
+            ReferenceType::Option(_) => Ok(Value::NONE),
+            _ => Err("zero native reference is invalid for this category".into()),
+        };
+    }
+    let index = u32::try_from(word - 1).map_err(|_| "native heap handle out of range")?;
+    let value = Value::from_heap(index);
+    if heap.layout_of(value) != Some(reference_layout_key(reference_type)) {
+        return Err("native heap handle layout mismatch".into());
+    }
+    let category_matches = match (reference_type, heap.get(value)) {
+        (ReferenceType::Buf, Ok(HeapObj::Buf(_)))
+        | (ReferenceType::Str, Ok(HeapObj::Str(_)))
+        | (ReferenceType::List(_), Ok(HeapObj::Pair { .. }))
+        | (ReferenceType::Option(_), Ok(HeapObj::OptionSome(_)))
+        | (ReferenceType::Result(_), Ok(HeapObj::ResultOk(_) | HeapObj::ResultErr(_))) => true,
+        (ReferenceType::Product(layout), Ok(HeapObj::Product { product, .. })) => {
+            layout.get() == u32::from(product.raw()).saturating_add(1)
+        }
+        _ => false,
+    };
+    if !category_matches {
+        return Err("native heap handle category mismatch".into());
+    }
+    Ok(value)
+}
+
+fn reference_native_value(
+    heap: &GcHeap,
+    value: Value,
+    reference_type: ReferenceType,
+) -> Result<NativeValue, String> {
+    if value.is_empty_list() && matches!(reference_type, ReferenceType::List(_))
+        || value.is_none() && matches!(reference_type, ReferenceType::Option(_))
+    {
+        return Ok(NativeValue::Reference(
+            lkjscript_native::NativeReference::new(reference_type, 0),
+        ));
+    }
+    let index = value.as_heap().ok_or("expected heap reference result")?;
+    let reference = lkjscript_native::NativeReference::new(reference_type, u64::from(index) + 1);
+    native_reference_value(heap, reference)?;
+    Ok(NativeValue::Reference(reference))
+}
+
+fn index(value: i64, operation: &str) -> Result<usize, String> {
+    usize::try_from(value).map_err(|_| format!("{operation} index out of range"))
+}
+
+fn value_equal(heap: &GcHeap, left: Value, right: Value) -> Result<bool, String> {
+    if left == right {
+        return Ok(true);
+    }
+    if let (Some(left), Some(right)) = (left.as_bool(), right.as_bool()) {
+        return Ok(left == right);
+    }
+    if let (Some(left), Some(right)) = (left.as_small_i64(), right.as_small_i64()) {
+        return Ok(left == right);
+    }
+    match (heap.get(left), heap.get(right)) {
+        (Ok(HeapObj::Int(left)), Ok(HeapObj::Int(right))) => Ok(left == right),
+        (Ok(HeapObj::Float(left)), Ok(HeapObj::Float(right))) => Ok(left == right),
+        (Ok(HeapObj::Str(left)), Ok(HeapObj::Str(right))) => Ok(left == right),
+        (Ok(HeapObj::OptionSome(left)), Ok(HeapObj::OptionSome(right)))
+        | (Ok(HeapObj::ResultOk(left)), Ok(HeapObj::ResultOk(right)))
+        | (Ok(HeapObj::ResultErr(left)), Ok(HeapObj::ResultErr(right))) => {
+            value_equal(heap, *left, *right)
+        }
+        (Ok(HeapObj::ResultOk(_)), Ok(HeapObj::ResultErr(_)))
+        | (Ok(HeapObj::ResultErr(_)), Ok(HeapObj::ResultOk(_))) => Ok(false),
+        _ if left.is_none() || right.is_none() => Ok(left.is_none() && right.is_none()),
+        _ => Err("equal-value category mismatch".into()),
     }
 }
 

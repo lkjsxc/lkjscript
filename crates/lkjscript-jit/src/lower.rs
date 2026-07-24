@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use lkjscript_ir::{
@@ -5,9 +6,10 @@ use lkjscript_ir::{
     SsaType, StructuredOutcome, Terminator, ValueId, VerifiedProgram,
 };
 use lkjscript_native::{
-    BackendLimits, BoolComparison, F64Comparison, FunctionBuilder, I64Comparison, InstallableImage,
-    LocalId, MachinePlanBuilder, NativeError, RuntimeCallSlot, RuntimeOutcome, Signature,
-    SourceFunctionId, SourceOrigin, TrapCode, ValueType,
+    AllocationClass, BackendLimits, BoolComparison, F64Comparison, FunctionBuilder,
+    HeapCallDescriptor, HeapOperation, I64Comparison, InstallableImage, LayoutIdentity, LocalId,
+    MachinePlanBuilder, NativeError, ReferenceType, RuntimeCallSlot, RuntimeOutcome, Signature,
+    SourceFunctionId, SourceOrigin, StoreClass, TrapCode, ValueType,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -113,11 +115,9 @@ fn visit(
         return Ok(());
     }
     if mark == 1 {
-        return Err(LoweringError::new(
-            LoweringFailureCode::RecursiveCallGraph,
-            Some(function),
-            "recursive native call graph is unsupported by the baseline JIT MVP",
-        ));
+        // The declaration pass precedes every definition, so direct and mutual
+        // recursion are ordinary bounded native calls within one installed SCC.
+        return Ok(());
     }
     marks[index] = 1;
     let item = program
@@ -159,6 +159,7 @@ pub(crate) fn lower_group(
 ) -> Result<LoweredGroup, LoweringError> {
     let functions = reachable_group(verified, root)?;
     let program = verified.program();
+    verify_layout_identities(program, &functions)?;
     for function in &functions {
         let item = source_function(program, *function)?;
         preflight_function(item)?;
@@ -199,6 +200,43 @@ pub(crate) fn lower_group(
     })
 }
 
+fn verify_layout_identities(
+    program: &lkjscript_ir::Program,
+    functions: &[FunctionId],
+) -> Result<(), LoweringError> {
+    let mut identities: HashMap<ReferenceType, SsaType> = HashMap::new();
+    for function in functions {
+        let item = source_function(program, *function)?;
+        for ty in item
+            .signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(item.signature.result.as_ref()))
+            .chain(item.blocks.iter().flat_map(|block| {
+                block
+                    .parameters
+                    .iter()
+                    .map(|parameter| &parameter.ty)
+                    .chain(block.instructions.iter().map(|instruction| &instruction.ty))
+            }))
+        {
+            let Ok(ValueType::Reference(reference_type)) = lower_type(item.id, ty) else {
+                continue;
+            };
+            if let Some(previous) = identities.insert(reference_type, ty.clone()) {
+                if previous != *ty {
+                    return Err(LoweringError::new(
+                        LoweringFailureCode::UnsupportedType,
+                        Some(item.id),
+                        "distinct GC layouts collide in the bounded native layout identity space",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn source_function(
     program: &lkjscript_ir::Program,
     function: FunctionId,
@@ -233,8 +271,16 @@ fn preflight_function(function: &Function) -> Result<(), LoweringError> {
             lower_type(function.id, &instruction.ty)?;
             match &instruction.kind {
                 InstructionKind::Constant(constant) => match constant {
-                    Constant::Unit | Constant::Bool(_) | Constant::I64(_) | Constant::F64(_) => {}
-                    _ => return unsupported_operation(function.id, "reference constant"),
+                    Constant::Unit
+                    | Constant::Bool(_)
+                    | Constant::I64(_)
+                    | Constant::F64(_)
+                    | Constant::Str(_)
+                    | Constant::EmptyList
+                    | Constant::None => {}
+                    Constant::Symbol(_) => {
+                        return unsupported_operation(function.id, "Symbol constant")
+                    }
                 },
                 InstructionKind::Copy(_) => {}
                 InstructionKind::PlaceInit { .. }
@@ -275,9 +321,7 @@ fn preflight_function(function: &Function) -> Result<(), LoweringError> {
                 }
                 InstructionKind::ProductValue { .. }
                 | InstructionKind::ProductField { .. }
-                | InstructionKind::WithProductField { .. } => {
-                    return unsupported_operation(function.id, "product/reference operation");
-                }
+                | InstructionKind::WithProductField { .. } => {}
             }
         }
         if let Terminator::Outcome {
@@ -307,6 +351,38 @@ fn supported_runtime(operation: RuntimeOp) -> bool {
             | RuntimeOp::BitAnd
             | RuntimeOp::BitOr
             | RuntimeOp::BitXor
+            | RuntimeOp::SameObject
+            | RuntimeOp::ListEqual
+            | RuntimeOp::Cons
+            | RuntimeOp::Car
+            | RuntimeOp::Cdr
+            | RuntimeOp::IsEmptyList
+            | RuntimeOp::EmptyStr
+            | RuntimeOp::BufNew
+            | RuntimeOp::BufLen
+            | RuntimeOp::BufRef
+            | RuntimeOp::BufSet
+            | RuntimeOp::BufClone
+            | RuntimeOp::BufFromStr
+            | RuntimeOp::BufToStr
+            | RuntimeOp::BufSlice
+            | RuntimeOp::BufGetU32
+            | RuntimeOp::BufSetU32
+            | RuntimeOp::StrLen
+            | RuntimeOp::StrRef
+            | RuntimeOp::StrAppend
+            | RuntimeOp::StrSlice
+            | RuntimeOp::StrFromByte
+            | RuntimeOp::StrFromI64
+            | RuntimeOp::StrFromF64
+            | RuntimeOp::Ok
+            | RuntimeOp::Err
+            | RuntimeOp::IsOk
+            | RuntimeOp::UnwrapOk
+            | RuntimeOp::UnwrapErr
+            | RuntimeOp::Some
+            | RuntimeOp::IsSome
+            | RuntimeOp::UnwrapSome
     )
 }
 
@@ -350,12 +426,66 @@ fn lower_type(function: FunctionId, ty: &SsaType) -> Result<ValueType, LoweringE
         SsaType::Bool => Ok(ValueType::Bool),
         SsaType::I64 => Ok(ValueType::I64),
         SsaType::F64 => Ok(ValueType::F64),
+        SsaType::Str => Ok(ValueType::Reference(ReferenceType::Str)),
+        SsaType::Buf => Ok(ValueType::Reference(ReferenceType::Buf)),
+        SsaType::Product(product) => Ok(ValueType::Reference(ReferenceType::Product(
+            LayoutIdentity::new(u32::from(product.raw()).saturating_add(1)),
+        ))),
+        SsaType::List(element) => Ok(ValueType::Reference(ReferenceType::List(
+            LayoutIdentity::new(layout_identity(1, element)),
+        ))),
+        SsaType::Option(element) => Ok(ValueType::Reference(ReferenceType::Option(
+            LayoutIdentity::new(layout_identity(2, element)),
+        ))),
+        SsaType::Result(ok, error) => Ok(ValueType::Reference(ReferenceType::Result(
+            LayoutIdentity::new(layout_identity_pair(3, ok, error)),
+        ))),
+        SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            "Owned/Ref/RefMut remain outside the generated GC-reference adapter",
+        )),
         _ => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
             Some(function),
             format!("type {ty:?} contains a reference or unsupported native representation"),
         )),
     }
+}
+
+fn layout_identity(seed: u32, ty: &SsaType) -> u32 {
+    fn mix(state: u32, value: u32) -> u32 {
+        state.wrapping_mul(16_777_619) ^ value
+    }
+    fn visit(state: u32, ty: &SsaType) -> u32 {
+        match ty {
+            SsaType::Unit => mix(state, 1),
+            SsaType::Bool => mix(state, 2),
+            SsaType::I64 => mix(state, 3),
+            SsaType::F64 => mix(state, 4),
+            SsaType::Str => mix(state, 5),
+            SsaType::Symbol => mix(state, 6),
+            SsaType::Buf => mix(state, 7),
+            SsaType::Product(product) => mix(mix(state, 8), u32::from(product.raw())),
+            SsaType::List(inner) => visit(mix(state, 9), inner),
+            SsaType::Option(inner) => visit(mix(state, 10), inner),
+            SsaType::Result(ok, error) => visit(visit(mix(state, 11), ok), error),
+            SsaType::Owned(inner) => visit(mix(state, 12), inner),
+            SsaType::Ref(inner) => visit(mix(state, 13), inner),
+            SsaType::RefMut(inner) => visit(mix(state, 14), inner),
+            SsaType::Handle => mix(state, 15),
+            SsaType::Function(_) => mix(state, 16),
+            SsaType::TypeParameter(name) => name
+                .as_bytes()
+                .iter()
+                .fold(mix(state, 17), |state, byte| mix(state, u32::from(*byte))),
+        }
+    }
+    visit(2_166_136_261 ^ seed, ty).max(1)
+}
+
+fn layout_identity_pair(seed: u32, left: &SsaType, right: &SsaType) -> u32 {
+    layout_identity(layout_identity(seed, left), right)
 }
 
 #[derive(Clone, Copy)]
@@ -555,7 +685,34 @@ fn lower_instruction(
             Constant::Bool(value) => builder.bool_const(block, *value),
             Constant::I64(value) => builder.i64_const(block, *value),
             Constant::F64(value) => builder.f64_const_bits(block, value.to_bits()),
-            _ => return unsupported_operation(function.id, "reference constant"),
+            Constant::Str(value) => builder.heap_call(
+                block,
+                heap_descriptor(
+                    HeapOperation::ConstantStr(value.clone()),
+                    Vec::new(),
+                    value_type(value_types, instruction.id)?,
+                )?,
+                Vec::new(),
+            ),
+            Constant::EmptyList => builder.heap_call(
+                block,
+                heap_descriptor(
+                    HeapOperation::EmptyList,
+                    Vec::new(),
+                    value_type(value_types, instruction.id)?,
+                )?,
+                Vec::new(),
+            ),
+            Constant::None => builder.heap_call(
+                block,
+                heap_descriptor(
+                    HeapOperation::None,
+                    Vec::new(),
+                    value_type(value_types, instruction.id)?,
+                )?,
+                Vec::new(),
+            ),
+            Constant::Symbol(_) => return unsupported_operation(function.id, "Symbol constant"),
         },
         InstructionKind::Copy(value) => {
             let value = read_value(builder, block, locals, *value, function.id)?;
@@ -569,9 +726,12 @@ fn lower_instruction(
             function,
             *operation,
             arguments,
-            block,
-            locals,
-            value_types,
+            RuntimeLoweringContext {
+                block,
+                locals,
+                value_types,
+                result_type: value_type(value_types, instruction.id)?,
+            },
             builder,
         ),
         InstructionKind::Call {
@@ -596,7 +756,70 @@ fn lower_instruction(
                 "indirect native calls are unsupported",
             ));
         }
-        _ => return unsupported_operation(function.id, "reference operation"),
+        InstructionKind::ProductValue { product, fields } => {
+            let arguments = read_values(builder, block, locals, fields, function.id)?;
+            let inputs = fields
+                .iter()
+                .map(|value| value_type(value_types, *value))
+                .collect::<Result<Vec<_>, _>>()?;
+            builder.heap_call(
+                block,
+                heap_descriptor(
+                    HeapOperation::ProductValue {
+                        product: u32::from(product.raw()),
+                        fields: u8::try_from(fields.len())
+                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
+                    },
+                    inputs,
+                    value_type(value_types, instruction.id)?,
+                )?,
+                arguments,
+            )
+        }
+        InstructionKind::ProductField {
+            product,
+            field,
+            value,
+        } => {
+            let argument = read_value(builder, block, locals, *value, function.id)?;
+            builder.heap_call(
+                block,
+                heap_descriptor(
+                    HeapOperation::ProductField {
+                        product: u32::from(product.raw()),
+                        field: *field,
+                    },
+                    vec![value_type(value_types, *value)?],
+                    value_type(value_types, instruction.id)?,
+                )?,
+                vec![argument],
+            )
+        }
+        InstructionKind::WithProductField {
+            product,
+            field,
+            value,
+            replacement,
+        } => {
+            let arguments =
+                read_values(builder, block, locals, &[*value, *replacement], function.id)?;
+            builder.heap_call(
+                block,
+                heap_descriptor(
+                    HeapOperation::WithProductField {
+                        product: u32::from(product.raw()),
+                        field: *field,
+                    },
+                    vec![
+                        value_type(value_types, *value)?,
+                        value_type(value_types, *replacement)?,
+                    ],
+                    value_type(value_types, instruction.id)?,
+                )?,
+                arguments,
+            )
+        }
+        _ => return unsupported_operation(function.id, "ownership/reference operation"),
     }
     .map_err(LoweringError::backend)?;
     builder
@@ -609,17 +832,44 @@ fn lower_instruction(
     Ok(())
 }
 
+struct RuntimeLoweringContext<'a> {
+    block: lkjscript_native::BlockId,
+    locals: &'a [LocalId],
+    value_types: &'a [ValueType],
+    result_type: ValueType,
+}
+
 fn lower_runtime(
     function: &Function,
     operation: RuntimeOp,
     arguments: &[ValueId],
-    block: lkjscript_native::BlockId,
-    locals: &[LocalId],
-    value_types: &[ValueType],
+    context: RuntimeLoweringContext<'_>,
     builder: &mut FunctionBuilder,
 ) -> Result<lkjscript_native::ValueId, lkjscript_native::PlanError> {
-    let values = read_values(builder, block, locals, arguments, function.id)
+    let block = context.block;
+    let value_types = context.value_types;
+    let values = read_values(builder, block, context.locals, arguments, function.id)
         .map_err(|_| lkjscript_native::PlanError::UnknownValue)?;
+    let input_types = arguments
+        .iter()
+        .map(|argument| value_type(value_types, *argument))
+        .collect::<Result<Vec<_>, _>>()?;
+    let reference_equality = operation == RuntimeOp::EqualValue
+        && input_types
+            .first()
+            .is_some_and(|ty| matches!(ty, ValueType::Reference(_)));
+    if reference_equality || heap_operation(operation).is_some() {
+        let operation = if reference_equality {
+            HeapOperation::EqualValue
+        } else {
+            heap_operation(operation).ok_or(lkjscript_native::PlanError::InvalidHeapCall)?
+        };
+        return builder.heap_call(
+            block,
+            heap_descriptor(operation, input_types, context.result_type)?,
+            values,
+        );
+    }
     match operation {
         RuntimeOp::Add | RuntimeOp::Subtract | RuntimeOp::Multiply | RuntimeOp::Divide => {
             let [left, right] = two_values(&values)?;
@@ -719,6 +969,82 @@ fn lower_runtime(
         }
         _ => Err(lkjscript_native::PlanError::UnknownValue),
     }
+}
+
+fn heap_operation(operation: RuntimeOp) -> Option<HeapOperation> {
+    Some(match operation {
+        RuntimeOp::SameObject => HeapOperation::SameObject,
+        RuntimeOp::ListEqual => HeapOperation::ListEqual,
+        RuntimeOp::Cons => HeapOperation::Cons,
+        RuntimeOp::Car => HeapOperation::Car,
+        RuntimeOp::Cdr => HeapOperation::Cdr,
+        RuntimeOp::IsEmptyList => HeapOperation::IsEmptyList,
+        RuntimeOp::EmptyStr => HeapOperation::EmptyStr,
+        RuntimeOp::BufNew => HeapOperation::BufNew,
+        RuntimeOp::BufLen => HeapOperation::BufLen,
+        RuntimeOp::BufRef => HeapOperation::BufRef,
+        RuntimeOp::BufSet => HeapOperation::BufSet,
+        RuntimeOp::BufClone => HeapOperation::BufClone,
+        RuntimeOp::BufFromStr => HeapOperation::BufFromStr,
+        RuntimeOp::BufToStr => HeapOperation::BufToStr,
+        RuntimeOp::BufSlice => HeapOperation::BufSlice,
+        RuntimeOp::BufGetU32 => HeapOperation::BufGetU32,
+        RuntimeOp::BufSetU32 => HeapOperation::BufSetU32,
+        RuntimeOp::StrLen => HeapOperation::StrLen,
+        RuntimeOp::StrRef => HeapOperation::StrRef,
+        RuntimeOp::StrAppend => HeapOperation::StrAppend,
+        RuntimeOp::StrSlice => HeapOperation::StrSlice,
+        RuntimeOp::StrFromByte => HeapOperation::StrFromByte,
+        RuntimeOp::StrFromI64 => HeapOperation::StrFromI64,
+        RuntimeOp::StrFromF64 => HeapOperation::StrFromF64,
+        RuntimeOp::Ok => HeapOperation::Ok,
+        RuntimeOp::Err => HeapOperation::Err,
+        RuntimeOp::IsOk => HeapOperation::IsOk,
+        RuntimeOp::UnwrapOk => HeapOperation::UnwrapOk,
+        RuntimeOp::UnwrapErr => HeapOperation::UnwrapErr,
+        RuntimeOp::Some => HeapOperation::Some,
+        RuntimeOp::IsSome => HeapOperation::IsSome,
+        RuntimeOp::UnwrapSome => HeapOperation::UnwrapSome,
+        _ => return None,
+    })
+}
+
+fn heap_descriptor(
+    operation: HeapOperation,
+    input_types: Vec<ValueType>,
+    result_type: ValueType,
+) -> Result<HeapCallDescriptor, lkjscript_native::PlanError> {
+    let allocation = if matches!(
+        operation,
+        HeapOperation::ConstantStr(_)
+            | HeapOperation::EmptyStr
+            | HeapOperation::ProductValue { .. }
+            | HeapOperation::WithProductField { .. }
+            | HeapOperation::Cons
+            | HeapOperation::Some
+            | HeapOperation::Ok
+            | HeapOperation::Err
+            | HeapOperation::BufNew
+            | HeapOperation::BufClone
+            | HeapOperation::BufFromStr
+            | HeapOperation::BufToStr
+            | HeapOperation::BufSlice
+            | HeapOperation::StrAppend
+            | HeapOperation::StrSlice
+            | HeapOperation::StrFromByte
+            | HeapOperation::StrFromI64
+            | HeapOperation::StrFromF64
+    ) {
+        AllocationClass::Bounded
+    } else {
+        AllocationClass::None
+    };
+    let store = match operation {
+        HeapOperation::BufSet | HeapOperation::BufSetU32 => StoreClass::Scalar,
+        _ if allocation == AllocationClass::Bounded => StoreClass::Initialization,
+        _ => StoreClass::None,
+    };
+    HeapCallDescriptor::new(operation, input_types, result_type, allocation, store)
 }
 
 fn convert_to_f64(
@@ -963,6 +1289,12 @@ fn native_function(
                 "direct callee is outside the native compilation group",
             )
         })
+}
+
+impl From<lkjscript_native::PlanError> for LoweringError {
+    fn from(error: lkjscript_native::PlanError) -> Self {
+        Self::backend(error)
+    }
 }
 
 impl From<NativeError> for LoweringError {

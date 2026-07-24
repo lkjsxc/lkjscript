@@ -51,10 +51,10 @@ checks. No workspace crate has a third-party Rust dependency.
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
 | Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, ABI-2 reservation/encoding, opaque installable image |
-| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar eligibility, deterministic lowering, code objects, tier state, forced/auto execution |
+| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, `GcHeap` runtime services, code objects, tier state, forced/auto execution |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
-| Heap/GC | `crates/lkjscript-vm/src/arena.rs` | Current VM-owned `Arena`; selected native-reference slice moves the pure stable-handle heap to `lkjscript-core` before sharing it with generated execution |
+| Heap/GC | `crates/lkjscript-core/src/gc.rs` | pure session-owned stable-index `GcHeap`, exact bounded counters/collection policy, VM and forced-JIT use |
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
 | Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers, safe bounded executable installation/invocation, private raw active-frame chain, copied typed-root service callback |
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
@@ -87,8 +87,8 @@ CLI path
   -> validate_chunk -> opaque immutable ValidatedChunk
   -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
       +-> vm: run_chunk_with_args(program.bytecode(), ExecutionConfig)
-      +-> baseline-jit: verified scalar group -> ABI-2 code object -> native main
-          (Current closed-plan typed roots/active frames; accepted next: shared heap/allocation)
+      +-> baseline-jit: verified scalar/reference SCC group -> ABI-2 code object
+          -> typed frame-home HeapDispatchV1 -> session GcHeap -> native main
       +-> auto: VM entries -> bounded hotness -> later native function calls
 ```
 
@@ -121,7 +121,7 @@ bounded code objects, and callable function-entry baseline tier are **Current**
 for allocation-free Unit/Bool/I64/F64 acyclic direct-call groups. Forced and
 auto engines execute real entries. The initial `Owned Buf` ownership safe island,
 marker traits, and closed-plan ABI-2 typed-reference frames/maps are Current;
-general ownership, source-level native allocation/shared heap, loop OSR, an optimizing tier,
+general ownership, Handle/host native allocation, native/VM reference transitions, loop OSR, an optimizing tier,
 minimal AOT file emission, and direct Wasm remain **Accepted Targets** or later
 work. The VM remains the cold tier and runtime oracle. See [Ownership And
 Borrowing](../decisions/ownership-and-borrowing.md), [Coherent Traits And Static
@@ -162,13 +162,14 @@ rather than claiming cancellation.
 The current native flow is:
 
 ```text
-forced main or hot VM function entry
-  -> verified scalar eligibility and acyclic reachable group
+forced main or hot scalar VM function entry
+  -> verified scalar or host-independent reference eligibility and reachable SCC group
   -> synchronous typed-SSA lowering at a safepoint
   -> bounded W^X callable ABI-2 baseline code object
   -> descriptor/budget/pthread-bounds frame reservation before stack subtraction
   -> initialized registered frame and verifier-certified exact scalar or typed-reference call map
-  -> exact VM/native scalar adapter or unboxed direct closed-plan call
+  -> unboxed direct call or verified-home HeapDispatchV1 safe runtime service
+  -> GcHeap collection/allocation with root writeback and exact owned return snapshot
   -> PollV1/CollectReferenceV1 and structured return/trap/exit/deadline/resource/host status
   -> exactly one unregister on every registered outcome
 ```
@@ -176,8 +177,10 @@ forced main or hot VM function entry
 Forced mode enters generated main and never falls back. Auto compiles at one
 function entry and uses the object only on later calls; unsupported code stays
 VM-correct with same-epoch retry suppression. The old observation-only hook is
-removed. Closed machine plans can invoke exact Buf-reference collection through
-safe copied roots, but SSA/source references and allocation remain absent. Loop
+removed. Closed plans retain exact Buf-reference collection. Forced SSA/source execution
+also supports Str, legacy Buf, Product, List, Option, and Result allocation and
+direct/mutual recursion. Auto intentionally keeps reference-typed functions in
+VM because reference transitions remain absent. Loop
 OSR, background compilation, optimizing tiers, persistent profiles, and
 persistent code caches are absent.
 
@@ -220,3 +223,10 @@ Cycle](../decisions/callable-baseline-jit.md); the next contracts are
 and [Proof-Based Optimizing JIT](../decisions/proof-based-optimizing-jit.md).
 Real modules, process-safe host services, byte strings/views, and measured
 memory strategies build on those layers as vertical slices.
+
+The containing host-independent allocation slice based on `0daa7a0` passed the
+focused cross-crate tests, strict affected Clippy, docs/tree/source checks,
+`quiet verify` (182 unit/integration tests plus one compile-fail doctest), locked
+release build, scalar/hello/Brainfuck smokes, and forced allocation-graph smoke
+described in [Current State](../current-state.md). Docker and performance were
+not run.

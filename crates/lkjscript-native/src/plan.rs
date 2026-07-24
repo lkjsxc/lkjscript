@@ -184,6 +184,201 @@ impl TrapCode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum AllocationClass {
+    None,
+    Bounded,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum StoreClass {
+    None,
+    Initialization,
+    Scalar,
+    Reference,
+    ReferenceClearing,
+}
+
+/// Host-independent heap semantics retained as exact versioned runtime-site
+/// identity. Literal bytes and nominal identities are bounded image metadata,
+/// never source pointers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum HeapOperation {
+    ConstantStr(String),
+    EmptyStr,
+    EmptyList,
+    None,
+    ProductValue { product: u32, fields: u8 },
+    ProductField { product: u32, field: u8 },
+    WithProductField { product: u32, field: u8 },
+    Cons,
+    Car,
+    Cdr,
+    IsEmptyList,
+    Some,
+    IsSome,
+    UnwrapSome,
+    Ok,
+    Err,
+    IsOk,
+    UnwrapOk,
+    UnwrapErr,
+    BufNew,
+    BufLen,
+    BufRef,
+    BufSet,
+    BufClone,
+    BufFromStr,
+    BufToStr,
+    BufSlice,
+    BufGetU32,
+    BufSetU32,
+    StrLen,
+    StrRef,
+    StrAppend,
+    StrSlice,
+    StrFromByte,
+    StrFromI64,
+    StrFromF64,
+    EqualValue,
+    SameObject,
+    ListEqual,
+}
+
+impl HeapOperation {
+    pub(crate) fn expected_arity(&self) -> usize {
+        match self {
+            Self::EmptyStr | Self::EmptyList | Self::None | Self::ConstantStr(_) => 0,
+            Self::ProductValue { fields, .. } => usize::from(*fields),
+            Self::BufSet | Self::BufSlice | Self::BufSetU32 | Self::StrSlice => 3,
+            Self::ProductField { .. }
+            | Self::Car
+            | Self::Cdr
+            | Self::IsEmptyList
+            | Self::Some
+            | Self::IsSome
+            | Self::UnwrapSome
+            | Self::Ok
+            | Self::Err
+            | Self::IsOk
+            | Self::UnwrapOk
+            | Self::UnwrapErr
+            | Self::BufNew
+            | Self::BufLen
+            | Self::BufClone
+            | Self::BufFromStr
+            | Self::BufToStr
+            | Self::StrLen
+            | Self::StrFromByte
+            | Self::StrFromI64
+            | Self::StrFromF64 => 1,
+            Self::WithProductField { .. }
+            | Self::Cons
+            | Self::BufRef
+            | Self::BufGetU32
+            | Self::StrRef
+            | Self::StrAppend
+            | Self::EqualValue
+            | Self::SameObject
+            | Self::ListEqual => 2,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct HeapCallDescriptor {
+    operation: HeapOperation,
+    input_types: Vec<ValueType>,
+    result_type: ValueType,
+    allocation: AllocationClass,
+    store: StoreClass,
+}
+
+impl HeapCallDescriptor {
+    pub fn new(
+        operation: HeapOperation,
+        input_types: Vec<ValueType>,
+        result_type: ValueType,
+        allocation: AllocationClass,
+        store: StoreClass,
+    ) -> Result<Self, PlanError> {
+        if input_types.len() > 16 || input_types.len() != operation.expected_arity() {
+            return Err(PlanError::InvalidHeapCall);
+        }
+        let descriptor = Self {
+            operation,
+            input_types,
+            result_type,
+            allocation,
+            store,
+        };
+        if !descriptor.classes_are_valid() {
+            return Err(PlanError::InvalidHeapCall);
+        }
+        Ok(descriptor)
+    }
+
+    #[must_use]
+    pub fn operation(&self) -> &HeapOperation {
+        &self.operation
+    }
+
+    #[must_use]
+    pub fn input_types(&self) -> &[ValueType] {
+        &self.input_types
+    }
+
+    #[must_use]
+    pub const fn result_type(&self) -> ValueType {
+        self.result_type
+    }
+
+    #[must_use]
+    pub const fn allocation(&self) -> AllocationClass {
+        self.allocation
+    }
+
+    #[must_use]
+    pub const fn store(&self) -> StoreClass {
+        self.store
+    }
+
+    pub(crate) fn classes_are_valid(&self) -> bool {
+        let allocates = matches!(
+            self.operation,
+            HeapOperation::ConstantStr(_)
+                | HeapOperation::EmptyStr
+                | HeapOperation::ProductValue { .. }
+                | HeapOperation::WithProductField { .. }
+                | HeapOperation::Cons
+                | HeapOperation::Some
+                | HeapOperation::Ok
+                | HeapOperation::Err
+                | HeapOperation::BufNew
+                | HeapOperation::BufClone
+                | HeapOperation::BufFromStr
+                | HeapOperation::BufToStr
+                | HeapOperation::BufSlice
+                | HeapOperation::StrAppend
+                | HeapOperation::StrSlice
+                | HeapOperation::StrFromByte
+                | HeapOperation::StrFromI64
+                | HeapOperation::StrFromF64
+        );
+        let expected_allocation = if allocates {
+            AllocationClass::Bounded
+        } else {
+            AllocationClass::None
+        };
+        let expected_store = match self.operation {
+            HeapOperation::BufSet | HeapOperation::BufSetU32 => StoreClass::Scalar,
+            _ if allocates => StoreClass::Initialization,
+            _ => StoreClass::None,
+        };
+        self.allocation == expected_allocation && self.store == expected_store
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RuntimeCallSlot {
     IdentityI64V1,
     /// Cooperative deadline and native fuel poll. The execution context is the
@@ -193,6 +388,10 @@ pub enum RuntimeCallSlot {
     EnterFunctionV1,
     /// Collecting reference round trip used by the closed ABI-2 plan slice.
     CollectReferenceV1,
+    /// Generic verified-frame-home heap dispatch. Plans create it only through
+    /// `FunctionBuilder::heap_call`; ordinary runtime-call construction cannot
+    /// forge its site metadata.
+    HeapDispatchV1,
     /// Encoder-owned frame-chain operations. Plans cannot name these slots.
     ReserveFrameV1,
     RegisterFrameV1,
@@ -255,7 +454,8 @@ impl RuntimeCallSlot {
                 parameters: vec![ValueType::Reference(ReferenceType::Buf)],
                 result: ValueType::Reference(ReferenceType::Buf),
             }),
-            Self::ReserveFrameV1
+            Self::HeapDispatchV1
+            | Self::ReserveFrameV1
             | Self::RegisterFrameV1
             | Self::PublishSafepointV1
             | Self::UnregisterFrameV1 => None,
@@ -290,6 +490,13 @@ impl RuntimeCallSlot {
                 ],
                 result: InternalMachineResult::Unit,
             }),
+            Self::HeapDispatchV1 => Some(InternalRuntimeSignature {
+                parameters: &[
+                    InternalMachineArgument::InvocationContext,
+                    InternalMachineArgument::SafepointId,
+                ],
+                result: InternalMachineResult::Unit,
+            }),
             Self::IdentityI64V1
             | Self::PollV1
             | Self::EnterFunctionV1
@@ -304,7 +511,7 @@ impl RuntimeCallSlot {
 
     #[must_use]
     pub const fn may_collect(self) -> bool {
-        matches!(self, Self::CollectReferenceV1)
+        matches!(self, Self::CollectReferenceV1 | Self::HeapDispatchV1)
     }
 
     pub(crate) const fn plan_callable(self) -> bool {
@@ -334,6 +541,7 @@ pub enum PlanError {
     UnknownLocal,
     BlockAlreadyTerminated,
     EncoderOwnedRuntimeCall,
+    InvalidHeapCall,
 }
 
 impl fmt::Display for PlanError {
@@ -362,6 +570,7 @@ impl fmt::Display for PlanError {
             Self::EncoderOwnedRuntimeCall => {
                 formatter.write_str("runtime call is owned by the native encoder")
             }
+            Self::InvalidHeapCall => formatter.write_str("heap runtime call metadata is invalid"),
         }
     }
 }
@@ -395,6 +604,7 @@ pub(crate) enum Operation {
     WriteLocal(LocalId, ValueId),
     Call(FunctionId, Vec<ValueId>),
     RuntimeCall(RuntimeCallSlot, Vec<ValueId>),
+    HeapCall(HeapCallDescriptor, Vec<ValueId>),
 }
 
 impl Operation {
@@ -423,7 +633,9 @@ impl Operation {
             | Self::F64Compare(_, left, right)
             | Self::F64BitsEqual(left, right)
             | Self::BoolCompare(_, left, right) => vec![*left, *right],
-            Self::Call(_, arguments) | Self::RuntimeCall(_, arguments) => arguments.clone(),
+            Self::Call(_, arguments)
+            | Self::RuntimeCall(_, arguments)
+            | Self::HeapCall(_, arguments) => arguments.clone(),
         }
     }
 }
@@ -991,6 +1203,36 @@ impl FunctionBuilder {
             block,
             signature.result(),
             Operation::Call(callee, arguments),
+            None,
+        )
+    }
+
+    pub fn heap_call(
+        &mut self,
+        block: BlockId,
+        descriptor: HeapCallDescriptor,
+        arguments: Vec<ValueId>,
+    ) -> Result<ValueId, PlanError> {
+        if arguments.len() != descriptor.input_types().len()
+            || arguments
+                .iter()
+                .zip(descriptor.input_types())
+                .any(|(argument, expected)| {
+                    self.values
+                        .get(argument.index as usize)
+                        .filter(|fact| fact.id == *argument)
+                        .is_none_or(|fact| fact.value_type != *expected)
+                })
+        {
+            return Err(PlanError::InvalidHeapCall);
+        }
+        for argument in &arguments {
+            self.check_value(*argument)?;
+        }
+        self.append(
+            block,
+            descriptor.result_type(),
+            Operation::HeapCall(descriptor, arguments),
             None,
         )
     }

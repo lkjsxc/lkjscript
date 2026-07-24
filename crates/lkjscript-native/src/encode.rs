@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use crate::image::{
-    entry_metadata, exact_safepoint, frame_facts, frame_home, outcome_map_entry, relocation,
-    root_location, root_map_requirement, source_map_entry, trap_map_entry, AbiVersions,
+    entry_metadata, exact_safepoint, frame_facts, frame_home, heap_runtime_site, outcome_map_entry,
+    relocation, root_location, root_map_requirement, source_map_entry, trap_map_entry, AbiVersions,
     FrameHomeKind, ImageParts, InstallableImage, OutcomeKind, RelocationKind, RelocationTarget,
     RootLocation,
 };
@@ -63,6 +63,7 @@ struct FunctionEncoder<'a> {
     relocations: &'a mut Vec<crate::Relocation>,
     safepoints: &'a mut Vec<crate::Safepoint>,
     root_requirements: &'a mut Vec<crate::image::RootMapRequirement>,
+    heap_runtime_sites: &'a mut Vec<crate::HeapRuntimeSite>,
     source_map: &'a mut Vec<crate::SourceMapEntry>,
     trap_map: &'a mut Vec<crate::TrapMapEntry>,
     outcome_map: &'a mut Vec<crate::OutcomeMapEntry>,
@@ -88,6 +89,7 @@ pub fn encode(
     let mut frames = Vec::new();
     let mut safepoints = Vec::new();
     let mut root_requirements = Vec::new();
+    let mut heap_runtime_sites = Vec::new();
     let mut source_map = Vec::new();
     let mut trap_map = Vec::new();
     let mut outcome_map = Vec::new();
@@ -114,6 +116,7 @@ pub fn encode(
             relocations: &mut relocations,
             safepoints: &mut safepoints,
             root_requirements: &mut root_requirements,
+            heap_runtime_sites: &mut heap_runtime_sites,
             source_map: &mut source_map,
             trap_map: &mut trap_map,
             outcome_map: &mut outcome_map,
@@ -155,10 +158,11 @@ pub fn encode(
         RuntimeCallSlot::PollV1 => 2_u8,
         RuntimeCallSlot::EnterFunctionV1 => 3_u8,
         RuntimeCallSlot::CollectReferenceV1 => 4_u8,
-        RuntimeCallSlot::ReserveFrameV1 => 5_u8,
-        RuntimeCallSlot::RegisterFrameV1 => 6_u8,
-        RuntimeCallSlot::PublishSafepointV1 => 7_u8,
-        RuntimeCallSlot::UnregisterFrameV1 => 8_u8,
+        RuntimeCallSlot::HeapDispatchV1 => 5_u8,
+        RuntimeCallSlot::ReserveFrameV1 => 6_u8,
+        RuntimeCallSlot::RegisterFrameV1 => 7_u8,
+        RuntimeCallSlot::PublishSafepointV1 => 8_u8,
+        RuntimeCallSlot::UnregisterFrameV1 => 9_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -169,6 +173,7 @@ pub fn encode(
         frames,
         safepoints,
         root_requirements,
+        heap_runtime_sites,
         source_map,
         trap_map,
         outcome_map,
@@ -452,6 +457,9 @@ impl FunctionEncoder<'_> {
                     RelocationTarget::Runtime(*slot),
                 )?;
             }
+            Operation::HeapCall(descriptor, arguments) => {
+                self.emit_heap_call(instruction, descriptor, arguments)?;
+            }
         }
         Ok(())
     }
@@ -641,6 +649,54 @@ impl FunctionEncoder<'_> {
             }
         }
         Ok(())
+    }
+
+    fn emit_heap_call(
+        &mut self,
+        instruction: &Instruction,
+        descriptor: &crate::HeapCallDescriptor,
+        arguments: &[ValueId],
+    ) -> Result<(), NativeError> {
+        let safepoint_id = to_u32(self.safepoints.len())?;
+        let site_id = to_u32(self.heap_runtime_sites.len())?;
+        let certificate = self
+            .certified_call_roots
+            .get(instruction.output.index as usize)
+            .and_then(Option::as_deref)
+            .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
+        let roots = certified_root_locations(self.function, certificate)?;
+        self.emit_publish_safepoint(safepoint_id)?;
+        self.runtime_calls.insert(RuntimeCallSlot::HeapDispatchV1);
+        self.load_integer_register(7, self.context_offset())?;
+        self.load_integer_register_immediate(6, u64::from(site_id))?;
+        self.emit_call_target(RelocationTarget::Runtime(RuntimeCallSlot::HeapDispatchV1))?;
+        let call_offset = self.bytes.len();
+        self.emit(&[0x41, 0xff, 0xd3])?;
+        self.safepoints.push(exact_safepoint(
+            safepoint_id,
+            self.function.id,
+            to_u32(call_offset)?,
+            roots.clone(),
+        ));
+        self.root_requirements
+            .push(root_map_requirement(safepoint_id, self.function.id, roots));
+        let argument_homes = arguments
+            .iter()
+            .map(|argument| value_frame_home(self.function, *argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        let result = value_frame_home(self.function, instruction.output)?;
+        self.heap_runtime_sites.push(heap_runtime_site(
+            site_id,
+            self.function.id,
+            safepoint_id,
+            descriptor.clone(),
+            argument_homes,
+            result,
+            instruction.source,
+        ));
+        self.load_integer_register(1, self.context_offset())?;
+        self.emit(&[0x83, 0x39, 0x00])?;
+        self.emit_conditional_jump(0x85, FixupTarget::StatusReturn)
     }
 
     fn emit_publish_safepoint(&mut self, safepoint_id: u32) -> Result<(), NativeError> {
@@ -1009,6 +1065,22 @@ fn build_frame_homes(function: &FunctionPlan) -> Result<Vec<crate::FrameHome>, N
         ));
     }
     Ok(homes)
+}
+
+fn value_frame_home(
+    function: &FunctionPlan,
+    value: ValueId,
+) -> Result<crate::FrameHome, NativeError> {
+    let fact = function
+        .values
+        .get(value.index as usize)
+        .filter(|fact| fact.id == value)
+        .ok_or(NativeError::Encode(EncodeError::InvalidValue))?;
+    Ok(frame_home(
+        FrameHomeKind::Value(value.index),
+        fact.value_type,
+        value_home_offset(function, value.index as usize)?,
+    ))
 }
 
 fn local_home_offset(index: usize) -> Result<i32, NativeError> {

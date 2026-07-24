@@ -8,15 +8,14 @@ mod numeric;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, HeapObj, HostError,
-    ResourceLimitKind, Result, Trap, ValidatedChunk, Value,
+    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, GcHeap as Arena, HeapObj,
+    HostError, ResourceLimitKind, Result, Trap, ValidatedChunk, Value,
 };
 use lkjscript_jit::{
     EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,
     ScalarSignature, TrapCode,
 };
 
-use crate::arena::Arena;
 use crate::host_ext::ResourceTable;
 
 pub(crate) struct Frame {
