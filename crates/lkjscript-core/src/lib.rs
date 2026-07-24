@@ -2,7 +2,6 @@
 
 mod chunk;
 mod error;
-mod jit;
 mod limits;
 mod opcode;
 mod outcome;
@@ -13,7 +12,6 @@ pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
 };
 pub use error::{Error, ErrorClass, Result};
-pub use jit::{JitHook, NullJit};
 pub use limits::{
     ExecutionConfig, Limits, ValidationLimits, MAX_BYTECODE_METADATA_BYTES,
     MAX_BYTECODE_TABLE_ENTRIES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES, MAX_CONSTANT_DATA_BYTES,

@@ -1,8 +1,8 @@
 //! Exact I64 and IEEE-754 F64 helpers for the VM.
 
-use lkjscript_core::{Error, HeapObj, JitHook, Result, Value};
+use lkjscript_core::{Error, HeapObj, Result, Value};
 
-use crate::run::Vm;
+use crate::run::{RuntimeTier, Vm};
 
 #[derive(Clone, Copy)]
 enum Number {
@@ -26,7 +26,7 @@ pub enum Ordering {
     GreaterEqual,
 }
 
-fn number<J: JitHook>(vm: &Vm<'_, J>, value: Value) -> Result<Number> {
+fn number<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Number> {
     if let Some(number) = value.as_small_i64() {
         return Ok(Number::I64(number));
     }
@@ -37,7 +37,7 @@ fn number<J: JitHook>(vm: &Vm<'_, J>, value: Value) -> Result<Number> {
     }
 }
 
-fn push_number<J: JitHook>(vm: &mut Vm<'_, J>, number: Number) {
+fn push_number<J: RuntimeTier>(vm: &mut Vm<'_, J>, number: Number) {
     let value = match number {
         Number::I64(number) => vm.make_i64(number),
         Number::F64(number) => vm.arena.alloc(HeapObj::Float(number)),
@@ -45,7 +45,7 @@ fn push_number<J: JitHook>(vm: &mut Vm<'_, J>, number: Number) {
     vm.push(value);
 }
 
-pub fn bin_arithmetic<J: JitHook>(vm: &mut Vm<'_, J>, operation: Arithmetic) -> Result<()> {
+pub fn bin_arithmetic<J: RuntimeTier>(vm: &mut Vm<'_, J>, operation: Arithmetic) -> Result<()> {
     let right_value = vm.pop()?;
     let left_value = vm.pop()?;
     let right = number(vm, right_value)?;
@@ -98,7 +98,7 @@ impl Arithmetic {
     }
 }
 
-pub fn bin_ordering<J: JitHook>(vm: &mut Vm<'_, J>, ordering: Ordering) -> Result<()> {
+pub fn bin_ordering<J: RuntimeTier>(vm: &mut Vm<'_, J>, ordering: Ordering) -> Result<()> {
     let right_value = vm.pop()?;
     let left_value = vm.pop()?;
     let right = number(vm, right_value)?;
@@ -132,7 +132,9 @@ fn compare_f64(ordering: Ordering, left: f64, right: f64) -> bool {
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
-    use lkjscript_core::{ExecutionConfig, HeapObj, NullJit, Op, MAX_SMALL_I64, MIN_SMALL_I64};
+    use lkjscript_core::{ExecutionConfig, HeapObj, Op, MAX_SMALL_I64, MIN_SMALL_I64};
+
+    use crate::run::NoTier as NullJit;
 
     use super::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
     use crate::run::{test_chunk, Vm};

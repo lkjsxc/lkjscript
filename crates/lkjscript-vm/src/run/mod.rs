@@ -8,8 +8,12 @@ mod numeric;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, HeapObj, HostError, JitHook,
+    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, HeapObj, HostError,
     ResourceLimitKind, Result, Trap, ValidatedChunk, Value,
+};
+use lkjscript_jit::{
+    EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,
+    ScalarSignature, TrapCode,
 };
 
 use crate::arena::Arena;
@@ -27,7 +31,75 @@ enum Stop {
     Exited(i32),
 }
 
-pub struct Vm<'a, J: JitHook> {
+pub trait RuntimeTier {
+    fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision;
+    fn scalar_signature(&self, function: FunctionId) -> Option<ScalarSignature>;
+    fn invoke_scalar(
+        &mut self,
+        function: FunctionId,
+        arguments: &[NativeValue],
+        execution: &ExecutionConfig,
+    ) -> std::result::Result<ScalarInvocation, EngineError>;
+    fn trap_message(&self, function: FunctionId, trap: TrapCode) -> String;
+    fn record_invocation_failure(&mut self, function: FunctionId);
+}
+
+#[derive(Debug, Default)]
+pub struct NoTier;
+
+impl RuntimeTier for NoTier {
+    fn observe_function_entry(&mut self, _prototype: u32) -> EntryDecision {
+        EntryDecision::Interpret
+    }
+
+    fn scalar_signature(&self, _function: FunctionId) -> Option<ScalarSignature> {
+        None
+    }
+
+    fn invoke_scalar(
+        &mut self,
+        function: FunctionId,
+        _arguments: &[NativeValue],
+        _execution: &ExecutionConfig,
+    ) -> std::result::Result<ScalarInvocation, EngineError> {
+        Err(EngineError::new_unavailable(function))
+    }
+
+    fn trap_message(&self, _function: FunctionId, _trap: TrapCode) -> String {
+        "native tier is unavailable".to_string()
+    }
+
+    fn record_invocation_failure(&mut self, _function: FunctionId) {}
+}
+
+impl RuntimeTier for JitSession {
+    fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision {
+        JitSession::observe_function_entry(self, prototype)
+    }
+
+    fn scalar_signature(&self, function: FunctionId) -> Option<ScalarSignature> {
+        JitSession::scalar_signature(self, function)
+    }
+
+    fn invoke_scalar(
+        &mut self,
+        function: FunctionId,
+        arguments: &[NativeValue],
+        execution: &ExecutionConfig,
+    ) -> std::result::Result<ScalarInvocation, EngineError> {
+        JitSession::invoke_scalar(self, function, arguments, execution)
+    }
+
+    fn trap_message(&self, function: FunctionId, trap: TrapCode) -> String {
+        self.trap_message_for(function, trap)
+    }
+
+    fn record_invocation_failure(&mut self, function: FunctionId) {
+        JitSession::record_invocation_failure(self, function);
+    }
+}
+
+pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) chunk: &'a ValidatedChunk,
     pub(crate) globals: Vec<Value>,
     pub(crate) stack: Vec<Value>,
@@ -43,7 +115,7 @@ pub struct Vm<'a, J: JitHook> {
     started: Instant,
 }
 
-impl<'a, J: JitHook> Vm<'a, J> {
+impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub fn new(
         chunk: &'a ValidatedChunk,
         jit: J,
@@ -68,6 +140,10 @@ impl<'a, J: JitHook> Vm<'a, J> {
     }
 
     pub fn run(mut self) -> ExecutionOutcome {
+        self.run_inner()
+    }
+
+    fn run_inner(&mut self) -> ExecutionOutcome {
         let stopped = self.run_loop();
         let mut outcome = match stopped {
             Ok(Stop::Returned(value)) => {
@@ -376,6 +452,14 @@ impl<'a, J: JitHook> Vm<'a, J> {
     }
 }
 
+impl<'a> Vm<'a, JitSession> {
+    pub fn run_auto(mut self) -> (ExecutionOutcome, JitStats) {
+        let outcome = self.run_inner();
+        let stats = self.jit.stats();
+        (outcome, stats)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 pub(crate) fn test_chunk() -> ValidatedChunk {
@@ -401,11 +485,11 @@ mod tests {
     use std::time::Duration;
 
     use lkjscript_core::{
-        validate_chunk, Chunk, Constant, ExecutionConfig, ExecutionOutcome, NullJit, Op,
-        ResourceLimitKind, ValidationLimits,
+        validate_chunk, Chunk, Constant, ExecutionConfig, ExecutionOutcome, Op, ResourceLimitKind,
+        ValidationLimits,
     };
 
-    use super::Vm;
+    use super::{NoTier as NullJit, Vm};
 
     fn validated(ops: &[Op]) -> lkjscript_core::ValidatedChunk {
         let mut chunk = Chunk::new();

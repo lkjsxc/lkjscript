@@ -12,10 +12,13 @@ path = "src/main.rs"
 [dependencies]
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-compiler = { path = "../lkjscript-compiler" }
+lkjscript-ir = { path = "../lkjscript-ir" }
+lkjscript-jit = { path = "../lkjscript-jit" }
 lkjscript-vm = { path = "../lkjscript-vm" }
 
+
 [dev-dependencies]
-lkjscript-ir = { path = "../lkjscript-ir" }
+lkjscript-native = { path = "../lkjscript-native" }
 
 [lints]
 workspace = true

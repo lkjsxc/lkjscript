@@ -1,15 +1,15 @@
 //! Dispatch for string and file opcodes.
 
-use lkjscript_core::{HeapObj, JitHook, Op, Result, Value};
+use lkjscript_core::{HeapObj, Op, Result, Value};
 
-use crate::run::Vm;
+use crate::run::{RuntimeTier, Vm};
 
-fn push_language_result<J: JitHook>(vm: &mut Vm<'_, J>, result: Result<Value>) {
+fn push_language_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<Value>) {
     let value = crate::host_ext::language_result(&mut vm.arena, result);
     vm.push(value);
 }
 
-fn push_i64_result<J: JitHook>(vm: &mut Vm<'_, J>, result: Result<i64>) {
+fn push_i64_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<i64>) {
     let result = result.map(|number| vm.make_i64(number));
     push_language_result(vm, result);
 }
@@ -20,7 +20,7 @@ fn sleep_result(milliseconds: u64) -> Result<Value> {
         .map_err(|error| lkjscript_core::Error::msg(format!("sys-wait-ms: {error}")))
 }
 
-fn wait_readable<J: JitHook>(
+fn wait_readable<J: RuntimeTier>(
     vm: &Vm<'_, J>,
     handle: Value,
     operation: &str,
@@ -37,7 +37,7 @@ fn wait_readable<J: JitHook>(
     }
 }
 
-pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
+pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::StrLen as u8 => {
             let v = vm.pop()?;

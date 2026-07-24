@@ -1,13 +1,13 @@
 //! Opcode dispatch.
 
 use lkjscript_core::{
-    Error, HeapObj, JitHook, Op, ProductFieldRef, ProductId, Result, Value, MAX_LIST_EQUAL_STEPS,
+    Error, HeapObj, Op, ProductFieldRef, ProductId, Result, Value, MAX_LIST_EQUAL_STEPS,
     MAX_PRODUCT_FIELDS,
 };
 
 use super::calls::{call, car, cdr, make_closure};
 use super::numeric::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
-use super::Vm;
+use super::{RuntimeTier, Vm};
 use crate::host::{display_value, flush_out, read_byte, write_byte, write_output, write_str};
 
 fn maybe_i64(arena: &crate::arena::Arena, value: Value) -> Result<Option<i64>> {
@@ -78,7 +78,7 @@ fn value_equal(arena: &crate::arena::Arena, mut left: Value, mut right: Value) -
     }
 }
 
-fn equal_value<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let equal = value_equal(&vm.arena, left, right)?;
@@ -86,7 +86,7 @@ fn equal_value<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn same_object<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn same_object<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let equal = match (left.as_handle(), right.as_handle()) {
@@ -142,7 +142,7 @@ fn list_values_equal(
     }
 }
 
-fn list_equal<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn list_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let equal = list_values_equal(&vm.arena, left, right, MAX_LIST_EQUAL_STEPS)?;
@@ -150,7 +150,7 @@ fn list_equal<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn f64_bits_equal<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn f64_bits_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let right = match vm.arena.get(right)? {
@@ -165,7 +165,7 @@ fn f64_bits_equal<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn product_metadata<'a, J: JitHook>(
+fn product_metadata<'a, J: RuntimeTier>(
     vm: &'a Vm<'_, J>,
     product: ProductId,
 ) -> Result<&'a lkjscript_core::ProductMetadata> {
@@ -181,7 +181,7 @@ fn product_metadata<'a, J: JitHook>(
     Ok(metadata)
 }
 
-fn product_field_ref<J: JitHook>(vm: &Vm<'_, J>, index: usize) -> Result<ProductFieldRef> {
+fn product_field_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<ProductFieldRef> {
     let field_ref = vm
         .chunk
         .product_fields()
@@ -195,7 +195,7 @@ fn product_field_ref<J: JitHook>(vm: &Vm<'_, J>, index: usize) -> Result<Product
     Ok(field_ref)
 }
 
-fn make_product<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let product = ProductId::new(vm.read_u16()?);
     let field_count = product_metadata(vm, product)?.fields.len();
     let mut fields = Vec::with_capacity(field_count);
@@ -208,7 +208,7 @@ fn make_product<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn load_product_field<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let descriptor = vm.read_u16()? as usize;
     let field_ref = product_field_ref(vm, descriptor)?;
     let value = vm.pop()?;
@@ -229,7 +229,7 @@ fn load_product_field<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn with_product_field<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
+fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let descriptor = vm.read_u16()? as usize;
     let field_ref = product_field_ref(vm, descriptor)?;
     let replacement = vm.pop()?;
@@ -256,7 +256,7 @@ fn with_product_field<J: JitHook>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-fn bin_bits<J: JitHook>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
+fn bin_bits<J: RuntimeTier>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
     let right = vm
@@ -270,7 +270,7 @@ fn bin_bits<J: JitHook>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()
     Ok(())
 }
 
-pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
     match op {
         x if x == Op::Nop as u8 => Ok(()),
         x if x == Op::LoadConst as u8 => {
@@ -502,7 +502,9 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use lkjscript_core::{ExecutionConfig, HeapObj, NullJit, Op, Value};
+    use lkjscript_core::{ExecutionConfig, HeapObj, Op, Value};
+
+    use crate::run::NoTier as NullJit;
 
     use super::{dispatch, list_values_equal};
     use crate::run::{test_chunk, Vm};

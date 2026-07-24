@@ -7,9 +7,10 @@ mod host_ext;
 mod host_term;
 mod run;
 
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, JitHook, NullJit, ValidatedChunk};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, ValidatedChunk};
+use lkjscript_jit::{JitSession, JitStats};
 
-pub use run::Vm;
+pub use run::{NoTier, Vm};
 
 pub fn run_chunk(chunk: &ValidatedChunk, config: &ExecutionConfig) -> ExecutionOutcome {
     run_chunk_with_args(chunk, &[], config)
@@ -20,15 +21,16 @@ pub fn run_chunk_with_args(
     args: &[String],
     config: &ExecutionConfig,
 ) -> ExecutionOutcome {
-    Vm::new(chunk, NullJit, args.to_vec(), config.clone()).run()
+    Vm::new(chunk, NoTier, args.to_vec(), config.clone()).run()
 }
 
-pub fn run_chunk_with_jit<J: JitHook>(
+pub fn run_chunk_auto(
     chunk: &ValidatedChunk,
-    jit: J,
+    args: &[String],
     config: &ExecutionConfig,
-) -> ExecutionOutcome {
-    Vm::new(chunk, jit, Vec::new(), config.clone()).run()
+    session: JitSession,
+) -> (ExecutionOutcome, JitStats) {
+    Vm::new(chunk, session, args.to_vec(), config.clone()).run_auto()
 }
 
 #[cfg(test)]
