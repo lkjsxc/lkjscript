@@ -231,6 +231,7 @@ fn check_sources(root: &Path) -> i32 {
         "src/examples/bench/main.lkjscript",
         "src/examples/brainfuck/main.lkjscript",
         "src/examples/bulk-bytes/main.lkjscript",
+        "src/examples/durable-files/main.lkjscript",
         "src/examples/hello/main.lkjscript",
         "src/examples/http/hello.lkjscript",
         "src/examples/mandel/main.lkjscript",

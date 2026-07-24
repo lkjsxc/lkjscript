@@ -127,6 +127,21 @@ pub fn sys_write_from(
     i64::try_from(count).map_err(|_| Error::msg("sys-write-from count out of range"))
 }
 
+pub fn sys_random_fill(
+    arena: &mut Arena,
+    buffer: Value,
+    offset: i64,
+    requested: i64,
+) -> Result<Value> {
+    let range = bulk_range(arena, buffer, offset, requested, "sys-random-fill")?;
+    let destination = as_buf_mut(arena, buffer)?
+        .get_mut(range)
+        .ok_or_else(|| Error::msg("sys-random-fill range is invalid"))?;
+    lkjscript_sys::random_fill(destination)
+        .map_err(|error| Error::msg(format!("sys-random-fill: {error}")))?;
+    Ok(Value::UNIT)
+}
+
 pub fn sys_tty_get(
     arena: &mut Arena,
     handles: &ResourceTable,
@@ -229,8 +244,8 @@ mod tests {
     use crate::host_ext::ResourceTable;
 
     use super::{
-        as_buf, buf_from_str, buf_new, buf_set, buf_set_u32, buf_to_str, sys_poll, sys_read_into,
-        sys_write_from,
+        as_buf, buf_from_str, buf_new, buf_set, buf_set_u32, buf_to_str, sys_poll, sys_random_fill,
+        sys_read_into, sys_write_from,
     };
 
     static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
@@ -347,6 +362,26 @@ mod tests {
         handles.close(output_handle).expect("close output");
         assert_eq!(fs::read(&output.0)?, vec![0, 0xc3, 0xa9, 0xff, b'x']);
         Ok(())
+    }
+
+    #[test]
+    fn random_fill_obeys_exact_bounded_ranges() {
+        let mut arena = Arena::default();
+        let buffer = buf_new(&mut arena, 8).expect("buffer");
+        for index in 0..8 {
+            buf_set(&mut arena, buffer, index, 0xaa).expect("initialize buffer");
+        }
+        assert_eq!(
+            sys_random_fill(&mut arena, buffer, 2, 4).ok(),
+            Some(Value::UNIT)
+        );
+        let bytes = as_buf(&arena, buffer).expect("filled buffer");
+        assert_eq!(&bytes[..2], &[0xaa, 0xaa]);
+        assert_eq!(&bytes[6..], &[0xaa, 0xaa]);
+        assert_ne!(&bytes[2..6], &[0, 0, 0, 0]);
+        assert!(sys_random_fill(&mut arena, buffer, -1, 1).is_err());
+        assert!(sys_random_fill(&mut arena, buffer, 7, 2).is_err());
+        assert!(sys_random_fill(&mut arena, buffer, 0, MAX_BULK_IO_BYTES as i64 + 1,).is_err());
     }
 
     #[test]

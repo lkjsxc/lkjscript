@@ -361,6 +361,13 @@ fn operation_opcode(operation: Operation) -> Option<Op> {
         Operation::SysTtyGuardClear => Op::SysTtyGuardClear,
         Operation::SysOpenRead => Op::SysOpenRead,
         Operation::SysOpenWrite => Op::SysOpenWrite,
+        Operation::SysOpenAppend => Op::SysOpenAppend,
+        Operation::SysOpenCreateNew => Op::SysOpenCreateNew,
+        Operation::SysOpenDir => Op::SysOpenDir,
+        Operation::SysFsync => Op::SysFsync,
+        Operation::SysTruncate => Op::SysTruncate,
+        Operation::SysRename => Op::SysRename,
+        Operation::SysRandomFill => Op::SysRandomFill,
         Operation::SysPathExists => Op::SysPathExists,
         Operation::SysWaitMs => Op::SysWaitMs,
         Operation::SysNowMs => Op::SysNowMs,
@@ -406,6 +413,15 @@ mod tests {
         assert_eq!(
             operation_opcode(Operation::SysWriteFrom),
             Some(Op::SysWriteFrom)
+        );
+        assert_eq!(
+            operation_opcode(Operation::SysOpenAppend),
+            Some(Op::SysOpenAppend)
+        );
+        assert_eq!(operation_opcode(Operation::SysFsync), Some(Op::SysFsync));
+        assert_eq!(
+            operation_opcode(Operation::SysRandomFill),
+            Some(Op::SysRandomFill)
         );
     }
 }

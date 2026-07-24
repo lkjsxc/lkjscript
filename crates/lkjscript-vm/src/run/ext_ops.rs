@@ -120,6 +120,56 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             push_language_result(vm, result);
             Ok(true)
         }
+        x if x == Op::SysOpenAppend as u8 => {
+            vm.ensure_host_deadline_support("sys-open-append", false)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_append(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysOpenCreateNew as u8 => {
+            vm.ensure_host_deadline_support("sys-open-create-new", false)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_create_new(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysOpenDir as u8 => {
+            vm.ensure_host_deadline_support("sys-open-dir", false)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_dir(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysFsync as u8 => {
+            vm.ensure_host_deadline_support("sys-fsync", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sys_fsync(handle);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysTruncate as u8 => {
+            vm.ensure_host_deadline_support("sys-truncate", false)?;
+            let length = vm.pop()?;
+            let length = vm.as_i64(length)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sys_truncate(handle, length);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysRename as u8 => {
+            vm.ensure_host_deadline_support("sys-rename", false)?;
+            let to = vm.pop()?;
+            let from = vm.pop()?;
+            let from = crate::host_ext::as_str(&vm.arena, from)?.to_string();
+            let to = crate::host_ext::as_str(&vm.arena, to)?.to_string();
+            let result = crate::host_ext::ResourceTable::sys_rename(&from, &to);
+            push_language_result(vm, result);
+            Ok(true)
+        }
         x if x == Op::SysClose as u8 => {
             vm.ensure_host_deadline_support("sys-close", false)?;
             let handle = vm.pop()?;
@@ -163,6 +213,17 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
                 requested,
             );
             push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysRandomFill as u8 => {
+            vm.ensure_host_deadline_support("sys-random-fill", false)?;
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let result = crate::host_buf::sys_random_fill(&mut vm.arena, buffer, offset, requested);
+            push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysWriteFrom as u8 => {

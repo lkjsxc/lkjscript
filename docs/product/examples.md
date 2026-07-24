@@ -20,6 +20,7 @@ manifest is an **Accepted Target**.
 | `src/examples/bench/main.lkjscript` | Leibniz diagnostic entry | numeric result checked by benchmark tooling |
 | `src/examples/brainfuck/main.lkjscript` | direct Brainfuck interpreter, with optional identical-run folding | authored smoke fixtures and pinned Mandelbrot output checked byte-for-byte by `meta/benchmarks/brainfuck/benchmark.py` |
 | `src/examples/bulk-bytes/main.lkjscript` | exact UTF-8 file-buffer round trip | smoke writes, rereads, decodes, and prints exact text |
+| `src/examples/durable-files/main.lkjscript` | append/replay/restart durability consumer | smoke runs twice, checks replayed byte count and retained appended records |
 | `src/examples/lkjedit/main.lkjscript` | full terminal editor acceptance | scripted open/edit/save/reopen/new-file smoke |
 | `src/examples/lkjedit/buffer-demo.lkjscript` | terminal redraw/list demonstration | compile coverage only |
 | `src/examples/lkjedit/edit-mem.lkjscript` | editor loop with in-memory buffer | compile coverage only |

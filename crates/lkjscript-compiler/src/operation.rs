@@ -65,6 +65,13 @@ pub enum Operation {
     SysTtyGuardClear,
     SysOpenRead,
     SysOpenWrite,
+    SysOpenAppend,
+    SysOpenCreateNew,
+    SysOpenDir,
+    SysFsync,
+    SysTruncate,
+    SysRename,
+    SysRandomFill,
     SysPathExists,
     SysWaitMs,
     SysNowMs,
@@ -148,6 +155,13 @@ impl Operation {
         Self::SysTtyGuardClear,
         Self::SysOpenRead,
         Self::SysOpenWrite,
+        Self::SysOpenAppend,
+        Self::SysOpenCreateNew,
+        Self::SysOpenDir,
+        Self::SysFsync,
+        Self::SysTruncate,
+        Self::SysRename,
+        Self::SysRandomFill,
         Self::SysPathExists,
         Self::SysWaitMs,
         Self::SysNowMs,
@@ -237,6 +251,13 @@ impl Operation {
             Self::SysTtyGuardClear => "sys-tty-guard-clear",
             Self::SysOpenRead => "sys-open-read",
             Self::SysOpenWrite => "sys-open-write",
+            Self::SysOpenAppend => "sys-open-append",
+            Self::SysOpenCreateNew => "sys-open-create-new",
+            Self::SysOpenDir => "sys-open-dir",
+            Self::SysFsync => "sys-fsync",
+            Self::SysTruncate => "sys-truncate",
+            Self::SysRename => "sys-rename",
+            Self::SysRandomFill => "sys-random-fill",
             Self::SysPathExists => "sys-path-exists",
             Self::SysWaitMs => "sys-wait-ms",
             Self::SysNowMs => "sys-now-ms",
@@ -373,9 +394,18 @@ impl Operation {
             ),
             Self::SysTtyGuardSave => function(vec![Type::Buf], system_result(Type::Unit)),
             Self::SysTtyGuardClear => function(Vec::new(), system_result(Type::Unit)),
-            Self::SysOpenRead | Self::SysOpenWrite => {
-                function(vec![Type::Str], system_result(Type::Handle))
-            }
+            Self::SysOpenRead
+            | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir => function(vec![Type::Str], system_result(Type::Handle)),
+            Self::SysFsync => function(vec![Type::Handle], system_result(Type::Unit)),
+            Self::SysTruncate => function(vec![Type::Handle, Type::I64], system_result(Type::Unit)),
+            Self::SysRename => function(vec![Type::Str, Type::Str], system_result(Type::Unit)),
+            Self::SysRandomFill => function(
+                vec![Type::Buf, Type::I64, Type::I64],
+                system_result(Type::Unit),
+            ),
             Self::SysPathExists => function(vec![Type::Str], system_result(Type::Bool)),
             Self::SysWaitMs => function(vec![Type::I64], system_result(Type::Unit)),
             Self::SysNowMs => function(Vec::new(), system_result(Type::I64)),
@@ -614,6 +644,13 @@ impl Operation {
             | Self::SysTtyGuardClear
             | Self::SysOpenRead
             | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir
+            | Self::SysFsync
+            | Self::SysTruncate
+            | Self::SysRename
+            | Self::SysRandomFill
             | Self::SysPathExists
             | Self::SysWaitMs
             | Self::SysNowMs
@@ -884,6 +921,47 @@ mod tests {
             EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP)
+        );
+    }
+
+    #[test]
+    fn durable_file_operations_have_exact_signatures_and_effects() {
+        let result_handle = Type::Result(Box::new(Type::Handle), Box::new(Type::Str));
+        let result_unit = Type::Result(Box::new(Type::Unit), Box::new(Type::Str));
+        assert_eq!(
+            Operation::from_name("sys-open-append"),
+            Some(Operation::SysOpenAppend)
+        );
+        assert_eq!(
+            Operation::from_name("sys-random-fill"),
+            Some(Operation::SysRandomFill)
+        );
+        assert_eq!(
+            Operation::SysOpenCreateNew.resolve_types(&[Type::Str]),
+            Ok((
+                function(vec![Type::Str], result_handle.clone()),
+                result_handle
+            ))
+        );
+        assert_eq!(
+            Operation::SysTruncate.resolve_types(&[Type::Handle, Type::I64]),
+            Ok((
+                function(vec![Type::Handle, Type::I64], result_unit.clone()),
+                result_unit.clone(),
+            ))
+        );
+        assert_eq!(
+            Operation::SysRandomFill.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
+            Ok((
+                function(vec![Type::Buf, Type::I64, Type::I64], result_unit),
+                Type::Result(Box::new(Type::Unit), Box::new(Type::Str)),
+            ))
+        );
+        assert_eq!(
+            Operation::SysFsync.effects(),
+            EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
                 .union(EffectSet::MAY_TRAP)
         );
     }

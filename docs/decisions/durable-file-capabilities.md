@@ -8,7 +8,8 @@ projection ordering, storage policy, and token formats remain `.lkjscript`.
 
 ## Status
 
-**Accepted Target.** No primitive in this record is implemented yet.
+**Current.** The primitive surface, append/replay consumer, canonical local
+and Docker verification are implemented and verified.
 
 ## Decision
 
@@ -39,11 +40,10 @@ script controls flags, permissions, or random source selection.
 
 ## Verification
 
-Test append/create exclusivity, binary random fill and range errors, file and
-directory sync, truncation, same-filesystem rename, stale/wrong handles, and
-interrupted/error propagation. A `.lkjscript` append/replay/restart consumer
-must exercise the capability before a product claim. Docker and canonical gates
-must pass.
+Append/create exclusivity, binary random fill/range errors, file/directory
+sync, truncation, rename, stale/wrong handles, and opcode validation pass. The
+`.lkjscript` append/replay/restart consumer passes locally; canonical and Docker
+gates pass.
 
 ## Rejected
 

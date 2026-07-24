@@ -1025,11 +1025,20 @@ fn apply_instruction(
             expect_pop(state, Kind::F64, proto, instruction)?;
             state.stack.push(Kind::Str);
         }
-        Op::SysOpenRead | Op::SysOpenWrite | Op::SysPathExists => {
+        Op::SysOpenRead
+        | Op::SysOpenWrite
+        | Op::SysOpenAppend
+        | Op::SysOpenCreateNew
+        | Op::SysOpenDir
+        | Op::SysPathExists => {
             expect_pop(state, Kind::Str, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
-        Op::SysWriteByte | Op::SysBind | Op::SysListen => {
+        Op::SysFsync => {
+            expect_pop(state, Kind::Handle, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysWriteByte | Op::SysBind | Op::SysListen | Op::SysTruncate => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
             state.stack.push(Kind::Result);
@@ -1054,6 +1063,17 @@ fn apply_instruction(
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Buf, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysRandomFill => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysRename => {
+            expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Str, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
         Op::OkWrap | Op::ErrWrap => {
@@ -1462,6 +1482,20 @@ mod tests {
         let mut from = unit_chunk();
         from.main.code = vec![Op::Unit as u8, Op::BufFromStr as u8, Op::Return as u8];
         assert!(error(from).contains("Str"));
+
+        let mut random = unit_chunk();
+        random.main.code = vec![
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::SysRandomFill as u8,
+            Op::Return as u8,
+        ];
+        assert!(error(random).contains("I64"));
+
+        let mut fsync = unit_chunk();
+        fsync.main.code = vec![Op::Unit as u8, Op::SysFsync as u8, Op::Return as u8];
+        assert!(error(fsync).contains("Handle"));
     }
 
     #[test]

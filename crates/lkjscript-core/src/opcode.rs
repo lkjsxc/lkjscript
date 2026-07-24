@@ -100,6 +100,13 @@ pub enum Op {
     SysWriteFrom = 155,
     BufFromStr = 156,
     BufToStr = 157,
+    SysOpenAppend = 158,
+    SysOpenCreateNew = 159,
+    SysOpenDir = 160,
+    SysFsync = 161,
+    SysTruncate = 162,
+    SysRename = 163,
+    SysRandomFill = 164,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,6 +275,13 @@ impl Op {
         Self::SysWriteFrom,
         Self::BufFromStr,
         Self::BufToStr,
+        Self::SysOpenAppend,
+        Self::SysOpenCreateNew,
+        Self::SysOpenDir,
+        Self::SysFsync,
+        Self::SysTruncate,
+        Self::SysRename,
+        Self::SysRandomFill,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -353,7 +367,9 @@ impl Op {
             | Self::SysTtySet
             | Self::SysBind
             | Self::SysListen
-            | Self::SysSend => Fixed {
+            | Self::SysSend
+            | Self::SysTruncate
+            | Self::SysRename => Fixed {
                 required: 2,
                 pops: 2,
                 pushes: 1,
@@ -361,6 +377,11 @@ impl Op {
             Self::SysReadInto | Self::SysWriteFrom => Fixed {
                 required: 4,
                 pops: 4,
+                pushes: 1,
+            },
+            Self::SysRandomFill => Fixed {
+                required: 3,
+                pops: 3,
                 pushes: 1,
             },
             Self::BufRef | Self::BufGetU32 => Fixed {
@@ -394,6 +415,10 @@ impl Op {
             | Self::StrFromByte
             | Self::SysOpenRead
             | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir
+            | Self::SysFsync
             | Self::SysClose
             | Self::SysReadByte
             | Self::Arg

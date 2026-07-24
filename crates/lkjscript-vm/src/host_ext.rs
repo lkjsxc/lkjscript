@@ -55,6 +55,7 @@ pub fn str_from_byte(arena: &mut Arena, number: i64) -> Result<Value> {
 
 enum OwnedResource {
     File(OwnedFd),
+    Directory(OwnedFd),
     Socket(OwnedFd),
 }
 
@@ -102,6 +103,53 @@ impl ResourceTable {
         let file = lkjscript_sys::open_write(path)
             .map_err(|error| Error::msg(format!("sys-open-write: {error}")))?;
         self.push(OwnedResource::File(file))
+    }
+
+    pub fn sys_open_append(&mut self, path: &str) -> Result<Value> {
+        self.ensure_capacity()?;
+        let file = lkjscript_sys::open_append(path)
+            .map_err(|error| Error::msg(format!("sys-open-append: {error}")))?;
+        self.push(OwnedResource::File(file))
+    }
+
+    pub fn sys_open_create_new(&mut self, path: &str) -> Result<Value> {
+        self.ensure_capacity()?;
+        let file = lkjscript_sys::open_create_new(path)
+            .map_err(|error| Error::msg(format!("sys-open-create-new: {error}")))?;
+        self.push(OwnedResource::File(file))
+    }
+
+    pub fn sys_open_dir(&mut self, path: &str) -> Result<Value> {
+        self.ensure_capacity()?;
+        let directory = lkjscript_sys::open_dir(path)
+            .map_err(|error| Error::msg(format!("sys-open-dir: {error}")))?;
+        self.push(OwnedResource::Directory(directory))
+    }
+
+    /// Files and directory handles may be synced; directories make a prior
+    /// same-filesystem rename durable. Sockets and stale handles are rejected.
+    pub fn sys_fsync(&self, handle: Value) -> Result<Value> {
+        let raw = self.sync_raw(handle, "sys-fsync")?;
+        lkjscript_sys::fsync_fd(raw).map_err(|error| Error::msg(format!("sys-fsync: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    /// Only regular file capabilities may be truncated; directory and socket
+    /// handles are rejected before the OS call.
+    pub fn sys_truncate(&self, handle: Value, length: i64) -> Result<Value> {
+        if length < 0 {
+            return Err(Error::msg("sys-truncate length out of range"));
+        }
+        let raw = self.file_raw(handle, "sys-truncate")?;
+        lkjscript_sys::truncate_fd(raw, length)
+            .map_err(|error| Error::msg(format!("sys-truncate: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sys_rename(from: &str, to: &str) -> Result<Value> {
+        lkjscript_sys::rename_path(from, to)
+            .map_err(|error| Error::msg(format!("sys-rename: {error}")))?;
+        Ok(Value::UNIT)
     }
 
     pub fn sys_path_exists(path: &str) -> Result<Value> {
@@ -194,6 +242,9 @@ impl ResourceTable {
                 lkjscript_sys::recv_sock(socket.as_raw(), destination)
                     .map_err(|error| Error::msg(format!("sys-read-into: {error}")))
             }
+            Some(OwnedResource::Directory(_)) => {
+                Err(Error::msg("sys-read-into: handle is a directory"))
+            }
             None => Err(Error::msg("sys-read-into: stale or unknown handle")),
         }
     }
@@ -206,6 +257,9 @@ impl ResourceTable {
             Some(OwnedResource::Socket(socket)) => {
                 lkjscript_sys::send_sock(socket.as_raw(), source)
                     .map_err(|error| Error::msg(format!("sys-write-from: {error}")))
+            }
+            Some(OwnedResource::Directory(_)) => {
+                Err(Error::msg("sys-write-from: handle is a directory"))
             }
             None => Err(Error::msg("sys-write-from: stale or unknown handle")),
         }
@@ -226,6 +280,9 @@ impl ResourceTable {
                 Some(OwnedResource::Socket(socket)) => {
                     lkjscript_sys::recv_sock(socket.as_raw(), &mut buffer)
                         .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?
+                }
+                Some(OwnedResource::Directory(_)) => {
+                    return Err(Error::msg("sys-read-byte: handle is a directory"));
                 }
                 None => return Err(Error::msg("sys-read-byte: stale or unknown handle")),
             }
@@ -250,6 +307,9 @@ impl ResourceTable {
                 lkjscript_sys::send_sock(socket.as_raw(), &[byte])
                     .map_err(|error| Error::msg(format!("sys-write-byte: {error}")))?;
             }
+            Some(OwnedResource::Directory(_)) => {
+                return Err(Error::msg("sys-write-byte: handle is a directory"));
+            }
             None => return Err(Error::msg("sys-write-byte: stale or unknown handle")),
         }
         Ok(Value::UNIT)
@@ -268,6 +328,7 @@ impl ResourceTable {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::File(file)) => Ok(file.as_raw()),
+            Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
             Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
@@ -277,9 +338,35 @@ impl ResourceTable {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
-            Some(OwnedResource::File(_)) => {
+            Some(OwnedResource::File(_)) | Some(OwnedResource::Directory(_)) => {
                 Err(Error::msg(format!("{operation}: handle is not a socket")))
             }
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
+        }
+    }
+
+    fn file_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
+        let index = self.owned_index(handle, operation)?;
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::File(file)) => Ok(file.as_raw()),
+            Some(OwnedResource::Directory(_)) => {
+                Err(Error::msg(format!("{operation}: handle is a directory")))
+            }
+            Some(OwnedResource::Socket(_)) => {
+                Err(Error::msg(format!("{operation}: handle is not a file")))
+            }
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
+        }
+    }
+
+    fn sync_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
+        let index = self.owned_index(handle, operation)?;
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::File(file)) => Ok(file.as_raw()),
+            Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
+            Some(OwnedResource::Socket(_)) => Err(Error::msg(format!(
+                "{operation}: handle is not a file or directory"
+            ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
@@ -460,6 +547,57 @@ mod tests {
         let second = second.expect("open second temporary file");
         assert_ne!(first, second);
         assert!(table.close(second).is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn durable_file_capabilities_check_kind_staleness_and_effects(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let file = TempFile::new()?;
+        let appended = std::env::temp_dir().join(format!(
+            "lkjscript-durable-new-{}-{}",
+            std::process::id(),
+            NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let renamed = std::env::temp_dir().join(format!(
+            "lkjscript-durable-rename-{}-{}",
+            std::process::id(),
+            NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_file(&appended);
+        let _ = fs::remove_file(&renamed);
+        let directory = std::env::temp_dir().join(format!(
+            "lkjscript-durable-dir-{}-{}",
+            std::process::id(),
+            NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&directory)?;
+
+        let mut table = ResourceTable::default();
+        let append = table.sys_open_append(&file.0.to_string_lossy())?;
+        table.write_byte(append, b'y'.into())?;
+        table.sys_fsync(append)?;
+        table.sys_truncate(append, 1)?;
+        table.close(append)?;
+        assert_eq!(fs::read(&file.0)?, b"x");
+        assert!(table.sys_fsync(append).is_err());
+
+        let created = table.sys_open_create_new(&appended.to_string_lossy())?;
+        assert!(table
+            .sys_open_create_new(&appended.to_string_lossy())
+            .is_err());
+        table.close(created)?;
+        ResourceTable::sys_rename(&file.0.to_string_lossy(), &renamed.to_string_lossy())?;
+        assert!(renamed.is_file());
+
+        let dir = table.sys_open_dir(&directory.to_string_lossy())?;
+        table.sys_fsync(dir)?;
+        assert!(table.sys_truncate(dir, 0).is_err());
+        assert!(table.write_byte(dir, 0).is_err());
+        table.close(dir)?;
+        let _ = fs::remove_file(&appended);
+        let _ = fs::remove_file(&renamed);
+        fs::remove_dir(&directory)?;
         Ok(())
     }
 

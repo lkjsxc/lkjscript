@@ -35,8 +35,8 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 4. at most 16 immediate entries in every directory under the language `src`
    tree, using the compiler's shared language rule;
 5. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
-6. successful compilation of 10 roots and exact equality between their reported
-   import closures and all 95 canonical sources in the corpus;
+6. successful compilation of 11 roots and exact equality between their reported
+   import closures and all 96 canonical sources in the corpus;
 7. `cargo fmt --all -- --check`;
 8. strict Clippy for the workspace, all targets, and all features;
 9. workspace unit tests with the locked Cargo graph.
@@ -80,6 +80,7 @@ python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/bulk-bytes-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/durable-files-smoke.sh
 ```
 
 The HTTP workload accepts one request and exits; it is not a general server.

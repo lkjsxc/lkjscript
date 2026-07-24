@@ -37,6 +37,13 @@ sys-read-into Handle Buf I64 I64     -> Result I64 Str
 sys-write-from Handle Buf I64 I64    -> Result I64 Str
 buf-from-str Str                      -> Buf
 buf-to-str Buf                        -> Result Str Str
+sys-open-append Str                  -> Result Handle Str
+sys-open-create-new Str              -> Result Handle Str
+sys-open-dir Str                     -> Result Handle Str
+sys-fsync Handle                     -> Result Unit Str
+sys-truncate Handle I64              -> Result Unit Str
+sys-rename Str Str                   -> Result Unit Str
+sys-random-fill Buf I64 I64          -> Result Unit Str
 sys-tty-guard-save Buf               -> Result Unit Str
 sys-tty-guard-clear                  -> Result Unit Str
 ```
@@ -69,6 +76,8 @@ Result error text in its VM diagnostic.
 - Successful send and bulk write report actual byte counts.
 - Bulk reads/writes preserve bytes exactly, validate offset/length before
   slicing, and reject invalid UTF-8 rather than applying replacement text.
+- Append, sync, truncate, rename, and OS random-fill expose no raw descriptor,
+  caller-selected flags, or pseudo-random fallback.
 - Prelude names, codegen mappings, and opcode dispatch have conformance tests.
 - Hello, lkjedit, and one-shot HTTP remain green.
 
