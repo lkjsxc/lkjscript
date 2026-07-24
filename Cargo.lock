@@ -9,6 +9,8 @@ dependencies = [
  "lkjscript-compiler",
  "lkjscript-core",
  "lkjscript-ir",
+ "lkjscript-jit",
+ "lkjscript-native",
  "lkjscript-vm",
 ]
 
@@ -29,6 +31,16 @@ name = "lkjscript-ir"
 version = "0.1.0"
 
 [[package]]
+name = "lkjscript-jit"
+version = "0.1.0"
+dependencies = [
+ "lkjscript-core",
+ "lkjscript-ir",
+ "lkjscript-native",
+ "lkjscript-sys",
+]
+
+[[package]]
 name = "lkjscript-native"
 version = "0.1.0"
 
@@ -44,6 +56,7 @@ name = "lkjscript-vm"
 version = "0.1.0"
 dependencies = [
  "lkjscript-core",
+ "lkjscript-jit",
  "lkjscript-sys",
 ]
 
