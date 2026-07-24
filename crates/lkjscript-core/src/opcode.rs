@@ -133,6 +133,7 @@ pub enum Op {
     SysSqliteLastInsertRowid = 188,
     SysSqliteExtendedResultCode = 189,
     SysSqliteBackup = 190,
+    BufSlice = 191,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -335,6 +336,7 @@ impl Op {
         Self::SysSqliteLastInsertRowid,
         Self::SysSqliteExtendedResultCode,
         Self::SysSqliteBackup,
+        Self::BufSlice,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -471,7 +473,8 @@ impl Op {
                 pops: 2,
                 pushes: 1,
             },
-            Self::SysSqliteBindI64
+            Self::BufSlice
+            | Self::SysSqliteBindI64
             | Self::SysSqliteBindF64
             | Self::SysSqliteBindText
             | Self::SysSqliteBindBytes

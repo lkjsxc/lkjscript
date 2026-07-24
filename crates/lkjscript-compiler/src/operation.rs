@@ -45,6 +45,7 @@ pub enum Operation {
     BufClone,
     BufFromStr,
     BufToStr,
+    BufSlice,
     BufGetU32,
     BufSetU32,
     StrLen,
@@ -160,6 +161,7 @@ impl Operation {
         Self::BufClone,
         Self::BufFromStr,
         Self::BufToStr,
+        Self::BufSlice,
         Self::BufGetU32,
         Self::BufSetU32,
         Self::StrLen,
@@ -281,6 +283,7 @@ impl Operation {
             Self::BufClone => "buf-clone",
             Self::BufFromStr => "buf-from-str",
             Self::BufToStr => "buf-to-str",
+            Self::BufSlice => "buf-slice",
             Self::BufGetU32 => "buf-get-u32",
             Self::BufSetU32 => "buf-set-u32",
             Self::StrLen => "str-len",
@@ -450,6 +453,10 @@ impl Operation {
             Self::BufClone => function(vec![Type::Buf], Type::Buf),
             Self::BufFromStr => function(vec![Type::Str], Type::Buf),
             Self::BufToStr => function(vec![Type::Buf], system_result(Type::Str)),
+            Self::BufSlice => function(
+                vec![Type::Buf, Type::I64, Type::I64],
+                system_result(Type::Buf),
+            ),
             Self::StrLen => function(vec![Type::Str], Type::I64),
             Self::StrRef => function(vec![Type::Str, Type::I64], Type::I64),
             Self::StrAppend => function(vec![Type::Str, Type::Str], Type::Str),
@@ -740,7 +747,7 @@ impl Operation {
 
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
-            Self::BufFromStr | Self::BufToStr => EffectSet::ALLOCATES
+            Self::BufFromStr | Self::BufToStr | Self::BufSlice => EffectSet::ALLOCATES
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::MAY_TRAP),
             Self::Cons

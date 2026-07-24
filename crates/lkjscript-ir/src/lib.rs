@@ -221,6 +221,7 @@ pub enum RuntimeOp {
     BufClone,
     BufFromStr,
     BufToStr,
+    BufSlice,
     BufGetU32,
     BufSetU32,
     StrLen,
@@ -299,9 +300,11 @@ impl RuntimeOp {
     pub const fn effects(self) -> EffectSet {
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
-            Self::BufFromStr | Self::BufToStr | Self::SysSha256 => EffectSet::ALLOCATES
-                .union(EffectSet::READS_MEMORY)
-                .union(EffectSet::MAY_TRAP),
+            Self::BufFromStr | Self::BufToStr | Self::BufSlice | Self::SysSha256 => {
+                EffectSet::ALLOCATES
+                    .union(EffectSet::READS_MEMORY)
+                    .union(EffectSet::MAY_TRAP)
+            }
             Self::Cons
             | Self::StrAppend
             | Self::StrFromByte

@@ -931,6 +931,10 @@ fn verify_runtime_signature(operation: RuntimeOp, signature: &Signature) -> crat
             _ => false,
         },
         RuntimeOp::BufToStr => exact(&[SsaType::Buf], &system_result(SsaType::Str)),
+        RuntimeOp::BufSlice => exact(
+            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &system_result(SsaType::Buf),
+        ),
         RuntimeOp::StrLen => exact(&[SsaType::Str], &SsaType::I64),
         RuntimeOp::StrRef => exact(&[SsaType::Str, SsaType::I64], &SsaType::I64),
         RuntimeOp::StrAppend => exact(&[SsaType::Str, SsaType::Str], &SsaType::Str),

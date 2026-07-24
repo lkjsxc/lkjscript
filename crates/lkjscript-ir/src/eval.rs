@@ -528,6 +528,32 @@ impl Evaluator<'_> {
                     )))),
                 }
             }),
+            Op::BufSlice => ternary(&arguments, |buffer, offset, length| {
+                let buffer = as_buffer(buffer)?;
+                let offset = index_value(offset, "buf-slice")?;
+                let length = index_value(length, "buf-slice")?;
+                let Some(end) = offset.checked_add(length) else {
+                    return Ok(EvalValue::Err(Box::new(EvalValue::Str(
+                        "buf-slice range overflow".into(),
+                    ))));
+                };
+                let bytes = {
+                    let bytes = buffer.bytes.borrow();
+                    let Some(bytes) = bytes.get(offset..end) else {
+                        return Ok(EvalValue::Err(Box::new(EvalValue::Str(
+                            "buf-slice out of bounds".into(),
+                        ))));
+                    };
+                    bytes.to_vec()
+                };
+                self.allocate()?;
+                let id = self.next_buffer_id;
+                self.next_buffer_id = self.next_buffer_id.saturating_add(1);
+                Ok(EvalValue::Ok(Box::new(EvalValue::Buf(EvalBuffer {
+                    id,
+                    bytes: Rc::new(RefCell::new(bytes)),
+                }))))
+            }),
             Op::BufGetU32 => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
                 let index = index_value(index, "buf-get-u32")?;

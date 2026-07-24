@@ -782,6 +782,7 @@ fn runtime_opcode(operation: RuntimeOp) -> Op {
         RuntimeOp::BufClone => Op::BufClone,
         RuntimeOp::BufFromStr => Op::BufFromStr,
         RuntimeOp::BufToStr => Op::BufToStr,
+        RuntimeOp::BufSlice => Op::BufSlice,
         RuntimeOp::BufGetU32 => Op::BufGetU32,
         RuntimeOp::BufSetU32 => Op::BufSetU32,
         RuntimeOp::StrLen => Op::StrLen,

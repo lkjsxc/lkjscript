@@ -955,6 +955,12 @@ fn apply_instruction(
             expect_pop(state, Kind::Buf, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
+        Op::BufSlice => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
         Op::BufLen | Op::BufClone => {
             expect_pop(state, Kind::Buf, proto, instruction)?;
             state.stack.push(if op == Op::BufLen {

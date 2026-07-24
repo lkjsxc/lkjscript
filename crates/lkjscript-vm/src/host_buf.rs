@@ -95,6 +95,15 @@ pub fn buf_to_str(arena: &mut Arena, value: Value) -> Result<Value> {
     Ok(arena.alloc(HeapObj::Str(text.to_owned())))
 }
 
+pub fn buf_slice(arena: &mut Arena, value: Value, offset: i64, length: i64) -> Result<Value> {
+    let range = buffer_range(arena, value, offset, length, "buf-slice")?;
+    let bytes = as_buf(arena, value)?
+        .get(range)
+        .ok_or_else(|| Error::msg("buf-slice range is invalid"))?
+        .to_vec();
+    Ok(arena.alloc(HeapObj::Buf(bytes)))
+}
+
 pub fn sys_read_into(
     arena: &mut Arena,
     handles: &ResourceTable,
@@ -211,7 +220,7 @@ pub fn sys_tty_guard_clear() -> Result<Value> {
     Ok(Value::UNIT)
 }
 
-fn bulk_range(
+fn buffer_range(
     arena: &Arena,
     buffer: Value,
     offset: i64,
@@ -222,11 +231,6 @@ fn bulk_range(
         .map_err(|_| Error::msg(format!("{operation} offset out of range")))?;
     let requested = usize::try_from(requested)
         .map_err(|_| Error::msg(format!("{operation} length out of range")))?;
-    if requested > MAX_BULK_IO_BYTES {
-        return Err(Error::msg(format!(
-            "{operation} length exceeds bulk I/O limit"
-        )));
-    }
     let end = offset
         .checked_add(requested)
         .ok_or_else(|| Error::msg(format!("{operation} range overflow")))?;
@@ -234,6 +238,22 @@ fn bulk_range(
         return Err(Error::msg(format!("{operation} range out of bounds")));
     }
     Ok(offset..end)
+}
+
+fn bulk_range(
+    arena: &Arena,
+    buffer: Value,
+    offset: i64,
+    requested: i64,
+    operation: &str,
+) -> Result<std::ops::Range<usize>> {
+    let range = buffer_range(arena, buffer, offset, requested, operation)?;
+    if range.len() > MAX_BULK_IO_BYTES {
+        return Err(Error::msg(format!(
+            "{operation} length exceeds bulk I/O limit"
+        )));
+    }
+    Ok(range)
 }
 
 fn buffer_index(index: i64, operation: &str) -> Result<usize> {
@@ -253,8 +273,8 @@ mod tests {
     use crate::host_ext::ResourceTable;
 
     use super::{
-        as_buf, buf_from_str, buf_new, buf_set, buf_set_u32, buf_to_str, sys_poll, sys_random_fill,
-        sys_read_into, sys_sha256, sys_write_from,
+        as_buf, buf_from_str, buf_new, buf_set, buf_set_u32, buf_slice, buf_to_str, sys_poll,
+        sys_random_fill, sys_read_into, sys_sha256, sys_write_from,
     };
 
     static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
@@ -310,6 +330,16 @@ mod tests {
         assert!(crate::host_ext::as_str(&arena, error)
             .expect("ResultErr string")
             .contains("invalid UTF-8"));
+    }
+
+    #[test]
+    fn buf_slice_copies_exact_bounded_ranges() {
+        let mut arena = Arena::default();
+        let source = arena.alloc(lkjscript_core::HeapObj::Buf(vec![0, 1, 2, 3]));
+        let slice = buf_slice(&mut arena, source, 1, 2).expect("slice range");
+        assert_eq!(as_buf(&arena, slice).expect("slice bytes"), &[1, 2]);
+        assert!(buf_slice(&mut arena, source, -1, 1).is_err());
+        assert!(buf_slice(&mut arena, source, 3, 2).is_err());
     }
 
     #[test]

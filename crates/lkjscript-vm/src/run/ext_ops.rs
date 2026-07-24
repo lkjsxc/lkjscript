@@ -104,6 +104,16 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             push_language_result(vm, result);
             Ok(true)
         }
+        x if x == Op::BufSlice as u8 => {
+            let length = vm.pop()?;
+            let offset = vm.pop()?;
+            let length = vm.as_i64(length)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let result = crate::host_buf::buf_slice(&mut vm.arena, buffer, offset, length);
+            push_language_result(vm, result);
+            Ok(true)
+        }
         x if x == Op::SysOpenRead as u8 => {
             vm.ensure_host_deadline_support("sys-open-read", false)?;
             let path = vm.pop()?;

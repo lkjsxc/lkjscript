@@ -21,6 +21,7 @@ sys-read-into Handle Buf I64 I64 -> Result I64 Str
 sys-write-from Handle Buf I64 I64 -> Result I64 Str
 buf-from-str Str -> Buf
 buf-to-str Buf -> Result Str Str
+buf-slice Buf I64 I64 -> Result Buf Str
 ```
 
 For read/write, offset and requested length are non-negative, fit the buffer,
@@ -28,7 +29,9 @@ and do not exceed a fixed bulk-I/O limit. `Ok(0)` means EOF or no progress;
 writes report actual progress and never hide a partial write. Invalid ranges,
 wrong/stale handles, ordinary OS errors, and invalid UTF-8 are Result errors.
 UTF-8 conversion never uses replacement characters. `buf-from-str` encodes
-exact UTF-8 and is bounded by the existing buffer limit.
+exact UTF-8 and is bounded by the existing buffer limit. `buf-slice` copies an
+exact validated range into a bounded `Buf`; it supplies protocol consumers with
+an exact received prefix without exposing host slices.
 
 The existing Str-only socket operations are retained only while legacy examples
 need them; new consumers use this surface. Blocking bulk calls remain rejected

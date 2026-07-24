@@ -1190,6 +1190,7 @@ fn runtime_operation(operation: Operation) -> Result<RuntimeOp> {
         Operation::BufClone => RuntimeOp::BufClone,
         Operation::BufFromStr => RuntimeOp::BufFromStr,
         Operation::BufToStr => RuntimeOp::BufToStr,
+        Operation::BufSlice => RuntimeOp::BufSlice,
         Operation::BufGetU32 => RuntimeOp::BufGetU32,
         Operation::BufSetU32 => RuntimeOp::BufSetU32,
         Operation::StrLen => RuntimeOp::StrLen,
