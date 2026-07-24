@@ -5,11 +5,12 @@ use std::time::{Duration, Instant};
 
 use lkjscript_core::{Error, Result};
 use lkjscript_ir::{
-    verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter, CallTarget,
-    Constant, EffectSet, FailureBehavior, FrameLocal, FrameState, Function, FunctionId,
-    GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind, InstructionMetadata,
-    Origin, ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint, Signature,
-    SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
+    verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter,
+    BorrowKind as SsaBorrowKind, CallTarget, Constant, EffectSet, FailureBehavior, FrameLocal,
+    FrameState, Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction,
+    InstructionKind, InstructionMetadata, LoanId as SsaLoanId, Origin, PlaceId as SsaPlaceId,
+    PlaceMetadata, ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint,
+    Signature, SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
     TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VerifiedProgram,
 };
 
@@ -114,21 +115,30 @@ fn construct_program(program: &hir::Program) -> Result<Program> {
         let entry = builder.new_block(origin(function.origin.raw(), 0), false)?;
         builder.entry = entry;
         builder.current = Some(entry);
-        if function.params.len() != builder.signature.parameters.len() {
+        if function.params.len() != builder.signature.parameters.len()
+            || function.params.len() != function.param_places.len()
+        {
             return Err(Error::msg(format!(
                 "HIR function {} parameter/signature mismatch",
                 binding.name
             )));
         }
-        for (index, (binding_id, ty)) in function
+        for (index, ((binding_id, place), ty)) in function
             .params
             .iter()
             .copied()
+            .zip(function.param_places.iter().copied())
             .zip(builder.signature.parameters.clone())
             .enumerate()
         {
-            let parameter =
-                builder.add_block_parameter(entry, ty, origin(function.origin.raw(), 0))?;
+            builder.register_place(place, binding_id, ty.clone())?;
+            let owner_place = is_owned_buf(&ty).then_some(SsaPlaceId::new(place.raw()));
+            let parameter = builder.add_block_parameter(
+                entry,
+                ty,
+                owner_place,
+                origin(function.origin.raw(), 0),
+            )?;
             builder.env.insert(binding_id, parameter);
             let slot =
                 u16::try_from(index).map_err(|_| Error::msg("SSA parameter slot exceeds u16"))?;
@@ -253,6 +263,7 @@ struct FunctionBuilder<'a> {
     next_value: u32,
     next_position: u32,
     value_types: Vec<SsaType>,
+    places: Vec<PlaceMetadata>,
     env: BTreeMap<BindingId, ValueId>,
     slots: BTreeMap<BindingId, u16>,
 }
@@ -284,9 +295,75 @@ impl<'a> FunctionBuilder<'a> {
             next_value: 0,
             next_position: 0,
             value_types: Vec::new(),
+            places: Vec::new(),
             env: BTreeMap::new(),
             slots: BTreeMap::new(),
         }
+    }
+
+    fn register_place(
+        &mut self,
+        place: hir::PlaceId,
+        binding: BindingId,
+        ty: SsaType,
+    ) -> Result<()> {
+        let expected = u32::try_from(self.places.len())
+            .map_err(|_| Error::msg("SSA place count exceeds u32"))?;
+        if place.raw() != expected {
+            return Err(Error::msg("HIR PlaceIds are not dense in function order"));
+        }
+        self.places.push(PlaceMetadata {
+            id: SsaPlaceId::new(place.raw()),
+            binding: SsaBindingId::new(binding.raw()),
+            ty,
+        });
+        Ok(())
+    }
+
+    fn owned_place_for_binding(&self, binding: BindingId) -> Result<Option<SsaPlaceId>> {
+        let binding = SsaBindingId::new(binding.raw());
+        let place = self.places.iter().find(|place| place.binding == binding);
+        match place {
+            Some(place) if is_owned_buf(&place.ty) => Ok(Some(place.id)),
+            Some(_) => Ok(None),
+            None => Err(Error::msg(format!(
+                "HIR binding {} has no registered SSA place",
+                binding.raw()
+            ))),
+        }
+    }
+
+    fn initialize_owned_place(
+        &mut self,
+        binding: BindingId,
+        value: ValueId,
+        expression_origin: hir::SourceId,
+    ) -> Result<()> {
+        if let Some(place) = self.owned_place_for_binding(binding)? {
+            let _fact = self.append(
+                SsaType::Unit,
+                InstructionKind::PlaceInit { place, value },
+                EffectSet::PURE,
+                expression_origin,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn end_owned_place(
+        &mut self,
+        binding: BindingId,
+        expression_origin: hir::SourceId,
+    ) -> Result<()> {
+        if let Some(place) = self.owned_place_for_binding(binding)? {
+            let _fact = self.append(
+                SsaType::Unit,
+                InstructionKind::PlaceEnd { place },
+                EffectSet::PURE,
+                expression_origin,
+            )?;
+        }
+        Ok(())
     }
 
     fn new_block(&mut self, block_origin: Origin, loop_header: bool) -> Result<BlockId> {
@@ -318,15 +395,40 @@ impl<'a> FunctionBuilder<'a> {
         &mut self,
         block: BlockId,
         ty: SsaType,
+        owner_place: Option<SsaPlaceId>,
         parameter_origin: Origin,
     ) -> Result<ValueId> {
         let id = self.next_value(&ty)?;
         self.block_mut(block)?.parameters.push(BlockParameter {
             id,
             ty,
+            owner_place,
             origin: parameter_origin,
         });
         Ok(id)
+    }
+
+    fn add_environment_parameters(
+        &mut self,
+        block: BlockId,
+        incoming: &BTreeMap<BindingId, ValueId>,
+        parameter_origin: Origin,
+    ) -> Result<BTreeMap<BindingId, ValueId>> {
+        let mut environment = BTreeMap::new();
+        for (binding, value) in incoming {
+            let parameter = self.add_block_parameter(
+                block,
+                self.value_type(*value)?,
+                self.owned_place_for_binding(*binding)?,
+                parameter_origin,
+            )?;
+            environment.insert(*binding, parameter);
+        }
+        Ok(environment)
+    }
+
+    fn environment_arguments(environment: &BTreeMap<BindingId, ValueId>) -> Vec<ValueId> {
+        environment.values().copied().collect()
     }
 
     fn next_value(&mut self, ty: &SsaType) -> Result<ValueId> {
@@ -463,6 +565,49 @@ impl<'a> FunctionBuilder<'a> {
                 expression.origin,
             )?,
             ExprKind::Load(binding) => return self.lower_load(*binding, expression),
+            ExprKind::Move { place, binding } => {
+                let Some(value) = self.lower_load(*binding, expression)? else {
+                    return Ok(None);
+                };
+                let moved = self.append(
+                    ty,
+                    InstructionKind::Move {
+                        place: SsaPlaceId::new(place.raw()),
+                        value,
+                    },
+                    EffectSet::PURE,
+                    expression.origin,
+                )?;
+                // A moved place has no current owner until an explicit
+                // reinitialization fact. The Move result is an unplaced
+                // transferred value and may travel only through affine edges.
+                self.env.remove(&binding.binding);
+                moved
+            }
+            ExprKind::Borrow {
+                place,
+                loan,
+                kind,
+                binding,
+            } => {
+                let Some(value) = self.lower_load(*binding, expression)? else {
+                    return Ok(None);
+                };
+                self.append(
+                    ty,
+                    InstructionKind::Borrow {
+                        place: SsaPlaceId::new(place.raw()),
+                        loan: SsaLoanId::new(loan.raw()),
+                        kind: match kind {
+                            hir::BorrowKind::Shared => SsaBorrowKind::Shared,
+                            hir::BorrowKind::Mutable => SsaBorrowKind::Mutable,
+                        },
+                        value,
+                    },
+                    EffectSet::PURE,
+                    expression.origin,
+                )?
+            }
             ExprKind::Call {
                 callee,
                 args,
@@ -545,7 +690,7 @@ impl<'a> FunctionBuilder<'a> {
                 };
                 let runtime = runtime_operation(*operation)?;
                 let signature = signature_from_type(resolved_signature, self.product_ids)?;
-                self.append(
+                let result = self.append(
                     ty,
                     InstructionKind::Runtime {
                         operation: runtime,
@@ -554,7 +699,9 @@ impl<'a> FunctionBuilder<'a> {
                     },
                     effects(operation.effects()),
                     expression.origin,
-                )?
+                )?;
+                self.forget_consumed_ref_mut_arguments(args);
+                result
             }
             ExprKind::Do(expressions) => {
                 return self.lower_sequence(expressions, expression.origin)
@@ -574,19 +721,26 @@ impl<'a> FunctionBuilder<'a> {
             }
             ExprKind::MutableLocal {
                 binding,
+                place,
                 slot,
                 initial,
                 body,
             } => {
+                let place_ty = lower_type(&initial.ty, self.product_ids)?;
                 let Some(initial) = self.lower_expr(initial)? else {
                     return Ok(None);
                 };
+                self.register_place(*place, *binding, place_ty)?;
+                self.initialize_owned_place(*binding, initial, expression.origin)?;
                 let previous_value = self.env.insert(*binding, initial);
                 let previous_slot = self.slots.insert(*binding, u16::from(*slot));
-                let result = self.lower_expr(body);
+                let result = self.lower_expr(body)?;
+                if result.is_some() {
+                    self.end_owned_place(*binding, expression.origin)?;
+                }
                 restore(&mut self.env, *binding, previous_value);
                 restore(&mut self.slots, *binding, previous_slot);
-                return result;
+                return Ok(result);
             }
             ExprKind::SetLocal {
                 target,
@@ -596,11 +750,15 @@ impl<'a> FunctionBuilder<'a> {
                 let Some(value) = self.lower_expr(value)? else {
                     return Ok(None);
                 };
-                if !self.env.contains_key(target) {
+                let owned_place = self.owned_place_for_binding(*target)?;
+                if owned_place.is_none() && !self.env.contains_key(target) {
                     return Err(Error::msg(format!(
                         "HIR set target {} is not in SSA environment",
                         target.raw()
                     )));
+                }
+                if owned_place.is_some() {
+                    self.initialize_owned_place(*target, value, expression.origin)?;
                 }
                 self.env.insert(*target, value);
                 self.slots.insert(*target, u16::from(*slot));
@@ -741,6 +899,17 @@ impl<'a> FunctionBuilder<'a> {
         })
     }
 
+    fn forget_consumed_ref_mut_arguments(&mut self, arguments: &[Expr]) {
+        for argument in arguments {
+            if !matches!(argument.ty, hir::Type::RefMut(_)) {
+                continue;
+            }
+            if let ExprKind::Load(binding) = &argument.kind {
+                self.env.remove(&binding.binding);
+            }
+        }
+    }
+
     fn lower_arguments(&mut self, arguments: &[Expr]) -> Result<Option<Vec<ValueId>>> {
         let mut values = Vec::with_capacity(arguments.len());
         for argument in arguments {
@@ -782,18 +951,26 @@ impl<'a> FunctionBuilder<'a> {
                 }
                 return Ok(None);
             };
+            let place_ty = lower_type(&binding.value.ty, self.product_ids)?;
+            self.register_place(binding.place, binding.binding, place_ty)?;
+            self.initialize_owned_place(binding.binding, value, binding.value.origin)?;
             previous.push((
                 binding.binding,
                 self.env.insert(binding.binding, value),
                 self.slots.insert(binding.binding, u16::from(binding.slot)),
             ));
         }
-        let result = self.lower_expr(body);
+        let result = self.lower_expr(body)?;
+        if result.is_some() {
+            for (binding, _, _) in previous.iter().rev() {
+                self.end_owned_place(*binding, body.origin)?;
+            }
+        }
         for (binding, previous_value, previous_slot) in previous.into_iter().rev() {
             restore(&mut self.env, binding, previous_value);
             restore(&mut self.slots, binding, previous_slot);
         }
-        result
+        Ok(result)
     }
 
     fn lower_if(
@@ -809,25 +986,28 @@ impl<'a> FunctionBuilder<'a> {
         let branch_origin = origin(expression.origin.raw(), self.next_position);
         let then_block = self.new_block(branch_origin, false)?;
         let else_block = self.new_block(branch_origin, false)?;
+        let incoming_env = self.env.clone();
+        let incoming_slots = self.slots.clone();
+        let then_env = self.add_environment_parameters(then_block, &incoming_env, branch_origin)?;
+        let else_env = self.add_environment_parameters(else_block, &incoming_env, branch_origin)?;
+        let incoming_arguments = Self::environment_arguments(&incoming_env);
         self.terminate(Terminator::ConditionalBranch {
             condition: condition_value,
             true_target: then_block,
-            true_arguments: Vec::new(),
+            true_arguments: incoming_arguments.clone(),
             false_target: else_block,
-            false_arguments: Vec::new(),
+            false_arguments: incoming_arguments,
         })?;
-        let incoming_env = self.env.clone();
-        let incoming_slots = self.slots.clone();
 
         self.switch_to(then_block)?;
-        self.env = incoming_env.clone();
+        self.env = then_env;
         self.slots = incoming_slots.clone();
         let then_value = self.lower_expr(then_branch)?;
         let then_end = self.current;
         let then_env = self.env.clone();
 
         self.switch_to(else_block)?;
-        self.env = incoming_env.clone();
+        self.env = else_env;
         self.slots = incoming_slots.clone();
         let else_value = self.lower_expr(else_branch)?;
         let else_end = self.current;
@@ -886,19 +1066,37 @@ impl<'a> FunctionBuilder<'a> {
                 let result = self.add_block_parameter(
                     merge,
                     result_type,
+                    None,
                     origin(expression_origin.raw(), self.next_position),
                 )?;
-                let bindings: Vec<BindingId> = incoming_env.keys().copied().collect();
+                let mut bindings = Vec::new();
+                for binding in incoming_env.keys().copied() {
+                    match (
+                        then_result.2.contains_key(&binding),
+                        else_result.2.contains_key(&binding),
+                    ) {
+                        (true, true) => bindings.push(binding),
+                        (false, false) => {}
+                        _ => {
+                            return Err(Error::msg(
+                                "SSA branch ownership environments do not match exactly",
+                            ));
+                        }
+                    }
+                }
                 let mut merge_env = BTreeMap::new();
                 for binding in &bindings {
-                    let ty = self.value_type(
-                        *incoming_env
-                            .get(binding)
-                            .ok_or_else(|| Error::msg("SSA merge lost incoming binding"))?,
-                    )?;
+                    let then_value = then_result
+                        .2
+                        .get(binding)
+                        .copied()
+                        .ok_or_else(|| Error::msg("SSA merge lost branch binding"))?;
+                    let ty = self.value_type(then_value)?;
+                    let owner_place = self.owned_place_for_binding(*binding)?;
                     let parameter = self.add_block_parameter(
                         merge,
                         ty,
+                        owner_place,
                         origin(expression_origin.raw(), self.next_position),
                     )?;
                     merge_env.insert(*binding, parameter);
@@ -945,25 +1143,30 @@ impl<'a> FunctionBuilder<'a> {
         } else {
             (skip_right, evaluate_right, true)
         };
+        let incoming_env = self.env.clone();
+        let incoming_slots = self.slots.clone();
+        let right_entry_env =
+            self.add_environment_parameters(evaluate_right, &incoming_env, branch_origin)?;
+        let skipped_entry_env =
+            self.add_environment_parameters(skip_right, &incoming_env, branch_origin)?;
+        let incoming_arguments = Self::environment_arguments(&incoming_env);
         self.terminate(Terminator::ConditionalBranch {
             condition: left,
             true_target,
-            true_arguments: Vec::new(),
+            true_arguments: incoming_arguments.clone(),
             false_target,
-            false_arguments: Vec::new(),
+            false_arguments: incoming_arguments,
         })?;
-        let incoming_env = self.env.clone();
-        let incoming_slots = self.slots.clone();
 
         self.switch_to(evaluate_right)?;
-        self.env = incoming_env.clone();
+        self.env = right_entry_env;
         self.slots = incoming_slots.clone();
         let right_value = self.lower_expr(right)?;
         let right_end = self.current;
         let right_env = self.env.clone();
 
         self.switch_to(skip_right)?;
-        self.env = incoming_env.clone();
+        self.env = skipped_entry_env;
         self.slots = incoming_slots.clone();
         let skipped_value =
             self.constant(SsaType::Bool, Constant::Bool(skipped), expression.origin)?;
@@ -1010,9 +1213,12 @@ impl<'a> FunctionBuilder<'a> {
                 .get(binding)
                 .copied()
                 .ok_or_else(|| Error::msg("SSA loop lost incoming binding"))?;
+            let ty = self.value_type(incoming)?;
+            let owner_place = self.owned_place_for_binding(*binding)?;
             let parameter = self.add_block_parameter(
                 header,
-                self.value_type(incoming)?,
+                ty,
+                owner_place,
                 origin(expression.origin.raw(), self.next_position),
             )?;
             header_env.insert(*binding, parameter);
@@ -1053,22 +1259,21 @@ impl<'a> FunctionBuilder<'a> {
                 .copied()
                 .ok_or_else(|| Error::msg("SSA loop condition lost binding"))?;
             let ty = self.value_type(value)?;
-            body_env.insert(
-                *binding,
-                self.add_block_parameter(
-                    body_block,
-                    ty.clone(),
-                    origin(expression.origin.raw(), self.next_position),
-                )?,
-            );
-            exit_env.insert(
-                *binding,
-                self.add_block_parameter(
-                    exit_block,
-                    ty,
-                    origin(expression.origin.raw(), self.next_position),
-                )?,
-            );
+            let owner_place = self.owned_place_for_binding(*binding)?;
+            let body_parameter = self.add_block_parameter(
+                body_block,
+                ty.clone(),
+                owner_place,
+                origin(expression.origin.raw(), self.next_position),
+            )?;
+            body_env.insert(*binding, body_parameter);
+            let exit_parameter = self.add_block_parameter(
+                exit_block,
+                ty,
+                owner_place,
+                origin(expression.origin.raw(), self.next_position),
+            )?;
+            exit_env.insert(*binding, exit_parameter);
         }
         let condition_arguments: Vec<ValueId> = bindings
             .iter()
@@ -1147,6 +1352,7 @@ impl<'a> FunctionBuilder<'a> {
             id: self.id,
             name: self.name,
             signature: self.signature,
+            places: self.places,
             effects: self.function_effect,
             entry: self.entry,
             blocks,
@@ -1215,6 +1421,9 @@ fn lower_type(ty: &Type, products: &HashMap<String, ProductId>) -> Result<SsaTyp
         Type::F64 => SsaType::F64,
         Type::Str => SsaType::Str,
         Type::Buf => SsaType::Buf,
+        Type::Owned(inner) => SsaType::Owned(Box::new(lower_type(inner, products)?)),
+        Type::Ref(inner) => SsaType::Ref(Box::new(lower_type(inner, products)?)),
+        Type::RefMut(inner) => SsaType::RefMut(Box::new(lower_type(inner, products)?)),
         Type::Symbol => SsaType::Symbol,
         Type::Handle => SsaType::Handle,
         Type::Product(name) => SsaType::Product(
@@ -1233,6 +1442,10 @@ fn lower_type(ty: &Type, products: &HashMap<String, ProductId>) -> Result<SsaTyp
             SsaType::Function(Box::new(signature_from_type(ty, products)?))
         }
     })
+}
+
+fn is_owned_buf(ty: &SsaType) -> bool {
+    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
 }
 
 fn runtime_operation(operation: Operation) -> Result<RuntimeOp> {
@@ -1269,6 +1482,10 @@ fn runtime_operation(operation: Operation) -> Result<RuntimeOp> {
         Operation::BufLen => RuntimeOp::BufLen,
         Operation::BufRef => RuntimeOp::BufRef,
         Operation::BufSet => RuntimeOp::BufSet,
+        Operation::OwnedBufNew => RuntimeOp::OwnedBufNew,
+        Operation::OwnedBufLen => RuntimeOp::OwnedBufLen,
+        Operation::OwnedBufRef => RuntimeOp::OwnedBufRef,
+        Operation::OwnedBufSet => RuntimeOp::OwnedBufSet,
         Operation::BufClone => RuntimeOp::BufClone,
         Operation::BufFromStr => RuntimeOp::BufFromStr,
         Operation::BufToStr => RuntimeOp::BufToStr,

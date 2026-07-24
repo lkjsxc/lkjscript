@@ -7,11 +7,11 @@ without claiming that the complete borrow conformance matrix is implemented.
 
 ## Status
 
-Current lkjscript has immutable values, function-local `var`/`set`, worker-local
-traced heap handles, and runtime-owned resource handles, but no source borrow
-syntax or ownership checker. The model below is an **Accepted Target**. It
-becomes Current only in separately recorded sound slices. “Full Rust-style
-borrow checking” remains an invalid claim until the declared matrix passes.
+The **Initial Sound Slice** below is **Current**. It is one deliberately narrow
+safe island for fresh `Owned Buf` values, whole-local moves, and non-escaping
+`Ref Buf`/`RefMut Buf` loans. Legacy `Buf`, handles, products, and collections
+retain their previous semantics. The broader model remains an **Accepted
+Target**; “full Rust-style borrow checking” is still an invalid claim.
 
 ## Ownership Categories
 
@@ -83,7 +83,8 @@ must retain the owner and exact element layout.
 
 ## Places, Moves, And Initialization
 
-HIR records a `PlaceId` and move path for every local, product field, indexed
+**Accepted Target overall; only the whole-local `Owned Buf` subset below is
+Current.** HIR records a `PlaceId` and move path for every local, product field, indexed
 container element where statically representable, and dereferenced reference.
 A place has initialized, moved, shared-borrowed, or exclusively-borrowed state
 at each CFG point. Uses in consuming positions require explicit `move` for
@@ -97,7 +98,8 @@ partial moves remain an **Accepted Target**.
 
 ## Borrow Rules And NLL
 
-The checker rejects use/double-move, moving a borrowed owner, dangling or
+**Accepted Target overall; Current NLL is the conservative same-block subset
+below.** The checker rejects use/double-move, moving a borrowed owner, dangling or
 escaping borrows, overlapping exclusive borrows, an exclusive borrow
 concurrent with any shared borrow, invalid reborrow, cross-function mutable
 aliasing, and shorter-region storage in a longer region.
@@ -119,7 +121,7 @@ contract. Cross-worker transfer additionally requires compiler-derived `Send`.
 
 ## Drop
 
-The compiler elaborates deterministic drops in reverse initialization order at
+**Accepted Target; not Current.** The compiler will elaborate deterministic drops in reverse initialization order at
 normal scope exit, early return, structured trap/exit cleanup edges, and branch
 joins. A moved value is not dropped. Every initialized owned value is dropped
 exactly once. Explicit `drop` consumes its place and prevents later use.
@@ -132,15 +134,16 @@ source-visible.
 ## Verification Boundary
 
 Ownership analysis runs after name/type resolution and before ordinary SSA
-construction. SSA retains ownership kind, move/drop operations, region facts,
-place/alias class, and source origin. Verification runs after elaboration and
-after every pass and rejects a transformation that invents an alias, crosses a
-region, loses/doubles a drop, exposes uninitialized storage, or moves a live
-root illegally.
+construction. The Current slice retains explicit place initialization/end,
+move/borrow, owner transport, loan identity, and source origin. Verification
+runs after elaboration and every pass and independently checks this subset.
+General region facts and deterministic Drop verification remain an **Accepted
+Target**; they are not inferred from Current `PlaceEnd` root-liveness facts.
 
 ## Initial Sound Slice
 
-The first implementation slice is a complete safe island around `Owned Buf`:
+**Current.** The first implementation slice is a complete safe island around
+`Owned Buf`:
 
 - `owned-buf-new` creates a fresh `Owned Buf` that cannot have a pre-existing
   alias;
@@ -149,12 +152,33 @@ The first implementation slice is a complete safe island around `Owned Buf`:
 - `borrow` and `borrow-mut` create non-escaping `Ref Buf` and `RefMut Buf`;
 - owned-buffer read operations require `Ref Buf`, and writes require `RefMut
   Buf`;
-- last-use dataflow ends a local borrow before lexical scope end where proved;
-- branch state joins are exact, while unsupported loop-carried loans,
+- whole-program ownership analysis is charged against the deterministic
+  `OWNERSHIP_ANALYSIS_MAX_EXPRESSION_NODES = 16_384` aggregate HIR-expression
+  budget before place/loan analysis begins;
+- a `borrow`/`borrow-mut` expression is accepted only as an exact direct
+  reference argument or a direct `let` initializer; a direct argument's loan
+  remains active through the complete call/runtime-operation expression;
+- same-basic-block last-use dataflow ends a local borrow before lexical scope
+  end where proved. Branch-local borrows are valid when each definition and all
+  uses remain in its arm, but transporting one Borrow result across an SSA
+  block edge is conservatively rejected;
+- branch ownership states join exactly. Unsupported loop-carried moves/loans,
   reborrows, field/index places, return/storage of references, and partial moves
   are rejected;
-- SSA retains move, borrow, ownership, loan, and alias identities even though
-  the VM representation remains the existing safe arena handle.
+- all generic instantiations whose signature or substitution contains `Owned`,
+  `Ref`, or `RefMut` are rejected, including nested occurrences;
+- SSA retains explicit place initialization/end, move, borrow, owner-transport,
+  loan, and alias identities even though the VM representation remains the
+  existing safe arena handle. Its public verifier uses bounded forward CFG
+  dataflow under `OWNERSHIP_VERIFY_MAX_WORK = 131_072`, exact joins, explicit
+  affine transfer, canonical current-owner facts, global LoanId uniqueness, and
+  same-block loan checks after every pass. Work and retained ownership state are
+  separately capped at 131,072 charged units/cells. The public CFG verifier
+  additionally requires dense block storage, caps a function at 4,096 blocks,
+  uses bounded bitset dominators, and caps charged CFG work at 4,194,304 word
+  operations. Affine values crossing a basic-block boundary must use explicit
+  typed block arguments; direct predecessor-value carry is deliberately
+  rejected.
 
 The initial owned-buffer operations consume typed references directly; general
 `ref-read`/`ref-write` syntax is rejected until place projection is implemented.
@@ -168,6 +192,24 @@ Current final backstop and is not called language `Drop`.
 
 Native GC references are added as a separate ownership category rather than
 pretending they are lexical borrows.
+
+Current source accepts only exact `Owned Buf`, `Ref Buf`, and `RefMut Buf`.
+`Owned Buf` may occur in local annotations, parameters, and function/main
+returns. References may occur only as function parameters or inferred local
+borrow bindings. Product fields and List/Option/Result elements reject direct
+or nested ownership/reference types. Generic ownership/reference
+instantiation, named regions, nested ownership/reference constructors,
+reference returns or user-call results, reborrows, projected places,
+closures/capture, partial moves, cross-block Borrow results, Move/Borrow in
+loop cycles, changed loop-carried owner/loan state, and unequal loop/branch
+ownership states are rejected.
+`RefMut` user-call forwarding is rejected in this slice. Semantic frame states
+retain a reference through its consuming runtime call and omit a consumed
+`RefMut` from later safepoints; these bytecode-era frame facts are not native GC
+stack maps. Same-block NLL ends a
+local loan after its last argument use; temporary argument loans end only after
+the complete call/runtime-operation expression. Runtime/frame cleanup and SSA
+`PlaceEnd` are lexical/root cleanup facts, not deterministic user `Drop`.
 
 ## Deferred And Rejected
 

@@ -8,8 +8,8 @@ reinterpret the language.
 
 ## Status
 
-**Current** for parsed AST -> resolved typed HIR with fixed-point function
-effects -> verified typed SSA -> verified baseline normalization -> reference
+**Current** for parsed AST -> resolved typed HIR -> mandatory initial `Owned
+Buf` ownership analysis with fixed-point function effects -> verified typed SSA -> verified baseline normalization -> reference
 bytecode. The independent bounded SSA evaluator and bytecode link metadata are
 also Current. The selected owned Linux x86-64 scalar machine-plan encoder, safe W^X boundary,
 narrow verified-SSA adapter, bounded code objects, and forced/automatic callable
@@ -45,7 +45,13 @@ function effect summaries. One compiler lowering environment-renames HIR
 locals and mutation into `lkjscript-ir`; code generation consumes only verified
 normalized SSA rather than HIR, definitions, parameters, operators, or names.
 
-`Unit`, typed empty lists, Option, immutable nominal products, and the explicit
+The initial `Owned Buf` safe island retains exact lexical place initialization/
+end, current-owner transport, move, borrow, loan, kind, and alias identities in
+HIR/SSA. The public verifier applies bounded forward CFG ownership dataflow and
+exact joins after every pass. Generic ownership/reference substitution,
+cross-block Borrow results, and aggregate storage are rejected in this slice;
+verified reference-bytecode lowering may erase wrappers to the existing arena
+handle and the scalar baseline rejects the new types/operations explicitly. `Unit`, typed empty lists, Option, immutable nominal products, and the explicit
 value/object/list/F64-bit equality families have distinct exact HIR/runtime
 semantics, and every `if` has
 exactly three operands with matching branch types. Nil, universal equality, and

@@ -3,12 +3,12 @@
 use crate::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,
     effect_aware_dce, empty_block_forwarding, evaluate, normalize_baseline, simplify_branches,
-    unreachable_blocks, verify, Block, BlockId, BlockMetadata, BlockParameter, CallTarget,
-    Constant, EffectSet, EvalConfig, EvalOutcome, EvalValue, FailureBehavior, FrameState, Function,
-    FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
-    InstructionMetadata, Origin, ProductMetadata, Program, RuntimeOp, Safepoint, Signature,
-    SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
-    TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
+    unreachable_blocks, verify, Block, BlockId, BlockMetadata, BlockParameter, BorrowKind,
+    CallTarget, Constant, EffectSet, EvalConfig, EvalOutcome, EvalValue, FailureBehavior,
+    FrameState, Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction,
+    InstructionKind, InstructionMetadata, LoanId, Origin, PlaceId, ProductMetadata, Program,
+    RuntimeOp, Safepoint, Signature, SourceMetadata, SsaType, Terminator, TraitBound, TraitId,
+    TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
 };
 
 fn metadata(effects: EffectSet) -> InstructionMetadata {
@@ -52,6 +52,7 @@ fn one_block_program() -> Program {
             id: FunctionId::new(0),
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+            places: Vec::new(),
             effects: EffectSet::PURE,
             entry: BlockId::new(0),
             blocks: vec![Block {
@@ -86,6 +87,133 @@ fn core_traits() -> Vec<TraitMetadata> {
     .collect()
 }
 
+fn owned_buf_type() -> SsaType {
+    SsaType::Owned(Box::new(SsaType::Buf))
+}
+
+fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
+    crate::PlaceMetadata {
+        id: PlaceId::new(id),
+        binding: crate::BindingId::new(binding),
+        ty: owned_buf_type(),
+    }
+}
+
+fn ownership_program(function: Function) -> Program {
+    let mut program = one_block_program();
+    program.functions.push(function);
+    program
+}
+
+fn owned_branch_function(equal_moves: bool) -> Function {
+    let second_instruction = if equal_moves {
+        Instruction {
+            id: ValueId::new(5),
+            ty: owned_buf_type(),
+            kind: InstructionKind::Move {
+                place: PlaceId::new(0),
+                value: ValueId::new(3),
+            },
+            metadata: metadata(EffectSet::PURE),
+        }
+    } else {
+        Instruction {
+            id: ValueId::new(5),
+            ty: SsaType::Unit,
+            kind: InstructionKind::Constant(Constant::Unit),
+            metadata: metadata(EffectSet::PURE),
+        }
+    };
+    Function {
+        id: FunctionId::new(1),
+        name: "owned-branch".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![
+            Block {
+                id: BlockId::new(0),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![Instruction {
+                    id: ValueId::new(1),
+                    ty: SsaType::Bool,
+                    kind: InstructionKind::Constant(Constant::Bool(true)),
+                    metadata: metadata(EffectSet::PURE),
+                }],
+                terminator: Terminator::ConditionalBranch {
+                    condition: ValueId::new(1),
+                    true_target: BlockId::new(1),
+                    true_arguments: vec![ValueId::new(0)],
+                    false_target: BlockId::new(2),
+                    false_arguments: vec![ValueId::new(0)],
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(1),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(2),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![Instruction {
+                    id: ValueId::new(4),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(0),
+                        value: ValueId::new(2),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                }],
+                terminator: Terminator::Branch {
+                    target: BlockId::new(3),
+                    arguments: vec![ValueId::new(4)],
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(2),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(3),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![second_instruction],
+                terminator: Terminator::Branch {
+                    target: BlockId::new(3),
+                    arguments: vec![if equal_moves {
+                        ValueId::new(5)
+                    } else {
+                        ValueId::new(3)
+                    }],
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(3),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(6),
+                    ty: owned_buf_type(),
+                    owner_place: None,
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: Vec::new(),
+                terminator: Terminator::Return(ValueId::new(6)),
+                metadata: block_metadata(),
+            },
+        ],
+        origin: Origin::SYNTHETIC,
+    }
+}
+
 fn bounded_call_program() -> Program {
     let declared = Signature {
         type_parameters: vec!["T".into()],
@@ -110,6 +238,7 @@ fn bounded_call_program() -> Program {
                 id: FunctionId::new(0),
                 name: "copy-value".into(),
                 signature: declared,
+                places: Vec::new(),
                 effects: EffectSet::PURE,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -117,6 +246,7 @@ fn bounded_call_program() -> Program {
                     parameters: vec![BlockParameter {
                         id: ValueId::new(0),
                         ty: SsaType::TypeParameter("T".into()),
+                        owner_place: None,
                         origin: Origin::SYNTHETIC,
                     }],
                     instructions: Vec::new(),
@@ -129,6 +259,7 @@ fn bounded_call_program() -> Program {
                 id: FunctionId::new(1),
                 name: "main".into(),
                 signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+                places: Vec::new(),
                 effects: EffectSet::PURE,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -189,6 +320,7 @@ fn pass_program() -> Program {
             id: FunctionId::new(0),
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+            places: Vec::new(),
             effects: EffectSet::PURE,
             entry: BlockId::new(0),
             blocks: vec![
@@ -236,6 +368,7 @@ fn pass_program() -> Program {
                     parameters: vec![BlockParameter {
                         id: ValueId::new(6),
                         ty: SsaType::I64,
+                        owner_place: None,
                         origin: Origin::SYNTHETIC,
                     }],
                     instructions: Vec::new(),
@@ -250,6 +383,7 @@ fn pass_program() -> Program {
                     parameters: vec![BlockParameter {
                         id: ValueId::new(7),
                         ty: SsaType::I64,
+                        owner_place: None,
                         origin: Origin::SYNTHETIC,
                     }],
                     instructions: Vec::new(),
@@ -264,6 +398,7 @@ fn pass_program() -> Program {
                     parameters: vec![BlockParameter {
                         id: ValueId::new(8),
                         ty: SsaType::I64,
+                        owner_place: None,
                         origin: Origin::SYNTHETIC,
                     }],
                     instructions: Vec::new(),
@@ -282,6 +417,807 @@ fn pass_program() -> Program {
         }],
         main: FunctionId::new(0),
     }
+}
+
+#[test]
+fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
+    let mut valid = one_block_program();
+    valid.functions.push(Function {
+        id: FunctionId::new(1),
+        name: "owned-id".into(),
+        signature: Signature::monomorphic(
+            vec![SsaType::Owned(Box::new(SsaType::Buf))],
+            SsaType::Owned(Box::new(SsaType::Buf)),
+        ),
+        places: vec![crate::PlaceMetadata {
+            id: PlaceId::new(0),
+            binding: crate::BindingId::new(0),
+            ty: SsaType::Owned(Box::new(SsaType::Buf)),
+        }],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: SsaType::Owned(Box::new(SsaType::Buf)),
+                owner_place: Some(PlaceId::new(0)),
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: vec![Instruction {
+                id: ValueId::new(1),
+                ty: SsaType::Owned(Box::new(SsaType::Buf)),
+                kind: InstructionKind::Move {
+                    place: PlaceId::new(0),
+                    value: ValueId::new(0),
+                },
+                metadata: metadata(EffectSet::PURE),
+            }],
+            terminator: Terminator::Return(ValueId::new(1)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    });
+    assert!(verify(valid.clone()).is_ok());
+
+    let mut duplicate_place_end = valid.clone();
+    duplicate_place_end.functions[1].blocks[0].instructions = vec![
+        Instruction {
+            id: ValueId::new(1),
+            ty: SsaType::Unit,
+            kind: InstructionKind::PlaceEnd {
+                place: PlaceId::new(0),
+            },
+            metadata: metadata(EffectSet::PURE),
+        },
+        Instruction {
+            id: ValueId::new(2),
+            ty: SsaType::Unit,
+            kind: InstructionKind::PlaceEnd {
+                place: PlaceId::new(0),
+            },
+            metadata: metadata(EffectSet::PURE),
+        },
+        Instruction {
+            id: ValueId::new(3),
+            ty: owned_buf_type(),
+            kind: InstructionKind::Move {
+                place: PlaceId::new(0),
+                value: ValueId::new(0),
+            },
+            metadata: metadata(EffectSet::PURE),
+        },
+    ];
+    duplicate_place_end.functions[1].blocks[0].terminator = Terminator::Return(ValueId::new(3));
+    let end_error = verify(duplicate_place_end).expect_err("duplicate PlaceEnd must fail");
+    assert!(end_error.to_string().contains("not active"), "{end_error}");
+
+    let mut copied = valid.clone();
+    copied.functions[1].blocks[0].instructions[0].kind = InstructionKind::Copy(ValueId::new(0));
+    assert!(verify(copied).is_err());
+
+    let mut wrong_move = valid.clone();
+    wrong_move.functions[1].blocks[0].instructions[0].ty = SsaType::Buf;
+    assert!(verify(wrong_move).is_err());
+
+    let mut unknown_place = valid.clone();
+    let InstructionKind::Move { place, .. } =
+        &mut unknown_place.functions[1].blocks[0].instructions[0].kind
+    else {
+        panic!("expected move fact");
+    };
+    *place = PlaceId::new(9);
+    assert!(verify(unknown_place).is_err());
+
+    let mut duplicate_place = valid.clone();
+    let repeated_place = duplicate_place.functions[1].places[0].clone();
+    duplicate_place.functions[1].places.push(repeated_place);
+    assert!(verify(duplicate_place).is_err());
+
+    let mut duplicate_loan = valid;
+    duplicate_loan.functions[1].blocks[0].instructions = vec![
+        Instruction {
+            id: ValueId::new(1),
+            ty: SsaType::Ref(Box::new(SsaType::Buf)),
+            kind: InstructionKind::Borrow {
+                place: PlaceId::new(0),
+                loan: LoanId::new(0),
+                kind: BorrowKind::Shared,
+                value: ValueId::new(0),
+            },
+            metadata: metadata(EffectSet::PURE),
+        },
+        Instruction {
+            id: ValueId::new(2),
+            ty: SsaType::Ref(Box::new(SsaType::Buf)),
+            kind: InstructionKind::Borrow {
+                place: PlaceId::new(0),
+                loan: LoanId::new(0),
+                kind: BorrowKind::Shared,
+                value: ValueId::new(0),
+            },
+            metadata: metadata(EffectSet::PURE),
+        },
+    ];
+    duplicate_loan.functions[1].blocks[0].terminator = Terminator::Trap {
+        message: "duplicate loan".into(),
+    };
+    assert!(verify(duplicate_loan).is_err());
+
+    let borrowed_function = |id: u32, name: &str| Function {
+        id: FunctionId::new(id),
+        name: name.into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::I64),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::READS_MEMORY,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: owned_buf_type(),
+                owner_place: Some(PlaceId::new(0)),
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: vec![
+                Instruction {
+                    id: ValueId::new(1),
+                    ty: SsaType::Ref(Box::new(SsaType::Buf)),
+                    kind: InstructionKind::Borrow {
+                        place: PlaceId::new(0),
+                        loan: LoanId::new(0),
+                        kind: BorrowKind::Shared,
+                        value: ValueId::new(0),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                },
+                Instruction {
+                    id: ValueId::new(2),
+                    ty: SsaType::I64,
+                    kind: InstructionKind::Runtime {
+                        operation: RuntimeOp::OwnedBufLen,
+                        arguments: vec![ValueId::new(1)],
+                        signature: Signature::monomorphic(
+                            vec![SsaType::Ref(Box::new(SsaType::Buf))],
+                            SsaType::I64,
+                        ),
+                    },
+                    metadata: metadata(EffectSet::READS_MEMORY),
+                },
+            ],
+            terminator: Terminator::Return(ValueId::new(2)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let mut cross_function_duplicate = one_block_program();
+    cross_function_duplicate.functions.extend([
+        borrowed_function(1, "borrow-one"),
+        borrowed_function(2, "borrow-two"),
+    ]);
+    let error = verify(cross_function_duplicate)
+        .expect_err("LoanIds must be unique across the whole public Program");
+    assert!(
+        error.to_string().contains("anywhere in the program"),
+        "{error}"
+    );
+}
+
+#[test]
+fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
+    verify(ownership_program(owned_branch_function(true)))
+        .expect("equal explicit moves on both branch arms must join");
+
+    let mut implicit_edge = owned_branch_function(true);
+    implicit_edge.blocks[0].terminator = Terminator::ConditionalBranch {
+        condition: ValueId::new(1),
+        true_target: BlockId::new(1),
+        true_arguments: Vec::new(),
+        false_target: BlockId::new(2),
+        false_arguments: Vec::new(),
+    };
+    let error = verify(ownership_program(implicit_edge))
+        .expect_err("current affine owners require explicit edge arguments");
+    assert!(
+        error.to_string().contains("explicit block argument"),
+        "{error}"
+    );
+
+    let mismatch = verify(ownership_program(owned_branch_function(false)))
+        .expect_err("one moved and one initialized branch must not join");
+    assert!(
+        mismatch.to_string().contains("implicitly transfer")
+            || mismatch.to_string().contains("join exactly"),
+        "wrong branch mismatch diagnostic: {mismatch}"
+    );
+
+    let mut returned_original = ownership_program(owned_branch_function(true));
+    returned_original.functions[1].blocks[1].terminator = Terminator::Return(ValueId::new(0));
+    let error = verify(returned_original)
+        .expect_err("Move followed by Return of the original owner must fail");
+    assert!(error.to_string().contains("unavailable affine"), "{error}");
+
+    let direct_return = Function {
+        id: FunctionId::new(1),
+        name: "implicit-return".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: owned_buf_type(),
+                owner_place: Some(PlaceId::new(0)),
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: Vec::new(),
+            terminator: Terminator::Return(ValueId::new(0)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let error = verify(ownership_program(direct_return))
+        .expect_err("Owned entry parameter return requires explicit Move");
+    assert!(
+        error.to_string().contains("without explicit Move"),
+        "{error}"
+    );
+}
+
+#[test]
+fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
+    let successor_reuse = Function {
+        id: FunctionId::new(1),
+        name: "successor-reuse".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![
+            Block {
+                id: BlockId::new(0),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![Instruction {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(0),
+                        value: ValueId::new(0),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                }],
+                terminator: Terminator::Branch {
+                    target: BlockId::new(1),
+                    arguments: Vec::new(),
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(1),
+                parameters: Vec::new(),
+                instructions: Vec::new(),
+                terminator: Terminator::Return(ValueId::new(0)),
+                metadata: block_metadata(),
+            },
+        ],
+        origin: Origin::SYNTHETIC,
+    };
+    assert!(verify(ownership_program(successor_reuse)).is_err());
+
+    let duplicate_edge = Function {
+        id: FunctionId::new(1),
+        name: "duplicate-edge".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![
+            Block {
+                id: BlockId::new(0),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![Instruction {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(0),
+                        value: ValueId::new(0),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                }],
+                terminator: Terminator::Branch {
+                    target: BlockId::new(1),
+                    arguments: vec![ValueId::new(1), ValueId::new(1)],
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(1),
+                parameters: vec![
+                    BlockParameter {
+                        id: ValueId::new(2),
+                        ty: owned_buf_type(),
+                        owner_place: None,
+                        origin: Origin::SYNTHETIC,
+                    },
+                    BlockParameter {
+                        id: ValueId::new(3),
+                        ty: owned_buf_type(),
+                        owner_place: None,
+                        origin: Origin::SYNTHETIC,
+                    },
+                ],
+                instructions: Vec::new(),
+                terminator: Terminator::Trap {
+                    message: "duplicate edge".into(),
+                },
+                metadata: block_metadata(),
+            },
+        ],
+        origin: Origin::SYNTHETIC,
+    };
+    let error = verify(ownership_program(duplicate_edge))
+        .expect_err("duplicate affine edge arguments must fail");
+    assert!(
+        error.to_string().contains("duplicates one affine"),
+        "{error}"
+    );
+
+    let loop_mismatch = Function {
+        id: FunctionId::new(1),
+        name: "loop-mismatch".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![
+            Block {
+                id: BlockId::new(0),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: Vec::new(),
+                terminator: Terminator::Branch {
+                    target: BlockId::new(1),
+                    arguments: vec![ValueId::new(0)],
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(1),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![Instruction {
+                    id: ValueId::new(2),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(0),
+                        value: ValueId::new(1),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                }],
+                terminator: Terminator::Branch {
+                    target: BlockId::new(1),
+                    arguments: vec![ValueId::new(2)],
+                },
+                metadata: BlockMetadata {
+                    loop_header: true,
+                    origin: Origin::SYNTHETIC,
+                    frame_state: Some(FrameState {
+                        bytecode_position: 0,
+                        locals: Vec::new(),
+                        operand_stack: Vec::new(),
+                    }),
+                },
+            },
+        ],
+        origin: Origin::SYNTHETIC,
+    };
+    assert!(verify(ownership_program(loop_mismatch)).is_err());
+}
+
+#[test]
+fn ownership_cfg_rejects_duplicate_calls_aliases_and_missing_provenance() {
+    let callee = Function {
+        id: FunctionId::new(1),
+        name: "take-two".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type(), owned_buf_type()], SsaType::Unit),
+        places: vec![owned_place(0, 0), owned_place(1, 1)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![
+                BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                },
+                BlockParameter {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(1)),
+                    origin: Origin::SYNTHETIC,
+                },
+            ],
+            instructions: vec![Instruction {
+                id: ValueId::new(2),
+                ty: SsaType::Unit,
+                kind: InstructionKind::Constant(Constant::Unit),
+                metadata: metadata(EffectSet::PURE),
+            }],
+            terminator: Terminator::Return(ValueId::new(2)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let caller = Function {
+        id: FunctionId::new(2),
+        name: "duplicate-call".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: owned_buf_type(),
+                owner_place: Some(PlaceId::new(0)),
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: vec![
+                Instruction {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(0),
+                        value: ValueId::new(0),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                },
+                Instruction {
+                    id: ValueId::new(2),
+                    ty: SsaType::Unit,
+                    kind: InstructionKind::Call {
+                        target: CallTarget::Direct(FunctionId::new(1)),
+                        arguments: vec![ValueId::new(1), ValueId::new(1)],
+                        signature: Signature::monomorphic(
+                            vec![owned_buf_type(), owned_buf_type()],
+                            SsaType::Unit,
+                        ),
+                        instantiation: None,
+                    },
+                    metadata: InstructionMetadata {
+                        origin: Origin::SYNTHETIC,
+                        effects: EffectSet::PURE,
+                        safepoint: Safepoint::Required,
+                        failure: FailureBehavior::None,
+                        frame_state: Some(FrameState {
+                            bytecode_position: 0,
+                            locals: Vec::new(),
+                            operand_stack: Vec::new(),
+                        }),
+                    },
+                },
+            ],
+            terminator: Terminator::Return(ValueId::new(2)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let mut duplicate_call = one_block_program();
+    duplicate_call.functions.extend([callee.clone(), caller]);
+    let error = verify(duplicate_call).expect_err("duplicate affine call arguments must fail");
+    assert!(
+        error.to_string().contains("duplicates one affine"),
+        "{error}"
+    );
+
+    let implicit_call = Function {
+        id: FunctionId::new(2),
+        name: "implicit-call".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type(), owned_buf_type()], SsaType::Unit),
+        places: vec![owned_place(0, 0), owned_place(1, 1)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![
+                BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                },
+                BlockParameter {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(1)),
+                    origin: Origin::SYNTHETIC,
+                },
+            ],
+            instructions: vec![
+                Instruction {
+                    id: ValueId::new(2),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(1),
+                        value: ValueId::new(1),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                },
+                Instruction {
+                    id: ValueId::new(3),
+                    ty: SsaType::Unit,
+                    kind: InstructionKind::Call {
+                        target: CallTarget::Direct(FunctionId::new(1)),
+                        arguments: vec![ValueId::new(0), ValueId::new(2)],
+                        signature: Signature::monomorphic(
+                            vec![owned_buf_type(), owned_buf_type()],
+                            SsaType::Unit,
+                        ),
+                        instantiation: None,
+                    },
+                    metadata: InstructionMetadata {
+                        origin: Origin::SYNTHETIC,
+                        effects: EffectSet::PURE,
+                        safepoint: Safepoint::Required,
+                        failure: FailureBehavior::None,
+                        frame_state: Some(FrameState {
+                            bytecode_position: 0,
+                            locals: Vec::new(),
+                            operand_stack: Vec::new(),
+                        }),
+                    },
+                },
+            ],
+            terminator: Terminator::Return(ValueId::new(3)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let mut implicit_call_program = one_block_program();
+    implicit_call_program
+        .functions
+        .extend([callee, implicit_call]);
+    let error = verify(implicit_call_program)
+        .expect_err("Owned entry call argument requires explicit Move");
+    assert!(error.to_string().contains("explicit Move"), "{error}");
+
+    let aliased_places = Function {
+        id: FunctionId::new(1),
+        name: "aliased-places".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        places: vec![owned_place(0, 0), owned_place(1, 1)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: owned_buf_type(),
+                owner_place: Some(PlaceId::new(0)),
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: vec![Instruction {
+                id: ValueId::new(1),
+                ty: SsaType::Unit,
+                kind: InstructionKind::PlaceInit {
+                    place: PlaceId::new(1),
+                    value: ValueId::new(0),
+                },
+                metadata: metadata(EffectSet::PURE),
+            }],
+            terminator: Terminator::Return(ValueId::new(1)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let error = verify(ownership_program(aliased_places))
+        .expect_err("one owner value cannot initialize two PlaceIds");
+    assert!(error.to_string().contains("multiple PlaceIds"), "{error}");
+
+    let mut missing_entry = owned_branch_function(true);
+    missing_entry.blocks[0].parameters[0].owner_place = None;
+    assert!(verify(ownership_program(missing_entry)).is_err());
+
+    let missing_local = Function {
+        id: FunctionId::new(1),
+        name: "missing-local-provenance".into(),
+        signature: Signature::monomorphic(Vec::new(), SsaType::Unit),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: Vec::new(),
+            instructions: vec![Instruction {
+                id: ValueId::new(0),
+                ty: SsaType::Unit,
+                kind: InstructionKind::Constant(Constant::Unit),
+                metadata: metadata(EffectSet::PURE),
+            }],
+            terminator: Terminator::Return(ValueId::new(0)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    assert!(verify(ownership_program(missing_local)).is_err());
+}
+
+#[test]
+fn ownership_verification_has_an_aggregate_state_work_bound() {
+    let count = 22_000_u32;
+    let parameters: Vec<_> = (0..count).map(|_| owned_buf_type()).collect();
+    let places: Vec<_> = (0..count).map(|index| owned_place(index, index)).collect();
+    let block_parameters: Vec<_> = (0..count)
+        .map(|index| BlockParameter {
+            id: ValueId::new(index),
+            ty: owned_buf_type(),
+            owner_place: Some(PlaceId::new(index)),
+            origin: Origin::SYNTHETIC,
+        })
+        .collect();
+    let function = Function {
+        id: FunctionId::new(1),
+        name: "wide-ownership-state".into(),
+        signature: Signature::monomorphic(parameters, SsaType::Unit),
+        places,
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: block_parameters,
+            instructions: vec![Instruction {
+                id: ValueId::new(count),
+                ty: SsaType::Unit,
+                kind: InstructionKind::Constant(Constant::Unit),
+                metadata: metadata(EffectSet::PURE),
+            }],
+            terminator: Terminator::Return(ValueId::new(count)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let error = verify(ownership_program(function)).expect_err("wide state must be bounded");
+    assert!(
+        error.to_string().contains("ownership")
+            && (error.to_string().contains("work") || error.to_string().contains("state")),
+        "{error}"
+    );
+}
+
+#[test]
+fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() {
+    let function = Function {
+        id: FunctionId::new(1),
+        name: "too-many-blocks".into(),
+        signature: Signature::monomorphic(Vec::new(), SsaType::Unit),
+        places: Vec::new(),
+        effects: EffectSet::MAY_TRAP,
+        entry: BlockId::new(0),
+        blocks: (0..=crate::SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION)
+            .map(|index| Block {
+                id: BlockId::new(index as u32),
+                parameters: Vec::new(),
+                instructions: Vec::new(),
+                terminator: Terminator::Trap {
+                    message: "bounded".into(),
+                },
+                metadata: block_metadata(),
+            })
+            .collect(),
+        origin: Origin::SYNTHETIC,
+    };
+    let error = verify(ownership_program(function)).expect_err("CFG block count must be bounded");
+    assert!(error.to_string().contains("exceeds 4096 blocks"), "{error}");
+
+    let mut nested_function = one_block_program();
+    *nested_function.functions[0].signature.result =
+        SsaType::Option(Box::new(SsaType::Function(Box::new(
+            Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        ))));
+    let error = verify(nested_function)
+        .expect_err("collection-nested function signatures cannot launder ownership types");
+    assert!(error.to_string().contains("storage position"), "{error}");
+
+    let mut deeply_nested_function = one_block_program();
+    let mut nested = SsaType::Unit;
+    for _ in 0..70 {
+        nested = SsaType::Function(Box::new(Signature::monomorphic(Vec::new(), nested)));
+    }
+    *deeply_nested_function.functions[0].signature.result = SsaType::Option(Box::new(nested));
+    let error = verify(deeply_nested_function)
+        .expect_err("nested function ownership scan must remain under type verifier bounds");
+    assert!(
+        error.to_string().contains("type nesting exceeds"),
+        "{error}"
+    );
+}
+
+#[test]
+fn ownership_cfg_rejects_borrow_use_across_blocks() {
+    let function = Function {
+        id: FunctionId::new(1),
+        name: "cross-block-loan".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::I64),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::READS_MEMORY,
+        entry: BlockId::new(0),
+        blocks: vec![
+            Block {
+                id: BlockId::new(0),
+                parameters: vec![BlockParameter {
+                    id: ValueId::new(0),
+                    ty: owned_buf_type(),
+                    owner_place: Some(PlaceId::new(0)),
+                    origin: Origin::SYNTHETIC,
+                }],
+                instructions: vec![Instruction {
+                    id: ValueId::new(1),
+                    ty: SsaType::Ref(Box::new(SsaType::Buf)),
+                    kind: InstructionKind::Borrow {
+                        place: PlaceId::new(0),
+                        loan: LoanId::new(0),
+                        kind: BorrowKind::Shared,
+                        value: ValueId::new(0),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                }],
+                terminator: Terminator::Branch {
+                    target: BlockId::new(1),
+                    arguments: Vec::new(),
+                },
+                metadata: block_metadata(),
+            },
+            Block {
+                id: BlockId::new(1),
+                parameters: Vec::new(),
+                instructions: vec![Instruction {
+                    id: ValueId::new(2),
+                    ty: SsaType::I64,
+                    kind: InstructionKind::Runtime {
+                        operation: RuntimeOp::OwnedBufLen,
+                        arguments: vec![ValueId::new(1)],
+                        signature: Signature::monomorphic(
+                            vec![SsaType::Ref(Box::new(SsaType::Buf))],
+                            SsaType::I64,
+                        ),
+                    },
+                    metadata: metadata(EffectSet::READS_MEMORY),
+                }],
+                terminator: Terminator::Return(ValueId::new(2)),
+                metadata: block_metadata(),
+            },
+        ],
+        origin: Origin::SYNTHETIC,
+    };
+    let error = verify(ownership_program(function))
+        .expect_err("Borrow result cannot cross blocks in the current slice");
+    assert!(
+        error.to_string().contains("outside its defining block"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -400,6 +1336,174 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
         *instantiation = None;
     }
     assert!(verify(missing_instantiation).is_err());
+}
+
+#[test]
+fn verifier_rejects_generic_ownership_substitution() {
+    let generic = Function {
+        id: FunctionId::new(1),
+        name: "generic-id".into(),
+        signature: Signature {
+            type_parameters: vec!["T".into()],
+            bounds: Vec::new(),
+            parameters: vec![SsaType::TypeParameter("T".into())],
+            result: Box::new(SsaType::TypeParameter("T".into())),
+        },
+        places: Vec::new(),
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: SsaType::TypeParameter("T".into()),
+                owner_place: None,
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: Vec::new(),
+            terminator: Terminator::Return(ValueId::new(0)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let caller = Function {
+        id: FunctionId::new(2),
+        name: "generic-owned-caller".into(),
+        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        places: vec![owned_place(0, 0)],
+        effects: EffectSet::PURE,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: owned_buf_type(),
+                owner_place: Some(PlaceId::new(0)),
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: vec![
+                Instruction {
+                    id: ValueId::new(1),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Move {
+                        place: PlaceId::new(0),
+                        value: ValueId::new(0),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                },
+                Instruction {
+                    id: ValueId::new(2),
+                    ty: owned_buf_type(),
+                    kind: InstructionKind::Call {
+                        target: CallTarget::Direct(FunctionId::new(1)),
+                        arguments: vec![ValueId::new(1)],
+                        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+                        instantiation: Some(GenericInstantiation {
+                            substitutions: vec![TypeSubstitution {
+                                parameter: "T".into(),
+                                ty: owned_buf_type(),
+                            }],
+                            witnesses: Vec::new(),
+                        }),
+                    },
+                    metadata: InstructionMetadata {
+                        origin: Origin::SYNTHETIC,
+                        effects: EffectSet::PURE,
+                        safepoint: Safepoint::Required,
+                        failure: FailureBehavior::None,
+                        frame_state: Some(FrameState {
+                            bytecode_position: 0,
+                            locals: Vec::new(),
+                            operand_stack: Vec::new(),
+                        }),
+                    },
+                },
+            ],
+            terminator: Terminator::Return(ValueId::new(2)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let mut program = one_block_program();
+    program.functions.extend([generic.clone(), caller]);
+    let error = verify(program).expect_err("generic ownership substitution must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("ownership/reference generic instantiation is unavailable"),
+        "wrong generic ownership diagnostic: {error}"
+    );
+
+    let reference = SsaType::Ref(Box::new(SsaType::Buf));
+    let reference_caller = Function {
+        id: FunctionId::new(2),
+        name: "generic-reference-caller".into(),
+        signature: Signature::monomorphic(vec![reference.clone()], SsaType::I64),
+        places: Vec::new(),
+        effects: EffectSet::READS_MEMORY,
+        entry: BlockId::new(0),
+        blocks: vec![Block {
+            id: BlockId::new(0),
+            parameters: vec![BlockParameter {
+                id: ValueId::new(0),
+                ty: reference.clone(),
+                owner_place: None,
+                origin: Origin::SYNTHETIC,
+            }],
+            instructions: vec![
+                Instruction {
+                    id: ValueId::new(1),
+                    ty: reference.clone(),
+                    kind: InstructionKind::Call {
+                        target: CallTarget::Direct(FunctionId::new(1)),
+                        arguments: vec![ValueId::new(0)],
+                        signature: Signature::monomorphic(
+                            vec![reference.clone()],
+                            reference.clone(),
+                        ),
+                        instantiation: Some(GenericInstantiation {
+                            substitutions: vec![TypeSubstitution {
+                                parameter: "T".into(),
+                                ty: reference.clone(),
+                            }],
+                            witnesses: Vec::new(),
+                        }),
+                    },
+                    metadata: InstructionMetadata {
+                        origin: Origin::SYNTHETIC,
+                        effects: EffectSet::PURE,
+                        safepoint: Safepoint::Required,
+                        failure: FailureBehavior::None,
+                        frame_state: Some(FrameState {
+                            bytecode_position: 0,
+                            locals: Vec::new(),
+                            operand_stack: Vec::new(),
+                        }),
+                    },
+                },
+                Instruction {
+                    id: ValueId::new(2),
+                    ty: SsaType::I64,
+                    kind: InstructionKind::Runtime {
+                        operation: RuntimeOp::OwnedBufLen,
+                        arguments: vec![ValueId::new(1)],
+                        signature: Signature::monomorphic(vec![reference], SsaType::I64),
+                    },
+                    metadata: metadata(EffectSet::READS_MEMORY),
+                },
+            ],
+            terminator: Terminator::Return(ValueId::new(2)),
+            metadata: block_metadata(),
+        }],
+        origin: Origin::SYNTHETIC,
+    };
+    let mut reference_program = one_block_program();
+    reference_program
+        .functions
+        .extend([generic, reference_caller]);
+    let error =
+        verify(reference_program).expect_err("reference-valued generic user-call result must fail");
+    assert!(error.to_string().contains("user-call result"), "{error}");
 }
 
 #[test]
@@ -530,6 +1634,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                 id: FunctionId::new(0),
                 name: "answer".into(),
                 signature: signature.clone(),
+                places: Vec::new(),
                 effects: EffectSet::PURE,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -545,6 +1650,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                 id: FunctionId::new(1),
                 name: "main".into(),
                 signature: signature.clone(),
+                places: Vec::new(),
                 effects: call_effects,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -624,6 +1730,7 @@ fn evaluator_executes_result_construction_and_projection_without_vm_helpers() {
             id: FunctionId::new(0),
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::Bool),
+            places: Vec::new(),
             effects: allocation_effects,
             entry: BlockId::new(0),
             blocks: vec![Block {

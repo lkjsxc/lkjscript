@@ -16,7 +16,10 @@ pub use passes::{
     effect_aware_dce, empty_block_forwarding, normalize_baseline, simplify_branches,
     unreachable_blocks,
 };
-pub use verify::{verify, VerifiedProgram};
+pub use verify::{
+    verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,
+    SSA_VERIFY_MAX_CFG_WORK,
+};
 
 macro_rules! dense_id {
     ($name:ident, $raw:ty) => {
@@ -46,6 +49,8 @@ dense_id!(ProductId, u16);
 dense_id!(BindingId, u32);
 dense_id!(TraitId, u32);
 dense_id!(ImplId, u32);
+dense_id!(PlaceId, u32);
+dense_id!(LoanId, u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Origin {
@@ -88,6 +93,9 @@ pub enum SsaType {
     Str,
     Symbol,
     Buf,
+    Owned(Box<SsaType>),
+    Ref(Box<SsaType>),
+    RefMut(Box<SsaType>),
     Handle,
     Product(ProductId),
     List(Box<SsaType>),
@@ -285,6 +293,10 @@ pub enum RuntimeOp {
     BufLen,
     BufRef,
     BufSet,
+    OwnedBufNew,
+    OwnedBufLen,
+    OwnedBufRef,
+    OwnedBufSet,
     BufClone,
     BufFromStr,
     BufToStr,
@@ -379,6 +391,7 @@ impl RuntimeOp {
             | Self::StrFromF64
             | Self::EmptyStr
             | Self::BufNew
+            | Self::OwnedBufNew
             | Self::BufClone
             | Self::Ok
             | Self::Err
@@ -386,14 +399,19 @@ impl RuntimeOp {
             Self::Car
             | Self::Cdr
             | Self::BufRef
+            | Self::OwnedBufRef
             | Self::BufGetU32
             | Self::StrRef
             | Self::StrSlice
             | Self::UnwrapOk
             | Self::UnwrapErr
             | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
-            Self::BufSet | Self::BufSetU32 => EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP),
-            Self::BufLen | Self::StrLen | Self::IsOk | Self::IsSome => EffectSet::READS_MEMORY,
+            Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet => {
+                EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
+            }
+            Self::BufLen | Self::OwnedBufLen | Self::StrLen | Self::IsOk | Self::IsSome => {
+                EffectSet::READS_MEMORY
+            }
             Self::SysReadInto => EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::WRITES_MEMORY)
@@ -522,10 +540,37 @@ pub enum CallTarget {
     Indirect(ValueId),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BorrowKind {
+    Shared,
+    Mutable,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstructionKind {
     Constant(Constant),
     Copy(ValueId),
+    /// Establishes one SSA value as the current owner of a whole local place.
+    /// This is an ownership fact only; it is not a user-visible store or Drop.
+    PlaceInit {
+        place: PlaceId,
+        value: ValueId,
+    },
+    /// Ends the lexical identity of a whole local place. Runtime cleanup remains
+    /// separate from deterministic source Drop, which is not in this slice.
+    PlaceEnd {
+        place: PlaceId,
+    },
+    Move {
+        place: PlaceId,
+        value: ValueId,
+    },
+    Borrow {
+        place: PlaceId,
+        loan: LoanId,
+        kind: BorrowKind,
+        value: ValueId,
+    },
     FunctionRef(FunctionId),
     Runtime {
         operation: RuntimeOp,
@@ -558,8 +603,11 @@ pub enum InstructionKind {
 impl InstructionKind {
     pub fn operands(&self) -> Vec<ValueId> {
         match self {
-            Self::Constant(_) | Self::FunctionRef(_) => Vec::new(),
-            Self::Copy(value) => vec![*value],
+            Self::Constant(_) | Self::PlaceEnd { .. } | Self::FunctionRef(_) => Vec::new(),
+            Self::Copy(value)
+            | Self::PlaceInit { value, .. }
+            | Self::Move { value, .. }
+            | Self::Borrow { value, .. } => vec![*value],
             Self::Runtime { arguments, .. }
             | Self::Call {
                 target: CallTarget::Direct(_),
@@ -597,6 +645,9 @@ pub struct Instruction {
 pub struct BlockParameter {
     pub id: ValueId,
     pub ty: SsaType,
+    /// Exact current-owner transport for the initial ownership slice. `None`
+    /// denotes an ordinary value or an unplaced transferred affine value.
+    pub owner_place: Option<PlaceId>,
     pub origin: Origin,
 }
 
@@ -676,11 +727,19 @@ pub struct Block {
     pub metadata: BlockMetadata,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceMetadata {
+    pub id: PlaceId,
+    pub binding: BindingId,
+    pub ty: SsaType,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub id: FunctionId,
     pub name: String,
     pub signature: Signature,
+    pub places: Vec<PlaceMetadata>,
     pub effects: EffectSet,
     pub entry: BlockId,
     pub blocks: Vec<Block>,

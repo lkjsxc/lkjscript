@@ -73,6 +73,28 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   removed in favor of exact value, object-identity, bounded structural-list,
   and F64-bit equality families; nominal products have ordered named fields,
   exact construction, access, and immutable replacement
+- Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
+  fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
+  aggregate ownership-analysis budget; lexical place initialization/end;
+  same-block last-use loans; exact branch ownership joins; and evaluator plus
+  reference-bytecode execution using the safe arena handle representation.
+  Public SSA independently verifies explicit place initialization/end,
+  canonical current owners, affine transfer, owner block arguments, bounded
+  forward CFG state plus a 131,072-cell retained-state cap, exact joins,
+  same-block loan uses, and global LoanId uniqueness after every pass. General
+  SSA CFG validation requires dense block order, at most 4,096 blocks per
+  function, bitset dominators, and at most 4,194,304 charged word operations.
+  Affine cross-block values require explicit typed block arguments. `Owned Buf` is
+  affine, shared references are
+  Copy, exclusive references are affine, and all three are
+  worker-local/non-Send/non-Sync. Legacy `Buf` semantics are unchanged.
+  Borrow is accepted only as an exact direct reference argument or direct let
+  initializer; temporary loans cover the full call/runtime-operation.
+  Ownership/reference generic instantiation and direct/nested product or
+  collection storage are rejected. References cannot escape, Borrow results
+  cannot cross SSA blocks, loop cycles reject Move/Borrow and cannot carry
+  changed owner/loan state, `RefMut` user-call forwarding is rejected, and
+  cleanup is not deterministic user `Drop`
 - Marker traits: declaration-only top-level traits and exact nominal-product
   impls are Current across imports; generic `bounds/` are solved at concrete
   calls with exact explicit ImplId or structural auto-trait witnesses. Core
@@ -176,9 +198,10 @@ do not establish application durability or migration behavior.
 
 ## Accepted Platform Direction
 
-The marker-trait foundation is Current, but sound ownership and full static
-trait methods/associated items are not. The next implementation sequence is
-sound ownership and the next coherent static-trait slice, then exact native
+The marker-trait foundation and initial `Owned Buf` ownership safe island are
+Current, but general ownership and full static trait methods/associated items
+are not. The next implementation sequence broadens only proved ownership and
+the next coherent static-trait slice, then exact native
 frames/roots, allocation-capable baseline execution, and a distinct proof-based
 optimizing tier with measured process-local promotion. These remaining steps
 are **Accepted Targets**, not Current behavior. The authoritative records
@@ -214,6 +237,21 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The ownership implementation tree based on main HEAD `c64b3ab` was checked on
+Linux 7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. Canonical Brainfuck source
+was unchanged.
+
+| Ownership correction command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-compiler -p lkjscript-ir -p lkjscript-core -p lkjscript-vm -p lkjscript-app` | passed; source/HIR/SSA malformed boundaries plus evaluator/reference-VM equivalence and existing scalar JIT app gates |
+| `cargo clippy --locked -p lkjscript-ir -p lkjscript-compiler -p lkjscript-jit -p lkjscript-app --all-targets --all-features -- -D warnings` | passed |
+| separate `check-docs`, `check-tree`, and `check-sources` | passed; canonical language sources were not modified |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; formatting, strict workspace Clippy, docs/tree/source closure, and all 168 workspace tests |
+| `cargo build --workspace --release --locked`; default hello, forced scalar JIT, Brainfuck, lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smokes | passed; Brainfuck source remained unchanged |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | passed with `result=ok` and all configured smokes |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | performance, full Brainfuck Mandelbrot, Miri, sanitizers, or non-Linux targets |
 
 The marker-trait implementation tree based on `5c6ba38` was checked on Linux
 7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0:

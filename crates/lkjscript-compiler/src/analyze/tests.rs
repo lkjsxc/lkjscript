@@ -172,6 +172,7 @@ mod tests {
             slot: inner_slot,
             initial,
             body: inner_body,
+            ..
         } = &outer_body.kind
         else {
             panic!("expected inner mutable local");

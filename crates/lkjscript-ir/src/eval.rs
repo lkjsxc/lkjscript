@@ -271,7 +271,12 @@ impl Evaluator<'_> {
     ) -> std::result::Result<EvalValue, Flow> {
         match &instruction.kind {
             InstructionKind::Constant(constant) => self.constant(constant),
-            InstructionKind::Copy(source) => value(values, *source).cloned(),
+            InstructionKind::Copy(source)
+            | InstructionKind::Move { value: source, .. }
+            | InstructionKind::Borrow { value: source, .. } => value(values, *source).cloned(),
+            InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
+                Ok(EvalValue::Unit)
+            }
             InstructionKind::FunctionRef(function) => Ok(EvalValue::Function(*function)),
             InstructionKind::Runtime {
                 operation,
@@ -456,7 +461,7 @@ impl Evaluator<'_> {
                     Ok(EvalValue::None)
                 }
             }),
-            Op::BufNew => unary(&arguments, |size| {
+            Op::BufNew | Op::OwnedBufNew => unary(&arguments, |size| {
                 let size = usize::try_from(as_i64(size)?)
                     .map_err(|_| Flow::Trap("buf-new size out of range".into()))?;
                 if size > self.config.max_buffer_bytes || size > 1_000_000 {
@@ -470,13 +475,13 @@ impl Evaluator<'_> {
                     bytes: Rc::new(RefCell::new(vec![0; size])),
                 }))
             }),
-            Op::BufLen => unary(&arguments, |buffer| {
+            Op::BufLen | Op::OwnedBufLen => unary(&arguments, |buffer| {
                 let buffer = as_buffer(buffer)?;
                 let length = i64::try_from(buffer.bytes.borrow().len())
                     .map_err(|_| Flow::Trap("buf-len out of range".into()))?;
                 Ok(EvalValue::I64(length))
             }),
-            Op::BufRef => binary(&arguments, |buffer, index| {
+            Op::BufRef | Op::OwnedBufRef => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
                 let index = index_value(index, "buf-ref")?;
                 let byte = buffer
@@ -487,7 +492,7 @@ impl Evaluator<'_> {
                     .ok_or_else(|| Flow::Trap("buf-ref out of bounds".into()))?;
                 Ok(EvalValue::I64(i64::from(byte)))
             }),
-            Op::BufSet => ternary(&arguments, |buffer, index, byte| {
+            Op::BufSet | Op::OwnedBufSet => ternary(&arguments, |buffer, index, byte| {
                 let buffer = as_buffer(buffer)?;
                 let index = index_value(index, "buf-set")?;
                 let byte = u8::try_from(as_i64(byte)?)

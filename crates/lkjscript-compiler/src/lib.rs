@@ -10,6 +10,7 @@ mod import;
 mod lex;
 mod limits_check;
 mod operation;
+mod ownership;
 mod parse;
 mod ssa;
 mod types;
@@ -253,6 +254,260 @@ mod tests {
             .constants()
             .iter()
             .any(|constant| matches!(constant, Constant::F64(value) if *value == 2.0)));
+    }
+
+    fn ownership_source(body: &str, result: &str) -> String {
+        let result = result.replace(' ', "\n");
+        format!("main/\nsig/\n->\n{result}\n/sig\n{body}\n/main\n")
+    }
+
+    #[test]
+    fn initial_owned_buf_slice_accepts_nll_mutation_move_and_return() {
+        let source = ownership_source(
+            "let/\nbind/\nb\nowned-buf-new/\n2\n/owned-buf-new\n/bind\ndo/\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\nowned-buf-len/\nr\n/owned-buf-len\n/let\nlet/\nbind/\nm\nborrow-mut/\nb\n/borrow-mut\n/bind\ndo/\nowned-buf-set/\nm\n0\n65\n/owned-buf-set\nmove/\nb\n/move\n/do\n/let\n/do\n/let",
+            "Owned Buf",
+        );
+        let program = compile_source(&source, "owned-valid.lkjscript", &Limits::default())
+            .expect("valid Owned Buf safe island");
+        assert!(program
+            .ssa()
+            .program()
+            .functions
+            .iter()
+            .flat_map(|function| &function.blocks)
+            .flat_map(|block| &block.instructions)
+            .any(|instruction| matches!(
+                instruction.kind,
+                lkjscript_ir::InstructionKind::Move { .. }
+            )));
+
+        let shared_pair = ownership_source(
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nlet/\nbind/\nr1\nborrow/\nb\n/borrow\n/bind\nbind/\nr2\nborrow/\nb\n/borrow\n/bind\ndo/\nowned-buf-len/\nr1\n/owned-buf-len\nowned-buf-len/\nr2\n/owned-buf-len\n/do\n/let\n/let",
+            "I64",
+        );
+        compile_source(
+            &shared_pair,
+            "owned-shared-pair.lkjscript",
+            &Limits::default(),
+        )
+        .expect("overlapping shared loans must be accepted");
+
+        let equal_branch = ownership_source(
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nif/\ntrue\nmove/\nb\n/move\nmove/\nb\n/move\n/if\n/let",
+            "Owned Buf",
+        );
+        compile_source(
+            &equal_branch,
+            "owned-equal-branch.lkjscript",
+            &Limits::default(),
+        )
+        .expect("equal branch move states must join");
+
+        let branch_local_result = ownership_source(
+            "if/\ntrue\nlet/\nbind/\na\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nmove/\na\n/move\n/let\nlet/\nbind/\nb\nowned-buf-new/\n2\n/owned-buf-new\n/bind\nmove/\nb\n/move\n/let\n/if",
+            "Owned Buf",
+        );
+        compile_source(
+            &branch_local_result,
+            "owned-branch-local-result.lkjscript",
+            &Limits::default(),
+        )
+        .expect("transferred branch-local owners must canonicalize at the result join");
+
+        let constant_false_loop = ownership_source("while/\nfalse\nunit\n/while", "Unit");
+        compile_source(
+            &constant_false_loop,
+            "constant-false-loop.lkjscript",
+            &Limits::default(),
+        )
+        .expect("branch simplification must clear a stale loop-header marker");
+    }
+
+    #[test]
+    fn initial_owned_buf_slice_rejects_affine_and_alias_failures() {
+        let cases = [
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nb\n/let", "Owned Buf", "loaded or copied"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nmove/\nb\n/move\nmove/\nb\n/move\n/do\n/let", "Owned Buf", "double move"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\ndo/\nmove/\nb\n/move\nowned-buf-len/\nr\n/owned-buf-len\n/do\n/let\n/let", "I64", "while it is borrowed"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nif/\ntrue\ndo/\nmove/\nb\n/move\nunit\n/do\nunit\n/if\n/let", "Unit", "branch join"),
+            ("borrow/\nowned-buf-new/\n1\n/owned-buf-new\n/borrow", "Unit", "whole Owned Buf local"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nmove/\nb\n/move\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/do\n/let", "I64", "after move"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\nlet/\nbind/\nm\nborrow-mut/\nb\n/borrow-mut\n/bind\ndo/\nowned-buf-len/\nr\n/owned-buf-len\nowned-buf-set/\nm\n0\n1\n/owned-buf-set\n/do\n/let\n/let\n/let", "Unit", "conflicting shared and exclusive"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nwhile/\nfalse\nmove/\nb\n/move\n/while\n/let", "Unit", "loop-carried"),
+            ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nsome/\nborrow/\nb\n/borrow\n/some\nunit\n/do\n/let", "Unit", "cannot be stored in List or Option"),
+        ];
+        for (body, result, diagnostic) in cases {
+            let source = ownership_source(body, result);
+            let error = compile_source(&source, "owned-invalid.lkjscript", &Limits::default())
+                .expect_err("invalid ownership source must fail")
+                .to_string();
+            assert!(error.contains(diagnostic), "{diagnostic}: {error}");
+        }
+    }
+
+    #[test]
+    fn ownership_generic_laundering_and_reference_results_are_rejected() {
+        let generic_id = "def/\nname/\nid\n/name\nfn/\nforall/\nT\n/forall\nsig/\nT\n->\nT\n/sig\nparams/\nx\nT\n/params\nx\n/fn\n/def\n";
+        let reference = format!(
+            "{generic_id}{}",
+            ownership_source(
+                "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\nlet/\nbind/\nr2\nid/\nr\n/id\n/bind\ndo/\nmove/\nb\n/move\nowned-buf-len/\nr2\n/owned-buf-len\n/do\n/let\n/let\n/let",
+                "I64",
+            )
+        );
+        let owned = format!(
+            "{generic_id}{}",
+            ownership_source(
+                "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nid/\nmove/\nb\n/move\n/id\n/let",
+                "Owned Buf",
+            )
+        );
+        let generic_with_owned_parameter = "def/\nname/\nconsume-generic\n/name\nfn/\nforall/\nT\n/forall\nsig/\nOwned\nBuf\nT\n->\nT\n/sig\nparams/\nb\nOwned/\nBuf\n/Owned\nx\nT\n/params\nx\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nconsume-generic/\nmove/\nb\n/move\n7\n/consume-generic\n/let\n/main\n";
+        for source in [reference, owned, generic_with_owned_parameter.into()] {
+            let error = compile_source(&source, "generic-owned.lkjscript", &Limits::default())
+                .expect_err("generic ownership laundering must fail")
+                .to_string();
+            assert!(
+                error.contains("ownership/reference generic instantiation is unavailable"),
+                "wrong generic ownership diagnostic: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn ownership_function_signature_escape_boundary_is_exact() {
+        let valid = "def/\nname/\nread-owned\n/name\nfn/\nsig/\nRef\nBuf\n->\nI64\n/sig\nparams/\nr\nRef/\nBuf\n/Ref\n/params\nowned-buf-len/\nr\n/owned-buf-len\n/fn\n/def\ndef/\nname/\nwrite-owned\n/name\nfn/\nsig/\nRefMut\nBuf\n->\nUnit\n/sig\nparams/\nr\nRefMut/\nBuf\n/RefMut\n/params\nowned-buf-set/\nr\n0\n1\n/owned-buf-set\n/fn\n/def\ndef/\nname/\nfresh-owned\n/name\nfn/\nsig/\nI64\n->\nOwned\nBuf\n/sig\nparams/\nn\nI64\n/params\nowned-buf-new/\nn\n/owned-buf-new\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nb\nfresh-owned/\n1\n/fresh-owned\n/bind\nread-owned/\nborrow/\nb\n/borrow\n/read-owned\n/let\n/main\n";
+        compile_source(valid, "ownership-signatures.lkjscript", &Limits::default())
+            .expect("Ref/RefMut parameters and Owned return must remain valid");
+
+        let consumed_ref_mut_before_safepoint = "def/\nname/\nwrite-then-allocate\n/name\nfn/\nsig/\nRefMut\nBuf\n->\nI64\n/sig\nparams/\nr\nRefMut/\nBuf\n/RefMut\n/params\ndo/\nowned-buf-set/\nr\n0\n1\n/owned-buf-set\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/let\n/do\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+        compile_source(
+            consumed_ref_mut_before_safepoint,
+            "consumed-ref-mut-frame.lkjscript",
+            &Limits::default(),
+        )
+        .expect("consumed RefMut must leave later semantic frame states");
+
+        let invalid = "def/\nname/\nreturn-ref\n/name\nfn/\nsig/\nRef\nBuf\n->\nRef\nBuf\n/sig\nparams/\nr\nRef/\nBuf\n/Ref\n/params\nr\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+        let error = compile_source(invalid, "reference-return.lkjscript", &Limits::default())
+            .expect_err("reference return must fail")
+            .to_string();
+        assert!(error.contains("cannot be returned"), "{error}");
+    }
+
+    #[test]
+    fn ownership_types_cannot_escape_into_products_or_collections() {
+        let product_direct = "product/\nname/\nBad\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nOwned\nBuf\n/type\n/field\n/fields\n/product\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+        let product_nested = "product/\nname/\nBadNested\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nOption\nRef\nBuf\n/type\n/field\n/fields\n/product\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+        let list = "main/\nsig/\n->\nList\nOwned\nBuf\n/sig\nunit\n/main\n";
+        let option = "main/\nsig/\n->\nOption\nRef\nBuf\n/sig\nunit\n/main\n";
+        let result = "main/\nsig/\n->\nResult\nI64\nRefMut\nBuf\n/sig\nunit\n/main\n";
+        for source in [product_direct, product_nested, list, option, result] {
+            let error = compile_source(source, "stored-owned.lkjscript", &Limits::default())
+                .expect_err("ownership storage must fail")
+                .to_string();
+            assert!(
+                error.contains("ownership/reference"),
+                "wrong ownership storage diagnostic: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn lexical_owned_places_join_without_branch_local_pollution() {
+        let valid_local = ownership_source(
+            "if/\ntrue\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/let\nlet/\nbind/\nb\nowned-buf-new/\n2\n/owned-buf-new\n/bind\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/let\n/if",
+            "I64",
+        );
+        compile_source(
+            &valid_local,
+            "branch-local-owned.lkjscript",
+            &Limits::default(),
+        )
+        .expect("branch-local Owned places must end before the join");
+
+        let valid_reinit = ownership_source(
+            "var/\nname/\nb\n/name\ntype/\nOwned\nBuf\n/type\nowned-buf-new/\n1\n/owned-buf-new\ndo/\nif/\ntrue\nmove/\nb\n/move\nmove/\nb\n/move\n/if\nset/\nb\nowned-buf-new/\n3\n/owned-buf-new\n/set\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/do\n/var",
+            "I64",
+        );
+        compile_source(
+            &valid_reinit,
+            "branch-reinit-owned.lkjscript",
+            &Limits::default(),
+        )
+        .expect("equal branch moves may be reinitialized after the join");
+
+        let invalid_after_move = ownership_source(
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nmove/\nb\n/move\nif/\ntrue\nlet/\nbind/\nlocal\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nunit\n/let\nunit\n/if\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/do\n/let",
+            "I64",
+        );
+        let error = compile_source(
+            &invalid_after_move,
+            "branch-after-move.lkjscript",
+            &Limits::default(),
+        )
+        .expect_err("branch-local place must not resurrect a moved outer place")
+        .to_string();
+        assert!(
+            error.contains("after move"),
+            "wrong move diagnostic: {error}"
+        );
+
+        let invalid_reinit = ownership_source(
+            "var/\nname/\nb\n/name\ntype/\nOwned\nBuf\n/type\nowned-buf-new/\n1\n/owned-buf-new\nset/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/set\n/var",
+            "Unit",
+        );
+        let error = compile_source(
+            &invalid_reinit,
+            "owned-reinit-before-move.lkjscript",
+            &Limits::default(),
+        )
+        .expect_err("initialized Owned var cannot be overwritten")
+        .to_string();
+        assert!(
+            error.contains("only reinitialization after move"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn temporary_borrows_have_only_direct_supported_placements() {
+        let direct = ownership_source(
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\nmove/\nb\n/move\n/do\n/let",
+            "Owned Buf",
+        );
+        compile_source(&direct, "temporary-borrow.lkjscript", &Limits::default())
+            .expect("direct temporary borrow must end after the operation");
+
+        let unsupported = [
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nborrow/\nb\n/borrow\nunit\n/do\n/let",
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-len/\nif/\ntrue\nborrow/\nb\n/borrow\nborrow/\nb\n/borrow\n/if\n/owned-buf-len\n/let",
+            "let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-len/\ndo/\nborrow/\nb\n/borrow\n/do\n/owned-buf-len\n/let",
+        ];
+        for body in unsupported {
+            let source = ownership_source(body, if body.contains("unit") { "Unit" } else { "I64" });
+            let error = compile_source(
+                &source,
+                "unsupported-borrow-placement.lkjscript",
+                &Limits::default(),
+            )
+            .expect_err("unsupported Borrow placement must fail")
+            .to_string();
+            assert!(
+                error.contains("exact direct reference argument or direct let initializer"),
+                "wrong Borrow placement diagnostic: {error}"
+            );
+        }
+
+        let borrow_then_move_call = "def/\nname/\nobserve-and-take\n/name\nfn/\nsig/\nRef\nBuf\nOwned\nBuf\n->\nI64\n/sig\nparams/\nr\nRef/\nBuf\n/Ref\nb\nOwned/\nBuf\n/Owned\n/params\nowned-buf-len/\nr\n/owned-buf-len\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nobserve-and-take/\nborrow/\nb\n/borrow\nmove/\nb\n/move\n/observe-and-take\n/let\n/main\n";
+        let error = compile_source(
+            borrow_then_move_call,
+            "temporary-full-call.lkjscript",
+            &Limits::default(),
+        )
+        .expect_err("temporary loan must cover all call arguments")
+        .to_string();
+        assert!(error.contains("while it is borrowed"), "{error}");
     }
 
     #[test]

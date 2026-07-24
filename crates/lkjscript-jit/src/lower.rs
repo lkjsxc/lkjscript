@@ -237,6 +237,15 @@ fn preflight_function(function: &Function) -> Result<(), LoweringError> {
                     _ => return unsupported_operation(function.id, "reference constant"),
                 },
                 InstructionKind::Copy(_) => {}
+                InstructionKind::PlaceInit { .. }
+                | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::Move { .. }
+                | InstructionKind::Borrow { .. } => {
+                    return unsupported_operation(
+                        function.id,
+                        "ownership/reference operation in initial Owned Buf slice",
+                    );
+                }
                 InstructionKind::Runtime { operation, .. } if supported_runtime(*operation) => {}
                 InstructionKind::Call {
                     target: CallTarget::Direct(_),

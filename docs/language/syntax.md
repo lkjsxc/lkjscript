@@ -7,8 +7,9 @@ Define expression, type, and import behavior above the physical line format.
 ## Status
 
 **Current.** Executable roots use exactly one explicit `main`, imported files
-are declaration-only, and mutation is limited to typed function-local
-`var`/`set`. The exact numeric contract is
+are declaration-only, mutation is limited to typed function-local `var`/`set`,
+and the exact initial `Owned Buf` safe island below is implemented. The exact
+numeric contract is
 [numeric-semantics.md](../decisions/numeric-semantics.md).
 
 ## Expressions
@@ -49,6 +50,43 @@ enters scope. In the body, `set/ x value /set` targets only the nearest `var`
 in the same main or function, requires exact type equality, and returns Unit.
 Parameters, `let` bindings, functions, globals, and bindings in another
 function cannot be assigned. No source global or compatibility form remains.
+
+## Initial Owned Buffer Safe Island
+
+The only ownership types currently accepted are exact `Owned Buf`, `Ref Buf`,
+and `RefMut Buf`. `Owned Buf` is permitted for locals, parameters, and returns.
+References are permitted only as function parameters and inferred local borrow
+bindings; they cannot be returned by source functions or user calls or placed
+in products, List, Option, or Result. Those aggregate storage positions reject
+both direct and nested ownership/reference types. Parameter annotations use the
+marked form `Owned/ Buf /Owned` (and the corresponding `Ref/` or `RefMut/`
+form); signatures and `type/` forms use the atoms `Owned Buf`, `Ref Buf`, or
+`RefMut Buf`.
+
+`owned-buf-new` creates the only source of `Owned Buf`. Reads use
+`owned-buf-len Ref Buf` and `owned-buf-ref Ref Buf I64`; writes use
+`owned-buf-set RefMut Buf I64 I64`. `move/ local-name /move` consumes one whole
+owned local or parameter. `borrow/ local-name /borrow` and
+`borrow-mut/ local-name /borrow-mut` borrow one whole `Owned Buf` place. A
+Borrow expression is legal only as an exact direct reference argument or as a
+direct `let` initializer. A temporary direct-argument loan ends after the
+complete call/runtime-operation expression, not after evaluation of that one
+argument. Same-basic-block last-use analysis ends local loans non-lexically;
+Borrow results do not cross SSA blocks. Legacy `Buf` operations and semantics
+are unchanged.
+
+Only Owned function parameters are initialized at entry. A local place becomes
+initialized after its initializer succeeds and leaves ownership/loan state at
+lexical scope exit, so branch-local places do not enter branch joins. `var`
+reinitialization is accepted only after a move, from a fresh or explicitly moved
+`Owned Buf`.
+
+Every generic instantiation involving a direct or nested `Owned`, `Ref`, or
+`RefMut` signature/substitution is unavailable. Arbitrary or nested borrow
+expressions, legacy-Buf conversion, fields/indexes, reborrowing, partial moves,
+reference return/storage, closures/capture, cross-block Borrow results,
+loop-carried ownership state or loans, and `RefMut` user-call forwarding are
+rejected. Runtime/frame cleanup is not user-visible deterministic `Drop`.
 
 ## Immutable Nominal Products
 

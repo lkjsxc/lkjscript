@@ -42,6 +42,10 @@ pub enum Operation {
     BufLen,
     BufRef,
     BufSet,
+    OwnedBufNew,
+    OwnedBufLen,
+    OwnedBufRef,
+    OwnedBufSet,
     BufClone,
     BufFromStr,
     BufToStr,
@@ -158,6 +162,10 @@ impl Operation {
         Self::BufLen,
         Self::BufRef,
         Self::BufSet,
+        Self::OwnedBufNew,
+        Self::OwnedBufLen,
+        Self::OwnedBufRef,
+        Self::OwnedBufSet,
         Self::BufClone,
         Self::BufFromStr,
         Self::BufToStr,
@@ -280,6 +288,10 @@ impl Operation {
             Self::BufLen => "buf-len",
             Self::BufRef => "buf-ref",
             Self::BufSet => "buf-set",
+            Self::OwnedBufNew => "owned-buf-new",
+            Self::OwnedBufLen => "owned-buf-len",
+            Self::OwnedBufRef => "owned-buf-ref",
+            Self::OwnedBufSet => "owned-buf-set",
             Self::BufClone => "buf-clone",
             Self::BufFromStr => "buf-from-str",
             Self::BufToStr => "buf-to-str",
@@ -445,6 +457,15 @@ impl Operation {
             Self::ArgCount => function(Vec::new(), Type::I64),
             Self::Arg => function(vec![Type::I64], Type::Option(Box::new(Type::Str))),
             Self::BufNew => function(vec![Type::I64], Type::Buf),
+            Self::OwnedBufNew => function(vec![Type::I64], Type::Owned(Box::new(Type::Buf))),
+            Self::OwnedBufLen => function(vec![Type::Ref(Box::new(Type::Buf))], Type::I64),
+            Self::OwnedBufRef => {
+                function(vec![Type::Ref(Box::new(Type::Buf)), Type::I64], Type::I64)
+            }
+            Self::OwnedBufSet => function(
+                vec![Type::RefMut(Box::new(Type::Buf)), Type::I64, Type::I64],
+                Type::Unit,
+            ),
             Self::BufLen => function(vec![Type::Buf], Type::I64),
             Self::BufRef | Self::BufGetU32 => function(vec![Type::Buf, Type::I64], Type::I64),
             Self::BufSet | Self::BufSetU32 => {
@@ -757,6 +778,7 @@ impl Operation {
             | Self::StrFromF64
             | Self::EmptyStr
             | Self::BufNew
+            | Self::OwnedBufNew
             | Self::BufClone
             | Self::Ok
             | Self::Err
@@ -764,14 +786,19 @@ impl Operation {
             Self::Car
             | Self::Cdr
             | Self::BufRef
+            | Self::OwnedBufRef
             | Self::BufGetU32
             | Self::StrRef
             | Self::StrSlice
             | Self::UnwrapOk
             | Self::UnwrapErr
             | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
-            Self::BufSet | Self::BufSetU32 => EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP),
-            Self::BufLen | Self::StrLen | Self::IsOk | Self::IsSome => EffectSet::READS_MEMORY,
+            Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet => {
+                EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
+            }
+            Self::BufLen | Self::OwnedBufLen | Self::StrLen | Self::IsOk | Self::IsSome => {
+                EffectSet::READS_MEMORY
+            }
             Self::SysReadInto => EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::WRITES_MEMORY)
@@ -931,7 +958,10 @@ fn bind_type_params(
             }
             Ok(())
         }
-        (Type::List(pattern), Type::List(argument))
+        (Type::Owned(pattern), Type::Owned(argument))
+        | (Type::Ref(pattern), Type::Ref(argument))
+        | (Type::RefMut(pattern), Type::RefMut(argument))
+        | (Type::List(pattern), Type::List(argument))
         | (Type::Option(pattern), Type::Option(argument)) => {
             bind_type_params(name, pattern, argument, variables, substitutions)
         }
@@ -960,6 +990,9 @@ fn supports_value_equality(ty: &Type) -> bool {
         Type::Option(value) => supports_value_equality(value),
         Type::Result(ok, err) => supports_value_equality(ok) && supports_value_equality(err),
         Type::Buf
+        | Type::Owned(_)
+        | Type::Ref(_)
+        | Type::RefMut(_)
         | Type::Handle
         | Type::Product(_)
         | Type::Param(_)

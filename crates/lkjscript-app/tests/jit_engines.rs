@@ -186,6 +186,10 @@ fn forced_mode_rejects_references_allocation_products_host_io_and_recursion() {
             "main/\nsig/\n->\nUnit\n/sig\nflush/\n/flush\n/main\n",
         ),
         (
+            "owned-buffer.lkjscript",
+            "main/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-ref/\nborrow/\nb\n/borrow\n0\n/owned-buf-ref\n/let\n/main\n",
+        ),
+        (
             "product.lkjscript",
             "product/\nname/\nBoxed\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\nmain/\nsig/\n->\nProduct\nBoxed\n/sig\nproduct-value/\nBoxed\nfield/\nvalue\n1\n/field\n/product-value\n/main\n",
         ),
@@ -202,6 +206,13 @@ fn forced_mode_rejects_references_allocation_products_host_io_and_recursion() {
             error.code(),
             FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
         ));
+        if name == "owned-buffer.lkjscript" {
+            let diagnostic = error.to_string();
+            assert!(
+                diagnostic.contains("reference") || diagnostic.contains("ownership"),
+                "forced owned-buffer rejection was not ownership-specific: {diagnostic}"
+            );
+        }
     }
 
     let recursion = "def/\nname/\nrecur\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\nif/\nlte/\nn\n0\n/lte\n0\nrecur/\n-/\nn\n1\n/-\n/recur\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nrecur/\n3\n/recur\n/main\n";

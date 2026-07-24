@@ -1116,6 +1116,7 @@ mod tests {
                 id: FunctionId::new(0),
                 name: "main".into(),
                 signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+                places: Vec::new(),
                 effects,
                 entry: BlockId::new(0),
                 blocks: vec![Block {

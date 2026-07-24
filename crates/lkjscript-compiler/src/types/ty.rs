@@ -10,6 +10,12 @@ pub enum Type {
     F64,
     Str,
     Buf,
+    /// Initial ownership slice: only `Owned Buf` is well formed.
+    Owned(Box<Type>),
+    /// Initial ownership slice: only `Ref Buf` is well formed.
+    Ref(Box<Type>),
+    /// Initial ownership slice: only `RefMut Buf` is well formed.
+    RefMut(Box<Type>),
     Symbol,
     Handle,
     /// Globally unique nominal product declaration name.
@@ -56,6 +62,9 @@ impl Type {
         match (got, expect) {
             (a, b) if a == b => true,
             (Type::Param(a), Type::Param(b)) => a == b,
+            (Type::Owned(g), Type::Owned(e))
+            | (Type::Ref(g), Type::Ref(e))
+            | (Type::RefMut(g), Type::RefMut(e)) => Self::unify_assignable(g, e),
             (Type::List(g), Type::List(e)) => g == e,
             (Type::Option(g), Type::Option(e)) => Self::unify_assignable(g, e),
             (Type::Result(a, b), Type::Result(c, d)) => {
@@ -81,6 +90,9 @@ impl Type {
     pub fn subst(&self, map: &HashMap<String, Type>) -> Type {
         match self {
             Type::Param(p) => map.get(p).cloned().unwrap_or_else(|| self.clone()),
+            Type::Owned(t) => Type::Owned(Box::new(t.subst(map))),
+            Type::Ref(t) => Type::Ref(Box::new(t.subst(map))),
+            Type::RefMut(t) => Type::RefMut(Box::new(t.subst(map))),
             Type::List(t) => Type::List(Box::new(t.subst(map))),
             Type::Option(t) => Type::Option(Box::new(t.subst(map))),
             Type::Result(a, b) => Type::Result(Box::new(a.subst(map)), Box::new(b.subst(map))),
@@ -120,6 +132,21 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         )),
         "Str" => Ok((Type::Str, i + 1)),
         "Buf" => Ok((Type::Buf, i + 1)),
+        "Owned" | "Ref" | "RefMut" => {
+            let (inner, next) = parse_one(atoms, i + 1)?;
+            if inner != Type::Buf {
+                return Err(format!(
+                    "{a} accepts only exact Buf in the initial ownership slice"
+                ));
+            }
+            let ty = match a.as_str() {
+                "Owned" => Type::Owned(Box::new(inner)),
+                "Ref" => Type::Ref(Box::new(inner)),
+                "RefMut" => Type::RefMut(Box::new(inner)),
+                _ => return Err("invalid ownership type".into()),
+            };
+            Ok((ty, next))
+        }
         "Symbol" => Ok((Type::Symbol, i + 1)),
         "Handle" => Ok((Type::Handle, i + 1)),
         "Product" => {
@@ -172,6 +199,9 @@ fn is_type_param_name(s: &str) -> bool {
                 | "F64"
                 | "Str"
                 | "Buf"
+                | "Owned"
+                | "Ref"
+                | "RefMut"
                 | "Symbol"
                 | "Handle"
                 | "List"

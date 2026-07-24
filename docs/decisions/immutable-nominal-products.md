@@ -65,6 +65,9 @@ The declaration contract is:
   product;
 - a product has from zero through 15 fields;
 - every field has an explicit type and contains no unbound type parameter;
+- under the Current ownership safe island, every field rejects direct or
+  nested `Owned`, `Ref`, and `RefMut`, including occurrences inside
+  List/Option/Result;
 - product declarations may refer to products declared later in the import
   closure;
 - the annotation `Product Point` denotes this exact nominal type;

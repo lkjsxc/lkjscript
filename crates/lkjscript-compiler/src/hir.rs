@@ -31,6 +31,8 @@ macro_rules! dense_id {
 
 dense_id!(TraitId);
 dense_id!(ImplId);
+dense_id!(PlaceId);
+dense_id!(LoanId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(u32);
@@ -216,6 +218,7 @@ pub struct Function {
     pub binding: BindingId,
     pub origin: SourceId,
     pub params: Vec<BindingId>,
+    pub param_places: Vec<PlaceId>,
     pub bounds: Vec<TraitBound>,
     pub arity: u8,
     pub local_count: u8,
@@ -266,6 +269,12 @@ pub struct Expr {
     pub kind: ExprKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BorrowKind {
+    Shared,
+    Mutable,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     LitI64(i64),
@@ -276,6 +285,16 @@ pub enum ExprKind {
     LitNone,
     LitStr(String),
     Load(BindingRef),
+    Move {
+        place: PlaceId,
+        binding: BindingRef,
+    },
+    Borrow {
+        place: PlaceId,
+        loan: LoanId,
+        kind: BorrowKind,
+        binding: BindingRef,
+    },
     Call {
         callee: BindingRef,
         args: Vec<Expr>,
@@ -303,6 +322,7 @@ pub enum ExprKind {
     },
     MutableLocal {
         binding: BindingId,
+        place: PlaceId,
         slot: u8,
         initial: Box<Expr>,
         body: Box<Expr>,
@@ -333,6 +353,7 @@ pub enum ExprKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalDefinition {
     pub binding: BindingId,
+    pub place: PlaceId,
     pub slot: u8,
     pub value: Expr,
 }

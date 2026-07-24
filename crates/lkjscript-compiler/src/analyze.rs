@@ -6,10 +6,11 @@ use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
 use crate::ast::Expr as AstExpr;
 use crate::hir::{
-    self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, CoreTrait, EffectSet, Expr,
-    ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LocalDefinition, Main,
-    Operation, Origin, ProductDefinition, ProductField, Source, SourceId, TraitBound,
-    TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type, TypeSubstitution,
+    self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
+    EffectSet, Expr, ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId,
+    LocalDefinition, Main, Operation, Origin, PlaceId, ProductDefinition, ProductField, Source,
+    SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
+    TypeSubstitution,
 };
 
 pub const TRAIT_SOLVER_MAX_DEPTH: usize = 32;
@@ -55,6 +56,7 @@ pub(crate) fn analyze_program_without_effects(program: &AstProgram) -> Result<hi
         main,
         global_layout,
     };
+    crate::ownership::check(&program)?;
     Ok(program)
 }
 
@@ -70,6 +72,7 @@ struct Analyzer {
     implementations: Vec<ImplDefinition>,
     implementation_index: HashMap<(TraitId, ProductId), ImplId>,
     function_bounds: HashMap<BindingId, Vec<TraitBound>>,
+    next_loan: u32,
 }
 
 impl Analyzer {
@@ -95,6 +98,7 @@ impl Analyzer {
             implementations: Vec::new(),
             implementation_index: HashMap::new(),
             function_bounds: HashMap::new(),
+            next_loan: 0,
         })
     }
 
@@ -285,6 +289,12 @@ impl Analyzer {
                             format!("product {product_name} field {field_name}: {message}"),
                         )
                     })?;
+                    if contains_ownership_type(&ty) {
+                        return Err(self.error(
+                            source,
+                            format!("product {product_name} field {field_name}: ownership/reference types cannot be stored in products"),
+                        ));
+                    }
                     let mut free = HashSet::new();
                     collect_type_params(&ty, &mut free);
                     if let Some(parameter) = free.into_iter().next() {
@@ -385,8 +395,25 @@ impl Analyzer {
                     Err(format!("unknown product type {name}"))
                 }
             }
-            Type::List(inner) | Type::Option(inner) => self.validate_product_type(inner),
+            Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) => {
+                if inner.as_ref() == &Type::Buf {
+                    Ok(())
+                } else {
+                    Err("ownership types accept only exact Buf in this slice".into())
+                }
+            }
+            Type::List(inner) | Type::Option(inner) => {
+                if contains_ownership_type(inner) {
+                    return Err(
+                        "ownership/reference types cannot be stored in List or Option".into(),
+                    );
+                }
+                self.validate_product_type(inner)
+            }
             Type::Result(ok, error) => {
+                if contains_ownership_type(ok) || contains_ownership_type(error) {
+                    return Err("ownership/reference types cannot be stored in Result".into());
+                }
                 self.validate_product_type(ok)?;
                 self.validate_product_type(error)
             }
@@ -444,6 +471,12 @@ impl Analyzer {
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
                         self.validate_product_type(&return_type)
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
+                        if matches!(return_type, Type::Ref(_) | Type::RefMut(_)) {
+                            return Err(self.error(
+                                source,
+                                "main cannot return a lexical reference in the initial ownership slice",
+                            ));
+                        }
                         let mut free = HashSet::new();
                         collect_type_params(&return_type, &mut free);
                         if let Some(parameter) = free.into_iter().next() {
@@ -507,6 +540,12 @@ impl Analyzer {
         {
             self.validate_product_type(ty)
                 .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
+        }
+        if matches!(parsed.signature_return, Type::Ref(_) | Type::RefMut(_)) {
+            return Err(self.error(
+                origin,
+                format!("def {name}: lexical references cannot be returned in the initial ownership slice"),
+            ));
         }
         let monomorphic = Type::Fn {
             params: parsed.signature_params.clone(),
@@ -707,7 +746,7 @@ impl Analyzer {
             params.push(id);
         }
 
-        let (body, local_count) = {
+        let (body, local_count, param_places) = {
             let type_variables = parsed.forall_vars.iter().cloned().collect();
             let mut resolver = Resolver::new(
                 self,
@@ -717,9 +756,13 @@ impl Analyzer {
                 type_variables,
                 params.len(),
             );
+            let param_places = params
+                .iter()
+                .map(|parameter| resolver.place(*parameter))
+                .collect::<Result<Vec<_>>>()?;
             let body = resolver.resolve_expr(parsed.body)?;
             let local_count = resolver.local_count()?;
-            (body, local_count)
+            (body, local_count, param_places)
         };
         if !Type::unify_assignable(&body.ty, &parsed.signature_return) {
             let name = self.binding(binding)?.name.clone();
@@ -736,6 +779,7 @@ impl Analyzer {
             binding,
             origin,
             params,
+            param_places,
             bounds,
             arity,
             local_count,
@@ -783,9 +827,11 @@ struct Resolver<'a> {
     origin: SourceId,
     scopes: Vec<HashMap<String, BindingId>>,
     local_slots: HashMap<BindingId, u8>,
+    local_places: HashMap<BindingId, PlaceId>,
     type_variables: HashSet<String>,
     next_slot: usize,
     max_slots: usize,
+    next_place: u32,
 }
 
 impl<'a> Resolver<'a> {
@@ -797,15 +843,50 @@ impl<'a> Resolver<'a> {
         type_variables: HashSet<String>,
         parameter_count: usize,
     ) -> Self {
+        let local_places = local_slots
+            .iter()
+            .map(|(binding, slot)| (*binding, PlaceId::new(u32::from(*slot))))
+            .collect();
         Self {
             analyzer,
             origin,
             scopes: vec![function_scope],
             local_slots,
+            local_places,
             type_variables,
             next_slot: parameter_count,
             max_slots: parameter_count,
+            next_place: u32::try_from(parameter_count).unwrap_or(u32::MAX),
         }
+    }
+
+    fn place(&self, binding: BindingId) -> Result<PlaceId> {
+        self.local_places.get(&binding).copied().ok_or_else(|| {
+            self.error(format!(
+                "binding {} has no whole-local PlaceId",
+                binding.raw()
+            ))
+        })
+    }
+
+    fn allocate_place(&mut self, binding: BindingId) -> Result<PlaceId> {
+        let place = PlaceId::new(self.next_place);
+        self.next_place = self
+            .next_place
+            .checked_add(1)
+            .ok_or_else(|| self.error("too many ownership places"))?;
+        self.local_places.insert(binding, place);
+        Ok(place)
+    }
+
+    fn allocate_loan(&mut self) -> Result<LoanId> {
+        let loan = LoanId::new(self.analyzer.next_loan);
+        self.analyzer.next_loan = self
+            .analyzer
+            .next_loan
+            .checked_add(1)
+            .ok_or_else(|| self.error("too many ownership loans in program closure"))?;
+        Ok(loan)
     }
 
     fn local_count(&self) -> Result<u8> {
@@ -863,6 +944,9 @@ impl<'a> Resolver<'a> {
             "var" => self.resolve_var(args),
             "quote" => self.resolve_quote(args),
             "set" => self.resolve_set(args),
+            "move" => self.resolve_move(args),
+            "borrow" => self.resolve_borrow(args, BorrowKind::Shared),
+            "borrow-mut" => self.resolve_borrow(args, BorrowKind::Mutable),
             "empty-list" => self.resolve_empty_list(args),
             "none" => self.resolve_none(args),
             "product-value" => self.resolve_product_value(args),
@@ -918,6 +1002,14 @@ impl<'a> Resolver<'a> {
                 },
             ))
         } else {
+            if resolved_args
+                .iter()
+                .any(|argument| matches!(argument.ty, Type::RefMut(_)))
+            {
+                return Err(
+                    self.error("RefMut forwarding is unsupported in the initial ownership slice")
+                );
+            }
             let (ty, instantiation) =
                 self.call_result(name, callee, callee_type, &resolved_args)?;
             let callee = self.binding_ref(callee)?;
@@ -939,7 +1031,19 @@ impl<'a> Resolver<'a> {
         callable: Type,
         args: &[Expr],
     ) -> Result<(Type, Option<GenericInstantiation>)> {
+        let is_generic = matches!(&callable, Type::Forall { .. });
+        let generic_signature_has_ownership = is_generic && contains_ownership_type(&callable);
         let (instantiated, substitutions) = self.instantiate(name, callable, args)?;
+        if is_generic
+            && (generic_signature_has_ownership
+                || substitutions
+                    .iter()
+                    .any(|substitution| contains_ownership_type(&substitution.ty)))
+        {
+            return Err(self.error(format!(
+                "{name}: ownership/reference generic instantiation is unavailable in the initial ownership slice"
+            )));
+        }
         let Type::Fn { params, ret } = instantiated else {
             return Err(self.error(format!("{name} is not a function")));
         };
@@ -957,6 +1061,11 @@ impl<'a> Resolver<'a> {
                     argument.ty
                 )));
             }
+        }
+        if contains_reference_type(&ret) {
+            return Err(self.error(format!(
+                "{name}: user-call results cannot be lexical references in the initial ownership slice"
+            )));
         }
         let instantiation = if substitutions.is_empty() {
             None
@@ -1139,7 +1248,11 @@ impl<'a> Resolver<'a> {
         let result = match core_trait {
             CoreTrait::Copy => match ty {
                 Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
+                Type::Ref(inner) if inner.as_ref() == &Type::Buf => true,
                 Type::Buf
+                | Type::Owned(_)
+                | Type::Ref(_)
+                | Type::RefMut(_)
                 | Type::Handle
                 | Type::Fn { .. }
                 | Type::Forall { .. }
@@ -1215,10 +1328,11 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(())
             }
-            (Type::List(pattern), Type::List(got)) => {
-                self.bind_type_params(function, pattern, got, variables, substitutions)
-            }
-            (Type::Option(pattern), Type::Option(got)) => {
+            (Type::Owned(pattern), Type::Owned(got))
+            | (Type::Ref(pattern), Type::Ref(got))
+            | (Type::RefMut(pattern), Type::RefMut(got))
+            | (Type::List(pattern), Type::List(got))
+            | (Type::Option(pattern), Type::Option(got)) => {
                 self.bind_type_params(function, pattern, got, variables, substitutions)
             }
             (Type::Result(ok_pattern, err_pattern), Type::Result(ok_got, err_got)) => {
@@ -1335,8 +1449,10 @@ impl<'a> Resolver<'a> {
             };
             scope.insert(name, binding_id);
             self.local_slots.insert(binding_id, slot);
+            let place = self.allocate_place(binding_id)?;
             resolved_bindings.push(LocalDefinition {
                 binding: binding_id,
+                place,
                 slot,
                 value,
             });
@@ -1373,6 +1489,11 @@ impl<'a> Resolver<'a> {
         }
         let declared_type = parse_type_form(type_args)
             .map_err(|message| self.error(format!("var {name}: {message}")))?;
+        if matches!(declared_type, Type::Ref(_) | Type::RefMut(_)) {
+            return Err(self.error(format!(
+                "var {name}: lexical references may only be inferred let bindings or parameters"
+            )));
+        }
         self.analyzer
             .validate_product_type(&declared_type)
             .map_err(|message| self.error(format!("var {name}: {message}")))?;
@@ -1411,6 +1532,7 @@ impl<'a> Resolver<'a> {
             Origin::Source(self.origin),
         )?;
         self.local_slots.insert(binding, slot);
+        let place = self.allocate_place(binding)?;
         self.scopes.push(HashMap::from([(name, binding)]));
         let body = self.resolve_expr(body_ast)?;
         let _removed_scope = self.scopes.pop();
@@ -1420,6 +1542,7 @@ impl<'a> Resolver<'a> {
             ty,
             ExprKind::MutableLocal {
                 binding,
+                place,
                 slot,
                 initial: Box::new(initial),
                 body: Box::new(body),
@@ -1472,6 +1595,65 @@ impl<'a> Resolver<'a> {
                 target,
                 slot,
                 value: Box::new(value),
+            },
+        ))
+    }
+
+    fn resolve_move(&mut self, args: &[AstExpr]) -> Result<Expr> {
+        let [AstExpr::Symbol(name)] = args else {
+            return Err(self.error("move expects exactly one whole local or parameter name"));
+        };
+        let binding = self.lookup_lexical(name).ok_or_else(|| {
+            self.error(format!(
+                "move target {name} is not a whole local or parameter"
+            ))
+        })?;
+        let ty = self.analyzer.binding(binding)?.ty.clone();
+        match ty {
+            Type::Owned(ref inner) if inner.as_ref() == &Type::Buf => {}
+            Type::RefMut(_) => {
+                return Err(
+                    self.error("RefMut forwarding is unsupported in the initial ownership slice")
+                );
+            }
+            _ => return Err(self.error("move requires an affine Owned Buf place")),
+        }
+        let place = self.place(binding)?;
+        let binding = self.binding_ref(binding)?;
+        Ok(self.expression(ty, ExprKind::Move { place, binding }))
+    }
+
+    fn resolve_borrow(&mut self, args: &[AstExpr], kind: BorrowKind) -> Result<Expr> {
+        let [AstExpr::Symbol(name)] = args else {
+            return Err(
+                self.error("borrow expects exactly one whole Owned Buf local or parameter name")
+            );
+        };
+        let binding = self.lookup_lexical(name).ok_or_else(|| {
+            self.error(format!(
+                "borrow target {name} is not a whole local or parameter"
+            ))
+        })?;
+        let owner_ty = self.analyzer.binding(binding)?.ty.clone();
+        if owner_ty != Type::Owned(Box::new(Type::Buf)) {
+            return Err(self.error(
+                "borrow target must have exact type Owned Buf; reborrow and legacy Buf are unsupported",
+            ));
+        }
+        let place = self.place(binding)?;
+        let loan = self.allocate_loan()?;
+        let binding = self.binding_ref(binding)?;
+        let ty = match kind {
+            BorrowKind::Shared => Type::Ref(Box::new(Type::Buf)),
+            BorrowKind::Mutable => Type::RefMut(Box::new(Type::Buf)),
+        };
+        Ok(self.expression(
+            ty,
+            ExprKind::Borrow {
+                place,
+                loan,
+                kind,
+                binding,
             },
         ))
     }
@@ -1736,7 +1918,7 @@ impl<'a> Resolver<'a> {
             | ExprKind::LitNone
             | ExprKind::LitStr(_)
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
-            ExprKind::Load(_) => EffectSet::PURE,
+            ExprKind::Load(_) | ExprKind::Move { .. } | ExprKind::Borrow { .. } => EffectSet::PURE,
             ExprKind::Call { args, .. } => fold_effects(args).union(EffectSet::CONSERVATIVE_CALL),
             ExprKind::Operation {
                 operation, args, ..
@@ -1806,6 +1988,9 @@ fn is_contextual_name(name: &str) -> bool {
             | "var"
             | "quote"
             | "set"
+            | "move"
+            | "borrow"
+            | "borrow-mut"
             | "empty-list"
             | "none"
             | "product"
@@ -2122,7 +2307,11 @@ fn collect_type_params<'a>(ty: &'a Type, output: &mut HashSet<&'a str>) {
         Type::Param(parameter) => {
             output.insert(parameter);
         }
-        Type::List(inner) | Type::Option(inner) => collect_type_params(inner, output),
+        Type::Owned(inner)
+        | Type::Ref(inner)
+        | Type::RefMut(inner)
+        | Type::List(inner)
+        | Type::Option(inner) => collect_type_params(inner, output),
         Type::Result(ok, error) => {
             collect_type_params(ok, output);
             collect_type_params(error, output);
@@ -2135,6 +2324,34 @@ fn collect_type_params<'a>(ty: &'a Type, output: &mut HashSet<&'a str>) {
         }
         Type::Forall { body, .. } => collect_type_params(body, output),
         _ => {}
+    }
+}
+
+fn contains_ownership_type(ty: &Type) -> bool {
+    match ty {
+        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => true,
+        Type::List(inner) | Type::Option(inner) => contains_ownership_type(inner),
+        Type::Result(ok, error) => contains_ownership_type(ok) || contains_ownership_type(error),
+        Type::Fn { params, ret } => {
+            params.iter().any(contains_ownership_type) || contains_ownership_type(ret)
+        }
+        Type::Forall { body, .. } => contains_ownership_type(body),
+        _ => false,
+    }
+}
+
+fn contains_reference_type(ty: &Type) -> bool {
+    match ty {
+        Type::Ref(_) | Type::RefMut(_) => true,
+        Type::Owned(inner) | Type::List(inner) | Type::Option(inner) => {
+            contains_reference_type(inner)
+        }
+        Type::Result(ok, error) => contains_reference_type(ok) || contains_reference_type(error),
+        Type::Fn { params, ret } => {
+            params.iter().any(contains_reference_type) || contains_reference_type(ret)
+        }
+        Type::Forall { body, .. } => contains_reference_type(body),
+        _ => false,
     }
 }
 
@@ -2186,6 +2403,22 @@ fn parameter_type(expression: &AstExpr) -> std::result::Result<Type, String> {
     match expression {
         AstExpr::Symbol(name) => atom_type(name),
         AstExpr::Call { name, args } if args.is_empty() => atom_type(name),
+        AstExpr::Call { name, args }
+            if matches!(name.as_str(), "Owned" | "Ref" | "RefMut") && args.len() == 1 =>
+        {
+            let inner = parameter_type(&args[0])?;
+            if inner != Type::Buf {
+                return Err(format!(
+                    "{name} accepts only exact Buf in the initial ownership slice"
+                ));
+            }
+            Ok(match name.as_str() {
+                "Owned" => Type::Owned(Box::new(inner)),
+                "Ref" => Type::Ref(Box::new(inner)),
+                "RefMut" => Type::RefMut(Box::new(inner)),
+                _ => return Err("invalid ownership parameter type".into()),
+            })
+        }
         AstExpr::Call { name, args } if name == "List" && args.len() == 1 => {
             Ok(Type::List(Box::new(parameter_type(&args[0])?)))
         }

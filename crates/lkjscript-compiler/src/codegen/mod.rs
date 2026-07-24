@@ -236,7 +236,12 @@ impl Emitter<'_> {
     fn emit_instruction(&mut self, instruction: &Instruction, store_result: bool) -> Result<()> {
         match &instruction.kind {
             InstructionKind::Constant(constant) => self.emit_constant(constant)?,
-            InstructionKind::Copy(value) => self.load(*value)?,
+            InstructionKind::Copy(value)
+            | InstructionKind::Move { value, .. }
+            | InstructionKind::Borrow { value, .. } => self.load(*value)?,
+            InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
+                self.proto.emit(Op::Unit);
+            }
             InstructionKind::FunctionRef(function) => {
                 let global = self.global(*function)?;
                 self.proto.emit_op_u16(Op::LoadGlobal, global);
@@ -779,6 +784,10 @@ fn runtime_opcode(operation: RuntimeOp) -> Op {
         RuntimeOp::BufLen => Op::BufLen,
         RuntimeOp::BufRef => Op::BufRef,
         RuntimeOp::BufSet => Op::BufSet,
+        RuntimeOp::OwnedBufNew => Op::BufNew,
+        RuntimeOp::OwnedBufLen => Op::BufLen,
+        RuntimeOp::OwnedBufRef => Op::BufRef,
+        RuntimeOp::OwnedBufSet => Op::BufSet,
         RuntimeOp::BufClone => Op::BufClone,
         RuntimeOp::BufFromStr => Op::BufFromStr,
         RuntimeOp::BufToStr => Op::BufToStr,

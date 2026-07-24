@@ -42,6 +42,23 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 8. strict Clippy for the workspace, all targets, and all features;
 9. workspace unit tests with the locked Cargo graph.
 
+Workspace tests also cover the initial `Owned Buf` safe island: exact type and
+operation signatures; generic-laundering and direct/nested aggregate-storage
+rejection; direct temporary/let Borrow placement and full-expression loan
+extent; affine move/reinitialization failures; lexical and branch-local place
+state/result transfer; shared/exclusive conflicts; same-block NLL; consumed
+`RefMut` frame liveness; constant-loop cleanup; and exact branch/loop state
+boundaries. Public malformed-SSA tests cover original-value reuse after Move,
+explicit affine edge transport, equal/mismatched branches, duplicate call/edge
+affine arguments, owner aliasing, missing entry/local provenance, cross-block
+Borrow rejection, terminator reuse, duplicate LoanIds, duplicate active
+`PlaceEnd`, loop mismatch, pass preservation, collection-nested function-type
+laundering, explicit affine arm transport, the 4,096-block function cap, bitset
+dominance, and bounded ownership/CFG/state work. Evaluator/VM equivalence uses the same
+zero-allocation boundary for the focused owned-buffer resource check, and the
+scalar-returning forced-baseline fixture reaches allocation/borrow/read before
+an ownership/reference support rejection.
+
 Workspace tests include focused numeric and explicit-equality
 parser/type/HIR/SSA/bytecode/VM/host boundaries, removed equality vocabulary
 and opcodes, and compiled source-to-VM execution across immediate and boxed I64
@@ -184,7 +201,7 @@ separate, stderr/file-only, opt-in, and silent during normal execution. Metrics
 retain exact outcome bits, compile/HIR/effect/SSA/bytecode/native/install/first-
 entry/first-call/VM/native/engine times, tier states and failures/fallbacks,
 entries/direct calls/PollV1, and code/metadata/accounted cache peaks.
-Allocation/reference/host paths,
+Owned-buffer and other allocation/reference/host paths,
 recursion, OSR, optimizing JIT, GC-native references, and background compilation
 are outside the current baseline subset. Performance adoption, broader
 malformed/resource equivalence, and native GC evidence remain separate future

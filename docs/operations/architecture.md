@@ -45,7 +45,8 @@ checks. No workspace crate has a third-party Rust dependency.
 | Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
 | Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
 | Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `effects.rs`, `hir.rs`, `operation.rs` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects |
-| HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa.rs` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect transfer |
+| Ownership analysis | `crates/lkjscript-compiler/src/ownership.rs` | mandatory aggregate-bounded `Owned Buf` lexical place/move/same-block-loan analysis and exact joins |
+| HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa.rs` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect/ownership transfer |
 | Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bytecode link metadata |
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
@@ -73,9 +74,12 @@ CLI path
   -> enforce one root main and declaration-only imports
   -> collect immutable function and product headers
   -> resolve exact types, binding IDs, and local slots into owned HIR
+  -> enforce the aggregate ownership-expression budget
+  -> run mandatory whole-place lexical ownership/same-block-loan analysis
   -> infer stable fixed-point function effects and recompute expression effects
   -> environment-rename HIR locals/mutation into typed SSA block parameters
-  -> verify typed SSA
+     with explicit place init/end and current-owner transport facts
+  -> verify typed SSA with bounded forward ownership CFG dataflow
   -> run each deterministic isolated baseline pass with post-pass verification
   -> lower only normalized SSA and retain deterministic bytecode link metadata
   -> install internal function closures as implementation metadata
@@ -114,7 +118,8 @@ explicitly unsupported in it. The selected owned Linux x86-64 closed scalar
 machine plan, encoder, metadata, safe W^X boundary, verified SSA adapter,
 bounded code objects, and callable function-entry baseline tier are **Current**
 for allocation-free Unit/Bool/I64/F64 acyclic direct-call groups. Forced and
-auto engines execute real entries. Ownership/traits, native references/allocation, loop OSR, an optimizing tier,
+auto engines execute real entries. The initial `Owned Buf` ownership safe island and marker traits are Current;
+general ownership, native references/allocation, loop OSR, an optimizing tier,
 minimal AOT file emission, and direct Wasm remain **Accepted Targets** or later
 work. The VM remains the cold tier and runtime oracle. See [Ownership And
 Borrowing](../decisions/ownership-and-borrowing.md), [Coherent Traits And Static

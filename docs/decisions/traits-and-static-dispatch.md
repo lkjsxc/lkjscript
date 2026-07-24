@@ -166,8 +166,10 @@ The bounded marker solver derives `Copy`, `Send`, and `Sync`. Unit, Bool, I64,
 and F64 have all three facts. Str and Symbol are `Copy` within one worker but,
 like List, Option, Result, and nominal products, are worker-local GC references
 and therefore do not derive `Send` or `Sync`; structurally eligible contained
-values still determine their `Copy` fact. Buf, Handle, and function types have
-no automatic facts in this slice. Exact repeated product recursion and solver
+values still determine their `Copy` fact. Legacy Buf, Handle, and function types have no automatic facts in this slice.
+In the Current initial ownership island, `Owned Buf` and `RefMut Buf` derive no
+Copy/Send/Sync fact; `Ref Buf` derives Copy but not Send or Sync. All remain
+worker-local. Exact repeated product recursion and solver
 depth/work exhaustion are deterministic compile errors rather than optimistic
 inference. Other user marker bounds require one exact explicit product
 implementation.
@@ -175,7 +177,9 @@ implementation.
 Bounded generic functions are callable only at concrete direct-call sites and
 are not first-class values in this slice; generic-context bound forwarding and
 loading one for an indirect call are rejected because an abstract caller-bound
-witness is not yet represented. Resolved concrete generic HIR calls retain canonical
+witness is not yet represented. Every generic instantiation whose signature or
+substitution directly or transitively contains `Owned`, `Ref`, or `RefMut` is
+also rejected by the Current ownership safe island. Resolved concrete generic HIR calls retain canonical
 ordered substitutions and one erased witness per bound: either an auto-trait fact or an exact implementation
 identity. `Clone` and `Drop` bounds are unavailable until their method/drop
 contracts are implemented. Typed SSA retains trait/implementation metadata, signature bounds,

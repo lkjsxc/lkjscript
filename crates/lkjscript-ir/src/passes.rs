@@ -136,7 +136,27 @@ pub fn simplify_branches(verified: &VerifiedProgram) -> crate::Result<VerifiedPr
                 block.terminator = replacement;
             }
         }
+        // Verification runs after every isolated pass. Remove blocks made
+        // unreachable by a proven constant edge here so they cannot retain
+        // stale cross-block ownership/value uses until the later dedicated
+        // unreachable-block pass.
+        let mut reachable = HashSet::new();
+        let mut work = vec![function.entry];
+        while let Some(current) = work.pop() {
+            if !reachable.insert(current) {
+                continue;
+            }
+            if let Some(block) = function.blocks.iter().find(|block| block.id == current) {
+                work.extend(successors(&block.terminator));
+            }
+        }
+        function
+            .blocks
+            .retain(|block| reachable.contains(&block.id));
+        clear_stale_loop_headers(function);
     }
+    compact_blocks(&mut program)?;
+    compact_values(&mut program)?;
     finish(program)
 }
 
@@ -205,6 +225,13 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
             for instruction in &block.instructions {
                 if !instruction.metadata.effects.is_pure()
                     || instruction.metadata.safepoint == Safepoint::Required
+                    || matches!(
+                        instruction.kind,
+                        InstructionKind::PlaceInit { .. }
+                            | InstructionKind::PlaceEnd { .. }
+                            | InstructionKind::Move { .. }
+                            | InstructionKind::Borrow { .. }
+                    )
                 {
                     live.extend(instruction.kind.operands());
                     live.insert(instruction.id);
@@ -233,6 +260,13 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
         for block in &mut function.blocks {
             block.instructions.retain(|instruction| {
                 live.contains(&instruction.id)
+                    || matches!(
+                        instruction.kind,
+                        InstructionKind::PlaceInit { .. }
+                            | InstructionKind::PlaceEnd { .. }
+                            | InstructionKind::Move { .. }
+                            | InstructionKind::Borrow { .. }
+                    )
                     || !instruction.metadata.effects.is_pure()
                     || instruction.metadata.safepoint == Safepoint::Required
             });
@@ -477,6 +511,38 @@ fn canonical_walk(
     }
 }
 
+fn clear_stale_loop_headers(function: &mut crate::Function) {
+    let stale: Vec<BlockId> = function
+        .blocks
+        .iter()
+        .filter(|block| block.metadata.loop_header)
+        .filter_map(|header| {
+            let mut seen = HashSet::new();
+            let mut work = successors(&header.terminator);
+            let mut cyclic = false;
+            while let Some(current) = work.pop() {
+                if current == header.id {
+                    cyclic = true;
+                    break;
+                }
+                if !seen.insert(current) {
+                    continue;
+                }
+                if let Some(block) = function.blocks.iter().find(|block| block.id == current) {
+                    work.extend(successors(&block.terminator));
+                }
+            }
+            (!cyclic).then_some(header.id)
+        })
+        .collect();
+    for id in stale {
+        if let Some(block) = function.blocks.iter_mut().find(|block| block.id == id) {
+            block.metadata.loop_header = false;
+            block.metadata.frame_state = None;
+        }
+    }
+}
+
 fn successors(terminator: &Terminator) -> Vec<BlockId> {
     match terminator {
         Terminator::Branch { target, .. } => vec![*target],
@@ -531,7 +597,80 @@ fn compact_blocks(program: &mut Program) -> crate::Result<()> {
             }
         }
     }
+    compact_places(program)
+}
+
+fn compact_places(program: &mut Program) -> crate::Result<()> {
+    for function in &mut program.functions {
+        let mut referenced = HashSet::new();
+        for block in &function.blocks {
+            referenced.extend(
+                block
+                    .parameters
+                    .iter()
+                    .filter_map(|parameter| parameter.owner_place),
+            );
+            for instruction in &block.instructions {
+                match instruction.kind {
+                    InstructionKind::PlaceInit { place, .. }
+                    | InstructionKind::PlaceEnd { place }
+                    | InstructionKind::Move { place, .. }
+                    | InstructionKind::Borrow { place, .. } => {
+                        referenced.insert(place);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let retained: Vec<_> = function
+            .places
+            .iter()
+            .filter(|place| referenced.contains(&place.id))
+            .cloned()
+            .collect();
+        let mut mapping = HashMap::with_capacity(retained.len());
+        for (index, place) in retained.iter().enumerate() {
+            let raw = u32::try_from(index)
+                .map_err(|_| crate::IrError::new("SSA place count exceeds u32"))?;
+            mapping.insert(place.id, crate::PlaceId::new(raw));
+        }
+        function.places = retained
+            .into_iter()
+            .map(|mut place| {
+                place.id = mapped_place(&mapping, place.id)?;
+                Ok(place)
+            })
+            .collect::<crate::Result<Vec<_>>>()?;
+        for block in &mut function.blocks {
+            for parameter in &mut block.parameters {
+                if let Some(place) = parameter.owner_place {
+                    parameter.owner_place = Some(mapped_place(&mapping, place)?);
+                }
+            }
+            for instruction in &mut block.instructions {
+                match &mut instruction.kind {
+                    InstructionKind::PlaceInit { place, .. }
+                    | InstructionKind::PlaceEnd { place }
+                    | InstructionKind::Move { place, .. }
+                    | InstructionKind::Borrow { place, .. } => {
+                        *place = mapped_place(&mapping, *place)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
     Ok(())
+}
+
+fn mapped_place(
+    mapping: &HashMap<crate::PlaceId, crate::PlaceId>,
+    id: crate::PlaceId,
+) -> crate::Result<crate::PlaceId> {
+    mapping
+        .get(&id)
+        .copied()
+        .ok_or_else(|| crate::IrError::new(format!("pass lost SSA place {}", id.raw())))
 }
 
 fn mapped_block(mapping: &HashMap<BlockId, BlockId>, id: BlockId) -> crate::Result<BlockId> {
@@ -591,8 +730,15 @@ fn rewrite_function_values(
         }
         for instruction in &mut block.instructions {
             match &mut instruction.kind {
-                InstructionKind::Constant(_) | InstructionKind::FunctionRef(_) => {}
-                InstructionKind::Copy(value) => *value = rewrite(*value),
+                InstructionKind::Constant(_)
+                | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::FunctionRef(_) => {}
+                InstructionKind::Copy(value)
+                | InstructionKind::PlaceInit { value, .. }
+                | InstructionKind::Move { value, .. }
+                | InstructionKind::Borrow { value, .. } => {
+                    *value = rewrite(*value);
+                }
                 InstructionKind::Runtime { arguments, .. }
                 | InstructionKind::Call { arguments, .. } => {
                     for argument in arguments {
