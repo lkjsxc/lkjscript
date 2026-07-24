@@ -216,6 +216,34 @@ Phase B, or Phase C. A gate that did not run did not pass. Docker, full
 Brainfuck Mandelbrot, source-to-native execution, and performance were not
 tested for Phase C.
 
+The callable scalar baseline implementation chain through
+`3117819d890cd1b3eda8651b9fae104a6ec31214`, based on current-main
+`c4c96094260072323f9399fe7f0f7b4a14d1eef6`, was checked in isolated worktree
+`/tmp/pi-agent-a98a8be7-b37a-422-f33e779d` on Linux
+`7.0.0-27-generic` x86-64 with Rust/Cargo 1.96.0. The evidence establishes the
+exact allocation-free scalar subset, not full-language native execution, OSR,
+or a performance result.
+
+| Callable baseline command or check | Result |
+| --- | --- |
+| focused IR/compiler/native/sys/JIT/VM/app tests | passed; the final canonical workspace gate reports 116 tests, including 7 source-engine and 1 direct verified-SSA JIT tests |
+| strict workspace Clippy, all targets/features | passed with `-D warnings` |
+| `check-docs`, `check-tree`, `check-sources` | passed; ten roots exactly cover all 96 canonical sources |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs/tree/source closure, rustfmt, strict Clippy, and all 116 tests |
+| `cargo build --workspace --release --locked` | passed in the shared target tree |
+| scalar workload, explicit `vm` / `baseline-jit` / threshold-2 `auto` | all exited 0 with empty stdout and exact test-oracle F64 bits |
+| forced scalar diagnostics | one installed W^X object; compiled `scalar-step` and `main`; 100,001 native entries, 100,000 direct native calls, 300,002 PollV1 calls, zero VM fallbacks/failures |
+| auto scalar diagnostics | 99,998 later-call native entries, 99,998 PollV1 calls, exactly two initial VM calls, zero compile failures; no OSR claim |
+| explicit VM and threshold-2 auto hello | both output `3628800`; auto recorded 15 native leaf entries and one retry-suppressed recursive-group failure |
+| direct Mandelbrot in VM | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
+| Brainfuck smoke only | passed direct/run-folded correctness and failure checks; full Brainfuck Mandelbrot was not run |
+| lkjedit and one-shot HTTP smokes | passed |
+| opt-in generated binary plus external `objdump` | passed; 1,926-byte source-derived object dumped, disassembled, then removed; normal stdout stayed empty |
+
+Docker, full Brainfuck Mandelbrot, performance sampling, OSR, background work,
+optimizing/speculative tiers, native references/allocation/host IO, and
+non-Linux/non-x86-64 acceptance were not run or implemented.
+
 ## Accepted Next Target
 
 The real callable allocation-free scalar baseline-JIT cycle is Current on Linux
