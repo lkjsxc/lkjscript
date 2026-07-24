@@ -80,12 +80,14 @@ declaration kind, canonical operation and resolved signature, source origin,
 and conservative effects;
 codegen no longer re-parses declarations or resolves names.
 
-Typed SSA, a shared native code-object backend, function/loop-triggered runtime
-JIT, a minimal AOT test emitter, and direct Wasm consuming the same semantic IR
-family remain **Accepted Targets**. Native scalar/product representations
-replace universal tagged values only after differential SSA/backend gates. The
-VM remains the cold tier and oracle. See
-[Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md) and
+Typed SSA, the selected owned Linux x86-64 native code-object backend,
+function/loop-triggered runtime JIT, a minimal AOT test emitter, and direct Wasm
+consuming the same semantic IR family remain **Accepted Targets**. Backend
+selection is complete, but no native code is implemented. Native scalar/product
+representations replace universal tagged values only after differential
+SSA/backend gates. The VM remains the cold tier and oracle. See
+[Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md),
+[Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md), and
 [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
 
 ## Runtime Flow
@@ -149,8 +151,8 @@ plus immutable nominal products in place, establish explicit main and
 effect-free libraries, migrate global editor state into a product plus one
 local var, remove
 mutable globals, validate chunks, and make VM outcomes process-safe. Typed SSA,
-its verifier/differential oracle, and a shared Linux x86-64 native code-object
-backend follow. The first adaptive execution target is synchronous baseline
+its verifier/differential oracle, and the selected owned Linux x86-64 native
+code-object backend follow. The first adaptive execution target is synchronous baseline
 JIT, followed by loop OSR and proof-based optimizing JIT. Minimal file emission
 remains only for backend tests; offline PGO is rejected. The exact active
 boundary is [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).

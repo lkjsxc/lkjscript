@@ -10,9 +10,11 @@ without turning aspiration into a current release claim.
 The reference bytecode VM, exact I64/F64 execution, precise mark-sweep, resolved
 typed HIR, and tail-frame reuse are **Current**. The observation-only JIT hook
 is **Placeholder**. Remaining semantic prerequisites, typed SSA, native code
-objects, baseline JIT, OSR, proof-based optimizing JIT, and direct Wasm are
-**Accepted Targets**. Guarded specialization is **Deferred** until justified.
-Offline PGO is **Rejected by Product Decision**.
+objects, the selected owned Linux x86-64 backend, baseline JIT, OSR,
+proof-based optimizing JIT, and direct Wasm are **Accepted Targets**. Backend
+selection is complete, but no native backend is implemented. Guarded
+specialization is **Deferred** until justified. Offline PGO is **Rejected by
+Product Decision**.
 
 ## Sequence
 
@@ -23,7 +25,7 @@ truthful semantics and safety
   -> AI-first semantic core migration
   -> chunk validation and structured VM outcomes
   -> typed SSA, verifier, and differential evaluator
-  -> shared Linux x86-64 native code-object backend
+  -> owned Linux x86-64 native code-object backend
   -> function-triggered baseline JIT
   -> loop-triggered baseline JIT and OSR
   -> proof-based optimizing JIT
@@ -95,9 +97,9 @@ bytecode-to-machine-code semantic compiler is accepted.
 ## Phase 3: Native Code Objects
 
 1. Define semantic and native ABI versions and typed representations.
-2. Spike and measure an owned Linux x86-64 emitter and a mature Rust-native JIT
-   backend, record the dependency decision, and implement only the selected
-   production backend.
+2. Implement only the owned emitter selected by
+   [Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md);
+   the measured selection is complete, but implementation has not begun.
 3. Retain a non-PGO file-emission harness for disassembly, debugger, ABI, and
    differential tests.
 4. Implement versioned runtime-call adapters and VM/native transitions.

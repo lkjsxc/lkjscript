@@ -52,6 +52,7 @@ fn check_docs(root: &Path) -> i32 {
         "docs/decisions/compiler-pipeline.md",
         "docs/decisions/equality-families.md",
         "docs/decisions/immutable-nominal-products.md",
+        "docs/decisions/linux-x86-64-native-backend.md",
         "docs/decisions/runtime-jit-instead-of-offline-pgo.md",
         "docs/decisions/numeric-semantics.md",
         "docs/decisions/semantic-core.md",

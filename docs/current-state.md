@@ -63,6 +63,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
   native compilation, engine selector, code object, execution handoff, OSR, or
   deoptimization
+- Native backend decision: a measured called-code experiment selected a future
+  owned Linux x86-64 byte encoder over Cranelift 0.134.2; this is an
+  **Accepted Target**, not an implemented backend or product dependency
 - Adaptive-performance contract: runtime JIT is the **Accepted Target** after
   semantic/outcome and typed-SSA prerequisites; the VM remains the cold tier
   and oracle, and minimal AOT emission is only a shared-backend test surface
@@ -127,7 +130,8 @@ The current working tree was checked on Linux x86-64 with Rust/Cargo
 | Option/no-nil diagnostic sample | 31 randomized runs: hello 0.994x, Mandelbrot 1.027x, Leibniz-200,000 1.015x, Mandelbrot disassembly 1.014x candidate/baseline median; release binary 1.012x size |
 | explicit-equality diagnostic sample | 31 randomized runs: hello 1.029x, Mandelbrot 1.003x, Leibniz-200000 0.978x, Mandelbrot disassembly 0.972x, Brainfuck hello 0.998x candidate/baseline median; release binary 1.006x size |
 | immutable-product diagnostic sample | 31 randomized runs: hello 1.011x, Mandelbrot 0.947x, Leibniz-200000 0.994x, Mandelbrot disassembly 1.028x, Brainfuck hello 0.980x candidate/baseline median; release binary 1.058x size |
-| Markdown local links/status audit | 42 files scanned, zero broken links, zero missing statuses |
+| native-backend decision spike | 8 randomized warmups plus 31 retained pairs; exact generated calls passed; owned execution median/MAD 48.406374/0.540016 ms versus Cranelift 0.134.2 119.422902/0.566505 ms; temporary artifacts removed; no production backend implemented |
+| Markdown local links/status audit | 43 files scanned, zero broken links, zero missing statuses |
 | `git diff --check` | passed |
 | Docker verify profile | passed; the verification image includes machine-required `AGENTS.md` and committed benchmark documentation link targets |
 | decision-grade performance suite | not yet run; HIR figures above are a focused diagnostic comparison |
@@ -150,10 +154,10 @@ an observation hook alone cannot complete it. The dependency sequence is:
 3. lower HIR through verified typed SSA, an independent differential evaluator,
    and isolated non-speculative normalization; cut reference bytecode over to
    SSA before the native backend becomes authoritative;
-4. measure an owned emitter and a mature Rust-native backend, select one under
-   the dependency policy, then implement versioned SysV AMD64/runtime ABIs,
-   bounded code objects, W^X memory in `lkjscript-sys`, exact stack-map gates,
-   VM/native and native/native calls, and forced native execution;
+4. implement the selected owned Linux x86-64 emitter with versioned SysV
+   AMD64/runtime ABIs, bounded code objects, W^X memory in `lkjscript-sys`,
+   exact stack-map gates, VM/native and native/native calls, and forced native
+   execution;
 5. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
    code has been called. Forced mode never falls back; auto uses synchronous
    function-entry tiering and may remain in the VM for unsupported code.
@@ -167,6 +171,7 @@ engine, safety, and evidence contract is
 The supporting contracts are [AI-First Semantic Core](decisions/semantic-core.md),
 [Explicit Equality Families](decisions/equality-families.md),
 [Immutable Nominal Products](decisions/immutable-nominal-products.md),
+[Linux x86-64 Native Backend](decisions/linux-x86-64-native-backend.md),
 [Typed Compiler Pipeline And Runtime JIT](decisions/compiler-pipeline.md),
 [Runtime JIT Instead of Offline PGO](decisions/runtime-jit-instead-of-offline-pgo.md),
 and the [Performance Scorecard](vision/performance-scorecard.md).

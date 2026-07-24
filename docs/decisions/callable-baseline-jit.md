@@ -229,25 +229,25 @@ fall-through layout.
 
 ## Backend Selection Gate
 
-One production native backend is selected only after a real spike compares:
+The gate is complete for future implementation. A real called-code spike
+compared an owned x86-64 byte encoder with Cranelift 0.134.2 over checked integer
+and F64 arithmetic, comparisons, branches, a loop, a direct generated call, and
+a runtime-style call. It retained generated-code execution, compilation,
+binary/build/RSS, dependency/unsafe/license/security, code/metadata, stack-map,
+W^X, platform, maintenance, and replacement evidence.
 
-1. an owned x86-64 emitter covering integer and floating arithmetic,
-   comparisons, branches, loops, direct calls, and runtime calls; and
-2. a mature Rust-native JIT backend such as Cranelift.
+The accepted [Linux x86-64 Native Backend](linux-x86-64-native-backend.md)
+selects the owned encoder because its generated execution was materially faster
+under the predeclared rule. Avoiding a dependency did not decide the result.
+Cranelift is rejected for this production baseline decision but remains a
+future measured replacement candidate under the record's explicit conditions.
+LLVM is not the default fallback.
 
-The comparison records generated-code execution speed, compilation latency,
-release binary growth, locked build time, peak RSS, transitive/unsafe and
-license surface, code/metadata bytes, safepoint support, W^X integration,
-platform assumptions, and fit with the repository-owned SSA and ABI.
-
-Runtime speed decides a material difference when correctness and maintenance
-are acceptable. Avoiding a dependency is not sufficient reason to retain
-materially slower generated code, and implementation convenience is not
-sufficient reason to accept materially worse code. A new dependency requires a
-separate accepted record with exact locking, license/security/maintenance
-review, runtime/build-time classification, measured costs, rejected
-alternatives, and a replacement boundary. LLVM is not the default fallback.
-Temporary spike artifacts are removed after compact evidence is retained.
+Selection does not implement the backend. Temporary spike artifacts were
+removed after compact evidence was retained; the implementation still must
+lower verified typed SSA, produce complete code-object metadata, install
+through safe bounded W^X memory, and call generated code through forced-native
+tests.
 
 ## Linux x86-64 ABI And Runtime Calls
 

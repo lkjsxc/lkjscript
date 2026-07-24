@@ -11,7 +11,9 @@ reinterpret the language.
 **Current** for parsed AST -> resolved typed HIR -> reference bytecode. Typed
 SSA, native code objects, baseline JIT, proof-based optimizing JIT, minimal AOT
 test emission, and direct Wasm are **Accepted Targets**. Native compilation is
-not implemented. Offline PGO is **Rejected by Product Decision** in
+not implemented. The future Linux x86-64 backend is the owned encoder selected
+by [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
+**Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
 
 ## Pipeline
@@ -94,15 +96,17 @@ native callers call compiled callees directly.
 
 ## Native Code Object Priority
 
-After typed SSA and differential correctness gates, spike a small owned x86-64
-emitter and a mature Rust-native JIT backend such as Cranelift against the same
-integer, floating, branch, loop, direct-call, and runtime-call slice. Select one
-production backend from generated-code speed plus visible compilation, binary,
-RSS, dependency, safety, and maintenance costs. A dependency requires its own
-accepted measured decision. Callable baseline JIT is the primary adaptive
-performance path. File emission exists only to inspect code, test relocations
-and ABI behavior, use external debuggers, and compare backend output with the
-VM.
+The required called-code experiment is complete. The accepted
+[Linux x86-64 Native Backend](linux-x86-64-native-backend.md) selects a small
+owned byte encoder over Cranelift 0.134.2 from generated-code speed plus visible
+compilation, binary, RSS, dependency, safety, stack-map, W^X, and maintenance
+costs. The decision adds no product dependency and implements no backend.
+
+After typed SSA and differential correctness gates, implement only that selected
+backend behind the shared native code-image/code-object boundary. Callable
+baseline JIT remains the primary adaptive performance path. File emission
+exists only to inspect code, test relocations and ABI behavior, use external
+debuggers, and compare backend output with the VM.
 
 Native target modes are explicit and every result records its target. Linux
 x86-64 is the only acceptance platform for the active callable-baseline cycle;

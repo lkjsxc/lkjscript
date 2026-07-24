@@ -448,9 +448,10 @@ implied by a non-speculative optimizing tier.
    structured-outcome prerequisites.
 2. Implement typed SSA, verifier, differential evaluator, and isolated proven
    optimization passes.
-3. Implement the shared Linux x86-64 native code-object backend and minimal
-   non-PGO file emitter; add relocations, ABI tests, runtime calls, and precise
-   stack maps before allocation paths.
+3. Implement the selected owned
+   [Linux x86-64 native backend](linux-x86-64-native-backend.md), shared native
+   code-object boundary, and minimal non-PGO file emitter; add relocations, ABI
+   tests, runtime calls, and precise stack maps before allocation paths.
 4. Add bounded call counters and synchronous function-triggered baseline JIT,
    VM/native calls, direct native calls, and forced baseline testing.
 5. Add bounded loop-backedge counters and verified baseline OSR, measured first
