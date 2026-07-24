@@ -3,7 +3,7 @@ FROM rust:bookworm AS build
 
 WORKDIR /src
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt clippy
 COPY Cargo.toml Cargo.lock README.md AGENTS.md ./
@@ -37,11 +37,12 @@ RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/regis
     && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/bulk-bytes-smoke.sh \
     && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/durable-files-smoke.sh \
     && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/sha256-smoke.sh \
+    && LKJSCRIPT_BIN=/tmp/lkjscript bash meta/scripts/sqlite-smoke.sh \
     && printf 'result=ok\n' > /tmp/lkjscript-verification-result
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /tmp/lkjscript /usr/local/bin/lkjscript
 ENV LKJSCRIPT_ROOT=/usr/local/share/lkjscript

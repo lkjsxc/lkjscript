@@ -12,7 +12,7 @@ fn as_buf_mut(arena: &mut Arena, value: Value) -> Result<&mut Vec<u8>> {
     }
 }
 
-fn as_buf(arena: &Arena, value: Value) -> Result<&[u8]> {
+pub fn as_buf(arena: &Arena, value: Value) -> Result<&[u8]> {
     match arena.get(value)? {
         HeapObj::Buf(buffer) => Ok(buffer.as_slice()),
         _ => Err(Error::msg("expected buf")),

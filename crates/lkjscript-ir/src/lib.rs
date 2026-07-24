@@ -249,6 +249,30 @@ pub enum RuntimeOp {
     SysRename,
     SysRandomFill,
     SysSha256,
+    SysSqliteOpen,
+    SysSqliteClose,
+    SysSqliteBusyTimeout,
+    SysSqliteExec,
+    SysSqlitePrepare,
+    SysSqliteFinalize,
+    SysSqliteReset,
+    SysSqliteClearBindings,
+    SysSqliteBindNull,
+    SysSqliteBindI64,
+    SysSqliteBindF64,
+    SysSqliteBindText,
+    SysSqliteBindBytes,
+    SysSqliteStep,
+    SysSqliteColumnCount,
+    SysSqliteColumnType,
+    SysSqliteColumnI64,
+    SysSqliteColumnF64,
+    SysSqliteColumnText,
+    SysSqliteColumnBytes,
+    SysSqliteChanges,
+    SysSqliteLastInsertRowid,
+    SysSqliteExtendedResultCode,
+    SysSqliteBackup,
     SysPathExists,
     SysWaitMs,
     SysNowMs,
@@ -308,7 +332,31 @@ impl RuntimeOp {
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::MAY_TRAP),
-            Self::Print
+            Self::SysSqliteOpen
+            | Self::SysSqliteClose
+            | Self::SysSqliteBusyTimeout
+            | Self::SysSqliteExec
+            | Self::SysSqlitePrepare
+            | Self::SysSqliteFinalize
+            | Self::SysSqliteReset
+            | Self::SysSqliteClearBindings
+            | Self::SysSqliteBindNull
+            | Self::SysSqliteBindI64
+            | Self::SysSqliteBindF64
+            | Self::SysSqliteBindText
+            | Self::SysSqliteBindBytes
+            | Self::SysSqliteStep
+            | Self::SysSqliteColumnCount
+            | Self::SysSqliteColumnType
+            | Self::SysSqliteColumnI64
+            | Self::SysSqliteColumnF64
+            | Self::SysSqliteColumnText
+            | Self::SysSqliteColumnBytes
+            | Self::SysSqliteChanges
+            | Self::SysSqliteLastInsertRowid
+            | Self::SysSqliteExtendedResultCode
+            | Self::SysSqliteBackup
+            | Self::Print
             | Self::Flush
             | Self::ReadByte
             | Self::WriteByte

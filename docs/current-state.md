@@ -95,6 +95,10 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   Current; application framing/recovery policy remains in language code
 - SHA-256: fixed bounded-buffer digest is Current for verifier/integrity
   consumers; HMAC, password KDF, encryption, and WebAuthn remain absent
+- SQLite: generic owned connection/statement handles, prepared operations,
+  exact bounded text/blob copies, and online backup are Current through the
+  Linux `libsqlite3.so.0` system library; schema and storage policy stay in
+  language consumers
 - Canonical resource names: `stdin-handle`, `sys-close`, `sys-read-byte`,
   `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
@@ -139,13 +143,27 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   tiers, deoptimization, native references/allocation, persistent profiles, and
   persistent code caches remain absent
 
+## SQLite Evidence
+
+The SQLite implementation tree was verified on Linux x86-64 with the system
+`libsqlite3.so.0` using:
+
+- `cargo run --locked -p lkjscript-xtask -- quiet verify` (passed);
+- `cargo build --workspace --release --locked` plus HTTP, bulk-byte, durable,
+  SHA-256, and SQLite smokes (passed);
+- `docker compose -f meta/docker-compose.yml --profile verify run --build --rm
+  verify` (passed; `sqlite-smoke ok`).
+
+These are VM and generic host-boundary results. They are not JIT evidence and
+do not establish application durability or migration behavior.
+
 ## Known Defects
 
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. some library file operations remain per-byte or quadratic; SQLite and
-   application-level storage recovery are not implemented;
+1. some library file operations remain per-byte or quadratic; application-level
+   storage recovery is a language-consumer responsibility;
 2. source/import aggregate bytes and counts are not comprehensively bounded;
    bytecode tables/data/code/metadata and VM execution resources are bounded;
 3. cooperative deadlines can overrun inside filesystem, console-write,

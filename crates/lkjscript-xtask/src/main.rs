@@ -57,6 +57,7 @@ fn check_docs(root: &Path) -> i32 {
         "docs/decisions/numeric-semantics.md",
         "docs/decisions/semantic-core.md",
         "docs/decisions/sha256.md",
+        "docs/decisions/sqlite-capabilities.md",
         "docs/vision/performance-scorecard.md",
     ];
     let mut failures = 0;
@@ -234,6 +235,7 @@ fn check_sources(root: &Path) -> i32 {
         "src/examples/bulk-bytes/main.lkjscript",
         "src/examples/durable-files/main.lkjscript",
         "src/examples/sha256/main.lkjscript",
+        "src/examples/sqlite/main.lkjscript",
         "src/examples/hello/main.lkjscript",
         "src/examples/http/hello.lkjscript",
         "src/examples/jit-scalar/main.lkjscript",

@@ -57,6 +57,14 @@ enum OwnedResource {
     File(OwnedFd),
     Directory(OwnedFd),
     Socket(OwnedFd),
+    SqliteConnection {
+        connection: lkjscript_sys::SqliteConnection,
+        live_statements: usize,
+    },
+    SqliteStatement {
+        statement: lkjscript_sys::SqliteStatement,
+        parent: usize,
+    },
 }
 
 pub struct ResourceTable {
@@ -223,13 +231,228 @@ impl ResourceTable {
 
     pub fn close(&mut self, handle: Value) -> Result<Value> {
         let index = self.owned_index(handle, "sys-close")?;
-        let slot = self
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(
+                "sys-close: SQLite handles require their SQLite close operation",
+            )),
+            Some(_) => self.close_slot(index, "sys-close"),
+            None => Err(Error::msg("sys-close: stale or already closed handle")),
+        }
+    }
+
+    pub fn sqlite_open(&mut self, path: &str, flags: i64) -> Result<Value> {
+        self.ensure_capacity()?;
+        let connection = lkjscript_sys::SqliteConnection::open(path, flags)
+            .map_err(|error| Error::msg(format!("sys-sqlite-open: {error}")))?;
+        self.push(OwnedResource::SqliteConnection {
+            connection,
+            live_statements: 0,
+        })
+    }
+
+    pub fn sqlite_close(&mut self, handle: Value) -> Result<Value> {
+        let index = self.owned_index(handle, "sys-sqlite-close")?;
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::SqliteConnection {
+                live_statements, ..
+            }) if *live_statements > 0 => Err(Error::msg(
+                "sys-sqlite-close: live statements must be finalized",
+            )),
+            Some(OwnedResource::SqliteConnection { .. }) => {
+                self.close_slot(index, "sys-sqlite-close")
+            }
+            Some(_) => Err(Error::msg(
+                "sys-sqlite-close: handle is not a SQLite connection",
+            )),
+            None => Err(Error::msg("sys-sqlite-close: stale or unknown handle")),
+        }
+    }
+
+    pub fn sqlite_busy_timeout(&self, handle: Value, milliseconds: i64) -> Result<Value> {
+        self.sqlite_connection(handle, "sys-sqlite-busy-timeout")?
+            .busy_timeout(milliseconds)
+            .map_err(|error| Error::msg(format!("sys-sqlite-busy-timeout: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_exec(&self, handle: Value, sql: &str) -> Result<Value> {
+        self.sqlite_connection(handle, "sys-sqlite-exec")?
+            .exec(sql)
+            .map_err(|error| Error::msg(format!("sys-sqlite-exec: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_prepare(&mut self, handle: Value, sql: &str) -> Result<Value> {
+        self.ensure_capacity()?;
+        let parent = self.owned_index(handle, "sys-sqlite-prepare")?;
+        let statement = self
+            .sqlite_connection_at(parent, "sys-sqlite-prepare")?
+            .prepare(sql)
+            .map_err(|error| Error::msg(format!("sys-sqlite-prepare: {error}")))?;
+        let live_statements = self.sqlite_live_statements_at_mut(parent, "sys-sqlite-prepare")?;
+        *live_statements = live_statements.saturating_add(1);
+        self.push(OwnedResource::SqliteStatement { statement, parent })
+    }
+
+    pub fn sqlite_finalize(&mut self, handle: Value) -> Result<Value> {
+        let index = self.owned_index(handle, "sys-sqlite-finalize")?;
+        let parent = match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::SqliteStatement { parent, .. }) => *parent,
+            Some(_) => {
+                return Err(Error::msg(
+                    "sys-sqlite-finalize: handle is not a SQLite statement",
+                ))
+            }
+            None => return Err(Error::msg("sys-sqlite-finalize: stale or unknown handle")),
+        };
+        let _statement = self
             .slots
             .get_mut(index)
-            .ok_or_else(|| Error::msg("sys-close: unknown handle"))?;
-        if slot.take().is_none() {
-            return Err(Error::msg("sys-close: stale or already closed handle"));
+            .and_then(Option::take)
+            .ok_or_else(|| Error::msg("sys-sqlite-finalize: stale or unknown handle"))?;
+        let live_statements = self.sqlite_live_statements_at_mut(parent, "sys-sqlite-finalize")?;
+        *live_statements = live_statements.saturating_sub(1);
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_reset(&self, handle: Value) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-reset")?
+            .reset()
+            .map_err(|error| Error::msg(format!("sys-sqlite-reset: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_clear_bindings(&self, handle: Value) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-clear-bindings")?
+            .clear_bindings()
+            .map_err(|error| Error::msg(format!("sys-sqlite-clear-bindings: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_bind_null(&self, handle: Value, index: i64) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-bind-null")?
+            .bind_null(index)
+            .map_err(|error| Error::msg(format!("sys-sqlite-bind-null: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_bind_i64(&self, handle: Value, index: i64, value: i64) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-bind-i64")?
+            .bind_i64(index, value)
+            .map_err(|error| Error::msg(format!("sys-sqlite-bind-i64: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_bind_f64(&self, handle: Value, index: i64, value: f64) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-bind-f64")?
+            .bind_f64(index, value)
+            .map_err(|error| Error::msg(format!("sys-sqlite-bind-f64: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_bind_text(&self, handle: Value, index: i64, value: &str) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-bind-text")?
+            .bind_text(index, value)
+            .map_err(|error| Error::msg(format!("sys-sqlite-bind-text: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_bind_bytes(&self, handle: Value, index: i64, value: &[u8]) -> Result<Value> {
+        self.sqlite_statement(handle, "sys-sqlite-bind-bytes")?
+            .bind_bytes(index, value)
+            .map_err(|error| Error::msg(format!("sys-sqlite-bind-bytes: {error}")))?;
+        Ok(Value::UNIT)
+    }
+
+    pub fn sqlite_step(&self, handle: Value) -> Result<i64> {
+        match self
+            .sqlite_statement(handle, "sys-sqlite-step")?
+            .step()
+            .map_err(|error| Error::msg(format!("sys-sqlite-step: {error}")))?
+        {
+            lkjscript_sys::SqliteStep::Row => Ok(100),
+            lkjscript_sys::SqliteStep::Done => Ok(101),
         }
+    }
+
+    pub fn sqlite_column_count(&self, handle: Value) -> Result<i64> {
+        Ok(self
+            .sqlite_statement(handle, "sys-sqlite-column-count")?
+            .column_count())
+    }
+
+    pub fn sqlite_column_type(&self, handle: Value, index: i64) -> Result<i64> {
+        let value = match self
+            .sqlite_statement(handle, "sys-sqlite-column-type")?
+            .column_type(index)
+            .map_err(|error| Error::msg(format!("sys-sqlite-column-type: {error}")))?
+        {
+            lkjscript_sys::ColumnType::Integer => 1,
+            lkjscript_sys::ColumnType::Float => 2,
+            lkjscript_sys::ColumnType::Text => 3,
+            lkjscript_sys::ColumnType::Blob => 4,
+            lkjscript_sys::ColumnType::Null => 5,
+        };
+        Ok(value)
+    }
+
+    pub fn sqlite_column_i64(&self, handle: Value, index: i64) -> Result<Option<i64>> {
+        self.sqlite_statement(handle, "sys-sqlite-column-i64")?
+            .column_i64(index)
+            .map_err(|error| Error::msg(format!("sys-sqlite-column-i64: {error}")))
+    }
+
+    pub fn sqlite_column_f64(&self, handle: Value, index: i64) -> Result<Option<f64>> {
+        self.sqlite_statement(handle, "sys-sqlite-column-f64")?
+            .column_f64(index)
+            .map_err(|error| Error::msg(format!("sys-sqlite-column-f64: {error}")))
+    }
+
+    pub fn sqlite_column_text(
+        &self,
+        handle: Value,
+        index: i64,
+        max: usize,
+    ) -> Result<Option<String>> {
+        self.sqlite_statement(handle, "sys-sqlite-column-text")?
+            .column_text(index, max)
+            .map_err(|error| Error::msg(format!("sys-sqlite-column-text: {error}")))
+    }
+
+    pub fn sqlite_column_bytes(
+        &self,
+        handle: Value,
+        index: i64,
+        max: usize,
+    ) -> Result<Option<Vec<u8>>> {
+        self.sqlite_statement(handle, "sys-sqlite-column-bytes")?
+            .column_bytes(index, max)
+            .map_err(|error| Error::msg(format!("sys-sqlite-column-bytes: {error}")))
+    }
+
+    pub fn sqlite_changes(&self, handle: Value) -> Result<i64> {
+        Ok(self
+            .sqlite_connection(handle, "sys-sqlite-changes")?
+            .changes())
+    }
+
+    pub fn sqlite_last_insert_rowid(&self, handle: Value) -> Result<i64> {
+        Ok(self
+            .sqlite_connection(handle, "sys-sqlite-last-insert-rowid")?
+            .last_insert_rowid())
+    }
+
+    pub fn sqlite_extended_result_code(&self, handle: Value) -> Result<i64> {
+        Ok(self
+            .sqlite_connection(handle, "sys-sqlite-extended-result-code")?
+            .extended_result_code())
+    }
+
+    pub fn sqlite_backup(&self, handle: Value, path: &str, flags: i64) -> Result<Value> {
+        self.sqlite_connection(handle, "sys-sqlite-backup")?
+            .backup_to(path, flags)
+            .map_err(|error| Error::msg(format!("sys-sqlite-backup: {error}")))?;
         Ok(Value::UNIT)
     }
 
@@ -244,6 +467,10 @@ impl ResourceTable {
             }
             Some(OwnedResource::Directory(_)) => {
                 Err(Error::msg("sys-read-into: handle is a directory"))
+            }
+            Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => {
+                Err(Error::msg("sys-read-into: handle is not a file or socket"))
             }
             None => Err(Error::msg("sys-read-into: stale or unknown handle")),
         }
@@ -260,6 +487,10 @@ impl ResourceTable {
             }
             Some(OwnedResource::Directory(_)) => {
                 Err(Error::msg("sys-write-from: handle is a directory"))
+            }
+            Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => {
+                Err(Error::msg("sys-write-from: handle is not a file or socket"))
             }
             None => Err(Error::msg("sys-write-from: stale or unknown handle")),
         }
@@ -283,6 +514,10 @@ impl ResourceTable {
                 }
                 Some(OwnedResource::Directory(_)) => {
                     return Err(Error::msg("sys-read-byte: handle is a directory"));
+                }
+                Some(OwnedResource::SqliteConnection { .. })
+                | Some(OwnedResource::SqliteStatement { .. }) => {
+                    return Err(Error::msg("sys-read-byte: handle is not a file or socket"));
                 }
                 None => return Err(Error::msg("sys-read-byte: stale or unknown handle")),
             }
@@ -310,6 +545,10 @@ impl ResourceTable {
             Some(OwnedResource::Directory(_)) => {
                 return Err(Error::msg("sys-write-byte: handle is a directory"));
             }
+            Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => {
+                return Err(Error::msg("sys-write-byte: handle is not a file or socket"));
+            }
             None => return Err(Error::msg("sys-write-byte: stale or unknown handle")),
         }
         Ok(Value::UNIT)
@@ -330,6 +569,87 @@ impl ResourceTable {
             Some(OwnedResource::File(file)) => Ok(file.as_raw()),
             Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
             Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
+            Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(format!(
+                "{operation}: handle is not a file, directory, or socket"
+            ))),
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
+        }
+    }
+
+    fn close_slot(&mut self, index: usize, operation: &str) -> Result<Value> {
+        let slot = self
+            .slots
+            .get_mut(index)
+            .ok_or_else(|| Error::msg(format!("{operation}: unknown handle")))?;
+        if slot.take().is_none() {
+            return Err(Error::msg(format!(
+                "{operation}: stale or already closed handle"
+            )));
+        }
+        Ok(Value::UNIT)
+    }
+
+    fn sqlite_connection(
+        &self,
+        handle: Value,
+        operation: &str,
+    ) -> Result<&lkjscript_sys::SqliteConnection> {
+        let index = self.owned_index(handle, operation)?;
+        self.sqlite_connection_at(index, operation)
+    }
+
+    fn sqlite_connection_at(
+        &self,
+        index: usize,
+        operation: &str,
+    ) -> Result<&lkjscript_sys::SqliteConnection> {
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::SqliteConnection { connection, .. }) => Ok(connection),
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: handle is not a SQLite connection"
+            ))),
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
+        }
+    }
+
+    fn sqlite_live_statements_at_mut(
+        &mut self,
+        index: usize,
+        operation: &str,
+    ) -> Result<&mut usize> {
+        match self.slots.get_mut(index).and_then(Option::as_mut) {
+            Some(OwnedResource::SqliteConnection {
+                live_statements, ..
+            }) => Ok(live_statements),
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: handle is not a SQLite connection"
+            ))),
+            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
+        }
+    }
+
+    fn sqlite_statement(
+        &self,
+        handle: Value,
+        operation: &str,
+    ) -> Result<&lkjscript_sys::SqliteStatement> {
+        let index = self.owned_index(handle, operation)?;
+        match self.slots.get(index).and_then(Option::as_ref) {
+            Some(OwnedResource::SqliteStatement { statement, parent }) => {
+                if !matches!(
+                    self.slots.get(*parent),
+                    Some(Some(OwnedResource::SqliteConnection { .. }))
+                ) {
+                    return Err(Error::msg(format!(
+                        "{operation}: parent SQLite connection is closed"
+                    )));
+                }
+                Ok(statement)
+            }
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: handle is not a SQLite statement"
+            ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
@@ -338,7 +658,10 @@ impl ResourceTable {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
-            Some(OwnedResource::File(_)) | Some(OwnedResource::Directory(_)) => {
+            Some(OwnedResource::File(_))
+            | Some(OwnedResource::Directory(_))
+            | Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => {
                 Err(Error::msg(format!("{operation}: handle is not a socket")))
             }
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
@@ -352,7 +675,9 @@ impl ResourceTable {
             Some(OwnedResource::Directory(_)) => {
                 Err(Error::msg(format!("{operation}: handle is a directory")))
             }
-            Some(OwnedResource::Socket(_)) => {
+            Some(OwnedResource::Socket(_))
+            | Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => {
                 Err(Error::msg(format!("{operation}: handle is not a file")))
             }
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
@@ -364,7 +689,9 @@ impl ResourceTable {
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::File(file)) => Ok(file.as_raw()),
             Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
-            Some(OwnedResource::Socket(_)) => Err(Error::msg(format!(
+            Some(OwnedResource::Socket(_))
+            | Some(OwnedResource::SqliteConnection { .. })
+            | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(format!(
                 "{operation}: handle is not a file or directory"
             ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
@@ -599,6 +926,25 @@ mod tests {
         let _ = fs::remove_file(&renamed);
         fs::remove_dir(&directory)?;
         Ok(())
+    }
+
+    #[test]
+    fn sqlite_connection_rejects_close_until_statement_finalizes() {
+        let mut table = ResourceTable::default();
+        let connection = table
+            .sqlite_open(":memory:", 0x0001_0006)
+            .expect("open SQLite connection");
+        let statement = table
+            .sqlite_prepare(connection, "SELECT 1")
+            .expect("prepare SQLite statement");
+        assert!(table.sqlite_close(connection).is_err());
+        assert!(table.close(statement).is_err());
+        table
+            .sqlite_finalize(statement)
+            .expect("finalize statement");
+        assert!(table.sqlite_step(statement).is_err());
+        table.sqlite_close(connection).expect("close connection");
+        assert!(table.sqlite_close(connection).is_err());
     }
 
     #[test]

@@ -73,6 +73,30 @@ pub enum Operation {
     SysRename,
     SysRandomFill,
     SysSha256,
+    SysSqliteOpen,
+    SysSqliteClose,
+    SysSqliteBusyTimeout,
+    SysSqliteExec,
+    SysSqlitePrepare,
+    SysSqliteFinalize,
+    SysSqliteReset,
+    SysSqliteClearBindings,
+    SysSqliteBindNull,
+    SysSqliteBindI64,
+    SysSqliteBindF64,
+    SysSqliteBindText,
+    SysSqliteBindBytes,
+    SysSqliteStep,
+    SysSqliteColumnCount,
+    SysSqliteColumnType,
+    SysSqliteColumnI64,
+    SysSqliteColumnF64,
+    SysSqliteColumnText,
+    SysSqliteColumnBytes,
+    SysSqliteChanges,
+    SysSqliteLastInsertRowid,
+    SysSqliteExtendedResultCode,
+    SysSqliteBackup,
     SysPathExists,
     SysWaitMs,
     SysNowMs,
@@ -164,6 +188,30 @@ impl Operation {
         Self::SysRename,
         Self::SysRandomFill,
         Self::SysSha256,
+        Self::SysSqliteOpen,
+        Self::SysSqliteClose,
+        Self::SysSqliteBusyTimeout,
+        Self::SysSqliteExec,
+        Self::SysSqlitePrepare,
+        Self::SysSqliteFinalize,
+        Self::SysSqliteReset,
+        Self::SysSqliteClearBindings,
+        Self::SysSqliteBindNull,
+        Self::SysSqliteBindI64,
+        Self::SysSqliteBindF64,
+        Self::SysSqliteBindText,
+        Self::SysSqliteBindBytes,
+        Self::SysSqliteStep,
+        Self::SysSqliteColumnCount,
+        Self::SysSqliteColumnType,
+        Self::SysSqliteColumnI64,
+        Self::SysSqliteColumnF64,
+        Self::SysSqliteColumnText,
+        Self::SysSqliteColumnBytes,
+        Self::SysSqliteChanges,
+        Self::SysSqliteLastInsertRowid,
+        Self::SysSqliteExtendedResultCode,
+        Self::SysSqliteBackup,
         Self::SysPathExists,
         Self::SysWaitMs,
         Self::SysNowMs,
@@ -261,6 +309,30 @@ impl Operation {
             Self::SysRename => "sys-rename",
             Self::SysRandomFill => "sys-random-fill",
             Self::SysSha256 => "sys-sha256",
+            Self::SysSqliteOpen => "sys-sqlite-open",
+            Self::SysSqliteClose => "sys-sqlite-close",
+            Self::SysSqliteBusyTimeout => "sys-sqlite-busy-timeout",
+            Self::SysSqliteExec => "sys-sqlite-exec",
+            Self::SysSqlitePrepare => "sys-sqlite-prepare",
+            Self::SysSqliteFinalize => "sys-sqlite-finalize",
+            Self::SysSqliteReset => "sys-sqlite-reset",
+            Self::SysSqliteClearBindings => "sys-sqlite-clear-bindings",
+            Self::SysSqliteBindNull => "sys-sqlite-bind-null",
+            Self::SysSqliteBindI64 => "sys-sqlite-bind-i64",
+            Self::SysSqliteBindF64 => "sys-sqlite-bind-f64",
+            Self::SysSqliteBindText => "sys-sqlite-bind-text",
+            Self::SysSqliteBindBytes => "sys-sqlite-bind-bytes",
+            Self::SysSqliteStep => "sys-sqlite-step",
+            Self::SysSqliteColumnCount => "sys-sqlite-column-count",
+            Self::SysSqliteColumnType => "sys-sqlite-column-type",
+            Self::SysSqliteColumnI64 => "sys-sqlite-column-i64",
+            Self::SysSqliteColumnF64 => "sys-sqlite-column-f64",
+            Self::SysSqliteColumnText => "sys-sqlite-column-text",
+            Self::SysSqliteColumnBytes => "sys-sqlite-column-bytes",
+            Self::SysSqliteChanges => "sys-sqlite-changes",
+            Self::SysSqliteLastInsertRowid => "sys-sqlite-last-insert-rowid",
+            Self::SysSqliteExtendedResultCode => "sys-sqlite-extended-result-code",
+            Self::SysSqliteBackup => "sys-sqlite-backup",
             Self::SysPathExists => "sys-path-exists",
             Self::SysWaitMs => "sys-wait-ms",
             Self::SysNowMs => "sys-now-ms",
@@ -412,6 +484,72 @@ impl Operation {
             Self::SysSha256 => function(
                 vec![Type::Buf, Type::I64, Type::I64],
                 system_result(Type::Buf),
+            ),
+            Self::SysSqliteOpen => {
+                function(vec![Type::Str, Type::I64], system_result(Type::Handle))
+            }
+            Self::SysSqliteClose
+            | Self::SysSqliteFinalize
+            | Self::SysSqliteReset
+            | Self::SysSqliteClearBindings => {
+                function(vec![Type::Handle], system_result(Type::Unit))
+            }
+            Self::SysSqliteBindNull | Self::SysSqliteBusyTimeout => {
+                function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
+            }
+            Self::SysSqliteExec | Self::SysSqlitePrepare => function(
+                vec![Type::Handle, Type::Str],
+                system_result(if matches!(self, Self::SysSqlitePrepare) {
+                    Type::Handle
+                } else {
+                    Type::Unit
+                }),
+            ),
+            Self::SysSqliteBindI64 => function(
+                vec![Type::Handle, Type::I64, Type::I64],
+                system_result(Type::Unit),
+            ),
+            Self::SysSqliteBindF64 => function(
+                vec![Type::Handle, Type::I64, Type::F64],
+                system_result(Type::Unit),
+            ),
+            Self::SysSqliteBindText => function(
+                vec![Type::Handle, Type::I64, Type::Str],
+                system_result(Type::Unit),
+            ),
+            Self::SysSqliteBindBytes => function(
+                vec![Type::Handle, Type::I64, Type::Buf],
+                system_result(Type::Unit),
+            ),
+            Self::SysSqliteStep
+            | Self::SysSqliteColumnCount
+            | Self::SysSqliteChanges
+            | Self::SysSqliteLastInsertRowid
+            | Self::SysSqliteExtendedResultCode => {
+                function(vec![Type::Handle], system_result(Type::I64))
+            }
+            Self::SysSqliteColumnType => {
+                function(vec![Type::Handle, Type::I64], system_result(Type::I64))
+            }
+            Self::SysSqliteColumnI64 => function(
+                vec![Type::Handle, Type::I64],
+                system_result(Type::Option(Box::new(Type::I64))),
+            ),
+            Self::SysSqliteColumnF64 => function(
+                vec![Type::Handle, Type::I64],
+                system_result(Type::Option(Box::new(Type::F64))),
+            ),
+            Self::SysSqliteColumnText => function(
+                vec![Type::Handle, Type::I64],
+                system_result(Type::Option(Box::new(Type::Str))),
+            ),
+            Self::SysSqliteColumnBytes => function(
+                vec![Type::Handle, Type::I64],
+                system_result(Type::Option(Box::new(Type::Buf))),
+            ),
+            Self::SysSqliteBackup => function(
+                vec![Type::Handle, Type::Str, Type::I64],
+                system_result(Type::Unit),
             ),
             Self::SysPathExists => function(vec![Type::Str], system_result(Type::Bool)),
             Self::SysWaitMs => function(vec![Type::I64], system_result(Type::Unit)),
@@ -637,6 +775,32 @@ impl Operation {
                 .union(EffectSet::MAY_TRAP),
             Self::SysSha256 => EffectSet::ALLOCATES
                 .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::SysSqliteOpen
+            | Self::SysSqliteClose
+            | Self::SysSqliteBusyTimeout
+            | Self::SysSqliteExec
+            | Self::SysSqlitePrepare
+            | Self::SysSqliteFinalize
+            | Self::SysSqliteReset
+            | Self::SysSqliteClearBindings
+            | Self::SysSqliteBindNull
+            | Self::SysSqliteBindI64
+            | Self::SysSqliteBindF64
+            | Self::SysSqliteBindText
+            | Self::SysSqliteBindBytes
+            | Self::SysSqliteStep
+            | Self::SysSqliteColumnCount
+            | Self::SysSqliteColumnType
+            | Self::SysSqliteColumnI64
+            | Self::SysSqliteColumnF64
+            | Self::SysSqliteColumnText
+            | Self::SysSqliteColumnBytes
+            | Self::SysSqliteChanges
+            | Self::SysSqliteLastInsertRowid
+            | Self::SysSqliteExtendedResultCode
+            | Self::SysSqliteBackup => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
                 .union(EffectSet::MAY_TRAP),
             Self::Print
             | Self::Flush

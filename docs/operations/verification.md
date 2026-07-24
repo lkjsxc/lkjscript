@@ -101,6 +101,7 @@ LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/bulk-bytes-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/durable-files-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sha256-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sqlite-smoke.sh
 ```
 
 The HTTP workload accepts one request and exits; it is not a general server.

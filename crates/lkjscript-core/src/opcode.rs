@@ -109,6 +109,30 @@ pub enum Op {
     SysRename = 164,
     SysRandomFill = 165,
     SysSha256 = 166,
+    SysSqliteOpen = 167,
+    SysSqliteClose = 168,
+    SysSqliteBusyTimeout = 169,
+    SysSqliteExec = 170,
+    SysSqlitePrepare = 171,
+    SysSqliteFinalize = 172,
+    SysSqliteReset = 173,
+    SysSqliteClearBindings = 174,
+    SysSqliteBindNull = 175,
+    SysSqliteBindI64 = 176,
+    SysSqliteBindF64 = 177,
+    SysSqliteBindText = 178,
+    SysSqliteBindBytes = 179,
+    SysSqliteStep = 180,
+    SysSqliteColumnCount = 181,
+    SysSqliteColumnType = 182,
+    SysSqliteColumnI64 = 183,
+    SysSqliteColumnF64 = 184,
+    SysSqliteColumnText = 185,
+    SysSqliteColumnBytes = 186,
+    SysSqliteChanges = 187,
+    SysSqliteLastInsertRowid = 188,
+    SysSqliteExtendedResultCode = 189,
+    SysSqliteBackup = 190,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,6 +311,30 @@ impl Op {
         Self::SysRename,
         Self::SysRandomFill,
         Self::SysSha256,
+        Self::SysSqliteOpen,
+        Self::SysSqliteClose,
+        Self::SysSqliteBusyTimeout,
+        Self::SysSqliteExec,
+        Self::SysSqlitePrepare,
+        Self::SysSqliteFinalize,
+        Self::SysSqliteReset,
+        Self::SysSqliteClearBindings,
+        Self::SysSqliteBindNull,
+        Self::SysSqliteBindI64,
+        Self::SysSqliteBindF64,
+        Self::SysSqliteBindText,
+        Self::SysSqliteBindBytes,
+        Self::SysSqliteStep,
+        Self::SysSqliteColumnCount,
+        Self::SysSqliteColumnType,
+        Self::SysSqliteColumnI64,
+        Self::SysSqliteColumnF64,
+        Self::SysSqliteColumnText,
+        Self::SysSqliteColumnBytes,
+        Self::SysSqliteChanges,
+        Self::SysSqliteLastInsertRowid,
+        Self::SysSqliteExtendedResultCode,
+        Self::SysSqliteBackup,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -392,6 +440,42 @@ impl Op {
                 pushes: 1,
             },
             Self::SysSha256 => Fixed {
+                required: 3,
+                pops: 3,
+                pushes: 1,
+            },
+            Self::SysSqliteClose
+            | Self::SysSqliteFinalize
+            | Self::SysSqliteReset
+            | Self::SysSqliteClearBindings
+            | Self::SysSqliteStep
+            | Self::SysSqliteColumnCount
+            | Self::SysSqliteChanges
+            | Self::SysSqliteLastInsertRowid
+            | Self::SysSqliteExtendedResultCode => Fixed {
+                required: 1,
+                pops: 1,
+                pushes: 1,
+            },
+            Self::SysSqliteOpen
+            | Self::SysSqliteBindNull
+            | Self::SysSqliteBusyTimeout
+            | Self::SysSqliteExec
+            | Self::SysSqlitePrepare
+            | Self::SysSqliteColumnType
+            | Self::SysSqliteColumnI64
+            | Self::SysSqliteColumnF64
+            | Self::SysSqliteColumnText
+            | Self::SysSqliteColumnBytes => Fixed {
+                required: 2,
+                pops: 2,
+                pushes: 1,
+            },
+            Self::SysSqliteBindI64
+            | Self::SysSqliteBindF64
+            | Self::SysSqliteBindText
+            | Self::SysSqliteBindBytes
+            | Self::SysSqliteBackup => Fixed {
                 required: 3,
                 pops: 3,
                 pushes: 1,

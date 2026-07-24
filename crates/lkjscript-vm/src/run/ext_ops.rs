@@ -255,6 +255,249 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             push_i64_result(vm, result);
             Ok(true)
         }
+        x if x == Op::SysSqliteOpen as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-open", false)?;
+            let flags = vm.pop()?;
+            let flags = vm.as_i64(flags)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sqlite_open(&path, flags);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteClose as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-close", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_close(handle);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBusyTimeout as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-busy-timeout", false)?;
+            let milliseconds = vm.pop()?;
+            let milliseconds = vm.as_i64(milliseconds)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_busy_timeout(handle, milliseconds);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteExec as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-exec", false)?;
+            let sql = vm.pop()?;
+            let sql = crate::host_ext::as_str(&vm.arena, sql)?.to_string();
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_exec(handle, &sql);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqlitePrepare as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-prepare", false)?;
+            let sql = vm.pop()?;
+            let sql = crate::host_ext::as_str(&vm.arena, sql)?.to_string();
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_prepare(handle, &sql);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteFinalize as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-finalize", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_finalize(handle);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteReset as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-reset", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_reset(handle);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteClearBindings as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-clear-bindings", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_clear_bindings(handle);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBindNull as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-bind-null", false)?;
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_bind_null(handle, index);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBindI64 as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-bind-i64", false)?;
+            let value = vm.pop()?;
+            let value = vm.as_i64(value)?;
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_bind_i64(handle, index, value);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBindF64 as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-bind-f64", false)?;
+            let value = vm.pop()?;
+            let value = match vm.arena.get(value)? {
+                HeapObj::Float(value) => *value,
+                _ => {
+                    return Err(lkjscript_core::Error::msg(
+                        "sys-sqlite-bind-f64: expected F64",
+                    ))
+                }
+            };
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_bind_f64(handle, index, value);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBindText as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-bind-text", false)?;
+            let value = vm.pop()?;
+            let value = crate::host_ext::as_str(&vm.arena, value)?.to_string();
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_bind_text(handle, index, &value);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBindBytes as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-bind-bytes", false)?;
+            let value = vm.pop()?;
+            let value = crate::host_buf::as_buf(&vm.arena, value)?.to_vec();
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_bind_bytes(handle, index, &value);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteStep as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-step", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_step(handle);
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteColumnCount as u8 => {
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_column_count(handle);
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteColumnType as u8 => {
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_column_type(handle, index);
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteColumnI64 as u8 => {
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm
+                .resources
+                .sqlite_column_i64(handle, index)
+                .map(|value| match value {
+                    Some(value) => {
+                        let value = vm.make_i64(value);
+                        crate::host_ext::option_some(&mut vm.arena, value)
+                    }
+                    None => Value::NONE,
+                });
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteColumnF64 as u8 => {
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm
+                .resources
+                .sqlite_column_f64(handle, index)
+                .map(|value| match value {
+                    Some(value) => {
+                        let value = vm.arena.alloc(HeapObj::Float(value));
+                        crate::host_ext::option_some(&mut vm.arena, value)
+                    }
+                    None => Value::NONE,
+                });
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteColumnText as u8 => {
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm
+                .resources
+                .sqlite_column_text(handle, index, lkjscript_core::MAX_BUFFER_BYTES)
+                .map(|value| match value {
+                    Some(value) => {
+                        let value = vm.arena.alloc(HeapObj::Str(value));
+                        crate::host_ext::option_some(&mut vm.arena, value)
+                    }
+                    None => Value::NONE,
+                });
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteColumnBytes as u8 => {
+            let index = vm.pop()?;
+            let index = vm.as_i64(index)?;
+            let handle = vm.pop()?;
+            let result = vm
+                .resources
+                .sqlite_column_bytes(handle, index, lkjscript_core::MAX_BUFFER_BYTES)
+                .map(|value| match value {
+                    Some(value) => {
+                        let value = vm.arena.alloc(HeapObj::Buf(value));
+                        crate::host_ext::option_some(&mut vm.arena, value)
+                    }
+                    None => Value::NONE,
+                });
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteChanges as u8 => {
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_changes(handle);
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteLastInsertRowid as u8 => {
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_last_insert_rowid(handle);
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteExtendedResultCode as u8 => {
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_extended_result_code(handle);
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSqliteBackup as u8 => {
+            vm.ensure_host_deadline_support("sys-sqlite-backup", false)?;
+            let flags = vm.pop()?;
+            let flags = vm.as_i64(flags)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let handle = vm.pop()?;
+            let result = vm.resources.sqlite_backup(handle, &path, flags);
+            push_language_result(vm, result);
+            Ok(true)
+        }
         x if x == Op::Arg as u8 => {
             let value = vm.pop()?;
             let index = vm.as_i64(value)?;

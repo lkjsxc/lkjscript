@@ -12,6 +12,7 @@ mod poll;
 mod random;
 mod sha256;
 mod socket;
+mod sqlite;
 mod time;
 mod tty;
 
@@ -26,6 +27,10 @@ pub use sha256::sha256;
 pub use socket::{
     accept_sock, bind_ipv4_any, listen_sock, recv_sock, send_sock, set_reuseaddr, tcp_socket,
     SockError,
+};
+pub use sqlite::{
+    ColumnType, Connection as SqliteConnection, SqliteError, Statement as SqliteStatement,
+    Step as SqliteStep,
 };
 pub use time::{now_ms_monotonic, sleep_ms};
 pub use tty::{

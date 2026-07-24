@@ -640,7 +640,31 @@ impl Evaluator<'_> {
                 EvalValue::None => Err(Flow::Trap("unwrap-some on none".into())),
                 _ => Err(Flow::Trap("unwrap-some operand is not Option".into())),
             }),
-            Op::Print
+            Op::SysSqliteOpen
+            | Op::SysSqliteClose
+            | Op::SysSqliteBusyTimeout
+            | Op::SysSqliteExec
+            | Op::SysSqlitePrepare
+            | Op::SysSqliteFinalize
+            | Op::SysSqliteReset
+            | Op::SysSqliteClearBindings
+            | Op::SysSqliteBindNull
+            | Op::SysSqliteBindI64
+            | Op::SysSqliteBindF64
+            | Op::SysSqliteBindText
+            | Op::SysSqliteBindBytes
+            | Op::SysSqliteStep
+            | Op::SysSqliteColumnCount
+            | Op::SysSqliteColumnType
+            | Op::SysSqliteColumnI64
+            | Op::SysSqliteColumnF64
+            | Op::SysSqliteColumnText
+            | Op::SysSqliteColumnBytes
+            | Op::SysSqliteChanges
+            | Op::SysSqliteLastInsertRowid
+            | Op::SysSqliteExtendedResultCode
+            | Op::SysSqliteBackup
+            | Op::Print
             | Op::Flush
             | Op::ReadByte
             | Op::WriteByte

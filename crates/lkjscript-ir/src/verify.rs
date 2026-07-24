@@ -970,6 +970,75 @@ fn verify_runtime_signature(operation: RuntimeOp, signature: &Signature) -> crat
             &[SsaType::Buf, SsaType::I64, SsaType::I64],
             &system_result(SsaType::Buf),
         ),
+        RuntimeOp::SysSqliteOpen => exact(
+            &[SsaType::Str, SsaType::I64],
+            &system_result(SsaType::Handle),
+        ),
+        RuntimeOp::SysSqliteClose
+        | RuntimeOp::SysSqliteFinalize
+        | RuntimeOp::SysSqliteReset
+        | RuntimeOp::SysSqliteClearBindings => {
+            exact(&[SsaType::Handle], &system_result(SsaType::Unit))
+        }
+        RuntimeOp::SysSqliteBusyTimeout | RuntimeOp::SysSqliteBindNull => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSqliteExec => exact(
+            &[SsaType::Handle, SsaType::Str],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSqlitePrepare => exact(
+            &[SsaType::Handle, SsaType::Str],
+            &system_result(SsaType::Handle),
+        ),
+        RuntimeOp::SysSqliteBindI64 => exact(
+            &[SsaType::Handle, SsaType::I64, SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSqliteBindF64 => exact(
+            &[SsaType::Handle, SsaType::I64, SsaType::F64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSqliteBindText => exact(
+            &[SsaType::Handle, SsaType::I64, SsaType::Str],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSqliteBindBytes => exact(
+            &[SsaType::Handle, SsaType::I64, SsaType::Buf],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSqliteStep
+        | RuntimeOp::SysSqliteColumnCount
+        | RuntimeOp::SysSqliteChanges
+        | RuntimeOp::SysSqliteLastInsertRowid
+        | RuntimeOp::SysSqliteExtendedResultCode => {
+            exact(&[SsaType::Handle], &system_result(SsaType::I64))
+        }
+        RuntimeOp::SysSqliteColumnType => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::I64),
+        ),
+        RuntimeOp::SysSqliteColumnI64 => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::Option(Box::new(SsaType::I64))),
+        ),
+        RuntimeOp::SysSqliteColumnF64 => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::Option(Box::new(SsaType::F64))),
+        ),
+        RuntimeOp::SysSqliteColumnText => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::Option(Box::new(SsaType::Str))),
+        ),
+        RuntimeOp::SysSqliteColumnBytes => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::Option(Box::new(SsaType::Buf))),
+        ),
+        RuntimeOp::SysSqliteBackup => exact(
+            &[SsaType::Handle, SsaType::Str, SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
         RuntimeOp::SysPathExists => exact(&[SsaType::Str], &system_result(SsaType::Bool)),
         RuntimeOp::SysWaitMs => exact(&[SsaType::I64], &system_result(SsaType::Unit)),
         RuntimeOp::SysNowMs => exact(&[], &system_result(SsaType::I64)),

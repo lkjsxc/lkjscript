@@ -37,6 +37,7 @@ Runtime acceptance:
 cargo build --workspace --release --locked
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sqlite-smoke.sh
 ```
 
 Docker acceptance, run from this repository:
