@@ -99,8 +99,9 @@ The highest-priority defects are:
 
 ## Evidence
 
-The Phase A candidate tree based on `e4c1d0e` was checked on Linux x86-64 with
-Rust/Cargo 1.96.0. Evidence is command-specific; Docker, full Brainfuck
+Phase A implementation commit
+`12836da90d886c9e741a5ac9f8148a17d00f0505`, based on `e4c1d0e`, was checked
+on Linux x86-64 with Rust/Cargo 1.96.0. Evidence is command-specific; Docker, full Brainfuck
 Mandelbrot, and performance are not implied.
 
 | Command or check | Result |
