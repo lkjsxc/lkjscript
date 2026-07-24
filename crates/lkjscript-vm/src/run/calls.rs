@@ -85,6 +85,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                     .collect::<Result<Vec<_>>>()?;
                 let mut execution = vm.config.clone();
                 execution.instruction_fuel = vm.fuel_remaining;
+                execution.wall_time = vm.remaining_wall_time()?;
                 match vm
                     .jit
                     .invoke_scalar(function, &native_arguments, &execution)
