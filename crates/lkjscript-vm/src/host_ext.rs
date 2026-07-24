@@ -58,23 +58,47 @@ enum OwnedResource {
     Socket(OwnedFd),
 }
 
-#[derive(Default)]
 pub struct ResourceTable {
     slots: Vec<Option<OwnedResource>>,
+    max_handles: usize,
+    limit_exceeded: bool,
+}
+
+impl Default for ResourceTable {
+    fn default() -> Self {
+        Self::new(4_096)
+    }
 }
 
 impl ResourceTable {
+    pub fn new(max_handles: usize) -> Self {
+        Self {
+            slots: Vec::new(),
+            max_handles,
+            limit_exceeded: false,
+        }
+    }
+
+    pub fn allocated_handle_slots(&self) -> usize {
+        self.slots.len()
+    }
+
+    pub const fn limit_exceeded(&self) -> bool {
+        self.limit_exceeded
+    }
     pub fn stdin_handle() -> Value {
         Value::from_handle(STDIN_TOKEN)
     }
 
     pub fn sys_open_read(&mut self, path: &str) -> Result<Value> {
+        self.ensure_capacity()?;
         let file = lkjscript_sys::open_read(path)
             .map_err(|error| Error::msg(format!("sys-open-read: {error}")))?;
         self.push(OwnedResource::File(file))
     }
 
     pub fn sys_open_write(&mut self, path: &str) -> Result<Value> {
+        self.ensure_capacity()?;
         let file = lkjscript_sys::open_write(path)
             .map_err(|error| Error::msg(format!("sys-open-write: {error}")))?;
         self.push(OwnedResource::File(file))
@@ -87,6 +111,7 @@ impl ResourceTable {
     }
 
     pub fn sys_socket(&mut self) -> Result<Value> {
+        self.ensure_capacity()?;
         let socket = lkjscript_sys::tcp_socket()
             .map_err(|error| Error::msg(format!("sys-socket: {error}")))?;
         self.push(OwnedResource::Socket(socket))
@@ -115,6 +140,7 @@ impl ResourceTable {
     }
 
     pub fn sys_accept(&mut self, handle: Value) -> Result<Value> {
+        self.ensure_capacity()?;
         let raw = self.socket_raw(handle, "sys-accept")?;
         let client = lkjscript_sys::accept_sock(raw)
             .map_err(|error| Error::msg(format!("sys-accept: {error}")))?;
@@ -203,6 +229,12 @@ impl ResourceTable {
         Ok(Value::UNIT)
     }
 
+    pub fn poll_readable(&self, handle: Value, timeout_ms: i32, operation: &str) -> Result<bool> {
+        let raw = self.raw_fd(handle, operation)?;
+        lkjscript_sys::poll_fd(raw, timeout_ms)
+            .map_err(|error| Error::msg(format!("{operation}: {error}")))
+    }
+
     pub(crate) fn raw_fd(&self, handle: Value, operation: &str) -> Result<RawFd> {
         if handle.as_handle() == Some(STDIN_TOKEN) {
             return Ok(lkjscript_sys::STDIN_FD);
@@ -237,6 +269,7 @@ impl ResourceTable {
     }
 
     fn push(&mut self, handle: OwnedResource) -> Result<Value> {
+        self.ensure_capacity()?;
         let index = u32::try_from(self.slots.len())
             .map_err(|_| Error::msg("resource handle table exhausted"))?;
         let token = FIRST_OWNED_TOKEN
@@ -244,6 +277,15 @@ impl ResourceTable {
             .ok_or_else(|| Error::msg("resource handle token exhausted"))?;
         self.slots.push(Some(handle));
         Ok(Value::from_handle(token))
+    }
+
+    fn ensure_capacity(&mut self) -> Result<()> {
+        if self.slots.len() >= self.max_handles {
+            self.limit_exceeded = true;
+            Err(Error::msg("resource handle limit exceeded"))
+        } else {
+            Ok(())
+        }
     }
 }
 

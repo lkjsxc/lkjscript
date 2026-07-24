@@ -1,16 +1,20 @@
 #![allow(clippy::expect_used)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{Limits, Value};
+use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, OwnedValue};
 use lkjscript_vm::run_chunk;
 
-fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<Value> {
+fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<OwnedValue> {
     let source = format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n");
     let chunk = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
-    run_chunk(&chunk)
+    match run_chunk(&chunk, &ExecutionConfig::default()) {
+        ExecutionOutcome::Returned(value) => Ok(value),
+        ExecutionOutcome::Trapped(trap) => Err(Error::msg(trap.to_string())),
+        other => Err(Error::msg(other.summary())),
+    }
 }
 
-fn evaluate(expression: &str) -> lkjscript_core::Result<Value> {
+fn evaluate(expression: &str) -> lkjscript_core::Result<OwnedValue> {
     evaluate_typed(expression, "Bool")
 }
 

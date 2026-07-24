@@ -1,7 +1,7 @@
-//! Dense bytecode opcodes for the register/stack hybrid VM.
+//! Dense bytecode opcodes and their centralized decode/stack metadata.
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Op {
     Nop = 0,
     LoadConst = 1,
@@ -44,6 +44,8 @@ pub enum Op {
     BufLen = 67,
     BufRef = 68,
     BufSet = 69,
+    Pop = 70,
+    Dup = 71,
     BufGetU32 = 72,
     BufSetU32 = 73,
     SysTtyGet = 74,
@@ -52,7 +54,10 @@ pub enum Op {
     SysIsatty = 77,
     SysTtyGuardSave = 78,
     SysTtyGuardClear = 79,
+    False = 80,
+    True = 81,
     SysTtySet = 83,
+    Unit = 84,
     BufClone = 85,
     EmptyList = 86,
     OptionNone = 87,
@@ -91,115 +96,181 @@ pub enum Op {
     MakeProduct = 151,
     LoadProductField = 152,
     WithProductField = 153,
-    Pop = 70,
-    Dup = 71,
-    False = 80,
-    True = 81,
-    Unit = 84,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StackEffect {
+    Fixed {
+        required: usize,
+        pops: usize,
+        pushes: usize,
+    },
+    Call,
+    MakeProduct,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlFlow {
+    Next,
+    Jump,
+    Branch,
+    Return,
+    Exit,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OpInfo {
+    pub operand_width: usize,
+    pub stack: StackEffect,
+    pub control: ControlFlow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecodedInstruction {
+    offset: usize,
+    next_offset: usize,
+    op: Op,
+    operand: Option<u16>,
+}
+
+impl DecodedInstruction {
+    pub const fn offset(self) -> usize {
+        self.offset
+    }
+
+    pub const fn next_offset(self) -> usize {
+        self.next_offset
+    }
+
+    pub const fn op(self) -> Op {
+        self.op
+    }
+
+    pub const fn operand(self) -> Option<u16> {
+        self.operand
+    }
+
+    pub(crate) const fn new(
+        offset: usize,
+        next_offset: usize,
+        op: Op,
+        operand: Option<u16>,
+    ) -> Self {
+        Self {
+            offset,
+            next_offset,
+            op,
+            operand,
+        }
+    }
 }
 
 impl Op {
+    pub const ALL: &'static [Self] = &[
+        Self::Nop,
+        Self::LoadConst,
+        Self::LoadLocal,
+        Self::StoreLocal,
+        Self::LoadGlobal,
+        Self::StoreGlobal,
+        Self::Add,
+        Self::Sub,
+        Self::Mul,
+        Self::Div,
+        Self::EqualValue,
+        Self::Lt,
+        Self::Le,
+        Self::Gt,
+        Self::Ge,
+        Self::Not,
+        Self::BitAnd,
+        Self::BitOr,
+        Self::BitXor,
+        Self::Jump,
+        Self::JumpIfFalse,
+        Self::Call,
+        Self::Return,
+        Self::MakeClosure,
+        Self::Cons,
+        Self::Car,
+        Self::Cdr,
+        Self::IsEmptyList,
+        Self::SameObject,
+        Self::ListEqual,
+        Self::F64BitsEqual,
+        Self::Print,
+        Self::Flush,
+        Self::ReadByte,
+        Self::WriteByte,
+        Self::Exit,
+        Self::WriteStr,
+        Self::BufNew,
+        Self::BufLen,
+        Self::BufRef,
+        Self::BufSet,
+        Self::Pop,
+        Self::Dup,
+        Self::BufGetU32,
+        Self::BufSetU32,
+        Self::SysTtyGet,
+        Self::SysPoll,
+        Self::StdinHandle,
+        Self::SysIsatty,
+        Self::SysTtyGuardSave,
+        Self::SysTtyGuardClear,
+        Self::False,
+        Self::True,
+        Self::SysTtySet,
+        Self::Unit,
+        Self::BufClone,
+        Self::EmptyList,
+        Self::OptionNone,
+        Self::StrLen,
+        Self::StrRef,
+        Self::StrAppend,
+        Self::StrSlice,
+        Self::StrFromByte,
+        Self::SysOpenRead,
+        Self::SysOpenWrite,
+        Self::SysClose,
+        Self::SysReadByte,
+        Self::SysWriteByte,
+        Self::Arg,
+        Self::Argc,
+        Self::EmptyStr,
+        Self::SysNowMs,
+        Self::SysWaitMs,
+        Self::SysSocket,
+        Self::SysBind,
+        Self::SysListen,
+        Self::SysAccept,
+        Self::SysPathExists,
+        Self::SysRecv,
+        Self::SysSend,
+        Self::OkWrap,
+        Self::ErrWrap,
+        Self::IsOk,
+        Self::UnwrapOk,
+        Self::UnwrapErr,
+        Self::StrFromI64,
+        Self::StrFromF64,
+        Self::SomeWrap,
+        Self::IsSome,
+        Self::UnwrapSome,
+        Self::MakeProduct,
+        Self::LoadProductField,
+        Self::WithProductField,
+    ];
+
     pub fn from_byte(byte: u8) -> Option<Self> {
-        Some(match byte {
-            0 => Self::Nop,
-            1 => Self::LoadConst,
-            2 => Self::LoadLocal,
-            3 => Self::StoreLocal,
-            4 => Self::LoadGlobal,
-            5 => Self::StoreGlobal,
-            10 => Self::Add,
-            11 => Self::Sub,
-            12 => Self::Mul,
-            13 => Self::Div,
-            20 => Self::EqualValue,
-            22 => Self::Lt,
-            23 => Self::Le,
-            24 => Self::Gt,
-            25 => Self::Ge,
-            26 => Self::Not,
-            27 => Self::BitAnd,
-            28 => Self::BitOr,
-            29 => Self::BitXor,
-            30 => Self::Jump,
-            31 => Self::JumpIfFalse,
-            40 => Self::Call,
-            41 => Self::Return,
-            42 => Self::MakeClosure,
-            50 => Self::Cons,
-            51 => Self::Car,
-            52 => Self::Cdr,
-            53 => Self::IsEmptyList,
-            54 => Self::SameObject,
-            55 => Self::ListEqual,
-            56 => Self::F64BitsEqual,
-            60 => Self::Print,
-            61 => Self::Flush,
-            62 => Self::ReadByte,
-            63 => Self::WriteByte,
-            64 => Self::Exit,
-            65 => Self::WriteStr,
-            66 => Self::BufNew,
-            67 => Self::BufLen,
-            68 => Self::BufRef,
-            69 => Self::BufSet,
-            70 => Self::Pop,
-            71 => Self::Dup,
-            72 => Self::BufGetU32,
-            73 => Self::BufSetU32,
-            74 => Self::SysTtyGet,
-            75 => Self::SysPoll,
-            76 => Self::StdinHandle,
-            77 => Self::SysIsatty,
-            78 => Self::SysTtyGuardSave,
-            79 => Self::SysTtyGuardClear,
-            80 => Self::False,
-            81 => Self::True,
-            83 => Self::SysTtySet,
-            84 => Self::Unit,
-            85 => Self::BufClone,
-            86 => Self::EmptyList,
-            87 => Self::OptionNone,
-            90 => Self::StrLen,
-            91 => Self::StrRef,
-            92 => Self::StrAppend,
-            93 => Self::StrSlice,
-            94 => Self::StrFromByte,
-            100 => Self::SysOpenRead,
-            101 => Self::SysOpenWrite,
-            102 => Self::SysClose,
-            103 => Self::SysReadByte,
-            104 => Self::SysWriteByte,
-            110 => Self::Arg,
-            111 => Self::Argc,
-            112 => Self::EmptyStr,
-            123 => Self::SysNowMs,
-            124 => Self::SysWaitMs,
-            130 => Self::SysSocket,
-            131 => Self::SysBind,
-            132 => Self::SysListen,
-            133 => Self::SysAccept,
-            134 => Self::SysPathExists,
-            135 => Self::SysRecv,
-            136 => Self::SysSend,
-            140 => Self::OkWrap,
-            141 => Self::ErrWrap,
-            142 => Self::IsOk,
-            143 => Self::UnwrapOk,
-            144 => Self::UnwrapErr,
-            146 => Self::StrFromI64,
-            147 => Self::StrFromF64,
-            148 => Self::SomeWrap,
-            149 => Self::IsSome,
-            150 => Self::UnwrapSome,
-            151 => Self::MakeProduct,
-            152 => Self::LoadProductField,
-            153 => Self::WithProductField,
-            _ => return None,
-        })
+        Self::ALL.iter().copied().find(|op| *op as u8 == byte)
     }
 
-    pub const fn operand_width(self) -> usize {
-        match self {
+    pub const fn info(self) -> OpInfo {
+        use ControlFlow::{Branch, Exit, Jump, Next, Return};
+        use StackEffect::{Call, Fixed, MakeProduct};
+
+        let operand_width = match self {
             Self::LoadConst
             | Self::LoadGlobal
             | Self::StoreGlobal
@@ -211,40 +282,188 @@ impl Op {
             | Self::WithProductField => 2,
             Self::LoadLocal | Self::StoreLocal | Self::Call => 1,
             _ => 0,
+        };
+        let control = match self {
+            Self::Jump => Jump,
+            Self::JumpIfFalse => Branch,
+            Self::Return => Return,
+            Self::Exit => Exit,
+            _ => Next,
+        };
+        let stack = match self {
+            Self::Nop => Fixed {
+                required: 0,
+                pops: 0,
+                pushes: 0,
+            },
+            Self::LoadConst
+            | Self::LoadLocal
+            | Self::LoadGlobal
+            | Self::Flush
+            | Self::ReadByte
+            | Self::StdinHandle
+            | Self::SysTtyGuardClear
+            | Self::False
+            | Self::True
+            | Self::Unit
+            | Self::EmptyList
+            | Self::OptionNone
+            | Self::Argc
+            | Self::EmptyStr
+            | Self::SysNowMs
+            | Self::SysSocket => Fixed {
+                required: 0,
+                pops: 0,
+                pushes: 1,
+            },
+            Self::StoreLocal | Self::StoreGlobal => Fixed {
+                required: 1,
+                pops: 0,
+                pushes: 0,
+            },
+            Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::EqualValue
+            | Self::Lt
+            | Self::Le
+            | Self::Gt
+            | Self::Ge
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::Cons
+            | Self::SameObject
+            | Self::ListEqual
+            | Self::F64BitsEqual
+            | Self::StrRef
+            | Self::StrAppend
+            | Self::SysWriteByte
+            | Self::SysPoll
+            | Self::SysTtyGet
+            | Self::SysTtySet
+            | Self::SysBind
+            | Self::SysListen
+            | Self::SysSend => Fixed {
+                required: 2,
+                pops: 2,
+                pushes: 1,
+            },
+            Self::BufRef | Self::BufGetU32 => Fixed {
+                required: 2,
+                pops: 2,
+                pushes: 1,
+            },
+            Self::StrSlice | Self::BufSet => Fixed {
+                required: 3,
+                pops: 3,
+                pushes: 1,
+            },
+            Self::BufSetU32 => Fixed {
+                required: 3,
+                pops: 3,
+                pushes: 1,
+            },
+            Self::Not
+            | Self::Car
+            | Self::Cdr
+            | Self::IsEmptyList
+            | Self::Print
+            | Self::WriteByte
+            | Self::WriteStr
+            | Self::BufNew
+            | Self::BufLen
+            | Self::BufClone
+            | Self::SysIsatty
+            | Self::SysTtyGuardSave
+            | Self::StrLen
+            | Self::StrFromByte
+            | Self::SysOpenRead
+            | Self::SysOpenWrite
+            | Self::SysClose
+            | Self::SysReadByte
+            | Self::Arg
+            | Self::SysWaitMs
+            | Self::SysAccept
+            | Self::SysPathExists
+            | Self::SysRecv
+            | Self::OkWrap
+            | Self::ErrWrap
+            | Self::IsOk
+            | Self::UnwrapOk
+            | Self::UnwrapErr
+            | Self::StrFromI64
+            | Self::StrFromF64
+            | Self::SomeWrap
+            | Self::IsSome
+            | Self::UnwrapSome
+            | Self::LoadProductField => Fixed {
+                required: 1,
+                pops: 1,
+                pushes: 1,
+            },
+            Self::Jump => Fixed {
+                required: 0,
+                pops: 0,
+                pushes: 0,
+            },
+            Self::JumpIfFalse | Self::Exit | Self::Pop | Self::Return => Fixed {
+                required: 1,
+                pops: 1,
+                pushes: 0,
+            },
+            Self::MakeClosure => Fixed {
+                required: 1,
+                pops: 1,
+                pushes: 1,
+            },
+            Self::Call => Call,
+            Self::MakeProduct => MakeProduct,
+            Self::Dup => Fixed {
+                required: 1,
+                pops: 0,
+                pushes: 1,
+            },
+            Self::WithProductField => Fixed {
+                required: 2,
+                pops: 2,
+                pushes: 1,
+            },
+        };
+        OpInfo {
+            operand_width,
+            stack,
+            control,
         }
+    }
+
+    pub const fn operand_width(self) -> usize {
+        self.info().operand_width
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Op;
+    use super::{ControlFlow, Op, StackEffect};
 
     #[test]
-    fn byte_decoder_and_operand_widths_are_truthful() {
-        assert_eq!(Op::from_byte(Op::LoadConst as u8), Some(Op::LoadConst));
-        assert_eq!(Op::LoadConst.operand_width(), 2);
-        assert_eq!(Op::Call.operand_width(), 1);
-        assert_eq!(Op::Return.operand_width(), 0);
-        assert_eq!(Op::from_byte(Op::EqualValue as u8), Some(Op::EqualValue));
-        assert_eq!(Op::from_byte(Op::SameObject as u8), Some(Op::SameObject));
-        assert_eq!(Op::from_byte(Op::ListEqual as u8), Some(Op::ListEqual));
-        assert_eq!(
-            Op::from_byte(Op::F64BitsEqual as u8),
-            Some(Op::F64BitsEqual)
-        );
-        assert_eq!(Op::from_byte(Op::MakeProduct as u8), Some(Op::MakeProduct));
-        assert_eq!(Op::MakeProduct.operand_width(), 2);
-        assert_eq!(
-            Op::from_byte(Op::LoadProductField as u8),
-            Some(Op::LoadProductField)
-        );
-        assert_eq!(Op::LoadProductField.operand_width(), 2);
-        assert_eq!(
-            Op::from_byte(Op::WithProductField as u8),
-            Some(Op::WithProductField)
-        );
-        assert_eq!(Op::WithProductField.operand_width(), 2);
+    fn every_known_opcode_has_truthful_metadata_and_round_trips() {
+        let mut seen = [false; 256];
+        for op in Op::ALL {
+            let byte = *op as u8;
+            assert!(!seen[usize::from(byte)]);
+            seen[usize::from(byte)] = true;
+            assert_eq!(Op::from_byte(byte), Some(*op));
+            assert!(op.operand_width() <= 2);
+        }
         assert_eq!(Op::from_byte(21), None);
+        assert_eq!(Op::from_byte(82), None);
+        assert_eq!(Op::from_byte(145), None);
         assert_eq!(Op::from_byte(255), None);
+        assert_eq!(Op::Jump.info().control, ControlFlow::Jump);
+        assert_eq!(Op::Return.info().control, ControlFlow::Return);
+        assert_eq!(Op::Call.info().stack, StackEffect::Call);
+        assert_eq!(Op::MakeProduct.info().stack, StackEffect::MakeProduct);
     }
 }

@@ -1,17 +1,21 @@
 //! Precise mark-sweep arena for heap objects.
 
-use lkjscript_core::{Error, HeapObj, Result, Value};
+use lkjscript_core::{Error, HeapObj, OwnedValue, Result, Value};
 
 #[derive(Debug, Default)]
 pub struct Arena {
     objs: Vec<Option<HeapObj>>,
     free: Vec<u32>,
     allocs_since_gc: u32,
+    total_allocations: u64,
+    heap_bytes: usize,
 }
 
 impl Arena {
     pub fn alloc(&mut self, obj: HeapObj) -> Value {
-        self.allocs_since_gc += 1;
+        self.allocs_since_gc = self.allocs_since_gc.saturating_add(1);
+        self.total_allocations = self.total_allocations.saturating_add(1);
+        self.heap_bytes = self.heap_bytes.saturating_add(estimated_object_bytes(&obj));
         if let Some(idx) = self.free.pop() {
             self.objs[idx as usize] = Some(obj);
             return Value::from_heap(idx);
@@ -59,7 +63,10 @@ impl Arena {
         }
         self.free.clear();
         for (i, slot) in self.objs.iter_mut().enumerate() {
-            if slot.is_some() && !marked[i] {
+            if let Some(object) = slot.as_ref().filter(|_| !marked[i]) {
+                self.heap_bytes = self
+                    .heap_bytes
+                    .saturating_sub(estimated_object_bytes(object));
                 *slot = None;
                 self.free.push(i as u32);
             }
@@ -71,11 +78,40 @@ impl Arena {
         self.allocs_since_gc >= 1024
     }
 
-    pub fn maybe_collect(&mut self, roots: &[Value]) {
-        if self.needs_collect() {
-            self.collect(roots);
-        }
+    pub const fn heap_bytes(&self) -> usize {
+        self.heap_bytes
     }
+
+    pub const fn total_allocations(&self) -> u64 {
+        self.total_allocations
+    }
+
+    pub fn into_owned(mut self, root: Value) -> Result<OwnedValue> {
+        self.collect(&[root]);
+        OwnedValue::from_vm_snapshot(root, self.objs)
+    }
+}
+
+fn estimated_object_bytes(object: &HeapObj) -> usize {
+    let base = std::mem::size_of::<HeapObj>();
+    let dynamic = match object {
+        HeapObj::Str(text) | HeapObj::Symbol(text) => text.capacity(),
+        HeapObj::Pair { .. }
+        | HeapObj::Int(_)
+        | HeapObj::Float(_)
+        | HeapObj::Builtin(_)
+        | HeapObj::ResultOk(_)
+        | HeapObj::ResultErr(_)
+        | HeapObj::OptionSome(_) => 0,
+        HeapObj::Closure { captures, .. } => captures
+            .capacity()
+            .saturating_mul(std::mem::size_of::<Value>()),
+        HeapObj::Buf(bytes) => bytes.capacity(),
+        HeapObj::Product { fields, .. } => fields
+            .capacity()
+            .saturating_mul(std::mem::size_of::<Value>()),
+    };
+    base.saturating_add(dynamic)
 }
 
 #[cfg(test)]

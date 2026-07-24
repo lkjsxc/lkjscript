@@ -1,4 +1,4 @@
-//! Stack VM with precise mark-sweep GC and thin host IO builtins.
+//! Stack VM with validated input, structured outcomes, and bounded execution.
 
 mod arena;
 mod host;
@@ -7,24 +7,26 @@ mod host_ext;
 mod host_term;
 mod run;
 
-use lkjscript_core::{Chunk, JitHook, NullJit, Result, Value};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, JitHook, NullJit, ValidatedChunk};
 
 pub use run::Vm;
 
-pub fn run_chunk(chunk: &Chunk) -> Result<Value> {
-    run_chunk_with_args(chunk, &[])
+pub fn run_chunk(chunk: &ValidatedChunk, config: &ExecutionConfig) -> ExecutionOutcome {
+    run_chunk_with_args(chunk, &[], config)
 }
 
-pub fn run_chunk_with_args(chunk: &Chunk, args: &[String]) -> Result<Value> {
-    let mut vm = Vm::new(chunk, NullJit, args.to_vec());
-    let out = vm.run();
-    host_term::restore_tty();
-    out
+pub fn run_chunk_with_args(
+    chunk: &ValidatedChunk,
+    args: &[String],
+    config: &ExecutionConfig,
+) -> ExecutionOutcome {
+    Vm::new(chunk, NullJit, args.to_vec(), config.clone()).run()
 }
 
-pub fn run_chunk_with_jit<J: JitHook>(chunk: &Chunk, jit: J) -> Result<Value> {
-    let mut vm = Vm::new(chunk, jit, Vec::new());
-    let out = vm.run();
-    host_term::restore_tty();
-    out
+pub fn run_chunk_with_jit<J: JitHook>(
+    chunk: &ValidatedChunk,
+    jit: J,
+    config: &ExecutionConfig,
+) -> ExecutionOutcome {
+    Vm::new(chunk, jit, Vec::new(), config.clone()).run()
 }

@@ -13,7 +13,7 @@ mod types;
 
 use std::path::{Path, PathBuf};
 
-use lkjscript_core::{Chunk, Limits, Result};
+use lkjscript_core::{validate_chunk, Limits, Result, ValidatedChunk};
 
 use crate::analyze::analyze_program;
 use crate::ast::Expr;
@@ -24,11 +24,14 @@ use crate::parse::parse_tokens;
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 
-pub fn compile_path(path: &Path, limits: &Limits) -> Result<Chunk> {
+pub fn compile_path(path: &Path, limits: &Limits) -> Result<ValidatedChunk> {
     compile_path_with_sources(path, limits).map(|(chunk, _)| chunk)
 }
 
-pub fn compile_path_with_sources(path: &Path, limits: &Limits) -> Result<(Chunk, Vec<PathBuf>)> {
+pub fn compile_path_with_sources(
+    path: &Path,
+    limits: &Limits,
+) -> Result<(ValidatedChunk, Vec<PathBuf>)> {
     ensure_source_path(path)?;
     let program = load_program(path, limits)?;
     let sources = program
@@ -38,10 +41,23 @@ pub fn compile_path_with_sources(path: &Path, limits: &Limits) -> Result<(Chunk,
         .collect();
     let analyzed = analyze_program(&program)?;
     let chunk = compile_program(&analyzed)?;
-    Ok((chunk, sources))
+    let validated = validate_chunk(chunk, &limits.validation)?;
+    Ok((validated, sources))
 }
 
-pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<Chunk> {
+pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<ValidatedChunk> {
+    let chunk = compile_source_builder(source, path, limits)?;
+    validate_chunk(chunk, &limits.validation)
+}
+
+/// Produces the mutable builder representation used by compiler and malformed
+/// bytecode tests. It is not executable until passed to `validate_chunk`.
+#[doc(hidden)]
+pub fn compile_source_builder(
+    source: &str,
+    path: &str,
+    limits: &Limits,
+) -> Result<lkjscript_core::Chunk> {
     ensure_source_path(Path::new(path))?;
     let forms = parse_source(source, path, limits)?;
     let fake = PathBuf::from(path);
@@ -133,11 +149,11 @@ mod tests {
         let chunk = compile_source(&source, "numeric.lkjscript", &Limits::default())
             .expect("compile numeric source");
         assert!(chunk
-            .constants
+            .constants()
             .iter()
             .any(|constant| matches!(constant, Constant::I64(i64::MAX))));
         assert!(chunk
-            .constants
+            .constants()
             .iter()
             .any(|constant| matches!(constant, Constant::F64(value) if *value == 2.0)));
     }

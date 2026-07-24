@@ -8,7 +8,7 @@ use lkjscript_core::{
 use super::calls::{call, car, cdr, make_closure};
 use super::numeric::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
 use super::Vm;
-use crate::host::{flush_out, print_value, read_byte, write_byte, write_str};
+use crate::host::{display_value, flush_out, read_byte, write_byte, write_output, write_str};
 
 fn maybe_i64(arena: &crate::arena::Arena, value: Value) -> Result<Option<i64>> {
     if let Some(number) = value.as_small_i64() {
@@ -171,7 +171,7 @@ fn product_metadata<'a, J: JitHook>(
 ) -> Result<&'a lkjscript_core::ProductMetadata> {
     let metadata = vm
         .chunk
-        .products
+        .products()
         .get(product.index())
         .filter(|metadata| metadata.id == product)
         .ok_or_else(|| Error::msg("product metadata index or identity is invalid"))?;
@@ -184,7 +184,7 @@ fn product_metadata<'a, J: JitHook>(
 fn product_field_ref<J: JitHook>(vm: &Vm<'_, J>, index: usize) -> Result<ProductFieldRef> {
     let field_ref = vm
         .chunk
-        .product_fields
+        .product_fields()
         .get(index)
         .copied()
         .ok_or_else(|| Error::msg("product field descriptor index out of range"))?;
@@ -413,31 +413,41 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         x if x == Op::ListEqual as u8 => list_equal(vm),
         x if x == Op::F64BitsEqual as u8 => f64_bits_equal(vm),
         x if x == Op::Print as u8 => {
-            let v = vm.pop()?;
-            print_value(&vm.arena, v)?;
+            vm.ensure_host_deadline_support("print", false)?;
+            let value = vm.pop()?;
+            let text = display_value(&vm.arena, value)?;
+            vm.record_output(text.len())?;
+            write_output(text.as_bytes(), "print")?;
             vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::Flush as u8 => {
+            vm.ensure_host_deadline_support("flush", false)?;
             flush_out()?;
             vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::ReadByte as u8 => {
+            vm.wait_for_stdin()?;
             let number = read_byte()?;
             let value = vm.make_i64(number);
             vm.push(value);
             Ok(())
         }
         x if x == Op::WriteByte as u8 => {
+            vm.ensure_host_deadline_support("write-byte", false)?;
             let value = vm.pop()?;
             let byte = vm.as_i64(value)?;
+            vm.record_output(1)?;
             vm.push(write_byte(byte)?);
             Ok(())
         }
         x if x == Op::WriteStr as u8 => {
-            let v = vm.pop()?;
-            vm.push(write_str(&vm.arena, v)?);
+            vm.ensure_host_deadline_support("write-str", false)?;
+            let value = vm.pop()?;
+            let length = crate::host_ext::as_str(&vm.arena, value)?.len();
+            vm.record_output(length)?;
+            vm.push(write_str(&vm.arena, value)?);
             Ok(())
         }
         x if x == Op::Exit as u8 => {
@@ -484,10 +494,15 @@ pub fn dispatch<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use lkjscript_core::{Chunk, HeapObj, NullJit, Op, Value};
+    use lkjscript_core::{ExecutionConfig, HeapObj, NullJit, Op, Value};
 
     use super::{dispatch, list_values_equal};
-    use crate::run::Vm;
+    use crate::run::{test_chunk, Vm};
+
+    fn test_vm() -> Vm<'static, NullJit> {
+        let chunk = Box::leak(Box::new(test_chunk()));
+        Vm::new(chunk, NullJit, Vec::new(), ExecutionConfig::default())
+    }
 
     fn compare(vm: &mut Vm<'_, NullJit>, op: Op, left: Value, right: Value) -> bool {
         vm.push(left);
@@ -510,8 +525,7 @@ mod tests {
 
     #[test]
     fn value_equality_is_exact_and_category_checked() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
 
         assert!(compare(&mut vm, Op::EqualValue, Value::UNIT, Value::UNIT));
         assert!(!compare(&mut vm, Op::EqualValue, Value::TRUE, Value::FALSE));
@@ -544,8 +558,7 @@ mod tests {
 
     #[test]
     fn option_and_result_value_equality_is_structural() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         assert!(compare(&mut vm, Op::EqualValue, Value::NONE, Value::NONE));
 
         let one_left = vm.make_i64(1);
@@ -580,8 +593,7 @@ mod tests {
 
     #[test]
     fn object_identity_is_limited_to_buffers_and_handles() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         let buffer = vm.arena.alloc(HeapObj::Buf(vec![1, 2, 3]));
         let clone = vm.arena.alloc(HeapObj::Buf(vec![1, 2, 3]));
         assert!(compare(&mut vm, Op::SameObject, buffer, buffer));
@@ -615,8 +627,7 @@ mod tests {
 
     #[test]
     fn list_equality_is_structural_bounded_and_rejects_improper_lists() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         assert!(compare(
             &mut vm,
             Op::ListEqual,
@@ -657,8 +668,7 @@ mod tests {
 
     #[test]
     fn f64_bit_equality_distinguishes_signed_zero_and_accepts_equal_nan_bits() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         let positive_zero = vm.arena.alloc(HeapObj::Float(0.0));
         let negative_zero = vm.arena.alloc(HeapObj::Float(-0.0));
         assert!(!compare(

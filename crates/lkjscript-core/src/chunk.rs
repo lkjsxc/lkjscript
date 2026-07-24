@@ -26,7 +26,7 @@ pub struct ProductMetadata {
     pub fields: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProductFieldRef {
     pub product: ProductId,
     pub field: u8,

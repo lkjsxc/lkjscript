@@ -44,10 +44,18 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 Workspace tests include focused numeric and explicit-equality
 parser/type/HIR/bytecode/VM/host boundaries, removed equality vocabulary and
 opcodes, and compiled source-to-VM execution across immediate and boxed I64
-values.
+values. They also cover whole-chunk reachable/unreachable decode, random small
+byte robustness without panic, size/index/metadata/product/category/CFG/local
+initialization/return validation, owned returned heap values, independent VMs
+after exit/trap, and structured fuel/stack/frame/heap/allocation/handle/output/
+deadline and hard-deadline-unsupported outcomes.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.
+
+The compiler API returns `ValidatedChunk`; VM and disassembly tests therefore
+cannot accidentally execute a raw builder `Chunk`. Validation failure remains a
+compile/validation error rather than an `ExecutionOutcome`.
 
 ## Runtime Acceptance
 

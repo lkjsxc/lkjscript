@@ -66,7 +66,9 @@ CLI path
   -> collect immutable function and product headers
   -> resolve exact types, binding IDs, and local slots into owned HIR
   -> install internal function closures, then lower explicit main and functions
-  -> run_chunk_with_args
+  -> mutable Chunk builder
+  -> validate_chunk -> opaque immutable ValidatedChunk
+  -> run_chunk_with_args(ValidatedChunk, ExecutionConfig)
 ```
 
 Imported immutable function and product declarations share one program
@@ -97,19 +99,28 @@ SSA/backend gates. The VM remains the cold tier and oracle. See
 ## Runtime Flow
 
 ```text
-Chunk main
+ValidatedChunk main
+  -> explicit ExecutionConfig budgets and monotonic deadline
   -> install internal immutable function closures
   -> execute the source main body
-  -> dense opcode dispatch
+  -> dense opcode dispatch with fuel/stack/frame/heap/allocation metering
   -> stack frames and return-adjacent tail reuse
   -> tagged immediate values or arena objects
+  -> bounded handle/output accounting
   -> host operation dispatch
-  -> VM resource table
   -> lkjscript-sys Linux FFI
+  -> owned Returned value or structured terminal outcome
+  -> drop resources, restore terminal, flush, then CLI status translation
 ```
 
-The VM is synchronous and single-threaded. Process exit, blocking host effects,
-and process-global IO prevent safe multi-VM supervision today.
+The VM is synchronous and single-threaded. It never terminates the Rust process;
+exit, traps, limits, deadlines, and host failures stop only the current VM.
+Returned heap values own a private reachable-object snapshot, and later VM
+instances have fresh globals, arenas, handles, counters, and deadlines.
+Process-global stdin/stdout and the terminal guard still prevent parallel VM
+supervision. Cooperative deadlines can overrun inside current filesystem and
+write/send wrappers; hard-deadline mode rejects those operations before effects
+rather than claiming cancellation.
 
 The accepted later native flow is:
 
@@ -152,9 +163,9 @@ an external project receives the same contract.
 ## Accepted Redesign Direction
 
 Explicit main, effect-free imported libraries, local-only mutation, and
-product-threaded editor, terminal, and Brainfuck state are now Current. Next,
-infer fixed-point function effects, validate chunks, and make VM outcomes and
-limits process-safe. Typed SSA, its verifier/differential oracle, and the
+product-threaded editor, terminal, and Brainfuck state, whole-chunk validation,
+structured process-safe outcomes, and bounded VM execution are now Current.
+Next, infer fixed-point function effects. Typed SSA, its verifier/differential oracle, and the
 selected owned Linux x86-64 native code-object backend then follow. The first
 adaptive execution target remains synchronous callable baseline JIT; loop OSR
 and proof-based optimizing JIT are later. Minimal file emission remains only

@@ -131,7 +131,7 @@ impl fmt::Debug for Value {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HeapObj {
     Int(i64),
     Float(f64),

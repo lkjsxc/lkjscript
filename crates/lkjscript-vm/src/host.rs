@@ -48,16 +48,16 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     }
 }
 
-pub fn print_value(arena: &Arena, v: Value) -> Result<()> {
-    let s = display_value(arena, v)?;
-    print!("{s}");
-    Ok(())
+pub fn write_output(bytes: &[u8], operation: &str) -> Result<()> {
+    io::stdout()
+        .write_all(bytes)
+        .map_err(|error| Error::host(format!("{operation}: {error}")))
 }
 
 pub fn flush_out() -> Result<()> {
     io::stdout()
         .flush()
-        .map_err(|e| Error::msg(format!("flush: {e}")))
+        .map_err(|error| Error::host(format!("flush: {error}")))
 }
 
 pub fn read_byte() -> Result<i64> {
@@ -65,7 +65,7 @@ pub fn read_byte() -> Result<i64> {
     match io::stdin().read(&mut buf) {
         Ok(0) => Ok(-1),
         Ok(_) => Ok(i64::from(buf[0])),
-        Err(e) => Err(Error::msg(format!("read-byte: {e}"))),
+        Err(error) => Err(Error::host(format!("read-byte: {error}"))),
     }
 }
 
@@ -73,7 +73,7 @@ pub fn write_byte(number: i64) -> Result<Value> {
     let byte = u8::try_from(number).map_err(|_| Error::msg("write-byte out of range"))?;
     io::stdout()
         .write_all(&[byte])
-        .map_err(|e| Error::msg(format!("write-byte: {e}")))?;
+        .map_err(|error| Error::host(format!("write-byte: {error}")))?;
     Ok(Value::UNIT)
 }
 
@@ -81,6 +81,6 @@ pub fn write_str(arena: &Arena, v: Value) -> Result<Value> {
     let s = crate::host_ext::as_str(arena, v)?;
     io::stdout()
         .write_all(s.as_bytes())
-        .map_err(|e| Error::msg(format!("write-str: {e}")))?;
+        .map_err(|error| Error::host(format!("write-str: {error}")))?;
     Ok(Value::UNIT)
 }

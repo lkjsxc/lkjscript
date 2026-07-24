@@ -132,10 +132,15 @@ fn compare_f64(ordering: Ordering, left: f64, right: f64) -> bool {
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::panic)]
 mod tests {
-    use lkjscript_core::{Chunk, HeapObj, NullJit, Op, MAX_SMALL_I64, MIN_SMALL_I64};
+    use lkjscript_core::{ExecutionConfig, HeapObj, NullJit, Op, MAX_SMALL_I64, MIN_SMALL_I64};
 
     use super::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
-    use crate::run::Vm;
+    use crate::run::{test_chunk, Vm};
+
+    fn test_vm() -> Vm<'static, NullJit> {
+        let chunk = Box::leak(Box::new(test_chunk()));
+        Vm::new(chunk, NullJit, Vec::new(), ExecutionConfig::default())
+    }
 
     fn pop_i64(vm: &mut Vm<'_, NullJit>) -> i64 {
         let value = vm.pop().expect("numeric result on stack");
@@ -152,8 +157,7 @@ mod tests {
 
     #[test]
     fn complete_i64_range_round_trips_through_immediate_and_boxed_values() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         for number in [
             i64::MIN,
             MIN_SMALL_I64 - 1,
@@ -172,8 +176,7 @@ mod tests {
 
     #[test]
     fn i64_arithmetic_is_exact_checked_and_truncating() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
 
         let left = vm.make_i64(9_007_199_254_740_993);
         let right = vm.make_i64(2);
@@ -208,8 +211,7 @@ mod tests {
 
     #[test]
     fn mixed_and_f64_arithmetic_preserve_ieee_f64_identity() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
 
         let integer = vm.make_i64(1);
         let float = vm.arena.alloc(HeapObj::Float(2.0));
@@ -235,8 +237,7 @@ mod tests {
 
     #[test]
     fn numeric_ordering_is_exact_and_uses_ieee_promotion() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         let left = vm.make_i64(9_007_199_254_740_992);
         let right = vm.make_i64(9_007_199_254_740_993);
         vm.push(left);
@@ -260,8 +261,7 @@ mod tests {
 
     #[test]
     fn bitwise_dispatch_uses_all_i64_bits() {
-        let chunk = Chunk::new();
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let mut vm = test_vm();
         let left = vm.make_i64(i64::MIN);
         let right = vm.make_i64(-1);
         vm.push(left);

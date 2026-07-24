@@ -7,10 +7,11 @@ seam under the runtime-JIT-first plan.
 
 ## Status
 
-Dense Rust bytecode, tagged values, and precise mark-sweep are **Current**. The
-call-observation JIT hook is explicitly **Placeholder**. Bounded hotness,
-callable code objects, tiering, and OSR are **Accepted Targets** and are not
-implemented.
+Dense Rust bytecode, tagged values, precise mark-sweep, whole-chunk validation,
+structured process-safe outcomes, and configured VM resource limits are
+**Current**. The call-observation JIT hook is explicitly **Placeholder**.
+Bounded hotness, callable code objects, tiering, and OSR are **Accepted
+Targets** and are not implemented.
 
 ## Decision
 
@@ -28,22 +29,40 @@ no status, sees no loop backedge or VM state, and cannot install or call code.
 It must not return or imply compilation success until verified callable code
 objects and execution transfer replace it.
 
-## Accepted Validated Execution Boundary
+## Current Validated Execution Boundary
 
-Raw mutable chunks are builder/test inputs, not executable programs. One
-validator must consume a raw chunk and produce an opaque immutable
-`ValidatedChunk` before VM, disassembly, or JIT use. It decodes all bytes and
-checks indexes, metadata identities/categories, arity/locals, zero unsupported
-captures, instruction-boundary jumps, CFG stack compatibility, definite local
-initialization, return shape, and configured size limits. Validation failure is
-not a language trap and no effects occur first. Direct malformed-chunk tests use
-the same validator as compiler output.
+Raw mutable `Chunk` values are builder/compiler/test inputs, not executable
+programs. The one `validate_chunk` function consumes a raw chunk and produces
+an opaque immutable `ValidatedChunk`. Public VM entry points, disassembly, and
+the JIT observation interface accept only that type. Compiler-produced chunks
+cross the same validator as direct malformed test chunks.
 
-VM and native execution return one structured model distinguishing returned
-values, explicit exit, language traps, deadline, resource limits, and host
-failure. The execution core and generated code never call
-`std::process::exit`; the CLI maps a completed outcome only after resource
-cleanup, terminal restoration, and required flushing.
+Validation decodes reachable and unreachable bytes and checks opcode retirement,
+operand completeness, configured encoded/table/code/metadata limits, constants,
+prototype and local/global indexes, main/arity/local shape, zero captures,
+product IDs/descriptors/fields and duplicate metadata, instruction-boundary
+jumps, CFG stack depth/category joins, definite local initialization, reachable
+fallthrough, return shape, and statically known scalar, Option, Result, list,
+buffer, handle, and product operation categories. Validation errors remain
+outside execution outcomes and occur before VM effects.
+
+VM execution returns `ExecutionOutcome::{Returned, Exited, Trapped,
+DeadlineExceeded, ResourceLimitExceeded, HostFailure}`. `Returned` contains an
+owned heap snapshot rather than a live arena index. The execution core does not
+call `std::process::exit`; after VM stop it drops handles, restores terminal
+state, and flushes stdout before the CLI translates the outcome. Cleanup errors
+are `HostFailure` and retain a summary of the prior outcome. Ordinary `sys-*`
+failures remain language `ResultErr` values.
+
+`ExecutionConfig` bounds fuel, operand/local stack values, frames, estimated
+live heap bytes, aggregate allocations, monotonically allocated handle slots,
+and stdout bytes. Its cooperative monotonic deadline is checked throughout VM
+execution; stdin, handle reads, accept/receive, poll, and wait use the remaining
+time through current sys polling/sleep APIs. With `require_hard_deadline`, an
+operation whose current wrapper cannot be cancelled, including console writes,
+filesystem open/query, and send/write, returns truthful `HostFailure` before
+that effect. Cooperative mode can overrun while inside such a host call, and
+cleanup flush/restoration is not cancellable.
 
 The exact active contract is
 [Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).

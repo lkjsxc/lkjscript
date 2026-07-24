@@ -65,17 +65,15 @@ pub fn tty_guard_clear() -> Result<(), TtyError> {
     Ok(())
 }
 
-/// Restore a saved state during process shutdown; errors cannot be surfaced.
-pub fn tty_guard_restore() {
-    let saved = match GUARD.lock() {
-        Ok(mut guard) => guard.take(),
-        Err(_) => None,
-    };
+/// Restore and clear a saved state during execution cleanup.
+pub fn tty_guard_restore() -> Result<(), TtyError> {
+    let saved = GUARD.lock().map_err(|_| TtyError::GuardPoisoned)?.take();
     if let Some(state) = saved {
         if is_tty(STDIN_FD) {
-            let _ = tty_set(STDIN_FD, &state);
+            tty_set(STDIN_FD, &state)?;
         }
     }
+    Ok(())
 }
 
 fn validate_state_length(actual: usize) -> Result<(), TtyError> {

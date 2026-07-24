@@ -1,130 +1,319 @@
-//! Bytecode interpreter.
+//! Bytecode interpreter over a validated immutable chunk.
 
 mod calls;
 mod dispatch;
 mod ext_ops;
 mod numeric;
 
-use lkjscript_core::{Chunk, Constant, Error, HeapObj, JitHook, Result, Value};
+use std::time::{Duration, Instant};
+
+use lkjscript_core::{
+    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, HeapObj, HostError, JitHook,
+    ResourceLimitKind, Result, Trap, ValidatedChunk, Value,
+};
 
 use crate::arena::Arena;
 use crate::host_ext::ResourceTable;
 
-pub struct Frame {
+pub(crate) struct Frame {
     pub proto: u32,
     pub ip: usize,
     pub stack_base: usize,
     pub locals_base: usize,
 }
 
+enum Stop {
+    Returned(Value),
+    Exited(i32),
+}
+
 pub struct Vm<'a, J: JitHook> {
-    pub chunk: &'a Chunk,
-    pub globals: Vec<Value>,
-    pub stack: Vec<Value>,
-    pub frames: Vec<Frame>,
-    pub arena: Arena,
-    pub jit: J,
-    pub exit_code: Option<i32>,
-    pub args: Vec<String>,
-    pub resources: ResourceTable,
+    pub(crate) chunk: &'a ValidatedChunk,
+    pub(crate) globals: Vec<Value>,
+    pub(crate) stack: Vec<Value>,
+    pub(crate) frames: Vec<Frame>,
+    pub(crate) arena: Arena,
+    pub(crate) jit: J,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) args: Vec<String>,
+    pub(crate) resources: ResourceTable,
+    config: ExecutionConfig,
+    fuel_remaining: u64,
+    output_bytes: usize,
+    started: Instant,
 }
 
 impl<'a, J: JitHook> Vm<'a, J> {
-    pub fn new(chunk: &'a Chunk, jit: J, args: Vec<String>) -> Self {
+    pub fn new(
+        chunk: &'a ValidatedChunk,
+        jit: J,
+        args: Vec<String>,
+        config: ExecutionConfig,
+    ) -> Self {
         Self {
             chunk,
-            globals: vec![Value::INVALID; chunk.global_names.len()],
+            globals: vec![Value::INVALID; chunk.global_names().len()],
             stack: Vec::new(),
             frames: Vec::new(),
             arena: Arena::default(),
             jit,
             exit_code: None,
             args,
-            resources: ResourceTable::default(),
+            resources: ResourceTable::new(config.max_handles),
+            fuel_remaining: config.instruction_fuel,
+            output_bytes: 0,
+            started: Instant::now(),
+            config,
         }
     }
 
-    pub fn run(&mut self) -> Result<Value> {
+    pub fn run(mut self) -> ExecutionOutcome {
+        let stopped = self.run_loop();
+        let mut outcome = match stopped {
+            Ok(Stop::Returned(value)) => {
+                let arena = std::mem::take(&mut self.arena);
+                match arena.into_owned(value) {
+                    Ok(value) => ExecutionOutcome::Returned(value),
+                    Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
+                        "invalid returned VM value: {error}"
+                    ))),
+                }
+            }
+            Ok(Stop::Exited(code)) => ExecutionOutcome::Exited(code),
+            Err(error) => outcome_from_error(error),
+        };
+
+        let resources = std::mem::replace(&mut self.resources, ResourceTable::new(0));
+        drop(resources);
+        let restore_error = crate::host_term::restore_tty().err();
+        let flush_error = crate::host::flush_out().err();
+        if restore_error.is_some() || flush_error.is_some() {
+            let prior = outcome.summary();
+            let message = match (restore_error, flush_error) {
+                (Some(restore), Some(flush)) => {
+                    format!("{restore}; stdout cleanup {flush}")
+                }
+                (Some(restore), None) => restore.to_string(),
+                (None, Some(flush)) => format!("stdout cleanup {flush}"),
+                (None, None) => String::new(),
+            };
+            outcome = ExecutionOutcome::HostFailure(HostError::during_cleanup(message, prior));
+        }
+        outcome
+    }
+
+    fn run_loop(&mut self) -> Result<Stop> {
         self.frames.push(Frame {
             proto: u32::MAX,
             ip: 0,
             stack_base: 0,
             locals_base: 0,
         });
-        for _ in 0..self.chunk.main.locals {
+        for _ in 0..self.chunk.main().locals {
             self.stack.push(Value::INVALID);
         }
+        self.check_runtime_limits()?;
         loop {
             if let Some(code) = self.exit_code {
-                crate::host_term::restore_tty();
-                std::process::exit(code);
+                return Ok(Stop::Exited(code));
             }
             if self.frames.is_empty() {
-                return self.pop();
+                return self.pop().map(Stop::Returned);
             }
+            self.check_deadline()?;
+            if self.fuel_remaining == 0 {
+                return Err(Error::resource(
+                    ResourceLimitKind::InstructionFuel,
+                    "instruction fuel exhausted",
+                ));
+            }
+            self.fuel_remaining -= 1;
             if self.arena.needs_collect() {
-                let mut roots = self.globals.clone();
-                roots.extend_from_slice(&self.stack);
-                self.arena.collect(&roots);
+                self.collect();
             }
             self.step()?;
+            self.check_runtime_limits()?;
         }
     }
 
-    pub fn code_len(&self) -> Result<usize> {
+    fn collect(&mut self) {
+        let mut roots = self.globals.clone();
+        roots.extend_from_slice(&self.stack);
+        self.arena.collect(&roots);
+    }
+
+    fn check_runtime_limits(&mut self) -> Result<()> {
+        if self.stack.len() > self.config.max_stack_values {
+            return Err(Error::resource(
+                ResourceLimitKind::StackValues,
+                "VM stack value limit exceeded",
+            ));
+        }
+        if self.frames.len() > self.config.max_frames {
+            return Err(Error::resource(
+                ResourceLimitKind::FrameDepth,
+                "VM frame depth limit exceeded",
+            ));
+        }
+        if self.arena.total_allocations() > self.config.max_allocations {
+            return Err(Error::resource(
+                ResourceLimitKind::Allocations,
+                "VM aggregate allocation limit exceeded",
+            ));
+        }
+        if self.arena.heap_bytes() > self.config.max_heap_bytes {
+            self.collect();
+            if self.arena.heap_bytes() > self.config.max_heap_bytes {
+                return Err(Error::resource(
+                    ResourceLimitKind::HeapBytes,
+                    "VM live heap byte limit exceeded",
+                ));
+            }
+        }
+        if self.resources.limit_exceeded()
+            || self.resources.allocated_handle_slots() > self.config.max_handles
+        {
+            return Err(Error::resource(
+                ResourceLimitKind::Handles,
+                "VM handle limit exceeded",
+            ));
+        }
+        self.check_deadline()
+    }
+
+    pub(crate) fn check_deadline(&self) -> Result<()> {
+        if self
+            .config
+            .wall_time
+            .is_some_and(|limit| self.started.elapsed() >= limit)
+        {
+            return Err(Error::deadline("execution wall deadline exceeded"));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn remaining_wall_time(&self) -> Result<Option<Duration>> {
+        let Some(limit) = self.config.wall_time else {
+            return Ok(None);
+        };
+        let elapsed = self.started.elapsed();
+        limit
+            .checked_sub(elapsed)
+            .filter(|remaining| !remaining.is_zero())
+            .map(Some)
+            .ok_or_else(|| Error::deadline("execution wall deadline exceeded"))
+    }
+
+    pub(crate) fn ensure_host_deadline_support(
+        &self,
+        operation: &str,
+        hard_deadline_supported: bool,
+    ) -> Result<()> {
+        if self.config.require_hard_deadline
+            && self.config.wall_time.is_some()
+            && !hard_deadline_supported
+        {
+            return Err(Error::host(format!(
+                "{operation}: hard wall deadline is unsupported by the current host wrapper"
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn deadline_timeout_ms(&self) -> Result<Option<i32>> {
+        let Some(remaining) = self.remaining_wall_time()? else {
+            return Ok(None);
+        };
+        let milliseconds = remaining.as_millis().max(1);
+        Ok(Some(i32::try_from(milliseconds).unwrap_or(i32::MAX)))
+    }
+
+    pub(crate) fn wait_for_stdin(&self) -> Result<()> {
+        let Some(timeout) = self.deadline_timeout_ms()? else {
+            return Ok(());
+        };
+        let ready = lkjscript_sys::poll_fd(lkjscript_sys::STDIN_FD, timeout)
+            .map_err(|error| Error::host(format!("read-byte poll: {error}")))?;
+        if ready {
+            Ok(())
+        } else {
+            Err(Error::deadline(
+                "execution wall deadline exceeded during read-byte",
+            ))
+        }
+    }
+
+    pub(crate) fn record_output(&mut self, bytes: usize) -> Result<()> {
+        let total = self.output_bytes.checked_add(bytes).ok_or_else(|| {
+            Error::resource(
+                ResourceLimitKind::OutputBytes,
+                "VM output byte counter overflow",
+            )
+        })?;
+        if total > self.config.max_output_bytes {
+            return Err(Error::resource(
+                ResourceLimitKind::OutputBytes,
+                "VM output byte limit exceeded",
+            ));
+        }
+        self.output_bytes = total;
+        Ok(())
+    }
+
+    pub(crate) fn code_len(&self) -> Result<usize> {
         Ok(self.code()?.len())
     }
 
-    pub fn code(&self) -> Result<&[u8]> {
-        let fr = self.frames.last().ok_or_else(|| Error::msg("no frame"))?;
-        if fr.proto == u32::MAX {
-            Ok(&self.chunk.main.code)
+    pub(crate) fn code(&self) -> Result<&[u8]> {
+        let frame = self.frames.last().ok_or_else(|| Error::msg("no frame"))?;
+        if frame.proto == u32::MAX {
+            Ok(&self.chunk.main().code)
         } else {
             self.chunk
-                .protos
-                .get(fr.proto as usize)
+                .protos()
+                .get(frame.proto as usize)
                 .map(|proto| proto.code.as_slice())
                 .ok_or_else(|| Error::msg("frame proto index out of range"))
         }
     }
 
-    pub fn read_u8(&mut self) -> Result<u8> {
+    pub(crate) fn read_u8(&mut self) -> Result<u8> {
         let (proto, ip) = {
-            let fr = self.frames.last().ok_or_else(|| Error::msg("no frame"))?;
-            (fr.proto, fr.ip)
+            let frame = self.frames.last().ok_or_else(|| Error::msg("no frame"))?;
+            (frame.proto, frame.ip)
         };
         let code = if proto == u32::MAX {
-            &self.chunk.main.code
+            &self.chunk.main().code
         } else {
             &self
                 .chunk
-                .protos
+                .protos()
                 .get(proto as usize)
                 .ok_or_else(|| Error::msg("frame proto index out of range"))?
                 .code
         };
-        let b = *code.get(ip).ok_or_else(|| Error::msg("ip out of range"))?;
-        if let Some(fr) = self.frames.last_mut() {
-            fr.ip += 1;
+        let byte = *code.get(ip).ok_or_else(|| Error::msg("ip out of range"))?;
+        if let Some(frame) = self.frames.last_mut() {
+            frame.ip += 1;
         }
-        Ok(b)
+        Ok(byte)
     }
 
-    pub fn read_u16(&mut self) -> Result<u16> {
-        let a = self.read_u8()? as u16;
-        let b = self.read_u8()? as u16;
-        Ok(a | (b << 8))
+    pub(crate) fn read_u16(&mut self) -> Result<u16> {
+        let low = self.read_u8()? as u16;
+        let high = self.read_u8()? as u16;
+        Ok(low | (high << 8))
     }
 
-    pub fn push(&mut self, v: Value) {
-        self.stack.push(v);
+    pub(crate) fn push(&mut self, value: Value) {
+        self.stack.push(value);
     }
 
-    pub fn make_i64(&mut self, number: i64) -> Value {
+    pub(crate) fn make_i64(&mut self, number: i64) -> Value {
         Value::from_small_i64(number).unwrap_or_else(|| self.arena.alloc(HeapObj::Int(number)))
     }
 
-    pub fn as_i64(&self, value: Value) -> Result<i64> {
+    pub(crate) fn as_i64(&self, value: Value) -> Result<i64> {
         if let Some(number) = value.as_small_i64() {
             return Ok(number);
         }
@@ -134,7 +323,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
         }
     }
 
-    pub fn pop(&mut self) -> Result<Value> {
+    pub(crate) fn pop(&mut self) -> Result<Value> {
         let value = self
             .stack
             .pop()
@@ -145,7 +334,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
         Ok(value)
     }
 
-    pub fn peek(&self) -> Result<Value> {
+    pub(crate) fn peek(&self) -> Result<Value> {
         let value = self
             .stack
             .last()
@@ -157,10 +346,10 @@ impl<'a, J: JitHook> Vm<'a, J> {
         Ok(value)
     }
 
-    pub fn load_const(&mut self, id: usize) -> Result<Value> {
+    pub(crate) fn load_const(&mut self, id: usize) -> Result<Value> {
         match self
             .chunk
-            .constants
+            .constants()
             .get(id)
             .ok_or_else(|| Error::msg("bad const"))?
         {
@@ -177,7 +366,7 @@ impl<'a, J: JitHook> Vm<'a, J> {
         let ip = self
             .frames
             .last()
-            .map(|f| f.ip)
+            .map(|frame| frame.ip)
             .ok_or_else(|| Error::msg("no frame"))?;
         if ip >= code_len {
             return Err(Error::msg("function ended without Return"));
@@ -189,230 +378,220 @@ impl<'a, J: JitHook> Vm<'a, J> {
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
+pub(crate) fn test_chunk() -> ValidatedChunk {
+    let mut chunk = lkjscript_core::Chunk::new();
+    chunk.main.emit(lkjscript_core::Op::Unit);
+    chunk.main.emit(lkjscript_core::Op::Return);
+    lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
+        .expect("VM unit-test chunk validates")
+}
+
+fn outcome_from_error(error: Error) -> ExecutionOutcome {
+    match error.class() {
+        ErrorClass::Ordinary => ExecutionOutcome::Trapped(Trap::new(error.to_string())),
+        ErrorClass::Deadline => ExecutionOutcome::DeadlineExceeded,
+        ErrorClass::Resource(kind) => ExecutionOutcome::ResourceLimitExceeded(kind),
+        ErrorClass::Host => ExecutionOutcome::HostFailure(HostError::new(error.to_string())),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::field_reassign_with_default)]
 mod tests {
-    use lkjscript_core::{Chunk, NullJit, Op, ProductFieldRef, ProductId, ProductMetadata};
+    use std::time::Duration;
+
+    use lkjscript_core::{
+        validate_chunk, Chunk, Constant, ExecutionConfig, ExecutionOutcome, NullJit, Op,
+        ResourceLimitKind, ValidationLimits,
+    };
 
     use super::Vm;
 
-    fn vm_error(chunk: Chunk) -> String {
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
-        vm.run().expect_err("malformed chunk must fail").to_string()
-    }
-
-    #[test]
-    fn missing_and_uninitialized_vm_values_are_errors() {
+    fn validated(ops: &[Op]) -> lkjscript_core::ValidatedChunk {
         let mut chunk = Chunk::new();
-        assert!(vm_error(chunk.clone()).contains("without Return"));
+        for op in ops {
+            chunk.main.emit(*op);
+        }
+        validate(chunk)
+    }
 
-        chunk.main.code = vec![Op::Pop as u8, Op::Return as u8];
-        assert!(vm_error(chunk).contains("stack underflow"));
-
-        let mut local = Chunk::new();
-        local.main.locals = 1;
-        local.main.emit_op_u8(Op::LoadLocal, 0);
-        local.main.emit(Op::Return);
-        assert!(vm_error(local).contains("uninitialized slot"));
-
-        let mut global = Chunk::new();
-        global.global_names.push("missing".into());
-        global.main.emit_op_u16(Op::LoadGlobal, 0);
-        global.main.emit(Op::Return);
-        assert!(vm_error(global).contains("uninitialized slot"));
-
-        let mut store = Chunk::new();
-        store.main.emit(Op::Unit);
-        store.main.emit_op_u16(Op::StoreGlobal, 0);
-        store.main.emit(Op::Return);
-        assert!(vm_error(store).contains("StoreGlobal slot out of range"));
+    fn validate(chunk: Chunk) -> lkjscript_core::ValidatedChunk {
+        validate_chunk(chunk, &ValidationLimits::default()).expect("test chunk validates")
     }
 
     #[test]
-    fn malformed_product_metadata_operands_and_categories_are_errors() {
-        let mut missing_product = Chunk::new();
-        missing_product.main.emit_op_u16(Op::MakeProduct, 0);
-        missing_product.main.emit(Op::Return);
-        assert!(vm_error(missing_product).contains("product metadata"));
+    fn fuel_and_returned_values_use_structured_outcomes() {
+        let chunk = validated(&[Op::Unit, Op::Return]);
+        let returned = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default()).run();
+        assert!(matches!(returned, ExecutionOutcome::Returned(value) if value.is_unit()));
 
-        for opcode in [Op::MakeProduct, Op::LoadProductField, Op::WithProductField] {
-            let mut truncated = Chunk::new();
-            truncated.main.code = vec![opcode as u8, 0];
-            assert!(vm_error(truncated).contains("ip out of range"));
-        }
-
-        let mut wrong_metadata_identity = Chunk::new();
-        wrong_metadata_identity.products.push(ProductMetadata {
-            id: ProductId::new(1),
-            name: "Wrong".into(),
-            fields: Vec::new(),
-        });
-        wrong_metadata_identity.main.emit_op_u16(Op::MakeProduct, 0);
-        wrong_metadata_identity.main.emit(Op::Return);
-        assert!(vm_error(wrong_metadata_identity).contains("identity is invalid"));
-
-        let mut too_wide = Chunk::new();
-        too_wide.products.push(ProductMetadata {
-            id: ProductId::new(0),
-            name: "Wide".into(),
-            fields: (0..16).map(|index| format!("f{index}")).collect(),
-        });
-        too_wide.main.emit_op_u16(Op::MakeProduct, 0);
-        too_wide.main.emit(Op::Return);
-        assert!(vm_error(too_wide).contains("exceeds field limit"));
-
-        let product = ProductMetadata {
-            id: ProductId::new(0),
-            name: "Point".into(),
-            fields: vec!["x".into()],
-        };
-
-        let mut missing_value = Chunk::new();
-        missing_value.products.push(product.clone());
-        missing_value.main.emit_op_u16(Op::MakeProduct, 0);
-        missing_value.main.emit(Op::Return);
-        assert!(vm_error(missing_value).contains("stack underflow"));
-
-        let mut missing_descriptor = Chunk::new();
-        missing_descriptor.products.push(product.clone());
-        missing_descriptor.main.emit(Op::Unit);
-        missing_descriptor.main.emit_op_u16(Op::MakeProduct, 0);
-        missing_descriptor.main.emit_op_u16(Op::LoadProductField, 0);
-        missing_descriptor.main.emit(Op::Return);
-        assert!(vm_error(missing_descriptor).contains("descriptor index out of range"));
-
-        let mut bad_field = Chunk::new();
-        bad_field.products.push(product.clone());
-        bad_field.product_fields.push(ProductFieldRef {
-            product: ProductId::new(0),
-            field: 1,
-        });
-        bad_field.main.emit(Op::Unit);
-        bad_field.main.emit_op_u16(Op::MakeProduct, 0);
-        bad_field.main.emit_op_u16(Op::LoadProductField, 0);
-        bad_field.main.emit(Op::Return);
-        assert!(vm_error(bad_field).contains("product field index out of range"));
-
-        let mut wrong_category = Chunk::new();
-        wrong_category.products.push(product.clone());
-        wrong_category.product_fields.push(ProductFieldRef {
-            product: ProductId::new(0),
-            field: 0,
-        });
-        wrong_category.main.emit(Op::Unit);
-        wrong_category.main.emit_op_u16(Op::LoadProductField, 0);
-        wrong_category.main.emit(Op::Return);
-        assert!(vm_error(wrong_category).contains("expects Product"));
-
-        let mut wrong_identity = Chunk::new();
-        wrong_identity.products.push(product);
-        wrong_identity.products.push(ProductMetadata {
-            id: ProductId::new(1),
-            name: "Other".into(),
-            fields: vec!["x".into()],
-        });
-        wrong_identity.product_fields.push(ProductFieldRef {
-            product: ProductId::new(1),
-            field: 0,
-        });
-        wrong_identity.main.emit(Op::Unit);
-        wrong_identity.main.emit_op_u16(Op::MakeProduct, 0);
-        wrong_identity.main.emit_op_u16(Op::LoadProductField, 0);
-        wrong_identity.main.emit(Op::Return);
-        assert!(vm_error(wrong_identity).contains("identity mismatch"));
-
-        let mut replacement_descriptor = Chunk::new();
-        replacement_descriptor.products.push(ProductMetadata {
-            id: ProductId::new(0),
-            name: "Point".into(),
-            fields: vec!["x".into()],
-        });
-        replacement_descriptor.main.emit(Op::Unit);
-        replacement_descriptor.main.emit_op_u16(Op::MakeProduct, 0);
-        replacement_descriptor.main.emit(Op::Unit);
-        replacement_descriptor
-            .main
-            .emit_op_u16(Op::WithProductField, 0);
-        replacement_descriptor.main.emit(Op::Return);
-        assert!(vm_error(replacement_descriptor).contains("descriptor index out of range"));
-
-        let mut replacement_field = Chunk::new();
-        replacement_field.products.push(ProductMetadata {
-            id: ProductId::new(0),
-            name: "Point".into(),
-            fields: vec!["x".into()],
-        });
-        replacement_field.product_fields.push(ProductFieldRef {
-            product: ProductId::new(0),
-            field: 1,
-        });
-        replacement_field.main.emit(Op::Unit);
-        replacement_field.main.emit_op_u16(Op::MakeProduct, 0);
-        replacement_field.main.emit(Op::Unit);
-        replacement_field.main.emit_op_u16(Op::WithProductField, 0);
-        replacement_field.main.emit(Op::Return);
-        assert!(vm_error(replacement_field).contains("product field index out of range"));
-
-        let mut replacement_identity = Chunk::new();
-        replacement_identity.products.push(ProductMetadata {
-            id: ProductId::new(0),
-            name: "Point".into(),
-            fields: vec!["x".into()],
-        });
-        replacement_identity.products.push(ProductMetadata {
-            id: ProductId::new(1),
-            name: "Other".into(),
-            fields: vec!["x".into()],
-        });
-        replacement_identity.product_fields.push(ProductFieldRef {
-            product: ProductId::new(1),
-            field: 0,
-        });
-        replacement_identity.main.emit(Op::Unit);
-        replacement_identity.main.emit_op_u16(Op::MakeProduct, 0);
-        replacement_identity.main.emit(Op::Unit);
-        replacement_identity
-            .main
-            .emit_op_u16(Op::WithProductField, 0);
-        replacement_identity.main.emit(Op::Return);
-        assert!(vm_error(replacement_identity).contains("identity mismatch"));
-
-        let mut replacement_category = Chunk::new();
-        replacement_category.products.push(ProductMetadata {
-            id: ProductId::new(0),
-            name: "Point".into(),
-            fields: vec!["x".into()],
-        });
-        replacement_category.product_fields.push(ProductFieldRef {
-            product: ProductId::new(0),
-            field: 0,
-        });
-        replacement_category.main.emit(Op::Unit);
-        replacement_category.main.emit(Op::Unit);
-        replacement_category
-            .main
-            .emit_op_u16(Op::WithProductField, 0);
-        replacement_category.main.emit(Op::Return);
-        assert!(vm_error(replacement_category).contains("expects Product"));
+        let mut config = ExecutionConfig::default();
+        config.instruction_fuel = 1;
+        let exhausted = Vm::new(&chunk, NullJit, Vec::new(), config).run();
+        assert_eq!(
+            exhausted,
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel)
+        );
     }
 
     #[test]
-    fn malformed_conditions_and_removed_semantic_opcodes_are_errors() {
-        let mut not = Chunk::new();
-        not.main.emit(Op::Unit);
-        not.main.emit(Op::Not);
-        not.main.emit(Op::Return);
-        assert!(vm_error(not).contains("not expects Bool"));
+    fn exit_does_not_terminate_or_contaminate_later_vms() {
+        let mut exit = Chunk::new();
+        let zero = exit.add_const(Constant::I64(0));
+        exit.main.emit_op_u16(Op::LoadConst, zero.0);
+        exit.main.emit(Op::Exit);
+        let exit = validate_chunk(exit, &ValidationLimits::default()).expect("exit validates");
+        assert_eq!(
+            Vm::new(&exit, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+            ExecutionOutcome::Exited(0)
+        );
 
-        let mut branch = Chunk::new();
-        branch.main.emit(Op::Unit);
-        branch.main.emit_op_u16(Op::JumpIfFalse, 0);
-        branch.main.emit(Op::Unit);
-        branch.main.emit(Op::Return);
-        assert!(vm_error(branch).contains("JumpIfFalse expects Bool"));
+        let returned = validated(&[Op::Unit, Op::Return]);
+        assert!(matches!(
+            Vm::new(
+                &returned,
+                NullJit,
+                Vec::new(),
+                ExecutionConfig::default()
+            )
+            .run(),
+            ExecutionOutcome::Returned(value) if value.is_unit()
+        ));
+    }
 
-        for removed in [21, 82, 145] {
-            let mut removed_opcode = Chunk::new();
-            removed_opcode.main.code = vec![removed];
-            assert!(vm_error(removed_opcode).contains("unknown opcode"));
-        }
+    #[test]
+    fn trap_does_not_contaminate_a_later_vm() {
+        let mut trap = Chunk::new();
+        let one = trap.add_const(Constant::I64(1));
+        let zero = trap.add_const(Constant::I64(0));
+        trap.main.emit_op_u16(Op::LoadConst, one.0);
+        trap.main.emit_op_u16(Op::LoadConst, zero.0);
+        trap.main.emit(Op::Div);
+        trap.main.emit(Op::Return);
+        let trap = validate(trap);
+        assert!(matches!(
+            Vm::new(&trap, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+            ExecutionOutcome::Trapped(_)
+        ));
+
+        let returned = validated(&[Op::Unit, Op::Return]);
+        assert!(matches!(
+            Vm::new(
+                &returned,
+                NullJit,
+                Vec::new(),
+                ExecutionConfig::default()
+            )
+            .run(),
+            ExecutionOutcome::Returned(value) if value.is_unit()
+        ));
+    }
+
+    #[test]
+    fn returned_heap_values_own_their_storage() {
+        let mut chunk = Chunk::new();
+        let text = chunk.add_const(Constant::Str("owned".into()));
+        chunk.main.emit_op_u16(Op::LoadConst, text.0);
+        chunk.main.emit(Op::Return);
+        let chunk = validate(chunk);
+        let outcome = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default()).run();
+        assert!(matches!(
+            outcome,
+            ExecutionOutcome::Returned(value) if value.as_str() == Some("owned")
+        ));
+    }
+
+    #[test]
+    fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
+        let returned = validated(&[Op::Unit, Op::Return]);
+
+        let mut stack = ExecutionConfig::default();
+        stack.max_stack_values = 0;
+        assert_eq!(
+            Vm::new(&returned, NullJit, Vec::new(), stack).run(),
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+        );
+
+        let mut frames = ExecutionConfig::default();
+        frames.max_frames = 0;
+        assert_eq!(
+            Vm::new(&returned, NullJit, Vec::new(), frames).run(),
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
+        );
+
+        let mut string = Chunk::new();
+        let text = string.add_const(Constant::Str("x".into()));
+        string.main.emit_op_u16(Op::LoadConst, text.0);
+        string.main.emit(Op::Return);
+        let string = validate(string);
+
+        let mut heap = ExecutionConfig::default();
+        heap.max_heap_bytes = 0;
+        assert_eq!(
+            Vm::new(&string, NullJit, Vec::new(), heap).run(),
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
+        );
+
+        let mut allocations = ExecutionConfig::default();
+        allocations.max_allocations = 0;
+        assert_eq!(
+            Vm::new(&string, NullJit, Vec::new(), allocations).run(),
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
+        );
+
+        let mut output_chunk = Chunk::new();
+        let text = output_chunk.add_const(Constant::Str("x".into()));
+        output_chunk.main.emit_op_u16(Op::LoadConst, text.0);
+        output_chunk.main.emit(Op::WriteStr);
+        output_chunk.main.emit(Op::Return);
+        let output_chunk = validate(output_chunk);
+        let mut output = ExecutionConfig::default();
+        output.max_output_bytes = 0;
+        assert_eq!(
+            Vm::new(&output_chunk, NullJit, Vec::new(), output).run(),
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::OutputBytes)
+        );
+
+        let mut hard_deadline = ExecutionConfig::default();
+        hard_deadline.require_hard_deadline = true;
+        assert!(matches!(
+            Vm::new(&output_chunk, NullJit, Vec::new(), hard_deadline).run(),
+            ExecutionOutcome::HostFailure(error)
+                if error.as_str().contains("hard wall deadline is unsupported")
+        ));
+    }
+
+    #[test]
+    fn configured_handle_and_wall_limits_are_structured() {
+        let socket = validated(&[Op::SysSocket, Op::Return]);
+        let mut handles = ExecutionConfig::default();
+        handles.max_handles = 0;
+        assert_eq!(
+            Vm::new(&socket, NullJit, Vec::new(), handles).run(),
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Handles)
+        );
+
+        let mut loop_chunk = Chunk::new();
+        loop_chunk.main.emit_op_u16(Op::Jump, 0);
+        let loop_chunk = validate(loop_chunk);
+        let mut deadline = ExecutionConfig::default();
+        deadline.wall_time = Some(Duration::ZERO);
+        assert_eq!(
+            Vm::new(&loop_chunk, NullJit, Vec::new(), deadline).run(),
+            ExecutionOutcome::DeadlineExceeded
+        );
+
+        let mut wait = Chunk::new();
+        let duration = wait.add_const(Constant::I64(50));
+        wait.main.emit_op_u16(Op::LoadConst, duration.0);
+        wait.main.emit(Op::SysWaitMs);
+        wait.main.emit(Op::Return);
+        let wait = validate(wait);
+        let mut deadline = ExecutionConfig::default();
+        deadline.wall_time = Some(Duration::from_millis(1));
+        assert_eq!(
+            Vm::new(&wait, NullJit, Vec::new(), deadline).run(),
+            ExecutionOutcome::DeadlineExceeded
+        );
     }
 }

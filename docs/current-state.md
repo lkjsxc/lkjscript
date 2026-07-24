@@ -39,6 +39,18 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   labels, and exact source-closure coverage are machine-checked
 - Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
   traced immutable product objects, and return-adjacent tail-frame reuse
+- Execution boundary: mutable `Chunk` is builder-only; one whole-chunk
+  validator produces opaque immutable `ValidatedChunk`, and VM, disassembly,
+  and the JIT observation seam accept only validated input; compiler output
+  crosses the same validator
+- Outcomes: VM execution distinguishes returned, exited, trapped, deadline,
+  resource-limit, and host-failure outcomes; the core does not terminate the
+  process, returned heap values own their reachable storage, and cleanup occurs
+  before CLI exit-status translation
+- Runtime budgets: explicit configuration bounds fuel, stack values, frames,
+  estimated live heap, aggregate allocations, handles, output, and cooperative
+  wall time; hard-deadline mode rejects host wrappers that cannot guarantee
+  cancellation
 - Semantics: executable roots have exactly one no-parameter typed main;
   imports contain declarations only; top-level `do` and runtime value defs are
   removed; `var` introduces one exactly typed mutable local and local-only
@@ -87,15 +99,16 @@ The highest-priority defects are:
    fixed-point summaries;
 2. strings and IO lack a lossless bulk byte contract, and some library file
    operations are per-byte or quadratic;
-3. public malformed chunks are not prevalidated, although stack underflow,
-   uninitialized slots, bad slot indexes, removed opcodes, non-Bool control,
-   and malformed product metadata/descriptor/category/identity boundaries
-   return VM errors instead of semantic fallback values;
-4. source/import aggregate bytes, depth, count, constants, internal function
-   slots, bytecode, VM fuel, heap, handles, output, and wall time are not
-   comprehensively bounded;
-5. process exit and terminal restoration remain process-global, and monotonic
-   handle metadata remains until the VM ends.
+3. source/import aggregate bytes and counts are not comprehensively bounded;
+   bytecode tables/data/code/metadata and VM execution resources are bounded;
+4. cooperative deadlines can overrun inside filesystem, console-write,
+   send/write, terminal-cleanup, or other non-cancellable wrappers;
+   hard-deadline mode reports those operations as unsupported `HostFailure`
+   before effects; live-heap accounting is estimated at VM instruction
+   boundaries, and `print` builds its host-format string before the output check;
+5. stdin/stdout and the terminal guard remain process-global, so concurrent VM
+   supervision is unsupported; handle metadata is VM-local and bounded but
+   monotonically allocated until that VM ends.
 
 ## Evidence
 
@@ -118,6 +131,8 @@ Mandelbrot, and performance are not implied.
 | Brainfuck smoke | direct and run-folded correctness/failure boundaries passed |
 | lkjedit smoke | passed; existing-file insert/save/reopen, missing-file creation, CRLF redraw, and command paint |
 | one-shot HTTP smoke | passed |
+| validated-chunk boundaries | centralized decode/CFG/metadata validation and random raw-chunk no-panic tests passed after integration |
+| structured execution boundaries | return/exit/trap/deadline and configured resource categories passed; returned heap values remain owned after VM teardown |
 | native-backend decision spike | 8 randomized warmups plus 31 retained pairs; exact generated calls passed; owned execution median/MAD 48.406374/0.540016 ms versus Cranelift 0.134.2 119.422902/0.566505 ms; temporary artifacts removed; no production backend implemented |
 | Phase A `check-docs` and `git diff --check` | passed |
 
@@ -131,14 +146,12 @@ The active engineering cycle must reach a real callable baseline JIT on Linux
 x86-64; documentation, SSA scaffolding, machine-code emission, disassembly, or
 an observation hook alone cannot complete it. The dependency sequence is:
 
-Phase A is Current: explicit typed main, declaration-only imports, local-only
-mutation, removal of source runtime globals, and product-threaded lkjedit,
-terminal, and Brainfuck state are implemented. The remaining dependency
-sequence is:
+Explicit typed main, declaration-only imports, local-only mutation, removal of
+source runtime globals, product-threaded workload state, whole-chunk validation,
+structured outcomes, and bounded VM execution are Current. The remaining
+dependency sequence is:
 
-1. infer deterministic fixed-point function effects, validate complete chunks
-   before execution, and replace process termination/string-only runtime errors
-   with structured process-safe outcomes and explicit runtime limits;
+1. infer deterministic fixed-point function effects;
 2. lower HIR through verified typed SSA, an independent differential evaluator,
    and isolated non-speculative normalization; cut reference bytecode over to
    SSA before the native backend becomes authoritative;

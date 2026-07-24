@@ -1,15 +1,25 @@
 #![allow(clippy::expect_used)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{Limits, Op, Value};
+use lkjscript_core::{
+    Error, ExecutionConfig, ExecutionOutcome, Limits, Op, OwnedValue, ValidatedChunk,
+};
 use lkjscript_vm::{run_chunk, run_chunk_with_args};
 
-fn compile(source: &str) -> lkjscript_core::Result<lkjscript_core::Chunk> {
+fn compile(source: &str) -> lkjscript_core::Result<ValidatedChunk> {
     compile_source(source, "hir-behavior.lkjscript", &Limits::default())
 }
 
-fn evaluate(source: &str) -> lkjscript_core::Result<Value> {
-    run_chunk(&compile(source)?)
+fn returned(outcome: ExecutionOutcome) -> lkjscript_core::Result<OwnedValue> {
+    match outcome {
+        ExecutionOutcome::Returned(value) => Ok(value),
+        ExecutionOutcome::Trapped(trap) => Err(Error::msg(trap.to_string())),
+        other => Err(Error::msg(other.summary())),
+    }
+}
+
+fn evaluate(source: &str) -> lkjscript_core::Result<OwnedValue> {
+    returned(run_chunk(&compile(source)?, &ExecutionConfig::default()))
 }
 
 fn bool_main(expression: &str) -> String {
@@ -28,27 +38,24 @@ fn assert_main_bool(expression: &str, expected: bool) {
 #[test]
 fn explicit_main_returns_its_exact_body_value() {
     let source = "main/\nsig/\n->\nI64\n/sig\n42\n/main\n";
-    assert_eq!(
-        evaluate(source).expect("evaluate main").as_small_i64(),
-        Some(42)
-    );
+    assert_eq!(evaluate(source).expect("evaluate main").as_i64(), Some(42));
     let chunk = compile(source).expect("compile explicit main");
-    assert_eq!(chunk.main.name, "main");
-    assert_eq!(chunk.main.arity, 0);
-    assert!(chunk.main.code.ends_with(&[Op::Return as u8]));
-    assert!(chunk.global_names.is_empty());
+    assert_eq!(chunk.main().name, "main");
+    assert_eq!(chunk.main().arity, 0);
+    assert!(chunk.main().code.ends_with(&[Op::Return as u8]));
+    assert!(chunk.global_names().is_empty());
 }
 
 #[test]
 fn local_var_set_and_shadowing_execute_through_store_local() {
     let source = "main/\nsig/\n->\nI64\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n1\ndo/\nset/\nx\n2\n/set\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n+/\nx\n1\n/+\ndo/\nset/\nx\n+/\nx\n3\n/+\n/set\nx\n/do\n/var\n/do\n/var\n/main\n";
     let chunk = compile(source).expect("compile local mutation");
-    assert_eq!(chunk.main.locals, 2);
-    assert!(chunk.main.code.contains(&(Op::StoreLocal as u8)));
+    assert_eq!(chunk.main().locals, 2);
+    assert!(chunk.main().code.contains(&(Op::StoreLocal as u8)));
     assert_eq!(
-        run_chunk(&chunk)
+        returned(run_chunk(&chunk, &ExecutionConfig::default()))
             .expect("run local mutation")
-            .as_small_i64(),
+            .as_i64(),
         Some(6)
     );
 
@@ -60,9 +67,7 @@ fn local_var_set_and_shadowing_execute_through_store_local() {
 fn function_local_var_is_per_invocation_and_typed() {
     let source = "def/\nname/\nincrement\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nstart\nI64\n/params\nvar/\nname/\nvalue\n/name\ntype/\nI64\n/type\nstart\ndo/\nset/\nvalue\n+/\nvalue\n1\n/+\n/set\nvalue\n/do\n/var\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\n+/\nincrement/\n4\n/increment\nincrement/\n9\n/increment\n/+\n/main\n";
     assert_eq!(
-        evaluate(source)
-            .expect("function-local mutation")
-            .as_small_i64(),
+        evaluate(source).expect("function-local mutation").as_i64(),
         Some(15)
     );
 }
@@ -102,7 +107,7 @@ fn local_var_exact_type_and_initializer_scope_are_enforced() {
     assert_eq!(
         evaluate(outer_initializer)
             .expect("initializer sees outer binding")
-            .as_small_i64(),
+            .as_i64(),
         Some(7)
     );
 }
@@ -111,9 +116,7 @@ fn local_var_exact_type_and_initializer_scope_are_enforced() {
 fn immutable_product_state_threads_through_a_local_var() {
     let source = "product/\nname/\nCounterState\n/name\nfields/\nfield/\nname/\ncount\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\ndef/\nname/\nincrement-state\n/name\nfn/\nsig/\nProduct\nCounterState\n->\nProduct\nCounterState\n/sig\nparams/\nstate\nProduct/\nCounterState\n/Product\n/params\nwith-field/\nstate\ncount\n+/\nfield/\nstate\ncount\n/field\n1\n/+\n/with-field\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nvar/\nname/\nstate\n/name\ntype/\nProduct\nCounterState\n/type\nproduct-value/\nCounterState\nfield/\ncount\n0\n/field\n/product-value\ndo/\nset/\nstate\nincrement-state/\nstate\n/increment-state\n/set\nset/\nstate\nincrement-state/\nstate\n/increment-state\n/set\nfield/\nstate\ncount\n/field\n/do\n/var\n/main\n";
     assert_eq!(
-        evaluate(source)
-            .expect("thread product state")
-            .as_small_i64(),
+        evaluate(source).expect("thread product state").as_i64(),
         Some(2)
     );
 }
@@ -123,9 +126,13 @@ fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
     let argument = "main/\nsig/\n->\nI64\n/sig\nstr-len/\nunwrap-some/\narg/\n0\n/arg\n/unwrap-some\n/str-len\n/main\n";
     let chunk = compile(argument).expect("compile argument main");
     assert_eq!(
-        run_chunk_with_args(&chunk, &["hello".into()])
-            .expect("argument present")
-            .as_small_i64(),
+        returned(run_chunk_with_args(
+            &chunk,
+            &["hello".into()],
+            &ExecutionConfig::default(),
+        ))
+        .expect("argument present")
+        .as_i64(),
         Some(5)
     );
 

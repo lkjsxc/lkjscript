@@ -52,7 +52,7 @@ pub fn call<J: JitHook>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
             vm.jit.observe_call(vm.chunk, proto);
             let p = vm
                 .chunk
-                .protos
+                .protos()
                 .get(proto as usize)
                 .ok_or_else(|| Error::msg("call proto index out of range"))?;
             if argc as usize != p.arity as usize {
@@ -109,7 +109,7 @@ fn is_tail_position<J: JitHook>(vm: &Vm<'_, J>) -> bool {
         return false;
     }
     vm.chunk
-        .protos
+        .protos()
         .get(frame.proto as usize)
         .and_then(|proto| proto.code.get(frame.ip))
         .copied()
@@ -120,27 +120,33 @@ fn is_tail_position<J: JitHook>(vm: &Vm<'_, J>) -> bool {
 #[allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use lkjscript_core::{Chunk, FunctionProto, NullJit};
+    use lkjscript_core::{
+        validate_chunk, Chunk, ExecutionConfig, FunctionProto, NullJit, ValidationLimits,
+    };
 
     #[test]
     fn tail_call_reuses_the_current_frame() {
         let mut chunk = Chunk::new();
+        chunk.main.emit(Op::Unit);
+        chunk.main.emit(Op::Return);
         chunk.protos.push(FunctionProto {
             name: "callee".into(),
             arity: 1,
             locals: 1,
-            code: vec![Op::Return as u8],
+            code: vec![Op::LoadLocal as u8, 0, Op::Return as u8],
         });
         chunk.protos.push(FunctionProto {
             name: "caller".into(),
             arity: 0,
             locals: 0,
-            code: vec![Op::Return as u8],
+            code: vec![Op::Unit as u8, Op::Return as u8],
         });
-        let mut vm = Vm::new(&chunk, NullJit, Vec::new());
+        let chunk =
+            validate_chunk(chunk, &ValidationLimits::default()).expect("call test chunk validates");
+        let mut vm = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default());
         vm.frames.push(Frame {
             proto: 1,
-            ip: 0,
+            ip: 1,
             stack_base: 0,
             locals_base: 0,
         });

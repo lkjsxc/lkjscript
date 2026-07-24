@@ -14,6 +14,29 @@ fn push_i64_result<J: JitHook>(vm: &mut Vm<'_, J>, result: Result<i64>) {
     push_language_result(vm, result);
 }
 
+fn sleep_result(milliseconds: u64) -> Result<Value> {
+    lkjscript_sys::sleep_ms(milliseconds)
+        .map(|()| Value::UNIT)
+        .map_err(|error| lkjscript_core::Error::msg(format!("sys-wait-ms: {error}")))
+}
+
+fn wait_readable<J: JitHook>(
+    vm: &Vm<'_, J>,
+    handle: Value,
+    operation: &str,
+) -> Result<Option<lkjscript_core::Error>> {
+    let Some(timeout) = vm.deadline_timeout_ms()? else {
+        return Ok(None);
+    };
+    match vm.resources.poll_readable(handle, timeout, operation) {
+        Ok(true) => Ok(None),
+        Ok(false) => Err(lkjscript_core::Error::deadline(format!(
+            "execution wall deadline exceeded during {operation}"
+        ))),
+        Err(error) => Ok(Some(error)),
+    }
+}
+
 pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::StrLen as u8 => {
@@ -70,6 +93,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysOpenRead as u8 => {
+            vm.ensure_host_deadline_support("sys-open-read", false)?;
             let path = vm.pop()?;
             let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
             let result = vm.resources.sys_open_read(&path);
@@ -77,6 +101,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysOpenWrite as u8 => {
+            vm.ensure_host_deadline_support("sys-open-write", false)?;
             let path = vm.pop()?;
             let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
             let result = vm.resources.sys_open_write(&path);
@@ -84,6 +109,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysClose as u8 => {
+            vm.ensure_host_deadline_support("sys-close", false)?;
             let handle = vm.pop()?;
             let result = vm.resources.close(handle);
             push_language_result(vm, result);
@@ -91,11 +117,16 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
         }
         x if x == Op::SysReadByte as u8 => {
             let handle = vm.pop()?;
+            if let Some(error) = wait_readable(vm, handle, "sys-read-byte")? {
+                push_i64_result(vm, Err(error));
+                return Ok(true);
+            }
             let result = vm.resources.read_byte(handle);
             push_i64_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysWriteByte as u8 => {
+            vm.ensure_host_deadline_support("sys-write-byte", false)?;
             let byte = vm.pop()?;
             let handle = vm.pop()?;
             let byte = vm.as_i64(byte)?;
@@ -187,6 +218,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysTtyGet as u8 => {
+            vm.ensure_host_deadline_support("sys-tty-get", false)?;
             let buffer = vm.pop()?;
             let handle = vm.pop()?;
             let result = crate::host_buf::sys_tty_get(&mut vm.arena, &vm.resources, handle, buffer);
@@ -194,6 +226,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysTtySet as u8 => {
+            vm.ensure_host_deadline_support("sys-tty-set", false)?;
             let buffer = vm.pop()?;
             let handle = vm.pop()?;
             let result = crate::host_buf::sys_tty_set(&vm.arena, &vm.resources, handle, buffer);
@@ -203,8 +236,23 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
         x if x == Op::SysPoll as u8 => {
             let timeout = vm.pop()?;
             let handle = vm.pop()?;
-            let timeout = vm.as_i64(timeout)?;
+            let requested = vm.as_i64(timeout)?;
+            let mut timeout = requested;
+            let mut deadline_limited = false;
+            if let Some(remaining) = vm.remaining_wall_time()? {
+                let remaining_ms = remaining.as_millis().max(1);
+                let remaining_ms = i64::try_from(remaining_ms).unwrap_or(i64::MAX);
+                if timeout > remaining_ms {
+                    timeout = remaining_ms;
+                    deadline_limited = true;
+                }
+            }
             let result = crate::host_buf::sys_poll(&vm.resources, handle, timeout);
+            if deadline_limited && matches!(result, Ok(0)) {
+                return Err(lkjscript_core::Error::deadline(
+                    "execution wall deadline exceeded during sys-poll",
+                ));
+            }
             push_i64_result(vm, result);
             Ok(true)
         }
@@ -213,18 +261,21 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysIsatty as u8 => {
+            vm.ensure_host_deadline_support("sys-isatty", false)?;
             let handle = vm.pop()?;
             let result = crate::host_buf::sys_isatty(&vm.resources, handle);
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysTtyGuardSave as u8 => {
+            vm.ensure_host_deadline_support("sys-tty-guard-save", false)?;
             let buffer = vm.pop()?;
             let result = crate::host_buf::sys_tty_guard_save(&vm.arena, buffer);
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysTtyGuardClear as u8 => {
+            vm.ensure_host_deadline_support("sys-tty-guard-clear", false)?;
             let result = crate::host_buf::sys_tty_guard_clear();
             push_language_result(vm, result);
             Ok(true)
@@ -237,29 +288,49 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
         }
         x if x == Op::SysWaitMs as u8 => {
             let duration = vm.pop()?;
-            let result = match vm.as_i64(duration) {
-                Ok(milliseconds) => u64::try_from(milliseconds)
+            let milliseconds = vm
+                .as_i64(duration)
+                .map_err(|_| lkjscript_core::Error::msg("sys-wait-ms: expected I64 duration"));
+            let milliseconds = milliseconds.and_then(|milliseconds| {
+                u64::try_from(milliseconds)
                     .map_err(|_| lkjscript_core::Error::msg("sys-wait-ms: duration out of range"))
-                    .and_then(|milliseconds| {
-                        lkjscript_sys::sleep_ms(milliseconds)
-                            .map(|()| Value::UNIT)
-                            .map_err(|error| {
-                                lkjscript_core::Error::msg(format!("sys-wait-ms: {error}"))
-                            })
-                    }),
-                Err(_) => Err(lkjscript_core::Error::msg(
-                    "sys-wait-ms: expected I64 duration",
-                )),
+            });
+            let result = match milliseconds {
+                Ok(milliseconds) => {
+                    if let Some(remaining) = vm.remaining_wall_time()? {
+                        let requested = std::time::Duration::from_millis(milliseconds);
+                        if requested > remaining {
+                            let sleep_ms = u64::try_from(remaining.as_millis()).unwrap_or(u64::MAX);
+                            match lkjscript_sys::sleep_ms(sleep_ms) {
+                                Ok(()) => {
+                                    return Err(lkjscript_core::Error::deadline(
+                                        "execution wall deadline exceeded during sys-wait-ms",
+                                    ));
+                                }
+                                Err(error) => {
+                                    Err(lkjscript_core::Error::msg(format!("sys-wait-ms: {error}")))
+                                }
+                            }
+                        } else {
+                            sleep_result(milliseconds)
+                        }
+                    } else {
+                        sleep_result(milliseconds)
+                    }
+                }
+                Err(error) => Err(error),
             };
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysSocket as u8 => {
+            vm.ensure_host_deadline_support("sys-socket", false)?;
             let result = vm.resources.sys_socket();
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysBind as u8 => {
+            vm.ensure_host_deadline_support("sys-bind", false)?;
             let port = vm.pop()?;
             let handle = vm.pop()?;
             let port = vm.as_i64(port)?;
@@ -268,6 +339,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysListen as u8 => {
+            vm.ensure_host_deadline_support("sys-listen", false)?;
             let backlog = vm.pop()?;
             let handle = vm.pop()?;
             let backlog = vm.as_i64(backlog)?;
@@ -277,17 +349,26 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
         }
         x if x == Op::SysAccept as u8 => {
             let handle = vm.pop()?;
+            if let Some(error) = wait_readable(vm, handle, "sys-accept")? {
+                push_language_result(vm, Err(error));
+                return Ok(true);
+            }
             let result = vm.resources.sys_accept(handle);
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysRecv as u8 => {
             let handle = vm.pop()?;
+            if let Some(error) = wait_readable(vm, handle, "sys-recv")? {
+                push_language_result(vm, Err(error));
+                return Ok(true);
+            }
             let result = vm.resources.sys_recv(&mut vm.arena, handle);
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysSend as u8 => {
+            vm.ensure_host_deadline_support("sys-send", false)?;
             let data = vm.pop()?;
             let handle = vm.pop()?;
             let result = vm.resources.sys_send(&vm.arena, handle, data);
@@ -295,6 +376,7 @@ pub fn dispatch_ext<J: JitHook>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
             Ok(true)
         }
         x if x == Op::SysPathExists as u8 => {
+            vm.ensure_host_deadline_support("sys-path-exists", false)?;
             let path = vm.pop()?;
             let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
             let result = crate::host_ext::ResourceTable::sys_path_exists(&path);
