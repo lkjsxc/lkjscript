@@ -52,26 +52,29 @@ and dereference meanings.
 Candidate B uses exact operation and type atoms:
 
 ```text
-SharedRef region-a T
-ExclusiveRef region-a T
+Owned T
+Ref T
+RefMut T
 GcRef T
 PinnedRef T
 
-borrow-shared/ place /borrow-shared
-borrow-exclusive/ place /borrow-exclusive
+borrow/ place /borrow
+borrow-mut/ place /borrow-mut
 ref-read/ reference /ref-read
 ref-write/ reference value /ref-write
 move/ place /move
 drop/ place /drop
 ```
 
-Candidate B is **Selected**. The punctuation candidate is rejected and is not
-an alias.
+Candidate B is **Selected**. The punctuation and `SharedRef`/`ExclusiveRef`
+aliases are rejected and are not accepted syntax. `Ref` is shared and `RefMut`
+is exclusive; mutability is therefore visible in both type and operation.
 
-A function that exposes a lexical reference declares region names in one
-`regions/ ... /regions` child adjacent to its signature. Region names use the
-`region-` prefix. Locally inferred borrows do not require a source region name.
-Nested type parsing is exact, so `SharedRef region-a List I64` has one meaning.
+The first non-escaping slice infers every reference region and uses `Ref T` or
+`RefMut T`. A later function that exposes a lexical reference declares region
+names in one `regions/ ... /regions` child adjacent to its signature and writes
+`Ref region-a T` or `RefMut region-a T`; that named-region form is an
+**Accepted Target**, not Current syntax. Nested type parsing remains exact.
 
 A place is not an arbitrary expression. Canonical place forms are a local name,
 `field-place/ owner field /field-place`, `index-place/ owner index
@@ -137,13 +140,34 @@ root illegally.
 
 ## Initial Sound Slice
 
-The first implementation slice is deliberately narrower than this full model:
-locals and whole immutable product fields; explicit moves; shared/exclusive
-borrows with CFG last-use liveness; reborrow of locals; no closure escape; no
-partial move; and deterministic drop for compiler-known resource values. Each
-unsupported place or escape is rejected explicitly. Native GC references are
-then added as a separate ownership category rather than pretending they are
-borrows.
+The first implementation slice is a complete safe island around `Owned Buf`:
+
+- `owned-buf-new` creates a fresh `Owned Buf` that cannot have a pre-existing
+  alias;
+- whole local/parameter places only;
+- explicit `move` for ownership transfer;
+- `borrow` and `borrow-mut` create non-escaping `Ref Buf` and `RefMut Buf`;
+- owned-buffer read operations require `Ref Buf`, and writes require `RefMut
+  Buf`;
+- last-use dataflow ends a local borrow before lexical scope end where proved;
+- branch state joins are exact, while unsupported loop-carried loans,
+  reborrows, field/index places, return/storage of references, and partial moves
+  are rejected;
+- SSA retains move, borrow, ownership, loan, and alias identities even though
+  the VM representation remains the existing safe arena handle.
+
+The initial owned-buffer operations consume typed references directly; general
+`ref-read`/`ref-write` syntax is rejected until place projection is implemented.
+This slice does not silently make legacy `Buf`, `Handle`, product, or collection
+uses affine; those remain worker-local GC/capability values until migrated by a
+later breaking contract. It establishes a sound ownership path without
+modifying canonical Brainfuck source. Deterministic source `Drop`, resource
+RAII, named regions, arbitrary `Owned T`, and borrow-aware existing host
+operations remain **Accepted Targets**. Runtime session cleanup remains the
+Current final backstop and is not called language `Drop`.
+
+Native GC references are added as a separate ownership category rather than
+pretending they are lexical borrows.
 
 ## Deferred And Rejected
 
