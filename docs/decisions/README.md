@@ -11,6 +11,7 @@ Index active architecture decisions separately from superseded history.
 ## Active And Accepted Decisions
 
 - [bytecode-vm.md](bytecode-vm.md): dense Rust bytecode VM
+- [callable-baseline-jit.md](callable-baseline-jit.md): required callable Linux x86-64 baseline-JIT cycle
 - [compiler-pipeline.md](compiler-pipeline.md): typed HIR/SSA and runtime JIT pipeline
 - [equality-families.md](equality-families.md): explicit value, identity, list, and F64-bit equality
 - [immutable-nominal-products.md](immutable-nominal-products.md): named immutable aggregate state

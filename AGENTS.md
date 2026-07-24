@@ -9,7 +9,9 @@ Define the working contract for automated engineering in this repository.
 `lkjscript` is a typed, line-oriented, AI-authored language implemented by a
 small Rust compiler and reference bytecode VM. Canonical explicit source feeds
 a resolved typed pipeline intended for VM, runtime JIT, a minimal native/AOT
-test surface, and Wasm.
+test surface, and Wasm. The active cycle must reach a real callable synchronous
+baseline JIT on Linux x86-64; code emission, disassembly, SSA scaffolding, or an
+observation hook is insufficient.
 The canonical accepted extension is `.lkjscript`; `.lkjml` is rejected without
 a compatibility mode. Linux x86-64 is the current acceptance platform.
 Portability is a design constraint, not a current support claim.
@@ -62,10 +64,11 @@ Portability is a design constraint, not a current support claim.
 6. [docs/decisions/immutable-nominal-products.md](docs/decisions/immutable-nominal-products.md)
 7. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
 8. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
-9. [docs/operations/verification.md](docs/operations/verification.md)
-10. [docs/vision/README.md](docs/vision/README.md)
-11. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
-12. [docs/vision/experiments.md](docs/vision/experiments.md)
+9. [docs/decisions/callable-baseline-jit.md](docs/decisions/callable-baseline-jit.md)
+10. [docs/operations/verification.md](docs/operations/verification.md)
+11. [docs/vision/README.md](docs/vision/README.md)
+12. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
+13. [docs/vision/experiments.md](docs/vision/experiments.md)
 
 ## Development Loop
 

@@ -66,8 +66,8 @@ testing. Runtime behavior is unchanged: the hook remains explicitly
 The value/object/list/F64-bit equality split is **Current**. Remaining work is:
 
 1. Add explicit main and effect-free imported libraries.
-2. Add local `var`/`set`, immutable global product state, and remove mutable
-   globals.
+2. Add local `var`/`set`, thread immutable product values through helpers, hold
+   the evolving state in main-local vars, and remove mutable globals.
 3. Compute fixed-point effect summaries where native movement needs them.
 4. Validate public chunks before execution.
 5. Return structured process-safe outcomes for success, exit, traps, deadlines,
@@ -84,7 +84,9 @@ comparison against its prior commit.
    calls, and trap edges.
 2. Implement an SSA verifier.
 3. Implement a differential SSA evaluator or equivalent oracle.
-4. Prove bytecode lowering equivalent or lower reference bytecode from SSA.
+4. Temporarily prove the existing bytecode lowering equivalent, then cut
+   reference bytecode over to verified SSA before native lowering is called
+   authoritative; delete the sibling semantic lowering.
 5. Establish isolated non-speculative passes and differential pass tests.
 
 Typed SSA is the only optimization authority. No independent
@@ -93,7 +95,9 @@ bytecode-to-machine-code semantic compiler is accepted.
 ## Phase 3: Native Code Objects
 
 1. Define semantic and native ABI versions and typed representations.
-2. Implement minimal owned Linux x86-64 emission, relocation, and metadata.
+2. Spike and measure an owned Linux x86-64 emitter and a mature Rust-native JIT
+   backend, record the dependency decision, and implement only the selected
+   production backend.
 3. Retain a non-PGO file-emission harness for disassembly, debugger, ABI, and
    differential tests.
 4. Implement versioned runtime-call adapters and VM/native transitions.
@@ -165,7 +169,8 @@ Persistent cross-run profiles and native-code caches remain outside the plan.
 
 ## Phase 8: Portability And Product Work
 
-After Linux x86-64 correctness, validate Linux AArch64 ABI assumptions, keep
+Only after Linux x86-64 correctness and callable-JIT acceptance, validate Linux
+AArch64 ABI assumptions, keep
 direct Wasm aligned with typed SSA, measure server-oriented tier policies, and
 consider product breadth without freezing representation defects. Browser,
 package/update, GUI, and general server/framework products retain their own
@@ -215,6 +220,9 @@ record trigger and compilation latency, first native execution, break-even,
 compilation/OSR/fallback/deoptimization counts, code and metadata bytes, peak
 RSS/cache, repetitions, dispersion/tails, and cleanup. A faster steady state is
 not called an end-to-end speedup when total execution is slower.
+
+The exact active completion boundary is
+[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
 
 ## Rejected And Deferred
 

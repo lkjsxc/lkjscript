@@ -95,10 +95,14 @@ General exceptions and stack unwinding are not part of the accepted core.
 ## Bindings And Mutation
 
 Top-level `def` declares an immutable function. Immutable local bindings remain
-lexical. `var` introduces an explicitly typed function-local mutable binding;
-`set` resolves only to an enclosing local `var`, requires exact type equality,
-and returns Unit.
+lexical. `var` introduces one explicitly typed function-local mutable binding,
+its initializer, and its lexical body. The initializer is evaluated before the
+binding enters scope. `set` resolves the nearest `var` within the same function
+invocation, requires exact type equality, and returns Unit. Parameters and
+immutable `let` bindings cannot be assigned, and resolution never crosses a
+function boundary.
 
+The canonical form is `var/ name/ x /name type/ T /type initial body /var`.
 Global mutable values are forbidden. Immutable values may be captured by a
 closure. Mutable capture is forbidden; a future explicit `Cell T` or another
 reference type is required when observable shared mutation is intentional.
@@ -113,7 +117,11 @@ substitutes remain rejected.
 
 Imported libraries contain declarations only and execute no top-level code.
 Executable roots contain exactly one explicit `main`; top-level `do` is removed.
-Runtime effects begin from main and receive capabilities explicitly.
+The canonical main form is
+`main/ sig/ -> T /sig body-expression /main`: it has no parameters, its body
+must have exactly the declared return type, and script arguments remain
+available through `arg`. Missing, duplicate, or imported main is a compile
+error. Runtime effects begin from main and receive capabilities explicitly.
 
 Global data is eventually limited to:
 
@@ -159,10 +167,17 @@ Linked List/Pair is not the default performance collection. The accepted core
 prioritizes Vec, Slice, Bytes, Str, fixed products, and views; List remains an
 explicit persistent structure.
 
-Typed IR records relevant effects, including allocation, memory reads/writes,
-host IO, and possible traps. Effect declarations are inferred and checked,
-not trusted. This enables compile-time evaluation, code motion, ownership
+Typed IR records allocation, memory reads/writes, local mutation, host IO,
+possible trap, explicit exit/outcome change, and possible divergence. Effect
+declarations are inferred and checked, not trusted. Direct user calls receive
+the least monotone fixed-point summary of their resolved callees, including
+recursive strongly connected components; unresolved call provenance remains
+conservatively all-effects. Summary identity and iteration order are stable and
+deterministic. This enables compile-time evaluation, code motion, ownership
 analysis, and safe host boundaries.
+
+The complete active-cycle contract is
+[Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).
 
 ## Rejected
 

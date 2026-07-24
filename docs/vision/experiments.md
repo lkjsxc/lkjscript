@@ -78,8 +78,8 @@ reason to retain complexity.
 
 | ID | Semantic IR | Backend | Purpose |
 | --- | --- | --- | --- |
-| C0 | duplicated untyped AST interpretation | bytecode VM | current baseline |
-| C1 | resolved typed HIR | bytecode VM | isolate correctness and compile-time cost |
+| C0 | duplicated untyped AST interpretation | bytecode VM | superseded historical baseline |
+| C1 | resolved typed HIR | bytecode VM | adopted current baseline; isolate correctness and compile-time cost |
 | C2 | typed HIR + SSA | verifier + reference evaluator/VM | differential SSA semantics |
 | C3 | typed SSA | shared x86-64 code-object backend + minimal AOT test emitter | native ABI, relocation, and codegen boundary |
 | C4 | typed SSA | synchronous function-triggered baseline JIT | callable native execution and break-even |

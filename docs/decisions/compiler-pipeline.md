@@ -48,9 +48,12 @@ over-approximation.
 
 Typed SSA uses explicit basic-block parameters, exact scalar/product types,
 trap edges, calls, and effects. It is the sole optimization authority for
-reference lowering, JIT, the AOT test surface, and direct Wasm. Runtime JIT and
-file emission differ in code placement, relocation, and linking, not semantics
-or optimization ownership.
+reference lowering, JIT, the AOT test surface, and direct Wasm. The active cycle
+may retain HIR-to-bytecode only while differential tests establish SSA; it then
+lowers reference bytecode from verified SSA and deletes the sibling semantic
+lowering before native lowering is authoritative. Runtime JIT and file emission
+differ in code placement, relocation, and linking, not semantics or
+optimization ownership.
 
 ## HIR Resolution Invariants
 
@@ -91,21 +94,20 @@ native callers call compiled callees directly.
 
 ## Native Code Object Priority
 
-After typed SSA and differential correctness gates, implement a minimal owned
-Linux x86-64 native backend that can produce both callable code objects and
-file-based test artifacts. Callable baseline JIT is the primary adaptive
+After typed SSA and differential correctness gates, spike a small owned x86-64
+emitter and a mature Rust-native JIT backend such as Cranelift against the same
+integer, floating, branch, loop, direct-call, and runtime-call slice. Select one
+production backend from generated-code speed plus visible compilation, binary,
+RSS, dependency, safety, and maintenance costs. A dependency requires its own
+accepted measured decision. Callable baseline JIT is the primary adaptive
 performance path. File emission exists only to inspect code, test relocations
 and ABI behavior, use external debuggers, and compare backend output with the
 VM.
 
-The first backend candidate remains a small owned baseline assembler. Mature
-build-time backends may be evaluated only as separately measured backend
-candidates under the dependency policy; they do not introduce training or PGO.
-Cryptography is never reimplemented as a compiler-dependency experiment.
-
-Native target modes are explicit: portable, x86-64-v2, x86-64-v3, and native.
-Every result records its target. Linux AArch64 ABI validation begins before
-x86-specific assumptions become structural.
+Native target modes are explicit and every result records its target. Linux
+x86-64 is the only acceptance platform for the active callable-baseline cycle;
+Linux AArch64 begins only afterward. Backend-independent typed SSA and native
+ABI boundaries must avoid accidental x86-specific semantic assumptions.
 
 ## Runtime Tiering
 
@@ -126,6 +128,8 @@ profiles and cross-run native caches are outside this plan.
 The complete state machine, OSR mapping, executable-code object, W^X, code-cache,
 GC stack-map, failure, engine-selection, benchmark, and adoption contracts are
 in [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
+The mandatory Linux x86-64 completion slice is
+[Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).
 
 ## Wasm
 

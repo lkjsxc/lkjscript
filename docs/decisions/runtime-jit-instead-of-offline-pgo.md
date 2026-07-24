@@ -56,6 +56,23 @@ effects, or optimization ownership.
 A separate bytecode-to-machine-code compiler that independently reinterprets
 language semantics is rejected.
 
+## Active Callable-Baseline Cycle
+
+The required next completion point is a real callable synchronous baseline JIT
+on Linux x86-64. Generated native code must be lowered from verified typed SSA,
+installed through bounded W^X memory, entered by the runtime, perform meaningful
+language computation, and return the same value or structured outcome as the
+VM. Forced mode proves a nonzero native entry count and cannot silently fall
+back. Emission, object bytes, assembly text, disassembly, a Rust simulation,
+hotness counters, or the observation hook are insufficient.
+
+Only whole-function function-entry tiering is in this cycle. Background
+compilation, loop OSR, proof-based optimizing promotion, guards,
+deoptimization, persistent profiles/caches, and non-Linux/non-x86-64 platforms
+remain later or rejected as classified below. The detailed prerequisite,
+backend-selection, ABI, safety, coverage, and evidence contract is
+[Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).
+
 ## Current Boundary
 
 The following are **Current**:

@@ -28,6 +28,26 @@ no status, sees no loop backedge or VM state, and cannot install or call code.
 It must not return or imply compilation success until verified callable code
 objects and execution transfer replace it.
 
+## Accepted Validated Execution Boundary
+
+Raw mutable chunks are builder/test inputs, not executable programs. One
+validator must consume a raw chunk and produce an opaque immutable
+`ValidatedChunk` before VM, disassembly, or JIT use. It decodes all bytes and
+checks indexes, metadata identities/categories, arity/locals, zero unsupported
+captures, instruction-boundary jumps, CFG stack compatibility, definite local
+initialization, return shape, and configured size limits. Validation failure is
+not a language trap and no effects occur first. Direct malformed-chunk tests use
+the same validator as compiler output.
+
+VM and native execution return one structured model distinguishing returned
+values, explicit exit, language traps, deadline, resource limits, and host
+failure. The execution core and generated code never call
+`std::process::exit`; the CLI maps a completed outcome only after resource
+cleanup, terminal restoration, and required flushing.
+
+The exact active contract is
+[Callable Linux x86-64 Baseline JIT Cycle](callable-baseline-jit.md).
+
 ## Current Product Bytecode
 
 Chunks carry immutable product names/field names separately from mutable runtime

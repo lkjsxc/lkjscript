@@ -136,16 +136,35 @@ A gate that did not run did not pass.
 
 ## Accepted Next Target
 
-The next implementation sequence is:
+The active engineering cycle must reach a real callable baseline JIT on Linux
+x86-64; documentation, SSA scaffolding, machine-code emission, disassembly, or
+an observation hook alone cannot complete it. The dependency sequence is:
 
-1. use current products to establish explicit main/effect-free libraries and
-   local var/set, then remove mutable globals;
-2. compute required effect summaries, validate chunks, and return structured
-   process-safe VM outcomes;
-3. implement typed SSA and its verifier/differential oracle before the shared
-   Linux x86-64 code-object backend and function-triggered baseline JIT.
+1. replace top-level `do` with exactly one typed root `main`; make imports
+   declaration-only; add lexical typed `var` plus local-only `set`; thread
+   lkjedit, terminal, and Brainfuck state through immutable products; remove
+   source mutable globals;
+2. infer deterministic fixed-point function effects, validate complete chunks
+   before execution, and replace process termination/string-only runtime errors
+   with structured process-safe outcomes and explicit runtime limits;
+3. lower HIR through verified typed SSA, an independent differential evaluator,
+   and isolated non-speculative normalization; cut reference bytecode over to
+   SSA before the native backend becomes authoritative;
+4. measure an owned emitter and a mature Rust-native backend, select one under
+   the dependency policy, then implement versioned SysV AMD64/runtime ABIs,
+   bounded code objects, W^X memory in `lkjscript-sys`, exact stack-map gates,
+   VM/native and native/native calls, and forced native execution;
+5. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
+   code has been called. Forced mode never falls back; auto uses synchronous
+   function-entry tiering and may remain in the VM for unsupported code.
 
-The contracts are [AI-First Semantic Core](decisions/semantic-core.md),
+OSR, background compilation, optimizing JIT, guards, deoptimization, persistent
+profiles/caches, offline PGO, and non-Linux/non-x86-64 acceptance are outside
+this cycle. The exact syntax, validation, outcome, SSA, backend-selection, ABI,
+engine, safety, and evidence contract is
+[Callable Linux x86-64 Baseline JIT Cycle](decisions/callable-baseline-jit.md).
+
+The supporting contracts are [AI-First Semantic Core](decisions/semantic-core.md),
 [Explicit Equality Families](decisions/equality-families.md),
 [Immutable Nominal Products](decisions/immutable-nominal-products.md),
 [Typed Compiler Pipeline And Runtime JIT](decisions/compiler-pipeline.md),

@@ -14,4 +14,5 @@ must not be described as implemented. Runtime-JIT-first tiering is an
 
 - [vm.md](vm.md): values, frames, heap, and host boundary
 - [jit-hook.md](jit-hook.md): explicitly labeled observation-only placeholder
+- [../decisions/callable-baseline-jit.md](../decisions/callable-baseline-jit.md): required Linux x86-64 callable-baseline cycle
 - [../decisions/runtime-jit-instead-of-offline-pgo.md](../decisions/runtime-jit-instead-of-offline-pgo.md): accepted tiers, OSR, code-object, and no-PGO contract

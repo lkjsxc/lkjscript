@@ -116,8 +116,11 @@ VM function entry / loop backedge
 ```
 
 No part of that flow is current. The existing observation hook sees closure
-calls only and cannot compile or transfer execution. Background compilation,
-persistent profiles, and persistent code caches are absent.
+calls only and cannot compile or transfer execution. The active cycle ends only
+when synchronous whole-function baseline code is actually called on Linux
+x86-64 in truthful forced and automatic modes. Loop OSR, background
+compilation, optimizing tiers, persistent profiles, and persistent code caches
+are not part of that cycle.
 
 ## Source Layout Rule
 
@@ -149,6 +152,7 @@ mutable globals, validate chunks, and make VM outcomes process-safe. Typed SSA,
 its verifier/differential oracle, and a shared Linux x86-64 native code-object
 backend follow. The first adaptive execution target is synchronous baseline
 JIT, followed by loop OSR and proof-based optimizing JIT. Minimal file emission
-remains only for backend tests; offline PGO is rejected. Real modules,
-process-safe host services, byte strings/views, and measured memory strategies
+remains only for backend tests; offline PGO is rejected. The exact active
+boundary is [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+Real modules, process-safe host services, byte strings/views, and measured memory strategies
 build on those layers as vertical slices.

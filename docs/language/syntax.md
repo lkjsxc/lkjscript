@@ -6,7 +6,9 @@ Define expression, type, and import behavior above the physical line format.
 
 ## Status
 
-**Current.** The exact numeric contract is
+**Current** for the forms explicitly labeled current below. Explicit `main` and
+function-local `var`/`set` are the next breaking **Accepted Target** and are not
+yet accepted by the compiler. The exact numeric contract is
 [numeric-semantics.md](../decisions/numeric-semantics.md).
 
 ## Expressions
@@ -41,9 +43,13 @@ exactly the same type. There is no omitted branch or nil-based type join.
 Empty `do`, `while`, `set`, and side-effecting operations return Unit.
 
 `set` currently mutates program-global state, but resolved HIR now requires an
-existing mutable value target, assignable value type, and returns Unit. Global
-mutation itself remains temporary and is removed by the accepted local
-`var`/`set` redesign.
+existing mutable value target, assignable value type, and returns Unit. This is
+temporary. The accepted replacement is
+`var/ name/ x /name type/ T /type initial body /var`; the initializer precedes
+the binding's lexical scope. In that body, `set/ x value /set` may target only
+the nearest `var` in the same function, has exact type `Unit`, and cannot target
+a parameter, `let` binding, function, or global. No compatibility form remains
+after cutover.
 
 ## Immutable Nominal Products
 
@@ -101,10 +107,17 @@ use `not` around a positive operation. See
 
 ## Files And Imports
 
-Top-level forms are `def`, `do`, `import`, and `product`, bounded by
+Current top-level forms are `def`, `do`, `import`, and `product`, bounded by
 `MAX_TOPLEVEL_FORMS`. Product declarations are effect-free metadata; arbitrary
 runtime global value definitions and top-level `do` remain current only until
 the accepted explicit-main cutover.
+
+After that cutover, imported files contain only `import`, function `def`, and
+`product`. An executable root additionally contains exactly one
+`main/ sig/ -> T /sig body-expression /main`. Main has no parameters, its body
+must have exactly `T`, and `arg` remains the script-argument operation. A main
+in an import, no root main, a duplicate root main, top-level `do`, and non-
+function `def` are compile errors.
 
 Current path resolution supports:
 

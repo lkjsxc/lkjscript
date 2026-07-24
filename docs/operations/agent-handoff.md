@@ -52,10 +52,13 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
   I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists,
   Option/no-nil, explicit equality families, and immutable nominal products have
-  landed. Product-state threading plus explicit main/local mutation is next,
-  followed by chunk validation and process-safe outcomes. Typed SSA, shared native code objects, runtime JIT, loop OSR, and a
-  minimal AOT test emitter remain targets, not current capability. Offline PGO
-  is rejected by product decision.
+  landed. The active cycle threads product state through explicit main/local
+  mutation, adds fixed-point effects, chunk validation, process-safe outcomes,
+  verified typed SSA, one measured backend, W^X code objects, and an actually
+  called synchronous Linux x86-64 baseline JIT. Loop OSR, optimizing JIT, and a
+  minimal AOT test emitter remain later targets, not current capability. Offline
+  PGO is rejected by product decision. See
+  [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
 
 ## Host Boundary
 

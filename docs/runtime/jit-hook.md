@@ -28,5 +28,7 @@ through a verified loop-header mapping.
 
 Current-process hotness counters are bounded, saturating, local, ephemeral, and
 never telemetry. Offline PGO and persistent profiles/caches are not part of the
-accepted plan. See
+accepted plan. The active replacement must reach the executed-code boundary in
+[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+The later tier hierarchy remains in
 [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).

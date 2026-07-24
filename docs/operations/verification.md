@@ -100,18 +100,22 @@ single-shot C script is diagnostic only.
 
 ## Accepted JIT Gates
 
-No JIT gate is current. When callable native work begins, each phase compares
-exact output, values, structured traps/outcomes, malformed-input behavior, GC,
-and resource limits with explicit VM mode. Forced JIT modes must prove native
-execution and fail rather than silently fall back. Retained results include
-compilation/warmup cost, trigger and first-native latency, OSR/fallback counts,
-code/metadata/cache size, RSS, repetitions, dispersion, tails, and cleanup.
+No JIT gate is current. The active cycle must add dedicated forced-native tests
+that prove a code object was installed, its generated entry was called, its
+native count is nonzero, no required user function fell back, and exact output,
+value, structured trap/outcome, malformed-input behavior, GC, and resource
+limits equal explicit VM mode. Forced JIT fails rather than silently falling
+back. Retained results include compilation/warmup cost, trigger and first-native
+latency, fallback counts, code/metadata/cache size, RSS, repetitions,
+dispersion, tails, and cleanup; OSR counts remain absent until a later cycle.
 
 The current CLI has no engine selector and always runs the VM. The accepted
 future syntax and semantics for `vm`, `auto`, `baseline-jit`, and
 `optimizing-jit` are defined in
 [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
-Do not add inert flags before native execution exists.
+Do not add inert flags before native execution exists. The mandatory cycle gate
+and Linux x86-64 boundary are in
+[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
 
 ## Rule
 
