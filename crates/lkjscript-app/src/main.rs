@@ -48,9 +48,13 @@ fn run_command(args: &[String]) -> Result<ExitCode, String> {
         2
     };
     let script_args = args.get(script_arg_start..).unwrap_or_default().to_vec();
-    let chunk = compile_path(&PathBuf::from(file), &Limits::default())
+    let program = compile_path(&PathBuf::from(file), &Limits::default())
         .map_err(|error| error.to_string())?;
-    let outcome = run_chunk_with_args(&chunk, &script_args, &ExecutionConfig::default());
+    let outcome = run_chunk_with_args(
+        program.bytecode(),
+        &script_args,
+        &ExecutionConfig::default(),
+    );
     match outcome {
         ExecutionOutcome::Returned(_) => Ok(ExitCode::SUCCESS),
         ExecutionOutcome::Exited(code) => {
@@ -74,9 +78,9 @@ fn disasm_command(args: &[String]) -> Result<ExitCode, String> {
     if args.len() != 2 {
         return Err("disasm accepts exactly one .lkjscript path".to_string());
     }
-    let chunk = compile_path(&PathBuf::from(file), &Limits::default())
+    let program = compile_path(&PathBuf::from(file), &Limits::default())
         .map_err(|error| error.to_string())?;
-    disassemble(&chunk)?;
+    disassemble(program.bytecode())?;
     Ok(ExitCode::SUCCESS)
 }
 

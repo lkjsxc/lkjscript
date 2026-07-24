@@ -14,6 +14,7 @@ mod tests {
     use crate::import::{Program as AstProgram, SourceFile};
     use crate::lex::lex;
     use crate::parse::parse_tokens;
+    use crate::ssa::lower_program;
 
     fn parsed_program(files: &[(&str, &str)]) -> Result<AstProgram> {
         let mut parsed_files = Vec::with_capacity(files.len());
@@ -32,6 +33,11 @@ mod tests {
 
     fn analyze_one(source: &str) -> Result<crate::hir::Program> {
         analyze_program(&parsed_program(&[("test.lkjscript", source)])?)
+    }
+
+    fn compile_hir(program: &crate::hir::Program) -> Result<lkjscript_core::Chunk> {
+        let ssa = lower_program(program)?;
+        compile_program(&ssa).map(|(chunk, _links)| chunk)
     }
 
     fn analysis_error(source: &str) -> String {
@@ -124,7 +130,7 @@ mod tests {
         };
         assert_eq!(callee.storage, BindingStorage::Function);
 
-        let chunk = compile_program(&program).expect("lower explicit main");
+        let chunk = compile_hir(&program).expect("lower explicit main through SSA");
         assert_eq!(chunk.global_names, vec!["answer"]);
         assert_eq!(chunk.main.name, "main");
         assert!(chunk.main.code.ends_with(&[Op::Return as u8]));
@@ -209,10 +215,10 @@ mod tests {
     fn operation_identity_and_local_mutation_reach_bytecode() {
         let source = main_source(
             "I64",
-            "var/\nname/\nx\n/name\ntype/\nI64\n/type\n1\ndo/\nset/\nx\n+/\nx\n2\n/+\n/set\nx\n/do\n/var",
+            "var/\nname/\nx\n/name\ntype/\nI64\n/type\nargc/\n/argc\ndo/\nset/\nx\n+/\nx\n2\n/+\n/set\nx\n/do\n/var",
         );
         let program = analyze_one(&source).expect("analyze operation and set");
-        let chunk = compile_program(&program).expect("lower operation and set");
+        let chunk = compile_hir(&program).expect("lower operation and set through SSA");
         assert!(chunk.main.code.contains(&(Op::Add as u8)));
         assert!(chunk.main.code.contains(&(Op::StoreLocal as u8)));
         assert!(chunk.global_names.is_empty());
@@ -230,7 +236,7 @@ mod tests {
             .global_layout
             .iter()
             .any(|binding| program.binding(*binding).is_some_and(|binding| binding.name == "Point")));
-        let chunk = compile_program(&program).expect("lower product state threading");
+        let chunk = compile_hir(&program).expect("lower product state threading through SSA");
         assert!(chunk.main.code.contains(&(Op::MakeProduct as u8)));
         assert!(chunk.main.code.contains(&(Op::StoreLocal as u8)));
         assert!(!chunk.product_fields.is_empty());

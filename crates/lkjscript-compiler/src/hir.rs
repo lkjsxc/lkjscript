@@ -24,7 +24,7 @@ impl SourceId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BindingId(u32);
 
 impl BindingId {
@@ -145,6 +145,10 @@ impl EffectSet {
 
     pub const fn union(self, other: Self) -> Self {
         Self(self.0 | other.0)
+    }
+
+    pub const fn bits(self) -> u16 {
+        self.0
     }
 
     pub const fn contains(self, effects: Self) -> bool {

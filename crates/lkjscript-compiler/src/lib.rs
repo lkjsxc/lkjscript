@@ -1,4 +1,5 @@
-//! Compile canonical line-oriented `.lkjscript` source into bytecode.
+//! Compile canonical line-oriented `.lkjscript` source into verified typed SSA
+//! and validated reference bytecode.
 
 mod analyze;
 mod ast;
@@ -10,11 +11,13 @@ mod lex;
 mod limits_check;
 mod operation;
 mod parse;
+mod ssa;
 mod types;
 
 use std::path::{Path, PathBuf};
 
 use lkjscript_core::{validate_chunk, Limits, Result, ValidatedChunk};
+use lkjscript_ir::{BytecodeLinkMetadata, VerifiedProgram};
 
 use crate::analyze::analyze_program;
 use crate::ast::Expr;
@@ -22,17 +25,44 @@ use crate::codegen::compile_program;
 use crate::import::load_program;
 use crate::limits_check::check_file_limits;
 use crate::parse::parse_tokens;
+use crate::ssa::lower_program;
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 
-pub fn compile_path(path: &Path, limits: &Limits) -> Result<ValidatedChunk> {
-    compile_path_with_sources(path, limits).map(|(chunk, _)| chunk)
+/// One compiled semantic program shared by the reference VM and later backends.
+#[derive(Debug, Clone)]
+pub struct ExecutableProgram {
+    bytecode: ValidatedChunk,
+    ssa: VerifiedProgram,
+    bytecode_links: BytecodeLinkMetadata,
+}
+
+impl ExecutableProgram {
+    pub fn bytecode(&self) -> &ValidatedChunk {
+        &self.bytecode
+    }
+
+    pub fn ssa(&self) -> &VerifiedProgram {
+        &self.ssa
+    }
+
+    pub fn bytecode_links(&self) -> &BytecodeLinkMetadata {
+        &self.bytecode_links
+    }
+
+    pub fn into_bytecode(self) -> ValidatedChunk {
+        self.bytecode
+    }
+}
+
+pub fn compile_path(path: &Path, limits: &Limits) -> Result<ExecutableProgram> {
+    compile_path_with_sources(path, limits).map(|(program, _)| program)
 }
 
 pub fn compile_path_with_sources(
     path: &Path,
     limits: &Limits,
-) -> Result<(ValidatedChunk, Vec<PathBuf>)> {
+) -> Result<(ExecutableProgram, Vec<PathBuf>)> {
     ensure_source_path(path)?;
     let program = load_program(path, limits)?;
     let sources = program
@@ -41,24 +71,11 @@ pub fn compile_path_with_sources(
         .map(|source| source.path.clone())
         .collect();
     let analyzed = analyze_program(&program)?;
-    let chunk = compile_program(&analyzed)?;
-    let validated = validate_chunk(chunk, &limits.validation)?;
-    Ok((validated, sources))
+    let executable = compile_analyzed(&analyzed, limits)?;
+    Ok((executable, sources))
 }
 
-pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<ValidatedChunk> {
-    let chunk = compile_source_builder(source, path, limits)?;
-    validate_chunk(chunk, &limits.validation)
-}
-
-/// Produces the mutable builder representation used by compiler and malformed
-/// bytecode tests. It is not executable until passed to `validate_chunk`.
-#[doc(hidden)]
-pub fn compile_source_builder(
-    source: &str,
-    path: &str,
-    limits: &Limits,
-) -> Result<lkjscript_core::Chunk> {
+pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<ExecutableProgram> {
     ensure_source_path(Path::new(path))?;
     let forms = parse_source(source, path, limits)?;
     let fake = PathBuf::from(path);
@@ -67,7 +84,18 @@ pub fn compile_source_builder(
         files: vec![import::SourceFile { path: fake, forms }],
     };
     let analyzed = analyze_program(&program)?;
-    compile_program(&analyzed)
+    compile_analyzed(&analyzed, limits)
+}
+
+fn compile_analyzed(analyzed: &hir::Program, limits: &Limits) -> Result<ExecutableProgram> {
+    let ssa = lower_program(analyzed)?;
+    let (chunk, bytecode_links) = compile_program(&ssa)?;
+    let bytecode = validate_chunk(chunk, &limits.validation)?;
+    Ok(ExecutableProgram {
+        bytecode,
+        ssa,
+        bytecode_links,
+    })
 }
 
 pub fn validate_source(source: &str, path: &str, limits: &Limits) -> Result<()> {
@@ -144,16 +172,20 @@ mod tests {
 
     #[test]
     fn bytecode_constants_preserve_numeric_source_types() {
-        let source = unit_main(
-            "equal-value/\n9223372036854775807\n9223372036854775807\n/equal-value\n+/\n2.0\n1\n/+",
-        );
-        let chunk = compile_source(&source, "numeric.lkjscript", &Limits::default())
-            .expect("compile numeric source");
-        assert!(chunk
+        let integer = "main/\nsig/\n->\nI64\n/sig\n9223372036854775807\n/main\n";
+        let integer = compile_source(integer, "integer.lkjscript", &Limits::default())
+            .expect("compile I64 source");
+        assert!(integer
+            .bytecode()
             .constants()
             .iter()
             .any(|constant| matches!(constant, Constant::I64(i64::MAX))));
-        assert!(chunk
+
+        let float = "main/\nsig/\n->\nF64\n/sig\n+/\n2.0\n1\n/+\n/main\n";
+        let float = compile_source(float, "float.lkjscript", &Limits::default())
+            .expect("compile F64 source");
+        assert!(float
+            .bytecode()
             .constants()
             .iter()
             .any(|constant| matches!(constant, Constant::F64(value) if *value == 2.0)));

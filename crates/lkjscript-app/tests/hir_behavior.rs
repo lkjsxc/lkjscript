@@ -1,12 +1,10 @@
 #![allow(clippy::expect_used)]
 
-use lkjscript_compiler::compile_source;
-use lkjscript_core::{
-    Error, ExecutionConfig, ExecutionOutcome, Limits, Op, OwnedValue, ValidatedChunk,
-};
+use lkjscript_compiler::{compile_source, ExecutableProgram};
+use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, Op, OwnedValue};
 use lkjscript_vm::{run_chunk, run_chunk_with_args};
 
-fn compile(source: &str) -> lkjscript_core::Result<ValidatedChunk> {
+fn compile(source: &str) -> lkjscript_core::Result<ExecutableProgram> {
     compile_source(source, "hir-behavior.lkjscript", &Limits::default())
 }
 
@@ -19,7 +17,8 @@ fn returned(outcome: ExecutionOutcome) -> lkjscript_core::Result<OwnedValue> {
 }
 
 fn evaluate(source: &str) -> lkjscript_core::Result<OwnedValue> {
-    returned(run_chunk(&compile(source)?, &ExecutionConfig::default()))
+    let program = compile(source)?;
+    returned(run_chunk(program.bytecode(), &ExecutionConfig::default()))
 }
 
 fn bool_main(expression: &str) -> String {
@@ -39,21 +38,26 @@ fn assert_main_bool(expression: &str, expected: bool) {
 fn explicit_main_returns_its_exact_body_value() {
     let source = "main/\nsig/\n->\nI64\n/sig\n42\n/main\n";
     assert_eq!(evaluate(source).expect("evaluate main").as_i64(), Some(42));
-    let chunk = compile(source).expect("compile explicit main");
+    let program = compile(source).expect("compile explicit main");
+    let chunk = program.bytecode();
     assert_eq!(chunk.main().name, "main");
     assert_eq!(chunk.main().arity, 0);
     assert!(chunk.main().code.ends_with(&[Op::Return as u8]));
     assert!(chunk.global_names().is_empty());
+    assert_eq!(program.ssa().program().main.raw(), 0);
 }
 
 #[test]
-fn local_var_set_and_shadowing_execute_through_store_local() {
+fn local_var_set_and_shadowing_execute_through_ssa() {
     let source = "main/\nsig/\n->\nI64\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n1\ndo/\nset/\nx\n2\n/set\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n+/\nx\n1\n/+\ndo/\nset/\nx\n+/\nx\n3\n/+\n/set\nx\n/do\n/var\n/do\n/var\n/main\n";
-    let chunk = compile(source).expect("compile local mutation");
-    assert_eq!(chunk.main().locals, 2);
-    assert!(chunk.main().code.contains(&(Op::StoreLocal as u8)));
+    let program = compile(source).expect("compile local mutation");
+    assert!(program
+        .bytecode()
+        .main()
+        .code
+        .contains(&(Op::StoreLocal as u8)));
     assert_eq!(
-        returned(run_chunk(&chunk, &ExecutionConfig::default()))
+        returned(run_chunk(program.bytecode(), &ExecutionConfig::default(),))
             .expect("run local mutation")
             .as_i64(),
         Some(6)
@@ -124,10 +128,10 @@ fn immutable_product_state_threads_through_a_local_var() {
 #[test]
 fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
     let argument = "main/\nsig/\n->\nI64\n/sig\nstr-len/\nunwrap-some/\narg/\n0\n/arg\n/unwrap-some\n/str-len\n/main\n";
-    let chunk = compile(argument).expect("compile argument main");
+    let program = compile(argument).expect("compile argument main");
     assert_eq!(
         returned(run_chunk_with_args(
-            &chunk,
+            program.bytecode(),
             &["hello".into()],
             &ExecutionConfig::default(),
         ))
