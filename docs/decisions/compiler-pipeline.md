@@ -53,14 +53,31 @@ function storage use the canonical callee's inferred summary; calls through
 parameters or locals, and any missing provenance, conservatively carry every
 effect. Call arguments always retain their independently inferred effects.
 
-Typed SSA uses explicit basic-block parameters, exact scalar/product types,
-trap edges, calls, and effects. It is the sole optimization authority for
-reference lowering, JIT, the AOT test surface, and direct Wasm. The active cycle
-may retain HIR-to-bytecode only while differential tests establish SSA; it then
-lowers reference bytecode from verified SSA and deletes the sibling semantic
-lowering before native lowering is authoritative. Runtime JIT and file emission
-differ in code placement, relocation, and linking, not semantics or
-optimization ownership.
+Typed SSA uses dense deterministic function/block/value identities, explicit
+ordered basic-block parameters, exact scalar/product/collection/function types,
+structured terminators, canonical operation identities, trap/outcome facts,
+calls, effects, safepoints, frame states, and source origins. It is the sole
+optimization authority for reference lowering, JIT, the AOT test surface, and
+direct Wasm. The active cycle may retain HIR-to-bytecode only while differential
+tests establish SSA; it then lowers reference bytecode from verified normalized
+SSA and deletes the sibling semantic lowering before native lowering is
+authoritative. Runtime JIT and file emission differ in code placement,
+relocation, and linking, not semantics or optimization ownership.
+
+The accepted cutover changes the compiler result from a bare bytecode value to
+an executable program that owns both the opaque validated reference bytecode
+and verified SSA, plus deterministic function-to-prototype/main and SSA-to-
+bytecode link metadata. Bytecode remains available through an explicit
+accessor. Mutable raw chunks remain builder inputs only for malformed-bytecode
+tests and always cross `validate_chunk` before execution.
+
+The differential evaluator is independent of bytecode, the VM, native helpers,
+and host effects. Its accepted current slice covers deterministic scalar and
+control semantics, recursion, SSA-converted local mutation, products,
+Option/Result, lists, strings, and host-independent buffers under explicit fuel,
+frame, allocation, and buffer bounds. Console, filesystem, sockets, terminal,
+time, process-global handles, and other host operations are explicit
+unsupported-evaluator results rather than inert behavior.
 
 ## HIR Resolution Invariants
 
