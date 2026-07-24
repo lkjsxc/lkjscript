@@ -54,7 +54,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar eligibility, deterministic lowering, code objects, tier state, forced/auto execution |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
-| Heap/GC | `crates/lkjscript-vm/src/arena.rs` | `Arena` |
+| Heap/GC | `crates/lkjscript-vm/src/arena.rs` | Current VM-owned `Arena`; selected native-reference slice moves the pure stable-handle heap to `lkjscript-core` before sharing it with generated execution |
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
 | Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers and safe bounded executable installation/invocation |
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
@@ -88,6 +88,7 @@ CLI path
   -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
       +-> vm: run_chunk_with_args(program.bytecode(), ExecutionConfig)
       +-> baseline-jit: verified scalar group -> code object -> native main
+          (accepted next: ABI-2 typed roots -> active frames -> shared GC heap)
       +-> auto: VM entries -> bounded hotness -> later native function calls
 ```
 

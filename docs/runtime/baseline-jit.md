@@ -123,3 +123,15 @@ Loop OSR, background compilation, optimizing tiers, speculation, guards,
 deoptimization, allocation-capable native frames, GC references, and persistent
 profiles or code caches remain future or rejected work as classified by the
 active decisions.
+
+## Selected Next ABI
+
+**Accepted Next Slice, not Current behavior in this document.** Reference-capable
+objects use native ABI 2 with typed stable GC handles, exact non-empty root maps,
+bounded registered generated frames, and enum-identified runtime-ABI-1 frame
+and collection calls. The first source surface is host-independent Str, Buf,
+product, List, Option, and Result allocation plus direct/mutual recursion.
+Scalar ABI 1 remains the only callable implementation until those machine-plan,
+collection, source-equivalence, W^X, and structured-unwind tests pass. Host
+capabilities, lexical ownership references, OSR, and optimization are not
+smuggled into that first slice.

@@ -12,6 +12,26 @@ is an **Accepted Target** until forced generated execution allocates, survives
 collection with active exact native frames, and passes the gates below. It does
 not supersede the current scalar contract prematurely.
 
+## Selected Delivery Slices
+
+The implementation proceeds through separately honest boundaries:
+
+1. native ABI 2 typed references, exact non-empty stack maps, bounded active
+   generated frames, and a safe collection-dispatch boundary, tested first with
+   closed machine plans;
+2. source-to-generated host-independent allocation for Str, Buf, products,
+   List, Option, and Result, including field/tag/read/write operations, direct
+   and mutual recursion, forced collection, and VM/evaluator/native equality;
+3. versioned Handle and host-capability calls, native/VM continuation, complete
+   metrics, and same-commit allocation workload measurement.
+
+Slices 1 and 2 may become Current without claiming the complete target in this
+record. Slice 3 and every item in **Required Surface** remain required before
+“full allocation-capable baseline JIT” is a valid unqualified claim. `Owned`,
+`Ref`, and `RefMut` lexical values are not silently relabeled GC references;
+the ownership safe island retains a deterministic generated-tier rejection
+until a separate exact adapter is proved.
+
 ## Pipeline
 
 The only semantic path remains:

@@ -13,6 +13,36 @@ allocation, active-frame root enumeration, barriers, and collection during a
 generated call are an **Accepted Target**. Emitted non-empty metadata without a
 collection test is experimental evidence, not completion.
 
+## Selected Implementation Contract
+
+**Accepted Next Slice; not Current until its retained tests pass.** Semantic ABI
+version 1 remains stable. The first reference-capable code objects use native
+ABI version 2. Runtime ABI version 1 is extended only with enum-identified V1
+frame, collection-dispatch, and barrier calls; scalar ABI-1 objects are rejected
+rather than reinterpreted as ABI 2.
+
+The VM arena moves into the pure shared runtime layer so VM and generated code
+use one session-owned stable-handle heap. `lkjscript-jit` supplies safe runtime
+services; `lkjscript-sys` alone may hold raw generated-frame addresses while an
+invocation is active. Code installation remains owned RW-then-RX and no heap
+word is an exposed native pointer.
+
+Native plans identify each GC reference by an exact reference/layout identity.
+Frame descriptors enumerate every reference-capable value/local home. A bounded
+backward CFG analysis derives the sorted typed live-root subset at each
+collecting call, and independent machine-plan/image validation rejects omitted,
+out-of-frame, mistyped, duplicate, unsorted, or stale roots. Registers are not
+roots in the first slice: references are homed before collection and reloaded
+afterward.
+
+Generated prologues reserve bounded frame depth/bytes, initialize storage, and
+register one frame. A collecting call first publishes its dense safepoint
+identity. The sys trampoline validates the active chain and stack map,
+materializes only exact live roots for the safe runtime collector, and writes
+back updated handles before generated execution resumes. Every registered
+return, trap, exit, deadline, resource, host-failure, and propagated-callee edge
+unregisters once; reservation failure uses an unregistered epilogue.
+
 ## Reference Representation
 
 A worker-local GC reference is a typed stable runtime handle, not a raw object
