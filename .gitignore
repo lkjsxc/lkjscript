@@ -1,5 +1,6 @@
 # Build / local
 /target/
+/target-lkjsxcdotcom-runtime/
 /tmp/
 .env
 *.swp

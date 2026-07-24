@@ -9,13 +9,20 @@ pub mod executable;
 mod fd;
 mod file;
 mod poll;
+mod random;
+mod sha256;
 mod socket;
 mod time;
 mod tty;
 
 pub use fd::{close_fd, FdError, OwnedFd};
-pub use file::{open_read, open_write, path_exists, read_fd, write_fd};
+pub use file::{
+    fsync_fd, open_append, open_create_new, open_dir, open_read, open_write, path_exists, read_fd,
+    rename_path, truncate_fd, write_fd,
+};
 pub use poll::{poll_fd, PollError};
+pub use random::random_fill;
+pub use sha256::sha256;
 pub use socket::{
     accept_sock, bind_ipv4_any, listen_sock, recv_sock, send_sock, set_reuseaddr, tcp_socket,
     SockError,

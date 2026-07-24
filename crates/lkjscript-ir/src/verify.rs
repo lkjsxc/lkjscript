@@ -925,7 +925,12 @@ fn verify_runtime_signature(operation: RuntimeOp, signature: &Signature) -> crat
         RuntimeOp::BufSet | RuntimeOp::BufSetU32 => {
             exact(&[SsaType::Buf, SsaType::I64, SsaType::I64], &SsaType::Unit)
         }
-        RuntimeOp::BufClone => exact(&[SsaType::Buf], &SsaType::Buf),
+        RuntimeOp::BufClone | RuntimeOp::BufFromStr => match operation {
+            RuntimeOp::BufClone => exact(&[SsaType::Buf], &SsaType::Buf),
+            RuntimeOp::BufFromStr => exact(&[SsaType::Str], &SsaType::Buf),
+            _ => false,
+        },
+        RuntimeOp::BufToStr => exact(&[SsaType::Buf], &system_result(SsaType::Str)),
         RuntimeOp::StrLen => exact(&[SsaType::Str], &SsaType::I64),
         RuntimeOp::StrRef => exact(&[SsaType::Str, SsaType::I64], &SsaType::I64),
         RuntimeOp::StrAppend => exact(&[SsaType::Str, SsaType::Str], &SsaType::Str),
@@ -940,11 +945,31 @@ fn verify_runtime_signature(operation: RuntimeOp, signature: &Signature) -> crat
             &[SsaType::Handle, SsaType::I64],
             &system_result(SsaType::Unit),
         ),
+        RuntimeOp::SysReadInto | RuntimeOp::SysWriteFrom => exact(
+            &[SsaType::Handle, SsaType::Buf, SsaType::I64, SsaType::I64],
+            &system_result(SsaType::I64),
+        ),
         RuntimeOp::SysTtyGuardSave => exact(&[SsaType::Buf], &system_result(SsaType::Unit)),
         RuntimeOp::SysTtyGuardClear => exact(&[], &system_result(SsaType::Unit)),
-        RuntimeOp::SysOpenRead | RuntimeOp::SysOpenWrite => {
-            exact(&[SsaType::Str], &system_result(SsaType::Handle))
-        }
+        RuntimeOp::SysOpenRead
+        | RuntimeOp::SysOpenWrite
+        | RuntimeOp::SysOpenAppend
+        | RuntimeOp::SysOpenCreateNew
+        | RuntimeOp::SysOpenDir => exact(&[SsaType::Str], &system_result(SsaType::Handle)),
+        RuntimeOp::SysFsync => exact(&[SsaType::Handle], &system_result(SsaType::Unit)),
+        RuntimeOp::SysTruncate => exact(
+            &[SsaType::Handle, SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysRename => exact(&[SsaType::Str, SsaType::Str], &system_result(SsaType::Unit)),
+        RuntimeOp::SysRandomFill => exact(
+            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysSha256 => exact(
+            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &system_result(SsaType::Buf),
+        ),
         RuntimeOp::SysPathExists => exact(&[SsaType::Str], &system_result(SsaType::Bool)),
         RuntimeOp::SysWaitMs => exact(&[SsaType::I64], &system_result(SsaType::Unit)),
         RuntimeOp::SysNowMs => exact(&[], &system_result(SsaType::I64)),

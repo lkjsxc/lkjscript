@@ -509,6 +509,25 @@ impl Evaluator<'_> {
                     bytes: Rc::new(RefCell::new(buffer.bytes.borrow().clone())),
                 }))
             }),
+            Op::BufFromStr => unary(&arguments, |text| {
+                self.allocate()?;
+                let id = self.next_buffer_id;
+                self.next_buffer_id = self.next_buffer_id.saturating_add(1);
+                Ok(EvalValue::Buf(EvalBuffer {
+                    id,
+                    bytes: Rc::new(RefCell::new(as_str(text)?.as_bytes().to_vec())),
+                }))
+            }),
+            Op::BufToStr => unary(&arguments, |buffer| {
+                let buffer = as_buffer(buffer)?;
+                self.allocate()?;
+                match String::from_utf8(buffer.bytes.borrow().clone()) {
+                    Ok(text) => Ok(EvalValue::Ok(Box::new(EvalValue::Str(text)))),
+                    Err(_) => Ok(EvalValue::Err(Box::new(EvalValue::Str(
+                        "buf-to-str invalid UTF-8".into(),
+                    )))),
+                }
+            }),
             Op::BufGetU32 => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
                 let index = index_value(index, "buf-get-u32")?;
@@ -631,10 +650,20 @@ impl Evaluator<'_> {
             | Op::SysClose
             | Op::SysReadByte
             | Op::SysWriteByte
+            | Op::SysReadInto
+            | Op::SysWriteFrom
             | Op::SysTtyGuardSave
             | Op::SysTtyGuardClear
             | Op::SysOpenRead
             | Op::SysOpenWrite
+            | Op::SysOpenAppend
+            | Op::SysOpenCreateNew
+            | Op::SysOpenDir
+            | Op::SysFsync
+            | Op::SysTruncate
+            | Op::SysRename
+            | Op::SysRandomFill
+            | Op::SysSha256
             | Op::SysPathExists
             | Op::SysWaitMs
             | Op::SysNowMs

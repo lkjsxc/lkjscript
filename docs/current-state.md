@@ -15,7 +15,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: 96 language files under `src`; ten executable roots cover the exact corpus closure
+- Corpus: all canonical language files under `src` have executable roots that
+  cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
@@ -86,6 +87,14 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 - System Results: open, path existence, close/read/write, `isatty`, time,
   socket, poll, terminal, and terminal-guard failures return operation-qualified
   `ResultErr` values; standard wrappers unwrap explicitly
+- Lossless bulk bytes: bounded `Buf` UTF-8 conversion and offset/length-checked
+  file/socket partial-progress reads and writes are Current; legacy Str socket
+  operations remain only for old examples
+- Durable files and entropy: append/create-new/directory handles, sync,
+  truncate, same-filesystem rename, and Linux `getrandom` buffer fill are
+  Current; application framing/recovery policy remains in language code
+- SHA-256: fixed bounded-buffer digest is Current for verifier/integrity
+  consumers; HMAC, password KDF, encryption, and WebAuthn remain absent
 - Canonical resource names: `stdin-handle`, `sys-close`, `sys-read-byte`,
   `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
@@ -135,8 +144,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 The source identity cutover does not make the runtime semantically complete.
 The highest-priority defects are:
 
-1. strings and IO lack a lossless bulk byte contract, and some library file
-   operations are per-byte or quadratic;
+1. some library file operations remain per-byte or quadratic; SQLite and
+   application-level storage recovery are not implemented;
 2. source/import aggregate bytes and counts are not comprehensively bounded;
    bytecode tables/data/code/metadata and VM execution resources are bounded;
 3. cooperative deadlines can overrun inside filesystem, console-write,
@@ -149,6 +158,17 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The lossless bulk-byte and durable-file changes in this documentation's
+containing commits were checked on Linux x86-64 with Rust/Cargo 1.96.0:
+
+| Command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-core -p lkjscript-compiler -p lkjscript-sys -p lkjscript-vm` | passed; focused compiler/core/sys/VM coverage including exact binary socket transfer |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; workspace check, docs/tree/source closure, rustfmt, strict Clippy, and all workspace tests |
+| `cargo build --workspace --release --locked`; bulk-byte, durable-file, and HTTP smokes | passed; exact `.lkjscript` file-buffer plus append/replay consumers and legacy HTTP behavior |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | passed; Docker source closure and all configured runtime smokes including bulk bytes and durable files |
+| Not tested | performance and application-level HTTP/storage workloads |
 
 Phase A implementation commit
 `12836da90d886c9e741a5ac9f8148a17d00f0505` and the state-threaded editor

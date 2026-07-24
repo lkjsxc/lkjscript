@@ -43,6 +43,8 @@ pub enum Operation {
     BufRef,
     BufSet,
     BufClone,
+    BufFromStr,
+    BufToStr,
     BufGetU32,
     BufSetU32,
     StrLen,
@@ -57,10 +59,20 @@ pub enum Operation {
     SysClose,
     SysReadByte,
     SysWriteByte,
+    SysReadInto,
+    SysWriteFrom,
     SysTtyGuardSave,
     SysTtyGuardClear,
     SysOpenRead,
     SysOpenWrite,
+    SysOpenAppend,
+    SysOpenCreateNew,
+    SysOpenDir,
+    SysFsync,
+    SysTruncate,
+    SysRename,
+    SysRandomFill,
+    SysSha256,
     SysPathExists,
     SysWaitMs,
     SysNowMs,
@@ -122,6 +134,8 @@ impl Operation {
         Self::BufRef,
         Self::BufSet,
         Self::BufClone,
+        Self::BufFromStr,
+        Self::BufToStr,
         Self::BufGetU32,
         Self::BufSetU32,
         Self::StrLen,
@@ -136,10 +150,20 @@ impl Operation {
         Self::SysClose,
         Self::SysReadByte,
         Self::SysWriteByte,
+        Self::SysReadInto,
+        Self::SysWriteFrom,
         Self::SysTtyGuardSave,
         Self::SysTtyGuardClear,
         Self::SysOpenRead,
         Self::SysOpenWrite,
+        Self::SysOpenAppend,
+        Self::SysOpenCreateNew,
+        Self::SysOpenDir,
+        Self::SysFsync,
+        Self::SysTruncate,
+        Self::SysRename,
+        Self::SysRandomFill,
+        Self::SysSha256,
         Self::SysPathExists,
         Self::SysWaitMs,
         Self::SysNowMs,
@@ -207,6 +231,8 @@ impl Operation {
             Self::BufRef => "buf-ref",
             Self::BufSet => "buf-set",
             Self::BufClone => "buf-clone",
+            Self::BufFromStr => "buf-from-str",
+            Self::BufToStr => "buf-to-str",
             Self::BufGetU32 => "buf-get-u32",
             Self::BufSetU32 => "buf-set-u32",
             Self::StrLen => "str-len",
@@ -221,10 +247,20 @@ impl Operation {
             Self::SysClose => "sys-close",
             Self::SysReadByte => "sys-read-byte",
             Self::SysWriteByte => "sys-write-byte",
+            Self::SysReadInto => "sys-read-into",
+            Self::SysWriteFrom => "sys-write-from",
             Self::SysTtyGuardSave => "sys-tty-guard-save",
             Self::SysTtyGuardClear => "sys-tty-guard-clear",
             Self::SysOpenRead => "sys-open-read",
             Self::SysOpenWrite => "sys-open-write",
+            Self::SysOpenAppend => "sys-open-append",
+            Self::SysOpenCreateNew => "sys-open-create-new",
+            Self::SysOpenDir => "sys-open-dir",
+            Self::SysFsync => "sys-fsync",
+            Self::SysTruncate => "sys-truncate",
+            Self::SysRename => "sys-rename",
+            Self::SysRandomFill => "sys-random-fill",
+            Self::SysSha256 => "sys-sha256",
             Self::SysPathExists => "sys-path-exists",
             Self::SysWaitMs => "sys-wait-ms",
             Self::SysNowMs => "sys-now-ms",
@@ -340,6 +376,8 @@ impl Operation {
                 function(vec![Type::Buf, Type::I64, Type::I64], Type::Unit)
             }
             Self::BufClone => function(vec![Type::Buf], Type::Buf),
+            Self::BufFromStr => function(vec![Type::Str], Type::Buf),
+            Self::BufToStr => function(vec![Type::Buf], system_result(Type::Str)),
             Self::StrLen => function(vec![Type::Str], Type::I64),
             Self::StrRef => function(vec![Type::Str, Type::I64], Type::I64),
             Self::StrAppend => function(vec![Type::Str, Type::Str], Type::Str),
@@ -353,11 +391,28 @@ impl Operation {
             Self::SysWriteByte => {
                 function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
             }
+            Self::SysReadInto | Self::SysWriteFrom => function(
+                vec![Type::Handle, Type::Buf, Type::I64, Type::I64],
+                system_result(Type::I64),
+            ),
             Self::SysTtyGuardSave => function(vec![Type::Buf], system_result(Type::Unit)),
             Self::SysTtyGuardClear => function(Vec::new(), system_result(Type::Unit)),
-            Self::SysOpenRead | Self::SysOpenWrite => {
-                function(vec![Type::Str], system_result(Type::Handle))
-            }
+            Self::SysOpenRead
+            | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir => function(vec![Type::Str], system_result(Type::Handle)),
+            Self::SysFsync => function(vec![Type::Handle], system_result(Type::Unit)),
+            Self::SysTruncate => function(vec![Type::Handle, Type::I64], system_result(Type::Unit)),
+            Self::SysRename => function(vec![Type::Str, Type::Str], system_result(Type::Unit)),
+            Self::SysRandomFill => function(
+                vec![Type::Buf, Type::I64, Type::I64],
+                system_result(Type::Unit),
+            ),
+            Self::SysSha256 => function(
+                vec![Type::Buf, Type::I64, Type::I64],
+                system_result(Type::Buf),
+            ),
             Self::SysPathExists => function(vec![Type::Str], system_result(Type::Bool)),
             Self::SysWaitMs => function(vec![Type::I64], system_result(Type::Unit)),
             Self::SysNowMs => function(Vec::new(), system_result(Type::I64)),
@@ -547,6 +602,9 @@ impl Operation {
 
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
+            Self::BufFromStr | Self::BufToStr => EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::Cons
             | Self::StrAppend
             | Self::StrFromByte
@@ -569,6 +627,17 @@ impl Operation {
             | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufSet | Self::BufSetU32 => EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufLen | Self::StrLen | Self::IsOk | Self::IsSome => EffectSet::READS_MEMORY,
+            Self::SysReadInto => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::SysWriteFrom => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::SysSha256 => EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::Print
             | Self::Flush
             | Self::ReadByte
@@ -585,6 +654,13 @@ impl Operation {
             | Self::SysTtyGuardClear
             | Self::SysOpenRead
             | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir
+            | Self::SysFsync
+            | Self::SysTruncate
+            | Self::SysRename
+            | Self::SysRandomFill
             | Self::SysPathExists
             | Self::SysWaitMs
             | Self::SysNowMs
@@ -752,7 +828,7 @@ mod tests {
     use crate::hir::EffectSet;
     use crate::types::Type;
 
-    use super::Operation;
+    use super::{function, Operation};
 
     #[test]
     fn explicit_equality_families_enforce_static_categories() {
@@ -816,6 +892,113 @@ mod tests {
         assert!(Operation::F64BitsEqual
             .resolve_types(&[Type::I64, Type::I64])
             .is_err());
+    }
+
+    #[test]
+    fn lossless_bulk_byte_operations_have_exact_signatures_and_effects() {
+        let result_i64 = Type::Result(Box::new(Type::I64), Box::new(Type::Str));
+        let result_str = Type::Result(Box::new(Type::Str), Box::new(Type::Str));
+        assert_eq!(
+            Operation::from_name("buf-from-str"),
+            Some(Operation::BufFromStr)
+        );
+        assert_eq!(
+            Operation::from_name("buf-to-str"),
+            Some(Operation::BufToStr)
+        );
+        assert_eq!(
+            Operation::SysReadInto.resolve_types(&[Type::Handle, Type::Buf, Type::I64, Type::I64]),
+            Ok((
+                function(
+                    vec![Type::Handle, Type::Buf, Type::I64, Type::I64],
+                    result_i64.clone()
+                ),
+                result_i64.clone(),
+            ))
+        );
+        assert_eq!(
+            Operation::BufToStr.resolve_types(&[Type::Buf]),
+            Ok((function(vec![Type::Buf], result_str.clone()), result_str))
+        );
+        assert_eq!(
+            Operation::BufFromStr.effects(),
+            EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP)
+        );
+        assert_eq!(
+            Operation::SysReadInto.effects(),
+            EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP)
+        );
+    }
+
+    #[test]
+    fn durable_file_operations_have_exact_signatures_and_effects() {
+        let result_handle = Type::Result(Box::new(Type::Handle), Box::new(Type::Str));
+        let result_unit = Type::Result(Box::new(Type::Unit), Box::new(Type::Str));
+        assert_eq!(
+            Operation::from_name("sys-open-append"),
+            Some(Operation::SysOpenAppend)
+        );
+        assert_eq!(
+            Operation::from_name("sys-random-fill"),
+            Some(Operation::SysRandomFill)
+        );
+        assert_eq!(
+            Operation::SysOpenCreateNew.resolve_types(&[Type::Str]),
+            Ok((
+                function(vec![Type::Str], result_handle.clone()),
+                result_handle
+            ))
+        );
+        assert_eq!(
+            Operation::SysTruncate.resolve_types(&[Type::Handle, Type::I64]),
+            Ok((
+                function(vec![Type::Handle, Type::I64], result_unit.clone()),
+                result_unit.clone(),
+            ))
+        );
+        assert_eq!(
+            Operation::SysRandomFill.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
+            Ok((
+                function(vec![Type::Buf, Type::I64, Type::I64], result_unit),
+                Type::Result(Box::new(Type::Unit), Box::new(Type::Str)),
+            ))
+        );
+        assert_eq!(
+            Operation::SysFsync.effects(),
+            EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::MAY_TRAP)
+        );
+    }
+
+    #[test]
+    fn sha256_has_an_exact_signature_and_memory_effects() {
+        let result_buf = Type::Result(Box::new(Type::Buf), Box::new(Type::Str));
+        assert_eq!(
+            Operation::from_name("sys-sha256"),
+            Some(Operation::SysSha256)
+        );
+        assert_eq!(
+            Operation::SysSha256.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
+            Ok((
+                function(vec![Type::Buf, Type::I64, Type::I64], result_buf.clone()),
+                result_buf,
+            ))
+        );
+        assert!(Operation::SysSha256
+            .resolve_types(&[Type::Buf, Type::I64])
+            .is_err());
+        assert_eq!(
+            Operation::SysSha256.effects(),
+            EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP)
+        );
     }
 
     #[test]

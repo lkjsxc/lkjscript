@@ -219,6 +219,8 @@ pub enum RuntimeOp {
     BufRef,
     BufSet,
     BufClone,
+    BufFromStr,
+    BufToStr,
     BufGetU32,
     BufSetU32,
     StrLen,
@@ -233,10 +235,20 @@ pub enum RuntimeOp {
     SysClose,
     SysReadByte,
     SysWriteByte,
+    SysReadInto,
+    SysWriteFrom,
     SysTtyGuardSave,
     SysTtyGuardClear,
     SysOpenRead,
     SysOpenWrite,
+    SysOpenAppend,
+    SysOpenCreateNew,
+    SysOpenDir,
+    SysFsync,
+    SysTruncate,
+    SysRename,
+    SysRandomFill,
+    SysSha256,
     SysPathExists,
     SysWaitMs,
     SysNowMs,
@@ -263,6 +275,9 @@ impl RuntimeOp {
     pub const fn effects(self) -> EffectSet {
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
+            Self::BufFromStr | Self::BufToStr | Self::SysSha256 => EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::Cons
             | Self::StrAppend
             | Self::StrFromByte
@@ -285,6 +300,14 @@ impl RuntimeOp {
             | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufSet | Self::BufSetU32 => EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufLen | Self::StrLen | Self::IsOk | Self::IsSome => EffectSet::READS_MEMORY,
+            Self::SysReadInto => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::SysWriteFrom => EffectSet::HOST_IO
+                .union(EffectSet::ALLOCATES)
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::Print
             | Self::Flush
             | Self::ReadByte
@@ -301,6 +324,13 @@ impl RuntimeOp {
             | Self::SysTtyGuardClear
             | Self::SysOpenRead
             | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir
+            | Self::SysFsync
+            | Self::SysTruncate
+            | Self::SysRename
+            | Self::SysRandomFill
             | Self::SysPathExists
             | Self::SysWaitMs
             | Self::SysNowMs

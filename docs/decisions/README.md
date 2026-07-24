@@ -16,6 +16,9 @@ Index active architecture decisions separately from superseded history.
 - [equality-families.md](equality-families.md): explicit value, identity, list, and F64-bit equality
 - [immutable-nominal-products.md](immutable-nominal-products.md): named immutable aggregate state
 - [linux-x86-64-native-backend.md](linux-x86-64-native-backend.md): owned emitter selected for the future production baseline JIT
+- [lossless-bulk-bytes.md](lossless-bulk-bytes.md): bounded exact byte boundary for files and sockets
+- [durable-file-capabilities.md](durable-file-capabilities.md): append, sync, rename, and OS entropy boundary
+- [sha256.md](sha256.md): fixed digest primitive for verifier and integrity use
 - [runtime-jit-instead-of-offline-pgo.md](runtime-jit-instead-of-offline-pgo.md): runtime JIT tiers and rejection of offline PGO
 - [numeric-semantics.md](numeric-semantics.md): exact I64/F64 source-to-host contract
 - [semantic-core.md](semantic-core.md): AI-first Unit/Option/control/mutation/equality contract

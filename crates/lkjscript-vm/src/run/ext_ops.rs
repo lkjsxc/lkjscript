@@ -92,6 +92,18 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             vm.push(r);
             Ok(true)
         }
+        x if x == Op::BufFromStr as u8 => {
+            let value = vm.pop()?;
+            let buffer = crate::host_buf::buf_from_str(&mut vm.arena, value)?;
+            vm.push(buffer);
+            Ok(true)
+        }
+        x if x == Op::BufToStr as u8 => {
+            let value = vm.pop()?;
+            let result = crate::host_buf::buf_to_str(&mut vm.arena, value);
+            push_language_result(vm, result);
+            Ok(true)
+        }
         x if x == Op::SysOpenRead as u8 => {
             vm.ensure_host_deadline_support("sys-open-read", false)?;
             let path = vm.pop()?;
@@ -105,6 +117,56 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let path = vm.pop()?;
             let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
             let result = vm.resources.sys_open_write(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysOpenAppend as u8 => {
+            vm.ensure_host_deadline_support("sys-open-append", false)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_append(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysOpenCreateNew as u8 => {
+            vm.ensure_host_deadline_support("sys-open-create-new", false)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_create_new(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysOpenDir as u8 => {
+            vm.ensure_host_deadline_support("sys-open-dir", false)?;
+            let path = vm.pop()?;
+            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let result = vm.resources.sys_open_dir(&path);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysFsync as u8 => {
+            vm.ensure_host_deadline_support("sys-fsync", false)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sys_fsync(handle);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysTruncate as u8 => {
+            vm.ensure_host_deadline_support("sys-truncate", false)?;
+            let length = vm.pop()?;
+            let length = vm.as_i64(length)?;
+            let handle = vm.pop()?;
+            let result = vm.resources.sys_truncate(handle, length);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysRename as u8 => {
+            vm.ensure_host_deadline_support("sys-rename", false)?;
+            let to = vm.pop()?;
+            let from = vm.pop()?;
+            let from = crate::host_ext::as_str(&vm.arena, from)?.to_string();
+            let to = crate::host_ext::as_str(&vm.arena, to)?.to_string();
+            let result = crate::host_ext::ResourceTable::sys_rename(&from, &to);
             push_language_result(vm, result);
             Ok(true)
         }
@@ -132,6 +194,65 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let byte = vm.as_i64(byte)?;
             let result = vm.resources.write_byte(handle, byte);
             push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysReadInto as u8 => {
+            vm.ensure_host_deadline_support("sys-read-into", false)?;
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let handle = vm.pop()?;
+            let result = crate::host_buf::sys_read_into(
+                &mut vm.arena,
+                &vm.resources,
+                handle,
+                buffer,
+                offset,
+                requested,
+            );
+            push_i64_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysRandomFill as u8 => {
+            vm.ensure_host_deadline_support("sys-random-fill", false)?;
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let result = crate::host_buf::sys_random_fill(&mut vm.arena, buffer, offset, requested);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysSha256 as u8 => {
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let result = crate::host_buf::sys_sha256(&mut vm.arena, buffer, offset, requested);
+            push_language_result(vm, result);
+            Ok(true)
+        }
+        x if x == Op::SysWriteFrom as u8 => {
+            vm.ensure_host_deadline_support("sys-write-from", false)?;
+            let requested = vm.pop()?;
+            let offset = vm.pop()?;
+            let requested = vm.as_i64(requested)?;
+            let offset = vm.as_i64(offset)?;
+            let buffer = vm.pop()?;
+            let handle = vm.pop()?;
+            let result = crate::host_buf::sys_write_from(
+                &vm.arena,
+                &vm.resources,
+                handle,
+                buffer,
+                offset,
+                requested,
+            );
+            push_i64_result(vm, result);
             Ok(true)
         }
         x if x == Op::Arg as u8 => {

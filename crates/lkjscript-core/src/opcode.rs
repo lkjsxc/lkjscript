@@ -97,6 +97,18 @@ pub enum Op {
     LoadProductField = 152,
     WithProductField = 153,
     Trap = 154,
+    SysReadInto = 155,
+    SysWriteFrom = 156,
+    BufFromStr = 157,
+    BufToStr = 158,
+    SysOpenAppend = 159,
+    SysOpenCreateNew = 160,
+    SysOpenDir = 161,
+    SysFsync = 162,
+    SysTruncate = 163,
+    SysRename = 164,
+    SysRandomFill = 165,
+    SysSha256 = 166,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -263,6 +275,18 @@ impl Op {
         Self::LoadProductField,
         Self::WithProductField,
         Self::Trap,
+        Self::SysReadInto,
+        Self::SysWriteFrom,
+        Self::BufFromStr,
+        Self::BufToStr,
+        Self::SysOpenAppend,
+        Self::SysOpenCreateNew,
+        Self::SysOpenDir,
+        Self::SysFsync,
+        Self::SysTruncate,
+        Self::SysRename,
+        Self::SysRandomFill,
+        Self::SysSha256,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {
@@ -350,9 +374,26 @@ impl Op {
             | Self::SysTtySet
             | Self::SysBind
             | Self::SysListen
-            | Self::SysSend => Fixed {
+            | Self::SysSend
+            | Self::SysTruncate
+            | Self::SysRename => Fixed {
                 required: 2,
                 pops: 2,
+                pushes: 1,
+            },
+            Self::SysReadInto | Self::SysWriteFrom => Fixed {
+                required: 4,
+                pops: 4,
+                pushes: 1,
+            },
+            Self::SysRandomFill => Fixed {
+                required: 3,
+                pops: 3,
+                pushes: 1,
+            },
+            Self::SysSha256 => Fixed {
+                required: 3,
+                pops: 3,
                 pushes: 1,
             },
             Self::BufRef | Self::BufGetU32 => Fixed {
@@ -386,6 +427,10 @@ impl Op {
             | Self::StrFromByte
             | Self::SysOpenRead
             | Self::SysOpenWrite
+            | Self::SysOpenAppend
+            | Self::SysOpenCreateNew
+            | Self::SysOpenDir
+            | Self::SysFsync
             | Self::SysClose
             | Self::SysReadByte
             | Self::Arg
@@ -403,7 +448,9 @@ impl Op {
             | Self::SomeWrap
             | Self::IsSome
             | Self::UnwrapSome
-            | Self::LoadProductField => Fixed {
+            | Self::LoadProductField
+            | Self::BufFromStr
+            | Self::BufToStr => Fixed {
                 required: 1,
                 pops: 1,
                 pushes: 1,

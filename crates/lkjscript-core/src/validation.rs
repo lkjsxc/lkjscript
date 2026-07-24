@@ -947,6 +947,14 @@ fn apply_instruction(
             expect_pop(state, Kind::I64, proto, instruction)?;
             state.stack.push(Kind::Buf);
         }
+        Op::BufFromStr => {
+            expect_pop(state, Kind::Str, proto, instruction)?;
+            state.stack.push(Kind::Buf);
+        }
+        Op::BufToStr => {
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
         Op::BufLen | Op::BufClone => {
             expect_pop(state, Kind::Buf, proto, instruction)?;
             state.stack.push(if op == Op::BufLen {
@@ -1025,11 +1033,20 @@ fn apply_instruction(
             expect_pop(state, Kind::F64, proto, instruction)?;
             state.stack.push(Kind::Str);
         }
-        Op::SysOpenRead | Op::SysOpenWrite | Op::SysPathExists => {
+        Op::SysOpenRead
+        | Op::SysOpenWrite
+        | Op::SysOpenAppend
+        | Op::SysOpenCreateNew
+        | Op::SysOpenDir
+        | Op::SysPathExists => {
             expect_pop(state, Kind::Str, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
-        Op::SysWriteByte | Op::SysBind | Op::SysListen => {
+        Op::SysFsync => {
+            expect_pop(state, Kind::Handle, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysWriteByte | Op::SysBind | Op::SysListen | Op::SysTruncate => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
             state.stack.push(Kind::Result);
@@ -1047,6 +1064,24 @@ fn apply_instruction(
         Op::SysSend => {
             expect_pop(state, Kind::Str, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysReadInto | Op::SysWriteFrom => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            expect_pop(state, Kind::Handle, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysRandomFill | Op::SysSha256 => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            state.stack.push(Kind::Result);
+        }
+        Op::SysRename => {
+            expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Str, proto, instruction)?;
             state.stack.push(Kind::Result);
         }
         Op::OkWrap | Op::ErrWrap => {
@@ -1442,6 +1477,7 @@ mod tests {
             (Op::Car, "List"),
             (Op::BufLen, "Buf"),
             (Op::SysClose, "Handle"),
+            (Op::BufToStr, "Buf"),
         ] {
             let mut chunk = unit_chunk();
             chunk.main.code = vec![Op::Unit as u8, operation as u8, Op::Return as u8];
@@ -1451,6 +1487,48 @@ mod tests {
                 "wrong category diagnostic for {operation:?}: {message}"
             );
         }
+    }
+
+    #[test]
+    fn bulk_byte_opcodes_reject_malformed_type_stacks() {
+        let mut read = unit_chunk();
+        read.main.code = vec![
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::SysReadInto as u8,
+            Op::Return as u8,
+        ];
+        assert!(error(read).contains("I64"));
+
+        let mut from = unit_chunk();
+        from.main.code = vec![Op::Unit as u8, Op::BufFromStr as u8, Op::Return as u8];
+        assert!(error(from).contains("Str"));
+
+        let mut random = unit_chunk();
+        random.main.code = vec![
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::SysRandomFill as u8,
+            Op::Return as u8,
+        ];
+        assert!(error(random).contains("I64"));
+
+        let mut sha256 = unit_chunk();
+        sha256.main.code = vec![
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::Unit as u8,
+            Op::SysSha256 as u8,
+            Op::Return as u8,
+        ];
+        assert!(error(sha256).contains("I64"));
+
+        let mut fsync = unit_chunk();
+        fsync.main.code = vec![Op::Unit as u8, Op::SysFsync as u8, Op::Return as u8];
+        assert!(error(fsync).contains("Handle"));
     }
 
     #[test]

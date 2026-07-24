@@ -16,6 +16,10 @@ pub const MAX_TOPLEVEL_FORMS: u32 = 8;
 pub const MAX_PRODUCT_FIELDS: usize = 15;
 /// Maximum pair-node comparisons performed by one structural list equality.
 pub const MAX_LIST_EQUAL_STEPS: usize = 1_000_000;
+/// Maximum bytes owned by one language buffer.
+pub const MAX_BUFFER_BYTES: usize = 1_000_000;
+/// Maximum bytes transferred by one bulk file or socket operation.
+pub const MAX_BULK_IO_BYTES: usize = 64 * 1024;
 
 pub const MAX_CHUNK_ENCODED_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_FUNCTION_CODE_BYTES: usize = 65_535;
@@ -117,6 +121,8 @@ mod tests {
         assert_eq!(lim.validation, ValidationLimits::default());
         assert_eq!(MAX_PRODUCT_FIELDS, 15);
         assert_eq!(MAX_LIST_EQUAL_STEPS, 1_000_000);
+        assert_eq!(MAX_BUFFER_BYTES, 1_000_000);
+        assert_eq!(MAX_BULK_IO_BYTES, 64 * 1024);
     }
 
     #[test]
