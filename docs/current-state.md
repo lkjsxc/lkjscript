@@ -100,8 +100,9 @@ The highest-priority defects are:
 ## Evidence
 
 Phase A implementation commit
-`12836da90d886c9e741a5ac9f8148a17d00f0505`, based on `e4c1d0e`, was checked
-on Linux x86-64 with Rust/Cargo 1.96.0. Evidence is command-specific; Docker, full Brainfuck
+`12836da90d886c9e741a5ac9f8148a17d00f0505` and the state-threaded editor
+behavior follow-up `91d7e9bb734307269eb44b2d3a0882ba55d2f5b2`, based on `e4c1d0e`, were
+checked on Linux x86-64 with Rust/Cargo 1.96.0. Evidence is command-specific; Docker, full Brainfuck
 Mandelbrot, and performance are not implied.
 
 | Command or check | Result |
