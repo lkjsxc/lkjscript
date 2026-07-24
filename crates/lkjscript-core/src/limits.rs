@@ -91,7 +91,7 @@ impl Default for ExecutionConfig {
         Self {
             instruction_fuel: 1_000_000_000,
             max_stack_values: 1_000_000,
-            max_frames: 4_096,
+            max_frames: 65_536,
             max_heap_bytes: 256 * 1024 * 1024,
             max_allocations: 10_000_000,
             max_handles: 4_096,
