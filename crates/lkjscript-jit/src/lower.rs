@@ -697,6 +697,7 @@ fn lower_runtime(
                 ValueType::F64 => {
                     builder.f64_compare(block, F64Comparison::OrderedEqual, left, right)
                 }
+                ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
             }
         }
         RuntimeOp::F64BitsEqual => {

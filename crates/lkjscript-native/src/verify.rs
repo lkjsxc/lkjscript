@@ -42,7 +42,7 @@ impl fmt::Display for VerificationError {
             Self::UnsupportedSignature(function) => {
                 write!(
                     formatter,
-                    "function {function:?} has an unsupported scalar ABI signature"
+                    "function {function:?} has an unsupported native ABI signature"
                 )
             }
             Self::MissingEntry(function) => {
@@ -457,6 +457,32 @@ fn verify_instruction(
 fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), VerificationError> {
     if slot.version() != 1 {
         return Err(VerificationError::TypeMismatch("runtime-call version"));
+    }
+    if !slot.plan_callable() {
+        return Err(VerificationError::TypeMismatch(
+            "encoder-owned runtime call",
+        ));
+    }
+    let signature = slot.signature();
+    match slot {
+        RuntimeCallSlot::CollectReferenceV1
+            if signature.parameters() == [ValueType::Reference(crate::ReferenceType::Buf)]
+                && signature.result() == ValueType::Reference(crate::ReferenceType::Buf) => {}
+        RuntimeCallSlot::CollectReferenceV1 => {
+            return Err(VerificationError::TypeMismatch(
+                "collecting runtime-call signature",
+            ));
+        }
+        RuntimeCallSlot::IdentityI64V1
+        | RuntimeCallSlot::PollV1
+        | RuntimeCallSlot::EnterFunctionV1 => {}
+        RuntimeCallSlot::RegisterFrameV1
+        | RuntimeCallSlot::PublishSafepointV1
+        | RuntimeCallSlot::UnregisterFrameV1 => {
+            return Err(VerificationError::TypeMismatch(
+                "encoder-owned runtime call",
+            ));
+        }
     }
     Ok(())
 }

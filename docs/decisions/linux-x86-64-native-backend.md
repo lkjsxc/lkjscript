@@ -12,9 +12,11 @@ source-independent Linux x86-64 scalar machine-plan verifier, encoder, opaque
 installable image, and safe bounded `lkjscript-sys` W^X boundary remain the
 backend foundation. A separate narrow `lkjscript-jit` adapter now consumes only
 verified typed SSA and provides callable allocation-free scalar code objects,
-VM/native transfer, tier state, and `vm`/`auto`/`baseline-jit` engines. Native
-references/allocation, host operations, recursion, OSR, and optimizing tiers
-remain outside current coverage.
+VM/native transfer, tier state, and `vm`/`auto`/`baseline-jit` engines. The
+closed machine-plan/sys boundary now supports exact ABI-2 typed stable
+references and active frames. Source-level native allocation/references, host
+operations, recursion, OSR, and optimizing tiers remain outside current
+coverage.
 
 ## Decision
 
@@ -149,8 +151,9 @@ reinterpreting another representation.
 
 The crate returns an opaque `InstallableImage` containing read-only code bytes,
 typed symbolic relocations, entries and signatures, runtime-call references,
-frame facts, scalar safepoints with empty reference maps, source/trap/outcome
-mappings, exact size/work accounting, and semantic/native/runtime ABI versions.
+typed checked frame homes, dense safepoints with liveness-derived exact maps,
+source/trap/outcome mappings, exact size/work accounting, and
+semantic/native/runtime ABI versions.
 It does not own executable memory, tier state, the VM, GC, host services, or CLI
 policy.
 

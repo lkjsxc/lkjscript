@@ -777,7 +777,7 @@ impl JitSession {
                     exact_scalar_stack_maps: object
                         .safepoints
                         .iter()
-                        .all(|point| point.stack_map().reference_slots().is_empty()),
+                        .all(|point| point.stack_map().roots().is_empty()),
                     diagnostic_machine_code: object.diagnostic_machine_code.clone(),
                     compile_stats: object.compile_stats.clone(),
                     invalidated: object.invalidated,
@@ -1040,6 +1040,9 @@ fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedValue> {
             Value::from_heap(0),
             vec![Some(HeapObj::Float(f64::from_bits(bits)))],
         ),
+        NativeValue::Reference(_) => Err(lkjscript_core::Error::msg(
+            "scalar JIT cannot return a native reference",
+        )),
     }
 }
 

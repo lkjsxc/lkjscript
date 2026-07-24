@@ -14,9 +14,10 @@ baseline execution, a proof-based optimizing tier, and later OSR in that order.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
 by measurement. Canonical source/verified-SSA linkage, bounded code objects,
 VM/native transfer, `vm`/`auto`/`baseline-jit`, PollV1, and actual generated
-calls are implemented. Ownership/traits, native references/allocation,
-recursion, OSR, optimizing/speculative tiers, background work, and
-deoptimization are absent.
+calls are implemented. Closed machine plans also have ABI-2 exact typed
+reference frames/maps and a collecting Buf-reference slot. Source-level native
+references/allocation, recursion, OSR, optimizing/speculative tiers, background
+work, and deoptimization are absent.
 
 ## Decision
 

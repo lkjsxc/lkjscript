@@ -1,8 +1,8 @@
 #![allow(clippy::panic)]
 
 use lkjscript_native::{
-    encode, BackendLimits, EncodingConfig, MachinePlanBuilder, NativeError, Signature,
-    SourceFunctionId, ValueType, VerificationError,
+    encode, BackendLimits, EncodingConfig, FrameHomeKind, MachinePlanBuilder, NativeError,
+    ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId, ValueType, VerificationError,
 };
 
 #[test]
@@ -106,5 +106,113 @@ fn rejects_type_mismatch_unsupported_signature_and_code_limit(
         encode(verified, EncodingConfig::default()),
         Err(NativeError::Encode(_))
     ));
+    Ok(())
+}
+
+#[test]
+fn verifies_exact_reference_signatures_and_type_use() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ValueType::Reference(ReferenceType::Buf);
+    let string = ValueType::Reference(ReferenceType::Str);
+
+    let mut plan = MachinePlanBuilder::new();
+    let function =
+        plan.declare_function(SourceFunctionId::new(10), Signature::new(vec![buf], buf)?)?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let input = builder.parameter(0)?;
+    let one = builder.i64_const(entry, 1)?;
+    let invalid = builder.i64_add(entry, input, one)?;
+    builder.return_value(entry, invalid)?;
+    plan.define_function(builder.finish())?;
+    assert!(matches!(
+        plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            _
+        )))
+    ));
+
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(11),
+        Signature::new(vec![string], buf)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let input = builder.parameter(0)?;
+    builder.return_value(entry, input)?;
+    plan.define_function(builder.finish())?;
+    assert!(matches!(
+        plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::InvalidReturn(
+            _
+        )))
+    ));
+
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(12),
+        Signature::new(vec![ValueType::I64], buf)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let integer = builder.parameter(0)?;
+    let invalid =
+        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![integer])?;
+    builder.return_value(entry, invalid)?;
+    plan.define_function(builder.finish())?;
+    assert!(matches!(
+        plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            _
+        )))
+    ));
+    Ok(())
+}
+
+#[test]
+fn derives_non_empty_exact_reference_maps_without_dead_slots(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ValueType::Reference(ReferenceType::Buf);
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(20),
+        Signature::new(vec![buf, buf], buf)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let live = builder.parameter(0)?;
+    let _dead = builder.parameter(1)?;
+    let local = builder.create_local(buf)?;
+    let _write = builder.write_local(entry, local, live)?;
+    let _collected =
+        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![live])?;
+    let returned = builder.read_local(entry, local)?;
+    builder.return_value(entry, returned)?;
+    plan.define_function(builder.finish())?;
+    let image = encode(
+        plan.verify(BackendLimits::default())?,
+        EncodingConfig::default(),
+    )?;
+    image.validate_integrity()?;
+    assert_eq!(image.safepoints().len(), 1);
+    let roots = image.safepoints()[0].stack_map().roots();
+    assert_eq!(roots.len(), 2);
+    assert!(roots
+        .iter()
+        .all(|root| root.reference_type() == ReferenceType::Buf));
+    assert!(roots
+        .iter()
+        .any(|root| root.kind() == FrameHomeKind::Value(0)));
+    assert!(roots
+        .iter()
+        .any(|root| root.kind() == FrameHomeKind::Local(0)));
+    assert!(!roots
+        .iter()
+        .any(|root| root.kind() == FrameHomeKind::Value(1)));
+    assert!(roots.windows(2).all(|pair| pair[0] < pair[1]));
     Ok(())
 }

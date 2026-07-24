@@ -153,10 +153,12 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   Unit/Bool/I64/F64 CFG and acyclic direct calls to `lkjscript-native`, installs
   bounded owned non-Send code objects through `lkjscript-sys`, and actually
   invokes generated System V AMD64 entries; direct native calls stay unboxed
-- Native runtime ABI: enum-identified `EnterFunctionV1` and `PollV1` calls record
-  per-source-function entries and enforce cooperative native poll fuel and a
-  monotonic deadline; structured return/trap/exit/deadline/resource/host status
-  returns to the execution owner and generated code never exits the process
+- Native runtime ABI: semantic/runtime versions remain 1 and native ABI 2 is
+  required. Enum-identified `EnterFunctionV1` and `PollV1` calls record entries
+  and enforce cooperative fuel/deadlines; generated ABI-2 prologues initialize
+  homes/context before bounded frame registration, collecting calls publish a
+  dense safepoint, and every structured return/trap/exit/deadline/resource/host
+  edge unregisters before status returns to the execution owner
 - Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; ordinary `run`
   defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
   remains deterministic, forced baseline compiles the complete reachable
@@ -174,13 +176,24 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   RSS, checks exact result bits and stream silence, randomizes at least four
   warmups plus 31 samples, and retains every sample and distribution under
   `meta/benchmarks/jit/results/`
-- Native limits: recursion, indirect calls, polymorphic or unsupported
-  signatures, references, strings, collections, products, Option/Result,
-  buffers, allocation, and host IO are explicit forced-mode engine errors.
-  Empty native stack maps are exact for this allocation-free scalar subset
+- Closed-plan native references: typed opaque stable-handle words use exact
+  Buf/Str/List/Option/Result/product layout identities and GPR marshalling, not
+  raw object pointers. Checked RBP homes and bounded backward-CFG liveness
+  derive sorted/deduplicated typed maps for every direct/runtime call;
+  `CollectReferenceV1` exercises exact non-empty Buf roots while Poll/Enter stay
+  non-collecting. `lkjscript-sys` alone retains raw active-frame addresses,
+  validates the installed image/chain/maps, copies typed roots to safe runtime
+  services, writes back handles, and reports peak/zero-final depth plus exact
+  collection root counts. Caller/callee chains, dead-root exclusion, bounds,
+  structured failures/outcomes, W^X, and repeated installation are tested
+- Native source limits: the callable SSA adapter still rejects recursion,
+  indirect calls, polymorphic or unsupported signatures, references, strings,
+  collections, products, Option/Result, buffers, allocation, and host IO.
+  Scalar ABI-2 stack maps are therefore exactly empty even though the closed
+  machine-plan/sys foundation supports typed references
 - Deferred tiers: loop OSR, background compilation, optimizing/speculative
-  tiers, deoptimization, native references/allocation, persistent profiles, and
-  persistent code caches remain absent
+  tiers, deoptimization, source-level native allocation and a shared VM/native
+  heap, persistent profiles, and persistent code caches remain absent
 
 ## SQLite Evidence
 
@@ -198,11 +211,12 @@ do not establish application durability or migration behavior.
 
 ## Accepted Platform Direction
 
-The marker-trait foundation and initial `Owned Buf` ownership safe island are
-Current, but general ownership and full static trait methods/associated items
-are not. The next implementation sequence broadens only proved ownership and
-the next coherent static-trait slice, then exact native
-frames/roots, allocation-capable baseline execution, and a distinct proof-based
+The marker-trait foundation, initial `Owned Buf` ownership safe island, and
+closed-plan exact ABI-2 native frames/roots are Current, but general ownership,
+full static trait methods/associated items, shared native heap objects, and
+source-level native allocation are not. The next implementation sequence
+broadens only proved ownership and the next coherent static-trait slice, then
+allocation-capable baseline execution and a distinct proof-based
 optimizing tier with measured process-local promotion. These remaining steps
 are **Accepted Targets**, not Current behavior. The authoritative records
 are [Ownership And Borrowing](decisions/ownership-and-borrowing.md), [Coherent
@@ -237,6 +251,23 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The closed-machine-plan native-reference/active-frame implementation in this
+document's containing commit, based on HEAD
+`ec54cde9b93a302c1310d2107c10b785001f184d`, was checked on Linux
+7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. It establishes ABI-2 typed
+stable words, exact closed-plan Buf roots, generated active frames, and actual
+safe-service collection; it does not establish source-level allocation or a
+shared VM/native heap.
+
+| Native-reference/frame command or check | Result |
+| --- | --- |
+| `cargo test --locked -p lkjscript-native -p lkjscript-sys -p lkjscript-jit -p lkjscript-vm` | passed; plan/image malformed boundaries, non-empty exact maps, generated collection with dead-root exclusion, caller/callee chains, structured epilogues, frame bounds, repeated W^X installation, and existing JIT/VM tests |
+| `cargo clippy --locked -p lkjscript-native -p lkjscript-sys -p lkjscript-jit --all-targets --all-features -- -D warnings` | passed |
+| separate `check-docs`, `check-tree`, and `check-sources` | passed; canonical language sources were unchanged |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; formatting, strict workspace Clippy, docs/tree/source closure, and all 175 workspace tests |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | source-level native allocation, shared VM/native collection, Docker/release smokes, performance, Miri, sanitizers, or non-Linux targets |
 
 The ownership implementation tree based on main HEAD `c64b3ab` was checked on
 Linux 7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. Canonical Brainfuck source
@@ -454,8 +485,9 @@ The next dependency sequence is:
 
 1. retain and broaden exact scalar baseline evidence without weakening forced
    errors or bounded code-object ownership;
-2. design loop-header state transfer separately before making any OSR claim.
-   Native references/allocation require exact live-reference maps first.
+2. build source-level native allocation and the shared stable-handle heap on the
+   now-Current exact ABI-2 root/frame boundary;
+3. design loop-header state transfer separately before making any OSR claim.
 
 OSR, background compilation, optimizing JIT, guards, deoptimization, persistent
 profiles/caches, offline PGO, and non-Linux/non-x86-64 acceptance are outside

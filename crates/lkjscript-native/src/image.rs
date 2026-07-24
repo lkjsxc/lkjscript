@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::fmt;
 
 use crate::plan::{
-    FunctionId, RuntimeCallSlot, Signature, SourceFunctionId, SourceOrigin, TrapCode, ValueType,
+    FunctionId, ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId, SourceOrigin,
+    TrapCode, ValueType,
 };
 
 pub const CURRENT_SEMANTIC_ABI_VERSION: u16 = 1;
-pub const CURRENT_NATIVE_ABI_VERSION: u16 = 1;
+pub const CURRENT_NATIVE_ABI_VERSION: u16 = 2;
 pub const CURRENT_RUNTIME_ABI_VERSION: u16 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,12 +58,46 @@ impl Default for AbiVersions {
     }
 }
 
+/// Typed stable handle word. The opaque word is never interpreted as an
+/// object address by the native ABI.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeReference {
+    reference_type: ReferenceType,
+    opaque_word: u64,
+}
+
+impl NativeReference {
+    #[must_use]
+    pub const fn new(reference_type: ReferenceType, opaque_word: u64) -> Self {
+        Self {
+            reference_type,
+            opaque_word,
+        }
+    }
+
+    #[must_use]
+    pub const fn buf(opaque_word: u64) -> Self {
+        Self::new(ReferenceType::Buf, opaque_word)
+    }
+
+    #[must_use]
+    pub const fn reference_type(self) -> ReferenceType {
+        self.reference_type
+    }
+
+    #[must_use]
+    pub const fn opaque_word(self) -> u64 {
+        self.opaque_word
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NativeValue {
     I64(i64),
     F64Bits(u64),
     Bool(bool),
     Unit,
+    Reference(NativeReference),
 }
 
 impl NativeValue {
@@ -78,6 +113,7 @@ impl NativeValue {
             Self::F64Bits(_) => ValueType::F64,
             Self::Bool(_) => ValueType::Bool,
             Self::Unit => ValueType::Unit,
+            Self::Reference(reference) => ValueType::Reference(reference.reference_type()),
         }
     }
 }
@@ -162,7 +198,37 @@ impl Relocation {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum FrameHomeKind {
+    Local(u32),
+    Value(u32),
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FrameHome {
+    kind: FrameHomeKind,
+    value_type: ValueType,
+    rbp_displacement: i32,
+}
+
+impl FrameHome {
+    #[must_use]
+    pub const fn kind(self) -> FrameHomeKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn value_type(self) -> ValueType {
+        self.value_type
+    }
+
+    #[must_use]
+    pub const fn rbp_displacement(self) -> i32 {
+        self.rbp_displacement
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FrameFacts {
     function: FunctionId,
     frame_bytes: u32,
@@ -171,65 +237,101 @@ pub struct FrameFacts {
     outgoing_machine_arguments: u8,
     uses_red_zone: bool,
     call_site_aligned_16: bool,
+    homes: Vec<FrameHome>,
 }
 
 impl FrameFacts {
     #[must_use]
-    pub const fn function(self) -> FunctionId {
+    pub const fn function(&self) -> FunctionId {
         self.function
     }
 
     #[must_use]
-    pub const fn frame_bytes(self) -> u32 {
+    pub const fn frame_bytes(&self) -> u32 {
         self.frame_bytes
     }
 
     #[must_use]
-    pub const fn value_slots(self) -> u32 {
+    pub const fn value_slots(&self) -> u32 {
         self.value_slots
     }
 
     #[must_use]
-    pub const fn local_slots(self) -> u32 {
+    pub const fn local_slots(&self) -> u32 {
         self.local_slots
     }
 
     #[must_use]
-    pub const fn outgoing_machine_arguments(self) -> u8 {
+    pub const fn outgoing_machine_arguments(&self) -> u8 {
         self.outgoing_machine_arguments
     }
 
     #[must_use]
-    pub const fn uses_red_zone(self) -> bool {
+    pub const fn uses_red_zone(&self) -> bool {
         self.uses_red_zone
     }
 
     #[must_use]
-    pub const fn call_site_aligned_16(self) -> bool {
+    pub const fn call_site_aligned_16(&self) -> bool {
         self.call_site_aligned_16
+    }
+
+    #[must_use]
+    pub fn homes(&self) -> &[FrameHome] {
+        &self.homes
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RootLocation {
+    rbp_displacement: i32,
+    kind: FrameHomeKind,
+    reference_type: ReferenceType,
+}
+
+impl RootLocation {
+    #[must_use]
+    pub const fn rbp_displacement(self) -> i32 {
+        self.rbp_displacement
+    }
+
+    #[must_use]
+    pub const fn kind(self) -> FrameHomeKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn reference_type(self) -> ReferenceType {
+        self.reference_type
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScalarStackMap {
-    reference_slots: Vec<u32>,
+pub struct ExactStackMap {
+    roots: Vec<RootLocation>,
 }
 
-impl ScalarStackMap {
+impl ExactStackMap {
     #[must_use]
-    pub fn reference_slots(&self) -> &[u32] {
-        &self.reference_slots
+    pub fn roots(&self) -> &[RootLocation] {
+        &self.roots
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Safepoint {
+    id: u32,
     function: FunctionId,
     code_offset: u32,
-    stack_map: ScalarStackMap,
+    stack_map: ExactStackMap,
 }
 
 impl Safepoint {
+    #[must_use]
+    pub const fn id(&self) -> u32 {
+        self.id
+    }
+
     #[must_use]
     pub const fn function(&self) -> FunctionId {
         self.function
@@ -241,7 +343,7 @@ impl Safepoint {
     }
 
     #[must_use]
-    pub const fn stack_map(&self) -> &ScalarStackMap {
+    pub const fn stack_map(&self) -> &ExactStackMap {
         &self.stack_map
     }
 }
@@ -510,6 +612,7 @@ impl InstallableImage {
         if runtime_calls.len() != self.runtime_calls.len() {
             return Err(ImageIntegrityError::RuntimeCallSet);
         }
+        let mut relocated_runtime_calls = HashSet::new();
         for relocation in &self.relocations {
             let start = relocation.offset as usize;
             let end = start
@@ -528,14 +631,26 @@ impl InstallableImage {
                     if !runtime_calls.contains(&slot) {
                         return Err(ImageIntegrityError::RelocationTarget);
                     }
+                    relocated_runtime_calls.insert(slot);
                 }
             }
         }
+        if relocated_runtime_calls != runtime_calls {
+            return Err(ImageIntegrityError::RuntimeCallSet);
+        }
+        let mut frame_functions = HashSet::new();
         for frame in &self.frames {
-            if !functions.contains(&frame.function)
+            let entry = self
+                .entries
+                .iter()
+                .find(|entry| entry.function == frame.function)
+                .ok_or(ImageIntegrityError::FrameFacts)?;
+            if !frame_functions.insert(frame.function)
+                || frame.frame_bytes == 0
                 || frame.frame_bytes % 16 != 0
                 || frame.uses_red_zone
                 || !frame.call_site_aligned_16
+                || !valid_frame_homes(frame, entry)
             {
                 return Err(ImageIntegrityError::FrameFacts);
             }
@@ -543,10 +658,20 @@ impl InstallableImage {
         if self.frames.len() != self.entries.len() {
             return Err(ImageIntegrityError::FrameFacts);
         }
-        for safepoint in &self.safepoints {
-            if !offset_in_function(&self.entries, safepoint.function, safepoint.code_offset)
-                || !safepoint.stack_map.reference_slots.is_empty()
+        let mut call_offsets = HashSet::new();
+        for (expected_id, safepoint) in self.safepoints.iter().enumerate() {
+            if safepoint.id as usize != expected_id
+                || !offset_in_function(&self.entries, safepoint.function, safepoint.code_offset)
+                || !call_offsets.insert((safepoint.function, safepoint.code_offset))
             {
+                return Err(ImageIntegrityError::Safepoint);
+            }
+            let frame = self
+                .frames
+                .iter()
+                .find(|frame| frame.function == safepoint.function)
+                .ok_or(ImageIntegrityError::Safepoint)?;
+            if !valid_stack_map(frame, &safepoint.stack_map) {
                 return Err(ImageIntegrityError::Safepoint);
             }
         }
@@ -659,6 +784,7 @@ pub(crate) fn frame_facts(
     value_slots: u32,
     local_slots: u32,
     outgoing_machine_arguments: u8,
+    homes: Vec<FrameHome>,
 ) -> FrameFacts {
     FrameFacts {
         function,
@@ -668,16 +794,45 @@ pub(crate) fn frame_facts(
         outgoing_machine_arguments,
         uses_red_zone: false,
         call_site_aligned_16: true,
+        homes,
     }
 }
 
-pub(crate) fn scalar_safepoint(function: FunctionId, code_offset: u32) -> Safepoint {
+pub(crate) const fn frame_home(
+    kind: FrameHomeKind,
+    value_type: ValueType,
+    rbp_displacement: i32,
+) -> FrameHome {
+    FrameHome {
+        kind,
+        value_type,
+        rbp_displacement,
+    }
+}
+
+pub(crate) fn exact_safepoint(
+    id: u32,
+    function: FunctionId,
+    code_offset: u32,
+    roots: Vec<RootLocation>,
+) -> Safepoint {
     Safepoint {
+        id,
         function,
         code_offset,
-        stack_map: ScalarStackMap {
-            reference_slots: Vec::new(),
-        },
+        stack_map: ExactStackMap { roots },
+    }
+}
+
+pub(crate) const fn root_location(
+    rbp_displacement: i32,
+    kind: FrameHomeKind,
+    reference_type: ReferenceType,
+) -> RootLocation {
+    RootLocation {
+        rbp_displacement,
+        kind,
+        reference_type,
     }
 }
 
@@ -719,6 +874,74 @@ pub(crate) fn outcome_map_entry(
     }
 }
 
+fn valid_frame_homes(frame: &FrameFacts, entry: &EntryMetadata) -> bool {
+    let expected = match usize::try_from(frame.value_slots).ok().and_then(|values| {
+        usize::try_from(frame.local_slots)
+            .ok()
+            .and_then(|locals| values.checked_add(locals))
+    }) {
+        Some(expected) => expected,
+        None => return false,
+    };
+    if frame.homes.len() != expected {
+        return false;
+    }
+    let mut kinds = HashSet::new();
+    for home in &frame.homes {
+        let displacement = match u32::try_from(home.rbp_displacement.checked_neg().unwrap_or(0)) {
+            Ok(displacement) => displacement,
+            Err(_) => return false,
+        };
+        if home.rbp_displacement > -16
+            || home.rbp_displacement % 8 != 0
+            || displacement > frame.frame_bytes
+            || canonical_home_displacement(frame, home.kind) != Some(home.rbp_displacement)
+            || !kinds.insert(home.kind)
+        {
+            return false;
+        }
+        match home.kind {
+            FrameHomeKind::Local(index) if index < frame.local_slots => {}
+            FrameHomeKind::Value(index) if index < frame.value_slots => {
+                if entry
+                    .signature
+                    .parameters()
+                    .get(index as usize)
+                    .is_some_and(|parameter| *parameter != home.value_type)
+                {
+                    return false;
+                }
+            }
+            FrameHomeKind::Local(_) | FrameHomeKind::Value(_) => return false,
+        }
+    }
+    true
+}
+
+fn canonical_home_displacement(frame: &FrameFacts, kind: FrameHomeKind) -> Option<i32> {
+    let slot = match kind {
+        FrameHomeKind::Local(index) => u64::from(index).checked_add(1)?,
+        FrameHomeKind::Value(index) => u64::from(frame.local_slots)
+            .checked_add(u64::from(index))?
+            .checked_add(1)?,
+    };
+    let bytes = slot.checked_add(1)?.checked_mul(8)?;
+    i32::try_from(bytes).ok()?.checked_neg()
+}
+
+fn valid_stack_map(frame: &FrameFacts, map: &ExactStackMap) -> bool {
+    if map.roots.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return false;
+    }
+    map.roots.iter().all(|root| {
+        frame.homes.iter().any(|home| {
+            home.kind == root.kind
+                && home.rbp_displacement == root.rbp_displacement
+                && home.value_type == ValueType::Reference(root.reference_type)
+        })
+    })
+}
+
 fn offset_in_function(entries: &[EntryMetadata], function: FunctionId, offset: u32) -> bool {
     entries
         .iter()
@@ -756,7 +979,13 @@ fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
     bytes = add_records(bytes, parts.relocations.len(), 24)?;
     bytes = add_records(bytes, parts.runtime_calls.len(), 8)?;
     bytes = add_records(bytes, parts.frames.len(), 32)?;
+    for frame in parts.frames {
+        bytes = add_records(bytes, frame.homes.len(), 16)?;
+    }
     bytes = add_records(bytes, parts.safepoints.len(), 24)?;
+    for safepoint in parts.safepoints {
+        bytes = add_records(bytes, safepoint.stack_map.roots.len(), 16)?;
+    }
     bytes = add_records(bytes, parts.source_map.len(), 24)?;
     bytes = add_records(bytes, parts.trap_map.len(), 16)?;
     add_records(bytes, parts.outcome_map.len(), 16)
@@ -765,4 +994,51 @@ fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
 fn add_records(bytes: u64, count: usize, record_bytes: u64) -> Option<u64> {
     let count = u64::try_from(count).ok()?;
     bytes.checked_add(count.checked_mul(record_bytes)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        encode, BackendLimits, EncodingConfig, MachinePlanBuilder, ReferenceType, RuntimeCallSlot,
+        Signature, SourceFunctionId, ValueType,
+    };
+
+    #[test]
+    fn integrity_rejects_out_of_frame_root_without_accounting_change(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let buf = ValueType::Reference(ReferenceType::Buf);
+        let mut plan = MachinePlanBuilder::new();
+        let function =
+            plan.declare_function(SourceFunctionId::new(1), Signature::new(vec![buf], buf)?)?;
+        let mut builder = plan.function_builder(function)?;
+        let entry = builder.create_block()?;
+        builder.set_entry(entry)?;
+        let input = builder.parameter(0)?;
+        let collected =
+            builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![input])?;
+        builder.return_value(entry, collected)?;
+        plan.define_function(builder.finish())?;
+        let mut image = encode(
+            plan.verify(BackendLimits::default())?,
+            EncodingConfig::default(),
+        )?;
+        image.accounting.metadata_bytes -= 1;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(super::ImageIntegrityError::MetadataAccountingMismatch)
+        );
+        image.accounting.metadata_bytes += 1;
+        image.safepoints[0].id = 7;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(super::ImageIntegrityError::Safepoint)
+        );
+        image.safepoints[0].id = 0;
+        image.safepoints[0].stack_map.roots[0].rbp_displacement = -8;
+        assert_eq!(
+            image.validate_integrity(),
+            Err(super::ImageIntegrityError::Safepoint)
+        );
+        Ok(())
+    }
 }

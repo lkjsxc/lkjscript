@@ -6,12 +6,51 @@ use crate::{BackendLimits, NativeError};
 
 static NEXT_PLAN_ID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct LayoutIdentity(u32);
+
+impl LayoutIdentity {
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// Exact runtime layout identity for a worker-local stable reference handle.
+/// Layout-bearing variants leave the machine ABI unchanged while preventing
+/// unrelated heap layouts from being interchanged.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ReferenceType {
+    Buf,
+    Str,
+    List(LayoutIdentity),
+    Option(LayoutIdentity),
+    Result(LayoutIdentity),
+    Product(LayoutIdentity),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ValueType {
     I64,
     F64,
     Bool,
     Unit,
+    Reference(ReferenceType),
+}
+
+impl ValueType {
+    #[must_use]
+    pub const fn reference_type(self) -> Option<ReferenceType> {
+        match self {
+            Self::Reference(reference_type) => Some(reference_type),
+            Self::I64 | Self::F64 | Self::Bool | Self::Unit => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -152,6 +191,12 @@ pub enum RuntimeCallSlot {
     PollV1,
     /// Records entry to a source function for exact native-tier accounting.
     EnterFunctionV1,
+    /// Collecting reference round trip used by the closed ABI-2 plan slice.
+    CollectReferenceV1,
+    /// Encoder-owned frame-chain operations. Plans cannot name these slots.
+    RegisterFrameV1,
+    PublishSafepointV1,
+    UnregisterFrameV1,
 }
 
 impl RuntimeCallSlot {
@@ -162,22 +207,36 @@ impl RuntimeCallSlot {
                 parameters: vec![ValueType::I64],
                 result: ValueType::I64,
             },
-            Self::PollV1 => Signature {
+            Self::PollV1 | Self::UnregisterFrameV1 => Signature {
                 parameters: Vec::new(),
                 result: ValueType::Unit,
             },
-            Self::EnterFunctionV1 => Signature {
+            Self::EnterFunctionV1 | Self::RegisterFrameV1 | Self::PublishSafepointV1 => Signature {
                 parameters: vec![ValueType::I64],
                 result: ValueType::Unit,
+            },
+            Self::CollectReferenceV1 => Signature {
+                parameters: vec![ValueType::Reference(ReferenceType::Buf)],
+                result: ValueType::Reference(ReferenceType::Buf),
             },
         }
     }
 
     #[must_use]
     pub const fn version(self) -> u16 {
-        match self {
-            Self::IdentityI64V1 | Self::PollV1 | Self::EnterFunctionV1 => 1,
-        }
+        1
+    }
+
+    #[must_use]
+    pub const fn may_collect(self) -> bool {
+        matches!(self, Self::CollectReferenceV1)
+    }
+
+    pub(crate) const fn plan_callable(self) -> bool {
+        matches!(
+            self,
+            Self::IdentityI64V1 | Self::PollV1 | Self::EnterFunctionV1 | Self::CollectReferenceV1
+        )
     }
 }
 

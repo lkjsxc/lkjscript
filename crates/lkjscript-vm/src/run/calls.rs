@@ -187,6 +187,9 @@ fn unbox_native<J: RuntimeTier>(
             _ => Err(Error::msg("native boundary expected F64")),
         },
         ValueType::Unit => Err(Error::msg("native boundary expected Unit")),
+        ValueType::Reference(_) => Err(Error::msg(
+            "VM/native reference transfer is not enabled in the scalar tier",
+        )),
     }
 }
 
@@ -196,6 +199,9 @@ fn box_native<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: NativeValue) -> Value {
         NativeValue::Bool(value) => Value::from_bool(value),
         NativeValue::I64(value) => vm.make_i64(value),
         NativeValue::F64Bits(bits) => vm.arena.alloc(HeapObj::Float(f64::from_bits(bits))),
+        NativeValue::Reference(_) => {
+            unreachable!("scalar tier returned an ineligible native reference")
+        }
     }
 }
 

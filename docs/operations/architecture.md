@@ -50,13 +50,13 @@ checks. No workspace crate has a third-party Rust dependency.
 | Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bytecode link metadata |
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
-| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar machine plan, verification, encoding, opaque installable image |
+| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verification, bounded liveness, exact typed maps, ABI-2 encoding, opaque installable image |
 | Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar eligibility, deterministic lowering, code objects, tier state, forced/auto execution |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-vm/src/arena.rs` | Current VM-owned `Arena`; selected native-reference slice moves the pure stable-handle heap to `lkjscript-core` before sharing it with generated execution |
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
-| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers and safe bounded executable installation/invocation |
+| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers, safe bounded executable installation/invocation, private raw active-frame chain, copied typed-root service callback |
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
 | Language library | `src/std/` | imported `std/...` definitions |
 | Validation package | `src/lib/lkjedit/` | editor state and control loop |
@@ -87,8 +87,8 @@ CLI path
   -> validate_chunk -> opaque immutable ValidatedChunk
   -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
       +-> vm: run_chunk_with_args(program.bytecode(), ExecutionConfig)
-      +-> baseline-jit: verified scalar group -> code object -> native main
-          (accepted next: ABI-2 typed roots -> active frames -> shared GC heap)
+      +-> baseline-jit: verified scalar group -> ABI-2 code object -> native main
+          (Current closed-plan typed roots/active frames; accepted next: shared heap/allocation)
       +-> auto: VM entries -> bounded hotness -> later native function calls
 ```
 
@@ -119,8 +119,9 @@ explicitly unsupported in it. The selected owned Linux x86-64 closed scalar
 machine plan, encoder, metadata, safe W^X boundary, verified SSA adapter,
 bounded code objects, and callable function-entry baseline tier are **Current**
 for allocation-free Unit/Bool/I64/F64 acyclic direct-call groups. Forced and
-auto engines execute real entries. The initial `Owned Buf` ownership safe island and marker traits are Current;
-general ownership, native references/allocation, loop OSR, an optimizing tier,
+auto engines execute real entries. The initial `Owned Buf` ownership safe island,
+marker traits, and closed-plan ABI-2 typed-reference frames/maps are Current;
+general ownership, source-level native allocation/shared heap, loop OSR, an optimizing tier,
 minimal AOT file emission, and direct Wasm remain **Accepted Targets** or later
 work. The VM remains the cold tier and runtime oracle. See [Ownership And
 Borrowing](../decisions/ownership-and-borrowing.md), [Coherent Traits And Static
@@ -164,16 +165,20 @@ The current native flow is:
 forced main or hot VM function entry
   -> verified scalar eligibility and acyclic reachable group
   -> synchronous typed-SSA lowering at a safepoint
-  -> bounded W^X callable baseline code object
-  -> exact VM/native adapter or unboxed direct native call
-  -> PollV1 and structured return/trap/exit/deadline/resource/host status
+  -> bounded W^X callable ABI-2 baseline code object
+  -> initialized registered frame and exact scalar or typed-reference call map
+  -> exact VM/native scalar adapter or unboxed direct closed-plan call
+  -> PollV1/CollectReferenceV1 and structured return/trap/exit/deadline/resource/host status
+  -> exactly one unregister on every registered outcome
 ```
 
 Forced mode enters generated main and never falls back. Auto compiles at one
 function entry and uses the object only on later calls; unsupported code stays
 VM-correct with same-epoch retry suppression. The old observation-only hook is
-removed. Loop OSR, background compilation, optimizing tiers, native references
-or allocation, persistent profiles, and persistent code caches are absent.
+removed. Closed machine plans can invoke exact Buf-reference collection through
+safe copied roots, but SSA/source references and allocation remain absent. Loop
+OSR, background compilation, optimizing tiers, persistent profiles, and
+persistent code caches are absent.
 
 ## Source Layout Rule
 

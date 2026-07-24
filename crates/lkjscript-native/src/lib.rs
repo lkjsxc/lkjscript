@@ -14,15 +14,17 @@ use std::fmt;
 
 pub use encode::{encode, EncodingConfig};
 pub use image::{
-    AbiVersions, CodeAccounting, EntryMetadata, FrameFacts, ImageIntegrityError, InstallableImage,
-    NativeValue, OutcomeKind, OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget,
-    Safepoint, ScalarStackMap, SourceMapEntry, TrapMapEntry, CURRENT_NATIVE_ABI_VERSION,
+    AbiVersions, CodeAccounting, EntryMetadata, ExactStackMap, FrameFacts, FrameHome,
+    FrameHomeKind, ImageIntegrityError, InstallableImage, NativeReference, NativeValue,
+    OutcomeKind, OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget, RootLocation,
+    Safepoint, SourceMapEntry, TrapMapEntry, CURRENT_NATIVE_ABI_VERSION,
     CURRENT_RUNTIME_ABI_VERSION, CURRENT_SEMANTIC_ABI_VERSION,
 };
 pub use plan::{
     BlockId, BoolComparison, F64Comparison, FunctionBuilder, FunctionId, FunctionPlan,
-    I64Comparison, LocalId, MachinePlanBuilder, PlanError, RuntimeCallSlot, RuntimeOutcome,
-    Signature, SourceFunctionId, SourceOrigin, TrapCode, ValueId, ValueType,
+    I64Comparison, LayoutIdentity, LocalId, MachinePlanBuilder, PlanError, ReferenceType,
+    RuntimeCallSlot, RuntimeOutcome, Signature, SourceFunctionId, SourceOrigin, TrapCode, ValueId,
+    ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 

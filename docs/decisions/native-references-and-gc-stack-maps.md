@@ -7,25 +7,29 @@ allocate or carry heap references across a collecting safepoint.
 
 ## Status
 
-Precise non-moving mark-sweep in the VM and allocation-free native frames with
-exact empty reference maps are **Current**. Native heap references, native
-allocation, active-frame root enumeration, barriers, and collection during a
-generated call are an **Accepted Target**. Emitted non-empty metadata without a
-collection test is experimental evidence, not completion.
+The closed machine-plan native-reference and active-frame slice is **Current**
+on Linux x86-64. Native ABI 2 carries typed stable reference words, derives
+exact typed maps, registers generated frames, and forces collection through a
+safe copied-root callback. Source-level native allocation, a shared VM/native
+heap, barriers, reference-capable SSA/JIT lowering, and recursive source groups
+remain **Accepted Targets**. The Current slice does not claim those later
+surfaces.
 
 ## Selected Implementation Contract
 
-**Accepted Next Slice; not Current until its retained tests pass.** Semantic ABI
-version 1 remains stable. The first reference-capable code objects use native
-ABI version 2. Runtime ABI version 1 is extended only with enum-identified V1
-frame, collection-dispatch, and barrier calls; scalar ABI-1 objects are rejected
-rather than reinterpreted as ABI 2.
+**Current for closed machine plans and actual sys invocation.** Semantic ABI
+version 1 remains stable. Reference-capable and scalar code objects both use
+native ABI version 2. Runtime ABI version 1 has enum-identified V1 frame and
+collection-dispatch calls; ABI-1 objects are rejected rather than reinterpreted
+as ABI 2.
 
-The VM arena moves into the pure shared runtime layer so VM and generated code
-use one session-owned stable-handle heap. `lkjscript-jit` supplies safe runtime
-services; `lkjscript-sys` alone may hold raw generated-frame addresses while an
-invocation is active. Code installation remains owned RW-then-RX and no heap
-word is an exposed native pointer.
+`lkjscript-native` owns pure typed handle, frame-home, liveness, and exact-map
+metadata. `lkjscript-sys` alone retains installed metadata beside the active
+invocation, holds raw generated-frame addresses, validates every active map,
+and copies typed handle words into the safe `NativeRuntimeServices` callback.
+Code installation remains owned RW-then-RX and no heap word is exposed as a
+native object pointer. Moving the VM arena into a pure shared runtime layer is
+part of the later source-allocation slice, not this Current claim.
 
 Native plans identify each GC reference by an exact reference/layout identity.
 Frame descriptors enumerate every reference-capable value/local home. A bounded
@@ -35,13 +39,16 @@ out-of-frame, mistyped, duplicate, unsorted, or stale roots. Registers are not
 roots in the first slice: references are homed before collection and reloaded
 afterward.
 
-Generated prologues reserve bounded frame depth/bytes, initialize storage, and
-register one frame. A collecting call first publishes its dense safepoint
-identity. The sys trampoline validates the active chain and stack map,
-materializes only exact live roots for the safe runtime collector, and writes
-back updated handles before generated execution resumes. Every registered
-return, trap, exit, deadline, resource, host-failure, and propagated-callee edge
-unregisters once; reservation failure uses an unregistered epilogue.
+Generated prologues reserve bounded frame bytes, initialize storage and
+context, home arguments, and then register one frame. A collecting call first
+publishes its dense safepoint identity. The sys trampoline validates the active
+chain and stack map, materializes only exact live roots for the safe runtime
+service, and writes back updated handles before generated execution resumes.
+Every registered return, trap, exit, deadline, resource, host-failure, and
+propagated-callee edge unregisters once; bounded frame reservation failure uses
+an unregistered epilogue. Reports retain peak depth, collection calls, maximum
+roots, and the exact root count for every collection; completed outcomes report
+zero active depth.
 
 ## Reference Representation
 
@@ -81,7 +88,9 @@ invocation objects, and structured outcomes.
 
 ## Stack Maps
 
-Each collecting safepoint records an exact sorted set of typed root locations.
+Each direct or native-runtime call records an exact sorted, deduplicated set of
+typed root locations. Calls that may collect publish the map's dense identity
+before transfer; PollV1 and EnterFunctionV1 remain non-collecting.
 A location is one of:
 
 ```text
@@ -142,7 +151,13 @@ pinned merely to simplify generated code.
 
 ## Collection Acceptance
 
-Native allocation becomes Current only when tests force collection with roots
+The Current closed-plan acceptance forces `CollectReferenceV1` with an exact
+Buf-reference argument/local map, proves a dead Buf home is absent, observes a
+caller/callee active chain, writes back copied handles, covers callback failure
+and every structured epilogue, enforces frame bounds, and repeats W^X
+install/invoke/drop. It does not allocate a language object.
+
+Source-level native allocation becomes Current only when tests force collection with roots
 in arguments and spill slots, across native/native and native/runtime calls,
 through recursion, immediately before return, and around a native/VM
 transition. Tests include live/dead product, Option, Result, string, buffer, and

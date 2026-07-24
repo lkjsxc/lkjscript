@@ -39,7 +39,9 @@ Native entry, call, and loop transitions use enum-identified versioned runtime
 calls. `EnterFunctionV1` records exact per-source-function native entries.
 `PollV1` consumes bounded native poll fuel, checks a monotonic deadline, counts
 polls, and propagates deadline, resource-limit, or host-clock status through the
-shared invocation state. Generated code never exits the host process.
+shared invocation state. Native ABI 2 prologues also register initialized
+frames, collecting calls publish dense safepoints, and every structured edge
+unregisters. Generated code never exits the host process.
 
 ## Engine Behavior
 
@@ -84,8 +86,8 @@ threshold optimum.
 A bounded non-Send execution session owns installed mappings and accounting.
 An installed code object retains function-group identity, baseline tier,
 semantic/native/runtime ABI versions, entries, code and page-accounted
-allocation sizes, relocations, runtime-call identities, frame facts,
-safepoints with exact empty scalar stack maps, source/trap/outcome maps,
+allocation sizes, relocations, runtime-call identities, typed frame homes,
+safepoints with exact derived stack maps, source/trap/outcome maps,
 compile/install statistics, invalidation state, metadata bytes, and native entry
 counts. Limits cover per-object and aggregate code, metadata, work, object
 count, diagnostic bytes, and compilation wall time. There is no persistence,
@@ -94,7 +96,10 @@ eviction, background compilation, concurrent mutation, or post-RX patching.
 Safe sys APIs accept only opaque images emitted from verified closed plans.
 Mappings transition RW to RX, are never RWX, expose no raw entry address, and
 remain owned for every invocation. Scalar eligibility rejects every reference
-and allocation path, so empty reference stack maps are exact.
+and allocation path, so its ABI-2 maps remain exactly empty. Independent closed
+machine-plan tests carry typed Buf handle words in GPRs, derive non-empty exact
+maps, register caller/callee frames, and invoke a safe copied-root collection
+service; no raw stack or object pointer crosses the sys boundary.
 
 ## Unsupported Native Semantics
 
@@ -120,18 +125,20 @@ conditional; ordinary native-call hot paths do not read the clock. Normal
 program stdout is never used for JIT diagnostics or metrics.
 
 Loop OSR, background compilation, optimizing tiers, speculation, guards,
-deoptimization, allocation-capable native frames, GC references, and persistent
-profiles or code caches remain future or rejected work as classified by the
-active decisions.
+deoptimization, source-level native allocation, shared VM/native heap objects,
+and persistent profiles or code caches remain future or rejected work as
+classified by the active decisions.
 
-## Selected Next ABI
+## Native-Reference Boundary
 
-**Accepted Next Slice, not Current behavior in this document.** Reference-capable
-objects use native ABI 2 with typed stable GC handles, exact non-empty root maps,
-bounded registered generated frames, and enum-identified runtime-ABI-1 frame
-and collection calls. The first source surface is host-independent Str, Buf,
-product, List, Option, and Result allocation plus direct/mutual recursion.
-Scalar ABI 1 remains the only callable implementation until those machine-plan,
-collection, source-equivalence, W^X, and structured-unwind tests pass. Host
-capabilities, lexical ownership references, OSR, and optimization are not
-smuggled into that first slice.
+**Current below source lowering; Accepted Target at source level.** Native ABI 2
+provides typed stable handle words, exact non-empty maps, bounded registered
+generated frames, and enum-identified runtime-ABI-1 frame and collection calls.
+The Current collecting slot is `CollectReferenceV1` for exact Buf-reference
+identity. Layout identities are extensible to Str, List, Option, Result, and
+nominal products, but those source values are still rejected by the scalar JIT.
+
+The next source slice supplies a shared stable-handle heap and host-independent
+Str, Buf, product, List, Option, and Result allocation plus direct/mutual
+recursion. Host capabilities, lexical ownership references, OSR, and
+optimization are not smuggled into this machine-plan foundation.

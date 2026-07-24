@@ -5,8 +5,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use lkjscript_native::{
-    AbiVersions, FunctionId, ImageIntegrityError, InstallableImage, NativeValue, RelocationTarget,
-    RuntimeCallSlot, Signature, TrapCode, ValueType,
+    AbiVersions, FunctionId, ImageIntegrityError, InstallableImage, NativeReference, NativeValue,
+    ReferenceType, RelocationTarget, RuntimeCallSlot, Signature, TrapCode, ValueType,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -159,6 +159,9 @@ pub enum InvocationError {
     InvalidNativeStatus(u32),
     InvalidNativeTrap(u32),
     InvalidBoolReturn(u64),
+    RootCapacityExceeded,
+    InvalidActiveFrame,
+    LeakedActiveFrames(usize),
 }
 
 impl fmt::Display for InvocationError {
@@ -192,6 +195,18 @@ impl fmt::Display for InvocationError {
                 formatter,
                 "generated code returned non-canonical Bool {value}"
             ),
+            Self::RootCapacityExceeded => {
+                formatter.write_str("native root materialization capacity is exceeded")
+            }
+            Self::InvalidActiveFrame => {
+                formatter.write_str("generated active-frame metadata is invalid")
+            }
+            Self::LeakedActiveFrames(depth) => {
+                write!(
+                    formatter,
+                    "generated invocation leaked {depth} active frames"
+                )
+            }
         }
     }
 }
@@ -201,6 +216,8 @@ impl std::error::Error for InvocationError {}
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NativeResourceLimitKind {
     PollFuel,
+    ActiveFrames,
+    MaterializedRoots,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -217,6 +234,7 @@ pub enum InvocationOutcome {
 pub struct NativeInvocationConfig {
     poll_fuel: u64,
     wall_time: Option<Duration>,
+    max_active_frames: usize,
 }
 
 impl NativeInvocationConfig {
@@ -225,7 +243,14 @@ impl NativeInvocationConfig {
         Self {
             poll_fuel,
             wall_time,
+            max_active_frames: MAX_ACTIVE_FRAMES,
         }
+    }
+
+    #[must_use]
+    pub const fn with_max_active_frames(mut self, maximum: usize) -> Self {
+        self.max_active_frames = maximum;
+        self
     }
 }
 
@@ -253,11 +278,59 @@ impl NativeEntryCount {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeRoot {
+    reference_type: ReferenceType,
+    opaque_word: u64,
+}
+
+impl NativeRoot {
+    #[must_use]
+    pub const fn reference_type(self) -> ReferenceType {
+        self.reference_type
+    }
+
+    #[must_use]
+    pub const fn opaque_word(self) -> u64 {
+        self.opaque_word
+    }
+
+    pub fn set_opaque_word(&mut self, opaque_word: u64) {
+        self.opaque_word = opaque_word;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeServiceError {
+    ResourceLimitExceeded,
+    HostFailure,
+}
+
+/// Safe collection boundary. Implementations receive copied typed handles;
+/// frame addresses and stack traversal remain private to this crate.
+pub trait NativeRuntimeServices {
+    fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError>;
+}
+
+#[derive(Default)]
+struct NoopNativeRuntimeServices;
+
+impl NativeRuntimeServices for NoopNativeRuntimeServices {
+    fn collect_references(&mut self, _roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct InvocationReport {
     outcome: InvocationOutcome,
     poll_count: u64,
     native_entries: Vec<NativeEntryCount>,
+    peak_active_frame_depth: usize,
+    active_frame_depth: usize,
+    collection_calls: u64,
+    maximum_roots: usize,
+    exact_root_counts: Vec<usize>,
 }
 
 impl InvocationReport {
@@ -274,6 +347,31 @@ impl InvocationReport {
     #[must_use]
     pub fn native_entries(&self) -> &[NativeEntryCount] {
         &self.native_entries
+    }
+
+    #[must_use]
+    pub const fn peak_active_frame_depth(&self) -> usize {
+        self.peak_active_frame_depth
+    }
+
+    #[must_use]
+    pub const fn active_frame_depth(&self) -> usize {
+        self.active_frame_depth
+    }
+
+    #[must_use]
+    pub const fn collection_calls(&self) -> u64 {
+        self.collection_calls
+    }
+
+    #[must_use]
+    pub const fn maximum_roots(&self) -> usize {
+        self.maximum_roots
+    }
+
+    #[must_use]
+    pub fn exact_root_counts(&self) -> &[usize] {
+        &self.exact_root_counts
     }
 }
 
@@ -459,6 +557,17 @@ impl InstalledImage {
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
     ) -> Result<InvocationReport, InvocationError> {
+        let mut services = NoopNativeRuntimeServices;
+        self.invoke_with_services(entry, arguments, config, &mut services)
+    }
+
+    pub fn invoke_with_services(
+        &self,
+        entry: FunctionId,
+        arguments: &[NativeValue],
+        config: &NativeInvocationConfig,
+        services: &mut dyn NativeRuntimeServices,
+    ) -> Result<InvocationReport, InvocationError> {
         let entry = self
             .image
             .entries()
@@ -466,13 +575,21 @@ impl InstalledImage {
             .find(|candidate| candidate.function() == entry)
             .ok_or(InvocationError::UnknownEntry)?;
         validate_arguments(entry.signature(), arguments)?;
-        let mut state = NativeCallState::new(config);
+        let mut state = NativeCallState::new(&self.image, config, services)?;
         let raw = self.mapping.invoke(
             entry.offset() as usize,
             entry.signature(),
             arguments,
             &mut state,
         )?;
+        if state.metadata_invalid {
+            return Err(InvocationError::InvalidActiveFrame);
+        }
+        if state.active_depth != 0 {
+            let leaked = state.active_depth;
+            state.active_depth = 0;
+            return Err(InvocationError::LeakedActiveFrames(leaked));
+        }
         let outcome = match state.status {
             0 => InvocationOutcome::Returned(raw.into_value(entry.signature().result())?),
             1 => InvocationOutcome::Trapped(match state.trap {
@@ -483,7 +600,12 @@ impl InstalledImage {
             }),
             2 => InvocationOutcome::Exited(state.payload),
             3 => InvocationOutcome::DeadlineExceeded,
-            4 => InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::PollFuel),
+            4 => InvocationOutcome::ResourceLimitExceeded(match state.payload {
+                1 => NativeResourceLimitKind::PollFuel,
+                2 => NativeResourceLimitKind::ActiveFrames,
+                3 => NativeResourceLimitKind::MaterializedRoots,
+                _ => return Err(InvocationError::InvalidNativeStatus(state.status)),
+            }),
             5 => InvocationOutcome::HostFailure,
             other => return Err(InvocationError::InvalidNativeStatus(other)),
         };
@@ -506,6 +628,11 @@ impl InstalledImage {
             outcome,
             poll_count: state.poll_count,
             native_entries,
+            peak_active_frame_depth: state.peak_active_depth,
+            active_frame_depth: state.active_depth,
+            collection_calls: state.collection_calls,
+            maximum_roots: state.maximum_roots,
+            exact_root_counts: state.exact_root_counts.clone(),
         })
     }
 
@@ -539,11 +666,37 @@ impl Drop for InstalledImage {
 }
 
 const MAX_NATIVE_ENTRY_COUNTS: usize = 64;
+const MAX_ACTIVE_FRAMES: usize = 64;
+const MAX_MATERIALIZED_ROOTS: usize = 65_536;
+const MAX_COLLECTION_REPORTS: usize = 65_536;
+const INVALID_SAFEPOINT: u32 = u32::MAX;
+
+#[derive(Clone, Copy)]
+struct ActiveFrame {
+    function_ordinal: u32,
+    rbp: *mut u8,
+    safepoint: u32,
+}
+
+const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
+    function_ordinal: u32::MAX,
+    rbp: std::ptr::null_mut(),
+    safepoint: INVALID_SAFEPOINT,
+};
+
+#[derive(Clone, Copy)]
+struct RootAddress {
+    address: *mut u64,
+    original_word: u64,
+    reference_type: ReferenceType,
+    frame_index: usize,
+}
 
 #[repr(C)]
-struct NativeCallState {
-    // These first three fields are the stable native ABI consumed by emitted
-    // code. New runtime-call state is append-only within ABI version 1.
+struct NativeCallState<'a> {
+    // These first three fields are the stable runtime ABI consumed directly by
+    // generated code. Native ABI 2 adds frame operations without changing the
+    // semantic or runtime ABI versions.
     status: u32,
     trap: u32,
     payload: i64,
@@ -551,10 +704,54 @@ struct NativeCallState {
     deadline_ms: i64,
     poll_count: u64,
     native_entries: [u64; MAX_NATIVE_ENTRY_COUNTS],
+    image: &'a InstallableImage,
+    services: &'a mut dyn NativeRuntimeServices,
+    active_frames: [ActiveFrame; MAX_ACTIVE_FRAMES],
+    active_depth: usize,
+    maximum_active_frames: usize,
+    peak_active_depth: usize,
+    collection_calls: u64,
+    maximum_roots: usize,
+    exact_root_counts: Vec<usize>,
+    roots: Vec<NativeRoot>,
+    root_addresses: Vec<RootAddress>,
+    metadata_invalid: bool,
 }
 
-impl NativeCallState {
-    fn new(config: &NativeInvocationConfig) -> Self {
+impl<'a> NativeCallState<'a> {
+    fn new(
+        image: &'a InstallableImage,
+        config: &NativeInvocationConfig,
+        services: &'a mut dyn NativeRuntimeServices,
+    ) -> Result<Self, InvocationError> {
+        let maximum_active_frames = config.max_active_frames.min(MAX_ACTIVE_FRAMES);
+        let maximum_map_roots = image
+            .safepoints()
+            .iter()
+            .map(|safepoint| safepoint.stack_map().roots().len())
+            .max()
+            .unwrap_or(0);
+        let root_capacity = maximum_map_roots
+            .checked_mul(maximum_active_frames)
+            .filter(|capacity| *capacity <= MAX_MATERIALIZED_ROOTS)
+            .ok_or(InvocationError::RootCapacityExceeded)?;
+        let mut roots = Vec::new();
+        let mut root_addresses = Vec::new();
+        let mut exact_root_counts = Vec::new();
+        roots
+            .try_reserve_exact(root_capacity)
+            .map_err(|_| InvocationError::RootCapacityExceeded)?;
+        root_addresses
+            .try_reserve_exact(root_capacity)
+            .map_err(|_| InvocationError::RootCapacityExceeded)?;
+        if image
+            .runtime_calls()
+            .contains(&RuntimeCallSlot::CollectReferenceV1)
+        {
+            exact_root_counts
+                .try_reserve_exact(MAX_COLLECTION_REPORTS)
+                .map_err(|_| InvocationError::RootCapacityExceeded)?;
+        }
         let (deadline_ms, status) = match config.wall_time {
             Some(duration) => match crate::now_ms_monotonic() {
                 Ok(now) => {
@@ -565,7 +762,7 @@ impl NativeCallState {
             },
             None => (-1, 0),
         };
-        Self {
+        Ok(Self {
             status,
             trap: 0,
             payload: 0,
@@ -573,7 +770,212 @@ impl NativeCallState {
             deadline_ms,
             poll_count: 0,
             native_entries: [0; MAX_NATIVE_ENTRY_COUNTS],
+            image,
+            services,
+            active_frames: [EMPTY_ACTIVE_FRAME; MAX_ACTIVE_FRAMES],
+            active_depth: 0,
+            maximum_active_frames,
+            peak_active_depth: 0,
+            collection_calls: 0,
+            maximum_roots: 0,
+            exact_root_counts,
+            roots,
+            root_addresses,
+            metadata_invalid: false,
+        })
+    }
+
+    fn register_frame(&mut self, function_ordinal: u32, rbp: *mut u8) {
+        if self.status != 0 {
+            return;
         }
+        let ordinal = function_ordinal as usize;
+        let valid_descriptor = self
+            .image
+            .entries()
+            .get(ordinal)
+            .and_then(|entry| {
+                self.image
+                    .frames()
+                    .iter()
+                    .find(|frame| frame.function() == entry.function())
+            })
+            .is_some();
+        if !valid_descriptor || rbp.is_null() || !(rbp as usize).is_multiple_of(16) {
+            self.invalidate_active_frame();
+            return;
+        }
+        if self.active_depth >= self.maximum_active_frames {
+            self.status = 4;
+            self.payload = 2;
+            return;
+        }
+        self.active_frames[self.active_depth] = ActiveFrame {
+            function_ordinal,
+            rbp,
+            safepoint: INVALID_SAFEPOINT,
+        };
+        self.active_depth += 1;
+        self.peak_active_depth = self.peak_active_depth.max(self.active_depth);
+    }
+
+    fn publish_safepoint(&mut self, safepoint: u32) {
+        if self.status != 0 {
+            return;
+        }
+        let Some(frame) = self
+            .active_frames
+            .get_mut(self.active_depth.saturating_sub(1))
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let Some(entry) = self.image.entries().get(frame.function_ordinal as usize) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let valid = self
+            .image
+            .safepoints()
+            .get(safepoint as usize)
+            .is_some_and(|map| map.id() == safepoint && map.function() == entry.function());
+        if !valid {
+            self.invalidate_active_frame();
+            return;
+        }
+        frame.safepoint = safepoint;
+    }
+
+    fn unregister_frame(&mut self, function_ordinal: u32, rbp: *mut u8) {
+        let Some(index) = self.active_depth.checked_sub(1) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let frame = self.active_frames[index];
+        if frame.function_ordinal != function_ordinal || frame.rbp != rbp {
+            self.invalidate_active_frame();
+            return;
+        }
+        self.active_frames[index] = EMPTY_ACTIVE_FRAME;
+        self.active_depth = index;
+    }
+
+    fn collect_references(&mut self, argument: u64) -> u64 {
+        if self.status != 0 {
+            return argument;
+        }
+        self.roots.clear();
+        self.root_addresses.clear();
+        for frame_index in 0..self.active_depth {
+            if !self.materialize_frame_roots(frame_index) {
+                self.invalidate_active_frame();
+                return argument;
+            }
+        }
+        let root_count = self.roots.len();
+        if self.exact_root_counts.len() == MAX_COLLECTION_REPORTS {
+            self.status = 4;
+            self.payload = 3;
+            return argument;
+        }
+        self.collection_calls = self.collection_calls.saturating_add(1);
+        self.maximum_roots = self.maximum_roots.max(root_count);
+        self.exact_root_counts.push(root_count);
+        match self.services.collect_references(&mut self.roots) {
+            Ok(()) => {}
+            Err(NativeServiceError::ResourceLimitExceeded) => {
+                self.status = 4;
+                self.payload = 3;
+                return argument;
+            }
+            Err(NativeServiceError::HostFailure) => {
+                self.status = 5;
+                return argument;
+            }
+        }
+        for (root, address) in self.roots.iter().zip(&self.root_addresses) {
+            if root.reference_type != address.reference_type {
+                self.invalidate_active_frame();
+                return argument;
+            }
+            // SAFETY: materialize_frame_roots validated this exact aligned home
+            // against retained image metadata and the live generated frame.
+            unsafe { address.address.write(root.opaque_word) };
+        }
+        self.root_addresses
+            .iter()
+            .zip(&self.roots)
+            .rev()
+            .find(|(address, _)| {
+                address.frame_index + 1 == self.active_depth
+                    && address.original_word == argument
+                    && address.reference_type == ReferenceType::Buf
+            })
+            .map_or(argument, |(_, root)| root.opaque_word)
+    }
+
+    fn materialize_frame_roots(&mut self, frame_index: usize) -> bool {
+        let Some(frame) = self.active_frames.get(frame_index).copied() else {
+            return false;
+        };
+        if frame.rbp.is_null() || frame.safepoint == INVALID_SAFEPOINT {
+            return false;
+        }
+        let Some(entry) = self.image.entries().get(frame.function_ordinal as usize) else {
+            return false;
+        };
+        let Some(frame_facts) = self
+            .image
+            .frames()
+            .iter()
+            .find(|facts| facts.function() == entry.function())
+        else {
+            return false;
+        };
+        let Some(safepoint) = self.image.safepoints().get(frame.safepoint as usize) else {
+            return false;
+        };
+        if safepoint.id() != frame.safepoint || safepoint.function() != entry.function() {
+            return false;
+        }
+        for root in safepoint.stack_map().roots() {
+            let displacement = root.rbp_displacement();
+            let in_frame = displacement <= -16
+                && displacement % 8 == 0
+                && displacement
+                    .checked_neg()
+                    .and_then(|value| u32::try_from(value).ok())
+                    .is_some_and(|value| value <= frame_facts.frame_bytes())
+                && frame_facts.homes().iter().any(|home| {
+                    home.kind() == root.kind()
+                        && home.rbp_displacement() == displacement
+                        && home.value_type() == ValueType::Reference(root.reference_type())
+                });
+            if !in_frame || self.roots.len() == self.roots.capacity() {
+                return false;
+            }
+            // SAFETY: the retained descriptor bounds the negative displacement
+            // within this registered generated frame. Homes are aligned words.
+            let address = unsafe { frame.rbp.offset(displacement as isize).cast::<u64>() };
+            // SAFETY: address is the validated live word home above.
+            let opaque_word = unsafe { address.read() };
+            self.roots.push(NativeRoot {
+                reference_type: root.reference_type(),
+                opaque_word,
+            });
+            self.root_addresses.push(RootAddress {
+                address,
+                original_word: opaque_word,
+                reference_type: root.reference_type(),
+                frame_index,
+            });
+        }
+        true
+    }
+
+    fn invalidate_active_frame(&mut self) {
+        self.metadata_invalid = true;
+        self.status = 5;
     }
 }
 
@@ -602,6 +1004,9 @@ impl RawReturn {
             }
             (Self::Float(value), ValueType::F64) => Ok(NativeValue::F64Bits(value.to_bits())),
             (Self::Unit, ValueType::Unit) => Ok(NativeValue::Unit),
+            (Self::Integer(value), ValueType::Reference(reference_type)) => Ok(
+                NativeValue::Reference(NativeReference::new(reference_type, value)),
+            ),
             _ => Err(InvocationError::UnsupportedSignature),
         }
     }
@@ -643,6 +1048,9 @@ fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgument> {
             NativeValue::F64Bits(bits) => Some(MachineArgument::Float(f64::from_bits(*bits))),
             NativeValue::Bool(value) => Some(MachineArgument::Integer(u64::from(*value))),
             NativeValue::Unit => None,
+            NativeValue::Reference(reference) => {
+                Some(MachineArgument::Integer(reference.opaque_word()))
+            }
         })
         .collect()
 }
@@ -652,14 +1060,18 @@ fn runtime_symbol(slot: RuntimeCallSlot) -> usize {
         RuntimeCallSlot::IdentityI64V1 => runtime_identity_i64_v1 as *const () as usize,
         RuntimeCallSlot::PollV1 => runtime_poll_v1 as *const () as usize,
         RuntimeCallSlot::EnterFunctionV1 => runtime_enter_function_v1 as *const () as usize,
+        RuntimeCallSlot::CollectReferenceV1 => runtime_collect_reference_v1 as *const () as usize,
+        RuntimeCallSlot::RegisterFrameV1 => runtime_register_frame_v1 as *const () as usize,
+        RuntimeCallSlot::PublishSafepointV1 => runtime_publish_safepoint_v1 as *const () as usize,
+        RuntimeCallSlot::UnregisterFrameV1 => runtime_unregister_frame_v1 as *const () as usize,
     }
 }
 
-extern "C" fn runtime_identity_i64_v1(_state: *mut NativeCallState, value: u64) -> u64 {
+extern "C" fn runtime_identity_i64_v1(_state: *mut NativeCallState<'_>, value: u64) -> u64 {
     value
 }
 
-extern "C" fn runtime_poll_v1(state: *mut NativeCallState) {
+extern "C" fn runtime_poll_v1(state: *mut NativeCallState<'_>) {
     // SAFETY: generated runtime calls receive the live invocation state as the
     // implicit first argument. The mapping and call cannot outlive this stack
     // value, and generated code cannot replace the context pointer.
@@ -672,6 +1084,7 @@ extern "C" fn runtime_poll_v1(state: *mut NativeCallState) {
     state.poll_count = state.poll_count.saturating_add(1);
     if state.poll_fuel_remaining == 0 {
         state.status = 4;
+        state.payload = 1;
         return;
     }
     state.poll_fuel_remaining -= 1;
@@ -684,7 +1097,7 @@ extern "C" fn runtime_poll_v1(state: *mut NativeCallState) {
     }
 }
 
-extern "C" fn runtime_enter_function_v1(state: *mut NativeCallState, function: u64) {
+extern "C" fn runtime_enter_function_v1(state: *mut NativeCallState<'_>, function: u64) {
     // SAFETY: the context provenance is identical to runtime_poll_v1.
     let Some(state) = (unsafe { state.as_mut() }) else {
         return;
@@ -701,6 +1114,60 @@ extern "C" fn runtime_enter_function_v1(state: *mut NativeCallState, function: u
         return;
     };
     *entries = entries.saturating_add(1);
+}
+
+extern "C" fn runtime_register_frame_v1(
+    state: *mut NativeCallState<'_>,
+    function_ordinal: u64,
+    rbp: *mut u8,
+) {
+    // SAFETY: generated ABI-2 prologues pass their invocation context and
+    // current frame base. Both remain live until the matching epilogue.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return;
+    };
+    let Ok(function_ordinal) = u32::try_from(function_ordinal) else {
+        state.invalidate_active_frame();
+        return;
+    };
+    state.register_frame(function_ordinal, rbp);
+}
+
+extern "C" fn runtime_publish_safepoint_v1(state: *mut NativeCallState<'_>, safepoint: u64) {
+    // SAFETY: context provenance is identical to runtime_register_frame_v1.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return;
+    };
+    let Ok(safepoint) = u32::try_from(safepoint) else {
+        state.invalidate_active_frame();
+        return;
+    };
+    state.publish_safepoint(safepoint);
+}
+
+extern "C" fn runtime_unregister_frame_v1(
+    state: *mut NativeCallState<'_>,
+    function_ordinal: u64,
+    rbp: *mut u8,
+) {
+    // SAFETY: context/frame provenance is identical to registration.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return;
+    };
+    let Ok(function_ordinal) = u32::try_from(function_ordinal) else {
+        state.invalidate_active_frame();
+        return;
+    };
+    state.unregister_frame(function_ordinal, rbp);
+}
+
+extern "C" fn runtime_collect_reference_v1(state: *mut NativeCallState<'_>, reference: u64) -> u64 {
+    // SAFETY: generated collecting calls publish an exact safepoint before
+    // entering this trampoline; all raw frame access remains in this module.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return reference;
+    };
+    state.collect_references(reference)
 }
 
 fn check_object_limit(
@@ -1017,9 +1484,9 @@ mod platform {
         }
 
         match (arguments, result) {
-            ([], ValueType::I64 | ValueType::Bool) => Ok(RawReturn::Integer(call!(
-                extern "C" fn(*mut NativeCallState) -> u64
-            ))),
+            ([], ValueType::I64 | ValueType::Bool | ValueType::Reference(_)) => Ok(
+                RawReturn::Integer(call!(extern "C" fn(*mut NativeCallState) -> u64)),
+            ),
             ([], ValueType::F64) => Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState) -> f64
             ))),
@@ -1027,12 +1494,13 @@ mod platform {
                 call!(extern "C" fn(*mut NativeCallState));
                 Ok(RawReturn::Unit)
             }
-            ([MachineArgument::Integer(first)], ValueType::I64 | ValueType::Bool) => {
-                Ok(RawReturn::Integer(call!(
-                    extern "C" fn(*mut NativeCallState, u64) -> u64,
-                    *first
-                )))
-            }
+            (
+                [MachineArgument::Integer(first)],
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_),
+            ) => Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, u64) -> u64,
+                *first
+            ))),
             ([MachineArgument::Integer(first)], ValueType::F64) => Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState, u64) -> f64,
                 *first
@@ -1041,12 +1509,13 @@ mod platform {
                 call!(extern "C" fn(*mut NativeCallState, u64), *first);
                 Ok(RawReturn::Unit)
             }
-            ([MachineArgument::Float(first)], ValueType::I64 | ValueType::Bool) => {
-                Ok(RawReturn::Integer(call!(
-                    extern "C" fn(*mut NativeCallState, f64) -> u64,
-                    *first
-                )))
-            }
+            (
+                [MachineArgument::Float(first)],
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_),
+            ) => Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, f64) -> u64,
+                *first
+            ))),
             ([MachineArgument::Float(first)], ValueType::F64) => Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState, f64) -> f64,
                 *first
@@ -1057,7 +1526,7 @@ mod platform {
             }
             (
                 [MachineArgument::Integer(first), MachineArgument::Integer(second)],
-                ValueType::I64 | ValueType::Bool,
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_),
             ) => Ok(RawReturn::Integer(call!(
                 extern "C" fn(*mut NativeCallState, u64, u64) -> u64,
                 *first,
@@ -1084,7 +1553,7 @@ mod platform {
             }
             (
                 [MachineArgument::Integer(first), MachineArgument::Float(second)],
-                ValueType::I64 | ValueType::Bool,
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_),
             ) => Ok(RawReturn::Integer(call!(
                 extern "C" fn(*mut NativeCallState, u64, f64) -> u64,
                 *first,
@@ -1110,7 +1579,7 @@ mod platform {
             }
             (
                 [MachineArgument::Float(first), MachineArgument::Integer(second)],
-                ValueType::I64 | ValueType::Bool,
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_),
             ) => Ok(RawReturn::Integer(call!(
                 extern "C" fn(*mut NativeCallState, f64, u64) -> u64,
                 *first,
@@ -1136,7 +1605,7 @@ mod platform {
             }
             (
                 [MachineArgument::Float(first), MachineArgument::Float(second)],
-                ValueType::I64 | ValueType::Bool,
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_),
             ) => Ok(RawReturn::Integer(call!(
                 extern "C" fn(*mut NativeCallState, f64, f64) -> u64,
                 *first,

@@ -359,7 +359,7 @@ fn calls_multiblock_loop_scalar_and_structured_outcomes() -> Result<(), Box<dyn 
     assert!(image
         .safepoints()
         .iter()
-        .all(|point| point.stack_map().reference_slots().is_empty()));
+        .all(|point| point.stack_map().roots().is_empty()));
     let installer = ExecutableInstaller::default();
     let installed = installer.install(image)?;
     assert_eq!(
@@ -512,7 +512,7 @@ fn exact_integer_traps_and_f64_bits_and_ordered_branches() -> Result<(), Box<dyn
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
 fn enforces_versions_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::error::Error>> {
-    let mismatched = AbiVersions::new(2, 1, 1);
+    let mismatched = AbiVersions::new(1, 1, 1);
     let (image, _) = scalar_image(mismatched)?;
     let installer = ExecutableInstaller::default();
     assert!(matches!(

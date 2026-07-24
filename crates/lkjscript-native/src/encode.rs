@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::image::{
-    entry_metadata, frame_facts, outcome_map_entry, relocation, scalar_safepoint, source_map_entry,
-    trap_map_entry, AbiVersions, ImageParts, InstallableImage, OutcomeKind, RelocationKind,
-    RelocationTarget,
+    entry_metadata, exact_safepoint, frame_facts, frame_home, outcome_map_entry, relocation,
+    root_location, source_map_entry, trap_map_entry, AbiVersions, FrameHomeKind, ImageParts,
+    InstallableImage, OutcomeKind, RelocationKind, RelocationTarget, RootLocation,
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
@@ -40,6 +40,7 @@ enum FixupTarget {
     Block(BlockId),
     Trap(TrapCode),
     StatusReturn,
+    UnregisteredStatusReturn,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,6 +51,7 @@ struct BranchFixup {
 
 struct FunctionEncoder<'a> {
     function: &'a FunctionPlan,
+    function_ordinal: u32,
     signatures: &'a [(FunctionId, crate::Signature)],
     bytes: &'a mut Vec<u8>,
     relocations: &'a mut Vec<crate::Relocation>,
@@ -62,6 +64,8 @@ struct FunctionEncoder<'a> {
     block_offsets: Vec<Option<usize>>,
     trap_offsets: [Option<usize>; 3],
     status_return_offset: Option<usize>,
+    unregistered_status_return_offset: Option<usize>,
+    derived_call_roots: Vec<Option<Vec<RootLocation>>>,
     frame_bytes: u32,
     maximum_code_bytes: usize,
 }
@@ -85,12 +89,15 @@ pub fn encode(
         .map(|function| (function.id, function.signature.clone()))
         .collect();
 
-    for function in &plan.functions {
+    for (function_ordinal, function) in plan.functions.iter().enumerate() {
         let start = bytes.len();
         let frame_bytes = calculate_frame_bytes(function)?;
         let outgoing_arguments = maximum_outgoing_arguments(function)?;
+        let derived_call_roots = derive_call_roots(function, plan.limits.max_work_units())?;
+        let function_ordinal = to_u32(function_ordinal)?;
         let mut encoder = FunctionEncoder {
             function,
+            function_ordinal,
             signatures: &signatures,
             bytes: &mut bytes,
             relocations: &mut relocations,
@@ -103,6 +110,8 @@ pub fn encode(
             block_offsets: vec![None; function.blocks.len()],
             trap_offsets: [None; 3],
             status_return_offset: None,
+            unregistered_status_return_offset: None,
+            derived_call_roots,
             frame_bytes,
             maximum_code_bytes: plan.limits.max_code_bytes(),
         };
@@ -123,6 +132,7 @@ pub fn encode(
             to_u32(function.values.len())?,
             to_u32(function.locals.len())?,
             outgoing_arguments,
+            build_frame_homes(function)?,
         ));
         source_map.push(source_map_entry(function.id, start_u32, end_u32, None));
     }
@@ -132,6 +142,10 @@ pub fn encode(
         RuntimeCallSlot::IdentityI64V1 => 1_u8,
         RuntimeCallSlot::PollV1 => 2_u8,
         RuntimeCallSlot::EnterFunctionV1 => 3_u8,
+        RuntimeCallSlot::CollectReferenceV1 => 4_u8,
+        RuntimeCallSlot::RegisterFrameV1 => 5_u8,
+        RuntimeCallSlot::PublishSafepointV1 => 6_u8,
+        RuntimeCallSlot::UnregisterFrameV1 => 7_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -160,6 +174,7 @@ impl FunctionEncoder<'_> {
     fn emit_function(&mut self) -> Result<(), NativeError> {
         self.emit_prologue()?;
         self.emit_parameters()?;
+        self.emit_register_frame()?;
         let entry = self
             .function
             .entry
@@ -209,7 +224,9 @@ impl FunctionEncoder<'_> {
             self.emit_trap_stub(trap)?;
         }
         self.status_return_offset = Some(self.bytes.len());
-        self.emit_zero_return()?;
+        self.emit_registered_zero_return()?;
+        self.unregistered_status_return_offset = Some(self.bytes.len());
+        self.emit_unregistered_zero_return()?;
         self.patch_fixups()?;
         self.check_code_limit()
     }
@@ -219,7 +236,12 @@ impl FunctionEncoder<'_> {
         self.emit(&[0x48, 0x89, 0xe5])?;
         self.emit(&[0x48, 0x81, 0xec])?;
         self.emit(&self.frame_bytes.to_le_bytes())?;
-        self.store_integer_register(7, self.context_offset())
+        self.store_integer_register(7, self.context_offset())?;
+        self.zero_rax()?;
+        for home in build_frame_homes(self.function)? {
+            self.store_rax(home.rbp_displacement())?;
+        }
+        Ok(())
     }
 
     fn emit_parameters(&mut self) -> Result<(), NativeError> {
@@ -234,7 +256,7 @@ impl FunctionEncoder<'_> {
                 .id;
             let offset = self.value_offset(value)?;
             match parameter {
-                ValueType::I64 | ValueType::Bool => {
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
                     let register = [6_u8, 2_u8]
                         .get(integer_index)
                         .copied()
@@ -253,6 +275,19 @@ impl FunctionEncoder<'_> {
             }
         }
         Ok(())
+    }
+
+    fn emit_register_frame(&mut self) -> Result<(), NativeError> {
+        self.runtime_calls.insert(RuntimeCallSlot::RegisterFrameV1);
+        self.load_integer_register(7, self.context_offset())?;
+        self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
+        // mov rdx, rbp. The raw frame base is consumed only by the private sys
+        // runtime trampoline and never appears in a safe API.
+        self.emit(&[0x48, 0x89, 0xea])?;
+        self.emit_runtime_call_target(RuntimeCallSlot::RegisterFrameV1)?;
+        self.load_integer_register(1, self.context_offset())?;
+        self.emit(&[0x83, 0x39, 0x00])?;
+        self.emit_conditional_jump(0x85, FixupTarget::UnregisteredStatusReturn)
     }
 
     fn emit_instruction(&mut self, instruction: &Instruction) -> Result<(), NativeError> {
@@ -502,12 +537,26 @@ impl FunctionEncoder<'_> {
         arguments: &[ValueId],
         target: RelocationTarget,
     ) -> Result<(), NativeError> {
+        let safepoint_id = to_u32(self.safepoints.len())?;
+        let roots = self
+            .derived_call_roots
+            .get(output.index as usize)
+            .and_then(Clone::clone)
+            .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
+        let may_collect = match target {
+            RelocationTarget::Function(_) => true,
+            RelocationTarget::Runtime(slot) => slot.may_collect(),
+        };
+        if may_collect {
+            self.emit_publish_safepoint(safepoint_id)?;
+        }
+
         self.load_integer_register(7, self.context_offset())?;
         let mut integer_index = 0_usize;
         let mut float_index = 0_usize;
         for (argument, argument_type) in arguments.iter().zip(signature.parameters()) {
             match argument_type {
-                ValueType::I64 | ValueType::Bool => {
+                ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
                     let register = [6_u8, 2_u8]
                         .get(integer_index)
                         .copied()
@@ -522,6 +571,40 @@ impl FunctionEncoder<'_> {
                 ValueType::Unit => {}
             }
         }
+        self.emit_call_target(target)?;
+        let call_offset = self.bytes.len();
+        self.emit(&[0x41, 0xff, 0xd3])?;
+        self.safepoints.push(exact_safepoint(
+            safepoint_id,
+            self.function.id,
+            to_u32(call_offset)?,
+            roots,
+        ));
+        self.load_integer_register(1, self.context_offset())?;
+        self.emit(&[0x83, 0x39, 0x00])?;
+        self.emit_conditional_jump(0x85, FixupTarget::StatusReturn)?;
+        match signature.result() {
+            ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
+                self.store_rax(self.value_offset(output)?)?;
+            }
+            ValueType::F64 => self.store_xmm0(self.value_offset(output)?)?,
+            ValueType::Unit => {
+                self.zero_rax()?;
+                self.store_rax(self.value_offset(output)?)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_publish_safepoint(&mut self, safepoint_id: u32) -> Result<(), NativeError> {
+        self.runtime_calls
+            .insert(RuntimeCallSlot::PublishSafepointV1);
+        self.load_integer_register(7, self.context_offset())?;
+        self.load_integer_register_immediate(6, u64::from(safepoint_id))?;
+        self.emit_runtime_call_target(RuntimeCallSlot::PublishSafepointV1)
+    }
+
+    fn emit_call_target(&mut self, target: RelocationTarget) -> Result<(), NativeError> {
         self.emit(&[0x49, 0xbb])?;
         let relocation_offset = self.bytes.len();
         self.emit(&0_u64.to_le_bytes())?;
@@ -530,22 +613,12 @@ impl FunctionEncoder<'_> {
             RelocationKind::Absolute64,
             target,
         ));
-        let call_offset = self.bytes.len();
-        self.emit(&[0x41, 0xff, 0xd3])?;
-        self.safepoints
-            .push(scalar_safepoint(self.function.id, to_u32(call_offset)?));
-        self.load_integer_register(1, self.context_offset())?;
-        self.emit(&[0x83, 0x39, 0x00])?;
-        self.emit_conditional_jump(0x85, FixupTarget::StatusReturn)?;
-        match signature.result() {
-            ValueType::I64 | ValueType::Bool => self.store_rax(self.value_offset(output)?)?,
-            ValueType::F64 => self.store_xmm0(self.value_offset(output)?)?,
-            ValueType::Unit => {
-                self.zero_rax()?;
-                self.store_rax(self.value_offset(output)?)?;
-            }
-        }
         Ok(())
+    }
+
+    fn emit_runtime_call_target(&mut self, slot: RuntimeCallSlot) -> Result<(), NativeError> {
+        self.emit_call_target(RelocationTarget::Runtime(slot))?;
+        self.emit(&[0x41, 0xff, 0xd3])
     }
 
     fn emit_terminator(&mut self, terminator: &Terminator) -> Result<(), NativeError> {
@@ -568,8 +641,9 @@ impl FunctionEncoder<'_> {
                     to_u32(offset)?,
                     OutcomeKind::Return,
                 ));
+                self.emit_unregister_frame()?;
                 match self.value_type(*value)? {
-                    ValueType::I64 | ValueType::Bool => {
+                    ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
                         self.load_rax(self.value_offset(*value)?)?;
                     }
                     ValueType::F64 => {
@@ -592,7 +666,7 @@ impl FunctionEncoder<'_> {
                 self.emit(&[0xc7, 0x01])?;
                 self.emit(&2_u32.to_le_bytes())?;
                 self.emit(&[0x48, 0x89, 0x41, 0x08])?;
-                self.emit_zero_return()
+                self.emit_registered_zero_return()
             }
             Terminator::Outcome(outcome) => {
                 let offset = self.bytes.len();
@@ -613,7 +687,11 @@ impl FunctionEncoder<'_> {
                 self.load_integer_register(1, self.context_offset())?;
                 self.emit(&[0xc7, 0x01])?;
                 self.emit(&status.to_le_bytes())?;
-                self.emit_zero_return()
+                if matches!(outcome, RuntimeOutcome::ResourceLimitExceeded) {
+                    self.emit(&[0x48, 0xc7, 0x41, 0x08])?;
+                    self.emit(&1_u32.to_le_bytes())?;
+                }
+                self.emit_registered_zero_return()
             }
         }
     }
@@ -624,10 +702,25 @@ impl FunctionEncoder<'_> {
         self.emit(&1_u32.to_le_bytes())?;
         self.emit(&[0xc7, 0x41, 0x04])?;
         self.emit(&trap.as_u32().to_le_bytes())?;
-        self.emit_zero_return()
+        self.emit_registered_zero_return()
     }
 
-    fn emit_zero_return(&mut self) -> Result<(), NativeError> {
+    fn emit_unregister_frame(&mut self) -> Result<(), NativeError> {
+        self.runtime_calls
+            .insert(RuntimeCallSlot::UnregisterFrameV1);
+        self.load_integer_register(7, self.context_offset())?;
+        self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
+        // mov rdx, rbp; sys validates both the descriptor and frame base.
+        self.emit(&[0x48, 0x89, 0xea])?;
+        self.emit_runtime_call_target(RuntimeCallSlot::UnregisterFrameV1)
+    }
+
+    fn emit_registered_zero_return(&mut self) -> Result<(), NativeError> {
+        self.emit_unregister_frame()?;
+        self.emit_unregistered_zero_return()
+    }
+
+    fn emit_unregistered_zero_return(&mut self) -> Result<(), NativeError> {
         self.zero_rax()?;
         self.emit(&[0x66, 0x0f, 0xef, 0xc0])?;
         self.emit_epilogue()
@@ -671,6 +764,7 @@ impl FunctionEncoder<'_> {
                     .flatten(),
                 FixupTarget::Trap(trap) => self.trap_offsets[trap_index(trap)],
                 FixupTarget::StatusReturn => self.status_return_offset,
+                FixupTarget::UnregisteredStatusReturn => self.unregistered_status_return_offset,
             }
             .ok_or(NativeError::Encode(EncodeError::InvalidLabel))?;
             patch_relative(self.bytes, fixup.displacement_offset, target)?;
@@ -699,22 +793,27 @@ impl FunctionEncoder<'_> {
     }
 
     fn local_offset(&self, local: crate::LocalId) -> Result<i32, NativeError> {
-        let slot = 1_usize
-            .checked_add(local.index as usize)
-            .ok_or(NativeError::Encode(EncodeError::FrameTooLarge))?;
-        slot_offset(slot)
+        local_home_offset(local.index as usize)
     }
 
     fn value_offset(&self, value: ValueId) -> Result<i32, NativeError> {
-        let slot = 1_usize
-            .checked_add(self.function.locals.len())
-            .and_then(|base| base.checked_add(value.index as usize))
-            .ok_or(NativeError::Encode(EncodeError::FrameTooLarge))?;
-        slot_offset(slot)
+        value_home_offset(self.function, value.index as usize)
     }
 
     fn load_rax_immediate(&mut self, value: u64) -> Result<(), NativeError> {
         self.emit(&[0x48, 0xb8])?;
+        self.emit(&value.to_le_bytes())
+    }
+
+    fn load_integer_register_immediate(
+        &mut self,
+        register: u8,
+        value: u64,
+    ) -> Result<(), NativeError> {
+        if register > 7 {
+            return Err(NativeError::Encode(EncodeError::UnsupportedSignature));
+        }
+        self.emit(&[0x48, 0xb8 | register])?;
         self.emit(&value.to_le_bytes())
     }
 
@@ -799,6 +898,251 @@ impl FunctionEncoder<'_> {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum LiveHome {
+    Local(u32),
+    Value(u32),
+}
+
+fn derive_call_roots(
+    function: &FunctionPlan,
+    maximum_work: u64,
+) -> Result<Vec<Option<Vec<RootLocation>>>, NativeError> {
+    let mut live_in = vec![BTreeSet::new(); function.blocks.len()];
+    let mut work = 0_u64;
+    loop {
+        let mut changed = false;
+        for block_index in (0..function.blocks.len()).rev() {
+            charge_liveness(&mut work, maximum_work)?;
+            let block = &function.blocks[block_index];
+            let mut live = successor_live(function, block, &live_in, &mut work, maximum_work)?;
+            add_terminator_references(function, block, &mut live)?;
+            for instruction in block.instructions.iter().rev() {
+                transfer_reference_liveness(function, instruction, &mut live)?;
+                charge_liveness(&mut work, maximum_work)?;
+            }
+            if live != live_in[block_index] {
+                live_in[block_index] = live;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mut call_roots = vec![None; function.values.len()];
+    for block in &function.blocks {
+        let mut live = successor_live(function, block, &live_in, &mut work, maximum_work)?;
+        add_terminator_references(function, block, &mut live)?;
+        for instruction in block.instructions.iter().rev() {
+            if matches!(
+                &instruction.operation,
+                Operation::Call(_, _) | Operation::RuntimeCall(_, _)
+            ) {
+                let mut during_call = live.clone();
+                during_call.remove(&LiveHome::Value(instruction.output.index));
+                for operand in instruction.operation.operands() {
+                    if value_reference_type(function, operand).is_some() {
+                        during_call.insert(LiveHome::Value(operand.index));
+                    }
+                }
+                let mut roots = during_call
+                    .into_iter()
+                    .map(|home| live_home_root(function, home))
+                    .collect::<Result<Vec<_>, _>>()?;
+                roots.sort_unstable();
+                roots.dedup();
+                call_roots[instruction.output.index as usize] = Some(roots);
+            }
+            transfer_reference_liveness(function, instruction, &mut live)?;
+            charge_liveness(&mut work, maximum_work)?;
+        }
+    }
+    Ok(call_roots)
+}
+
+fn successor_live(
+    function: &FunctionPlan,
+    block: &crate::plan::Block,
+    live_in: &[BTreeSet<LiveHome>],
+    work: &mut u64,
+    maximum_work: u64,
+) -> Result<BTreeSet<LiveHome>, NativeError> {
+    let mut live = BTreeSet::new();
+    let terminator = block
+        .terminator
+        .as_ref()
+        .ok_or(NativeError::Encode(EncodeError::InvalidLabel))?;
+    let successors: Vec<BlockId> = match terminator {
+        Terminator::Branch(target) => vec![*target],
+        Terminator::BranchIf {
+            when_true,
+            when_false,
+            ..
+        } => vec![*when_true, *when_false],
+        Terminator::Return(_)
+        | Terminator::Trap(_)
+        | Terminator::Exit(_)
+        | Terminator::Outcome(_) => Vec::new(),
+    };
+    for successor in successors {
+        let successor_live = live_in
+            .get(successor.index as usize)
+            .ok_or(NativeError::Encode(EncodeError::InvalidLabel))?;
+        for home in successor_live {
+            live.insert(*home);
+            charge_liveness(work, maximum_work)?;
+        }
+    }
+    let _ = function;
+    Ok(live)
+}
+
+fn add_terminator_references(
+    function: &FunctionPlan,
+    block: &crate::plan::Block,
+    live: &mut BTreeSet<LiveHome>,
+) -> Result<(), NativeError> {
+    let terminator = block
+        .terminator
+        .as_ref()
+        .ok_or(NativeError::Encode(EncodeError::InvalidLabel))?;
+    for operand in terminator.operands() {
+        if value_reference_type(function, operand).is_some() {
+            live.insert(LiveHome::Value(operand.index));
+        }
+    }
+    Ok(())
+}
+
+fn transfer_reference_liveness(
+    function: &FunctionPlan,
+    instruction: &Instruction,
+    live: &mut BTreeSet<LiveHome>,
+) -> Result<(), NativeError> {
+    if instruction.output_type.reference_type().is_some() {
+        live.remove(&LiveHome::Value(instruction.output.index));
+    }
+    match &instruction.operation {
+        Operation::WriteLocal(local, _) => {
+            if function.locals[local.index as usize]
+                .value_type
+                .reference_type()
+                .is_some()
+            {
+                live.remove(&LiveHome::Local(local.index));
+            }
+        }
+        Operation::ReadLocal(local)
+            if function.locals[local.index as usize]
+                .value_type
+                .reference_type()
+                .is_some() =>
+        {
+            live.insert(LiveHome::Local(local.index));
+        }
+        Operation::ReadLocal(_) => {}
+        _ => {}
+    }
+    for operand in instruction.operation.operands() {
+        if value_reference_type(function, operand).is_some() {
+            live.insert(LiveHome::Value(operand.index));
+        }
+    }
+    Ok(())
+}
+
+fn value_reference_type(function: &FunctionPlan, value: ValueId) -> Option<crate::ReferenceType> {
+    function
+        .values
+        .get(value.index as usize)
+        .and_then(|fact| fact.value_type.reference_type())
+}
+
+fn live_home_root(function: &FunctionPlan, home: LiveHome) -> Result<RootLocation, NativeError> {
+    match home {
+        LiveHome::Local(index) => {
+            let fact = function
+                .locals
+                .get(index as usize)
+                .ok_or(NativeError::Encode(EncodeError::InvalidValue))?;
+            let reference_type = fact
+                .value_type
+                .reference_type()
+                .ok_or(NativeError::Encode(EncodeError::InvalidValue))?;
+            Ok(root_location(
+                local_home_offset(index as usize)?,
+                FrameHomeKind::Local(index),
+                reference_type,
+            ))
+        }
+        LiveHome::Value(index) => {
+            let fact = function
+                .values
+                .get(index as usize)
+                .ok_or(NativeError::Encode(EncodeError::InvalidValue))?;
+            let reference_type = fact
+                .value_type
+                .reference_type()
+                .ok_or(NativeError::Encode(EncodeError::InvalidValue))?;
+            Ok(root_location(
+                value_home_offset(function, index as usize)?,
+                FrameHomeKind::Value(index),
+                reference_type,
+            ))
+        }
+    }
+}
+
+fn charge_liveness(work: &mut u64, maximum: u64) -> Result<(), NativeError> {
+    *work = work
+        .checked_add(1)
+        .ok_or(NativeError::Encode(EncodeError::LimitExceeded(
+            "stack-map liveness work",
+        )))?;
+    if *work > maximum {
+        return Err(NativeError::Encode(EncodeError::LimitExceeded(
+            "stack-map liveness work",
+        )));
+    }
+    Ok(())
+}
+
+fn build_frame_homes(function: &FunctionPlan) -> Result<Vec<crate::FrameHome>, NativeError> {
+    let mut homes = Vec::with_capacity(function.locals.len() + function.values.len());
+    for (index, local) in function.locals.iter().enumerate() {
+        homes.push(frame_home(
+            FrameHomeKind::Local(to_u32(index)?),
+            local.value_type,
+            local_home_offset(index)?,
+        ));
+    }
+    for (index, value) in function.values.iter().enumerate() {
+        homes.push(frame_home(
+            FrameHomeKind::Value(to_u32(index)?),
+            value.value_type,
+            value_home_offset(function, index)?,
+        ));
+    }
+    Ok(homes)
+}
+
+fn local_home_offset(index: usize) -> Result<i32, NativeError> {
+    let slot = 1_usize
+        .checked_add(index)
+        .ok_or(NativeError::Encode(EncodeError::FrameTooLarge))?;
+    slot_offset(slot)
+}
+
+fn value_home_offset(function: &FunctionPlan, index: usize) -> Result<i32, NativeError> {
+    let slot = 1_usize
+        .checked_add(function.locals.len())
+        .and_then(|base| base.checked_add(index))
+        .ok_or(NativeError::Encode(EncodeError::FrameTooLarge))?;
+    slot_offset(slot)
 }
 
 fn calculate_frame_bytes(function: &FunctionPlan) -> Result<u32, NativeError> {
