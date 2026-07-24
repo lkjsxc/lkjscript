@@ -35,17 +35,24 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 4. at most 16 immediate entries in every directory under the language `src`
    tree, using the compiler's shared language rule;
 5. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
-6. successful compilation of 11 roots and exact equality between their reported
-   import closures and all 127 canonical sources in the corpus;
+6. successful compilation through verified normalized SSA and validated
+   bytecode for nine roots, with exact equality between their reported import
+   closures and all 94 canonical sources in the corpus;
 7. `cargo fmt --all -- --check`;
 8. strict Clippy for the workspace, all targets, and all features;
 9. workspace unit tests with the locked Cargo graph.
 
 Workspace tests include focused numeric and explicit-equality
-parser/type/HIR/bytecode/VM/host boundaries, removed equality vocabulary and
-opcodes, and compiled source-to-VM execution across immediate and boxed I64
-values. They also cover whole-chunk reachable/unreachable decode, random small
-byte robustness without panic, size/index/metadata/product/category/CFG/local
+parser/type/HIR/SSA/bytecode/VM/host boundaries, removed equality vocabulary
+and opcodes, and compiled source-to-VM execution across immediate and boxed I64
+values. Typed-SSA tests directly cover malformed IDs, use-before-definition,
+dominance/edge/loop/effect failures; deterministic isolated and combined
+passes; exact bounded evaluation of scalar/control/calls/recursion/local
+mutation/products/Option/Result/lists/strings/buffers/traps/exits; explicit
+unsupported host operations; focused VM equivalence; and 64 deterministic
+bounded randomized type-correct scalar programs. Bytecode tests also cover
+whole-chunk reachable/unreachable decode, random small-byte robustness without
+panic, explicit Trap, size/index/metadata/product/category/CFG/local
 initialization/return validation, owned returned heap values, independent VMs
 after exit/trap, and structured fuel/stack/frame/heap/allocation/handle/output/
 deadline and hard-deadline-unsupported outcomes.
@@ -66,8 +73,10 @@ Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and
 `unimplemented` denials. Runtime smokes, benchmarks, and Docker stay separate.
 
-The compiler API returns `ValidatedChunk`; VM and disassembly tests therefore
-cannot accidentally execute a raw builder `Chunk`. Validation failure remains a
+The compiler API returns `ExecutableProgram`, retaining verified normalized SSA,
+bytecode link metadata, and `ValidatedChunk`; the latter is available only
+through an explicit bytecode accessor. VM and disassembly therefore cannot
+accidentally execute a raw builder `Chunk`. Validation failure remains a
 compile/validation error rather than an `ExecutionOutcome`.
 
 ## Runtime Acceptance

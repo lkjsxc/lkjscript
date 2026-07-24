@@ -9,13 +9,14 @@ reinterpret the language.
 ## Status
 
 **Current** for parsed AST -> resolved typed HIR with fixed-point function
-effects -> reference bytecode, plus an isolated source-independent Linux x86-64
-scalar native/W^X foundation. Typed SSA, source/SSA native lowering, native code
-objects owned by the runtime, baseline JIT, proof-based optimizing JIT, minimal
-AOT test emission, and direct Wasm are **Accepted Targets**. The current native
-foundation has no canonical-source, HIR, SSA, bytecode, VM, tier, or engine
-linkage. The future integrated Linux x86-64 backend uses the owned encoder
-selected by [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
+effects -> verified typed SSA -> verified baseline normalization -> reference
+bytecode. The independent bounded SSA evaluator and bytecode link metadata are
+also Current. The selected owned Linux x86-64 scalar machine-plan encoder and
+safe W^X installation boundary are a **Current native foundation**, but verified
+SSA is not connected to them and no source/VM native transfer or engine exists.
+Baseline JIT, proof-based optimizing JIT, minimal AOT test emission, and direct
+Wasm are **Accepted Targets**. The backend is specified by
+[Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
 **Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
 
@@ -37,12 +38,12 @@ canonical source
       +-> direct Wasm later
 ```
 
-Typed HIR currently owns resolved binding IDs, declaration kinds, nominal
-product IDs and field indexes, exact static type facts, source origins,
-canonical operation identities and per-call signatures, per-expression
-effects, and compact per-function effect summaries. Code generation consumes
-HIR rather than re-parsing definitions, parameters, operators, and names
-independently.
+Typed HIR owns resolved binding IDs, declaration kinds, nominal product IDs and
+field indexes, exact static type facts, source origins, canonical operation
+identities and per-call signatures, per-expression effects, and compact per-
+function effect summaries. One compiler lowering environment-renames HIR
+locals and mutation into `lkjscript-ir`; code generation consumes only verified
+normalized SSA rather than HIR, definitions, parameters, operators, or names.
 
 `Unit`, typed empty lists, Option, immutable nominal products, and the explicit
 value/object/list/F64-bit equality families have distinct exact HIR/runtime
@@ -64,20 +65,29 @@ SSA and deletes the sibling semantic lowering before native lowering is
 authoritative. Runtime JIT and file emission differ in code placement,
 relocation, and linking, not semantics or optimization ownership.
 
-The accepted cutover changes the compiler result from a bare bytecode value to
-an executable program that owns both the opaque validated reference bytecode
-and verified SSA, plus deterministic function-to-prototype/main and SSA-to-
-bytecode link metadata. Bytecode remains available through an explicit
+The completed cutover changes the compiler result from a bare bytecode value to
+an `ExecutableProgram` that owns both the opaque validated reference bytecode
+and verified normalized SSA, plus deterministic function-to-prototype/main and
+SSA-to-bytecode link metadata. Bytecode remains available through an explicit
 accessor. Mutable raw chunks remain builder inputs only for malformed-bytecode
 tests and always cross `validate_chunk` before execution.
 
-The differential evaluator is independent of bytecode, the VM, native helpers,
-and host effects. Its accepted current slice covers deterministic scalar and
-control semantics, recursion, SSA-converted local mutation, products,
-Option/Result, lists, strings, and host-independent buffers under explicit fuel,
-frame, allocation, and buffer bounds. Console, filesystem, sockets, terminal,
-time, process-global handles, and other host operations are explicit
-unsupported-evaluator results rather than inert behavior.
+The Current differential evaluator is independent of bytecode, the VM, native
+helpers, and host effects. It covers deterministic scalar and control
+semantics, calls and recursion, SSA-converted local mutation, products,
+Option/Result, lists, strings, deterministic arguments, and host-independent
+buffers under explicit fuel, frame, allocation, buffer, and list-comparison
+bounds. Console, filesystem, sockets, terminal, time, process-global handles,
+and other host operations are explicit unsupported-evaluator results rather
+than inert behavior.
+
+Current baseline normalization runs only independently testable deterministic
+passes, verifying after each: constant folding/propagation with no F64
+arithmetic fold, copy propagation, branch simplification, unreachable-block
+elimination, empty-block forwarding, effect-aware dead-instruction elimination,
+direct-call resolution, and canonical block/fallthrough order. There is no
+speculation, native lowering, engine selection, OSR, guard, or deoptimization
+in this cutover.
 
 ## HIR Resolution Invariants
 
@@ -121,21 +131,26 @@ native callers call compiled callees directly.
 
 ## Native Code Object Priority
 
-The required called-code experiment is complete. The accepted
-[Linux x86-64 Native Backend](linux-x86-64-native-backend.md) selects a small
-owned byte encoder over Cranelift 0.134.2 from generated-code speed plus visible
+The required called-code experiment selected the
+[Linux x86-64 Native Backend](linux-x86-64-native-backend.md): a small owned
+encoder over Cranelift 0.134.2 from generated-code speed plus visible
 compilation, binary, RSS, dependency, safety, stack-map, W^X, and maintenance
-costs. The decision adds no product dependency and implements no backend.
+costs.
 
-The selected backend's isolated scalar foundation now provides a closed
-verified target-lowering plan, owned encoder, opaque installable image, and safe
-W^X boundary. After typed SSA and differential correctness gates, connect it
-only through a narrow verified SSA adapter and the shared native image/code-
-object boundary. The existing intermediate machine calls are backend-boundary
-tests, not source compilation or a JIT. Callable baseline JIT remains the
-primary adaptive performance path. File emission
-exists only to inspect code, test relocations and ABI behavior, use external
-debuggers, and compare backend output with the VM.
+The Current low-level foundation implements its closed typed scalar machine
+plan, verifier, deterministic stack-slot x86-64 encoder, relocations, ABI/frame
+and scalar-stack-map metadata, opaque installable image, and bounded safe
+`lkjscript-sys` RW-to-RX installation/invocation. Boundary tests call generated
+multi-block, loop, direct-call, allowlisted-runtime-call, exact I64/F64,
+trap/exit code. Safe APIs expose no arbitrary bytes, addresses, mappings, or
+function pointers; unsafe memory and invocation remain in `lkjscript-sys`.
+
+This foundation does not consume SSA, source, HIR, or bytecode and is not a JIT.
+Next, lower verified SSA into the closed plan, complete versioned runtime calls,
+and attach code-object/VM tier ownership. Callable baseline JIT remains the
+primary adaptive performance path. File emission exists only to inspect code,
+test relocations and ABI behavior, use external debuggers, and compare backend
+output with the VM.
 
 Native target modes are explicit and every result records its target. Linux
 x86-64 is the only acceptance platform for the active callable-baseline cycle;

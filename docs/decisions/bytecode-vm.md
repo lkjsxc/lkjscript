@@ -7,9 +7,9 @@ seam under the runtime-JIT-first plan.
 
 ## Status
 
-Dense Rust bytecode, tagged values, precise mark-sweep, whole-chunk validation,
-structured process-safe outcomes, and configured VM resource limits are
-**Current**. The call-observation JIT hook is explicitly **Placeholder**.
+Dense Rust bytecode lowered from verified normalized typed SSA, tagged values,
+precise mark-sweep, whole-chunk validation, structured process-safe outcomes,
+and configured VM resource limits are **Current**. The call-observation JIT hook is explicitly **Placeholder**.
 Bounded hotness, callable code objects, tiering, and OSR are **Accepted
 Targets** and are not implemented.
 
@@ -20,9 +20,10 @@ than a tree-walking-only interpreter or host-language GC. Keep it as the cold
 execution tier, correctness oracle, deterministic/debugging path, unsupported-
 platform path, and fallback for unsupported or resource-limited JIT code.
 
-Bytecode lowering remains behind resolved typed HIR and later typed SSA shared
-with runtime JIT, the minimal AOT test emitter, and Wasm. A native backend must
-not reinterpret bytecode semantics independently of typed SSA.
+Bytecode lowering consumes only verified normalized `lkjscript-ir` SSA shared
+with the later runtime JIT, minimal AOT test emitter, and Wasm. The obsolete
+sibling HIR semantic emitter is deleted. A native backend must not reinterpret
+bytecode semantics independently of typed SSA.
 
 The placeholder `JitHook::observe_call` is not an execution boundary. It returns
 no status, sees no loop backedge or VM state, and cannot install or call code.
@@ -31,20 +32,22 @@ objects and execution transfer replace it.
 
 ## Current Validated Execution Boundary
 
-Raw mutable `Chunk` values are builder/compiler/test inputs, not executable
-programs. The one `validate_chunk` function consumes a raw chunk and produces
-an opaque immutable `ValidatedChunk`. Public VM entry points, disassembly, and
-the JIT observation interface accept only that type. Compiler-produced chunks
-cross the same validator as direct malformed test chunks.
+Raw mutable `Chunk` values are builder/compiler/malformed-test inputs, not
+executable programs. The one `validate_chunk` function consumes a raw chunk and
+produces an opaque immutable `ValidatedChunk`. Public VM entry points,
+disassembly, and the JIT observation interface accept only that type. Compiler
+`ExecutableProgram` exposes validated bytecode explicitly and also retains the
+verified SSA and deterministic link metadata. Compiler-produced chunks cross
+the same validator as direct malformed test chunks.
 
 Validation decodes reachable and unreachable bytes and checks opcode retirement,
 operand completeness, configured encoded/table/code/metadata limits, constants,
 prototype and local/global indexes, main/arity/local shape, zero captures,
 product IDs/descriptors/fields and duplicate metadata, instruction-boundary
 jumps, CFG stack depth/category joins, definite local initialization, reachable
-fallthrough, return shape, and statically known scalar, Option, Result, list,
-buffer, handle, and product operation categories. Validation errors remain
-outside execution outcomes and occur before VM effects.
+fallthrough, return shape, explicit trap diagnostics, and statically known
+scalar, Option, Result, list, buffer, handle, and product operation categories.
+Validation errors remain outside execution outcomes and occur before VM effects.
 
 VM execution returns `ExecutionOutcome::{Returned, Exited, Trapped,
 DeadlineExceeded, ResourceLimitExceeded, HostFailure}`. `Returned` contains an
@@ -70,7 +73,8 @@ The exact active contract is
 ## Current Product Bytecode
 
 Chunks carry immutable product names/field names separately from mutable runtime
-globals. `MakeProduct` names a product metadata index;
+globals. `Trap` names an exact validated Str diagnostic and terminates only the
+current VM execution. `MakeProduct` names a product metadata index;
 `LoadProductField` and `WithProductField` name resolved product/field
 descriptors. The VM validates metadata, descriptor, field, category, and nominal
 identity boundaries before access. Construction and immutable replacement

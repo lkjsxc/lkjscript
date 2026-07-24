@@ -30,19 +30,29 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   owned, resolved typed HIR with explicit Main and Functions, BindingIds,
   local-slot references, MutableLocal/SetLocal, ProductIds, numeric field
   identities, source origins, exact operation/type facts, and deterministic
-  fixed-point function effect summaries; bytecode consumes HIR without
-  re-resolving source names or declarations
-- Host implementation: seven Rust workspace crates with no third-party Rust
+  fixed-point function effect summaries; HIR lowers once into verified typed
+  SSA, deterministic baseline normalization, and then reference bytecode
+- Typed SSA: dependency-free `lkjscript-ir` owns dense function/block/value
+  identities, exact types and nominal product metadata, explicit block
+  parameters and terminators, direct/indirect/runtime calls, effects,
+  safepoints, frame states, source origins, verification, an independent
+  bounded evaluator, deterministic isolated baseline passes, and bytecode link
+  metadata; SSA conversion renames local mutation and uses stable BindingId-
+  ordered block parameters at branch and loop joins
+- Host implementation: eight Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
   labels, and exact source-closure coverage are machine-checked
-- Runtime: dense bytecode, contiguous stacks, precise non-moving mark-sweep,
-  traced immutable product objects, and return-adjacent tail-frame reuse
-- Execution boundary: mutable `Chunk` is builder-only; one whole-chunk
-  validator produces opaque immutable `ValidatedChunk`, and VM, disassembly,
-  and the JIT observation seam accept only validated input; compiler output
-  crosses the same validator
+- Runtime: dense bytecode lowered only from normalized SSA, contiguous stacks,
+  precise non-moving mark-sweep, traced immutable product objects, explicit
+  validated `Trap`, and return-adjacent tail-frame reuse
+- Execution boundary: mutable `Chunk` is builder-only for malformed-bytecode
+  construction; one whole-chunk validator produces opaque immutable
+  `ValidatedChunk`, and VM, disassembly, and the JIT observation seam accept
+  only validated input; compiler `ExecutableProgram` retains verified
+  normalized SSA, deterministic function/prototype/main and SSA/bytecode link
+  metadata, and validated bytecode through an explicit accessor
 - Outcomes: VM execution distinguishes returned, exited, trapped, deadline,
   resource-limit, and host-failure outcomes; the core does not terminate the
   process, returned heap values own their reachable storage, and cleanup occurs
@@ -80,18 +90,25 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
   `MSG_NOSIGNAL` instead of risking process termination on a broken peer
+- SSA evaluator: independent of bytecode, VM, native, and host helpers; it
+  covers exact scalar/control semantics, calls and recursion, SSA-converted
+  local mutation, products, Option/Result, lists, strings, deterministic args,
+  host-independent buffers, traps, exits, and explicit fuel/frame/allocation/
+  buffer/list bounds; console, filesystem, sockets, terminal, time, and handle
+  operations return explicit unsupported-evaluator outcomes
+- Native foundation: dependency-free `lkjscript-native` verifies a closed
+  scalar machine plan and emits owned Linux x86-64 bytes, relocations, ABI/frame
+  facts, safepoints, empty scalar stack maps, and opaque installable images;
+  `lkjscript-sys` alone owns bounded RW-to-RX installation and typed invocation;
+  generated multi-block, loop, direct-call, runtime-call, exact I64/F64/trap/
+  exit code has been called in boundary tests, but no SSA adapter or VM transfer
+  exists yet
 - JIT seam: explicitly labeled **PLACEHOLDER** observation hook; there is no
-  native compilation, engine selector, code object, execution handoff, OSR, or
-  deoptimization
-- Native foundation: `lkjscript-native` owns a closed source-independent scalar
-  machine plan, verifier, deterministic stack-slot lowering, x86-64 encoder,
-  symbolic relocations, metadata-complete opaque `InstallableImage`, and exact
-  ABI/accounting records; `lkjscript-sys` alone owns bounded RW-to-RX
-  installation, allowlisted relocation resolution, typed invocation, permission
-  probing, and unmapping. Intermediate tests actually call multi-block, loop,
-  checked-trap, F64, direct-call, and runtime-slot generated code. This is a
-  **Current native foundation**, not canonical source/SSA lowering, VM transfer,
-  a runtime tier, CLI engine, or JIT
+  source-to-native compilation, engine selector, VM/native execution handoff,
+  tier state, OSR, or deoptimization
+- Native backend decision: the measured owned Linux x86-64 encoder selected over
+  Cranelift 0.134.2 is now the Current low-level foundation; the production
+  baseline JIT remains an **Accepted Target**
 - Adaptive-performance contract: runtime JIT is the **Accepted Target** after
   semantic/outcome and typed-SSA prerequisites; the VM remains the cold tier
   and oracle, and minimal AOT emission is only a shared-backend test surface
@@ -154,45 +171,58 @@ tested or implemented.
 | `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 101 workspace tests |
 | fixed-point effect conformance | passed; pure leaf, direct/transitive propagation, direct and mutual recursion, recursive effects, allocation, memory read/write, local mutation, host IO, process exit, trap, declaration-order independence, generic canonical direct calls, retained argument effects, and conservative indirect calls |
 
-The isolated native foundation in this documentation's containing commit,
-based on `ec2afbb1161eff437370d1e75c9522af9a261342`, was checked on Linux
-7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. These calls start from validated
-machine plans rather than canonical source or SSA, so they are evidence for the
-machine/W^X boundary only and not JIT completion.
+Phase C typed-SSA/reference-bytecode contract commit `787d7b1` and
+implementation commits `41deaef`, `0c9903b`, `d9a6917`, `47c3b83`, and
+`1b7b1ce`, based on
+`ec2afbb1161eff437370d1e75c9522af9a261342`, were checked on Linux x86-64 with
+Rust/Cargo 1.96.0. This evidence establishes typed SSA and the reference
+cutover, not native execution, JIT tiering, OSR, Docker, or performance.
 
-| Native-foundation command or check | Result |
+| Phase C command or check | Result |
 | --- | --- |
-| `cargo test --locked -p lkjscript-native -p lkjscript-sys` | passed; invalid-plan boundaries plus actual multi-block, loop, checked I64 trap, F64/Bool/Unit, direct generated-call, versioned runtime-call, W^X, limit, version, and repeated install/drop execution |
-| `cargo check --workspace --all-targets --locked` | passed |
+| focused crate tests | passed; 6 `lkjscript-ir`, 44 compiler, 14 core, 31 VM, and 14 app tests |
+| SSA differential conformance | passed; exact focused Unit/Bool/I64/F64/control/loops/calls/recursion/local mutation/products/Option/Result/buffers/traps/exits, explicit unsupported host operations, tail-call bytecode shape, and 64 deterministic bounded randomized typed scalar programs |
+| malformed SSA and pass conformance | passed; direct malformed identity/use/dominance/edge/loop/effect cases, each isolated pass, repeated determinism, post-pass verification, combined normalization, and evaluator bounds |
 | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | passed |
-| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 106 workspace tests |
-| W^X permission probe | passed; a sys-internal `/proc/self/maps` probe observed initial readable/writable/non-executable and sealed readable/non-writable/executable phases; no post-seal patch API is exposed |
-| Not tested | Docker, runtime workload smokes, performance, non-Linux execution, canonical source/SSA lowering, VM/native transfer, tiering, engines, GC-reference stack maps, allocation, and JIT |
+| `check-docs`, `check-tree`, and `check-sources` | passed; all nine executable closures cover all 94 canonical sources through SSA and validated bytecode |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; docs, tree, exact source closure, rustfmt, strict Clippy, and 112 workspace tests |
+| `cargo build --workspace --release --locked` | passed |
+| canonical hello | passed; output `3628800` |
+| Mandelbrot | passed; 1,176 bytes, 24 lines, SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
+| Brainfuck smoke | passed after preserving return-adjacent tail calls and liveness-allocated typed bytecode locals; direct and run-folded correctness/failure checks passed; full Brainfuck Mandelbrot was not run |
+| lkjedit and one-shot HTTP smoke | passed |
+
+The native-foundation commit based on `ec2afbb` passed six focused native/sys
+unit and integration tests, strict Clippy, the then-current 106-test canonical
+gate, and generated-code invocation for multi-block control, a 100-iteration
+loop, direct native calls, an allowlisted runtime call, exact I64 traps, F64
+bits/comparisons, structured exit, W^X permissions, limits, and 32 repeated
+install/invoke/drop cycles. It did not connect source or SSA to native code and
+therefore was not a JIT test.
 
 Earlier decision-grade and diagnostic performance records remain in
 [Experiment Registry](vision/experiments.md); they were not rerun for Phase A,
-Phase B, or this native foundation. A gate that did not run did not pass.
+Phase B, or Phase C. A gate that did not run did not pass. Docker, full
+Brainfuck Mandelbrot, source-to-native execution, and performance were not
+tested for Phase C.
 
 ## Accepted Next Target
 
 The active engineering cycle must reach a real callable baseline JIT on Linux
-x86-64; documentation, SSA scaffolding, machine-code emission, disassembly, or
-an observation hook alone cannot complete it. The dependency sequence is:
+x86-64; documentation, typed SSA, machine-code emission, disassembly, or an
+observation hook alone cannot complete it. The dependency sequence is:
 
 Explicit typed main, declaration-only imports, local-only mutation, removal of
 source runtime globals, product-threaded workload state, whole-chunk validation,
-structured outcomes, bounded VM execution, and deterministic fixed-point
-function effects are Current. The remaining dependency sequence is:
+structured outcomes, bounded VM execution, deterministic fixed-point function
+effects, verified typed SSA, the independent differential evaluator, isolated
+baseline normalization, and reference-bytecode cutover are Current. The
+remaining dependency sequence is:
 
-1. lower HIR through verified typed SSA, an independent differential evaluator,
-   and isolated non-speculative normalization; cut reference bytecode over to
-   SSA before native lowering becomes authoritative;
-2. add a narrow verified SSA adapter to the current closed scalar machine plan,
-   then add complete non-scalar representations, exact reference stack maps,
-   runtime services, VM/native transfers, native resource/deadline behavior,
-   and forced source-derived native execution without reinterpreting HIR or
-   bytecode;
-3. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
+1. lower verified SSA into the selected owned encoder, add the remaining
+   versioned runtime calls and code-object/tier ownership, and implement exact
+   VM/native and native/native calls plus forced source-to-native execution;
+2. expose truthful `vm`, `auto`, and `baseline-jit` modes only after generated
    code has been called. Forced mode never falls back; auto uses synchronous
    function-entry tiering and may remain in the VM for unsupported code.
 
@@ -220,7 +250,7 @@ ephemeral, and not telemetry.
 
 ## Deferred
 
-Native runtime integration and update, package manifests/locks/registry,
+Package installation and update, package manifests/locks/registry,
 supervisor/scheduler, adaptive or generational GC, background JIT compilation,
 guarded runtime specialization/deoptimization, non-Linux native backends,
 browser, general HTTP server/framework, and GUI runtime are later cycles.

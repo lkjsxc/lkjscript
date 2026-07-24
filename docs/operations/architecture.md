@@ -12,28 +12,28 @@ that own it.
 ## Crate Graph
 
 ```text
-lkjscript-core                 lkjscript-native
-    ^                              ^
-    |                              |
-compiler                     lkjscript-sys
-    ^                              ^
-    |                              |
-    +--- app ----------------------+--- vm
-    |
-    +--- xtask
+lkjscript-ir      lkjscript-core      lkjscript-native
+      ^                 ^                    ^
+      |                 |                    |
+      +--- compiler ----+              lkjscript-sys
+               ^                         ^
+               |                         |
+               +------ app --- vm -------+
+               |
+               +------ xtask
 ```
 
-The actual dependency edges are:
+The actual product dependency edges are:
 
-- `lkjscript-compiler -> lkjscript-core`
+- `lkjscript-ir` and `lkjscript-native` have no dependencies
+- `lkjscript-compiler -> lkjscript-ir + lkjscript-core`
 - `lkjscript-sys -> lkjscript-native`
 - `lkjscript-vm -> lkjscript-core + lkjscript-sys`
 - `lkjscript-app -> compiler + core + vm`
 - `lkjscript-xtask -> compiler + core`
 
-`lkjscript-core`, `lkjscript-native`, and `lkjscript-sys` have no third-party
-dependencies. `lkjscript-native` forbids unsafe Rust; executable-memory and
-native-call unsafety remain confined to `lkjscript-sys`.
+The app test target also uses `lkjscript-ir` for evaluator/VM differential
+checks. No workspace crate has a third-party Rust dependency.
 
 ## Ownership Map
 
@@ -44,14 +44,16 @@ native-call unsafety remain confined to `lkjscript-sys`.
 | Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
 | Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
 | Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `effects.rs`, `hir.rs`, `operation.rs` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects |
-| Type representation | `crates/lkjscript-compiler/src/types/` | canonical Type parsing and substitution |
-| HIR bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program` |
+| HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa.rs` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect transfer |
+| Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bytecode link metadata |
+| Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
+| SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
+| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar machine plan, verification, encoding, opaque installable image |
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-vm/src/arena.rs` | `Arena` |
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
-| Native scalar foundation | `crates/lkjscript-native/src/` | closed machine-plan builder/verifier, x86-64 encoder, opaque `InstallableImage` and metadata |
-| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers plus bounded image installation and typed invocation |
+| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers and safe bounded executable installation/invocation |
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
 | Language library | `src/std/` | imported `std/...` definitions |
 | Validation package | `src/lib/lkjedit/` | editor state and control loop |
@@ -70,10 +72,15 @@ CLI path
   -> collect immutable function and product headers
   -> resolve exact types, binding IDs, and local slots into owned HIR
   -> infer stable fixed-point function effects and recompute expression effects
-  -> install internal function closures, then lower explicit main and functions
+  -> environment-rename HIR locals/mutation into typed SSA block parameters
+  -> verify typed SSA
+  -> run each deterministic isolated baseline pass with post-pass verification
+  -> lower only normalized SSA and retain deterministic bytecode link metadata
+  -> install internal function closures as implementation metadata
   -> mutable Chunk builder
   -> validate_chunk -> opaque immutable ValidatedChunk
-  -> run_chunk_with_args(ValidatedChunk, ExecutionConfig)
+  -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
+  -> run_chunk_with_args(program.bytecode(), ExecutionConfig)
 ```
 
 Imported immutable function and product declarations share one program
@@ -83,24 +90,28 @@ are rejected.
 
 ## Compiler Pipeline Status
 
-Parsed AST -> resolved typed HIR -> reference bytecode is **Current**. HIR owns
-an explicit Main and Functions, resolved binding IDs and local slot references,
-immutable declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs
-and field indexes, exact static type facts, source origins, canonical operation
-identities and per-call signatures, compact fixed-point function summaries, and
-final per-expression effects. Direct resolved function calls use canonical
-callee summaries; indirect provenance remains all-effects. Codegen no longer
-re-parses declarations or resolves names. Source SetGlobal and runtime value-
-definition paths are absent.
+Parsed AST -> resolved typed HIR -> verified typed SSA -> verified baseline
+normalization -> reference bytecode is **Current**. HIR owns an explicit Main
+and Functions, resolved binding IDs and local slot references, immutable
+declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs and field
+indexes, exact static type facts, source origins, canonical operation identities
+and per-call signatures, compact fixed-point function summaries, and final
+per-expression effects. SSA owns backend control/data flow, exact types,
+effects, safepoints, frame states, and deterministic bytecode links. Direct
+resolved function calls use canonical callee summaries; indirect provenance
+remains all-effects. Codegen consumes only verified normalized SSA. The former
+HIR semantic bytecode emitter, source SetGlobal, and runtime value-definition
+paths are absent.
 
-Typed SSA, function/loop-triggered runtime JIT, a minimal AOT test emitter, and
-direct Wasm consuming the same semantic IR family remain **Accepted Targets**.
-A source-independent owned Linux x86-64 scalar native foundation is **Current**:
-it verifies a closed target-lowering plan, encodes an opaque metadata-complete
-image, installs it through bounded W^X memory, and supports typed intermediate-
-boundary calls. There is no canonical-source/SSA adapter, VM transfer, tier,
-engine mode, product/native representation cutover, or JIT. The VM remains the
-only language execution tier and oracle. See
+The dependency-free SSA evaluator is the differential oracle for host-
+independent semantics and does not call bytecode, VM, native, or host helpers.
+Console, filesystem, sockets, terminal, time, and handle operations are
+explicitly unsupported in it. The selected owned Linux x86-64 closed scalar
+machine plan, encoder, metadata, and safe W^X installation/invocation boundary
+are a **Current native foundation**. It does not yet consume SSA or participate
+in VM execution. SSA-to-native lowering, function/loop-triggered runtime JIT, a
+minimal AOT test emitter, and direct Wasm remain **Accepted Targets**. The VM
+remains the cold tier and runtime oracle. See
 [Typed Compiler Pipeline And Runtime JIT](../decisions/compiler-pipeline.md),
 [Linux x86-64 Native Backend](../decisions/linux-x86-64-native-backend.md), and
 [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
@@ -142,12 +153,9 @@ VM function entry / loop backedge
   -> exact VM fallback or structured outcome
 ```
 
-No part of that runtime flow is current. The native scalar foundation calls
-validated generated code only at its isolated intermediate test boundary; those
-calls do not originate in source or SSA and do not constitute a VM transfer or
-JIT. The existing observation hook sees closure calls only and cannot compile
-or transfer execution. The active cycle ends only when synchronous whole-
-function baseline code lowered from verified SSA is actually called on Linux
+No part of that flow is current. The existing observation hook sees closure
+calls only and cannot compile or transfer execution. The active cycle ends only
+when synchronous whole-function baseline code is actually called on Linux
 x86-64 in truthful forced and automatic modes. Loop OSR, background
 compilation, optimizing tiers, persistent profiles, and persistent code caches
 are not part of that cycle.
@@ -176,11 +184,12 @@ an external project receives the same contract.
 
 Explicit main, effect-free imported libraries, local-only mutation,
 product-threaded editor, terminal, and Brainfuck state, whole-chunk validation,
-structured process-safe outcomes, bounded VM execution, deterministic fixed-
-point function effects, and the isolated owned scalar native/W^X foundation are
-now Current. Typed SSA, its verifier and differential oracle, then the narrow
-SSA-to-machine-plan adapter and runtime integration follow. The first adaptive
-execution target remains synchronous callable baseline JIT; loop OSR
+structured process-safe outcomes, bounded VM execution, deterministic
+fixed-point function effects, typed SSA, verification, independent evaluation,
+baseline normalization, reference-bytecode cutover, and the owned low-level
+x86-64/W^X foundation are now Current. SSA-to-native lowering and exact VM/code-
+object tier ownership follow. The first adaptive execution target remains
+synchronous callable baseline JIT; loop OSR
 and proof-based optimizing JIT are later. Minimal file emission remains only
 for backend tests, and offline PGO is rejected. The exact active boundary is
 [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).

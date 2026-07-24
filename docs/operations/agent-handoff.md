@@ -7,9 +7,9 @@ implementation contracts.
 
 ## Status
 
-**Current** for engineering policy and the explicit-main/local-mutation
-foundation. Later validation, outcomes, SSA, and native execution remain
-**Accepted Targets**.
+**Current** for engineering policy, the semantic/outcome foundation, verified
+typed SSA, independent evaluation/baseline normalization, and reference-
+bytecode cutover. Native execution remains an **Accepted Target**.
 
 ## Product Intent
 
@@ -35,7 +35,7 @@ foundation. Later validation, outcomes, SSA, and native execution remain
 src/std/          language standard library
 src/lib/          reusable language packages
 src/examples/     executable validation workloads
-crates/           compiler, VM, sys, CLI, and gates
+crates/           typed SSA, compiler, core, VM, sys, CLI, and gates
 meta/             Docker, scripts, benchmark comparators, and configuration
 ```
 
@@ -46,7 +46,16 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Function closures are still installed in internal VM global slots before
   source main, but those slots are not source values or mutable source state.
 - `set` is local-only. It targets the nearest same-function `var` by stable HIR
-  binding and slot; lkjedit, terminal, and Brainfuck state is product-threaded.
+  BindingId and is environment-renamed into SSA; branch and loop state joins use
+  explicit block parameters in stable BindingId order. lkjedit, terminal, and
+  Brainfuck state is product-threaded.
+- `lkjscript-ir` is dependency-free and backend-independent. Its evaluator is
+  not a host-runtime substitute: console, filesystem, sockets, terminal, time,
+  and handle operations report explicit unsupported-evaluator outcomes.
+- Compiler results are `ExecutableProgram` values retaining verified normalized
+  SSA, deterministic function/prototype/main and bytecode-position links, and
+  validated bytecode through `bytecode()`. Do not reintroduce a HIR-to-bytecode
+  semantic emitter.
 - Raw terminal redraw must emit CR+LF; LF-only output causes staircase display.
 - lkjedit idle must wait without full repaint.
 - Final cursor placement must be followed by a flush.
@@ -56,13 +65,15 @@ meta/             Docker, scripts, benchmark comparators, and configuration
 - Bounded terminal operations, stale-safe handles, truthful Results, exact
   I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists,
   Option/no-nil, explicit equality families, immutable nominal products,
-  explicit main, declaration-only imports, local-only mutation, and product-
-  threaded workload state have landed. The active cycle next adds fixed-point
-  effects, chunk validation, process-safe outcomes, verified typed SSA, one
-  measured backend, W^X code objects, and an actually called synchronous Linux
-  x86-64 baseline JIT. Loop OSR, optimizing JIT, and a
-  minimal AOT test emitter remain later targets, not current capability. Offline
-  PGO is rejected by product decision. See
+  explicit main, declaration-only imports, local-only mutation, product-
+  threaded workload state, fixed-point effects, chunk validation, structured
+  process-safe outcomes, verified typed SSA, differential evaluation, baseline
+  passes, measured backend selection, and SSA-to-bytecode cutover have landed.
+  The active cycle next implements the selected owned backend, W^X code
+  objects, and an actually called synchronous Linux x86-64 baseline JIT. Do not
+  add engine flags before generated code is called. Loop OSR, optimizing JIT,
+  and a minimal AOT test emitter remain later targets, not current capability.
+  Offline PGO is rejected by product decision. See
   [Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
 
 ## Host Boundary
