@@ -368,6 +368,7 @@ pub struct JitStats {
     pub vm_fallbacks: u64,
     pub compile_failures: u64,
     pub native_invocations: u64,
+    pub time_to_first_native_entry: Option<Duration>,
     pub first_native_call: Option<Duration>,
     pub native_execution: Duration,
     pub auto_threshold: u64,
@@ -437,6 +438,8 @@ pub struct JitSession {
     vm_fallbacks: u64,
     compile_failures: u64,
     native_invocations: u64,
+    metrics_started: Option<Instant>,
+    time_to_first_native_entry: Option<Duration>,
     first_native_call: Option<Duration>,
     native_execution: Duration,
     diagnostic_bytes: u64,
@@ -498,6 +501,8 @@ impl JitSession {
             vm_fallbacks: 0,
             compile_failures: 0,
             native_invocations: 0,
+            metrics_started: config.collect_metrics.then(Instant::now),
+            time_to_first_native_entry: None,
             first_native_call: None,
             native_execution: Duration::ZERO,
             diagnostic_bytes: 0,
@@ -658,6 +663,9 @@ impl JitSession {
                 )
             })?;
         let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time);
+        if self.time_to_first_native_entry.is_none() {
+            self.time_to_first_native_entry = self.metrics_started.map(|started| started.elapsed());
+        }
         let invocation_started = self.config.collect_metrics.then(Instant::now);
         let report = self.objects[object_index]
             .installed
@@ -783,6 +791,7 @@ impl JitSession {
             vm_fallbacks: self.vm_fallbacks,
             compile_failures: self.compile_failures,
             native_invocations: self.native_invocations,
+            time_to_first_native_entry: self.time_to_first_native_entry,
             first_native_call: self.first_native_call,
             native_execution: self.native_execution,
             auto_threshold: self.config.auto_threshold,

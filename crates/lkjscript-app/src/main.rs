@@ -219,6 +219,10 @@ fn emit_metrics(report: MetricReport<'_>) -> Result<(), String> {
             installation = installation.saturating_add(object.compile_stats.installation());
         }
     }
+    let time_to_first_native = report
+        .stats
+        .and_then(|stats| stats.time_to_first_native_entry)
+        .map_or_else(|| "null".to_string(), duration_ns);
     let first_native = report
         .stats
         .and_then(|stats| stats.first_native_call)
@@ -230,7 +234,7 @@ fn emit_metrics(report: MetricReport<'_>) -> Result<(), String> {
         .stats
         .map_or_else(|| "null".to_string(), jit_metrics_json);
     let json = format!(
-        "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},\"configured_auto_threshold\":{configured_threshold},\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},\"timings_ns\":{{\"compile_total\":{compile_total},\"source_loading\":{source_loading},\"parse\":{parsing},\"hir_analysis\":{hir_analysis},\"effect_analysis\":{effect_analysis},\"ssa_construction\":{ssa_construction},\"ssa_verification\":{ssa_verification},\"normalization\":{normalization},\"reference_bytecode_lowering\":{bytecode_lowering},\"reference_bytecode_validation\":{bytecode_validation},\"native_lowering_encoding\":{native_lowering},\"relocation_wx_installation\":{installation},\"first_native_call\":{first_native},\"native_execution\":{native_execution},\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},\"source_files\":{source_files},\"jit\":{jit}}}",
+        "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},\"configured_auto_threshold\":{configured_threshold},\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},\"timings_ns\":{{\"compile_total\":{compile_total},\"source_loading\":{source_loading},\"parse\":{parsing},\"hir_analysis\":{hir_analysis},\"effect_analysis\":{effect_analysis},\"ssa_construction\":{ssa_construction},\"ssa_verification\":{ssa_verification},\"normalization\":{normalization},\"reference_bytecode_lowering\":{bytecode_lowering},\"reference_bytecode_validation\":{bytecode_validation},\"native_lowering_encoding\":{native_lowering},\"relocation_wx_installation\":{installation},\"time_to_first_native_entry\":{time_to_first_native},\"first_native_call\":{first_native},\"native_execution\":{native_execution},\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},\"source_files\":{source_files},\"jit\":{jit}}}",
         engine = json_string(engine),
         configured_threshold = report.configured_threshold,
         auto_enabled = report.auto_enabled,
