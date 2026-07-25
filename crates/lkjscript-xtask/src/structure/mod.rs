@@ -1,3 +1,21 @@
+mod capsule_actual;
+mod commands;
+mod detector;
+mod graph;
+mod graph_edges;
+#[cfg(test)]
+mod graph_tests;
+mod query;
+mod repository;
+mod repository_support;
+#[cfg(test)]
+mod repository_tests;
+mod rules;
+mod source_facts;
+mod validation;
+#[cfg(test)]
+mod validation_tests;
+
 use std::path::Path;
 
 use crate::model::{Audit, ExplainResult, Policy, ProvenanceFile, RatchetFile};
@@ -8,11 +26,11 @@ const RATCHET: &str = "meta/structure/ratchet.json";
 
 pub fn run(root: &Path, args: &[String]) -> i32 {
     let command = args.first().map(String::as_str).unwrap_or("");
-    let policy: Policy = match crate::repository::load_json(&root.join(POLICY)) {
+    let policy: Policy = match repository::load_json(&root.join(POLICY)) {
         Ok(value) => value,
         Err(error) => return fail(command, &error),
     };
-    let provenance: ProvenanceFile = match crate::repository::load_json(&root.join(PROVENANCE)) {
+    let provenance: ProvenanceFile = match repository::load_json(&root.join(PROVENANCE)) {
         Ok(value) => value,
         Err(error) => return fail(command, &error),
     };
@@ -25,20 +43,17 @@ pub fn run(root: &Path, args: &[String]) -> i32 {
             "unsupported structure policy or provenance version",
         );
     }
-    let audit = match crate::repository::capture(root, &provenance.entries) {
-        Ok(snapshot) => crate::structure_rules::audit(root, &policy, provenance.entries, snapshot),
+    let audit = match repository::capture(root, &provenance.entries) {
+        Ok(snapshot) => rules::audit(root, &policy, provenance.entries, snapshot),
         Err(error) => return fail(command, &error),
     };
     match command {
         "audit" => audit_command(&audit, args.get(1).map(String::as_str)),
         "check" => check(root, &audit),
         "explain" => explain(&audit, &policy, args.get(1)),
-        "graph" => {
-            crate::structure_commands::graph(root, &audit, &policy, args.get(1).map(String::as_str))
-        }
-        "context" => crate::structure_commands::query("context", &audit, &policy, &args[1..]),
-        "impact" | "tests" => {
-            crate::structure_commands::query(command, &audit, &policy, &args[1..])
+        "graph" => commands::graph(root, &audit, &policy, args.get(1).map(String::as_str)),
+        "context" | "impact" | "tests" => {
+            commands::query(command, root, &audit, &policy, &args[1..])
         }
         _ => {
             usage();
@@ -51,6 +66,7 @@ fn audit_command(audit: &Audit, flag: Option<&str>) -> i32 {
     if flag == Some("--json") {
         if let Err(error) = crate::util::print_json(audit) {
             eprintln!("{error}");
+            return 1;
         }
     } else if flag.is_none() {
         println!(
@@ -68,12 +84,13 @@ fn audit_command(audit: &Audit, flag: Option<&str>) -> i32 {
         }
     } else {
         eprintln!("usage: structure audit [--json]");
+        return 2;
     }
     0
 }
 
 fn check(root: &Path, audit: &Audit) -> i32 {
-    let ratchet: RatchetFile = match crate::repository::load_json(&root.join(RATCHET)) {
+    let ratchet: RatchetFile = match repository::load_json(&root.join(RATCHET)) {
         Ok(value) => value,
         Err(error) => {
             eprintln!("{error}");
@@ -84,7 +101,7 @@ fn check(root: &Path, audit: &Audit) -> i32 {
         eprintln!("unsupported structure ratchet version");
         return 1;
     }
-    let failures = crate::structure_rules::check_findings(audit, &ratchet.records);
+    let failures = rules::check_findings(audit, &ratchet.records);
     for finding in &failures {
         eprintln!("{} {}: {}", finding.rule, finding.path, finding.message);
     }
@@ -119,30 +136,34 @@ fn explain(audit: &Audit, policy: &Policy, query: Option<&String>) -> i32 {
         findings: audit
             .findings
             .iter()
-            .filter(|finding| finding.rule == *query || finding.path == *query)
+            .filter(|item| item.rule == *query || item.path == *query)
             .cloned()
             .collect(),
         unsupported: audit.unsupported.clone(),
     };
-    if let Err(error) = crate::util::print_json(&result) {
-        eprintln!("{error}");
-        1
-    } else {
-        0
-    }
+    crate::util::print_json(&result).map_or_else(
+        |error| {
+            eprintln!("{error}");
+            1
+        },
+        |()| 0,
+    )
 }
 
 fn fail(command: &str, error: &str) -> i32 {
     if command == "audit" {
         let encoded =
             serde_json::to_string(error).unwrap_or_else(|_| "\"serialization failure\"".into());
-        println!("{{\"schema\":\"lkjscript.structure.audit.error.v1\",\"error\":{encoded}}}");
+        println!(
+            "{{\"schema\":\"lkjscript.repository-audit-error\",\"version\":1,\"error\":{encoded}}}"
+        );
         0
     } else {
         eprintln!("{error}");
         1
     }
 }
+
 fn usage() {
     eprintln!("usage: structure [audit|check|explain|graph|context|impact|tests]");
 }

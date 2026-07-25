@@ -9,7 +9,7 @@ use crate::model::{Capsule, DirectoryRecord, Finding};
 pub fn load_capsules(root: &Path, paths: &BTreeSet<String>) -> Result<Vec<Capsule>, String> {
     let mut result: Vec<Capsule> = Vec::new();
     for path in paths {
-        result.push(crate::repository::load_json(&root.join(path))?);
+        result.push(super::repository::load_json(&root.join(path))?);
     }
     result.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(result)
@@ -63,7 +63,7 @@ pub fn physical_lines(text: &str) -> Result<u64, String> {
 }
 
 pub fn classify(path: &str) -> &'static str {
-    if path.ends_with("lkjscript.capsule") {
+    if path == "capsule.json" || path.ends_with("/capsule.json") {
         "capsule-manifest"
     } else if path == "meta/structure/ratchet.json" {
         "generated-migration-state"
@@ -132,6 +132,12 @@ mod tests {
         assert_eq!(super::physical_lines(&"x\n".repeat(199)).ok(), Some(199));
         assert_eq!(super::physical_lines(&"x\n".repeat(200)).ok(), Some(200));
         assert_eq!(super::physical_lines(&"x\n".repeat(201)).ok(), Some(201));
+    }
+    #[test]
+    fn capsule_manifest_name_is_exact() {
+        assert_eq!(super::classify("capsule.json"), "capsule-manifest");
+        assert_eq!(super::classify("a/capsule.json"), "capsule-manifest");
+        assert_eq!(super::classify("lkjscript.capsule"), "authored");
     }
     #[test]
     fn checked_overflow_is_rejected() {

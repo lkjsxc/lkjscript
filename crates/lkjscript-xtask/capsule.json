@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "xtask",
+  "root": "crates/lkjscript-xtask",
+  "kind": "crate",
+  "purpose": "Run repository verification, source checks, and bounded structure intelligence commands.",
+  "layer": "repository tooling",
+  "concepts": ["verification", "structure audit", "repository graph"],
+  "facade": ["crates/lkjscript-xtask/src/main.rs"],
+  "allowed_dependencies": ["compiler", "compiler.source", "core"],
+  "forbidden_dependencies": ["app", "jit", "vm"],
+  "tests": ["crates/lkjscript-xtask/src/structure/graph_tests/mod.rs", "crates/lkjscript-xtask/src/structure/repository_tests.rs"],
+  "decisions": ["docs/decisions/platform/bounded-repository-topology.md", "docs/decisions/platform/repository-intelligence-graph.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "uses", "names": ["repository policy"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-xtask", "cargo clippy --locked -p lkjscript-xtask --all-targets -- -D warnings"],
+  "context_card": {
+    "goal": "Make repository verification and graph answers deterministic, bounded, and evidenced.",
+    "interfaces": ["lkjscript-xtask structure", "lkjscript-xtask quiet verify"],
+    "invariants": ["Git-tracked authority", "explicit unsupported and truncation"]
+  }
+}

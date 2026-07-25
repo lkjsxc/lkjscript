@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "vm",
+  "root": "crates/lkjscript-vm",
+  "kind": "crate",
+  "purpose": "Execute validated bytecode and coordinate host capabilities and adaptive JIT tiers.",
+  "layer": "runtime",
+  "concepts": ["reference VM", "host capability dispatch", "JIT promotion"],
+  "facade": ["crates/lkjscript-vm/src/lib.rs"],
+  "allowed_dependencies": ["core", "jit", "sys"],
+  "forbidden_dependencies": ["app", "compiler"],
+  "tests": ["crates/lkjscript-vm/src/run/tests/mod.rs"],
+  "decisions": ["docs/decisions/execution/execution-portfolio.md", "docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md"],
+  "unsafe_boundary": { "status": "crosses", "boundaries": ["sys.native-call"] },
+  "capability": { "status": "uses", "names": ["host I/O", "executable memory"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-vm"],
+  "context_card": {
+    "goal": "Keep reference and adaptive runtime tiers semantically aligned.",
+    "interfaces": ["crates/lkjscript-vm/src/lib.rs"],
+    "invariants": ["validated bytecode", "shared verified SSA semantics"]
+  }
+}

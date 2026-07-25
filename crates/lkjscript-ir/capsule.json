@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "ir",
+  "root": "crates/lkjscript-ir",
+  "kind": "crate",
+  "purpose": "Define, verify, evaluate, and optimize the shared typed SSA family.",
+  "layer": "typed intermediate representation",
+  "concepts": ["typed SSA", "verification", "proof-checked optimization"],
+  "facade": ["crates/lkjscript-ir/src/lib.rs"],
+  "allowed_dependencies": [],
+  "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
+  "tests": ["crates/lkjscript-ir/src/tests/mod.rs"],
+  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/jit/proof-based-optimizing-jit.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "none", "names": [] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-ir"],
+  "context_card": {
+    "goal": "Keep evaluator, VM, JIT, AOT, and Wasm semantics on verified typed SSA.",
+    "interfaces": ["crates/lkjscript-ir/src/lib.rs"],
+    "invariants": ["verification before execution", "optimizer hints are proven or rejected"]
+  }
+}

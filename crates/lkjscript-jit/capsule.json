@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "jit",
+  "root": "crates/lkjscript-jit",
+  "kind": "crate",
+  "purpose": "Lower verified SSA into callable baseline and forced proof-checked optimizing JIT images.",
+  "layer": "adaptive execution",
+  "concepts": ["baseline JIT", "optimizing JIT", "native lowering"],
+  "facade": ["crates/lkjscript-jit/src/lib.rs"],
+  "allowed_dependencies": ["core", "ir", "native", "sys"],
+  "forbidden_dependencies": ["app", "compiler", "vm"],
+  "tests": ["crates/lkjscript-jit/src/tests/mod.rs"],
+  "decisions": ["docs/decisions/jit/callable-baseline-jit.md", "docs/decisions/jit/proof-based-optimizing-jit.md"],
+  "unsafe_boundary": { "status": "crosses", "boundaries": ["sys.executable-memory"] },
+  "capability": { "status": "uses", "names": ["native image production", "executable memory"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-jit"],
+  "context_card": {
+    "goal": "Retain synchronous callable execution evidence from verified SSA.",
+    "interfaces": ["crates/lkjscript-jit/src/lib.rs"],
+    "invariants": ["verified SSA input", "proof-required optimization"]
+  }
+}

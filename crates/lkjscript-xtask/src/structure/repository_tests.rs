@@ -45,7 +45,7 @@ fn tracked_hidden_symlink_and_ignored_boundaries() {
             "base"
         ]
     ));
-    let snapshot = crate::repository::capture(&root, &[]);
+    let snapshot = super::repository::capture(&root, &[]);
     assert!(snapshot.is_ok());
     if let Ok(snapshot) = snapshot {
         let paths: Vec<_> = snapshot
@@ -59,7 +59,7 @@ fn tracked_hidden_symlink_and_ignored_boundaries() {
         assert!(snapshot
             .findings
             .iter()
-            .any(|finding| finding.rule == "structure.path.symlink"));
+            .any(|finding| finding.rule == "LKJ-REPO-SYMLINK"));
     }
     assert!(fs::remove_dir_all(root).is_ok());
 }
@@ -83,13 +83,13 @@ fn tracked_non_utf8_is_unclassified() {
             "base"
         ]
     ));
-    let snapshot = crate::repository::capture(&root, &[]);
+    let snapshot = super::repository::capture(&root, &[]);
     assert!(snapshot.is_ok());
     if let Ok(snapshot) = snapshot {
         assert!(snapshot
             .findings
             .iter()
-            .any(|finding| finding.rule == "structure.path.unclassified"));
+            .any(|finding| finding.rule == "LKJ-REPO-UNCLASSIFIED"));
         assert_eq!(snapshot.files.first().map(|file| file.bytes), Some(3));
     }
     assert!(fs::remove_dir_all(root).is_ok());

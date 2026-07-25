@@ -1,3 +1,8 @@
+mod capsule;
+mod graph;
+pub use capsule::*;
+pub use graph::*;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -20,6 +25,8 @@ pub struct Limits {
     pub error_depth: u64,
     pub graph_nodes: u64,
     pub graph_edges: u64,
+    pub graph_work: u64,
+    pub graph_bytes: u64,
     pub query_work: u64,
     pub query_bytes: u64,
 }
@@ -65,29 +72,10 @@ pub struct Ratchet {
     pub observed: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum CapsuleKind {
-    Workspace,
-    Collection,
-    Crate,
-    Source,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Capsule {
-    pub schema: String,
-    pub version: u32,
-    pub id: String,
-    pub root: String,
-    pub kind: CapsuleKind,
-    pub dependencies: Vec<String>,
-}
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Audit {
     pub schema: String,
+    pub version: u32,
     pub revision: String,
     pub policy_version: String,
     pub files: Vec<FileRecord>,
@@ -132,54 +120,4 @@ pub struct Finding {
     pub message: String,
     pub provenance: Option<String>,
     pub sort_key: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Graph {
-    pub schema: String,
-    pub revision: String,
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
-    pub unsupported: Vec<String>,
-    pub truncated: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Node {
-    pub id: String,
-    pub revision_id: String,
-    pub kind: String,
-    pub label: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Edge {
-    pub from: String,
-    pub to: String,
-    pub kind: String,
-    pub evidence: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct ExplainResult {
-    pub schema: String,
-    pub query: String,
-    pub rules: Vec<Rule>,
-    pub files: Vec<FileRecord>,
-    pub findings: Vec<Finding>,
-    pub unsupported: Vec<String>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct QueryResult {
-    pub schema: String,
-    pub command: String,
-    pub target: String,
-    pub profile: Option<String>,
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
-    pub work_used: u64,
-    pub bytes_used: u64,
-    pub truncated: bool,
-    pub unsupported: Vec<String>,
 }

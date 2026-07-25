@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "crates",
+  "root": "crates",
+  "kind": "collection",
+  "purpose": "Collect the nine Rust workspace crates without inventing backend semantics.",
+  "layer": "workspace crates",
+  "concepts": ["crate dependency direction", "shared workspace policy"],
+  "facade": [],
+  "allowed_dependencies": ["app", "compiler", "core", "ir", "jit", "native", "sys", "vm", "xtask"],
+  "forbidden_dependencies": [],
+  "tests": ["crates/lkjscript-xtask/src/structure/graph_tests/mod.rs"],
+  "decisions": ["docs/operations/architecture/crate-graph.md"],
+  "unsafe_boundary": { "status": "confined", "boundaries": ["sys"] },
+  "capability": { "status": "defines", "names": ["crate dependency direction"] },
+  "provenance": { "class": "authored", "source": "Cargo workspace members" },
+  "verification": ["cargo test --workspace --locked"],
+  "context_card": {
+    "goal": "Select crate ownership and dependency direction before implementation changes.",
+    "interfaces": ["Cargo.toml"],
+    "invariants": ["nine workspace crates", "internal dependencies are explicit"]
+  }
+}

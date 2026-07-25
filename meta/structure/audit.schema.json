@@ -1,10 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.structure.audit.v1",
+  "$id": "lkjscript.repository-audit.v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema",
+    "version",
     "revision",
     "policy_version",
     "files",
@@ -17,7 +18,10 @@
   ],
   "properties": {
     "schema": {
-      "const": "lkjscript.structure.audit.v1"
+      "const": "lkjscript.repository-audit"
+    },
+    "version": {
+      "const": 1
     },
     "revision": {
       "type": "string",

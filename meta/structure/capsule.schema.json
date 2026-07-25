@@ -4,43 +4,75 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema",
-    "version",
-    "id",
-    "root",
-    "kind",
-    "dependencies"
+    "schema", "version", "id", "root", "kind", "purpose", "layer",
+    "concepts", "facade", "allowed_dependencies", "forbidden_dependencies",
+    "tests", "decisions", "unsafe_boundary", "capability", "provenance",
+    "verification", "context_card"
   ],
   "properties": {
-    "schema": {
-      "const": "lkjscript.capsule"
-    },
-    "version": {
-      "const": 1
-    },
-    "id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9.-]*$"
-    },
-    "root": {
-      "type": "string"
-    },
+    "schema": { "const": "lkjscript.capsule" },
+    "version": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "root": { "type": "string", "minLength": 1 },
     "kind": {
-      "enum": [
-        "workspace",
-        "collection",
-        "crate",
-        "source"
-      ]
+      "enum": ["workspace", "collection", "crate", "source", "tooling"]
     },
-    "dependencies": {
-      "type": "array",
-      "maxItems": 16,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9.-]*$"
+    "purpose": { "type": "string", "minLength": 1 },
+    "layer": { "type": "string", "minLength": 1 },
+    "concepts": { "$ref": "#/$defs/strings" },
+    "facade": { "$ref": "#/$defs/strings" },
+    "allowed_dependencies": { "$ref": "#/$defs/ids" },
+    "forbidden_dependencies": { "$ref": "#/$defs/ids" },
+    "tests": { "$ref": "#/$defs/strings" },
+    "decisions": { "$ref": "#/$defs/strings" },
+    "unsafe_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "boundaries"],
+      "properties": {
+        "status": { "enum": ["forbidden", "confined", "crosses"] },
+        "boundaries": { "$ref": "#/$defs/strings" }
       }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "names"],
+      "properties": {
+        "status": { "enum": ["none", "defines", "uses"] },
+        "names": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "source"],
+      "properties": {
+        "class": { "enum": ["authored", "generated", "vendored", "immutable-evidence"] },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "verification": { "$ref": "#/$defs/strings" },
+    "context_card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "interfaces", "invariants"],
+      "properties": {
+        "goal": { "type": "string", "minLength": 1 },
+        "interfaces": { "$ref": "#/$defs/strings" },
+        "invariants": { "$ref": "#/$defs/strings" }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*$" },
+    "ids": {
+      "type": "array", "maxItems": 16, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "strings": {
+      "type": "array", "maxItems": 16, "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
     }
   }
 }

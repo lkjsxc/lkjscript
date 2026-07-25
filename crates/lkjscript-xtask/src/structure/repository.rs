@@ -3,10 +3,10 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::model::{Capsule, DirectoryRecord, FileRecord, Finding, Provenance};
-use crate::repository_support::{
+use super::repository_support::{
     capsule_for, classify, directories, finding, git, load_capsules, physical_lines, read_bounded,
 };
+use crate::model::{Capsule, DirectoryRecord, FileRecord, Finding, Provenance};
 
 const FILE_READ_CAP: u64 = 4 * 1024 * 1024;
 const META_READ_CAP: u64 = 256 * 1024;
@@ -59,7 +59,7 @@ pub fn capture(root: &Path, provenance: &[Provenance]) -> Result<Snapshot, Strin
         .collect();
     let capsule_paths: BTreeSet<_> = paths
         .iter()
-        .filter(|path| path.ends_with("lkjscript.capsule"))
+        .filter(|path| path.as_str() == "capsule.json" || path.ends_with("/capsule.json"))
         .cloned()
         .collect();
     let capsules = load_capsules(root, &capsule_paths)?;
@@ -71,7 +71,7 @@ pub fn capture(root: &Path, provenance: &[Provenance]) -> Result<Snapshot, Strin
     if revision != git(root, &["rev-parse", "HEAD"])? {
         findings.push(finding(
             "error",
-            "structure.repository.race",
+            "LKJ-REPO-REPOSITORY-RACE",
             ".",
             "revision changed during audit",
         ));
@@ -99,7 +99,7 @@ fn inspect_file(
     if metadata.file_type().is_symlink() {
         findings.push(finding(
             "error",
-            "structure.path.symlink",
+            "LKJ-REPO-SYMLINK",
             path,
             "tracked symbolic link is forbidden",
         ));
@@ -108,7 +108,7 @@ fn inspect_file(
     if !metadata.is_file() {
         findings.push(finding(
             "error",
-            "structure.path.unclassified",
+            "LKJ-REPO-UNCLASSIFIED",
             path,
             "tracked path is not a regular file",
         ));
@@ -117,7 +117,7 @@ fn inspect_file(
     if metadata.len() > FILE_READ_CAP {
         findings.push(finding(
             "error",
-            "structure.file.read-bound",
+            "LKJ-REPO-READ-BOUND",
             path,
             "tracked file exceeds audit read bound",
         ));
@@ -128,7 +128,7 @@ fn inspect_file(
     if after.len() != metadata.len() {
         findings.push(finding(
             "error",
-            "structure.repository.race",
+            "LKJ-REPO-REPOSITORY-RACE",
             path,
             "file changed during audit",
         ));
@@ -138,7 +138,7 @@ fn inspect_file(
         Err(_) => {
             findings.push(finding(
                 "error",
-                "structure.path.unclassified",
+                "LKJ-REPO-UNCLASSIFIED",
                 path,
                 "tracked file is not UTF-8",
             ));

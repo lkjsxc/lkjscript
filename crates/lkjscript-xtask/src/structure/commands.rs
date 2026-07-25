@@ -8,7 +8,7 @@ pub fn graph(root: &Path, audit: &Audit, policy: &Policy, flag: Option<&str>) ->
         eprintln!("usage: structure graph [--json|--dot]");
         return 2;
     }
-    let graph = crate::structure_graph::build(audit, policy);
+    let graph = super::graph::build(root, audit, policy);
     let output = root.join("target/lkjscript/structure");
     if let Err(error) = fs::create_dir_all(&output) {
         eprintln!("create {}: {error}", output.display());
@@ -21,7 +21,7 @@ pub fn graph(root: &Path, audit: &Audit, policy: &Policy, flag: Option<&str>) ->
             return 1;
         }
     };
-    let dot = crate::structure_graph::dot(&graph);
+    let dot = super::graph::dot(&graph);
     if let Err(error) = fs::write(output.join("graph.json"), format!("{json}\n"))
         .and_then(|()| fs::write(output.join("graph.dot"), &dot))
     {
@@ -40,7 +40,7 @@ pub fn graph(root: &Path, audit: &Audit, policy: &Policy, flag: Option<&str>) ->
     0
 }
 
-pub fn query(command: &str, audit: &Audit, policy: &Policy, args: &[String]) -> i32 {
+pub fn query(command: &str, root: &Path, audit: &Audit, policy: &Policy, args: &[String]) -> i32 {
     let Some(target) = args.first() else {
         eprintln!("usage: structure {command} <target>");
         return 2;
@@ -66,8 +66,8 @@ pub fn query(command: &str, audit: &Audit, policy: &Policy, args: &[String]) -> 
         eprintln!("usage: structure {command} <target>");
         return 2;
     };
-    let graph = crate::structure_graph::build(audit, policy);
-    let result = crate::structure_query::run(command, target, profile, &graph, policy);
+    let graph = super::graph::build(root, audit, policy);
+    let result = super::query::run(command, target, profile, &graph, policy);
     if let Err(error) = crate::util::print_json(&result) {
         eprintln!("{error}");
         1

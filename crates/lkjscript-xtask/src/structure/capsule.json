@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "xtask.structure",
+  "root": "crates/lkjscript-xtask/src/structure",
+  "kind": "tooling",
+  "purpose": "Capture, validate, graph, and query exact bounded repository structure evidence.",
+  "layer": "repository intelligence",
+  "concepts": ["repository audit", "repository graph", "context bundle", "impact and test queries"],
+  "facade": ["crates/lkjscript-xtask/src/structure/mod.rs"],
+  "allowed_dependencies": ["compiler.source", "core"],
+  "forbidden_dependencies": ["app", "jit", "vm"],
+  "tests": ["crates/lkjscript-xtask/src/structure/graph_tests/mod.rs", "crates/lkjscript-xtask/src/structure/validation_tests.rs"],
+  "decisions": ["docs/decisions/platform/bounded-repository-topology.md", "docs/decisions/platform/repository-intelligence-graph.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "uses", "names": ["repository policy"] },
+  "provenance": { "class": "authored", "source": "Git-tracked structure tooling" },
+  "verification": ["cargo test --locked -p lkjscript-xtask structure", "cargo run --locked -p lkjscript-xtask -- structure check"],
+  "context_card": {
+    "goal": "Answer repository questions from exact authority without guessing.",
+    "interfaces": ["structure audit", "structure graph", "structure context", "structure impact", "structure tests"],
+    "invariants": ["stable entity IDs", "revision IDs remain separate", "bounded deterministic traversal"]
+  }
+}

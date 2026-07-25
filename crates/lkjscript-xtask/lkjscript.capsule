@@ -1,8 +1,0 @@
-{
-  "schema": "lkjscript.capsule",
-  "version": 1,
-  "id": "xtask",
-  "root": "crates/lkjscript-xtask",
-  "kind": "crate",
-  "dependencies": ["compiler.source", "core"]
-}

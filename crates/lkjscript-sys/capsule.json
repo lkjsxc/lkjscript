@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "sys",
+  "root": "crates/lkjscript-sys",
+  "kind": "crate",
+  "purpose": "Confine Linux host effects and unsafe executable-memory operations behind safe APIs.",
+  "layer": "host boundary",
+  "concepts": ["executable memory", "Linux syscalls", "safe host API"],
+  "facade": ["crates/lkjscript-sys/src/lib.rs"],
+  "allowed_dependencies": ["native"],
+  "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
+  "tests": ["crates/lkjscript-sys/tests/executable.rs", "crates/lkjscript-sys/tests/native_references.rs"],
+  "decisions": ["docs/decisions/jit/callable-baseline-jit.md", "docs/decisions/jit/native-references-and-gc-stack-maps.md"],
+  "unsafe_boundary": { "status": "confined", "boundaries": ["sys.executable-memory", "sys.native-call"] },
+  "capability": { "status": "defines", "names": ["executable memory", "host I/O"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-sys"],
+  "context_card": {
+    "goal": "Keep all unsafe Rust confined while preserving safe caller contracts.",
+    "interfaces": ["crates/lkjscript-sys/src/lib.rs"],
+    "invariants": ["unsafe is confined here", "safe API upholds Rust safety"]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "compiler",
+  "root": "crates/lkjscript-compiler",
+  "kind": "crate",
+  "purpose": "Validate canonical source and lower it through HIR into verified typed SSA and bytecode.",
+  "layer": "compiler",
+  "concepts": ["Semantic Source", "HIR analysis", "SSA lowering"],
+  "facade": ["crates/lkjscript-compiler/src/lib.rs"],
+  "allowed_dependencies": ["core", "ir"],
+  "forbidden_dependencies": ["app", "jit", "vm"],
+  "tests": ["crates/lkjscript-compiler/src/analyze/tests.rs", "crates/lkjscript-compiler/src/source/tests/mod.rs"],
+  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "none", "names": [] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-compiler"],
+  "context_card": {
+    "goal": "Retain one validated source-to-SSA semantic pipeline.",
+    "interfaces": ["crates/lkjscript-compiler/src/lib.rs", "crates/lkjscript-compiler/src/source/mod.rs"],
+    "invariants": ["canonical .lkjscript extension", "verified SSA before backend use"]
+  }
+}

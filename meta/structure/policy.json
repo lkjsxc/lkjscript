@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.structure.policy.v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "limits": {
     "authored_lines": 200,
     "authored_bytes": 32768,
@@ -10,164 +10,111 @@
     "error_depth": 12,
     "graph_nodes": 4096,
     "graph_edges": 16384,
+    "graph_work": 1048576,
+    "graph_bytes": 67108864,
     "query_work": 65536,
     "query_bytes": 65536
   },
   "rules": [
     {
-      "id": "structure.file.lines",
-      "level": "error",
+      "id": "LKJ-REPO-FILE-LINES", "level": "error",
       "summary": "Authored files have at most 200 physical lines."
     },
     {
-      "id": "structure.file.bytes",
-      "level": "error",
+      "id": "LKJ-REPO-FILE-BYTES", "level": "error",
       "summary": "Authored files have at most 32768 UTF-8 bytes."
     },
     {
-      "id": "structure.line.scalars",
-      "level": "error",
+      "id": "LKJ-REPO-LINE-WIDTH", "level": "error",
       "summary": "Ordinary authored lines have at most 120 Unicode scalars."
     },
     {
-      "id": "structure.directory.entries",
-      "level": "error",
+      "id": "LKJ-REPO-DIR-WIDTH", "level": "error",
       "summary": "Tracked immediate directory entries have at most 16 members."
     },
     {
-      "id": "structure.directory.depth-warning",
-      "level": "warning",
-      "summary": "Tracked depth greater than 8 is discouraged."
+      "id": "LKJ-REPO-DIR-DEPTH", "level": "error",
+      "summary": "Tracked depth warns above 8 and fails above 12."
     },
     {
-      "id": "structure.directory.depth-error",
-      "level": "error",
-      "summary": "Tracked depth greater than 12 is forbidden."
-    },
-    {
-      "id": "structure.directory.one-child",
-      "level": "warning",
+      "id": "LKJ-REPO-DIR-ONE-CHILD", "level": "warning",
       "summary": "One-child directories require review."
     },
     {
-      "id": "structure.path.symlink",
-      "level": "error",
+      "id": "LKJ-REPO-SYMLINK", "level": "error",
       "summary": "Tracked symbolic links are forbidden."
     },
     {
-      "id": "structure.path.unclassified",
-      "level": "error",
-      "summary": "Tracked paths must be regular UTF-8 files."
+      "id": "LKJ-REPO-UNCLASSIFIED", "level": "error",
+      "summary": "Tracked paths must be classified regular UTF-8 files."
     },
     {
-      "id": "structure.source.packed-rust",
-      "level": "error",
+      "id": "LKJ-REPO-PACKED-RUST", "level": "error",
       "summary": "Conservatively detected packed Rust statements are forbidden."
     },
     {
-      "id": "structure.source.minified-json",
-      "level": "error",
+      "id": "LKJ-REPO-MINIFIED-JSON", "level": "error",
       "summary": "Authored minified JSON is forbidden."
     },
     {
-      "id": "structure.source.base64",
-      "level": "error",
-      "summary": "Giant base64-like authored literals are forbidden."
+      "id": "LKJ-REPO-HIDDEN-LITERAL", "level": "error",
+      "summary": "Giant encoded or hidden-source-like literals are forbidden."
     },
     {
-      "id": "structure.source.hidden-literal",
-      "level": "error",
-      "summary": "Giant compressed or hidden-source-like literals are forbidden."
-    },
-    {
-      "id": "structure.source.top-level-items",
-      "level": "warning",
+      "id": "LKJ-REPO-TOPLEVEL-ITEMS", "level": "warning",
       "summary": "Conservative Rust top-level item counts over 16 require review."
     },
     {
-      "id": "structure.source.fanout",
-      "level": "warning",
+      "id": "LKJ-REPO-RUST-FANOUT", "level": "warning",
       "summary": "Conservative Rust import or module fanout over 16 requires review."
     },
     {
-      "id": "structure.provenance.stale",
-      "level": "error",
-      "summary": "Exact-path provenance hashes must match."
+      "id": "LKJ-REPO-GENERATED-PROVENANCE", "level": "error",
+      "summary": "Generated and immutable provenance is exact, complete, and current."
     },
     {
-      "id": "structure.provenance.exact-path",
-      "level": "error",
-      "summary": "Provenance uses exact paths without glob syntax."
+      "id": "LKJ-REPO-CAPSULE-CYCLE", "level": "error",
+      "summary": "Capsule allowed dependencies must be acyclic."
     },
     {
-      "id": "structure.provenance.class",
-      "level": "error",
-      "summary": "Provenance classifications are closed."
+      "id": "LKJ-REPO-CAPSULE-SCHEMA", "level": "error",
+      "summary": "Capsules use the strict closed capsule.json v1 contract."
     },
     {
-      "id": "structure.capsule.cycle",
-      "level": "error",
-      "summary": "Capsule dependencies must be acyclic."
+      "id": "LKJ-REPO-CAPSULE-ID", "level": "error",
+      "summary": "Capsule IDs and roots are unique and match manifest locations."
     },
     {
-      "id": "structure.capsule.version",
-      "level": "error",
-      "summary": "Capsules use the closed lkjscript.capsule v1 contract."
+      "id": "LKJ-REPO-CAPSULE-ACTUAL-DEPENDENCY", "level": "error",
+      "summary": "Actual internal Cargo dependencies are allowed by their capsule."
     },
     {
-      "id": "structure.capsule.duplicate",
-      "level": "error",
-      "summary": "Capsule IDs are unique."
+      "id": "LKJ-REPO-CAPSULE-DEPENDENCY", "level": "error",
+      "summary": "Allowed and forbidden capsule dependencies resolve without overlap."
     },
     {
-      "id": "structure.capsule.actual-dependency",
-      "level": "error",
-      "summary": "Actual internal crate dependencies must be capsule-declared."
+      "id": "LKJ-REPO-CAPSULE-FANOUT", "level": "error",
+      "summary": "Capsule dependency and principal concept fanout is at most 16."
     },
     {
-      "id": "structure.capsule.dependency",
-      "level": "error",
-      "summary": "Declared capsule dependencies resolve exactly."
+      "id": "LKJ-REPO-CAPSULE-EVIDENCE", "level": "error",
+      "summary": "Capsule facade, test, and decision evidence resolves exactly."
     },
     {
-      "id": "structure.capsule.fanout",
-      "level": "error",
-      "summary": "Capsule dependency fanout is at most 16."
+      "id": "LKJ-REPO-READ-BOUND", "level": "error",
+      "summary": "Audit reads remain within fixed input bounds."
     },
     {
-      "id": "structure.file.read-bound",
-      "level": "error",
-      "summary": "Audit reads remain within the fixed input bound."
-    },
-    {
-      "id": "structure.provenance.duplicate",
-      "level": "error",
-      "summary": "Each exact provenance path occurs once."
-    },
-    {
-      "id": "structure.provenance.generator",
-      "level": "error",
-      "summary": "Mutable generated files identify their generator."
-    },
-    {
-      "id": "structure.provenance.missing",
-      "level": "error",
-      "summary": "Every provenance path is tracked."
-    },
-    {
-      "id": "structure.provenance.read",
-      "level": "error",
-      "summary": "Provenance inputs remain readable within the repository."
-    },
-    {
-      "id": "structure.repository.race",
-      "level": "error",
+      "id": "LKJ-REPO-REPOSITORY-RACE", "level": "error",
       "summary": "Repository revision and file sizes remain stable during audit."
     },
     {
-      "id": "structure.ratchet.stale",
-      "level": "error",
-      "summary": "Ratchet records must describe current violations."
+      "id": "LKJ-REPO-RATCHET-STALE", "level": "error",
+      "summary": "Ratchet records describe current stable-ID violations."
+    },
+    {
+      "id": "LKJ-REPO-VAGUE-MODULE", "level": "error",
+      "summary": "Tooling module names describe their exact responsibility."
     }
   ]
 }

@@ -1,10 +1,10 @@
 use std::path::Path;
 
+use super::validation::simple;
 use crate::model::Finding;
-use crate::structure_validation::simple;
 
 pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
-    let Ok(bytes) = crate::repository_support::read_bounded(&root.join(path), 4 * 1024 * 1024)
+    let Ok(bytes) = super::repository_support::read_bounded(&root.join(path), 4 * 1024 * 1024)
     else {
         return;
     };
@@ -14,7 +14,7 @@ pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
     if packed_rust(path, text) {
         findings.push(simple(
             "error",
-            "structure.source.packed-rust",
+            "LKJ-REPO-PACKED-RUST",
             path,
             "conservative packed Rust statement detection",
         ));
@@ -22,7 +22,7 @@ pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
     if path.ends_with(".json") && text.len() > 512 && text.lines().count() <= 2 {
         findings.push(simple(
             "error",
-            "structure.source.minified-json",
+            "LKJ-REPO-MINIFIED-JSON",
             path,
             "conservative minified JSON detection",
         ));
@@ -35,7 +35,7 @@ pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
     {
         findings.push(simple(
             "error",
-            "structure.source.base64",
+            "LKJ-REPO-HIDDEN-LITERAL",
             path,
             "conservative giant base64 literal detection",
         ));
@@ -46,7 +46,7 @@ pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
     {
         findings.push(simple(
             "error",
-            "structure.source.hidden-literal",
+            "LKJ-REPO-HIDDEN-LITERAL",
             path,
             "conservative giant hidden-source literal detection",
         ));
@@ -54,9 +54,9 @@ pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
     if path.ends_with(".rs") {
         let (items, fanout) = rust_shape(text);
         if items > 16 {
-            crate::structure_validation::warning(
+            super::validation::warning(
                 findings,
-                "structure.source.top-level-items",
+                "LKJ-REPO-TOPLEVEL-ITEMS",
                 path,
                 items,
                 16,
@@ -64,9 +64,9 @@ pub fn content(root: &Path, path: &str, findings: &mut Vec<Finding>) {
             );
         }
         if fanout > 16 {
-            crate::structure_validation::warning(
+            super::validation::warning(
                 findings,
-                "structure.source.fanout",
+                "LKJ-REPO-RUST-FANOUT",
                 path,
                 fanout,
                 16,
@@ -163,10 +163,10 @@ mod tests {
         super::content(&root, "a.rs", &mut findings);
         assert!(findings
             .iter()
-            .any(|finding| finding.rule == "structure.source.hidden-literal"));
+            .any(|finding| finding.rule == "LKJ-REPO-HIDDEN-LITERAL"));
         assert!(findings
             .iter()
-            .any(|finding| finding.rule == "structure.source.base64"));
+            .any(|finding| finding.rule == "LKJ-REPO-HIDDEN-LITERAL"));
         assert!(std::fs::remove_dir_all(root).is_ok());
     }
 }

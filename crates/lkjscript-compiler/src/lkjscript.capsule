@@ -1,8 +1,0 @@
-{
-  "schema": "lkjscript.capsule",
-  "version": 1,
-  "id": "compiler.source",
-  "root": "crates/lkjscript-compiler/src",
-  "kind": "source",
-  "dependencies": []
-}

@@ -1,11 +1,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
+fn capsule_unknown_fields_fail_closed() {
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(include_str!("capsule.json"));
+    assert!(parsed.is_ok());
+    if let Ok(mut value) = parsed {
+        value["unknown"] = serde_json::Value::Bool(true);
+        assert!(serde_json::from_value::<crate::model::Capsule>(value).is_err());
+    }
+}
+
+#[test]
 fn cycles_are_detected() {
     let a = vec!["b".to_owned()];
     let b = vec!["a".to_owned()];
     let graph = BTreeMap::from([("a", a.as_slice()), ("b", b.as_slice())]);
-    assert!(crate::structure_validation::cycle(
+    assert!(super::validation::cycle(
         "a",
         "a",
         &graph,
@@ -17,24 +27,12 @@ fn cycles_are_detected() {
 fn byte_and_width_boundaries() {
     for (observed, count) in [(32_767, 0), (32_768, 0), (32_769, 1)] {
         let mut findings = Vec::new();
-        crate::structure_validation::metric(
-            &mut findings,
-            "structure.file.bytes",
-            "a",
-            observed,
-            32_768,
-        );
+        super::validation::metric(&mut findings, "LKJ-REPO-FILE-BYTES", "a", observed, 32_768);
         assert_eq!(findings.len(), count);
     }
     for (observed, count) in [(119, 0), (120, 0), (121, 1)] {
         let mut findings = Vec::new();
-        crate::structure_validation::metric(
-            &mut findings,
-            "structure.line.scalars",
-            "a",
-            observed,
-            120,
-        );
+        super::validation::metric(&mut findings, "LKJ-REPO-LINE-WIDTH", "a", observed, 120);
         assert_eq!(findings.len(), count);
     }
 }
@@ -59,9 +57,9 @@ fn stale_provenance_is_rejected() {
         generator: None,
     }];
     let mut findings = Vec::new();
-    crate::structure_validation::provenance(&root, &files, &entries, &mut findings);
+    super::validation::provenance(&root, &files, &entries, &mut findings);
     assert!(findings
         .iter()
-        .any(|finding| finding.rule == "structure.provenance.stale"));
+        .any(|finding| finding.rule == "LKJ-REPO-GENERATED-PROVENANCE"));
     assert!(std::fs::remove_dir_all(root).is_ok());
 }

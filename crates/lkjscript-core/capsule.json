@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "core",
+  "root": "crates/lkjscript-core",
+  "kind": "crate",
+  "purpose": "Provide bounded validated bytecode and shared runtime value contracts.",
+  "layer": "semantic foundation",
+  "concepts": ["validated bytecode", "limits", "runtime values"],
+  "facade": ["crates/lkjscript-core/src/lib.rs"],
+  "allowed_dependencies": [],
+  "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
+  "tests": ["crates/lkjscript-core/src/validation/tests/mod.rs"],
+  "decisions": ["docs/decisions/execution/compiler-pipeline.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "none", "names": [] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-core"],
+  "context_card": {
+    "goal": "Preserve bounded validated runtime primitives shared across execution tiers.",
+    "interfaces": ["crates/lkjscript-core/src/lib.rs"],
+    "invariants": ["memory-safe Rust", "checked resource limits"]
+  }
+}
