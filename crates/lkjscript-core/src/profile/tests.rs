@@ -54,11 +54,37 @@ fn lowered_profile_is_immutable_and_has_distinct_identity() {
 }
 
 #[test]
-fn profile_identity_is_versioned_and_stable() {
+fn profile_v2_identity_is_versioned_and_stable() {
     let first = ResourceProfile::new(ResourceProfileName::Deterministic).identity();
     let second = ResourceProfile::named("deterministic").unwrap().identity();
     assert_eq!(first, second);
     assert_eq!(first.schema, RESOURCE_PROFILE_SCHEMA);
-    assert_eq!(first.version, 1);
-    assert_eq!(first.implementation_maxima_version, 1);
+    assert_eq!(first.version, 2);
+    assert_eq!(first.implementation_maxima_version, 2);
+    assert_eq!(ResourceCategory::ALL.len(), 54);
+    assert_eq!(
+        ResourceCategory::ALL[24].as_str(),
+        "protocol_response_bytes"
+    );
+    assert_eq!(ResourceCategory::ALL[25].as_str(), "enum_declarations");
+    assert_eq!(
+        ResourceCategory::ALL[53].as_str(),
+        "logical_aggregate_constructions"
+    );
+}
+
+#[test]
+fn profile_ceilings_are_positive_and_monotonic() {
+    let order = [
+        ResourceProfileName::Sandbox,
+        ResourceProfileName::Deterministic,
+        ResourceProfileName::Default,
+        ResourceProfileName::Build,
+        ResourceProfileName::TrustedLocal,
+    ];
+    for category in ResourceCategory::ALL {
+        let values = order.map(|name| ResourceProfile::new(name).ceilings().limit(category));
+        assert!(values.into_iter().all(|value| value > 0));
+        assert!(values.windows(2).all(|pair| pair[0] <= pair[1]));
+    }
 }

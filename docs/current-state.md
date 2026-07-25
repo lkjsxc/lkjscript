@@ -15,8 +15,8 @@ next work without mixing them with long-term vision.
 <!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
 <!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
 <!-- LKJ-STATUS id=repository-topology/1 status=current -->
-<!-- LKJ-STATUS id=resource-profile-compiler/1 status=current -->
-<!-- LKJ-STATUS id=resource-profile-preallocation/1 status=accepted-target -->
+<!-- LKJ-STATUS id=resource-profile-compiler/2 status=current -->
+<!-- LKJ-STATUS id=resource-profile-preallocation/2 status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-session/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
@@ -28,11 +28,12 @@ next work without mixing them with long-term vision.
 the manifest capsules. Bounded Repository Topology, Repository Intelligence
 Graph/context, externalized Agent Work State V2 with semantic references,
 complete Semantic Source Schema V1
-and its one-shot query/edit protocol, bounded local stdio sessions, and compiler
-Resource Profile V1 are Current. The superseded Agent Foundation V1 identity is
-historical. Semantic Source Schema V2, typed holes, Edition 2, Profile V2
-pre-allocation, logical metering, nonzero query caching, and cross-authority
-ledgers remain Accepted Targets, not Current.
+and its one-shot query/edit protocol, bounded local stdio sessions, compiler
+Resource Profile V2, and the core hierarchical pre-allocation foundation are
+Current. The superseded Agent Foundation V1 identity is historical. Semantic
+Source Schema V2, typed holes, Edition 2, whole-pipeline pre-allocation, logical
+metering integration, nonzero query caching, and cross-authority ledgers remain
+Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
 
 ## Current Baseline
@@ -56,9 +57,9 @@ commands/APIs are Current on the containing implementation revision.
 4. [Complete Semantic Source Schema
    V1](decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md)
    is Current for the closed Edition 1 tree and bounded one-shot protocol.
-5. The [compiler resource-profile
-   foundation](decisions/platform/resource-budget-profiles-candidate.md) is
-   Current at its documented post-phase charging boundaries.
+5. The [Profile V2 resource foundation](decisions/platform/resource-budget-profiles-candidate.md)
+   is Current for core hierarchical reservation and the documented legacy
+   compiler post-phase charging boundaries; whole-pipeline migration is not.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

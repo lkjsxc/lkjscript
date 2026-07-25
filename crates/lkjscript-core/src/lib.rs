@@ -12,7 +12,11 @@ mod sha256;
 mod validation;
 mod value;
 
-pub use budget::{BudgetLedger, ResourceCategory, ResourceDiagnostic, ResourceUsage};
+pub use budget::{
+    BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
+    BudgetScope, Reservation, ReservationId, ReservationState, ResourceCategory,
+    ResourceDiagnostic, ResourceUsage, MAX_BUDGET_PATH_DEPTH,
+};
 pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
 };

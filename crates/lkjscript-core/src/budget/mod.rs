@@ -1,39 +1,23 @@
+mod authority;
 mod category;
+mod category_names;
+mod category_units;
+mod diagnostic;
+mod legacy;
+mod path;
+mod reservation;
+mod scope;
 
-use std::fmt;
-
+pub use authority::BudgetAuthority;
 pub use category::ResourceCategory;
-pub(crate) use category::RESOURCE_CATEGORY_COUNT;
+pub(crate) use category::{RESOURCE_CATEGORY_COUNT, V1_RESOURCE_CATEGORY_COUNT};
+pub use diagnostic::{BudgetCause, BudgetError, BudgetErrorKind};
+pub use legacy::ResourceDiagnostic;
+pub use path::{BudgetPath, MAX_BUDGET_PATH_DEPTH};
+pub use reservation::{Reservation, ReservationId, ReservationState};
+pub use scope::BudgetScope;
 
 use crate::{ResourceProfile, ResourceProfileIdentity};
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ResourceDiagnostic {
-    pub profile: ResourceProfileIdentity,
-    pub category: ResourceCategory,
-    pub limit: u64,
-    pub before: u64,
-    pub increment: u64,
-}
-
-impl fmt::Display for ResourceDiagnostic {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "compiler resource limit: profile={}/{}:{}; category={}; unit={}; limit={}; before={}; increment={}",
-            self.profile.schema,
-            self.profile.version,
-            self.profile.name.as_str(),
-            self.category.as_str(),
-            self.category.unit(),
-            self.limit,
-            self.before,
-            self.increment
-        )
-    }
-}
-
-impl std::error::Error for ResourceDiagnostic {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResourceUsage {
@@ -63,7 +47,8 @@ impl Default for ResourceUsage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BudgetLedger {
     profile: ResourceProfile,
-    used: [u64; RESOURCE_CATEGORY_COUNT],
+    pub(crate) used: [u64; RESOURCE_CATEGORY_COUNT],
+    next_reservation: u64,
 }
 
 impl BudgetLedger {
@@ -71,6 +56,7 @@ impl BudgetLedger {
         Self {
             profile,
             used: [0; RESOURCE_CATEGORY_COUNT],
+            next_reservation: 0,
         }
     }
 
@@ -89,6 +75,60 @@ impl BudgetLedger {
         }
     }
 
+    pub fn scope(&mut self, authority: BudgetAuthority) -> BudgetScope<'_> {
+        let mut grant = [0; RESOURCE_CATEGORY_COUNT];
+        for category in ResourceCategory::ALL {
+            let index = category.index();
+            grant[index] = self
+                .profile
+                .ceilings()
+                .limit(category)
+                .saturating_sub(self.used[index]);
+        }
+        BudgetScope {
+            profile: self.profile,
+            path: BudgetPath::root(authority),
+            grant,
+            used: [0; RESOURCE_CATEGORY_COUNT],
+            reserved: [0; RESOURCE_CATEGORY_COUNT],
+            sink: &mut self.used,
+            next_reservation: &mut self.next_reservation,
+        }
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "budget rejection must not allocate"
+    )]
+    pub fn charge_with_authority(
+        &mut self,
+        authority: Option<BudgetAuthority>,
+        category: ResourceCategory,
+        amount: u64,
+        cause: BudgetCause,
+    ) -> Result<(), BudgetError> {
+        let Some(authority) = authority else {
+            return Err(BudgetError {
+                kind: BudgetErrorKind::MissingAuthority,
+                profile: self.profile.identity(),
+                category,
+                authority: None,
+                path: BudgetPath::empty(),
+                cause,
+                limit: self.profile.ceilings().limit(category),
+                reserved: 0,
+                attempted: amount,
+                observed: self.used(category),
+                allocated_before_rejection: false,
+            });
+        };
+        let mut scope = self.scope(authority);
+        scope.reserve(category, amount, cause)?.commit();
+        Ok(())
+    }
+
+    /// Legacy Current compiler post-phase wrapper. New allocation authorities
+    /// must use a typed scope and reserve before allocation.
     pub fn charge(
         &mut self,
         category: ResourceCategory,
@@ -96,17 +136,17 @@ impl BudgetLedger {
     ) -> Result<(), ResourceDiagnostic> {
         let before = self.used(category);
         let limit = self.profile.ceilings().limit(category);
-        let after = before
-            .checked_add(increment)
-            .ok_or_else(|| self.diagnostic(category, limit, before, increment))?;
+        let Some(after) = before.checked_add(increment) else {
+            return Err(self.legacy_diagnostic(category, limit, before, increment));
+        };
         if after > limit {
-            return Err(self.diagnostic(category, limit, before, increment));
+            return Err(self.legacy_diagnostic(category, limit, before, increment));
         }
         self.used[category.index()] = after;
         Ok(())
     }
 
-    fn diagnostic(
+    fn legacy_diagnostic(
         &self,
         category: ResourceCategory,
         limit: u64,
@@ -129,5 +169,7 @@ impl Default for BudgetLedger {
     }
 }
 
+#[cfg(test)]
+mod hierarchy_tests;
 #[cfg(test)]
 mod tests;

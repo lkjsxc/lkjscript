@@ -2,22 +2,24 @@
 
 ## Purpose
 
-Replace prototype-sized permanent source semantics with layered safety maxima,
-host-selected resource profiles, and AI-maintainability lints without weakening
-safety during migration.
+Replace prototype-sized permanent source semantics with layered safety maxima, host-selected
+resource profiles, and AI-maintainability lints without weakening safety during migration.
 
 ## Status
 
-**Current compiler foundation; broader target Accepted.** Resource Profile V1,
-five bounded named profiles, lower-only host overrides, checked aggregate
-ledgers, profile identity, and post-phase source/HIR/normalized-SSA accounting
-are implemented in `lkjscript-core` and `lkjscript-compiler`. The exact Current
-surface and remaining boundaries are defined by the
-[First Current-Candidate Contract](resource-budget-profiles-candidate.md).
-Repository topology, repository intelligence, agent work state, protocol,
-proof, native artifact, and runtime budgets do not yet share that compiler
-ledger. Profile V2 hierarchical pre-allocation and deterministic logical
-metering are **Accepted Targets**, not Current behavior.
+**Current Profile V2 core and compiler foundation; broader migration Accepted.**
+Profile V2, five bounded named profiles, lower-only host overrides, closed
+hierarchical authorities, fixed authority paths, and conservative
+pre-allocation reservations are implemented in `lkjscript-core`. Existing
+compiler source/HIR/normalized-SSA accounting remains an explicitly legacy
+post-phase wrapper, and the one-shot protocol remains a separate ledger. The
+exact Current surface and remaining boundaries are defined by the
+[Current Compiler Foundation](resource-budget-profiles-candidate.md) and
+[Hierarchical Preallocation](resource-budget-profiles/hierarchical-preallocation.md).
+Repository topology, repository intelligence, agent state, protocol, proof,
+native artifact, and runtime budgets do not yet share one request ledger.
+Logical-charge IR preservation and whole-pipeline pre-allocation remain
+**Accepted Targets**, not Current behavior.
 
 All Current Edition 1 limits remain enforced unchanged: source depth 8, form
 children 16, tokens per file 384, top-level forms 8, product fields 15, and 16
@@ -186,12 +188,13 @@ depth, child, token, top-level, and field limits.
 
 ## Capsule Manifest
 
-- [Current V1 compiler foundation](resource-budget-profiles-candidate.md)
-- [Accepted Profile V2 preallocation](resource-budget-profiles/hierarchical-preallocation.md)
-- [Accepted logical metering](resource-budget-profiles/logical-metering.md)
+- [Current Profile V2 compiler foundation](resource-budget-profiles-candidate.md)
+- [Current core hierarchical preallocation](resource-budget-profiles/hierarchical-preallocation.md)
+- [Current logical category; Accepted metering](resource-budget-profiles/logical-metering.md)
 
 ## Not Current
 
-Package profile selection, pre-allocation charging, one cross-authority ledger,
-semantic-charge IR, and lint migration are not Current. Current fixed limits
-remain until complete replacement slices pass their migration gates.
+Package profile selection, whole-pipeline pre-allocation charging, one
+cross-authority ledger, semantic-charge IR, and lint migration are not Current.
+Current fixed limits remain until complete replacement slices pass their
+migration gates.

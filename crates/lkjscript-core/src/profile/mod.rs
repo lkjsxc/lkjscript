@@ -1,4 +1,6 @@
 mod ceilings;
+mod v1;
+mod v2;
 
 use std::fmt;
 use std::str::FromStr;
@@ -10,8 +12,8 @@ pub use ceilings::ResourceCeilings;
 use ceilings::{BUILD, DEFAULT, DETERMINISTIC, MAXIMA, SANDBOX};
 
 pub const RESOURCE_PROFILE_SCHEMA: &str = "lkjscript.resource-profile";
-pub const RESOURCE_PROFILE_VERSION: u32 = 1;
-pub const IMPLEMENTATION_MAXIMA_VERSION: u32 = 1;
+pub const RESOURCE_PROFILE_VERSION: u32 = 2;
+pub const IMPLEMENTATION_MAXIMA_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ResourceProfileName {

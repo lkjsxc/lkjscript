@@ -14,8 +14,8 @@ verification discipline without preserving obsolete implementation priorities.
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
 <!-- LKJ-STATUS id=repository-topology/1 status=current -->
-<!-- LKJ-STATUS id=resource-profile-compiler/1 status=current -->
-<!-- LKJ-STATUS id=resource-profile-preallocation/1 status=accepted-target -->
+<!-- LKJ-STATUS id=resource-profile-compiler/2 status=current -->
+<!-- LKJ-STATUS id=resource-profile-preallocation/2 status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-session/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
@@ -26,12 +26,12 @@ verification discipline without preserving obsolete implementation priorities.
 **Current** for the engineering policy and implementation boundaries linked from
 [Current State](../current-state.md). Bounded Repository Topology, Repository
 Intelligence Graph/context, Agent Work State V2 semantic references, complete
-Semantic Source Schema V1
-and its one-shot protocol, and compiler Resource Profile V1 are Current. Agent
+Semantic Source Schema V1 and its one-shot protocol, compiler Resource Profile
+V2, and the core hierarchical pre-allocation foundation are Current. Agent
 Foundation V1 is a superseded historical identity. Bounded local stdio sessions
 are Current. Semantic Source Schema V2, typed holes, all [Edition
-2](../decisions/semantics/edition-2.md) surfaces, Profile V2
-pre-allocation/logical metering, and a shared ledger remain Accepted Targets.
+2](../decisions/semantics/edition-2.md) surfaces, whole-pipeline pre-allocation,
+logical metering integration, and a shared ledger remain Accepted Targets.
 Automatic proof promotion remains
 an Accepted Implementation Selection, not the immediate priority.
 

@@ -78,11 +78,14 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   record sequence, reconstructs a private candidate, requires exact bitwise
   equality, verifies edit and cleanup stages, and rejects stale, forged,
   non-dominating, effectful, oversized, or aggregate-over-budget proofs
-- Compiler resource profiles: `lkjscript.resource-profile` V1 has exactly five
-  bounded profiles, lower-only ceilings, checked aggregate source/HIR/SSA
-  ledgers, profile-aware Rust and CLI entry points, successful usage metrics,
-  and publication guards. Charging is exact after each protected phase; current
-  fixed limits remain the pre-allocation defense
+- Resource profiles: `lkjscript.resource-profile` V2 preserves the first 25
+  category names/order and appends 29 closed categories across five positive
+  monotonic bounded profiles. Core provides closed authorities, fixed 16-entry
+  paths, lower-only child grants, and move-only pre-allocation reservations;
+  unused reservations commit on Drop unless explicitly returned. Compiler
+  source/HIR/SSA charging remains an explicit legacy post-phase wrapper, and
+  protocol/compiler ledgers remain separate. Current fixed limits remain the
+  complete-pipeline pre-allocation defense
 - Host implementation: nine Rust workspace crates. Exact locked `serde` and
   `serde_json` dependencies are confined to strict JSON protocol/tooling
   boundaries; unsafe Rust is confined to `lkjscript-sys`

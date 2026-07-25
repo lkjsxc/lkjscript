@@ -4,20 +4,22 @@
 
 ## Status
 
-**Current for the compiler foundation described here.** Resource Profile V1,
-checked ledgers, the five named ceiling sets, profile-aware compiler entry
-points, successful compile metrics, and publication guards are implemented.
-This does not weaken or replace an Edition 1 or implementation safety limit.
-The one-shot Semantic Protocol now selects the same closed profile identities
-and ceilings for its request-local categories. Pre-allocation compiler charging
-and one ledger shared across compiler, protocol, repository, agent-state,
-artifact, proof, or runtime authorities remain Accepted work.
+**Current for the compiler and core foundation described here.** Resource
+Profile V2, checked legacy compiler ledgers, five named ceiling sets,
+profile-aware compiler entry points, successful compile metrics, publication
+guards, and the hierarchical pre-allocation core are implemented. This does not
+weaken or replace an Edition 1 or implementation safety limit. The one-shot
+Semantic Protocol selects the same profile identity and ceilings for its
+request-local categories. Whole-pipeline pre-allocation and one ledger shared
+across compiler, protocol, repository, agent-state, artifact, proof, or runtime
+authorities remain Accepted work.
 
 ## Identity And Selection
 
-The identity is `lkjscript.resource-profile` version `1` with implementation
-maxima version `1`, one registered name, and SHA-256 over the closed ordered
-ceiling array. The exact names are `sandbox`, `default`, `build`,
+The identity is `lkjscript.resource-profile` version `2` with implementation
+maxima version `2`, one registered name, and SHA-256 over the closed ordered
+ceiling array. Version 1 is not accepted as an alias. The exact names are
+`sandbox`, `default`, `build`,
 `trusted-local`, and `deterministic`. Unknown names fail. `trusted-local` equals
 bounded implementation maxima; it is not an unsafe or unbounded mode.
 
@@ -29,9 +31,10 @@ Successful `CompileMetrics` exposes profile identity and exact charged totals,
 and `ExecutableProgram` retains the profile identity. Package manifests do not
 yet select profiles.
 
-## Closed V1 Categories
+## Closed V2 Categories
 
-The 25 categories are `source_bytes`, `source_units`, `import_edges`, `tokens`,
+The first 25 categories preserve the V1 names and order: `source_bytes`,
+`source_units`, `import_edges`, `tokens`,
 `schema_nodes`, `top_level_declarations`, `product_fields`, `parser_work`,
 `validation_work`, `path_work`, `type_nesting`, `type_work`, `trait_work`,
 `ownership_expressions`, `ownership_retained_state`, `hir_functions`,
@@ -39,13 +42,14 @@ The 25 categories are `source_bytes`, `source_units`, `import_edges`, `tokens`,
 `ssa_frame_states`, `diagnostics`, `protocol_request_bytes`, and
 `protocol_response_bytes`.
 
-Bytes categories use exact bytes; parser, validation, path, type, and trait work
-use deterministic work units; all other categories use records. Unknown
-categories require a new profile version rather than an alias.
+The 29 appended categories and their units are closed by
+[Hierarchical Preallocation](resource-budget-profiles/hierarchical-preallocation.md).
+Unknown categories require Profile V3 rather than an alias.
 
 ## Concrete Ceilings
 
-Columns are exact inclusive ceilings.
+Columns are exact inclusive ceilings for the preserved first 25 categories.
+The exact appended ceilings are in the hierarchical-preallocation capsule.
 
 | category | sandbox | default | build | trusted-local | deterministic |
 | --- | ---: | ---: | ---: | ---: | ---: |

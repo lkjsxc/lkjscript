@@ -9,8 +9,14 @@ pre-allocation accounting, failed prefixes, and closed Profile V2 categories.
 
 ## Status
 
-**Accepted Target, not Current.** Current Profile V1 post-phase compiler and
-one-shot protocol ledgers remain separate and unchanged.
+**Current core foundation; whole-pipeline migration incomplete.** Profile V2's
+closed categories, named ceilings, bounded authority paths, lower-only child
+grants, and move-only pre-allocation reservations are Current in
+`lkjscript-core`. Rejections report the exact event and always mark current
+prechecks as `allocated_before_rejection=false`; deterministic event-prefix
+journaling is not yet Current. Existing compiler and protocol entry points still
+use separate legacy/current charging paths; one cross-authority request ledger
+and pre-allocation coverage of every amplification path remain Accepted Targets.
 
 ## One Ledger
 
@@ -27,15 +33,28 @@ grant. It may lower but never raise or relabel a ceiling, create an unmetered
 sibling, or return more grant than it received. Checked addition and conversion
 precede reservation and allocation.
 
-Before allocation or amplification, an authority reserves the worst-case
-bounded category charge. Successful construction commits exact consumed units
-and releases the unused reservation. Failure releases unconsumed reservation
-but retains completed semantic/work charges. Reservation identity, owner,
-category, amount, semantic cause, parent grant, and state are explicit; double
-commit/release and cross-owner use fail closed.
+The closed authorities are `compile_request`, `semantic_request`, `transaction`,
+`proof`, `artifact_build`, `execution`, `source_loading`, `parsing`,
+`schema_validation`, `diagnostics`, `resolution`, `type_analysis`,
+`trait_analysis`, `ownership_analysis`, `hir`, `effects`,
+`pattern_usefulness`, `pattern_lowering`, `ssa_construction`,
+`ssa_verification`, `normalization`, `proof_discovery`, `proof_checking`,
+`bytecode`, `native_lowering`, `protocol_decode`, `protocol_encode`, `holes`,
+`session_caching`, and `repository_queries`. Authority paths contain one through
+16 entries in a fixed nonallocating representation. Missing authority and a
+seventeenth entry fail closed.
 
-A failed response includes the deterministic ledger prefix: profile identity,
-all committed charges and reservation transitions, and the rejected event's
+Before allocation or amplification, an authority reserves the worst-case
+bounded category charge. Callers consume exact completed units and explicitly
+return unused units after success or known failure. Dropping an active token
+conservatively commits its remainder, so forgotten return cannot recreate
+budget. Reservation identity, owner, category, amount, semantic cause, parent
+grant, and state are explicit; move semantics prevent double return/commit and
+cross-owner use.
+
+The complete migrated failure response will include the deterministic ledger
+prefix: profile identity, all committed charges and reservation transitions,
+and the rejected event's
 category, unit, ceiling, prior charge, attempted increment, semantic node,
 phase, allocation-before-rejection flag, and child-scope path. It cannot claim
 totals for work that did not occur or expose noncanonical host paths.
@@ -69,8 +88,42 @@ logical_aggregate_constructions
 Unknown categories require Profile V3. Names cannot alias or overload V1.
 `*_bytes` use exact bytes; `*_work` and lifetime fuel use deterministic work
 units; logical constructions use semantic events; all others use records.
-Concrete ceilings require retained corpus/adversarial measurements and exact
-boundary tests before V2 can be Current.
+The appended ceilings are exact inclusive sandbox ceilings below.
+`deterministic`, `default`, `build`, and `trusted-local` use respectively
+4, 8, 32, and 64 times each value, preserving a positive monotonic order.
+
+| categories | sandbox ceiling |
+| --- | ---: |
+| enum_declarations | 1,024 |
+| enum_variants | 4,096 |
+| variant_fields | 16,384 |
+| enum_recursion_work | 65,536 |
+| patterns | 16,384 |
+| match_arms | 8,192 |
+| usefulness_rows, usefulness_columns | 32,768 |
+| usefulness_specialization_work | 1,000,000 |
+| match_plans | 8,192 |
+| exhaustiveness_witness_bytes | 1,048,576 |
+| hole_count | 1,024 |
+| hole_candidates | 16,384 |
+| hole_search_work | 1,000,000 |
+| legal_actions | 65,536 |
+| semantic_session_lifetime_fuel | 1,000,000 |
+| semantic_session_input_bytes, semantic_session_output_bytes | 4,194,304 |
+| semantic_session_nodes | 65,536 |
+| semantic_session_snapshots | 256 |
+| semantic_session_retained_bytes | 4,194,304 |
+| semantic_session_cache_entries | 1,024 |
+| semantic_session_cached_revisions | 256 |
+| transactions | 1,024 |
+| transaction_operations | 8,192 |
+| transaction_impact_nodes | 32,768 |
+| staged_publication_bytes | 4,194,304 |
+| staged_publication_nodes | 65,536 |
+| logical_aggregate_constructions | 1,000,000 |
+
+These ceilings establish the core contract; they do not claim that existing
+pipelines reserve every allocation or share one ledger.
 
 ## Edition 1 Boundary
 

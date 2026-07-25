@@ -1,4 +1,6 @@
-use crate::budget::{ResourceCategory, RESOURCE_CATEGORY_COUNT};
+use crate::budget::{ResourceCategory, RESOURCE_CATEGORY_COUNT, V1_RESOURCE_CATEGORY_COUNT};
+
+use super::{v1, v2};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResourceCeilings {
@@ -15,76 +17,28 @@ impl ResourceCeilings {
     }
 }
 
-pub(crate) const MAXIMA: [u64; RESOURCE_CATEGORY_COUNT] = [
-    268_435_456,
-    65_536,
-    524_288,
-    25_165_824,
-    25_165_824,
-    524_288,
-    7_864_320,
-    50_331_648,
-    50_331_648,
-    589_824,
-    1_048_576,
-    100_000_000,
-    10_000_000,
-    16_384,
-    1_000_000,
-    524_289,
-    16_384,
-    524_289,
-    4_000_000,
-    100_000_000,
-    8_000_000,
-    4_000_000,
-    2_000_000,
-    268_435_456,
-    268_435_456,
-];
+const fn joined(
+    first: [u64; V1_RESOURCE_CATEGORY_COUNT],
+    second: [u64; v2::V2_RESOURCE_CATEGORY_COUNT],
+) -> [u64; RESOURCE_CATEGORY_COUNT] {
+    let mut result = [0; RESOURCE_CATEGORY_COUNT];
+    let mut index = 0;
+    while index < V1_RESOURCE_CATEGORY_COUNT {
+        result[index] = first[index];
+        index += 1;
+    }
+    let mut tail = 0;
+    while tail < v2::V2_RESOURCE_CATEGORY_COUNT {
+        result[index] = second[tail];
+        index += 1;
+        tail += 1;
+    }
+    result
+}
 
-pub(crate) const SANDBOX: [u64; RESOURCE_CATEGORY_COUNT] = [
-    1_048_576, 1_024, 4_096, 393_216, 393_216, 8_192, 122_880, 786_432, 786_432, 8_192, 32_768,
-    2_000_000, 250_000, 16_384, 131_072, 8_193, 16_384, 8_193, 262_144, 2_000_000, 524_288,
-    262_144, 4_096, 16_777_216, 16_777_216,
-];
-
-pub(crate) const DEFAULT: [u64; RESOURCE_CATEGORY_COUNT] = [
-    16_777_216, 8_192, 65_536, 3_145_728, 3_145_728, 65_536, 983_040, 6_291_456, 6_291_456, 73_728,
-    131_072, 12_000_000, 1_000_000, 16_384, 262_144, 65_537, 16_384, 65_537, 1_000_000, 12_000_000,
-    2_000_000, 1_000_000, 65_536, 67_108_864, 67_108_864,
-];
-
-pub(crate) const BUILD: [u64; RESOURCE_CATEGORY_COUNT] = [
-    134_217_728,
-    32_768,
-    262_144,
-    12_582_912,
-    12_582_912,
-    262_144,
-    3_932_160,
-    25_165_824,
-    25_165_824,
-    294_912,
-    524_288,
-    50_000_000,
-    5_000_000,
-    16_384,
-    750_000,
-    262_145,
-    16_384,
-    262_145,
-    3_000_000,
-    50_000_000,
-    6_000_000,
-    3_000_000,
-    500_000,
-    268_435_456,
-    268_435_456,
-];
-
-pub(crate) const DETERMINISTIC: [u64; RESOURCE_CATEGORY_COUNT] = [
-    8_388_608, 4_096, 32_768, 1_572_864, 1_572_864, 32_768, 491_520, 3_145_728, 3_145_728, 36_864,
-    65_536, 8_000_000, 750_000, 16_384, 196_608, 32_769, 16_384, 32_769, 524_288, 8_000_000,
-    1_000_000, 524_288, 32_768, 33_554_432, 33_554_432,
-];
+pub(crate) const MAXIMA: [u64; RESOURCE_CATEGORY_COUNT] = joined(v1::MAXIMA, v2::MAXIMA);
+pub(crate) const SANDBOX: [u64; RESOURCE_CATEGORY_COUNT] = joined(v1::SANDBOX, v2::SANDBOX);
+pub(crate) const DEFAULT: [u64; RESOURCE_CATEGORY_COUNT] = joined(v1::DEFAULT, v2::DEFAULT);
+pub(crate) const BUILD: [u64; RESOURCE_CATEGORY_COUNT] = joined(v1::BUILD, v2::BUILD);
+pub(crate) const DETERMINISTIC: [u64; RESOURCE_CATEGORY_COUNT] =
+    joined(v1::DETERMINISTIC, v2::DETERMINISTIC);

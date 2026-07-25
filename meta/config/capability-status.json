@@ -91,9 +91,9 @@
       ]
     },
     {
-      "id": "resource-profile-compiler/1",
+      "id": "resource-profile-compiler/2",
       "status": "current",
-      "interface": "lkjscript.resource-profile/1",
+      "interface": "lkjscript.resource-profile/2 legacy compiler wrapper",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
       "claimants": [
@@ -102,11 +102,11 @@
       ]
     },
     {
-      "id": "resource-profile-preallocation/1",
-      "status": "accepted-target",
-      "interface": "lkjscript.resource-profile/1 pre-allocation ledger",
+      "id": "resource-profile-preallocation/2",
+      "status": "current",
+      "interface": "lkjscript.resource-profile/2 core hierarchical reservations",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
-      "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
+      "evidence": "docs/decisions/platform/resource-budget-profiles/hierarchical-preallocation.md",
       "claimants": [
         "docs/current-state.md",
         "docs/operations/agent-handoff.md"

@@ -26,10 +26,39 @@ pub enum ResourceCategory {
     Diagnostics,
     ProtocolRequestBytes,
     ProtocolResponseBytes,
+    EnumDeclarations,
+    EnumVariants,
+    VariantFields,
+    EnumRecursionWork,
+    Patterns,
+    MatchArms,
+    UsefulnessRows,
+    UsefulnessColumns,
+    UsefulnessSpecializationWork,
+    MatchPlans,
+    ExhaustivenessWitnessBytes,
+    HoleCount,
+    HoleCandidates,
+    HoleSearchWork,
+    LegalActions,
+    SemanticSessionLifetimeFuel,
+    SemanticSessionInputBytes,
+    SemanticSessionOutputBytes,
+    SemanticSessionNodes,
+    SemanticSessionSnapshots,
+    SemanticSessionRetainedBytes,
+    SemanticSessionCacheEntries,
+    SemanticSessionCachedRevisions,
+    Transactions,
+    TransactionOperations,
+    TransactionImpactNodes,
+    StagedPublicationBytes,
+    StagedPublicationNodes,
+    LogicalAggregateConstructions,
 }
 
 impl ResourceCategory {
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 54] = [
         Self::SourceBytes,
         Self::SourceUnits,
         Self::ImportEdges,
@@ -55,53 +84,41 @@ impl ResourceCategory {
         Self::Diagnostics,
         Self::ProtocolRequestBytes,
         Self::ProtocolResponseBytes,
+        Self::EnumDeclarations,
+        Self::EnumVariants,
+        Self::VariantFields,
+        Self::EnumRecursionWork,
+        Self::Patterns,
+        Self::MatchArms,
+        Self::UsefulnessRows,
+        Self::UsefulnessColumns,
+        Self::UsefulnessSpecializationWork,
+        Self::MatchPlans,
+        Self::ExhaustivenessWitnessBytes,
+        Self::HoleCount,
+        Self::HoleCandidates,
+        Self::HoleSearchWork,
+        Self::LegalActions,
+        Self::SemanticSessionLifetimeFuel,
+        Self::SemanticSessionInputBytes,
+        Self::SemanticSessionOutputBytes,
+        Self::SemanticSessionNodes,
+        Self::SemanticSessionSnapshots,
+        Self::SemanticSessionRetainedBytes,
+        Self::SemanticSessionCacheEntries,
+        Self::SemanticSessionCachedRevisions,
+        Self::Transactions,
+        Self::TransactionOperations,
+        Self::TransactionImpactNodes,
+        Self::StagedPublicationBytes,
+        Self::StagedPublicationNodes,
+        Self::LogicalAggregateConstructions,
     ];
 
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::SourceBytes => "source_bytes",
-            Self::SourceUnits => "source_units",
-            Self::ImportEdges => "import_edges",
-            Self::Tokens => "tokens",
-            Self::SchemaNodes => "schema_nodes",
-            Self::TopLevelDeclarations => "top_level_declarations",
-            Self::ProductFields => "product_fields",
-            Self::ParserWork => "parser_work",
-            Self::ValidationWork => "validation_work",
-            Self::PathWork => "path_work",
-            Self::TypeNesting => "type_nesting",
-            Self::TypeWork => "type_work",
-            Self::TraitWork => "trait_work",
-            Self::OwnershipExpressions => "ownership_expressions",
-            Self::OwnershipRetainedState => "ownership_retained_state",
-            Self::HirFunctions => "hir_functions",
-            Self::HirExpressions => "hir_expressions",
-            Self::SsaFunctions => "ssa_functions",
-            Self::SsaBlocks => "ssa_blocks",
-            Self::SsaValues => "ssa_values",
-            Self::SsaEdges => "ssa_edges",
-            Self::SsaFrameStates => "ssa_frame_states",
-            Self::Diagnostics => "diagnostics",
-            Self::ProtocolRequestBytes => "protocol_request_bytes",
-            Self::ProtocolResponseBytes => "protocol_response_bytes",
-        }
-    }
-
-    pub const fn unit(self) -> &'static str {
-        match self {
-            Self::SourceBytes | Self::ProtocolRequestBytes | Self::ProtocolResponseBytes => "bytes",
-            Self::ParserWork
-            | Self::ValidationWork
-            | Self::PathWork
-            | Self::TypeWork
-            | Self::TraitWork => "work-units",
-            _ => "records",
-        }
-    }
-
-    pub(crate) const fn index(self) -> usize {
+    pub const fn index(self) -> usize {
         self as usize
     }
 }
 
+pub(crate) const V1_RESOURCE_CATEGORY_COUNT: usize = 25;
 pub(crate) const RESOURCE_CATEGORY_COUNT: usize = ResourceCategory::ALL.len();

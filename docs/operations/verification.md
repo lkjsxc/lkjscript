@@ -10,10 +10,11 @@ gates without claiming unimplemented checks.
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
-Schema V1, its one-shot protocol, bounded local stdio sessions, and compiler
-resource-profile checks are described in the capsules. Edition 2 cross-engine
-acceptance, typed holes, nonzero query caching, Profile V2 pre-allocation, and
-logical metering remain **Accepted Targets**, not Current commands.
+Schema V1, its one-shot protocol, bounded local stdio sessions, Profile V2 core
+reservation tests, and compiler resource-profile checks are described in the
+capsules. Edition 2 cross-engine acceptance, typed holes, nonzero query caching,
+whole-pipeline pre-allocation, and logical metering integration remain
+**Accepted Targets**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -92,10 +93,12 @@ stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
 
-Compiler resource-profile tests cover all five profiles, exact/lowered/+1/
-overflow boundaries, corpus roots, deterministic diagnostics, identity, and
-post-phase source/HIR/SSA publication guards. The broader pre-allocation and
-cross-authority ledger gates remain Accepted.
+Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
+boundaries, category order, positive monotonic ceilings, parent-child
+oversubscription, consume/return/Drop reservation behavior, authority depth,
+missing authority, deterministic diagnostics, and identity. Compiler tests
+retain corpus-root and legacy post-phase source/HIR/SSA publication coverage.
+Whole-pipeline pre-allocation and cross-authority ledger gates remain Accepted.
 
 ## Accepted Edition 2 Gate
 

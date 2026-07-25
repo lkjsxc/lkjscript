@@ -21,10 +21,11 @@ use lkjscript_core::ValidatedChunk;
 use lkjscript_ir::{BytecodeLinkMetadata, VerifiedProgram};
 
 pub use lkjscript_core::{
-    BudgetLedger, InvalidCeiling, ResourceCategory, ResourceCeilings, ResourceDiagnostic,
-    ResourceProfile, ResourceProfileIdentity, ResourceProfileName, ResourceUsage,
-    UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION, RESOURCE_PROFILE_SCHEMA,
-    RESOURCE_PROFILE_VERSION,
+    BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
+    BudgetScope, InvalidCeiling, Reservation, ReservationId, ReservationState, ResourceCategory,
+    ResourceCeilings, ResourceDiagnostic, ResourceProfile, ResourceProfileIdentity,
+    ResourceProfileName, ResourceUsage, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,
+    MAX_BUDGET_PATH_DEPTH, RESOURCE_PROFILE_SCHEMA, RESOURCE_PROFILE_VERSION,
 };
 pub use pipeline::{
     compile_path, compile_path_with_metrics, compile_path_with_profile,
