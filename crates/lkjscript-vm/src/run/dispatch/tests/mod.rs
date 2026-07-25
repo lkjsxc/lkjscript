@@ -1,0 +1,43 @@
+use lkjscript_core::{ExecutionConfig, HeapObj, Op, Value, MAX_LIST_EQUAL_STEPS};
+
+use crate::run::NoTier as NullJit;
+
+use super::dispatch;
+use crate::run::data::list_values_equal;
+use crate::run::{test_chunk, Vm};
+
+fn test_vm() -> Vm<'static, NullJit> {
+    let chunk = Box::leak(Box::new(test_chunk()));
+    Vm::new(chunk, NullJit, Vec::new(), ExecutionConfig::default())
+}
+
+fn compare(vm: &mut Vm<'_, NullJit>, op: Op, left: Value, right: Value) -> bool {
+    vm.push(left);
+    vm.push(right);
+    dispatch(vm, op as u8).expect("comparison succeeds");
+    vm.pop()
+        .expect("comparison result")
+        .as_bool()
+        .expect("Bool result")
+}
+
+fn test_i64(vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
+    vm.make_i64(number).expect("test I64 allocation")
+}
+
+fn test_alloc(vm: &mut Vm<'_, NullJit>, object: HeapObj) -> Value {
+    vm.arena.alloc(object).expect("test heap allocation")
+}
+
+fn i64_list(vm: &mut Vm<'_, NullJit>, values: &[i64]) -> Value {
+    let mut list = Value::EMPTY_LIST;
+    for number in values.iter().rev() {
+        let car = test_i64(vm, *number);
+        list = test_alloc(vm, HeapObj::Pair { car, cdr: list });
+    }
+    list
+}
+
+mod equality;
+mod identity;
+mod lists;
