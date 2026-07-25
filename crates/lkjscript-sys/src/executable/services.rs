@@ -1,0 +1,135 @@
+use super::*;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeInvocationConfig {
+    pub(super) poll_fuel: u64,
+    pub(super) wall_time: Option<Duration>,
+    pub(super) max_active_frames: usize,
+    pub(super) max_active_values: usize,
+    pub(super) max_native_stack_bytes: usize,
+    pub(super) max_native_frame_bytes: usize,
+}
+
+impl NativeInvocationConfig {
+    #[must_use]
+    pub const fn new(poll_fuel: u64, wall_time: Option<Duration>) -> Self {
+        Self {
+            poll_fuel,
+            wall_time,
+            max_active_frames: MAX_ACTIVE_FRAMES,
+            max_active_values: usize::MAX,
+            max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
+            max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_max_active_frames(mut self, maximum: usize) -> Self {
+        self.max_active_frames = maximum;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_max_active_values(mut self, maximum: usize) -> Self {
+        self.max_active_values = maximum;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_native_stack_limits(
+        mut self,
+        maximum_aggregate_bytes: usize,
+        maximum_frame_bytes: usize,
+    ) -> Self {
+        self.max_native_stack_bytes = maximum_aggregate_bytes;
+        self.max_native_frame_bytes = maximum_frame_bytes;
+        self
+    }
+}
+
+impl Default for NativeInvocationConfig {
+    fn default() -> Self {
+        Self::new(u64::MAX, None)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeEntryCount {
+    pub(super) source_function: u32,
+    pub(super) entries: u64,
+}
+
+impl NativeEntryCount {
+    #[must_use]
+    pub const fn source_function(self) -> u32 {
+        self.source_function
+    }
+
+    #[must_use]
+    pub const fn entries(self) -> u64 {
+        self.entries
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeRoot {
+    pub(super) reference_type: ReferenceType,
+    pub(super) opaque_word: u64,
+}
+
+impl NativeRoot {
+    #[must_use]
+    pub const fn reference_type(self) -> ReferenceType {
+        self.reference_type
+    }
+
+    #[must_use]
+    pub const fn opaque_word(self) -> u64 {
+        self.opaque_word
+    }
+
+    pub fn set_opaque_word(&mut self, opaque_word: u64) {
+        self.opaque_word = opaque_word;
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeServiceError {
+    Trap,
+    ResourceLimitExceeded,
+    HostFailure,
+}
+
+/// Safe runtime boundary. Implementations receive only copied typed values and
+/// roots; frame addresses and stack traversal remain private to this crate.
+pub trait NativeRuntimeServices {
+    fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError>;
+
+    /// Optionally collect for a verified site. Sys writes any updated roots
+    /// back to generated homes before calling `heap_operation`.
+    fn prepare_heap_operation(
+        &mut self,
+        _site: &HeapRuntimeSite,
+        _arguments: &[NativeValue],
+        _roots: &mut [NativeRoot],
+    ) -> Result<bool, NativeServiceError> {
+        Ok(false)
+    }
+
+    fn heap_operation(
+        &mut self,
+        _site: &HeapRuntimeSite,
+        _arguments: &[NativeValue],
+    ) -> Result<NativeValue, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+}
+
+#[derive(Default)]
+pub(super) struct NoopNativeRuntimeServices;
+
+impl NativeRuntimeServices for NoopNativeRuntimeServices {
+    fn collect_references(&mut self, _roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
+        Ok(())
+    }
+}
