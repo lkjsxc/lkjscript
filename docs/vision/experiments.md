@@ -834,22 +834,25 @@ server behavior. The 5x target passed, so no post-failure profiling or
 code-layout manipulation was performed. Docker and the 20-minute Brainfuck
 Mandelbrot were not run. Full Brainfuck Mandelbrot remains a later OSR workload.
 
-## C6 Forced Proof-Optimizing Performance Gate: Rejected
+## C6 Forced Proof-Optimizing Performance Gate: Adopted After Rejection
 
-- Status: **Rejected** for performance adoption. The forced proof-optimizing
-  correctness slice remains Current; automatic promotion remains disabled and
-  unmeasured.
+- Status: **Adopted** for forced first-tier performance at `cc967ff`, after the
+  retained `063668e` run was **Rejected** by the scalar native sentinel. The
+  forced proof-optimizing correctness slice remains Current; automatic
+  promotion remains disabled and unmeasured.
 - Question: does the first proof pipeline beat same-commit forced baseline by
   at least 1.20x beyond noise without hiding a greater-than-5% scalar sentinel
   regression?
-- Baseline/candidate: both forced tiers and the same-commit scalar sentinel used
-  implementation commit `063668e08b92a97a2feae8397ff0d634887bd0b6` and one
-  locked release binary. The historical scalar sentinel is retained callable
-  baseline commit `025cbb2feadbb18fbae51e68e38b9c849798d068`.
-- Environment: Linux 7.0.0-27-generic x86-64/glibc 2.39, AMD Ryzen 9 9955HX,
-  20 logical CPUs available, 32 GiB RAM, Rust/Cargo 1.96.0, Git 2.43.0, and
-  Python 3.12.3. The 2,127,792-byte binary SHA-256 was
-  `07d307879cc4f8476efea6218ca5e3a0943f7cdceb378972195e18171657e3bb`.
+- Baseline/candidate: the adopted rerun used implementation commit
+  `cc967ff7e6f57a3225ae974d64ced6039ed8e9ae` and one clean locked release
+  binary. The prior rejected run used
+  `063668e08b92a97a2feae8397ff0d634887bd0b6`. Both compare their same-commit
+  forced tiers and scalar sentinel with retained callable baseline commit
+  `025cbb2feadbb18fbae51e68e38b9c849798d068`.
+- Environment: both runs record Linux 7.0.0-27-generic x86-64/glibc 2.39, AMD
+  Ryzen 9 9955HX, 20 logical CPUs available, 32 GiB RAM, Rust/Cargo 1.96.0,
+  Git 2.43.0, and Python 3.12.3. The adopted 2,131,792-byte binary SHA-256 was
+  `7116365712455ef43c180ed84d69f2e521b0da3783074c7324bf6cd7273955b7`.
 - Build and command: the standard-library harness ran `cargo build --locked
   --workspace --release` itself, then `python3
   meta/benchmarks/jit/benchmark.py`. Normal VM/baseline/optimizing streams were
@@ -871,7 +874,10 @@ Mandelbrot were not run. Full Brainfuck Mandelbrot remains a later OSR workload.
   more than 5% over the retained callable baseline. Every criterion was
   mandatory.
 
-Times below are median / MAD / nearest-rank p95 / minimum / maximum.
+### Prior Rejected Run At `063668e`
+
+Times below are median / MAD / nearest-rank p95 / minimum / maximum for the
+first run.
 
 | Case | Native execution ms | Process wall ms | Peak RSS KiB |
 | --- | ---: | ---: | ---: |
@@ -905,17 +911,49 @@ maximum 3 roots, 14 attempted/14 successful heap calls, 6 barriers, zero
 baseline entries/fallback, and verified W^X. All of its correctness/accounting
 gates passed.
 
-The all-gates verdict is therefore **Rejected** despite the strong local
-optimizer result. No threshold was selected and no automatic promotion claim is
-made. Every warmup, sample, order, environment/tool record, source/binary hash,
-full metric, and distribution is retained under schema
+The first run's all-gates verdict was therefore **Rejected** despite the strong
+local optimizer result. Its repository record also truthfully lists dirty
+benchmark README, harness, and Python-cache paths. Every warmup, sample, order,
+environment/tool record,
+source/binary hash, full metric, and distribution remains retained under schema
 `lkjscript.optimizing-jit-benchmark.v1` in
-[`../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json`](../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json),
+[`../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json`](../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json),
 SHA-256
 `3e4341ffab5c0cbd976b3dc228d24dfdd8ff135247b91caafb74f0a571e71cec`.
-Only the compact retained JSON is committed; reproducible build and Python
-cache artifacts are not evidence and are removed or remain in the shared
-ignored target tree.
+
+### Adopted Recovery Run At `cc967ff`
+
+The identical predeclared protocol then retained a clean run after generated
+function entry polling was folded into ABI-2 frame registration. This removed
+a separate runtime transition without reducing mandatory polls or changing the
+optimizer proof pipeline.
+
+| Case | Native execution median / MAD ns | Process wall median ns |
+| --- | ---: | ---: |
+| optimizing workload, baseline | 1,999,889 / 10,469 | 3,565,363 |
+| optimizing workload, optimizing | 670,029 / 2,174 | 2,411,023 |
+| scalar workload, baseline | 7,982,586 / 54,212 | 9,207,038 |
+
+The optimizing native speedup was 2.984780x; the exact 1,329,860 ns improvement
+exceeded the 25,286 ns twice-combined-MAD threshold. Process wall improved
+1.478776x. All exact outcomes and silent-stream checks, tier entry/fallback,
+proof, W^X, allocation, and baseline integrity gates passed. Scalar native was
+7,982,586 versus retained 7,647,935 ns, ratio 1.043757; scalar process wall was
+9,207,038 versus 9,372,036 ns, ratio 0.982395. Both passed the 1.05 ceiling, so
+every exact criterion passed and forced first proof-optimizing performance is
+**Adopted**.
+
+The complete adopted record is
+[`../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json`](../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json),
+SHA-256
+`e71d1caf35b57ea50c094806372f6e8c991bf86418f44885c3d6fd0dcd4b082e`.
+The recovery does not erase or reinterpret the rejected result, and the scalar
+sentinel does not attribute either change to optimizing passes. No automatic
+promotion threshold was selected or measured. Automatic promotion remains
+disabled; OSR, deoptimization, and speculation remain absent and unclaimed.
+Only compact retained JSON is committed; reproducible build and Python cache
+artifacts are not evidence and are removed or remain in the shared ignored
+target tree.
 
 ## Deferred Matrices
 

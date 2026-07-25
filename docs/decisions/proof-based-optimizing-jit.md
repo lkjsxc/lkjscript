@@ -43,18 +43,16 @@ It reuses ABI-2 exact roots, allocation runtime sites, active-frame bounds, W^X
 installation, and structured outcomes. It adds no guards, deoptimization, OSR,
 background compilation, or hidden source assumptions.
 
-Automatic promotion remains disabled. The retained `063668e` forced-tier
-protocol measured a 2.930761x optimizing native-execution speedup over
-same-commit baseline on the declared workload, and the improvement exceeded
-its noise gate. The complete adoption verdict is nevertheless **Rejected**
-because the separate historical scalar sentinel's native median regressed
-6.99%, above the predeclared 5% ceiling. This does not reverse the Current
-forced correctness slice, but it prevents a retained optimizing performance
-adoption claim and does not select promotion thresholds. Inlining, general
-SCCP, range/check elimination, LICM, escape/scalar replacement, tail calls,
-unrolling, hot/cold layout, and host-capability optimization remain later
-accepted slices; the small first pipeline is not represented as completing
-those items.
+Automatic promotion remains disabled. The clean `cc967ff` forced-tier protocol
+measured a 2.984780x optimizing native-execution speedup over same-commit
+baseline on the declared workload, exceeded its noise gate, and passed both
+historical scalar gates. Every predeclared criterion passed, so performance
+of the forced first proof-optimizing tier is **Adopted**. This does not select or
+measure promotion thresholds and makes no OSR, deoptimization, or speculation
+claim. Inlining, general SCCP, range/check elimination, LICM, escape/scalar
+replacement, tail calls, unrolling, hot/cold layout, and host-capability
+optimization remain later accepted slices; the small first pipeline is not
+represented as completing those items.
 
 ## Engine And State
 
@@ -208,31 +206,34 @@ reported scalar statistic. These are deterministic accounting formulas, not
 Rust allocator-size claims. Forced tests require nonzero optimizing entries and
 zero baseline/VM downgrade.
 
-The retained forced workload demonstrates 2,724 optimizing versus 13,956
+The adopted forced workload demonstrates 2,424 optimizing versus 13,656
 baseline generated code bytes, 72 checked-I64 GVN records, and 10,001
 optimizing entries with zero baseline entry or fallback. Current-thread stack
 bounds are queried once per invocation rather than once per generated frame
 reservation; every reservation still uses the cached guarded bounds.
 
-At `063668e`, four warmups and 31 measured samples per forced case in one
-deterministically randomized interleaving produced native medians of 1.997375
-ms baseline (MAD 0.016721 ms) and 0.681521 ms optimizing (MAD 0.003567 ms):
-2.930761x. The 1.315854 ms improvement exceeded twice the combined MAD,
-0.040576 ms. Exact I64 `3333`, optimizing entries, zero downgrade, W^X, proof,
-and code-byte gates all passed. Same-commit scalar forced baseline measured
-8.182742 ms native and 9.340049 ms process wall. Against the retained callable
-baseline's 7.647935 and 9.372036 ms, the ratios were 1.069928 and 0.996587.
-Thus process wall passed while native execution exceeded the 5% regression
-ceiling.
+At `cc967ff`, four warmups and 31 measured samples per forced case in one
+deterministically randomized interleaving produced exact native medians of
+1,999,889 ns baseline (MAD 10,469 ns) and 670,029 ns optimizing (MAD 2,174 ns):
+2.984780x. The 1,329,860 ns improvement exceeded twice the combined MAD,
+25,286 ns. Process-wall medians were 3,565,363 and 2,411,023 ns, a 1.478776x
+speedup. Exact I64 `3333`, optimizing entries, zero downgrade, W^X, proof, and
+code-byte gates all passed. Same-commit scalar forced baseline measured
+7,982,586 ns native and 9,207,038 ns process wall. Against the retained callable
+baseline's 7,647,935 and 9,372,036 ns, the ratios were 1.043757 and 0.982395;
+both passed the 1.05 ceiling. Every predeclared criterion passed, so the forced
+first-tier performance verdict is **Adopted**.
 
-The mechanically complete adoption verdict is **Rejected**, despite the
-workload-local optimizing win. The scalar comparison is a sentinel across code
-evolution rather than an attribution experiment: its source is unchanged, but
-compiler, metrics, native ABI, stack checks, binary, and surrounding generated
-code evolved since the retained baseline. Negative evidence remains visible;
-a later accepted cross-workload decision or repaired scalar result requires a
-new predeclared protocol rather than reinterpretation. Automatic promotion is
-still disabled and unmeasured.
+The earlier `063668e` run remains retained and **Rejected**. Its local optimizer
+result was 2.930761x, but scalar native measured 8,182,742 versus 7,647,935 ns,
+a failing 1.069928 ratio; scalar process wall passed at 9,340,049 versus
+9,372,036 ns, ratio 0.996587. The later performance recovery followed folding
+the mandatory generated-function entry poll into ABI-2 frame registration,
+removing a separate runtime transition without weakening polling or optimizer
+proofs. Neither cross-commit scalar comparison attributes performance to the
+optimizer, and adoption does not erase the first run's negative evidence.
+Automatic promotion remains disabled and unmeasured; OSR, deoptimization, and
+speculation were not measured or added.
 
 ## Deferred And Rejected
 

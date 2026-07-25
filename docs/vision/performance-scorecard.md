@@ -155,51 +155,59 @@ improvement is claimed. Current binary size was 1,448,584 bytes versus 1,129,440
 bytes (1.283x), and median RSS was 2,756 versus 2,272 KiB. The larger binary and
 RSS remain visible baseline-JIT costs.
 
-## Retained Forced Optimizing Result
+## Retained Forced Optimizing Results
 
-The `063668e08b92a97a2feae8397ff0d634887bd0b6` locked release protocol
+The clean `cc967ff7e6f57a3225ae974d64ced6039ed8e9ae` locked release protocol
 retained four warmups and 31 measured samples for same-commit forced baseline
 and forced optimizing execution of `src/examples/jit-optimizing`, plus the same
 count for the forced-baseline scalar sentinel, in one deterministic randomized
 interleaving. A separate reference VM required exact returned I64 `3333`;
 normal streams were silent. Every sample and order, phase metric, peak RSS poll,
 tier/object/proof/code fact, and median/MAD/p95/min/max distribution is retained
-in
+in the adopted
 [`../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json`](../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json).
 
 | Forced optimizing workload metric | Baseline | Optimizing |
 | --- | ---: | ---: |
-| native execution median / MAD / p95 | 1.997375 / 0.016721 / 2.364345 ms | 0.681521 / 0.003567 / 0.843666 ms |
-| process wall median / MAD / p95 | 3.584969 / 0.049302 / 4.415831 ms | 2.457400 / 0.053521 / 3.143670 ms |
-| polled peak RSS median / MAD / p95 | 4,128 / 44 / 4,228 KiB | 4,048 / 28 / 4,136 KiB |
-| generated code / retained metadata | 13,956 / 16,489 B | 2,724 / 3,817 B |
+| native execution median / MAD / p95 | 1.999889 / 0.010469 / 2.092424 ms | 0.670029 / 0.002174 / 0.686310 ms |
+| process wall median / MAD / p95 | 3.565363 / 0.035817 / 4.145873 ms | 2.411023 / 0.014387 / 2.609285 ms |
+| polled peak RSS median / MAD / p95 | 4,148 / 40 / 4,224 KiB | 4,048 / 40 / 4,144 KiB |
+| generated code / retained metadata | 13,656 / 15,953 B | 2,424 / 3,281 B |
 | native entries | 10,001 baseline | 10,001 optimizing |
 
-Optimizing native execution was 2.930761x faster. Its 1.315854 ms median
-improvement exceeded twice the combined native MAD, 0.040576 ms. It retained 72
-checked-I64 GVN records, 2,816 estimated certificate bytes, 35 actually
-executed optimizing passes, zero baseline entries or VM fallback, and verified
-W^X. Median optimization, lowering/encoding, and installation were 0.254879,
-0.037590, and 0.047309 ms. The corresponding baseline lowering and installation
-medians were 0.083547 and 0.061566 ms.
+Optimizing native execution was 2.984780x faster. Its exact 1,329,860 ns median
+improvement exceeded twice the combined native MAD, 25,286 ns. Process wall
+improved from 3,565,363 to 2,411,023 ns, a 1.478776x speedup. The optimizing
+case retained 72 checked-I64 GVN records, 2,816 estimated certificate bytes, 35
+actually executed optimizing passes, zero baseline entries or VM fallback, and
+verified W^X. Median optimization, lowering/encoding, and installation were
+0.248297, 0.034676, and 0.045806 ms. The corresponding baseline lowering and
+installation medians were 0.081343 and 0.057638 ms.
 
-The mechanically complete verdict is **Rejected**, not Adopted. Same-commit
-forced baseline on the scalar source measured native median 8.182742 ms versus
-the retained callable baseline's 7.647935 ms, ratio 1.069928 and therefore over
-the predeclared 1.05 ceiling. Scalar process medians were 9.340049 versus
-9.372036 ms, ratio 0.996587, so that separate gate passed. The sentinel source
-is unchanged, but the compiler, metrics, native ABI, stack checks, release
-binary, and surrounding generated code evolved; this comparison detects a
-regression but does not attribute it to the optimizing tier. Workload-local
-speed/noise/correctness gates passing cannot override the predeclared all-gates
-rule. Automatic optimizing promotion remains disabled and unmeasured.
+The mechanically complete verdict is **Adopted** for forced first-tier
+performance: every exact, stream, tier, proof, W^X, allocation, speed, noise,
+and scalar criterion passed. Same-commit scalar native median was 7,982,586 ns
+versus retained 7,647,935 ns, ratio 1.043757; process wall was 9,207,038 versus
+9,372,036 ns, ratio 0.982395. The recovery followed folding the mandatory entry
+poll into ABI-2 frame registration, removing a separate runtime transition
+without weakening polling or proof checks.
+
+The earlier `063668e08b92a97a2feae8397ff0d634887bd0b6` result remains visible in
+[`../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json`](../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json).
+Its optimizer-local 2.930761x result passed, but scalar native was 8,182,742
+versus 7,647,935 ns, ratio 1.069928, so the complete verdict was **Rejected**;
+scalar process wall passed at 9,340,049 versus 9,372,036 ns, ratio 0.996587.
+The sentinel includes compiler/runtime evolution and does not attribute either
+regression or recovery to optimizing passes. The adopted run preserves rather
+than reinterprets this negative evidence.
 
 One untimed allocation-graph metrics execution returned exact I64 `1`, entered
 optimizing code three times, allocated seven objects, collected six times,
 reported 14 attempted/14 successful heap calls and maximum three roots, and had
-zero baseline entry/fallback with verified W^X. The result is only a forced
-first-tier boundary on one CPU, not a general language score or an automatic
-promotion measurement.
+zero baseline entry/fallback with verified W^X. This is only a forced first-tier
+boundary on one CPU, not a general language score. Automatic optimizing
+promotion remains disabled and unmeasured; no OSR, deoptimization, or
+speculation capability or measurement is claimed.
 
 ## Claim Policy
 

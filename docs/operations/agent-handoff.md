@@ -9,9 +9,10 @@ implementation contracts.
 
 **Current** for engineering policy, the semantic/outcome foundation, verified
 typed SSA, independent evaluation/baseline normalization, reference-bytecode
-cutover, and the callable scalar Linux x86-64 baseline tier. Ownership/traits,
-native allocation/GC roots, and optimizing execution remain **Accepted
-Targets**.
+cutover, callable scalar and allocation-capable Linux x86-64 baseline tiers,
+and forced certificate-verified optimizing execution. Ownership/traits,
+Handle/host transitions, automatic optimizing promotion, and broader proof
+passes remain **Accepted Targets**.
 
 ## Product Intent
 
@@ -77,7 +78,11 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   host-independent roots/allocation/collection, and the forced first
   certificate-verified optimizing tier have landed. The active sequence is
   broader ownership/coherent traits and Handle/host transitions, then measured
-  automatic optimizing promotion and broader proof passes. Do not add inert
+  automatic optimizing promotion and broader proof passes. Forced first-tier
+  performance is Adopted from the clean `cc967ff` run at 2.984780x after the
+  retained `063668e` run was Rejected by its scalar native sentinel; preserve
+  both records. Automatic promotion remains disabled and unmeasured, with no
+  OSR, deoptimization, or speculation claim. Do not add inert
   engine flags or label baseline code optimizing. Loop OSR and a minimal AOT
   test emitter remain later targets, not current capability. Offline PGO is
   rejected by product decision. See [Allocation-Capable Baseline

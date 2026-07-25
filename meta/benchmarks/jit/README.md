@@ -87,34 +87,50 @@ pass:
 A failed gate produces a retained **Rejected** verdict; it does not permit an
 optimizing performance claim or automatic promotion.
 
-## Retained Result At `063668e`
+## Adopted Result At `cc967ff`
 
-The locked release run on the recorded AMD Ryzen 9 9955HX host retained all
-four warmups and 31 samples per case. Same-commit optimizing-workload native
-medians were 1.997375 ms baseline (MAD 0.016721 ms) and 0.681521 ms optimizing
-(MAD 0.003567 ms), a 2.930761x speedup. The 1.315854 ms improvement exceeded
-twice the combined MAD, 0.040576 ms. Process medians were 3.584969 and 2.457400
-ms respectively. Optimizing retained 72 checked-I64 GVN proof records, 2,816
-estimated certificate bytes, 2,724 code bytes, 10,001 optimizing entries, zero
-baseline entries/fallback, and verified W^X; baseline retained 13,956 code bytes
-and 10,001 baseline entries.
+The clean locked release run on the recorded AMD Ryzen 9 9955HX host retained
+all four warmups and 31 samples per case. Same-commit optimizing-workload native
+medians were exactly 1,999,889 ns baseline (MAD 10,469 ns) and 670,029 ns
+optimizing (MAD 2,174 ns), a 2.984780x speedup. The 1,329,860 ns improvement
+exceeded twice the combined MAD, 25,286 ns. Process medians were 3,565,363 and
+2,411,023 ns respectively, a 1.478776x end-to-end speedup. Optimizing retained
+72 checked-I64 GVN proof records, 2,816 estimated certificate bytes, 2,424 code
+bytes, 10,001 optimizing entries, zero baseline entries/fallback, and verified
+W^X; baseline retained 13,656 code bytes and 10,001 baseline entries.
 
-The overall verdict is **Rejected** because the historical scalar sentinel's
-native median was 8.182742 ms versus retained 7.647935 ms, ratio 1.069928 and
-therefore a 6.99% regression above the 5% ceiling. Its process median was
-9.340049 ms versus 9.372036 ms, ratio 0.996587, so that separate gate passed.
-This is evidence of a sentinel regression, not attribution to the optimizer:
-the source remains identical but compiler, metrics, ABI, stack checks, binary,
-and surrounding generated code evolved between commits. The forced optimizer's
-workload-local speed/noise/correctness gates passed, but the predeclared
-all-gates adoption rule rejects the performance claim and leaves automatic
-promotion disabled and unmeasured.
+The scalar sentinel recovered enough to pass the predeclared ceiling: native
+median was 7,982,586 ns versus retained 7,647,935 ns, ratio 1.043757; process
+median was 9,207,038 ns versus 9,372,036 ns, ratio 0.982395. All exact outcome,
+stream, tier-integrity, proof, W^X, allocation, speed, noise, and scalar gates
+passed, so the forced first proof-optimizing tier's performance verdict is
+**Adopted**. This evidence changes no engine policy: automatic optimizing
+promotion remains disabled and unmeasured, and the forced non-speculative tier
+makes no OSR, deoptimization, or speculation claim.
 
-The one allocation-graph check returned I64 `1` with 3 optimizing entries, 7
+The performance recovery followed folding each generated function's mandatory
+entry poll into ABI-2 frame registration, removing a separate runtime
+transition rather than weakening polling or changing optimizer proofs. The one
+allocation-graph check still returned I64 `1` with 3 optimizing entries, 7
 allocations, 6 collections, 14 attempted/14 successful heap calls, maximum 3
-roots, 6 barriers, zero baseline entry/fallback, and verified W^X. The retained
+roots, 6 barriers, zero baseline entry/fallback, and verified W^X. The adopted
 JSON SHA-256 is
+`e71d1caf35b57ea50c094806372f6e8c991bf86418f44885c3d6fd0dcd4b082e`.
+
+## Prior Rejected Result At `063668e`
+
+The first run is preserved as
+[`results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json`](results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json).
+Its repository record truthfully lists dirty benchmark README, harness, and
+Python-cache paths while identifying implementation commit `063668e`. SHA-256:
 `3e4341ffab5c0cbd976b3dc228d24dfdd8ff135247b91caafb74f0a571e71cec`.
+Its workload-local optimizer gates passed at 2.930761x, but its scalar native
+sentinel measured 8,182,742 ns versus retained 7,647,935 ns, ratio 1.069928,
+while process wall measured 9,340,049 versus 9,372,036 ns, ratio 0.996587. The
+mandatory native sentinel gate therefore failed and the run was honestly
+**Rejected**. This cross-commit sentinel detects generated-runtime performance
+but does not attribute the regression to optimizing passes. The later adopted
+run does not erase or reinterpret that negative evidence.
 
 ## Historical Callable Baseline
 

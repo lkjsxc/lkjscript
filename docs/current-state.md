@@ -213,11 +213,13 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   and no collection-pause distribution is claimed. The standard-library harness
   polls process RSS, checks exact results and stream silence, randomizes at
   least four warmups plus 31 samples, and retains every sample and distribution
-  under `meta/benchmarks/jit/results/`. The `063668e` forced optimizing workload
-  passed its 2.930761x native/noise/correctness gates, but the complete adoption
-  verdict is **Rejected** because the historical scalar native sentinel ratio
-  was 1.069928, above its 1.05 ceiling. Automatic optimizing promotion remains
-  disabled and unmeasured
+  under `meta/benchmarks/jit/results/`. The first `063668e` run is retained as
+  **Rejected**: its 2.930761x optimizer-local result passed, but its historical
+  scalar native sentinel ratio was 1.069928, above the 1.05 ceiling. After
+  generated entry-poll transition recovery, the clean `cc967ff` run passed
+  every criterion at 2.984780x and is **Adopted** for forced proof-optimizing
+  performance. Automatic optimizing promotion remains disabled and unmeasured;
+  no OSR, deoptimization, or speculation claim is made
 - Native references and heap sites: typed opaque stable-handle words use exact
   Buf/Str/List/Option/Result/product layout identities and verified frame homes,
   not raw object pointers; zero is accepted only for EmptyList/None; the Copy runtime-adapter token is non-Send/non-Sync.
@@ -310,21 +312,22 @@ The highest-priority defects are:
 
 ## Evidence
 
-The retained optimizing-JIT benchmark-only work based on
-`063668e08b92a97a2feae8397ff0d634887bd0b6` was run on Linux
+The retained optimizing-JIT benchmark-only work at clean commit
+`cc967ff7e6f57a3225ae974d64ced6039ed8e9ae` was run on Linux
 7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX, with Rust/Cargo 1.96.0. It changes
-no engine behavior and makes only a forced first-tier performance measurement;
+no engine policy and makes only a forced first-tier performance measurement;
 automatic promotion remains disabled and unmeasured.
 
 | Retained optimizing benchmark command or check | Result |
 | --- | --- |
-| `python3 meta/benchmarks/jit/benchmark.py` | locked workspace release build passed; exact silent reference-VM I64 `3333` oracle and all forced outcomes passed; all 4 warmups and 31 measured samples per case were retained in deterministic randomized interleaving with monotonic process wall and polled peak RSS |
-| same-commit optimizing workload | baseline native median/MAD 1.997375/0.016721 ms; optimizing 0.681521/0.003567 ms; 2.930761x speedup; 1.315854 ms improvement versus 0.040576 ms twice-combined-MAD threshold; 72 checked proof records, 2,724 optimizing versus 13,956 baseline code bytes, 10,001 optimizing entries, zero baseline entry/fallback, and verified W^X |
-| retained scalar sentinel comparison | native median 8.182742 ms versus retained 7.647935 ms, ratio 1.069928: failed the 1.05 ceiling; process median 9.340049 versus 9.372036 ms, ratio 0.996587: passed. This cross-commit sentinel includes compiler/ABI/stack-check/code evolution and does not attribute the regression to optimizing passes |
+| `python3 meta/benchmarks/jit/benchmark.py` | clean locked workspace release build passed; exact silent reference-VM I64 `3333` oracle and all forced outcomes passed; all 4 warmups and 31 measured samples per case were retained in deterministic randomized interleaving with monotonic process wall and polled peak RSS |
+| same-commit optimizing workload | baseline native median/MAD exactly 1,999,889/10,469 ns; optimizing 670,029/2,174 ns; 2.984780x speedup; 1,329,860 ns improvement versus 25,286 ns twice-combined-MAD threshold; process wall 3,565,363 to 2,411,023 ns, 1.478776x; 72 checked proof records, 2,424 optimizing versus 13,656 baseline code bytes, 10,001 optimizing entries, zero baseline entry/fallback, and verified W^X |
+| retained scalar sentinel comparison | native median 7,982,586 ns versus retained 7,647,935 ns, ratio 1.043757: passed the 1.05 ceiling; process median 9,207,038 versus 9,372,036 ns, ratio 0.982395: passed. This cross-commit sentinel includes compiler/runtime evolution and does not attribute recovery to optimizing passes |
 | allocation-graph correctness metrics, once | exact I64 `1`; 3 optimizing entries, 7 allocations, 6 collections, 14 attempted/14 successful heap calls, maximum 3 roots, 6 barriers, zero baseline entry/fallback, and W^X |
-| mechanical verdict | **Rejected** because every predeclared gate was required and the scalar native sentinel failed; forced optimizer correctness remains Current, but no optimizing performance adoption or automatic-promotion claim is made |
-| `cargo run --locked -p lkjscript-xtask -- check-docs`; `git diff --check` | passed |
-| Not tested | full canonical workspace verification, Docker, automatic optimizing promotion, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
+| mechanical verdict | **Adopted** for forced first proof-optimizing performance because every exact criterion passed; automatic promotion remains disabled and unmeasured, with no OSR/deoptimization/speculation claim |
+| prior retained run | `063668e` remains **Rejected** in `optimizing-jit-linux-x86_64-rejected-scalar-regression.json`: optimizer-local 2.930761x passed, scalar native 8,182,742/7,647,935 ns = 1.069928 failed, and scalar process 9,340,049/9,372,036 ns = 0.996587 passed; its record truthfully lists dirty benchmark README/harness/cache paths. Folding the mandatory entry poll into frame registration removed one runtime transition before the clean adopted rerun without weakening polls or proofs |
+| retained JSON validation; `cargo run --locked -p lkjscript-xtask -- check-docs`; `git diff --check` | passed; both JSON files parsed, commit/verdict/SHA-256 identities matched, all 10 adopted criteria were true, exact medians and 1.478776 process ratio matched, docs links passed, and the diff had no whitespace errors |
+| Not tested | benchmark rerun, full canonical workspace verification, Docker, automatic optimizing promotion, OSR, deoptimization, speculation, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
 
 The final forced-optimizer hardening in this document's containing commit,
 based on `114196422fb41b8c1b1dab6304c1680000cf67ed`, was checked in the
