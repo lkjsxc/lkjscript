@@ -109,6 +109,24 @@ pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {
     loader::ensure_source_path(path).map_err(SourceDiagnostic::into_core)
 }
 
+pub(crate) fn rebuild_staged_sources(
+    sources: &[(PathBuf, SourceOrigin, String)],
+    root: PathBuf,
+    root_origin: SourceOrigin,
+    limits: &Limits,
+) -> SourceResult<ValidatedSourceTree> {
+    let mut parsed = Vec::with_capacity(sources.len());
+    for (path, origin, source) in sources {
+        parsed.push(parse::parse_file(
+            source,
+            origin.clone(),
+            path.clone(),
+            limits,
+        )?);
+    }
+    authority::finish_tree(root, root_origin, parsed)
+}
+
 #[cfg(test)]
 pub(crate) fn validate_source_set_for_analysis(
     files: &[(&str, &str)],

@@ -8,6 +8,8 @@ publish.workspace = true
 [dependencies]
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-ir = { path = "../lkjscript-ir" }
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

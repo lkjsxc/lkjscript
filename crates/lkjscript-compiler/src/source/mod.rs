@@ -15,20 +15,23 @@ mod validate;
 #[cfg(test)]
 pub(crate) use api::validate_source_set_for_analysis;
 pub(crate) use api::{
-    ensure_source_path_for_compiler, load_for_compiler_with_budget, load_with_metrics_and_budget,
-    validate_for_compiler_with_budget,
+    ensure_source_path_for_compiler, load_for_compiler, load_for_compiler_with_budget,
+    load_with_metrics, load_with_metrics_and_budget, rebuild_staged_sources,
+    validate_for_compiler, validate_for_compiler_with_budget,
 };
 pub use api::{load, validate, ValidatedSourceTree};
 pub use diagnostics::{
     DiagnosticCategory, DiagnosticCertainty, DiagnosticSeverity, RelatedSourceSpan,
     SourceDiagnostic, SourceOrigin, SourcePosition, SourceResult, SourceSpan,
 };
+pub(crate) use format::{format_f64, format_file, format_node_identity, format_node_source};
 pub use identity::{
     DeclarationKey, DeclarationKind, DeclarationSummary, NodeId, NodeKind, NodeSummary, RevisionId,
     StaleNodeId,
 };
 pub use load::validate_source_directory_tree;
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
+pub(crate) use parse::is_source_identifier;
 pub(crate) use validate::SourceFoundationBudget;
 
 /// Identity of the incomplete parser/load/identity foundation.

@@ -76,9 +76,12 @@ impl<'a> Resolver<'a> {
     }
 
     pub(in crate::analyze) fn resolve_load(&self, name: &str) -> Result<Expr> {
-        let binding = self
-            .lookup(name)
-            .ok_or_else(|| self.error(format!("unknown symbol {name}")))?;
+        let binding = self.lookup(name).ok_or_else(|| {
+            self.diagnostic(AnalysisDiagnostic::UnknownName {
+                usage: NameUse::Symbol,
+                name: name.to_string(),
+            })
+        })?;
         let resolved = self.analyzer.binding(binding)?;
         if matches!(resolved.kind, BindingKind::BuiltinOperation(_)) {
             return Err(self.error(format!(

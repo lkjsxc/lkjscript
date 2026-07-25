@@ -9,6 +9,7 @@ mod hir;
 mod operation;
 mod ownership;
 mod pipeline;
+pub mod semantic;
 pub mod source;
 mod ssa;
 mod types;

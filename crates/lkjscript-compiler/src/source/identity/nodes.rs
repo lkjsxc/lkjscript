@@ -5,11 +5,13 @@ use crate::source::{
     SourceOrigin, SourceResult, SyntaxKind,
 };
 
+type TopNodeIds = HashMap<(usize, usize), NodeId>;
+
 pub(crate) fn flatten_files(
     files: &[SourceFile],
     ordered: &[usize],
     revision: RevisionId,
-) -> SourceResult<(Vec<NodeSummary>, HashMap<(usize, usize), NodeId>)> {
+) -> SourceResult<(Vec<NodeSummary>, TopNodeIds)> {
     let mut nodes = Vec::new();
     let mut top_ids = HashMap::new();
     for file_index in ordered {

@@ -8,6 +8,7 @@ pub fn print() {
     println!("                 [--disable-auto-jit] <file.lkjscript> [--] [script-args...]");
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
     println!("  lkjscript disasm <file.lkjscript>");
+    println!("  lkjscript semantic [-] < request.json");
     println!("  lkjscript --help");
     println!("  lkjscript --version");
     println!();

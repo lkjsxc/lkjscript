@@ -10,6 +10,7 @@ mod metrics_jit;
 mod metrics_json;
 mod output;
 mod run;
+mod semantic;
 
 use std::env;
 use std::process::ExitCode;
@@ -34,6 +35,7 @@ fn real_main() -> Result<ExitCode, String> {
         }
         Some("run") => run::command(&args),
         Some("disasm") => disasm::command(&args),
+        Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),
     }
 }

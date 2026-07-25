@@ -36,9 +36,12 @@ impl Resolver<'_> {
         name: &str,
         args: &[AstExpr],
     ) -> Result<Expr> {
-        let callee = self
-            .lookup_call(name)
-            .ok_or_else(|| self.error(format!("unknown call {name}")))?;
+        let callee = self.lookup_call(name).ok_or_else(|| {
+            self.diagnostic(AnalysisDiagnostic::UnknownName {
+                usage: NameUse::Call,
+                name: name.to_string(),
+            })
+        })?;
         let (kind, callee_type) = {
             let binding = self.analyzer.binding(callee)?;
             (binding.kind.clone(), binding.ty.clone())
@@ -46,10 +49,11 @@ impl Resolver<'_> {
         let expected = callable_arity(&callee_type)
             .ok_or_else(|| self.error(format!("{name} is not a function ({callee_type:?})")))?;
         if expected != args.len() {
-            return Err(self.error(format!(
-                "{name}: expected {expected} args, got {}",
-                args.len()
-            )));
+            return Err(self.diagnostic(AnalysisDiagnostic::CallArity {
+                name: name.to_string(),
+                expected,
+                actual: args.len(),
+            }));
         }
         let _arity = u8::try_from(args.len())
             .map_err(|_| self.error(format!("{name}: too many call arguments")))?;
@@ -122,18 +126,19 @@ impl Resolver<'_> {
             return Err(self.error(format!("{name} is not a function")));
         };
         if params.len() != args.len() {
-            return Err(self.error(format!(
-                "{name}: expected {} args, got {}",
-                params.len(),
-                args.len()
-            )));
+            return Err(self.diagnostic(AnalysisDiagnostic::CallArity {
+                name: name.to_string(),
+                expected: params.len(),
+                actual: args.len(),
+            }));
         }
         for (parameter, argument) in params.iter().zip(args) {
             if !Type::unify_assignable(&argument.ty, parameter) {
-                return Err(self.error(format!(
-                    "{name}: arg type {:?} not assignable to {parameter:?}",
-                    argument.ty
-                )));
+                return Err(self.diagnostic(AnalysisDiagnostic::TypeMismatch {
+                    context: format!("{name}: arg type"),
+                    expected: format!("{parameter:?}"),
+                    actual: format!("{:?}", argument.ty),
+                }));
             }
         }
         if contains_reference_type(&ret) {
@@ -156,7 +161,11 @@ impl Resolver<'_> {
                     collect_type_params(&substitution.ty, &mut unresolved);
                     if !unresolved.is_empty() {
                         return Err(self.error(format!(
-                            "{name}: forwarding bounded calls from a generic context is unavailable in the marker-trait slice"
+                            concat!(
+                                "{name}: forwarding bounded calls from a generic context is ",
+                                "unavailable in the marker-trait slice",
+                            ),
+                            name = name,
                         )));
                     }
                 }

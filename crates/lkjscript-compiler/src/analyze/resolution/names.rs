@@ -103,6 +103,10 @@ impl Resolver<'_> {
         }
     }
 
+    pub(in crate::analyze) fn diagnostic(&self, diagnostic: AnalysisDiagnostic) -> Error {
+        self.analyzer.diagnostic(self.origin, diagnostic)
+    }
+
     pub(in crate::analyze) fn error(&self, message: impl Into<String>) -> Error {
         self.analyzer.error(self.origin, message)
     }

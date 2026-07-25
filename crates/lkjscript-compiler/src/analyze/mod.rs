@@ -97,9 +97,11 @@ struct Analyzer {
 }
 
 mod declarations;
+mod diagnostics;
 mod resolution;
 
 use declarations::*;
+use diagnostics::{AnalysisDiagnostic, NameUse};
 use resolution::*;
 
 struct Resolver<'a> {

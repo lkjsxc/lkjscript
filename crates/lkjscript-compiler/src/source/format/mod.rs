@@ -1,6 +1,6 @@
 use super::{SourceFile, SourceNode, SyntaxKind};
 
-pub(super) fn format_file(file: &SourceFile) -> String {
+pub(crate) fn format_file(file: &SourceFile) -> String {
     // Tokens, including their exact spans, are retained for diagnostics. The
     // formatter deliberately traverses structural nodes rather than source
     // bytes or the token stream.
@@ -16,9 +16,15 @@ pub(super) fn format_file(file: &SourceFile) -> String {
     output
 }
 
-pub(super) fn format_node_identity(node: &SourceNode) -> String {
+pub(crate) fn format_node_identity(node: &SourceNode) -> String {
     let mut output = String::new();
     format_node(node, &mut output, false);
+    output
+}
+
+pub(crate) fn format_node_source(node: &SourceNode) -> String {
+    let mut output = String::new();
+    format_node(node, &mut output, true);
     output
 }
 
@@ -101,7 +107,7 @@ fn format_text(marker: &str, value: &str, output: &mut String) {
     output.push('\n');
 }
 
-pub(super) fn format_f64(value: f64) -> String {
+pub(crate) fn format_f64(value: f64) -> String {
     if value == 0.0 && value.is_sign_negative() {
         return "-0.0".into();
     }

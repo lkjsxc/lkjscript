@@ -54,6 +54,14 @@ impl Analyzer {
             .ok_or_else(|| Error::msg(format!("unknown HIR BindingId {}", id.raw())))
     }
 
+    pub(in crate::analyze) fn diagnostic(
+        &self,
+        origin: SourceId,
+        diagnostic: AnalysisDiagnostic,
+    ) -> Error {
+        self.error(origin, diagnostic.render_human())
+    }
+
     pub(in crate::analyze) fn error(&self, origin: SourceId, message: impl Into<String>) -> Error {
         let label = origin
             .index()
