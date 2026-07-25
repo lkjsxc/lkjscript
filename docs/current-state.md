@@ -9,9 +9,10 @@ next work without mixing them with long-term vision.
 
 **Current** only for implementation and evidence explicitly labeled Current in
 the manifest capsules. Bounded Repository Topology, Repository Intelligence
-Graph/context, agent work state, complete Semantic Source/Agent Protocol V1,
-and resource profiles are **Accepted Implementation Contracts**, not Current
-code. Deferred and Rejected work remains non-current.
+Graph/context, and the externalized agent work-state service are Current.
+Complete Semantic Source/Agent Protocol V1 and resource profiles remain
+**Accepted Implementation Contracts**, not Current code. Deferred and Rejected
+work remains non-current.
 
 ## Current Baseline
 
@@ -20,24 +21,20 @@ reference bytecode/VM, callable host-independent Linux x86-64 baseline code,
 host-independent native allocation/collection, and forced proof-checked
 optimization are Current at baseline `dd8fb316`. Exact boundaries and retained
 historical command evidence are in the manifest below. Automatic proof
-promotion, topology checks, repository graph/context, task-state services,
-complete protocol operations, aggregate profiles, OSR, AOT/cache, and wider
-host-native transitions are not Current.
+promotion, complete protocol operations, aggregate profiles, OSR, AOT/cache,
+and wider host-native transitions are not Current. Structure, graph/context,
+and work-state commands are Current on the containing implementation commit.
 
-## Accepted Implementation Sequence
+## Implementation Sequence
 
-1. Implement [Bounded Repository Topology](decisions/platform/bounded-repository-topology.md),
-   including provenance, strict manifests, deterministic structure diagnostics,
-   and audit JSON under `target/`.
-2. Implement the [Repository Intelligence Graph And Context](decisions/platform/repository-intelligence-graph.md)
-   on validated topology and authority identities.
-3. Implement [Agent Work State](decisions/platform/agent-work-state.md) with
-   atomic scope/precondition/evidence publication.
-4. Implement the [first Semantic Source/Agent
+1. [Bounded Repository Topology](decisions/platform/bounded-repository-topology.md) is Current.
+2. [Repository Intelligence Graph And Context](decisions/platform/repository-intelligence-graph.md) is Current.
+3. The bounded externalized [Agent Work State](decisions/platform/agent-work-state.md) service is Current.
+4. The [first Semantic Source/Agent
    operations](decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md)
-   and [aggregate resource-profile candidate](decisions/platform/resource-budget-profiles-candidate.md).
+   and [aggregate resource-profile candidate](decisions/platform/resource-budget-profiles-candidate.md) remain next.
 
-This order is an accepted contract, not evidence that any listed surface exists.
+Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation
 Selection after these repository-intelligence foundations; it is not enabled.
 

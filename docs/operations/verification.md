@@ -8,10 +8,9 @@ gates without claiming unimplemented checks.
 ## Status
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
-placeholder, and retained-result checks remain described in the capsules.
-The `structure` command family, repository graph/context, agent-state
-conformance, and complete Semantic Source protocol gates are **Accepted
-Implementation Contracts**, not Current commands.
+placeholder, retained-result, `structure`, repository graph/context, and
+agent-state checks are described in the capsules. Complete Semantic Source
+protocol gates remain **Accepted Implementation Contracts**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -31,9 +30,9 @@ ordinary lines at most 120 Unicode scalars; every authored directory for at most
 16 immediate tracked entries; path depth; local links; and stale old paths. The
 exact script/command and result belong in commit evidence.
 
-## Accepted Structure Gate
+## Current Structure Gate
 
-The predeclared commands are:
+The implemented commands are:
 
 ```text
 cargo run --locked -p lkjscript-xtask -- structure audit --json
@@ -55,18 +54,18 @@ The structure gate must cover at least:
 - symlink containment, malformed manifests, duplicate identities, unsupported
   analyses, and stale authority paths.
 
-## Accepted Graph, Context, And Work-State Gates
+## Current Graph, Context, And Work-State Gates
 
-Repository graph tests prove closed node/edge/provenance enums, stable and dense
-identity laws, deterministic builds, stale-input rejection, aggregate charges,
-cycle-safe traversal, and explicit truncation. Context-profile goldens prove
-seed, inclusion reason, omission, ordering, revision, and total charge.
+Repository graph tests cover closed graph data, stable identities, deterministic
+builds, stale input, aggregate charges, cycle-safe traversal, and explicit
+truncation. Context tests cover section order, inclusion, omission, profile
+limits, revision, and total charge.
 
-Agent-state tests cover every legal/illegal lifecycle transition, exact scope,
-lease/base/precondition staleness, overlap, disjoint rebase, complete failed
-attempt retention, tested/not-tested truth, atomic rollback after every staged
-phase, crash recovery, and exact Git publication. Generated snapshots stay under
-`target/agent-state/`.
+Agent-state tests cover malformed, duplicate, unknown, and trailing JSON; stale
+and concurrent preconditions; exact and limit-plus-one bounds; checked revision
+overflow; deterministic quarantine; atomic failure before rename; evidence/hash
+validation; compaction retention and idempotence; and explicit context
+truncation. Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Accepted Semantic Operation Gate
 

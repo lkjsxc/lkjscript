@@ -15,14 +15,14 @@ memory, reproducible packages/components, one semantic IR family, and a
 measured evaluator/VM/JIT/AOT/cache/Wasm portfolio. None of those absent layers
 is Current by adoption of the direction.
 
-The immediate repository-wide implementation sequence is [Bounded Repository
+The repository-wide sequence has made [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository
 Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md),
-[Agent Work State](../decisions/platform/agent-work-state.md), the first
-[Semantic Source And Agent Protocol](../decisions/platform/semantic-source-and-agent-protocol.md)
-operations, and [Resource Budget Profiles](../decisions/platform/resource-budget-profiles.md).
-All Current
-source limits remain enforced until aggregate replacements are Current. The
+and bounded [Agent Work State](../decisions/platform/agent-work-state.md) Current.
+The first [Semantic Source And Agent
+Protocol](../decisions/platform/semantic-source-and-agent-protocol.md) operations
+and [Resource Budget Profiles](../decisions/platform/resource-budget-profiles.md)
+remain Accepted. All Current source limits remain enforced until aggregate replacements are Current. The
 [Measured Execution Portfolio](../decisions/execution/execution-portfolio.md) reclassifies
 AOT, content-addressed native caches, and optional explicit local PGO as later
 measured Targets; it does not add an engine or change Current runtime policy.

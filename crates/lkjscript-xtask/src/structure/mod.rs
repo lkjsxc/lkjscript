@@ -62,6 +62,28 @@ pub fn run(root: &Path, args: &[String]) -> i32 {
     }
 }
 
+pub(crate) fn agent_context(
+    root: &Path,
+    targets: &[String],
+    profile: &str,
+) -> Result<Vec<crate::model::QueryResult>, String> {
+    let policy: Policy = repository::load_json(&root.join(POLICY))?;
+    let provenance: ProvenanceFile = repository::load_json(&root.join(PROVENANCE))?;
+    if policy.schema != "lkjscript.structure.policy.v1"
+        || provenance.schema != "lkjscript.structure.provenance.v1"
+        || provenance.version != 1
+    {
+        return Err("unsupported structure policy or provenance version".into());
+    }
+    let snapshot = repository::capture(root, &provenance.entries)?;
+    let audit = rules::audit(root, &policy, provenance.entries, snapshot);
+    let graph = graph::build(root, &audit, &policy);
+    Ok(targets
+        .iter()
+        .map(|target| query::run("context", target, Some(profile), &graph, &policy))
+        .collect())
+}
+
 fn audit_command(audit: &Audit, flag: Option<&str>) -> i32 {
     if flag == Some("--json") {
         if let Err(error) = crate::util::print_json(audit) {

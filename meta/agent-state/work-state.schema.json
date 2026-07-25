@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lkjscript.agent-work-state.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "version", "task_id", "state_revision", "base_repository_revision",
+    "current_repository_revision", "goal", "hard_constraints", "selected_capsule_scope",
+    "accepted_decisions", "completed_actions", "command_results", "produced_commits",
+    "open_defects", "risks", "external_blockers", "next_actions", "invalidated_assumptions",
+    "artifact_references", "evidence_references"
+  ],
+  "properties": {
+    "schema": { "const": "lkjscript.agent-work-state" },
+    "version": { "const": 1 },
+    "task_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+    "state_revision": { "type": "integer", "minimum": 1 },
+    "base_repository_revision": { "$ref": "#/$defs/revision" },
+    "current_repository_revision": { "$ref": "#/$defs/revision" },
+    "goal": { "$ref": "#/$defs/text" },
+    "hard_constraints": { "$ref": "#/$defs/texts" },
+    "selected_capsule_scope": { "$ref": "#/$defs/capsules" },
+    "accepted_decisions": { "$ref": "#/$defs/references" },
+    "completed_actions": {
+      "type": "array", "maxItems": 256,
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "command_results": {
+      "type": "array", "maxItems": 256,
+      "items": { "$ref": "#/$defs/command" }
+    },
+    "produced_commits": { "$ref": "#/$defs/revisions" },
+    "open_defects": { "$ref": "#/$defs/texts" },
+    "risks": { "$ref": "#/$defs/texts" },
+    "external_blockers": { "$ref": "#/$defs/texts" },
+    "next_actions": { "$ref": "#/$defs/texts" },
+    "invalidated_assumptions": { "$ref": "#/$defs/texts" },
+    "artifact_references": { "$ref": "#/$defs/references" },
+    "evidence_references": { "$ref": "#/$defs/references" }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "texts": {
+      "type": "array", "maxItems": 128,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "capsules": {
+      "type": "array", "maxItems": 16, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*$" }
+    },
+    "revision": {
+      "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "revisions": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/revision" }
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "reference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/text" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "references": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/reference" }
+    },
+    "action": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sequence", "action", "outcome", "summary", "supersedes", "evidence"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "action": { "$ref": "#/$defs/text" },
+        "outcome": { "enum": ["completed", "failed", "tested", "not-tested"] },
+        "summary": { "$ref": "#/$defs/text" },
+        "supersedes": {
+          "type": "array", "maxItems": 128, "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "evidence": { "$ref": "#/$defs/texts" }
+      }
+    },
+    "command": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sequence", "command", "exit", "summary", "evidence"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "command": { "$ref": "#/$defs/text" },
+        "exit": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "summary": { "$ref": "#/$defs/text" },
+        "evidence": { "$ref": "#/$defs/texts" }
+      }
+    }
+  }
+}

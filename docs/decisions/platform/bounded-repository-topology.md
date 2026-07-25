@@ -7,9 +7,9 @@ reorganization, repository graph generation, or multi-agent work publication.
 
 ## Status
 
-**Accepted Implementation Contract.** No topology checker, manifest validator,
-or audit JSON described here is Current. Existing Edition 1 source limits remain
-Current and unchanged. The first implementation slice is the checker and its
+**Current.** `lkjscript-xtask structure` implements the bounded topology checker,
+strict capsule validation, generated audit, graph, and query foundations.
+Existing Edition 1 source limits remain Current and unchanged. The implemented slice is the checker and its
 focused fixtures; it must not rewrite the repository.
 
 ## Provenance Classes

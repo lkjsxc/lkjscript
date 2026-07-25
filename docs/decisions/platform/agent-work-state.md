@@ -1,132 +1,88 @@
-# Agent Work-State Contract
+# Externalized Agent Work-State Service
 
 ## Purpose
 
-Define atomic, reviewable task state for one or more agents without confusing
-intent, attempted work, generated context, or historical evidence with Current
-repository behavior.
+Define the Current bounded, reviewable handoff state used by autonomous work without treating generated state or
+repository context as source authority.
 
 ## Status
 
-**Accepted Implementation Contract.** No persisted work-state store or command
-surface described here is Current. The contract follows bounded topology and
-repository-graph identity. Ordinary Git commits remain publication authority.
+**Current.** `lkjscript-xtask` implements this local service. Git remains publication authority. Scheduling, leases,
+remote coordination, hidden reasoning, prompts, and autonomous merge resolution are not part of this service.
 
-## Identity And Scope
+## Commands And Location
 
-The schema identity is `lkjscript.agent-work-state`, version `1`. Each task has
-a stable length-framed task key, revision-scoped update ID, base repository
-revision, optional parent task, owning agent identity, lease epoch, exact scope,
-policy/profile identities, and creation/update sequence. Wall-clock time is
-metadata, never ordering authority.
-
-Scope is a closed set of repository graph node identities plus allowed operation
-classes. A path glob alone cannot grant ownership. Overlap is diagnosed before
-activation; an explicit parent coordinator may partition or serialize it.
-
-## States
-
-The closed lifecycle is:
+The exact command family is:
 
 ```text
-planned -> active -> blocked -> active -> completed
-                    \-> abandoned
-planned ------------> abandoned
-active  ------------> abandoned
+cargo run --locked -p lkjscript-xtask -- agent checkpoint <request.json>
+cargo run --locked -p lkjscript-xtask -- agent resume-context <task-id> [--profile weak|strong]
+cargo run --locked -p lkjscript-xtask -- agent validate-state <task-id>
+cargo run --locked -p lkjscript-xtask -- agent compact-state <task-id>
 ```
 
-`completed` means the declared deliverables and required evidence were
-atomically published at the named repository revision. It does not mean all
-product gates passed. Every required but unrun gate remains in `not_tested`.
-`blocked` names an actionable blocker and owner. `abandoned` retains reason and
-all attempts; it does not erase history. Unknown or illegal transitions fail.
+Live state is generated at `target/lkjscript/agent-state/<validated-id>.json` and is ignored by Git. Quarantined
+input remains generated below the adjacent `quarantine/` directory under a task ID and SHA-256 content identity.
+No generated task state is tracked.
 
-## Work Record
+## Closed V1 Snapshot
 
-A V1 record contains bounded, deterministically ordered:
+The persisted [work-state schema](../../../meta/agent-state/work-state.schema.json) has identity
+`lkjscript.agent-work-state`, version `1`; the strict
+[checkpoint envelope](../../../meta/agent-state/checkpoint.schema.json) carries its compare revision. Administrative
+schema, version, task ID, and state revision fields accompany only these bounded facts:
 
-- objective, deliverables, non-goals, and accepted authority links;
-- base revision, scope nodes, read set, precondition fingerprints, and lease;
-- planned and completed semantic operations;
-- touched paths/entities and old/new identities;
-- diagnostics, failed mutations, repair attempts, and blockers;
-- command evidence with commit, environment, command, exit/result, and artifact
-  identity;
-- explicit `tested` and `not_tested` gates;
-- generated context profile/revision/charges and inclusion reasons; and
-- publication revision, review decision, and superseded task identities.
+- base and current repository revisions, goal, hard constraints, and selected capsule scope;
+- accepted decision references and completed actions, including outcome, summary, supersession, and evidence;
+- exact command results: command, exit status, summary, and evidence references;
+- produced commits, open defects, risks, external blockers, and next actions;
+- invalidated assumptions; and
+- artifact and evidence references with exact path and SHA-256 content identity.
 
-Free-form notes may supplement but cannot replace closed status, scope,
-operation, evidence, or outcome fields. Secrets, credentials, raw private
-prompts, and unbounded command output are rejected.
+The schema has no prompt, chain-of-thought, secret, timestamp, host, model, owner, lease, scheduler, or free-form JSON
+field. `deny_unknown_fields`, typed deserialization, duplicate-field rejection, and trailing-input rejection apply at
+every request and state boundary. JSON `Value` is not an authority or intermediate schema.
 
-## Atomic Update Semantics
+## Checkpoint Semantics
 
-Each update names the exact task revision, lease epoch, base repository
-revision, and precondition fingerprint. The service validates schema/version,
-limits, transition, scope, graph freshness, and all preconditions before
-staging. It applies all record and semantic-edit operations in declared order,
-revalidates policy and diagnostics, and publishes one new task revision only if
-every operation succeeds. Failure publishes neither partial files nor partial
-work state.
+A checkpoint request names an exact expected state revision and one complete next snapshot. Revision zero creates a
+task; every later checkpoint increments by one. Task identity, base revision, goal, hard constraints, and capsule scope
+are immutable. Ordered action and command history, decisions, commits, invalidations, and references are append-only
+except for explicit compaction. Action and command sequence numbers are increasing and unique.
 
-Repository publication is compare-and-swap against the exact base revision.
-File changes use the Semantic Source transaction for semantic entities and
-same-directory atomic replacement for supported authored files. A commit hash
-is attached only after Git reports the exact staged tree. Lease expiry prevents
-new publication but cannot roll back an already committed tree.
+Before publication the service validates request, string, collection, history, reference, output, and aggregate-work
+bounds with checked arithmetic. It verifies task identity, current `HEAD`, base ancestry, monotonic repository history,
+commit objects, capsule identities, normalized repository-relative paths, content hashes, and evidence references.
+Malformed, duplicate, unknown, trailing, stale, or over-limit input publishes nothing.
 
-Concurrent disjoint tasks may publish only after rebasing and rechecking their
-complete read/precondition sets. Overlapping scope requires coordinator order;
-last-writer-wins is rejected. Rename preserves an explicit old/new relationship
-and transfers task scope atomically.
+Publication uses a same-directory create-new temporary file, `write_all`, file synchronization where supported,
+atomic rename, and parent-directory synchronization where supported. A per-task local checkpoint exclusion file rejects
+concurrent updates; it is synchronization only, not a lease or task authority. No partial JSON becomes live.
 
-## Commands
+Malformed or structurally corrupt live bytes are moved to a deterministic quarantine name containing their SHA-256.
+An existing different quarantine destination is never overwritten. The command fails after quarantine; a later explicit
+revision-zero checkpoint is the deterministic recovery path.
 
-The accepted conceptual surface is:
+## Resume, Validation, And Compaction
 
-```text
-lkjscript agent-state snapshot --profile handoff
-lkjscript agent-state begin request.json
-lkjscript agent-state update request.json
-lkjscript agent-state publish request.json
-lkjscript agent-state abandon request.json
-```
+`resume-context` emits the exact snapshot first, then bounded repository-graph context in the graph directive order.
+It reports current revision mismatch, stale references, unsupported facts, omitted scopes, and every truncation. Weak
+and strong profiles change only work, byte, and output limits; they do not change authority or validation rules.
 
-Strict request/response envelopes use stderr or a dedicated protocol stream;
-normal program stdout is never mixed with state data. Generated snapshots and
-audits are written under `target/agent-state/`, not tracked as authored files.
+`validate-state` rechecks schema, all aggregate bounds, legal sequences, repository revision relations, commits,
+capsules, paths, hashes, and evidence references. `compact-state` atomically removes only successful action detail
+explicitly superseded by a retained action. It retains final facts, failed outcomes, tested and not-tested outcomes,
+command results, commits, and all artifact/evidence references. A second compaction is byte-idempotent.
 
-## Aggregate Budgets
+## Bounds And Failure Policy
 
-Pre-allocation categories include request/response bytes, tasks, scope nodes,
-read/write/precondition entries, operations, diagnostics, command records,
-artifact references, context nodes/edges/bytes, history depth, transition work,
-and publication bytes. Checked arithmetic and deterministic profile ceilings
-apply before staging. Exhaustion reports category, limit, charge, profile, and
-responsible task/operation and publishes nothing.
-
-## Policy Coverage
-
-Before publication, policy evaluation covers topology/provenance, manifest and
-link correctness, Semantic Source structural and requested analysis checks,
-repository graph freshness, scope ownership, generated-output location,
-required focused tests, documentation status honesty, and immutable-evidence
-integrity. Code/build/runtime gates not required or not run remain explicit.
-Policy results identify rule/version and cannot be replaced by agent assertion.
-
-## Acceptance Gates
-
-V1 becomes Current only after illegal-transition, stale-base, stale-lease,
-overlapping-scope, atomic rollback, crash-recovery, rename, expression-edit,
-budget, malformed-version, deterministic snapshot, and disjoint-concurrency
-fixtures pass. A retained multi-agent task must show exact scope, complete
-attempt history, atomic Git publication, and truthful tested/not-tested fields.
+V1 constants bound request and generated output bytes, each string, each collection, combined history, combined
+artifact/evidence references, aggregate validation work, capsule enumeration, Git output, and referenced artifact
+reads. Arithmetic overflow is an error before allocation or publication. Repository traversal uses bounded Git and the
+bounded repository graph; it never recursively walks untrusted state input.
 
 ## Deferred And Rejected
 
-Remote coordination, distributed leases, autonomous merge resolution, and task
-scheduling are **Deferred**. Hidden state, mutable unversioned logs, partial
-publication, erased failed attempts, path-glob authority, last-writer-wins,
-claiming unrun gates, and treating `completed` as a product capability claim are
-**Rejected**.
+Distributed state, scheduling, semantic leases, uploaded state, and cross-repository coordination are Deferred.
+Hidden state, prompts or reasoning, credentials, timestamps as ordering, host/model identity, unbounded output,
+last-writer-wins, silent quarantine overwrite, partial publication, and inert command variants are Rejected.

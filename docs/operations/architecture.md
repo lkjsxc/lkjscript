@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Map Current product behavior to its authorities and record the accepted
-repository-intelligence architecture before implementation.
+Map Current product behavior and implemented repository-intelligence services
+to their authorities.
 
 ## Status
 
 The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
-Semantic Source Foundation V1 is Current. Bounded Repository Topology,
-Repository Intelligence Graph/context, agent work state, complete Schema/Agent
-Protocol V1, transactions, typed holes, and aggregate profiles are **Accepted
-Implementation Contracts**, not Current code.
+Semantic Source Foundation V1, Bounded Repository Topology, Repository
+Intelligence Graph/context, and externalized agent work state are Current.
+Complete Schema/Agent Protocol V1, transactions, typed holes, and aggregate
+profiles are **Accepted Implementation Contracts**, not Current code.
 
 ## Current Compiler/Runtime Boundary
 
@@ -26,7 +26,7 @@ Linux x86-64 callable baseline and forced proof-optimizing claims require real
 synchronous generated entry from verified SSA. Exact Current coverage and
 historical evidence remain in [Current State](../current-state.md).
 
-## Accepted Repository-Intelligence Flow
+## Repository-Intelligence Flow
 
 ```text
 tracked authorities + strict manifest
@@ -49,14 +49,14 @@ The accepted ownership boundaries are:
   canonical audit/graph construction, and repository fixtures;
 - Semantic Source/compiler boundary: source/entity/node identity, derived facts,
   diagnostics, and atomic semantic edits;
-- agent-state boundary: task lifecycle, exact scope, read/precondition sets,
-  attempts, blockers, command evidence, tested/not-tested facts, and publication;
+- agent-state boundary: immutable task/base/scope preconditions, action and
+  command history, blockers/risks, exact references, compaction, and atomic state publication;
 - Git: reviewed authored-tree publication authority; and
 - `target/`: disposable generated audits, graphs, contexts, and state snapshots.
 
-These are accepted ownership selections only. Implementation may choose crate
-placement after dependency-cycle review, but it must not put generated indexes
-or task assertions into compiler semantic authority.
+The first four flow stages are Current in `lkjscript-xtask`; Semantic Source
+transactions remain Accepted. Generated indexes and task assertions never enter
+compiler semantic authority.
 
 ## Aggregate Boundaries
 

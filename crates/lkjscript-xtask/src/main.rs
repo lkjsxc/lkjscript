@@ -1,8 +1,11 @@
 //! Verification and repository-structure tooling for lkjscript.
 
+mod agent;
 mod documentation;
 mod model;
 mod sha256;
+#[cfg(test)]
+mod sha256_tests;
 mod source_checks;
 mod structure;
 mod util;
@@ -16,6 +19,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(".");
     let code = match args.first().map(String::as_str) {
+        Some("agent") => agent::run(&root, &args[1..]),
         Some("check-docs") => documentation::check(&root),
         Some("check-tree") => source_checks::check_tree(&root),
         Some("check-sources") => source_checks::check_sources(&root),
@@ -23,7 +27,7 @@ fn main() -> ExitCode {
         Some("structure") => structure::run(&root, &args[1..]),
         _ => {
             eprintln!(
-                "usage: lkjscript-xtask [check-docs|check-tree|check-sources|quiet ...|structure ...]"
+                "usage: lkjscript-xtask [agent ...|check-docs|check-tree|check-sources|quiet ...|structure ...]"
             );
             2
         }

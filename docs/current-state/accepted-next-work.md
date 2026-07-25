@@ -7,18 +7,17 @@
 **Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
 explicit labels in this capsule and its authority; this capsule cannot promote a capability.
 
-## Accepted Next Implementation Contracts
+## Current Foundations And Accepted Next Contracts
 
-The immediate implementation sequence is:
+The immediate implementation sequence has progressed as follows:
 
-1. bounded repository topology and `check-structure`, with exact provenance,
-   semantic manifests, deterministic rule IDs, and audit JSON under `target/`;
-2. repository graph/context nodes, edges, authority identity, aggregate budgets,
-   and deterministic context profiles;
-3. atomic agent work state with exact scope, read/precondition sets, attempted
-   operations, blockers, tested/not-tested evidence, and Git publication; then
+1. bounded repository topology, strict manifests, rule IDs, and generated audit
+   JSON are Current;
+2. bounded repository graph/context nodes, edges, identities, and profiles are Current;
+3. externalized agent work state with exact Git/state preconditions, action and
+   command facts, content references, atomic replacement, and compaction is Current; and
 4. first Current-candidate Semantic Source operations and aggregate resource
-   profiles without changing any Current Edition 1 limit.
+   profiles remain next without changing any Current Edition 1 limit.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository
@@ -26,7 +25,8 @@ Intelligence Graph And Context](../decisions/platform/repository-intelligence-gr
 [Agent Work State](../decisions/platform/agent-work-state.md), [Semantic Source
 And Agent Protocol](../decisions/platform/semantic-source-and-agent-protocol.md),
 and [Resource Budget Profiles](../decisions/platform/resource-budget-profiles.md).
-All are **Accepted Implementation Contracts**, not Current code.
+The first three authorities now describe Current bounded implementations. The
+Semantic Source operations and aggregate resource profiles remain Accepted, not Current.
 
 The previously selected process-local synchronous automatic baseline-to-proof
 promotion remains an **Accepted Implementation Selection** and valid later

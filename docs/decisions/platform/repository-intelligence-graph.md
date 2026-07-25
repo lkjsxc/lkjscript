@@ -7,9 +7,9 @@ for humans and agents without making generated indexes semantic authority.
 
 ## Status
 
-**Accepted Implementation Contract.** The graph, context profiles, query
-interface, and generated artifacts are not Current. They follow the topology
-checker and consume only validated repository/source authorities.
+**Current.** The bounded graph and `structure graph`, `structure context`,
+`structure impact`, and `structure tests` query interfaces are implemented in
+`lkjscript-xtask`. They consume validated repository/source authorities.
 
 ## Authority And Identity
 
@@ -58,11 +58,13 @@ provenance is a diagnostic rather than last-writer-wins data.
 
 ## Build And Query Boundary
 
-The accepted commands are:
+The Current commands are:
 
 ```text
-cargo run --locked -p lkjscript-xtask -- repository-graph --output target/repository-graph.json
-cargo run --locked -p lkjscript-xtask -- repository-context --profile change --request request.json
+cargo run --locked -p lkjscript-xtask -- structure graph [--json|--dot]
+cargo run --locked -p lkjscript-xtask -- structure context <target> [--profile weak|strong]
+cargo run --locked -p lkjscript-xtask -- structure impact <target>
+cargo run --locked -p lkjscript-xtask -- structure tests <target>
 ```
 
 Canonical graph JSON is written only under `target/`. Requests and responses
