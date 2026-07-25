@@ -28,7 +28,7 @@ Index active architecture decisions separately from superseded history.
 - [native-references-and-gc-stack-maps.md](native-references-and-gc-stack-maps.md): exact native frames, roots, allocation, and barrier ABI
 - [numeric-semantics.md](numeric-semantics.md): exact I64/F64 source-to-host contract
 - [ownership-and-borrowing.md](ownership-and-borrowing.md): affine ownership, lexical references, NLL, and deterministic drop target
-- [proof-based-optimizing-jit.md](proof-based-optimizing-jit.md): non-speculative verified optimizing tier and promotion contract
+- [proof-based-optimizing-jit.md](proof-based-optimizing-jit.md): current forced non-speculative tier and accepted synchronous automatic-promotion implementation selection
 - [relational-database-roadmap.md](relational-database-roadmap.md): first-party B+tree/WAL/MVCC relational-server sequence
 - [semantic-core.md](semantic-core.md): AI-first Unit/Option/control/mutation/equality contract
 - [self-hosted-platform-roadmap.md](self-hosted-platform-roadmap.md): staged bootstrap-to-self-hosting boundary

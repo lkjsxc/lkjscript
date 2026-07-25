@@ -171,6 +171,39 @@ already current.
 Runtime smokes remain separate so focused compiler work does not need a socket
 or terminal. Docker remains the final package and installed-library gate.
 
+## Accepted Automatic Promotion Gate
+
+This gate is an **Accepted Implementation Selection**, not Current and not yet
+run. Focused tests must preserve the existing threshold-64 baseline behavior,
+then prove exact `BaselineCandidate`/`BaselineCompiling`/`BaselineNative` and
+`OptimizingCandidate`/`OptimizingCompiling`/`OptimizingPending`/
+`OptimizingNative`/`Disabled` transitions. At exact optimizing threshold N, the
+test must show synchronous proof/lowering/W^X installation, invocation of the
+captured baseline object on that entry, and optimized publication only on a
+later entry.
+
+Tests must reject mismatched opaque function/object/tier tokens, stale or
+invalidated selection, a second pending object, a second attempt in one epoch,
+attempts beyond the total bound, unbounded mappings/optimizer work/certificates/
+metadata, and reference-signature auto entry. Structured failure keeps baseline
+current and records suppression; an explicit newer epoch invalidates pending or
+current optimizing selection back to baseline and permits at most one bounded
+retry. Stale mappings remain owned and non-selectable until session drop. Main
+stays VM, scalar auto entry is unchanged, internal generated reference helpers
+may still call/allocate, and forced tiers remain fallback-free.
+
+The retained performance run must use one clean locked release build,
+deterministic randomized ordering, at least four warmups and 31 samples per
+auto baseline-only and 64/256/1,024/4,096 optimizing-threshold case, unchanged
+forced sentinels, and allocation/reference correctness. It checks exact oracle,
+streams, states/tokens/objects, proof, W^X, attempts/suppressions, invalidations,
+entries/bytes/times, and limits. Mechanical adoption is at least 1.10x median
+process speedup, improvement greater than twice combined MAD, p95 at most 5%
+worse, compilation repaid before completion, historical forced scalar native
+and process medians at most 5% worse, and no repeated attempt/fallback. The
+largest candidate within twice combined MAD of the fastest passing process
+median wins; otherwise the rejection is retained and optimizing stays disabled.
+
 ## Performance Evidence
 
 A benchmark is decision-grade only with a declared baseline, environment,
@@ -219,7 +252,11 @@ instruction growth/removal, estimated certificate/optimization metadata bytes,
 code/metadata/cache peaks, allocations/deterministic estimated object
 bytes/collections/estimated peak live heap, roots, distinct attempted and
 successful heap runtime calls, barriers, peak native frame depth, and transition
-counts. Collection pause distribution is not currently measured.
+counts. The selected automatic slice additionally requires exact enables/
+thresholds, epoch, attempts/failures/suppressions, baseline entries and elapsed
+time before first optimized entry, tier object IDs/tokens/code bytes, W^X/proof,
+stale invalidations, current/pending selection, and retained mapping/attempt/
+work/certificate/metadata limit facts. Collection pause distribution is not currently measured.
 Forced optimizing tests additionally require a retained bounded certificate,
 exact rewrite counts, `Tier::Optimizing`, W^X installation, nonzero optimizing
 entries, zero baseline entries/objects, zero VM fallback, smaller generated
@@ -228,9 +265,10 @@ baseline/optimizing values or structured outcomes. Allocation-graph attempts,
 successes, bytes, collections, and returned values remain equal between forced
 baseline and optimizing execution. Budget and unsupported failures are visible
 engine errors. `auto` remains baseline-only. Owned-buffer/lexical-reference,
-Handle/host paths, native/VM reference transitions, OSR, automatic optimizing
-promotion, broader proof passes, and background compilation are outside the
-current subsets. Host-independent GC references/allocation and
+Handle/host paths, native/VM reference transitions, OSR, broader proof passes,
+and background compilation are outside the current subsets. Automatic
+optimizing promotion is also outside Current behavior, but its next gate is the
+Accepted Implementation Selection above. Host-independent GC references/allocation and
 recursive SCCs are Current only in forced mode; auto remains conservative. The containing host-independent allocation commit based on `0daa7a0` passed
 focused core/native/sys/JIT/VM/app tests, strict affected Clippy, separate
 docs/tree/source checks, `quiet verify` with 182 unit/integration tests plus one

@@ -9,9 +9,11 @@ language native coverage or future OSR behavior.
 
 **Current on Linux x86-64** for allocation-free scalar execution and the exact
 host-independent allocation/recursion subset below. Ordinary `run` uses
-automatic tiering; reference-typed functions remain conservatively in the VM
-there. The reference VM remains the cold tier, full-language oracle, and
-deterministic explicit engine.
+baseline-only automatic tiering; reference-typed functions remain
+conservatively in the VM there. The reference VM remains the cold tier,
+full-language oracle, and deterministic explicit engine. The next synchronous
+automatic baseline-to-proof-optimizing slice is an **Accepted Implementation
+Selection**, not yet Current.
 
 ## Implemented Pipeline
 
@@ -140,10 +142,41 @@ collection-pause distribution. Collection is
 conditional; ordinary native-call hot paths do not read the clock. Normal
 program stdout is never used for JIT diagnostics or metrics.
 
-Loop OSR, background compilation, optimizing tiers, speculation, guards,
-deoptimization, Handle/host allocation calls, native/VM reference transitions,
-and persistent profiles or code caches remain future or rejected work as
-classified by the active decisions.
+## Accepted Automatic Promotion Boundary
+
+This boundary is selected but **not yet Current**. Existing auto baseline
+compilation remains at exactly 64 VM entries. A separate CLI opt-in will enable
+candidate proof-optimizing thresholds of 64, 256, 1,024, or 4,096 exact
+baseline-native entries of the promotion root; optimizing remains disabled by
+default until retained adoption evidence exists. Source main stays in the VM,
+and the auto VM/native adapter stays scalar-only.
+
+The Nth counted baseline entry synchronously proof-optimizes, lowers, and W^X-
+installs while invoking the exact captured baseline object. The optimized
+object is pending and non-selectable until a later root entry. Exact opaque
+entry tokens bind function, object, and tier. Baseline and optimizing objects
+coexist under one process-local session with one current and at most one
+pending object; stale invalidated mappings are bounded and retained until
+session drop but are never selectable.
+
+The selected state names are `BaselineCandidate`, `BaselineCompiling`,
+`BaselineNative`, `OptimizingCandidate`, `OptimizingCompiling`,
+`OptimizingPending`, `OptimizingNative`, and `Disabled`. One attempt is allowed
+per explicit epoch under a bounded total; same-epoch retries are suppressed.
+Failure records a structured tier reason and leaves baseline current. A newer
+epoch allows one bounded retry and invalidates pending/current optimized code
+back to the retained baseline. Generated reference-signature helpers may call
+and allocate within a native group, but cannot be auto entry roots or transfer
+references across VM/native entry. Forced tier behavior remains unchanged and
+fallback-free. The authoritative metrics, limits, transition rules, and
+predeclared benchmark are in [Proof-Based Optimizing
+JIT](../decisions/proof-based-optimizing-jit.md).
+
+Loop OSR, background compilation, speculation, guards, deoptimization,
+Handle/host allocation calls, native/VM reference transitions, and persistent
+profiles or code caches remain future or rejected work as classified by the
+active decisions. Forced proof-optimizing execution is Current; automatic
+optimizing promotion is only the accepted selection above.
 
 ## Current Slice Evidence
 

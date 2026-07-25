@@ -10,9 +10,11 @@ and the reference VM as the cold tier and correctness oracle.
 
 **Current** for the reference VM, synchronous scalar and host-independent
 allocation/recursion Linux x86-64 baseline tier, and the forced first
-proof-based optimizing pipeline. Handle/host-capability allocation, lexical
-ownership adapters, native/VM reference transitions, automatic optimizing
-promotion, broader proof passes, and later OSR remain **Accepted Targets**.
+proof-based optimizing pipeline. The synchronous automatic baseline-to-proof-
+optimizing slice is an **Accepted Implementation Selection**, not yet Current.
+Handle/host-capability allocation, lexical ownership adapters, native/VM
+reference transitions, broader proof passes, and later OSR remain **Accepted
+Targets**.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
 by measurement. Canonical source/verified-SSA linkage, bounded code objects,
 VM/native transfer, `vm`/`auto`/`baseline-jit`/`optimizing-jit`, PollV1, and actual generated
@@ -76,8 +78,9 @@ hotness counters, or the observation hook are insufficient.
 
 Only whole-function function-entry tiering is Current. Host-independent native
 allocation/collection and proof-certified optimizing execution are Current in
-forced mode; ownership/host-capability adapters, automatic optimizing promotion,
-broader passes, and then loop OSR remain later; background compilation, guards, deoptimization, persistent
+forced mode; ownership/host-capability adapters and broader passes remain later. The exact
+synchronous automatic optimizing promotion slice is selected but unimplemented;
+loop OSR remains later. Background compilation, guards, deoptimization, persistent
 profiles/caches, and non-Linux/non-x86-64 platforms remain later or rejected as
 classified below. The detailed prerequisite,
 backend-selection, ABI, safety, coverage, and evidence contract is
@@ -108,9 +111,11 @@ not consume source/HIR/SSA itself; only the narrow adapter consumes
 engine error in forced mode. Auto conservatively retains reference-typed and
 unsupported functions in VM.
 
-Broader ownership/traits, host-capability allocation, automatic optimizing
-promotion and broader Tier 2A passes, and later OSR remain **Accepted Targets** unless explicitly
-labeled Deferred or Rejected. Their exact contracts are [Ownership And
+Broader ownership/traits, host-capability allocation, broader Tier 2A passes,
+and later OSR remain **Accepted Targets** unless explicitly labeled Deferred or
+Rejected. Automatic optimizing promotion has the narrower **Accepted
+Implementation Selection** in the proof-JIT decision and is not Current. Their
+exact contracts are [Ownership And
 Borrowing](ownership-and-borrowing.md), [Coherent Traits And Static
 Dispatch](traits-and-static-dispatch.md), [Native References, Frames, And Exact
 GC Stack Maps](native-references-and-gc-stack-maps.md), [Allocation-Capable
@@ -199,8 +204,9 @@ does not require deoptimization.
 The Current forced first Tier 2A slice adds exact scalar algebraic identities,
 same-block/dominating exact scalar GVN (including checked-I64 successful-check
 reuse), and existing verified cleanup behind an independent bounded certificate
-verifier. It is not automatically promoted and has no 1.20x performance claim.
-Later candidates include:
+verifier. It is not automatically promoted. Its clean retained forced result is
+Adopted at 2.984780x native speedup; that evidence does not measure automatic
+promotion. Later candidates include:
 
 - inlining and monomorphization under budgets;
 - sparse conditional constant propagation;
@@ -239,22 +245,31 @@ resolved direct calls.
 
 ## JIT State Machine
 
-The Current function state model is:
+The implemented baseline-only auto state remains Current. The next automatic
+promotion model is an **Accepted Implementation Selection**, not Current:
 
 ```text
-VmOnly -> Observed -> BaselineCompiling
-                         | success -> BaselineNative
-                         | failure -> Observed or VmOnly(disabled)
+BaselineCandidate -> BaselineCompiling -> BaselineNative
 BaselineNative -> OptimizingCandidate -> OptimizingCompiling
-                                           | success -> OptimizedNative
-                                           | failure -> BaselineNative
-BaselineNative | OptimizedNative -- object invalidation --> Observed
+  -> OptimizingPending -> OptimizingNative
+BaselineCandidate | BaselineCompiling -> Disabled (VM remains current)
+any optimizing state -> Disabled (baseline remains current)
 ```
 
+The Nth exact baseline entry of the promotion root performs synchronous proof
+optimization, lowering, and W^X installation but invokes the captured baseline
+object. `OptimizingPending` is non-selectable; only a later entry can publish it.
+An opaque token binds function, exact object, and tier. Once baseline is
+installed, a session owns one current and at most one pending native selection
+while retaining bounded stale objects
+until drop; invalidated objects are never selectable. A newer explicit epoch
+invalidates pending/current optimizing selection back to baseline.
+
 There is no Current `Invalidated` function-state variant. Installed code objects
-retain an implemented invalidated bit, but invalidating one clears its function
-links and transitions affected functions directly to `Observed`; a dedicated
-function state may be documented only after it is implemented.
+retain an implemented invalidated bit. The selected promotion model also does
+not add one: invalidation unlinks the object's exact tokens and changes
+selection/state directly. The complete ownership and transition contract is
+[Proof-Based Optimizing JIT](proof-based-optimizing-jit.md).
 
 Initial compilation is synchronous at a safepoint. Background compiler threads
 are **Deferred** until VM outcomes, heap access, code-cache ownership,
@@ -263,21 +278,24 @@ cancellation, and synchronization are process-safe.
 Transitions are available through test-only structured diagnostics and
 benchmark counters, never normal stdout. Each function records a bounded retry
 count, last structured failure reason, and the resource/configuration epoch in
-which compilation was attempted. Failure transitions are exact:
+which compilation was attempted. Current baseline-only failure transitions
+remain exact:
 
 - permanently unsupported function: `BaselineCompiling -> VmOnly(disabled)`;
 - resource budget reached: `BaselineCompiling -> Observed`, with compilation
   suppressed until the relevant budget/configuration epoch changes;
 - ordinary `auto` backend failure: `BaselineCompiling -> Observed` while a
   bounded retry remains, then `VmOnly(disabled)`; execution stays in the VM;
-- optimization failure: `OptimizingCompiling -> BaselineNative`, with promotion
-  suppressed by the same bounded retry policy;
 - forced JIT backend failure: leave installed lower-tier state unchanged and
   return an error so tests cannot silently pass via the VM;
-- invalidation: transfer only at a safepoint to a still-valid baseline object,
-  otherwise `Observed` for bounded recompilation or `VmOnly(disabled)`;
 - internal compiler inconsistency: fail verification rather than claim native
   execution.
+
+The selected automatic model adds one optimization attempt per explicit epoch
+under a bounded total. Optimization failure keeps baseline current, records a
+structured reason, and suppresses the same epoch. A newer epoch unlinks and
+invalidates pending/current optimized objects back to baseline before one
+bounded retry; stale objects remain owned but cannot be selected.
 
 Hotness counters saturate rather than reset on compilation failure. A changed
 resource/configuration epoch may permit a bounded retry; an unchanged trigger
@@ -491,9 +509,10 @@ implied by a non-speculative optimizing tier.
 5. Add sound ownership/coherent traits, exact native frame roots, allocation,
    barriers, recursion, and collection exercised while generated frames are
    active.
-6. Add a distinct proof-based optimizing engine, then separately measure and
-   select process-local promotion with current-process layout data. The forced
-   first engine is Current; promotion remains pending.
+6. Add a distinct proof-based optimizing engine, then implement the selected
+   process-local synchronous promotion boundary and run its retained threshold
+   gate. The forced first engine is Current; automatic promotion remains
+   disabled by default and unimplemented.
 7. Add bounded loop-backedge counters and verified OSR in a later cycle; use
    unmodified Brainfuck Mandelbrot only as an appropriate long-loop diagnostic.
 8. Consider guarded specialization and deoptimization only from measured need.

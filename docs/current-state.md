@@ -249,10 +249,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   prevents a compiled reference helper from ever labeling a direct VM call
   native. Explicit trap sites carry deterministic selected message identity
   through lowering, image metadata, sys outcome, and JIT lookup
-- Deferred tiers/surfaces: automatic optimizing promotion, broader optimizing
-  passes, loop OSR, background compilation, speculative tiers, deoptimization, Handle/host native allocation,
-  native/VM reference transitions, persistent profiles, and persistent code
-  caches remain absent
+- Absent selected/later tiers and surfaces: automatic optimizing promotion has
+  an **Accepted Implementation Selection** but is not Current; broader optimizing
+  passes, loop OSR, background compilation, speculative tiers, deoptimization,
+  Handle/host native allocation, native/VM reference transitions, persistent
+  profiles, and persistent code caches remain absent
 
 ## SQLite Evidence
 
@@ -273,17 +274,59 @@ do not establish application durability or migration behavior.
 The marker-trait foundation, initial `Owned Buf` ownership safe island, exact
 ABI-2 frames/roots, and host-independent source allocation/recursive SCC slice
 are Current. General ownership, full static trait methods/associated items,
-Handle/host native calls, and native/VM reference transitions are not. The next implementation sequence
-broadens only proved ownership and the next coherent static-trait slice, then
-allocation-capable baseline execution and broader proof-based
-optimization with measured process-local promotion. The forced first optimizing
-pipeline is Current; promotion and broader passes are **Accepted Targets**, not
-Current behavior. The authoritative records
+Handle/host native calls, and native/VM reference transitions are not. The
+immediate implementation selection is the automatic promotion slice below;
+proved ownership, coherent static traits, Handle/host transitions, and broader
+proof optimization remain subsequent accepted work. The forced first optimizing
+pipeline is Current. The exact synchronous automatic
+promotion slice is an **Accepted Implementation Selection**; broader passes are
+**Accepted Targets**. Neither is Current behavior. The authoritative records
 are [Ownership And Borrowing](decisions/ownership-and-borrowing.md), [Coherent
 Traits And Static Dispatch](decisions/traits-and-static-dispatch.md), [Native
 References, Frames, And Exact GC Stack Maps](decisions/native-references-and-gc-stack-maps.md),
 [Allocation-Capable Baseline JIT](decisions/allocation-capable-baseline-jit.md),
 and [Proof-Based Optimizing JIT](decisions/proof-based-optimizing-jit.md).
+
+## Accepted Target: Automatic Baseline-To-Proof Promotion
+
+The next automatic promotion slice has an **Accepted Implementation Selection**,
+not a Current implementation. It preserves the existing 64-VM-entry automatic
+baseline threshold and keeps proof promotion CLI-opt-in and disabled by default
+until retained adoption. Candidate optimizing thresholds count exactly 64,
+256, 1,024, or 4,096 baseline entries of one promotion root. The Nth entry
+synchronously proves, lowers, and W^X-installs an optimizing object but must
+invoke the captured baseline object; only a later entry can publish the pending
+optimized object.
+
+Opaque entry tokens bind function, object, and tier. One process-local session
+exactly owns coexisting baseline/optimizing objects, one current selection, and
+at most one pending selection. Bounded stale invalidated objects remain owned
+until drop but are never selectable. The states are `BaselineCandidate`,
+`BaselineCompiling`, `BaselineNative`, `OptimizingCandidate`,
+`OptimizingCompiling`, `OptimizingPending`, `OptimizingNative`, and `Disabled`.
+There is one attempt per explicit epoch, a bounded total, same-epoch
+suppression, structured tier failure with baseline retained, and epoch-driven
+optimized invalidation/retry back to baseline.
+
+Auto entry remains scalar-only; source main remains in the VM. Generated
+reference helpers may call and allocate inside their native group but cannot
+transfer references at VM/native entry or become auto roots. Forced tiers remain
+unchanged and fallback-free. Required evidence records thresholds/enables,
+epochs, attempts/failures/suppressions, transitions, exact tier entries and
+objects/code bytes, baseline entries and time before first optimized entry,
+proof/W^X, stale invalidations, and bounded mappings/work/certificates/metadata.
+
+The predeclared clean locked release gate randomizes at least four warmups and
+31 samples for auto baseline-only, thresholds 64/256/1,024/4,096, unchanged
+forced sentinels, and allocation/reference correctness. Adoption requires at
+least 1.10x median process speedup, improvement greater than twice combined
+MAD, p95 no more than 5% worse, compile cost repaid, exact oracle/stream/state/
+proof/W^X results, historical scalar native and process medians within 5%, and
+no repeated attempt or fallback. The largest passing candidate within twice
+combined MAD of the fastest passing median is selected. Otherwise optimizing
+stays disabled and the complete rejection is retained. See [Proof-Based
+Optimizing JIT](decisions/proof-based-optimizing-jit.md) for the authoritative
+contract.
 
 Longer-term accepted sequences for [staged self-hosting](decisions/self-hosted-platform-roadmap.md),
 [modules and reproducible packages](decisions/modules-and-packages.md),
@@ -678,16 +721,21 @@ x86-64. Emission alone did not complete it: canonical source now reaches actual
 installed calls with nonzero main/callee/PollV1 counts and no forced fallback.
 The next dependency sequence is:
 
-1. retain and broaden exact scalar baseline evidence without weakening forced
-   errors or bounded code-object ownership;
-2. add Handle/host capability calls and explicit native/VM reference
-   transitions without weakening the Current host-independent heap slice;
-3. design loop-header state transfer separately before making any OSR claim.
+1. implement the selected process-local synchronous automatic proof promotion
+   without weakening baseline threshold-64 behavior or exact code ownership;
+2. run and retain the predeclared automatic threshold gate before changing its
+   default-disabled policy;
+3. return to Handle/host transitions, broader proved passes, and separately
+   designed loop-header state transfer without making an OSR claim.
 
-Automatic optimizing promotion, broader proof passes, OSR, background
+The next implementation slice is the selected process-local synchronous
+automatic baseline-to-proof promotion contract above. It must land disabled by
+default with candidate CLI threshold controls, then run the predeclared retained
+benchmark before any default adoption. Broader proof passes, OSR, background
 compilation, guards, deoptimization, persistent profiles/caches, offline PGO,
-and non-Linux/non-x86-64 acceptance are outside this first optimizing cycle. The exact syntax, validation, outcome, SSA, backend-selection, ABI,
-engine, safety, and evidence contract is
+and non-Linux/non-x86-64 acceptance remain outside that slice. The exact
+promotion contract is [Proof-Based Optimizing
+JIT](decisions/proof-based-optimizing-jit.md); the existing baseline contract is
 [Callable Linux x86-64 Baseline JIT Cycle](decisions/callable-baseline-jit.md).
 
 The supporting contracts are [AI-First Semantic Core](decisions/semantic-core.md),

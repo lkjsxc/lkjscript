@@ -12,8 +12,9 @@ typed HIR, verified normalized SSA, selected owned Linux x86-64 backend, bounded
 code objects, callable host-independent baseline JIT, and the forced first
 proof-based optimizing pipeline are **Current**. The old observation hook is
 removed. Broader ownership/traits, Handle/host native calls, native/VM
-reference transitions, automatic optimizing promotion, later loop OSR, and
-direct Wasm are **Accepted Targets**. Guarded
+reference transitions, later loop OSR, and direct Wasm are **Accepted Targets**.
+The synchronous automatic baseline-to-proof promotion slice is an **Accepted
+Implementation Selection**, not yet Current. Guarded
 specialization is **Deferred** until justified. Offline PGO is **Rejected by
 Product Decision**.
 
@@ -31,7 +32,8 @@ truthful semantics and safety
   -> ownership, coherent traits, and exact native roots
   -> allocation-capable baseline JIT
   -> forced first proof-based optimizing JIT
-  -> measured automatic promotion and broader proof passes
+  -> selected synchronous automatic proof promotion and retained threshold gate
+  -> broader proof passes
   -> loop-triggered JIT and OSR in a later cycle
   -> guarded specialization and deoptimization only when justified
   -> direct Wasm and additional targets
@@ -55,10 +57,12 @@ compiler, bounded code objects, explicit engines, and a retained scalar
 performance result. Generated forced baseline execution reached 46.146x
 same-commit VM execution and auto reached 1.653x process-wall speedup at
 threshold 64 on the 100,000-call F64 workload. Host-independent native
-reference/allocation and the forced first optimizing tier now exist, but no
-optimizing performance protocol has run. There is no automatic optimizing
-promotion, OSR, guarded specialization, or deoptimization; the scalar baseline
-result is not a full-language or optimizing-speed claim.
+reference/allocation and the forced first optimizing tier now exist. The clean
+retained forced protocol adopted that optimizing tier at 2.984780x native and
+1.478776x process-wall speedup over same-commit forced baseline on its declared
+workload; this remains a narrow forced-tier result. There is no automatic
+optimizing promotion, OSR, guarded specialization, or deoptimization; the
+scalar baseline and forced optimizing results are not full-language claims.
 
 Historical debug figures and single-shot C comparisons lack preserved machine,
 variance, or artifact data and remain diagnostic rather than baselines. The
@@ -170,6 +174,28 @@ This tier is non-speculative and does not imply general deoptimization. The
 exact pass and forced-engine boundary is [Proof-Based Optimizing
 JIT](../decisions/proof-based-optimizing-jit.md).
 
+The next slice is an **Accepted Implementation Selection**, not Current. It
+keeps auto baseline compilation at 64 VM entries and adds an initially disabled
+CLI opt-in for proof promotion after exactly N baseline entries of one scalar-
+entry root. The Nth baseline entry synchronously proves, lowers, and W^X-
+installs but calls captured baseline code; only a later entry publishes the
+pending optimized object. Exact tokens bind function/object/tier. Coexisting
+baseline/optimizing objects, one current plus optional pending selection,
+bounded unselectable stale retention, one attempt per epoch, total attempt
+bounds, structured failures, same-epoch suppression, and epoch invalidation
+back to baseline are mandatory. Main stays VM; generated reference helpers may
+allocate internally but are not VM/native entries. Forced tiers do not change.
+
+The retained clean locked release gate compares auto baseline-only with exact
+optimizing thresholds 64/256/1,024/4,096 using deterministic randomized ordering,
+at least four warmups and 31 samples, exact oracle/streams/state/proof/W^X,
+forced sentinels, and allocation/reference correctness. Adoption requires at
+least 1.10x median process speedup, improvement greater than twice combined MAD,
+p95 no more than 5% worse, compile cost repaid, both historical scalar medians
+within 5%, and no repeated attempt or fallback. Select the largest passing
+threshold within twice combined MAD of the fastest passing process median;
+otherwise retain the rejection and keep optimizing disabled.
+
 ## Phase 7: Loop Hotness And OSR — Later Cycle
 
 1. Add bounded saturating loop-backedge counters without ordinary
@@ -254,8 +280,10 @@ compilation/OSR/fallback/deoptimization counts, code and metadata bytes, peak
 RSS/cache, repetitions, dispersion/tails, and cleanup. A faster steady state is
 not called an end-to-end speedup when total execution is slower.
 
-The exact active completion boundary is
-[Callable Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md).
+The exact next implementation boundary is the **Accepted Implementation
+Selection** in [Proof-Based Optimizing
+JIT](../decisions/proof-based-optimizing-jit.md). The callable baseline and
+forced optimizing tiers remain the Current foundations.
 
 ## Rejected And Deferred
 

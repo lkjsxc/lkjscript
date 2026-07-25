@@ -14,9 +14,10 @@ bytecode. The independent bounded SSA evaluator and bytecode link metadata are
 also Current. The selected owned Linux x86-64 scalar machine-plan encoder, safe W^X boundary,
 narrow verified-SSA adapter, bounded code objects, forced/automatic callable
 baseline tier, host-independent native references/allocation, and the forced
-first proof-based optimizing slice are **Current**. Handle/host native calls,
-native/VM reference transitions, automatic optimizing promotion, loop OSR,
-minimal AOT test emission, and direct Wasm are **Accepted Targets**. The backend is specified by
+first proof-based optimizing slice are **Current**. Synchronous automatic
+proof promotion is an **Accepted Implementation Selection**, not Current.
+Handle/host native calls, native/VM reference transitions, loop OSR, minimal AOT
+test emission, and direct Wasm are **Accepted Targets**. The backend is specified by
 [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
 **Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).

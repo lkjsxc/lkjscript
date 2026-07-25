@@ -8,9 +8,10 @@ claiming one universal meaning of “fastest language.”
 ## Status
 
 **Accepted Target.** Current historical measurements are diagnostic unless
-their individual records say otherwise. No world-leading or JIT claim exists
-until the applicable category has reproducible correctness and performance
-evidence.
+their individual records say otherwise. The next automatic proof-promotion
+protocol is an **Accepted Implementation Selection**, not a measured or Current
+result. No world-leading or broad JIT claim exists until the applicable category
+has reproducible correctness and performance evidence.
 
 ## Categories
 
@@ -63,12 +64,18 @@ Every retained result records:
 - cold/warm state, warmups, repetitions, ordering, median, dispersion, tails,
   and unremoved samples;
 - peak RSS and artifact cleanup;
-- JIT thresholds and time until each trigger;
-- compilation time and time to first native execution;
-- end-to-end and steady-state time and time to break even against the VM;
-- baseline/optimizing compilation counts, OSR transitions, guard failures,
-  deoptimizations, VM fallbacks, native code bytes, metadata bytes, and
-  code-cache peak where applicable.
+- baseline/optimizing enables and thresholds, exact epoch, and time until each
+  trigger;
+- attempts, structured failures, same-epoch suppressions, and state transitions;
+- compilation time, exact baseline entries before first optimized entry, and
+  time to first native and first optimized execution;
+- end-to-end and steady-state time and time to break even against the VM or
+  baseline-only auto control;
+- exact tier entries, opaque object IDs/entry tokens, proof/W^X facts, stale
+  invalidations, baseline/optimizing compilation counts, OSR transitions, guard
+  failures, deoptimizations, VM fallbacks, native code bytes, metadata bytes,
+  retained mapping/object/attempt/work/certificate limits, and code-cache peak
+  where applicable.
 
 A field that does not apply is recorded as not applicable; a metric that was not
 collected is recorded as not measured. Offline PGO profile identity is not
@@ -208,6 +215,38 @@ zero baseline entry/fallback with verified W^X. This is only a forced first-tier
 boundary on one CPU, not a general language score. Automatic optimizing
 promotion remains disabled and unmeasured; no OSR, deoptimization, or
 speculation capability or measurement is claimed.
+
+## Predeclared Automatic Proof-Promotion Gate
+
+This gate is selected but has not run. The future automatic-optimizing control
+is CLI-opt-in and disabled by default; existing auto baseline threshold 64 and both forced
+tiers remain unchanged. A clean locked release protocol deterministically
+randomizes at least four warmups and 31 unremoved samples per case for:
+
+- auto baseline-only;
+- auto optimizing thresholds 64, 256, 1,024, and 4,096 exact baseline entries
+  of the promotion root;
+- unchanged forced-baseline and forced-optimizing sentinels;
+- allocation/reference correctness with exact roots and no reference VM/native
+  entry transfer.
+
+Every run checks the exact independent oracle and stream expectations; exact
+state, epoch, token, object, and tier entries; proof/certificate verification;
+W^X; stale invalidation/selection; attempts and suppressions; code/metadata/
+mapping limits; and zero fallback. The Nth baseline entry must compile and
+install synchronously while invoking captured baseline code, with the first
+optimized entry occurring only later.
+
+A threshold passes only with at least 1.10x median process speedup over auto
+baseline-only, median improvement greater than twice the sum of both MADs,
+nearest-rank p95 no more than 5% worse, measured compile/install cost repaid by
+workload completion, exact correctness, no repeated attempt/fallback, and forced
+scalar native/process medians no more than 5% above retained 7,647,935 ns and
+9,372,036 ns. Select the largest passing threshold whose process median differs
+from the fastest passing candidate by no more than twice the sum of their MADs.
+If none passes, retain every sample and the rejection and keep automatic
+optimizing disabled. A passing result is not Current default policy until a
+later implementation/documentation adoption change.
 
 ## Claim Policy
 

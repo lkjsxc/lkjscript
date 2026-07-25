@@ -10,9 +10,10 @@ implementation contracts.
 **Current** for engineering policy, the semantic/outcome foundation, verified
 typed SSA, independent evaluation/baseline normalization, reference-bytecode
 cutover, callable scalar and allocation-capable Linux x86-64 baseline tiers,
-and forced certificate-verified optimizing execution. Ownership/traits,
-Handle/host transitions, automatic optimizing promotion, and broader proof
-passes remain **Accepted Targets**.
+and forced certificate-verified optimizing execution. Synchronous automatic
+baseline-to-proof promotion is an **Accepted Implementation Selection**, not yet
+Current. Ownership/traits, Handle/host transitions, and broader proof passes
+remain **Accepted Targets**.
 
 ## Product Intent
 
@@ -76,14 +77,32 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   passes, measured backend selection, SSA-to-bytecode cutover, bounded W^X code
   objects, actually called synchronous Linux x86-64 baseline JIT, exact native
   host-independent roots/allocation/collection, and the forced first
-  certificate-verified optimizing tier have landed. The active sequence is
-  broader ownership/coherent traits and Handle/host transitions, then measured
-  automatic optimizing promotion and broader proof passes. Forced first-tier
+  certificate-verified optimizing tier have landed. The next implementation
+  slice is the selected automatic proof-promotion boundary and retained gate;
+  broader ownership/coherent traits, Handle/host transitions, and broader proof
+  passes remain subsequent accepted work. Forced first-tier
   performance is Adopted from the clean `cc967ff` run at 2.984780x after the
   retained `063668e` run was Rejected by its scalar native sentinel; preserve
   both records. Automatic promotion remains disabled and unmeasured, with no
-  OSR, deoptimization, or speculation claim. Do not add inert
-  engine flags or label baseline code optimizing. Loop OSR and a minimal AOT
+  OSR, deoptimization, or speculation claim. Its next slice is now selected:
+  keep baseline auto threshold 64; add initially disabled CLI proof-promotion
+  thresholds 64/256/1,024/4,096; count exact baseline root entries; make the Nth
+  entry compile/install synchronously but call the captured baseline object;
+  publish only on a later entry using exact function/object/tier tokens. Own
+  coexisting baseline/optimizing objects with one current and optional pending,
+  retain bounded stale mappings until session drop without selecting them, and
+  enforce one attempt per epoch, bounded total retries, same-epoch suppression,
+  structured baseline-preserving failure, and newer-epoch optimized invalidation
+  back to baseline. Main and reference VM/native entry remain VM-only; internal
+  generated reference helpers may call/allocate. Forced tiers stay unchanged
+  and fallback-free. The retained gate compares auto baseline-only with all four
+  thresholds plus forced/allocation/reference sentinels at >=4 warmups/31
+  randomized samples, requiring >=1.10x median process speedup, >2x combined
+  MAD improvement, p95 <=5% worse, repaid compile cost, <=5% historical scalar,
+  exact oracle/state/proof/W^X, and no repeated attempt/fallback. Pick the
+  largest candidate statistically tied with fastest or retain rejection and
+  remain disabled. Do not add inert engine flags or label baseline code
+  optimizing. Loop OSR and a minimal AOT
   test emitter remain later targets, not current capability. Offline PGO is
   rejected by product decision. See [Allocation-Capable Baseline
   JIT](../decisions/allocation-capable-baseline-jit.md) and [Proof-Based

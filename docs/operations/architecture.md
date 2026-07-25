@@ -7,7 +7,9 @@ that own it.
 
 ## Status
 
-**Current**, with accepted foundation changes called out explicitly.
+**Current**, with accepted foundation changes called out explicitly. The next
+synchronous automatic proof-promotion architecture is an **Accepted
+Implementation Selection**, not yet Current.
 
 ## Crate Graph
 
@@ -125,10 +127,10 @@ optimizing pipeline are **Current**. Forced and auto baseline engines plus force
 optimizing execution enter real generated code. The initial `Owned Buf`
 ownership safe island, marker traits, and closed-plan ABI-2 typed-reference
 frames/maps are Current;
-general ownership, Handle/host native allocation, native/VM reference transitions,
-automatic optimizing promotion, broader optimization passes, loop OSR,
-minimal AOT file emission, and direct Wasm remain **Accepted Targets** or later
-work. The VM remains the cold tier and runtime oracle. See [Ownership And
+general ownership, Handle/host native allocation, native/VM reference
+transitions, broader optimization passes, loop OSR, minimal AOT file emission,
+and direct Wasm remain **Accepted Targets** or later work. Automatic optimizing
+promotion has an exact **Accepted Implementation Selection** but is not Current. The VM remains the cold tier and runtime oracle. See [Ownership And
 Borrowing](../decisions/ownership-and-borrowing.md), [Coherent Traits And Static
 Dispatch](../decisions/traits-and-static-dispatch.md), [Native References,
 Frames, And Exact GC Stack Maps](../decisions/native-references-and-gc-stack-maps.md),
@@ -191,10 +193,30 @@ retry suppression. The old observation-only hook is
 removed. Closed plans retain exact Buf-reference collection. Forced SSA/source execution
 also supports Str, legacy Buf, Product, List, Option, and Result allocation and
 direct/mutual recursion. Auto intentionally keeps reference-typed functions in
-VM because reference transitions remain absent. Loop
-OSR, automatic optimizing promotion, broader proof passes, background
+VM because reference transitions remain absent. Loop OSR, automatic optimizing promotion, broader proof passes, background
 compilation, speculative tiers, persistent profiles, and persistent code caches
-are absent.
+are absent. The selected but unimplemented automatic flow is:
+
+```text
+VM root entries --64--> synchronous baseline install; triggering call stays VM
+later scalar root entry -> exact Baseline(function, object, tier) token
+  -> count exact baseline entries of that root
+  --N--> capture current baseline token/object
+          -> synchronous bounded proof/check/lower/W^X install
+          -> OptimizingPending; invoke captured baseline object
+  -> later root entry validates/publishes pending token -> OptimizingNative
+```
+
+N is CLI-opt-in and candidate-controlled at 64/256/1,024/4,096; optimizing is
+disabled by default until retained adoption. The process-local session owns
+coexisting baseline/optimizing objects, one current and optional pending
+selection, and bounded stale mappings until drop. Epoch changes invalidate
+optimized selection back to baseline; stale tokens cannot be selected. One
+attempt per epoch, a bounded total, same-epoch suppression, and structured tier
+failure are architectural boundaries, not optimizer hints. Source main and all
+reference VM/native entries remain VM-only, while generated reference helpers
+may call and allocate internally. There is no OSR, background compile,
+deoptimization, guard, or speculation.
 
 ## Source Layout Rule
 
@@ -227,13 +249,15 @@ x86-64/W^X foundation are now Current. SSA-to-native lowering and exact VM/code-
 object tier ownership follow. The first adaptive execution target remains
 synchronous callable baseline JIT. Exact native roots/allocation and a
 proof-based optimizing tier now precede later loop OSR in the accepted sequence.
-The forced first proof pipeline and callable baseline tier are Current;
-automatic optimizing promotion is not. Minimal file
+The forced first proof pipeline and callable baseline tier are Current. The
+process-local synchronous automatic promotion state/object/epoch/benchmark
+boundary is selected for the next implementation but is not Current. Minimal file
 emission remains only for diagnostics and backend tests, and offline PGO is
-rejected. The exact active boundary is [Callable Linux x86-64 Baseline JIT
-Cycle](../decisions/callable-baseline-jit.md); the next contracts are
-[Allocation-Capable Baseline JIT](../decisions/allocation-capable-baseline-jit.md)
-and [Proof-Based Optimizing JIT](../decisions/proof-based-optimizing-jit.md).
+rejected. The exact next implementation boundary is the **Accepted Implementation
+Selection** in [Proof-Based Optimizing
+JIT](../decisions/proof-based-optimizing-jit.md), built on the Current [Callable
+Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md) and
+[Allocation-Capable Baseline JIT](../decisions/allocation-capable-baseline-jit.md).
 Real modules, process-safe host services, byte strings/views, and measured
 memory strategies build on those layers as vertical slices.
 

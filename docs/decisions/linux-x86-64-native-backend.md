@@ -16,9 +16,10 @@ optimizing code and provides callable host-independent code objects, tier state,
 and `vm`/`auto`/`baseline-jit`/`optimizing-jit` engines. The closed
 machine-plan/sys boundary supports exact ABI-2 typed stable references, active
 frames, host-independent source allocation/recursion, and shared baseline or
-optimizing lowering. Handle/host operations, native/VM reference transitions,
-automatic optimizing promotion, broader proof passes, and OSR remain outside
-current coverage.
+optimizing lowering. Synchronous automatic optimizing promotion is an
+**Accepted Implementation Selection** but remains outside current coverage.
+Handle/host operations, native/VM reference transitions, broader proof passes,
+and OSR also remain outside current coverage.
 
 ## Decision
 
