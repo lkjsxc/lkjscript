@@ -72,8 +72,12 @@ plan-callable typed signatures; encoder-owned Reserve/Register/Publish/
 Unregister/HeapDispatch slots instead expose their exact
 context/ordinal/byte/pointer/safepoint/heap-site machine arguments through
 `internal_abi_signature`. In particular, the second `HeapDispatchV1` argument is
-a heap-site ID, not a safepoint ID. Every registered return,
-trap, exit, deadline, resource, host-failure, and propagated-callee edge
+a heap-site ID, not a safepoint ID. ABI-2 frame registration records the exact
+source-function entry, so source lowering does not emit a duplicate
+`EnterFunctionV1` transition. A verified transitive may-collect summary publishes
+a caller safepoint only for a direct callee whose closure can collect; scalar
+non-collecting calls retain exact empty maps without paying a publication call.
+Every registered return, trap, exit, deadline, resource, host-failure, and propagated-callee edge
 unregisters once. Reports
 retain peak depth and native-stack bytes, collection calls, maximum roots, and
 the exact root count for every collection; completed outcomes report zero

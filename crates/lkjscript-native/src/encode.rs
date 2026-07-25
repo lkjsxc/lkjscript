@@ -59,6 +59,7 @@ struct FunctionEncoder<'a> {
     function: &'a FunctionPlan,
     function_ordinal: u32,
     signatures: &'a [(FunctionId, crate::Signature)],
+    collecting_functions: &'a HashSet<FunctionId>,
     bytes: &'a mut Vec<u8>,
     relocations: &'a mut Vec<crate::Relocation>,
     safepoints: &'a mut Vec<crate::Safepoint>,
@@ -98,6 +99,7 @@ pub fn encode(
         .iter()
         .map(|function| (function.id, function.signature.clone()))
         .collect();
+    let collecting_functions = collecting_function_closure(&plan.functions);
 
     for (function_ordinal, function) in plan.functions.iter().enumerate() {
         let start = bytes.len();
@@ -112,6 +114,7 @@ pub fn encode(
             function,
             function_ordinal,
             signatures: &signatures,
+            collecting_functions: &collecting_functions,
             bytes: &mut bytes,
             relocations: &mut relocations,
             safepoints: &mut safepoints,
@@ -601,7 +604,7 @@ impl FunctionEncoder<'_> {
             .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
         let roots = certified_root_locations(self.function, certificate)?;
         let may_collect = match target {
-            RelocationTarget::Function(_) => true,
+            RelocationTarget::Function(function) => self.collecting_functions.contains(&function),
             RelocationTarget::Runtime(slot) => slot.may_collect(),
         };
         if may_collect {
@@ -1028,6 +1031,46 @@ impl FunctionEncoder<'_> {
             )));
         }
         Ok(())
+    }
+}
+
+fn collecting_function_closure(functions: &[FunctionPlan]) -> HashSet<FunctionId> {
+    let mut collecting: HashSet<FunctionId> = functions
+        .iter()
+        .filter(|function| {
+            function.blocks.iter().any(|block| {
+                block.instructions.iter().any(|instruction| {
+                    matches!(&instruction.operation, Operation::HeapCall(_, _))
+                        || matches!(
+                            &instruction.operation,
+                            Operation::RuntimeCall(slot, _) if slot.may_collect()
+                        )
+                })
+            })
+        })
+        .map(|function| function.id)
+        .collect();
+    loop {
+        let mut changed = false;
+        for function in functions {
+            if collecting.contains(&function.id) {
+                continue;
+            }
+            let calls_collector = function.blocks.iter().any(|block| {
+                block.instructions.iter().any(|instruction| {
+                    matches!(
+                        &instruction.operation,
+                        Operation::Call(callee, _) if collecting.contains(callee)
+                    )
+                })
+            });
+            if calls_collector {
+                changed |= collecting.insert(function.id);
+            }
+        }
+        if !changed {
+            return collecting;
+        }
     }
 }
 

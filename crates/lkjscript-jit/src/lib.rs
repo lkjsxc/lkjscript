@@ -893,8 +893,8 @@ impl JitSession {
             }
         }
         // The root machine entry was invoked even when its frame/value
-        // reservation failed before generated EnterFunctionV1. Count that
-        // actual entry once so forced-tier evidence never reports zero native
+        // reservation failed before frame registration could record the source
+        // function. Count that actual entry once so forced-tier evidence never reports zero native
         // execution for a structured pre-entry resource outcome.
         if invocation_entries == 0 {
             invocation_entries = 1;

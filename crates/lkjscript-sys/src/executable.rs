@@ -1060,6 +1060,20 @@ impl<'a> NativeCallState<'a> {
             self.invalidate_active_frame();
             return;
         }
+        let Some(source_function) = self
+            .image
+            .entries()
+            .get(function_ordinal as usize)
+            .map(|entry| entry.source_function().get() as usize)
+        else {
+            self.invalidate_active_frame();
+            return;
+        };
+        let Some(entries) = self.native_entries.get_mut(source_function) else {
+            self.invalidate_active_frame();
+            return;
+        };
+        *entries = entries.saturating_add(1);
         self.pending_reservation = None;
         self.active_frames[self.active_depth] = ActiveFrame {
             function_ordinal,

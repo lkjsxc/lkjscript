@@ -623,12 +623,9 @@ fn lower_function(
             .write_local(entry, local, value)
             .map_err(LoweringError::backend)?;
     }
-    let source_id = builder
-        .i64_const(entry, i64::from(function.id.raw()))
-        .map_err(LoweringError::backend)?;
-    builder
-        .runtime_call(entry, RuntimeCallSlot::EnterFunctionV1, vec![source_id])
-        .map_err(LoweringError::backend)?;
+    // ABI-2 frame registration records the exact source-function entry before
+    // generated body effects. A separate EnterFunctionV1 call would duplicate
+    // that accounting and add one runtime transition to every native call.
     builder
         .runtime_call(entry, RuntimeCallSlot::PollV1, Vec::new())
         .map_err(LoweringError::backend)?;

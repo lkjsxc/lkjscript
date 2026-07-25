@@ -38,12 +38,14 @@ string and legacy-buffer operations, direct and mutual recursion, return, trap,
 exit, and structured outcome propagation. Indirect calls remain unsupported.
 
 Native entry, call, and loop transitions use enum-identified versioned runtime
-calls. `EnterFunctionV1` records exact per-source-function native entries.
-`PollV1` consumes bounded native poll fuel, checks a monotonic deadline, counts
-polls, and propagates deadline, resource-limit, or host-clock status through the
-shared invocation state. Native ABI 2 prologues also register initialized
-frames, collecting calls publish dense safepoints, and every structured edge
-unregisters. Generated code never exits the host process.
+calls. ABI-2 frame registration records exact per-source-function native entries
+without a duplicate source-level `EnterFunctionV1` call. `PollV1` consumes
+bounded native poll fuel, checks a monotonic deadline, counts polls, and
+propagates deadline, resource-limit, or host-clock status through the shared
+invocation state. Native ABI 2 prologues register initialized frames; verified
+transitive may-collect summaries publish dense caller safepoints only where a
+callee closure can collect, and every structured edge unregisters. Generated
+code never exits the host process.
 
 ## Engine Behavior
 

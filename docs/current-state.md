@@ -178,8 +178,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   aggregate/per-frame limits, active-frame capacity, the exact configured
   active value/home/root budget, and guarded current pthread stack bounds. The
   sys invocation caches immutable current-thread stack bounds once, then checks
-  each generated reservation without repeating pthread attribute queries, and
-  tracks exact reservation/release across nested frames. Collecting calls publish
+  each generated reservation without repeating pthread attribute queries.
+  Registration itself records source-function entry, avoiding a duplicate
+  runtime call, and verified transitive may-collect summaries suppress caller
+  publication calls for non-collecting scalar closures while retaining exact
+  empty maps. Sys tracks exact reservation/release across nested frames. Collecting calls publish
   a dense safepoint, and every structured return/trap/exit/deadline/resource/host
   edge unregisters before status returns to the execution owner
 - Engine modes: explicit `vm`, `baseline-jit`, `optimizing-jit`, and `auto` work; ordinary `run`
