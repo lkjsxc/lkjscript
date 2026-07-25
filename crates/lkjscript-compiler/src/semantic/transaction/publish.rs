@@ -75,15 +75,31 @@ fn install(
         fs::rename(&paths.host, &paths.backup)
             .map_err(|cause| publication("rename source to recovery backup", cause))?;
         verify_backup(&paths.backup, source)?;
-        fs::rename(&paths.temporary, &paths.host)
-            .map_err(|cause| publication("install staged source", cause))?;
+        fs::hard_link(&paths.temporary, &paths.host)
+            .map_err(|cause| publication("install staged source without replacement", cause))?;
+        fs::remove_file(&paths.temporary)
+            .map_err(|cause| publication("remove installed source temporary", cause))?;
+        verify_installed(&paths.host, source)?;
         super::journal::sync_parent(&paths.host)?;
     }
     for (index, (source, record)) in transaction.sources.iter().zip(records).enumerate() {
         let paths = super::journal::paths(workspace, record, id, index)?;
         verify_backup(&paths.backup, source)?;
+        verify_installed(&paths.host, source)?;
     }
     Ok(())
+}
+
+fn verify_installed(host: &Path, source: &super::StagedSource) -> Result<(), ProtocolError> {
+    let bytes = read_exact(host, source.new_bytes.len())?;
+    if bytes == source.new_bytes {
+        Ok(())
+    } else {
+        Err(error(
+            ProtocolErrorCode::PreconditionFailed,
+            format!("source {} changed during installation", source.logical_path),
+        ))
+    }
 }
 
 fn verify_backup(backup: &Path, source: &super::StagedSource) -> Result<(), ProtocolError> {

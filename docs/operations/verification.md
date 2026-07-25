@@ -77,7 +77,9 @@ duplicate/trailing/malformed Unicode JSON; aggregate budgets; deterministic
 ordering; stale identities/preconditions; rename collisions and complete
 references; expression type/effect/ownership constraints; bounded response
 encoding before publish; publication failure; byte-identical rollback; and
-prepared-journal crash recovery before the next read.
+prepared-journal crash recovery before the next read; descriptor-anchored
+ancestor-swap rejection; and preservation of an externally created leaf at the
+no-replace install boundary.
 
 Compiler resource-profile tests cover all five profiles, exact/lowered/+1/
 overflow boundaries, corpus roots, deterministic diagnostics, identity, and

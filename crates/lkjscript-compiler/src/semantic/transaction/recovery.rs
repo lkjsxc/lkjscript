@@ -81,17 +81,64 @@ pub(super) fn rollback(
     for (index, record) in files.iter().enumerate().rev() {
         let paths = journal::paths(workspace, record, id, index)?;
         if paths.backup.exists() {
-            if paths.host.exists() {
-                fs::remove_file(&paths.host)
-                    .map_err(|cause| journal::io_failure("remove staged source", cause))?;
+            let backup = digest_existing(&paths.backup)?
+                .ok_or_else(|| journal::failure("source backup disappeared"))?;
+            if backup != record.old_sha256 {
+                return Err(journal::failure("source backup hash changed"));
             }
-            fs::rename(&paths.backup, &paths.host)
-                .map_err(|cause| journal::io_failure("restore source backup", cause))?;
+            match digest_existing(&paths.host)? {
+                None => restore_backup(&paths.backup, &paths.host)?,
+                Some(hash) if hash == record.new_sha256 => {
+                    fs::remove_file(&paths.host)
+                        .map_err(|cause| journal::io_failure("remove staged source", cause))?;
+                    restore_backup(&paths.backup, &paths.host)?;
+                }
+                Some(hash) if hash == record.old_sha256 => {
+                    fs::remove_file(&paths.backup)
+                        .map_err(|cause| journal::io_failure("remove duplicate backup", cause))?;
+                }
+                Some(_) => {
+                    fs::remove_file(&paths.backup).map_err(|cause| {
+                        journal::io_failure("preserve external source and remove backup", cause)
+                    })?;
+                }
+            }
         }
         let _ = fs::remove_file(&paths.temporary);
         journal::sync_parent(&paths.host)?;
     }
     Ok(())
+}
+
+fn restore_backup(backup: &Path, host: &Path) -> Result<(), ProtocolError> {
+    fs::rename(backup, host).map_err(|cause| journal::io_failure("restore source backup", cause))
+}
+
+fn digest_existing(path: &Path) -> Result<Option<String>, ProtocolError> {
+    let metadata = match path.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(cause) => return Err(journal::io_failure("inspect publication leaf", cause)),
+    };
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || metadata.len() > crate::source::FOUNDATION_MAX_SOURCE_FILE_BYTES
+    {
+        return Err(journal::failure(
+            "publication leaf is not a bounded regular file",
+        ));
+    }
+    let limit = crate::source::FOUNDATION_MAX_SOURCE_FILE_BYTES;
+    let mut bytes = Vec::new();
+    File::open(path)
+        .map_err(|cause| journal::io_failure("open publication leaf", cause))?
+        .take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|cause| journal::io_failure("read publication leaf", cause))?;
+    if u64::try_from(bytes.len()).map_err(|_| journal::failure("source size overflow"))? > limit {
+        return Err(journal::failure("publication leaf exceeds source limit"));
+    }
+    Ok(Some(journal::hex(&lkjscript_core::sha256(&bytes))))
 }
 
 pub(super) fn cleanup(

@@ -82,7 +82,11 @@ and one new revision. Before any source rename, the exact success response is
 encoded within its output bound. Repository publication holds one local
 repository exclusion lock and writes an atomically replaced, synchronized
 recovery journal below `target/lkjscript/semantic-staging/`. Every later request
-recovers an uncommitted journal before loading source. Final backup bytes are
+recovers an uncommitted journal before loading source. On Current Linux, each
+source parent is opened and verified as its exact canonical repository
+directory, and leaf operations remain anchored through that descriptor.
+Installation uses no-replace linking, so an external leaf created after backup
+is preserved rather than overwritten. Final backup and installed bytes are
 rechecked before commit. Any ordinary failed precondition/check/publication
 restores complete old files; a process crash is rolled back before the next
 protocol read. Comments and string contents are not renamed by text search.

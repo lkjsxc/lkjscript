@@ -38,6 +38,7 @@ pub(super) struct ArtifactPaths {
     pub host: PathBuf,
     pub temporary: PathBuf,
     pub backup: PathBuf,
+    _directory: super::directory_anchor::AnchoredDirectory,
 }
 
 pub(super) fn build(
@@ -114,20 +115,21 @@ pub(super) fn paths(
     {
         return Err(failure("publication journal record is invalid"));
     }
-    let host = workspace.join(&record.relative);
-    let directory = host
+    let lexical_host = workspace.join(&record.relative);
+    let lexical_directory = lexical_host
         .parent()
-        .ok_or_else(|| failure("source has no parent"))?
-        .to_path_buf();
-    let leaf = host
+        .ok_or_else(|| failure("source has no parent"))?;
+    let leaf = lexical_host
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| failure("source filename is not UTF-8"))?
         .to_string();
+    let directory = super::directory_anchor::AnchoredDirectory::open(lexical_directory)?;
     Ok(ArtifactPaths {
-        host,
+        host: directory.join(&leaf),
         temporary: directory.join(format!(".{leaf}.lkjscript-stage-{id}-{index}")),
         backup: directory.join(format!(".{leaf}.lkjscript-backup-{id}-{index}")),
+        _directory: directory,
     })
 }
 
@@ -153,7 +155,10 @@ fn safe_relative(path: &str) -> bool {
 }
 
 pub(super) fn is_hash(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 pub(super) fn hex(bytes: &[u8; 32]) -> String {

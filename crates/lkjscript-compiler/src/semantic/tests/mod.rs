@@ -3,6 +3,7 @@
 mod codec;
 mod diagnostics;
 mod publication;
+mod publication_conflict;
 mod query;
 mod transaction;
 
