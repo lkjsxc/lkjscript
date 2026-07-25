@@ -95,6 +95,14 @@ direct-call resolution, and canonical block/fallthrough order. There is no
 speculation, native lowering, engine selection, OSR, guard, or deoptimization
 in this cutover.
 
+The **Accepted Next** optimizing boundary starts from this verified baseline
+form and returns an opaque separately verified optimized program. Its first
+certificate vocabulary is exact scalar algebraic replacement and local/
+dominator-ordered value numbering, followed by the existing cleanup passes.
+The certificate verifier reconstructs the candidate from checked edits and the
+ordinary SSA verifier runs again. Baseline normalization is not relabeled as
+optimization, and unchecked optimizer output cannot reach native lowering.
+
 ## HIR Resolution Invariants
 
 - Every name resolves once to a stable binding ID.

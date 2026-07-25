@@ -11,6 +11,38 @@ Deterministic baseline SSA normalization is **Current**. An optimizing engine,
 optimizing code objects, optimized execution, and automatic promotion are an
 **Accepted Target**. No baseline code is labeled optimizing.
 
+## Selected First Delivery
+
+**Accepted Next Slice; not Current until forced generated execution and retained
+measurement pass.** The first optimizing pipeline is deliberately narrower than
+the full progression below:
+
+1. scalar algebraic identities whose exact typed operation proves the rewrite;
+2. dominator/same-block global value numbering for exact deterministic scalar
+   expressions, including a duplicate checked operation only after the first
+   identical operation proves the same check succeeded;
+3. ordinary verified copy/branch/unreachable/dead-code cleanup.
+
+Every rewrite is represented by a stable-ID edit certificate. An independent
+bounded verifier recomputes type, operation, operand, dominance/order, effect,
+trap, ownership, frame-state, and safepoint legality, applies only certified
+edits to a private clone, compares the exact candidate, and then runs the normal
+SSA verifier. Only an opaque `VerifiedOptimizedProgram` reaches optimizing
+lowering. Missing, stale, reordered, excessive, or forged edits fail closed.
+
+The selected forced engine is `--engine optimizing-jit`. It compiles the full
+required supported group before source effects, installs only `Tier::Optimizing`
+objects, actually enters optimized main, and never substitutes baseline or VM.
+It reuses ABI-2 exact roots, allocation runtime sites, active-frame bounds, W^X
+installation, and structured outcomes. It adds no guards, deoptimization, OSR,
+background compilation, or hidden source assumptions.
+
+Automatic promotion remains disabled until same-commit forced correctness and
+benchmark evidence select thresholds. Inlining, general SCCP, range/check
+elimination, LICM, escape/scalar replacement, tail calls, unrolling, hot/cold
+layout, and host-capability optimization remain later accepted slices; the
+small first pipeline is not represented as completing those items.
+
 ## Engine And State
 
 The accepted forced engine is:
