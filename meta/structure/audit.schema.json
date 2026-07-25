@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lkjscript.structure.audit.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "revision",
+    "policy_version",
+    "files",
+    "directories",
+    "classifications",
+    "capsules",
+    "findings",
+    "provenance",
+    "unsupported"
+  ],
+  "properties": {
+    "schema": {
+      "const": "lkjscript.structure.audit.v1"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "audit.records.schema.json#/$defs/file"
+      }
+    },
+    "directories": {
+      "type": "array",
+      "items": {
+        "$ref": "audit.records.schema.json#/$defs/directory"
+      }
+    },
+    "classifications": {
+      "type": "array",
+      "items": {
+        "$ref": "audit.records.schema.json#/$defs/classification"
+      }
+    },
+    "capsules": {
+      "type": "array",
+      "items": {
+        "$ref": "capsule.schema.json"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "audit.records.schema.json#/$defs/finding"
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "$ref": "audit.records.schema.json#/$defs/provenance"
+      }
+    },
+    "unsupported": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "core",
+  "root": "crates/lkjscript-core",
+  "kind": "crate",
+  "dependencies": []
+}

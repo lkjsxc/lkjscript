@@ -1,0 +1,8 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "workspace",
+  "root": ".",
+  "kind": "workspace",
+  "dependencies": ["crates"]
+}

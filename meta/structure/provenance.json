@@ -1,0 +1,132 @@
+{
+  "schema": "lkjscript.structure.provenance.v1",
+  "version": 1,
+  "entries": [
+    {
+      "path": "Cargo.lock",
+      "class": "generated-mutable",
+      "sha256": "ac2e26fd13762fcc41be31c854ede5ba4491e02994a9d224ab87d3653c752946",
+      "generator": "cargo 1.96.0 lockfile v4; Cargo.toml workspace dependency resolution"
+    },
+    {
+      "path": "LICENSE",
+      "class": "immutable-license",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/ai-authoring/results/raw-rename-gpt-5.4-mini-isolation-failure.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "99b8ab17897c9f61c1fcb1feb803573aafdd010f2202e1275bd0b78662d7b9ba",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/ai-authoring/results/raw-rename-gpt-5.6-sol.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "7317ff4ca5dfea8af0936938eb28728ec1894a4e132141db2316f22324e3efba",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/ai-authoring/results/raw-rename-qwen3.5-9b-timeout.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "2f6ce734b4919529457d20a610571d879dec3cd8b265d838cb3bfc57bd59c844",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/ai-authoring/tasks/rename-function-v1.json",
+      "class": "immutable-fixture",
+      "sha256": "a1a5ae28621091381d93b068ba4c62daba74afbc5febc710722af2f7cd3876da",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/comments.bf",
+      "class": "immutable-fixture",
+      "sha256": "271a2c339475f1a931a28e34ceebe4f9137f6e3501f2854e524abc688a73f9e6",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/echo.bf",
+      "class": "immutable-fixture",
+      "sha256": "bee709c22a3d8a904cb92ba667c33670688d187e6253ce517fcce1e793a953a6",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/eof.bf",
+      "class": "immutable-fixture",
+      "sha256": "b3725fd0f80c4dd8997af6c2a6a1dcca1ea5c046626df4c933b46940be8102a8",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/hello.bf",
+      "class": "immutable-fixture",
+      "sha256": "a64530a28fd3302164c7d4ea1c6ad03a2ed84128ed224238592d39cc96ca7e54",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/left-underflow.bf",
+      "class": "immutable-fixture",
+      "sha256": "33bf35acf206b0ea03a8c2712f70ca9a8a734c90939ecba398d865bac4a73f7f",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/nested.bf",
+      "class": "immutable-fixture",
+      "sha256": "01c33d4bc3b54b958c561845cddaf04abbda6fe5afd9883b147e2e87054dad91",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/unmatched-close.bf",
+      "class": "immutable-fixture",
+      "sha256": "26a46d6abbc796b2231c12490288ffdcd1f0c5740cfe244bfc62ad67a364938f",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/unmatched-open.bf",
+      "class": "immutable-fixture",
+      "sha256": "71a7b5f637c36c0fbb6976648dd0f1a9a6473c8dd5b04f07d7c749b99fa46be1",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/brainfuck/fixtures/wrapping.bf",
+      "class": "immutable-fixture",
+      "sha256": "09077c2f470a6d0d0b9a7e1d529e8410a86faf48ffa8797fdb20c6a7e562a7a2",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/auto-threshold-1.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "51d5eccd1705248e9e3a761f9de7e413ef1853e6f7e9befc8f7a006d2db207b0",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/auto-threshold-1024.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "f99d70bbf3af16d6fb83c1febd453a98620ae1feaa47078f33d14dbed50cdf25",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/callable-baseline-jit-linux-x86_64.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "ffdc3671857e44dfba2cbd2d1c287514a12c5a4c58a07124bfd99645c3bb86a7",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "3e4341ffab5c0cbd976b3dc228d24dfdd8ff135247b91caafb74f0a571e71cec",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "e71d1caf35b57ea50c094806372f6e8c991bf86418f44885c3d6fd0dcd4b082e",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/pre-jit-c4-vm-comparison.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "771d5206229f6452f96f5186d82353b80111b455f9e09c894c7c531206246884",
+      "generator": null
+    }
+  ]
+}

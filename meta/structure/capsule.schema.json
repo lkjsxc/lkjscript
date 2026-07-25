@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lkjscript.capsule.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "root",
+    "kind",
+    "dependencies"
+  ],
+  "properties": {
+    "schema": {
+      "const": "lkjscript.capsule"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]*$"
+    },
+    "root": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "workspace",
+        "collection",
+        "crate",
+        "source"
+      ]
+    },
+    "dependencies": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9.-]*$"
+      }
+    }
+  }
+}

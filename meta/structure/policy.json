@@ -1,0 +1,173 @@
+{
+  "schema": "lkjscript.structure.policy.v1",
+  "version": "1.0.0",
+  "limits": {
+    "authored_lines": 200,
+    "authored_bytes": 32768,
+    "ordinary_line_scalars": 120,
+    "directory_entries": 16,
+    "warning_depth": 8,
+    "error_depth": 12,
+    "graph_nodes": 4096,
+    "graph_edges": 16384,
+    "query_work": 65536,
+    "query_bytes": 65536
+  },
+  "rules": [
+    {
+      "id": "structure.file.lines",
+      "level": "error",
+      "summary": "Authored files have at most 200 physical lines."
+    },
+    {
+      "id": "structure.file.bytes",
+      "level": "error",
+      "summary": "Authored files have at most 32768 UTF-8 bytes."
+    },
+    {
+      "id": "structure.line.scalars",
+      "level": "error",
+      "summary": "Ordinary authored lines have at most 120 Unicode scalars."
+    },
+    {
+      "id": "structure.directory.entries",
+      "level": "error",
+      "summary": "Tracked immediate directory entries have at most 16 members."
+    },
+    {
+      "id": "structure.directory.depth-warning",
+      "level": "warning",
+      "summary": "Tracked depth greater than 8 is discouraged."
+    },
+    {
+      "id": "structure.directory.depth-error",
+      "level": "error",
+      "summary": "Tracked depth greater than 12 is forbidden."
+    },
+    {
+      "id": "structure.directory.one-child",
+      "level": "warning",
+      "summary": "One-child directories require review."
+    },
+    {
+      "id": "structure.path.symlink",
+      "level": "error",
+      "summary": "Tracked symbolic links are forbidden."
+    },
+    {
+      "id": "structure.path.unclassified",
+      "level": "error",
+      "summary": "Tracked paths must be regular UTF-8 files."
+    },
+    {
+      "id": "structure.source.packed-rust",
+      "level": "error",
+      "summary": "Conservatively detected packed Rust statements are forbidden."
+    },
+    {
+      "id": "structure.source.minified-json",
+      "level": "error",
+      "summary": "Authored minified JSON is forbidden."
+    },
+    {
+      "id": "structure.source.base64",
+      "level": "error",
+      "summary": "Giant base64-like authored literals are forbidden."
+    },
+    {
+      "id": "structure.source.hidden-literal",
+      "level": "error",
+      "summary": "Giant compressed or hidden-source-like literals are forbidden."
+    },
+    {
+      "id": "structure.source.top-level-items",
+      "level": "warning",
+      "summary": "Conservative Rust top-level item counts over 16 require review."
+    },
+    {
+      "id": "structure.source.fanout",
+      "level": "warning",
+      "summary": "Conservative Rust import or module fanout over 16 requires review."
+    },
+    {
+      "id": "structure.provenance.stale",
+      "level": "error",
+      "summary": "Exact-path provenance hashes must match."
+    },
+    {
+      "id": "structure.provenance.exact-path",
+      "level": "error",
+      "summary": "Provenance uses exact paths without glob syntax."
+    },
+    {
+      "id": "structure.provenance.class",
+      "level": "error",
+      "summary": "Provenance classifications are closed."
+    },
+    {
+      "id": "structure.capsule.cycle",
+      "level": "error",
+      "summary": "Capsule dependencies must be acyclic."
+    },
+    {
+      "id": "structure.capsule.version",
+      "level": "error",
+      "summary": "Capsules use the closed lkjscript.capsule v1 contract."
+    },
+    {
+      "id": "structure.capsule.duplicate",
+      "level": "error",
+      "summary": "Capsule IDs are unique."
+    },
+    {
+      "id": "structure.capsule.actual-dependency",
+      "level": "error",
+      "summary": "Actual internal crate dependencies must be capsule-declared."
+    },
+    {
+      "id": "structure.capsule.dependency",
+      "level": "error",
+      "summary": "Declared capsule dependencies resolve exactly."
+    },
+    {
+      "id": "structure.capsule.fanout",
+      "level": "error",
+      "summary": "Capsule dependency fanout is at most 16."
+    },
+    {
+      "id": "structure.file.read-bound",
+      "level": "error",
+      "summary": "Audit reads remain within the fixed input bound."
+    },
+    {
+      "id": "structure.provenance.duplicate",
+      "level": "error",
+      "summary": "Each exact provenance path occurs once."
+    },
+    {
+      "id": "structure.provenance.generator",
+      "level": "error",
+      "summary": "Mutable generated files identify their generator."
+    },
+    {
+      "id": "structure.provenance.missing",
+      "level": "error",
+      "summary": "Every provenance path is tracked."
+    },
+    {
+      "id": "structure.provenance.read",
+      "level": "error",
+      "summary": "Provenance inputs remain readable within the repository."
+    },
+    {
+      "id": "structure.repository.race",
+      "level": "error",
+      "summary": "Repository revision and file sizes remain stable during audit."
+    },
+    {
+      "id": "structure.ratchet.stale",
+      "level": "error",
+      "summary": "Ratchet records must describe current violations."
+    }
+  ]
+}
