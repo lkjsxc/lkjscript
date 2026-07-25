@@ -77,6 +77,7 @@ fn atomic_failures_leave_previous_state_byte_identical() {
         FailurePoint::AfterCreate,
         FailurePoint::AfterWrite,
         FailurePoint::AfterFileSync,
+        FailurePoint::AfterRename,
     ] {
         assert!(storage::write_state_at(&repo.root, "atomic-task", replacement, failure).is_err());
         assert_eq!(fs::read(&path).unwrap(), original);
@@ -86,6 +87,21 @@ fn atomic_failures_leave_previous_state_byte_identical() {
             .any(|item| item.file_name().to_string_lossy().ends_with(".tmp"));
         assert!(!temporary);
     }
+}
+
+#[test]
+fn post_rename_failure_removes_first_state() {
+    let repo = support::repository("atomic-first-state");
+    let path = storage::state_path(&repo.root, "first-task");
+    let failure = storage::write_state_at(
+        &repo.root,
+        "first-task",
+        b"replacement bytes\n",
+        FailurePoint::AfterRename,
+    )
+    .unwrap_err();
+    assert!(failure.contains("previous state restored"));
+    assert!(!path.exists());
 }
 
 #[cfg(unix)]

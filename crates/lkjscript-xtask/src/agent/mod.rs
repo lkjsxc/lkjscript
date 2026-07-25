@@ -6,6 +6,7 @@ mod git;
 mod history;
 mod json;
 mod model;
+mod publication_rollback;
 mod quarantine;
 mod references;
 mod storage;

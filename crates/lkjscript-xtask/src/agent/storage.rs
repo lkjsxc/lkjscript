@@ -11,6 +11,7 @@ pub enum FailurePoint {
     AfterCreate,
     AfterWrite,
     AfterFileSync,
+    AfterRename,
 }
 
 enum LiveState {
@@ -88,9 +89,31 @@ pub fn write_state_at(
         sync(&file)?;
         fail(failure, FailurePoint::AfterFileSync)?;
         drop(file);
+        let previous = match read_live(&destination)? {
+            LiveState::Missing => None,
+            LiveState::Bytes(bytes) => Some(bytes),
+            LiveState::Oversized => {
+                return Err("previous state exceeds state byte limit".into());
+            }
+        };
         fs::rename(&temporary_path, &destination)
             .map_err(|error| format!("publish state atomically: {error}"))?;
-        sync_parent(&directory)
+        if let Err(error) =
+            fail(failure, FailurePoint::AfterRename).and_then(|()| sync_parent(&directory))
+        {
+            return match super::publication_rollback::restore(
+                &directory,
+                &destination,
+                task_id,
+                previous.as_deref(),
+            ) {
+                Ok(()) => Err(format!("{error}; previous state restored")),
+                Err(rollback) => Err(format!(
+                    "{error}; state publication is indeterminate because rollback failed: {rollback}"
+                )),
+            };
+        }
+        Ok(())
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary_path);
@@ -123,19 +146,19 @@ fn fail(actual: FailurePoint, expected: FailurePoint) -> Result<(), String> {
     }
 }
 
-fn sync(file: &File) -> Result<(), String> {
+pub(super) fn sync(file: &File) -> Result<(), String> {
     file.sync_all()
         .map_err(|error| format!("sync state temporary: {error}"))
 }
 
 #[cfg(unix)]
-fn sync_parent(path: &Path) -> Result<(), String> {
+pub(super) fn sync_parent(path: &Path) -> Result<(), String> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(|error| format!("sync state directory: {error}"))
 }
 
 #[cfg(not(unix))]
-fn sync_parent(_path: &Path) -> Result<(), String> {
+pub(super) fn sync_parent(_path: &Path) -> Result<(), String> {
     Ok(())
 }

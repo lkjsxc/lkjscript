@@ -59,8 +59,11 @@ over-limit input publishes nothing.
 
 Publication uses a same-directory create-new temporary file, `write_all`, file
 synchronization where supported, atomic rename, and parent-directory
-synchronization where supported. Every live read, validation, compaction,
-quarantine, and write holds the same per-task local exclusion file. On the
+synchronization where supported. If rename succeeds but that synchronization
+fails synchronously, the writer atomically restores the prior bytes (or removes
+a first state) before reporting failure; a failed restoration is explicitly
+reported as indeterminate. Every live read, validation, compaction, quarantine,
+and write holds the same per-task local exclusion file. On the
 Current Linux target a lock records its process ID; a lock whose process no
 longer exists is removed before one bounded retry. The lock is synchronization only, not a lease or
 task authority. No partial JSON becomes live.
