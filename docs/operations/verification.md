@@ -9,9 +9,9 @@ gates without claiming unimplemented checks.
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 placeholder, and retained-result checks remain described in the capsules.
-`check-structure`, repository audit/graph/context, agent-state conformance, and
-complete Semantic Source protocol gates are **Accepted Implementation
-Contracts**, not Current commands.
+The `structure` command family, repository graph/context, agent-state
+conformance, and complete Semantic Source protocol gates are **Accepted
+Implementation Contracts**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -25,19 +25,20 @@ It checks a hardcoded required-document set and repository-local links. Any
 document move must update that required set in the integration change; moved
 paths must not be retained as aliases merely to satisfy the old checker.
 
-Until `check-structure` is implemented, a documentation migration independently
-checks every tracked authored Markdown file for at most 200 physical lines,
-32 KiB, and normal lines at most 120 columns; every authored directory for at
-most 16 immediate tracked entries; path depth; local links; and stale old paths.
-The exact script/command and result belong in commit evidence.
+Until `structure check` is implemented, each migration independently checks
+every tracked authored text file for at most 200 physical lines, 32 KiB, and
+ordinary lines at most 120 Unicode scalars; every authored directory for at most
+16 immediate tracked entries; path depth; local links; and stale old paths. The
+exact script/command and result belong in commit evidence.
 
 ## Accepted Structure Gate
 
 The predeclared commands are:
 
 ```text
-cargo run --locked -p lkjscript-xtask -- check-structure
-cargo run --locked -p lkjscript-xtask -- check-structure --audit-json target/repository-audit.json
+cargo run --locked -p lkjscript-xtask -- structure audit --json
+cargo run --locked -p lkjscript-xtask -- structure check
+cargo run --locked -p lkjscript-xtask -- structure explain <rule-or-path>
 ```
 
 They implement the rule IDs, provenance classes, bounds, strict manifest,
@@ -48,11 +49,11 @@ under `target/` and is byte-deterministic for the same inputs.
 
 The structure gate must cover at least:
 
-- `LKJ-REPO-PROVENANCE`, `LKJ-REPO-MANIFEST`, and `LKJ-REPO-LINK`;
-- line, byte, normal-column, width, depth, top-level, and fan-out rules;
-- generated location and bounded temporary-deviation records; and
-- symlink containment, malformed manifests, duplicate identities, and stale
-  authority paths.
+- exact provenance, classification, capsule-manifest, and local-link rules;
+- file line/byte/width, directory width/depth, item, fan-out, and cycle rules;
+- generated location and temporary ratchet records; and
+- symlink containment, malformed manifests, duplicate identities, unsupported
+  analyses, and stale authority paths.
 
 ## Accepted Graph, Context, And Work-State Gates
 

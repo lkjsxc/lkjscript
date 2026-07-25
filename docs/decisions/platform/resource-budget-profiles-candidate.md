@@ -79,10 +79,10 @@ immediate files/directories per lkjscript source directory. Current compiler,
 IR, bytecode, proof, native-image, execution, and Foundation V1 maxima also
 remain enforced.
 
-Repository authored-document limits are a separate topology policy. They do not
-raise or reclassify Edition 1 source limits. No Current source limit becomes a
-profile ceiling or lint until the authority's migration gates are implemented,
-measured, documented, and Current.
+Repository authored-file and directory limits are a separate topology policy.
+They do not raise or reclassify Edition 1 source limits. No Current source limit
+becomes a profile ceiling or lint until the authority's migration gates are
+implemented, measured, documented, and Current.
 
 ## Acceptance Gates
 

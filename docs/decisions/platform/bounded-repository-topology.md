@@ -35,25 +35,27 @@ scope, and the checker still reports it.
 
 ## Authored Bounds
 
-The accepted normal bounds are:
+The accepted repository-wide bounds are:
 
 | Rule | Bound |
 | --- | --- |
-| authored Markdown physical lines | at most 200 |
-| authored Markdown UTF-8 bytes | at most 32 KiB |
-| normal prose/code-comment columns | at most 120 Unicode scalar columns |
-| immediate tracked authored entries in one directory | at most 16 |
+| authored text file physical lines | at most 200 |
+| authored text file UTF-8 bytes | at most 32 KiB |
+| ordinary line width | at most 120 Unicode scalar values |
+| immediate tracked entries in an authored directory | at most 16 |
 | authored directory depth | warning above 8; hard failure above 12 |
 
-Physical lines include blank lines and fenced-block contents. The column rule
-excludes integrity strings, unavoidable external URLs, generated snapshots, and
-immutable evidence rows, but those lines still count toward line and byte
-bounds. Exclusion is rule-defined, not an exemption.
+These rules cover Rust, lkjscript, Markdown, scripts, schemas, manifests, test
+source, configuration, and CI files. Physical lines include comments, blank
+lines, module declarations, tests, and fenced examples. The width rule excludes
+only precisely recognized integrity strings, unavoidable external URLs,
+signatures, and exact test vectors. Those lines still count toward file bounds.
 
-The checker also warns on more than 12 top-level repository entries, more than
-12 immediate authored child directories, or more than 64 outgoing repository
-relationships from one manifest node. Warnings require review but do not change
-the hard 16-entry width or depth-12 limits.
+A directory warns above 12 entries. A single-child directory warns unless it is
+a stable namespace, target/platform, generated/evidence, edition/schema, trust,
+or capability boundary. Top-level semantic items warn above 16 while supported
+counting matures. Capsule dependencies and principal public concepts warn above
+12 and fail above 16. Cross-capsule dependency cycles fail.
 
 These repository limits do not change Edition 1 language semantics. In
 particular, source depth 8, form children 16, 384 tokens per file, 8 top-level
@@ -62,51 +64,62 @@ remain Current until their separate aggregate-budget migration gate passes.
 
 ## Semantic Capsules And Manifest
 
-A split document is a semantic capsule, not a numbered overflow fragment. Its
-authority page is a clearly named record or `README.md` with status vocabulary
-and a strict capsule manifest. Each manifest entry has a unique stable key,
-relative path, purpose, provenance, authority, status, and ordered relationship
-to sibling capsules. Unlisted capsules and duplicate paths fail. Moves update
-all repository-local links in the same change; compatibility aliases are
-rejected.
+A split unit is a semantic capsule, not a numbered overflow fragment. Every
+architecturally significant capsule has one strict `capsule.json`, a stable ID,
+purpose, layer, owned concepts, deliberate facade, allowed and forbidden
+internal dependencies, tests, decisions, unsafe/capability/provenance status,
+verification commands, and context card. Unknown fields fail. Actual extracted
+dependencies must be a subset of declared allowances.
 
-Directory names express product semantics such as `platform`, `execution`, or
-`capabilities`. Arbitrary buckets, hidden fan-out, line packing, and one-line
-link farms do not satisfy the bound.
+A nontrivial capsule has a bounded `README.md` describing authority, invariants,
+dependency direction, common agent tasks, verification, and status. Trivial
+leaves inherit their capsule. Moves update every repository-local link in the
+same change; aliases are rejected. Arbitrary buckets, vague dumping grounds,
+wrapper chains, hidden fan-out, statement packing, minification, embedded source
+payloads, compression, and macros used only to evade review do not comply.
 
 ## Checker Interface
 
-The accepted commands are:
+The accepted command family is:
 
 ```text
-cargo run --locked -p lkjscript-xtask -- check-structure
-cargo run --locked -p lkjscript-xtask -- check-structure --audit-json target/repository-audit.json
+lkjscript-xtask structure audit [--json]
+lkjscript-xtask structure check
+lkjscript-xtask structure explain <rule-or-path>
+lkjscript-xtask structure graph
+lkjscript-xtask structure context <target>
+lkjscript-xtask structure impact <target>
+lkjscript-xtask structure tests <target>
 ```
 
-The first command emits deterministic diagnostics sorted by rule ID and path.
-The second additionally writes canonical UTF-8 JSON under `target/`; normal
-stdout remains suitable for humans and no tracked file is generated.
+Audit succeeds even when findings exist; check fails. Diagnostics sort by rule
+ID, path, and evidence. Canonical JSON and full generated projections stay under
+`target/lkjscript/`; normal stdout remains human-oriented.
 
-Initial rule IDs are closed and stable:
+Initial stable IDs include `LKJ-REPO-FILE-LINES`, `LKJ-REPO-FILE-BYTES`,
+`LKJ-REPO-LINE-WIDTH`, `LKJ-REPO-DIR-WIDTH`, `LKJ-REPO-DIR-DEPTH`,
+`LKJ-REPO-TOPLEVEL-ITEMS`, `LKJ-REPO-CAPSULE-CYCLE`,
+`LKJ-REPO-CAPSULE-FANOUT`, `LKJ-REPO-UNCLASSIFIED`,
+`LKJ-REPO-GENERATED-PROVENANCE`, and `LKJ-REPO-VAGUE-MODULE`.
 
-- `LKJ-REPO-PROVENANCE`, `LKJ-REPO-MANIFEST`, and `LKJ-REPO-LINK`;
-- `LKJ-REPO-LINES`, `LKJ-REPO-BYTES`, and `LKJ-REPO-COLUMNS`;
-- `LKJ-REPO-WIDTH`, `LKJ-REPO-DEPTH`, `LKJ-REPO-TOPLEVEL`, and
-  `LKJ-REPO-FANOUT`; and
-- `LKJ-REPO-GENERATED-LOCATION` and `LKJ-REPO-TEMPORARY-DEVIATION`.
+Audit identity `lkjscript.repository-audit` version `1` contains repository and
+policy revisions, every tracked file/directory measurement, item counts where
+supported, capsule membership/dependencies, classifications, findings,
+provenance, deterministic sort keys, and explicit unsupported analyses. Unknown
+versions or fields fail at consumers.
 
-Audit JSON uses identity `lkjscript.repository-audit`, version `1`, and contains
-repository revision, manifest identity, policy identity, sorted findings,
-counts by provenance/rule/severity, checked paths, and deterministic limits.
-Unknown versions and fields fail at consumers.
+## Migration And Policy Coverage
 
-## Policy Coverage
+The initial migration uses an exact machine-readable ratchet: no new or worsened
+finding, monotonic removal only, and stale entries fail. It is deleted when zero
+authored violations is reached; no permanent exemption ledger remains.
 
-The checker covers all tracked authored Markdown, every directory containing a
-tracked authored entry, repository-local Markdown links, the strict manifest,
-and generated-output locations. Later language/source and code-specific rules
-may join the same audit only with explicit rule IDs and provenance semantics.
-Symlinks cannot evade containment or depth accounting.
+The checker covers every tracked path, all authored text, containing
+directories, local documentation links, strict manifests, provenance, generated
+locations, and supported code analyses. An unsupported analysis is reported,
+not omitted. Counting uses sorted Git-tracked UTF-8 paths, checked arithmetic,
+bounded reads, and explicit symlink handling; filesystem order and wall clock
+cannot affect it.
 
 ## Acceptance Gates
 
