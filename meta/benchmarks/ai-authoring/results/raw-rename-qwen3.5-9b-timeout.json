@@ -43,7 +43,8 @@
     "structurallyValid": false,
     "compilerValid": false,
     "functionallyCorrect": false,
-    "diffChecked": false
+    "diffChecked": false,
+    "isolationPreserved": true
   },
   "changedPaths": [],
   "unrelatedPaths": [],

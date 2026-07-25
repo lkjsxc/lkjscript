@@ -46,6 +46,7 @@ ACCEPTANCE_KEYS = {
     "compilerValid",
     "functionallyCorrect",
     "diffChecked",
+    "isolationPreserved",
 }
 
 
@@ -153,7 +154,13 @@ def validate(path: pathlib.Path) -> dict[str, Any]:
 
     passed_facts = all(
         acceptance[name]
-        for name in ("structurallyValid", "compilerValid", "functionallyCorrect", "diffChecked")
+        for name in (
+            "structurallyValid",
+            "compilerValid",
+            "functionallyCorrect",
+            "diffChecked",
+            "isolationPreserved",
+        )
     )
     passed_commands = all(entry["exitCode"] == 0 for entry in commands)
     should_pass = passed_facts and passed_commands and not unrelated

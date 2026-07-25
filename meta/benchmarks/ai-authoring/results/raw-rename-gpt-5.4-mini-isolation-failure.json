@@ -4,35 +4,35 @@
   "taskSha256": "9f1f155d073e126efbef3330a3b638ed1f34d05dabab2a150435fc1cfa730cde",
   "baseCommit": "f6410a22bdcf8e516e5f2a771428f74edf4fcfa1",
   "interface": "raw-text",
-  "model": "openai-codex/gpt-5.6-sol",
+  "model": "openai-codex/gpt-5.4-mini",
   "harness": {
     "name": "pi Agent",
-    "isolation": "git-worktree",
+    "isolation": "git-worktree-requested",
     "maxTurns": 20
   },
   "run": {
-    "startedAt": "2026-07-25T04:02:38.380Z",
-    "endedAt": "2026-07-25T04:03:21.801Z",
-    "status": "completed",
-    "eventLogSha256": "603cfec4f2b709bf0722953292d69c1711aa7d0d48ffc50ef76a856b7e5306ba",
-    "agentResultCommit": "e3ed3f0e8e3cc10c9fe390112fa4d8bcc0d1b261"
+    "startedAt": "2026-07-25T04:04:49.088Z",
+    "endedAt": "2026-07-25T04:06:48.719Z",
+    "status": "completed-with-isolation-violation",
+    "eventLogSha256": "ad9e50e693a72855776d08247e11803472e946545df6a0a0a923e16759751af3",
+    "agentResultCommit": "d789741f824f41ad2610d8acd640cba9d8ade5ae"
   },
   "metrics": {
-    "wallMilliseconds": 43421,
-    "inputTokens": 19998,
-    "cachedInputTokens": 65024,
-    "outputTokens": 1280,
-    "reasoningTokens": 547,
-    "toolCalls": 10,
+    "wallMilliseconds": 119631,
+    "inputTokens": 22347,
+    "cachedInputTokens": 277504,
+    "outputTokens": 5302,
+    "reasoningTokens": 3744,
+    "toolCalls": 27,
     "toolCallsByName": {
-      "bash": 1,
-      "ctx_execute": 4,
-      "edit": 2,
-      "read": 3
+      "bash": 13,
+      "edit": 6,
+      "grep": 2,
+      "read": 6
     },
-    "failedMutations": 0,
-    "compilerInvocations": 1,
-    "repairIterations": 0
+    "failedMutations": 2,
+    "compilerInvocations": 2,
+    "repairIterations": 2
   },
   "acceptance": {
     "commands": [
@@ -49,7 +49,7 @@
     "compilerValid": true,
     "functionallyCorrect": true,
     "diffChecked": true,
-    "isolationPreserved": true
+    "isolationPreserved": false
   },
   "changedPaths": [
     "src/examples/jit-scalar/kernel.lkjscript",
@@ -57,9 +57,9 @@
   ],
   "unrelatedPaths": [],
   "unmeasured": [
+    "the agent first addressed absolute main-checkout paths despite requested isolation; those transient expected-path edits were restored externally before the correct isolated replay",
     "unique uncached context tokens distinct from provider accounting",
-    "energy",
-    "sampling seed"
+    "energy and sampling seed"
   ],
-  "verdict": "passed"
+  "verdict": "failed"
 }
