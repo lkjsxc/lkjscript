@@ -25,6 +25,17 @@
       ]
     },
     {
+      "id": "edition-2-semantic-core/2",
+      "status": "accepted-target",
+      "interface": "lkjscript.edition/2",
+      "authority": "docs/decisions/semantics/edition-2.md",
+      "evidence": "docs/decisions/semantics/edition-2/execution-and-acceptance.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
       "id": "jit-auto-promotion/1",
       "status": "accepted-selection",
       "interface": "auto --auto-jit-threshold",
@@ -129,6 +140,17 @@
       "interface": "lkjscript.semantic-source/1",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "semantic-source-schema/2",
+      "status": "accepted-target",
+      "interface": "lkjscript.semantic-source/2",
+      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
       "claimants": [
         "docs/current-state.md",
         "docs/operations/agent-handoff.md"

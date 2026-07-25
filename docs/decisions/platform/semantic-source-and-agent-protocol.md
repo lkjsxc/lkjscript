@@ -22,11 +22,12 @@ recovery journals and exclusion, and an interrupted prepared transaction is
 rolled back before the next protocol read. This identity is deliberately the
 Agent Foundation, not the complete future Semantic Source Schema V1.
 
-Complete Schema V1, a wider transaction vocabulary, daemon transport, exact
-source-node correlation for every HIR/ownership/control/layout/proof fact,
-typed holes, and pre-allocation node/work metering remain **Accepted Targets**.
-Unavailable query facts are explicit, not guessed. Unsupported operations do
-not exist as inert endpoints.
+Complete Schema V1, `lkjscript.semantic-source/2`, Edition 2 authoring, typed
+holes and legal actions, the exact local stdio session, complete correlation,
+and pre-allocation node/work metering remain **Accepted Targets**. Their focused
+capsules are contracts, not Current endpoint claims. Unavailable query facts
+are explicit, not guessed. Unsupported operations do not exist as inert
+endpoints.
 
 ## Authority And Status Vocabulary
 
@@ -41,5 +42,8 @@ capability beyond the explicit status in its text.
 
 - [Identity, authority, and atomic edit model](semantic-source-and-agent-protocol/problem.md)
 - [Complete Protocol V1 target](semantic-source-and-agent-protocol/protocol-v1.md)
+- [Complete Schema V1](semantic-source-and-agent-protocol/complete-schema-v1.md)
+- [Typed holes and legal actions](semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md)
+- [Local session](semantic-source-and-agent-protocol/local-session.md)
 - [First Current-candidate operations](semantic-source-and-agent-protocol/first-current-candidate.md)
 - [Acceptance gates and deferred scope](semantic-source-and-agent-protocol/acceptance-gates.md)

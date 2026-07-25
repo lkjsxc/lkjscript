@@ -16,7 +16,8 @@ surface and remaining boundaries are defined by the
 [First Current-Candidate Contract](resource-budget-profiles-candidate.md).
 Repository topology, repository intelligence, agent work state, protocol,
 proof, native artifact, and runtime budgets do not yet share that compiler
-ledger.
+ledger. Profile V2 hierarchical pre-allocation and deterministic logical
+metering are **Accepted Targets**, not Current behavior.
 
 All Current Edition 1 limits remain enforced unchanged: source depth 8, form
 children 16, tokens per file 384, top-level forms 8, product fields 15, and 16
@@ -179,22 +180,18 @@ depth, child, token, top-level, and field limits.
 - replacing one unexplained hardcoded number with a larger unexplained number;
 - profile settings that weaken type or memory safety;
 - unbounded `trusted` modes;
-- counting optimizer-dependent physical allocations as deterministic language
-  semantics;
-- silently truncating source, diagnostics, proof search, or analysis and then
-  granting verified authority; and
-- treating directory/file width alone as a proxy for AI maintainability.
-## First Current-Candidate
+- counting optimizer-dependent physical allocations as semantic;
+- silently truncating source, diagnostics, proof search, or analysis; and
+- treating directory/file width alone as AI maintainability.
 
-[First Current-Candidate Contract](resource-budget-profiles-candidate.md)
-defines the exact Current V1 compiler categories, ceilings, charging points,
-and diagnostics, and labels the remaining target behavior separately.
+## Capsule Manifest
+
+- [Current V1 compiler foundation](resource-budget-profiles-candidate.md)
+- [Accepted Profile V2 preallocation](resource-budget-profiles/hierarchical-preallocation.md)
+- [Accepted logical metering](resource-budget-profiles/logical-metering.md)
 
 ## Not Current
 
-Profile selection is not yet exposed by package manifests. Protocol bytes are
-charged in the one-shot protocol's separate request-local ledger, not the
-compiler ledger. Pre-allocation compiler profile charging, one ledger across
-protocol/repository/task/runtime authorities, semantic-charge IR operations,
-and maintainability lint migration are not Current. Current fixed limits remain unchanged until complete replacement
-slices pass their separate migration gates.
+Package profile selection, pre-allocation charging, one cross-authority ledger,
+semantic-charge IR, and lint migration are not Current. Current fixed limits
+remain until complete replacement slices pass their migration gates.

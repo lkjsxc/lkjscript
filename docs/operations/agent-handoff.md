@@ -9,6 +9,7 @@ verification discipline without preserving obsolete implementation priorities.
 
 <!-- LKJ-STATUS id=agent-foundation/1 status=current -->
 <!-- LKJ-STATUS id=agent-work-state/1 status=current -->
+<!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
 <!-- LKJ-STATUS id=repository-topology/1 status=current -->
@@ -18,14 +19,17 @@ verification discipline without preserving obsolete implementation priorities.
 <!-- LKJ-STATUS id=semantic-session/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-schema/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-source-schema/2 status=accepted-target -->
 <!-- LKJ-STATUS id=typed-holes/1 status=accepted-target -->
 
 **Current** for the engineering policy and implementation boundaries linked from
 [Current State](../current-state.md). Bounded Repository Topology, Repository
 Intelligence Graph/context, agent work state, one-shot Agent Foundation V1, and
 the compiler Resource Profile V1 foundation are Current. Complete Semantic
-Source/Agent Protocol V1, local sessions, typed holes, pre-allocation charging,
-and a shared ledger remain Accepted Targets. Automatic proof promotion remains
+Source Schema V1/2, local sessions, typed holes, all [Edition
+2](../decisions/semantics/edition-2.md) surfaces, Profile V2
+pre-allocation/logical metering, and a shared ledger remain Accepted Targets.
+Automatic proof promotion remains
 an Accepted Implementation Selection, not the immediate priority.
 
 ## Product Intent

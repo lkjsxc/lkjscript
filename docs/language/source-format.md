@@ -6,8 +6,10 @@ Define the canonical physical notation of lkjscript source files.
 
 ## Status
 
-**Current.** Canonical files use `.lkjscript`. The former `.lkjml` extension and
-LKJML name are **Superseded** and are not accepted aliases.
+**Current** for the Edition 1 projection. Canonical files use `.lkjscript`. The
+former `.lkjml` extension and LKJML name are **Superseded** and are not accepted
+aliases. Edition 2's use of this same projection is an [Accepted Target, not
+Current](../decisions/semantics/edition-2.md).
 
 ## Invariants
 
@@ -62,6 +64,15 @@ fact/
 /print
 /do
 ```
+
+## Accepted Edition 2 Projection
+
+Edition 2 retains these physical invariants and the one parser/tree. Its first
+semantic form is exactly `edition/`, atom `2`, `/edition`; every source unit in
+the closure must agree. Enum, constructor, match, and closed-pattern markers are
+defined exactly by the [Edition 2 ADT](../decisions/semantics/edition-2/algebraic-data-types.md)
+and [pattern](../decisions/semantics/edition-2/patterns-and-match.md) capsules.
+These forms are Accepted Target and are not accepted by the Current compiler.
 
 ## Historical Experiments
 

@@ -1,0 +1,61 @@
+# Edition 2 Semantic Core
+
+## Purpose
+
+Define the accepted Edition 2 source, type, control, value, layout, error,
+compiler, execution, migration, and semantic-authoring contracts before any of
+them become implementation claims.
+
+## Status
+
+**Accepted Target, not Current.** Every Edition 2 surface in this authority and
+its capsules is unimplemented unless a later authority explicitly promotes a
+complete evidenced slice. Edition 1 remains Current during migration.
+
+## Authority
+
+This page is the authority for Edition 2 and its strict capsule manifest.
+Capsules may refine this contract but cannot promote it. Edition 2 is explicit
+per source unit: the first semantic form is exactly `edition/`, atom `2`, and
+`/edition`. Every unit in a loaded closure must agree. A file without that form
+is Edition 1 until cutover. The Semantic Source identity is
+`lkjscript.semantic-source/2`; the public ABI changes only where public Edition
+2 semantics require it.
+
+Semantic Source remains primary. Edition 1 and Edition 2 share one source
+parser and validated tree plus deterministic edition projections; a second
+parser/tree is forbidden. The current line projection remains canonical during
+this target. Edition 2's declaration name is exactly `enum`, with no alias.
+
+## Strict Capsule Manifest
+
+1. [Research inputs](edition-2/research-inputs.md)
+2. [Identity and migration](edition-2/identity-and-migration.md)
+3. [Algebraic data types](edition-2/algebraic-data-types.md)
+4. [Patterns and match](edition-2/patterns-and-match.md)
+5. [Never and control](edition-2/never-and-control.md)
+6. [Value, effects, and metering](edition-2/value-effects-and-metering.md)
+7. [Layouts](edition-2/layouts.md)
+8. [Numeric conversions](edition-2/numeric-conversions.md)
+9. [Typed errors](edition-2/typed-errors.md)
+10. [HIR and SSA](edition-2/hir-and-ssa.md)
+11. [Execution and acceptance](edition-2/execution-and-acceptance.md)
+12. [Semantic authoring](edition-2/semantic-authoring.md)
+
+The manifest is closed and ordered. Every listed capsule is required, and no
+unlisted file is part of this authority.
+
+## Cross-Authority Dependencies
+
+Edition 2 depends on [Semantic Source and Agent
+Protocol](../platform/semantic-source-and-agent-protocol.md) Schema V1 closure
+and the [Resource Budget Profiles](../platform/resource-budget-profiles.md)
+Profile V2 pre-allocation contract. Current source limits and execution
+behavior remain unchanged until the acceptance capsule's gates all pass.
+
+## Rejected
+
+- implicit edition selection or mixed-edition closures;
+- `.lkjml`, compatibility aliases, sibling source parsers, or backend syntax;
+- status language that calls an Edition 2 contract Current before evidence; and
+- an ABI version change made only because the source edition number changed.

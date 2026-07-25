@@ -103,7 +103,7 @@ format(parse(canonical_corpus_file)) == canonical_corpus_file
 format(parse(format(tree))) == format(tree)
 ```
 
-The exact 109-file canonical `src` corpus, all 113 tracked `.lkjscript`
+The exact 121-file canonical `src` corpus, all 125 tracked `.lkjscript`
 sources/fixtures/workloads, and benchmark identities recorded in Current State
 are immutable migration evidence. If existing canonical files reveal more
 than one accepted spelling, the decision records whether the formatter

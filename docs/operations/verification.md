@@ -9,10 +9,11 @@ gates without claiming unimplemented checks.
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
-`structure`, repository graph/context,
-agent-state, one-shot Agent Foundation V1, and compiler resource-profile checks
-are described in the capsules. Complete future Schema V1 and shared-ledger
-gates remain **Accepted Targets**, not Current commands.
+`structure`, repository graph/context, agent-state, one-shot Agent Foundation
+V1, and compiler resource-profile checks are described in the capsules.
+Complete Schema V1, Edition 2 cross-engine acceptance, local sessions, Profile
+V2 pre-allocation, and logical-metering gates remain **Accepted Targets**, not
+Current commands.
 
 ## Current Documentation Gate
 
@@ -88,6 +89,16 @@ Compiler resource-profile tests cover all five profiles, exact/lowered/+1/
 overflow boundaries, corpus roots, deterministic diagnostics, identity, and
 post-phase source/HIR/SSA publication guards. The broader pre-allocation and
 cross-authority ledger gates remain Accepted.
+
+## Accepted Edition 2 Gate
+
+The [Edition 2 acceptance contract](../decisions/semantics/edition-2/execution-and-acceptance.md)
+requires all 125 tracked sources (121 under `src/`) to migrate, exact
+old/new-identity and check/diff/publish tests, evaluator/VM/forced-JIT
+value/outcome/charge differentials, actual generated calls without fallback,
+malformed-metadata rejection, exact roots, and Profile V2 boundaries. No Current
+command claims this complete gate yet, and this documentation change does not
+run full workspace tests.
 
 ## Evidence Rule
 

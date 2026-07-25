@@ -29,6 +29,7 @@ pub fn check(root: &Path) -> i32 {
         "docs/decisions/execution/compiler-pipeline.md",
         "docs/decisions/execution/execution-portfolio.md",
         "docs/decisions/execution/linux-x86-64-native-backend.md",
+        "docs/decisions/semantics/edition-2.md",
         "docs/decisions/semantics/equality-families.md",
         "docs/decisions/semantics/immutable-nominal-products.md",
         "docs/decisions/semantics/numeric-semantics.md",

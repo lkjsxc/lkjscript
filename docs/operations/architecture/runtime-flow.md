@@ -99,6 +99,16 @@ an external project receives the same contract. The accepted destination is an
 AI-maintainability lint, but this check is not weakened until aggregate source
 closure/import/byte/node safety bounds are Current. See [Resource Budget
 Profiles](../../decisions/platform/resource-budget-profiles.md).
+## Edition 2 Accepted Flow
+
+Edition 2 is an [Accepted Target, not
+Current](../../decisions/semantics/edition-2.md). Its exact path remains the one
+validated Semantic Source tree through resolved HIR and verified SSA. Match is
+verified then lowered to SSA CFG; evaluators and backends implement only ADT,
+numeric, layout, charge, and terminator primitives. Acceptance requires actual
+generated calls in forced engines with no fallback and exact roots; no current
+runtime behavior is changed by that contract.
+
 ## Change Guide
 
 - Change source semantics/projection: Semantic Source schema/validator, edition adapter/formatter,
@@ -143,8 +153,9 @@ goal/specification
 
 [Semantic Source And Agent
 Protocol](../../decisions/platform/semantic-source-and-agent-protocol.md) now has a Current
-Foundation V1: one validated source-tree authority, exact 113-file tracked
-source roundtrip, exact revision identity, stable declaration keys, dense nodes,
+Foundation V1: one validated source-tree authority, exact 125-file tracked
+source roundtrip (121 under `src/`), exact revision identity, stable declaration
+keys, dense nodes,
 and structural source diagnostics. Existing HIR/SSA/VM/JIT behavior remains
 unchanged through that cutover, and no sibling parser/tree path independently
 feeds a backend. Bounded topology, repository graph/context, agent work state,

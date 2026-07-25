@@ -11,9 +11,9 @@ The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
 Semantic Source Foundation V1, Bounded Repository Topology, Repository
 Intelligence Graph/context, externalized agent work state, the bounded one-shot
 Agent Foundation V1 protocol, and the compiler resource-profile foundation are
-Current. Complete future Schema V1, daemon transport, typed holes,
-pre-allocation compiler profiles, and shared cross-authority ledgers are
-**Accepted Targets**, not Current code.
+Current. Complete Schema V1, `lkjscript.semantic-source/2`, local-session
+transport, typed holes, Edition 2, Profile V2 pre-allocation, and logical
+metering are **Accepted Targets**, not Current code.
 
 ## Current Compiler/Runtime Boundary
 
@@ -72,6 +72,14 @@ source bytes/units, work, and serialized output; compiler profile charges are
 exact post-phase guards before each downstream phase and artifact publication.
 Exhaustion cannot publish partial authority. Edition 1 source limits remain
 unchanged.
+
+## Accepted Edition 2 Path
+
+[Edition 2](../decisions/semantics/edition-2.md) preserves the same architecture:
+Semantic Source -> resolved typed HIR -> verified SSA -> evaluator/VM/native/
+proof consumers. Match lowers to SSA CFG only after plan verification; layout,
+roots, runtime facts, and logical charges remain explicit. Every surface is
+Accepted Target, not Current, until its cross-engine acceptance gate passes.
 
 ## Authority Links
 
