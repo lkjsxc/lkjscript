@@ -14,8 +14,8 @@ pub(crate) struct ProtocolLimits {
     pub source_bytes: u64,
     pub source_units: u64,
     source_nodes: u64,
-    work_units: u64,
-    request_bytes: u64,
+    pub(crate) work_units: u64,
+    pub(crate) request_bytes: u64,
     pub response_bytes: usize,
 }
 

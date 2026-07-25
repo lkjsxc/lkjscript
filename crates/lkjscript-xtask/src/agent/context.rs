@@ -18,7 +18,7 @@ pub fn build(root: &Path, task_id: &str, profile: &str) -> Result<ResumeContext,
     let contexts = crate::structure::agent_context(root, &state.selected_capsule_scope, profile)?;
     let mut response = ResumeContext {
         schema: "lkjscript.agent-resume-context",
-        version: 1,
+        version: 2,
         state,
         repository_context: Vec::new(),
         revision_mismatch,

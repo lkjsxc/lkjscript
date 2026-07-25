@@ -9,6 +9,7 @@ mod model;
 mod publication_rollback;
 mod quarantine;
 mod references;
+mod semantic_bounds;
 mod storage;
 mod validate;
 

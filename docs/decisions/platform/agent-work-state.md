@@ -25,14 +25,17 @@ Live state is generated at `target/lkjscript/agent-state/<validated-id>.json` an
 input remains generated below the adjacent `quarantine/` directory under a task ID and SHA-256 content identity.
 No generated task state is tracked.
 
-## Closed V1 Snapshot
+## Closed V2 Snapshot
 
 The persisted [work-state schema](../../../meta/agent-state/work-state.schema.json) has identity
-`lkjscript.agent-work-state`, version `1`; the strict
-[checkpoint envelope](../../../meta/agent-state/checkpoint.schema.json) carries its compare revision. Administrative
+`lkjscript.agent-work-state`, version `2`; the strict
+[checkpoint envelope](../../../meta/agent-state/checkpoint.schema.json) carries version 2 and its compare revision.
+Version 1 is historical and rejected without an alias. Administrative
 schema, version, task ID, and state revision fields accompany only these bounded facts:
 
 - base and current repository revisions, goal, hard constraints, and selected capsule scope;
+- optional exact semantic-session identity/source revision plus bounded target
+  entities, completed transactions, diagnostics, and unresolved holes;
 - accepted decision references and completed actions, including outcome, summary, supersession, and evidence;
 - exact command results: command, exit status, summary, and evidence references;
 - produced commits, open defects, risks, external blockers, and next actions;
@@ -86,7 +89,7 @@ command results, commits, and all artifact/evidence references. A second compact
 
 ## Bounds And Failure Policy
 
-V1 constants bound request and generated output bytes, quarantine bytes, each string, each collection, combined
+V2 constants bound request and generated output bytes, quarantine bytes, each string, each collection, combined
 history, combined artifact/evidence references, aggregate validation work, capsule enumeration, retained Git output,
 and referenced artifact reads. Git pipes are drained while retaining at most the configured bound. Arithmetic overflow
 is an error before repository work or publication. Repository traversal uses bounded Git and the bounded repository

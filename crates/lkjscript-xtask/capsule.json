@@ -10,7 +10,7 @@
     "verification",
     "structure audit",
     "repository graph",
-    "agent work state",
+    "agent work state semantic references",
     "capability status graph"
   ],
   "facade": [

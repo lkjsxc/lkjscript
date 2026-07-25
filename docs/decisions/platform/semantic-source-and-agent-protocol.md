@@ -17,14 +17,17 @@ trailing input fail. Inferred facts remain derived authority.
 
 The bounded one-shot `snapshot`, `read_entity`, `query_node`, `diagnostics`,
 atomic `rename`, and atomic `replace_expression` operations now emit that
-identity. Responses are bounded before publication; journaled local publication
-retains exclusion, rollback, descriptor anchoring, and conflict preservation.
+identity. The Current local `semantic serve --stdio` session uses the same
+engine with exact framing, revision pinning, external-change rejection, refresh,
+shutdown, and bounded lifetime state. Responses are bounded before publication;
+journaled publication retains exclusion, rollback, descriptor anchoring, and
+conflict preservation.
 The former `lkjscript.agent-foundation/1` identity is historical and is rejected
 rather than retained as an alias. `lkjscript.agent/1` is not emitted.
 
 `lkjscript.semantic-source/2`, Edition 2 authoring, typed holes/legal actions,
-the local stdio session, wider agent operations, and pre-allocation metering
-remain **Accepted Targets**. Unavailable HIR/SSA/layout/proof/native correlations
+wider agent operations, nonzero incremental query caching, and pre-allocation
+shared metering remain **Accepted Targets**. Unavailable HIR/SSA/layout/proof/native correlations
 are explicit and revisioned rather than guessed. Unsupported operations do not
 exist as inert endpoints.
 

@@ -8,6 +8,7 @@ mod operations;
 mod projection;
 mod response_codec;
 mod schema;
+pub mod session;
 mod transaction;
 mod tree;
 

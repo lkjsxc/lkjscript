@@ -61,6 +61,7 @@ pub fn state(value: &WorkState) -> Result<(), String> {
     for capsule in &value.selected_capsule_scope {
         text("selected capsule", capsule, &mut work)?;
     }
+    super::semantic_bounds::validate(&value.semantic_context, &mut work)?;
     refs("accepted_decisions", &value.accepted_decisions, &mut work)?;
     list(
         "completed_actions",
@@ -142,7 +143,12 @@ fn numbers(name: &str, count: usize, work: &mut usize) -> Result<(), String> {
     list(name, count, COLLECTION_ITEMS, work)
 }
 
-fn list(name: &str, count: usize, limit_value: usize, work: &mut usize) -> Result<(), String> {
+pub(super) fn list(
+    name: &str,
+    count: usize,
+    limit_value: usize,
+    work: &mut usize,
+) -> Result<(), String> {
     if count > limit_value {
         return Err(limit(name, limit_value, count));
     }
@@ -150,7 +156,7 @@ fn list(name: &str, count: usize, limit_value: usize, work: &mut usize) -> Resul
     Ok(())
 }
 
-fn text(name: &str, value: &str, work: &mut usize) -> Result<(), String> {
+pub(super) fn text(name: &str, value: &str, work: &mut usize) -> Result<(), String> {
     if value.is_empty() {
         return Err(format!("{name} must not be empty"));
     }
@@ -161,6 +167,6 @@ fn text(name: &str, value: &str, work: &mut usize) -> Result<(), String> {
     Ok(())
 }
 
-fn limit(category: &str, limit_value: usize, actual: usize) -> String {
+pub(super) fn limit(category: &str, limit_value: usize, actual: usize) -> String {
     format!("{category} exceeds limit {limit_value}: {actual}")
 }

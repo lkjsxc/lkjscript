@@ -6,18 +6,25 @@
   "kind": "source",
   "purpose": "Own strict bounded Semantic Source queries, diagnostics, and atomic revisioned transactions.",
   "layer": "agent protocol",
-  "concepts": ["closed Semantic Source schema", "semantic query", "atomic transaction"],
+  "concepts": [
+    "closed Semantic Source schema",
+    "semantic query",
+    "atomic transaction",
+    "bounded local session"
+  ],
   "facade": ["crates/lkjscript-compiler/src/semantic/mod.rs"],
   "allowed_dependencies": ["core", "semantic-source"],
   "forbidden_dependencies": ["app", "jit", "vm"],
   "tests": [
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/semantic/tests/corpus.rs",
+    "crates/lkjscript-compiler/src/semantic/session/tests/mod.rs",
     "crates/lkjscript-app/tests/semantic_cli.rs"
   ],
   "decisions": [
     "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-    "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md"
+    "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
+    "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
   ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
@@ -28,7 +35,11 @@
   ],
   "context_card": {
     "goal": "Return deterministic semantic facts and publish only fully validated revisions.",
-    "interfaces": ["lkjscript_compiler::semantic::execute", "lkjscript semantic"],
+    "interfaces": [
+      "lkjscript_compiler::semantic::execute",
+      "lkjscript_compiler::semantic::session::serve",
+      "lkjscript semantic"
+    ],
     "invariants": ["closed JSON schemas", "stale identity rejection", "no partial publish"]
   }
 }

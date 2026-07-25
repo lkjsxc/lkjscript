@@ -8,7 +8,8 @@ next work without mixing them with long-term vision.
 ## Status
 
 <!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
-<!-- LKJ-STATUS id=agent-work-state/1 status=current -->
+<!-- LKJ-STATUS id=agent-work-state/1 status=historical -->
+<!-- LKJ-STATUS id=agent-work-state/2 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
@@ -17,7 +18,7 @@ next work without mixing them with long-term vision.
 <!-- LKJ-STATUS id=resource-profile-compiler/1 status=current -->
 <!-- LKJ-STATUS id=resource-profile-preallocation/1 status=accepted-target -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-session/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-session/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-schema/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-schema/2 status=accepted-target -->
@@ -25,12 +26,13 @@ next work without mixing them with long-term vision.
 
 **Current** only for implementation and evidence explicitly labeled Current in
 the manifest capsules. Bounded Repository Topology, Repository Intelligence
-Graph/context, externalized agent work state, complete Semantic Source Schema V1
-and its one-shot query/edit protocol, and compiler Resource Profile V1 are
-Current. The superseded Agent Foundation V1 identity is historical. Semantic
-Source Schema V2, local sessions, typed holes, Edition 2, Profile V2
-pre-allocation, logical metering, and cross-authority ledgers remain Accepted
-Targets, not Current.
+Graph/context, externalized Agent Work State V2 with semantic references,
+complete Semantic Source Schema V1
+and its one-shot query/edit protocol, bounded local stdio sessions, and compiler
+Resource Profile V1 are Current. The superseded Agent Foundation V1 identity is
+historical. Semantic Source Schema V2, typed holes, Edition 2, Profile V2
+pre-allocation, logical metering, nonzero query caching, and cross-authority
+ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
 
 ## Current Baseline

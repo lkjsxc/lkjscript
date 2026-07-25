@@ -9,8 +9,8 @@ bounds, invalidation, and shutdown behavior.
 
 ## Status
 
-**Accepted Target, not Current.** The Current command remains the bounded
-one-shot `lkjscript.semantic-source/1` interface.
+**Current.** `lkjscript semantic serve --stdio` implements this bounded local
+session over the same Current one-shot Semantic Source engine.
 
 ## Command And Framing
 
@@ -43,20 +43,20 @@ queries pin one revision. Derived trees, facts, indexes, and caches are immutabl
 per snapshot and keyed by all semantic inputs.
 
 A stale request or externally changed file/root/dependency rejects with a typed
-reason. It never rebases silently. Typed cache keys record exact source units,
-declarations, compiler build, schema, profile, and query dependencies. A
-successful explicit refresh creates a new revision and invalidates every
-transitive dependent while retaining only bounded immutable revisions.
-Publication uses the same atomic journaled source transaction authority.
+reason. It never rebases silently. V1 retains one exact immutable fingerprint
+set and reports zero query-cache entries; it does not claim incremental caching.
+A successful explicit refresh creates a new revision and replaces that bounded
+snapshot metadata. Future nonzero cache keys must include exact source units,
+declarations, compiler build, schema, profile, and dependencies. Publication
+uses the same atomic journaled source transaction authority.
 
 ## Bounds And Shutdown
 
-A session-owned bounded grant covers lifetime and retained state; each request
-receives one request-owned hierarchical child ledger. Together they bound fuel,
-input/output bytes, decoded nodes, compiler work, snapshots, cached
-bytes/entries, retained revisions, transactions, and staged publication. Child
-work receives lower-only grants. Exhaustion returns a framed structured error
-when possible,
+Current Session Limits V1 intersect selected Resource Profile V1 protocol
+ceilings with stricter frame, cumulative-byte, request, fuel, metadata, and
+revision maxima. The session meters each request and retains one revision; it
+does not claim the Accepted shared hierarchical ledger or nonzero cache.
+Exhaustion returns a framed structured error when possible,
 publishes nothing partial, and may close the session if safe framing cannot be
 guaranteed.
 

@@ -2,6 +2,16 @@ use std::io::{Read, Write};
 use std::process::ExitCode;
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
+    if args.get(1).map(String::as_str) == Some("serve") {
+        if args.get(2).map(String::as_str) != Some("--stdio") || args.len() != 3 {
+            return Err("semantic session command is exactly: semantic serve --stdio".to_string());
+        }
+        let mut stdin = std::io::stdin().lock();
+        let mut stdout = std::io::stdout().lock();
+        lkjscript_compiler::semantic::session::serve(&mut stdin, &mut stdout)
+            .map_err(|failure| failure.to_string())?;
+        return Ok(ExitCode::SUCCESS);
+    }
     if args.len() > 2 || args.get(1).is_some_and(|argument| argument != "-") {
         return Err("semantic accepts only stdin; use - or input redirection".to_string());
     }

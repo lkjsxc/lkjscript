@@ -21,6 +21,7 @@ pub struct WorkState {
     pub goal: String,
     pub hard_constraints: Vec<String>,
     pub selected_capsule_scope: Vec<String>,
+    pub semantic_context: SemanticWorkContext,
     pub accepted_decisions: Vec<ContentReference>,
     pub completed_actions: Vec<CompletedAction>,
     pub command_results: Vec<CommandResult>,
@@ -32,6 +33,34 @@ pub struct WorkState {
     pub invalidated_assumptions: Vec<String>,
     pub artifact_references: Vec<ContentReference>,
     pub evidence_references: Vec<ContentReference>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SemanticWorkContext {
+    pub session: Option<SemanticSessionReference>,
+    pub target_entities: Vec<SemanticReference>,
+    pub completed_transactions: Vec<SemanticReference>,
+    pub diagnostics: Vec<SemanticReference>,
+    pub unresolved_holes: Vec<SemanticReference>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SemanticSessionReference {
+    pub schema: String,
+    pub version: u32,
+    pub identity: String,
+    pub source_revision: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SemanticReference {
+    pub schema: String,
+    pub version: u32,
+    pub source_revision: String,
+    pub identity: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

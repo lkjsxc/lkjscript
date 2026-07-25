@@ -46,6 +46,7 @@ fn increasing(name: &str, values: impl Iterator<Item = u64>) -> Result<(), Strin
 }
 
 pub fn append_only(old: &WorkState, new: &WorkState) -> Result<(), String> {
+    semantic_append_only(old, new)?;
     prefix(
         "accepted decisions",
         &old.accepted_decisions,
@@ -80,6 +81,25 @@ pub fn append_only(old: &WorkState, new: &WorkState) -> Result<(), String> {
         "evidence references",
         &old.evidence_references,
         &new.evidence_references,
+    )
+}
+
+fn semantic_append_only(old: &WorkState, new: &WorkState) -> Result<(), String> {
+    if let Some(old_session) = &old.semantic_context.session {
+        let Some(new_session) = &new.semantic_context.session else {
+            return Err("semantic session reference cannot be removed".into());
+        };
+        if old_session.schema != new_session.schema
+            || old_session.version != new_session.version
+            || old_session.identity != new_session.identity
+        {
+            return Err("semantic session identity is immutable".into());
+        }
+    }
+    prefix(
+        "semantic completed transactions",
+        &old.semantic_context.completed_transactions,
+        &new.semantic_context.completed_transactions,
     )
 }
 

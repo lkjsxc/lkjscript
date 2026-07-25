@@ -1,6 +1,8 @@
 use std::fs;
 
-use crate::agent::model::{ActionOutcome, CommandResult, ContentReference};
+use crate::agent::model::{
+    ActionOutcome, CommandResult, ContentReference, SemanticReference, SemanticSessionReference,
+};
 use crate::agent::{bounds, json, validate};
 
 use super::support;
@@ -97,6 +99,48 @@ fn enforces_history_reference_output_and_work_boundaries() {
     assert!(bounds::checked_work(usize::MAX, 1)
         .unwrap_err()
         .contains("overflow"));
+}
+
+#[test]
+fn semantic_context_is_closed_versioned_and_bounded() {
+    let repo = support::repository("semantic-context");
+    let mut state = support::state(&repo, "semantic-context-task");
+    state.semantic_context.session = Some(SemanticSessionReference {
+        schema: "lkjscript.semantic-session".into(),
+        version: 1,
+        identity: "1".repeat(64),
+        source_revision: "2".repeat(64),
+    });
+    state
+        .semantic_context
+        .target_entities
+        .push(SemanticReference {
+            schema: "lkjscript.semantic-source".into(),
+            version: 1,
+            source_revision: "2".repeat(64),
+            identity: "declaration:main".into(),
+        });
+    assert!(validate::shape(&state).is_ok());
+    state.semantic_context.target_entities[0].schema = "unknown".into();
+    assert!(validate::shape(&state).is_err());
+    state.semantic_context.target_entities[0].schema = "lkjscript.semantic-source".into();
+    state.semantic_context.target_entities[0].source_revision = "x".repeat(64);
+    assert!(validate::shape(&state).is_err());
+    state.semantic_context.target_entities = (0..=bounds::REFERENCE_ITEMS)
+        .map(|index| SemanticReference {
+            schema: "lkjscript.semantic-source".into(),
+            version: 1,
+            source_revision: "2".repeat(64),
+            identity: format!("entity:{index}"),
+        })
+        .collect();
+    assert!(bounds::state(&state)
+        .unwrap_err()
+        .contains("combined semantic references"));
+
+    let mut old = support::request(support::state(&repo, "old-version-task"), 0);
+    old.version = 1;
+    assert!(validate::checkpoint(&repo.root, &old, None).is_err());
 }
 
 #[test]

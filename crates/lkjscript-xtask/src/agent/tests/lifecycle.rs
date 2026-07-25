@@ -55,7 +55,7 @@ fn resume_context_reports_deterministic_output_truncation() {
     let repo = support::repository("context-limit");
     let mut response = ResumeContext {
         schema: "lkjscript.agent-resume-context",
-        version: 1,
+        version: 2,
         state: support::state(&repo, "context-task"),
         repository_context: Vec::new(),
         revision_mismatch: None,

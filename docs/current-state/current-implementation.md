@@ -25,8 +25,11 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   fields, operations, versions, duplicates, and trailing input fail. The
   bounded one-shot endpoint provides snapshot/entity/node/diagnostic queries
   plus atomic rename/expression replacement. Agent Foundation V1 is historical.
-  Sessions, typed holes, Semantic Source V2, and unavailable exact downstream
-  correlations remain non-Current
+  The local `semantic serve --stdio` session uses exact 8-byte framing, pins one
+  profile/root/revision, rejects stale/external changes, refreshes explicitly,
+  bounds cumulative frames/requests/fuel/metadata, and publishes through the
+  same engine. Typed holes, Semantic Source V2, nonzero query caching, shared
+  ledgers, and unavailable exact downstream correlations remain non-Current
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
   directory. Foundation implementation maxima additionally reject a source file

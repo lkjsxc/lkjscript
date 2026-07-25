@@ -15,8 +15,19 @@
     },
     {
       "id": "agent-work-state/1",
-      "status": "current",
+      "status": "historical",
       "interface": "lkjscript.agent-work-state/1",
+      "authority": "docs/decisions/platform/agent-work-state.md",
+      "evidence": "docs/decisions/platform/agent-work-state.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "agent-work-state/2",
+      "status": "current",
+      "interface": "lkjscript.agent-work-state/2",
       "authority": "docs/decisions/platform/agent-work-state.md",
       "evidence": "docs/decisions/platform/agent-work-state.md",
       "claimants": [
@@ -114,10 +125,10 @@
     },
     {
       "id": "semantic-session/1",
-      "status": "accepted-target",
+      "status": "current",
       "interface": "lkjscript semantic serve --stdio",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md",
       "claimants": [
         "docs/current-state.md",
         "docs/operations/agent-handoff.md"

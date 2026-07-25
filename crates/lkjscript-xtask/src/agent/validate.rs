@@ -8,7 +8,7 @@ pub fn checkpoint(
     request: &CheckpointRequest,
     current: Option<&WorkState>,
 ) -> Result<(), String> {
-    if request.schema != "lkjscript.agent-work-state-checkpoint" || request.version != 1 {
+    if request.schema != "lkjscript.agent-work-state-checkpoint" || request.version != 2 {
         return Err("unsupported checkpoint schema or version".into());
     }
     let state = &request.state;
@@ -72,7 +72,7 @@ pub fn validate(root: &Path, state: &WorkState, require_head: bool) -> Result<()
 
 pub fn shape(state: &WorkState) -> Result<(), String> {
     super::bounds::state(state)?;
-    if state.schema != "lkjscript.agent-work-state" || state.version != 1 {
+    if state.schema != "lkjscript.agent-work-state" || state.version != 2 {
         return Err("unsupported work-state schema or version".into());
     }
     task_id(&state.task_id)?;
@@ -81,6 +81,7 @@ pub fn shape(state: &WorkState) -> Result<(), String> {
     }
     super::history::sequence(state)?;
     super::references::shape(state)?;
+    semantic_context(state)?;
     unique("capsule scope", &state.selected_capsule_scope)?;
     unique("produced commits", &state.produced_commits)?;
     Ok(())
@@ -96,6 +97,54 @@ pub fn task_id(value: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err("task id must match ^[a-z][a-z0-9-]{0,63}$".into())
+    }
+}
+
+fn semantic_context(state: &WorkState) -> Result<(), String> {
+    if let Some(session) = &state.semantic_context.session {
+        if session.schema != "lkjscript.semantic-session" || session.version != 1 {
+            return Err("unsupported semantic session reference".into());
+        }
+        exact_sha256("semantic session identity", &session.identity)?;
+        exact_sha256("semantic session source revision", &session.source_revision)?;
+    }
+    for reference in state
+        .semantic_context
+        .target_entities
+        .iter()
+        .chain(&state.semantic_context.completed_transactions)
+        .chain(&state.semantic_context.diagnostics)
+        .chain(&state.semantic_context.unresolved_holes)
+    {
+        let known = matches!(
+            (reference.schema.as_str(), reference.version),
+            ("lkjscript.semantic-source", 1 | 2)
+                | ("lkjscript.semantic-transaction", 1)
+                | ("lkjscript.diagnostic", 1)
+                | ("lkjscript.typed-hole", 1)
+        );
+        if !known {
+            return Err("unsupported semantic work reference".into());
+        }
+        exact_sha256(
+            "semantic reference source revision",
+            &reference.source_revision,
+        )?;
+    }
+    Ok(())
+}
+
+fn exact_sha256(name: &str, value: &str) -> Result<(), String> {
+    if value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "{name} must be 64 lowercase hexadecimal characters"
+        ))
     }
 }
 

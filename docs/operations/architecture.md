@@ -9,11 +9,13 @@ to their authorities.
 
 The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
 Complete Semantic Source Schema V1, Bounded Repository Topology, Repository
-Intelligence Graph/context, externalized agent work state, its bounded one-shot
-semantic protocol, and compiler Resource Profile V1 are Current. Agent
-Foundation V1 is historical. `lkjscript.semantic-source/2`, local sessions,
-typed holes, Edition 2, Profile V2 pre-allocation, and logical metering are
-**Accepted Targets**, not Current code.
+Intelligence Graph/context, externalized Agent Work State V2 with exact semantic
+references, its bounded one-shot
+semantic protocol, bounded local stdio sessions, and compiler Resource Profile
+V1 are Current. Agent Foundation V1 is historical.
+`lkjscript.semantic-source/2`, typed holes, Edition 2, Profile V2 pre-allocation,
+nonzero incremental query caching, and logical metering are **Accepted Targets**,
+not Current code.
 
 ## Current Compiler/Runtime Boundary
 

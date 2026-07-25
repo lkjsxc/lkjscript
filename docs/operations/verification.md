@@ -10,10 +10,10 @@ gates without claiming unimplemented checks.
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
-Schema V1 and its one-shot protocol, and compiler resource-profile checks are
-described in the capsules. Edition 2 cross-engine acceptance, local sessions,
-typed holes, Profile V2 pre-allocation, and logical metering remain **Accepted
-Targets**, not Current commands.
+Schema V1, its one-shot protocol, bounded local stdio sessions, and compiler
+resource-profile checks are described in the capsules. Edition 2 cross-engine
+acceptance, typed holes, nonzero query caching, Profile V2 pre-allocation, and
+logical metering remain **Accepted Targets**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -68,7 +68,8 @@ limits, revision, and total charge.
 Agent-state tests cover malformed, duplicate, unknown, and trailing JSON; stale
 and concurrent preconditions; exact and limit-plus-one bounds; checked revision
 overflow; deterministic quarantine; atomic failure before rename; evidence/hash
-validation; ancestor-symlink rejection; bounded quarantine; crashed-lock
+validation; closed bounded semantic session/entity/transaction/diagnostic/hole
+references; ancestor-symlink rejection; bounded quarantine; crashed-lock
 recovery; compaction retention/idempotence; and explicit context truncation.
 Generated snapshots stay under `target/lkjscript/agent-state/`.
 
@@ -85,7 +86,11 @@ references; expression type/effect/ownership constraints; bounded response
 encoding before publish; publication failure; byte-identical rollback; and
 prepared-journal crash recovery before the next read; descriptor-anchored
 ancestor-swap rejection; and preservation of an externally created leaf at the
-no-replace install boundary.
+no-replace install boundary. Session tests cover 8-byte framing, clean EOF,
+partial/oversized/cumulative boundaries, strict envelopes, pinned profile/root,
+stale revisions, external edits, refresh, publication revision advance,
+lifetime/request/revision limits, deterministic responses, shutdown, and CLI
+stdout isolation.
 
 Compiler resource-profile tests cover all five profiles, exact/lowered/+1/
 overflow boundaries, corpus roots, deterministic diagnostics, identity, and

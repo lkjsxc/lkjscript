@@ -10,6 +10,7 @@ pub fn print() {
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
     println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");
     println!("  lkjscript semantic [-] < request.json");
+    println!("  lkjscript semantic serve --stdio");
     println!("  lkjscript --help");
     println!("  lkjscript --version");
     println!();

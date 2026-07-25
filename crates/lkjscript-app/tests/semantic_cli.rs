@@ -20,6 +20,42 @@ fn invoke(args: &[&str], input: &[u8]) -> std::process::Output {
     child.wait_with_output().expect("wait for semantic CLI")
 }
 
+fn framed(payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::with_capacity(payload.len() + 8);
+    frame.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    frame.extend_from_slice(payload);
+    frame
+}
+
+#[test]
+fn semantic_session_uses_exact_framing_and_command() {
+    let payload = concat!(
+        "{\"schema\":\"lkjscript.semantic-session\",\"version\":1,",
+        "\"request_id\":\"stop\",\"revision\":0,",
+        "\"request\":{\"kind\":\"shutdown\"}}",
+    );
+    let output = invoke(
+        &["semantic", "serve", "--stdio"],
+        &framed(payload.as_bytes()),
+    );
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert!(output.stdout.len() >= 8);
+    let length = u64::from_be_bytes(output.stdout[..8].try_into().expect("session header"));
+    assert_eq!(output.stdout.len() as u64, length + 8);
+    let response = String::from_utf8(output.stdout[8..].to_vec()).expect("session JSON");
+    assert!(response.contains("\"request_id\":\"stop\""));
+    assert!(response.contains("\"kind\":\"shutdown\""));
+
+    let partial = invoke(&["semantic", "serve", "--stdio"], &[0, 0, 0]);
+    assert!(!partial.status.success());
+    assert!(partial.stdout.is_empty());
+    assert!(String::from_utf8(partial.stderr)
+        .expect("process diagnostic")
+        .contains("partial_header"));
+    assert!(!invoke(&["semantic", "serve"], &[]).status.success());
+}
+
 #[test]
 fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     let malformed = invoke(&["semantic", "-"], b"{\"schema\":0,\"schema\":1}");

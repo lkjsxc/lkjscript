@@ -1,18 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.agent-work-state.v1",
+  "$id": "lkjscript.agent-work-state.v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema", "version", "task_id", "state_revision", "base_repository_revision",
     "current_repository_revision", "goal", "hard_constraints", "selected_capsule_scope",
-    "accepted_decisions", "completed_actions", "command_results", "produced_commits",
+    "semantic_context", "accepted_decisions", "completed_actions", "command_results",
+    "produced_commits",
     "open_defects", "risks", "external_blockers", "next_actions", "invalidated_assumptions",
     "artifact_references", "evidence_references"
   ],
   "properties": {
     "schema": { "const": "lkjscript.agent-work-state" },
-    "version": { "const": 1 },
+    "version": { "const": 2 },
     "task_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
     "state_revision": { "type": "integer", "minimum": 1 },
     "base_repository_revision": { "$ref": "#/$defs/revision" },
@@ -20,6 +21,7 @@
     "goal": { "$ref": "#/$defs/text" },
     "hard_constraints": { "$ref": "#/$defs/texts" },
     "selected_capsule_scope": { "$ref": "#/$defs/capsules" },
+    "semantic_context": { "$ref": "#/$defs/semantic_context" },
     "accepted_decisions": { "$ref": "#/$defs/references" },
     "completed_actions": {
       "type": "array", "maxItems": 256,
@@ -47,6 +49,46 @@
     "capsules": {
       "type": "array", "maxItems": 16, "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*$" }
+    },
+    "semantic_context": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "session", "target_entities", "completed_transactions", "diagnostics",
+        "unresolved_holes"
+      ],
+      "properties": {
+        "session": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/semantic_session" }]
+        },
+        "target_entities": { "$ref": "#/$defs/semantic_references" },
+        "completed_transactions": { "$ref": "#/$defs/semantic_references" },
+        "diagnostics": { "$ref": "#/$defs/semantic_references" },
+        "unresolved_holes": { "$ref": "#/$defs/semantic_references" }
+      }
+    },
+    "semantic_session": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "version", "identity", "source_revision"],
+      "properties": {
+        "schema": { "const": "lkjscript.semantic-session" },
+        "version": { "const": 1 },
+        "identity": { "$ref": "#/$defs/sha256" },
+        "source_revision": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "semantic_reference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "version", "source_revision", "identity"],
+      "properties": {
+        "schema": { "$ref": "#/$defs/text" },
+        "version": { "type": "integer", "minimum": 1 },
+        "source_revision": { "$ref": "#/$defs/sha256" },
+        "identity": { "$ref": "#/$defs/text" }
+      }
+    },
+    "semantic_references": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/semantic_reference" }
     },
     "revision": {
       "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"

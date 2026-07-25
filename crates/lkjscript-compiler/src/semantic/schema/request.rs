@@ -26,7 +26,7 @@ impl ResourceProfile {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Request {
     pub schema: String,
@@ -36,7 +36,7 @@ pub(crate) struct Request {
     pub operation: OperationRequest,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum OperationRequest {
     Snapshot {
@@ -77,7 +77,7 @@ pub(crate) enum ApplyMode {
     Publish,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FilePrecondition {
     pub path: String,
@@ -85,7 +85,7 @@ pub(crate) struct FilePrecondition {
     pub sha256: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum TransactionOperation {
     RenameDeclaration {

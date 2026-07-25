@@ -6,19 +6,26 @@
   "kind": "crate",
   "purpose": "Provide the command-line application and integration acceptance surface.",
   "layer": "application",
-  "concepts": ["CLI", "integration execution", "acceptance tests"],
+  "concepts": ["CLI", "semantic stdio session", "integration execution", "acceptance tests"],
   "facade": ["crates/lkjscript-app/src/main.rs"],
   "allowed_dependencies": ["compiler", "core", "ir", "jit", "native", "vm"],
   "forbidden_dependencies": ["xtask"],
-  "tests": ["crates/lkjscript-app/tests/jit_engines.rs", "crates/lkjscript-app/tests/ssa_equivalence.rs"],
-  "decisions": ["docs/decisions/execution/execution-portfolio.md"],
+  "tests": [
+    "crates/lkjscript-app/tests/jit_engines.rs",
+    "crates/lkjscript-app/tests/ssa_equivalence.rs",
+    "crates/lkjscript-app/tests/semantic_cli.rs"
+  ],
+  "decisions": [
+    "docs/decisions/execution/execution-portfolio.md",
+    "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
+  ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "uses", "names": ["host I/O", "executable memory"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-app"],
   "context_card": {
     "goal": "Exercise public compiler and runtime behavior without duplicating semantics.",
-    "interfaces": ["lkjscript"],
+    "interfaces": ["lkjscript", "lkjscript semantic serve --stdio"],
     "invariants": ["backends consume shared typed IR", "Linux x86-64 claims require calls"]
   }
 }

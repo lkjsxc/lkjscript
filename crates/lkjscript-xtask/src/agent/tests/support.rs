@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::agent::model::{
-    ActionOutcome, CheckpointRequest, CompletedAction, ContentReference, WorkState,
+    ActionOutcome, CheckpointRequest, CompletedAction, ContentReference, SemanticWorkContext,
+    WorkState,
 };
 
 pub struct Repository {
@@ -60,7 +61,7 @@ pub fn repository(name: &str) -> Repository {
 pub fn state(repo: &Repository, task: &str) -> WorkState {
     WorkState {
         schema: "lkjscript.agent-work-state".into(),
-        version: 1,
+        version: 2,
         task_id: task.into(),
         state_revision: 1,
         base_repository_revision: repo.revision.clone(),
@@ -68,6 +69,13 @@ pub fn state(repo: &Repository, task: &str) -> WorkState {
         goal: "implement bounded state".into(),
         hard_constraints: vec!["no hidden state".into()],
         selected_capsule_scope: vec!["workspace".into()],
+        semantic_context: SemanticWorkContext {
+            session: None,
+            target_entities: Vec::new(),
+            completed_transactions: Vec::new(),
+            diagnostics: Vec::new(),
+            unresolved_holes: Vec::new(),
+        },
         accepted_decisions: Vec::new(),
         completed_actions: vec![action(1, ActionOutcome::Completed, Vec::new())],
         command_results: Vec::new(),
@@ -85,7 +93,7 @@ pub fn state(repo: &Repository, task: &str) -> WorkState {
 pub fn request(state: WorkState, expected: u64) -> CheckpointRequest {
     CheckpointRequest {
         schema: "lkjscript.agent-work-state-checkpoint".into(),
-        version: 1,
+        version: 2,
         expected_state_revision: expected,
         state,
     }
