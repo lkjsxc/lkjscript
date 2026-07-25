@@ -1,0 +1,110 @@
+use crate::codegen::*;
+
+impl Emitter<'_> {
+    pub(in crate::codegen) fn offset(&self) -> Result<u16> {
+        let local = u16::try_from(self.proto.len())
+            .map_err(|_| Error::msg("bytecode function offset exceeds u16"))?;
+        self.code_base
+            .checked_add(local)
+            .ok_or_else(|| Error::msg("bytecode function offset exceeds u16"))
+    }
+
+    pub(in crate::codegen) fn slot(&self, value: ValueId) -> Result<u8> {
+        self.slots.get(&value).copied().ok_or_else(|| {
+            Error::msg(format!(
+                "SSA value {} has no bytecode local slot",
+                value.raw()
+            ))
+        })
+    }
+
+    pub(in crate::codegen) fn load(&mut self, value: ValueId) -> Result<()> {
+        let slot = self.slot(value)?;
+        self.proto.emit_op_u8(Op::LoadLocal, slot);
+        Ok(())
+    }
+
+    pub(in crate::codegen) fn store_result(&mut self, value: ValueId) -> Result<()> {
+        let slot = self.slot(value)?;
+        self.proto.emit_op_u8(Op::StoreLocal, slot);
+        self.proto.emit(Op::Pop);
+        Ok(())
+    }
+
+    pub(in crate::codegen) fn emit_instruction(
+        &mut self,
+        instruction: &Instruction,
+        store_result: bool,
+    ) -> Result<()> {
+        match &instruction.kind {
+            InstructionKind::Constant(constant) => self.emit_constant(constant)?,
+            InstructionKind::Copy(value)
+            | InstructionKind::Move { value, .. }
+            | InstructionKind::Borrow { value, .. } => self.load(*value)?,
+            InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
+                self.proto.emit(Op::Unit);
+            }
+            InstructionKind::FunctionRef(function) => {
+                let global = self.global(*function)?;
+                self.proto.emit_op_u16(Op::LoadGlobal, global);
+            }
+            InstructionKind::Runtime {
+                operation,
+                arguments,
+                ..
+            } => {
+                for argument in arguments {
+                    self.load(*argument)?;
+                }
+                self.proto.emit(runtime_opcode(*operation));
+            }
+            InstructionKind::Call {
+                target, arguments, ..
+            } => {
+                for argument in arguments {
+                    self.load(*argument)?;
+                }
+                match target {
+                    CallTarget::Direct(function) => {
+                        let global = self.global(*function)?;
+                        self.proto.emit_op_u16(Op::LoadGlobal, global);
+                    }
+                    CallTarget::Indirect(value) => self.load(*value)?,
+                }
+                let arity = u8::try_from(arguments.len())
+                    .map_err(|_| Error::msg("SSA call arity exceeds bytecode u8"))?;
+                self.proto.emit_op_u8(Op::Call, arity);
+            }
+            InstructionKind::ProductValue { product, fields } => {
+                for field in fields {
+                    self.load(*field)?;
+                }
+                self.proto.emit_op_u16(Op::MakeProduct, product.raw());
+            }
+            InstructionKind::ProductField {
+                product,
+                field,
+                value,
+            } => {
+                self.load(*value)?;
+                let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
+                self.proto.emit_op_u16(Op::LoadProductField, descriptor);
+            }
+            InstructionKind::WithProductField {
+                product,
+                field,
+                value,
+                replacement,
+            } => {
+                self.load(*value)?;
+                self.load(*replacement)?;
+                let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
+                self.proto.emit_op_u16(Op::WithProductField, descriptor);
+            }
+        }
+        if store_result {
+            self.store_result(instruction.id)?;
+        }
+        Ok(())
+    }
+}

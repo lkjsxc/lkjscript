@@ -1,0 +1,102 @@
+use crate::ownership::*;
+
+pub(in crate::ownership) fn check_control_expr(
+    program: &Program,
+    expression: &Expr,
+    places: &BTreeMap<BindingId, PlaceId>,
+    state: &mut State,
+    future: &BTreeSet<BindingId>,
+    _context: UseContext,
+) -> Result<()> {
+    match &expression.kind {
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                if is_owned(&argument.ty) && !matches!(argument.kind, ExprKind::Move { .. }) {
+                    return Err(Error::msg(
+                        "Owned Buf call arguments require explicit move of a whole local place",
+                    ));
+                }
+            }
+            check_arguments(program, args, places, state, future)?;
+        }
+        ExprKind::Operation { args, .. } => {
+            check_arguments(program, args, places, state, future)?;
+        }
+        ExprKind::Do(expressions) => check_sequence(program, expressions, places, state, future)?,
+        ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let branch_uses = uses(then_branch)
+                .union(&uses(else_branch))
+                .copied()
+                .collect();
+            check_expr(
+                program,
+                condition,
+                places,
+                state,
+                &branch_uses,
+                UseContext::Ordinary,
+            )?;
+            let mut left = state.clone();
+            let mut right = state.clone();
+            check_expr(
+                program,
+                then_branch,
+                places,
+                &mut left,
+                future,
+                UseContext::Ordinary,
+            )?;
+            check_expr(
+                program,
+                else_branch,
+                places,
+                &mut right,
+                future,
+                UseContext::Ordinary,
+            )?;
+            expire_dead_loans(&mut left, future);
+            expire_dead_loans(&mut right, future);
+            if left != right {
+                return Err(Error::msg(
+                    "ownership and loan state must match exactly at branch join",
+                ));
+            }
+            *state = left;
+        }
+        ExprKind::While { condition, body } => {
+            if contains_ownership_action(condition)
+                || body.iter().any(contains_ownership_action)
+                || uses_reference_binding(program, condition)?
+                || body.iter().try_fold(false, |found, item| {
+                    Ok::<bool, Error>(found || uses_reference_binding(program, item)?)
+                })?
+                || !state.loans.is_empty()
+            {
+                return Err(Error::msg(
+                    "loop-carried moves or loans are unsupported in the initial ownership slice",
+                ));
+            }
+            let before = state.clone();
+            check_expr(
+                program,
+                condition,
+                places,
+                state,
+                future,
+                UseContext::Ordinary,
+            )?;
+            check_sequence(program, body, places, state, future)?;
+            if *state != before {
+                return Err(Error::msg(
+                    "ownership initialization state must be equal after a loop iteration",
+                ));
+            }
+        }
+        _ => unreachable!("ownership expression category mismatch"),
+    }
+    Ok(())
+}

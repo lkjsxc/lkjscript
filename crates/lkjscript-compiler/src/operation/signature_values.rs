@@ -1,0 +1,91 @@
+use crate::operation::instantiation::{forall, function};
+use crate::operation::*;
+
+pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
+    let i64_binary = || function(vec![Type::I64, Type::I64], Type::I64);
+    let numeric_binary = || {
+        forall(
+            &["N"],
+            function(
+                vec![Type::Param("N".into()), Type::Param("N".into())],
+                Type::Param("N".into()),
+            ),
+        )
+    };
+    let numeric_comparison = || {
+        forall(
+            &["N"],
+            function(
+                vec![Type::Param("N".into()), Type::Param("N".into())],
+                Type::Bool,
+            ),
+        )
+    };
+    match operation {
+        Operation::Add | Operation::Subtract | Operation::Multiply | Operation::Divide => {
+            numeric_binary()
+        }
+        Operation::EqualValue | Operation::SameObject => forall(
+            &["T"],
+            function(
+                vec![Type::Param("T".into()), Type::Param("T".into())],
+                Type::Bool,
+            ),
+        ),
+        Operation::ListEqual => {
+            let item = Type::Param("T".into());
+            let list = Type::List(Box::new(item));
+            forall(&["T"], function(vec![list.clone(), list], Type::Bool))
+        }
+        Operation::F64BitsEqual => function(vec![Type::F64, Type::F64], Type::Bool),
+        Operation::Less | Operation::LessEqual | Operation::Greater | Operation::GreaterEqual => {
+            numeric_comparison()
+        }
+        Operation::BitAnd | Operation::BitOr | Operation::BitXor => i64_binary(),
+        Operation::Not => function(vec![Type::Bool], Type::Bool),
+        Operation::And | Operation::Or => function(vec![Type::Bool, Type::Bool], Type::Bool),
+        Operation::Cons => {
+            let item = Type::Param("T".into());
+            forall(
+                &["T"],
+                function(
+                    vec![item.clone(), Type::List(Box::new(item.clone()))],
+                    Type::List(Box::new(item)),
+                ),
+            )
+        }
+        Operation::Car => {
+            let item = Type::Param("T".into());
+            forall(
+                &["T"],
+                function(vec![Type::List(Box::new(item.clone()))], item),
+            )
+        }
+        Operation::Cdr => {
+            let item = Type::Param("T".into());
+            forall(
+                &["T"],
+                function(
+                    vec![Type::List(Box::new(item.clone()))],
+                    Type::List(Box::new(item)),
+                ),
+            )
+        }
+        Operation::IsEmptyList => forall(
+            &["T"],
+            function(
+                vec![Type::List(Box::new(Type::Param("T".into())))],
+                Type::Bool,
+            ),
+        ),
+        Operation::Print | Operation::WriteStr => function(vec![Type::Str], Type::Unit),
+        Operation::Flush => function(Vec::new(), Type::Unit),
+        Operation::ReadByte => function(Vec::new(), Type::I64),
+        Operation::WriteByte => function(vec![Type::I64], Type::Unit),
+        Operation::Exit => function(vec![Type::I64], Type::Unit),
+        Operation::EmptyStr => function(Vec::new(), Type::Str),
+        Operation::ArgCount => function(Vec::new(), Type::I64),
+        Operation::Arg => function(vec![Type::I64], Type::Option(Box::new(Type::Str))),
+        _ => unreachable!("operation signature family mismatch"),
+    }
+}
