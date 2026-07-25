@@ -1,0 +1,40 @@
+# Native References, Frames, And Exact GC Stack Maps: Collection Acceptance
+
+[Authority](../native-references-and-gc-stack-maps.md)
+
+## Status
+
+**Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
+explicit labels in this capsule and its authority; this capsule cannot promote a capability.
+
+## Collection Acceptance
+
+The Current closed-plan acceptance forces `CollectReferenceV1` with an exact
+Buf-reference argument/local map, proves a dead Buf home is absent, observes a
+caller/callee active chain, writes back copied handles, covers callback failure
+and every structured epilogue, enforces frame bounds, and repeats W^X
+install/invoke/drop. It does not allocate a language object.
+
+Source-level host-independent native allocation is Current after tests force collection with roots
+in arguments and spill slots, across native/native and native/runtime calls,
+through recursion, immediately before return, and around a native/VM
+transition. Tests include live/dead product, Option, Result, string, buffer, and
+list graphs, tiny heap limits, barriers, traps, exits, deadlines, and repeated
+install/invoke/drop. Missing or stale roots must fail validation or tests rather
+than become undefined behavior.
+## Long-Term GC Sequence
+
+```text
+exact native roots
+  -> allocation and barrier ABI
+  -> escape and stack allocation
+  -> worker-local copying nursery
+  -> promoted old generation
+  -> incremental/concurrent marking
+  -> measured compaction
+  -> immutable shared large objects
+```
+
+Only the first two steps are in scope for the current implementation cycle.
+Conservative scanning, default pinning, and a shared mutable process heap are
+**Rejected**.

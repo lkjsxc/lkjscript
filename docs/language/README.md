@@ -17,4 +17,4 @@ source budgets of `lkjscript`.
 - [limits.md](limits.md): fixed source budgets and source-tree width
 
 Historical notation records live only under
-[decisions/archive/](../decisions/archive/).
+[decisions/archive/](../decisions/archive).

@@ -4,7 +4,7 @@
 
 Reproduce correctness and end-to-end release-mode timing for the Brainfuck
 interpreter implemented in
-[`src/examples/brainfuck/`](../../../src/examples/brainfuck/).
+[`src/examples/brainfuck/`](../../../src/examples/brainfuck).
 
 ## Status
 

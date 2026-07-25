@@ -19,8 +19,8 @@ Separate the long-term direction from current product capability.
 - [process-supervisor.md](process-supervisor.md): experimental one-runtime design
 
 Accepted platform sequences are split into focused decisions rather than one
-aspirational implementation claim: [staged self-hosting](../decisions/self-hosted-platform-roadmap.md),
-[modules/packages](../decisions/modules-and-packages.md), [isolates and structured
-concurrency](../decisions/isolates-and-structured-concurrency.md), [the Web
-platform](../decisions/web-platform-roadmap.md), and [the first-party relational
-database](../decisions/relational-database-roadmap.md).
+aspirational implementation claim: [staged self-hosting](../decisions/platform/self-hosted-platform-roadmap.md),
+[modules/packages](../decisions/platform/modules-and-packages.md), [isolates and structured
+concurrency](../decisions/platform/isolates-and-structured-concurrency.md), [the Web
+platform](../decisions/roadmaps/web-platform-roadmap.md), and [the first-party relational
+database](../decisions/roadmaps/relational-database-roadmap.md).

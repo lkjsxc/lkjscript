@@ -50,7 +50,7 @@ docker compose -f meta/docker-compose.yml --profile verify run --build --rm veri
 
 - `crates/lkjscript-core`: bytecode and shared value contracts
 - `crates/lkjscript-ir`: verified typed SSA, evaluator, and baseline passes
-- `crates/lkjscript-compiler`: loading, parsing, typing, SSA, and bytecode lowering
+- `crates/lkjscript-compiler`: validated source loading, typed HIR, SSA, and bytecode lowering
 - `crates/lkjscript-vm`: interpreter, heap, host operations, and auto entry transfer
 - `crates/lkjscript-native`: source-independent closed Linux x86-64 scalar foundation
 - `crates/lkjscript-jit`: verified scalar SSA adapter, code objects, and tier state
@@ -71,8 +71,14 @@ See [docs/operations/architecture.md](docs/operations/architecture.md).
 
 1. [docs/current-state.md](docs/current-state.md)
 2. [docs/operations/architecture.md](docs/operations/architecture.md)
-3. [docs/language/README.md](docs/language/README.md)
-4. [docs/operations/verification.md](docs/operations/verification.md)
-5. [docs/vision/README.md](docs/vision/README.md)
+3. [AI-Native Platform](docs/decisions/platform/ai-native-platform.md)
+4. [Bounded Repository Topology](docs/decisions/platform/bounded-repository-topology.md)
+5. [Repository Intelligence Graph And Context](docs/decisions/platform/repository-intelligence-graph.md)
+6. [Agent Work State](docs/decisions/platform/agent-work-state.md)
+7. [Semantic Source And Agent Protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
+8. [Resource Budget Profiles](docs/decisions/platform/resource-budget-profiles.md)
+9. [docs/language/README.md](docs/language/README.md)
+10. [docs/operations/verification.md](docs/operations/verification.md)
+11. [docs/vision/README.md](docs/vision/README.md)
 
 Agent instructions: [AGENTS.md](AGENTS.md)

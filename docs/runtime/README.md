@@ -17,6 +17,9 @@ transfer, OSR, and background work are not implemented.
 ## Table of Contents
 
 - [vm.md](vm.md): validation, outcomes, limits, values, frames, heap, and host boundary
-- [baseline-jit.md](baseline-jit.md): callable scalar/forced-reference coverage, engines, PollV1, code objects, W^X, and the selected automatic-promotion boundary
-- [../decisions/callable-baseline-jit.md](../decisions/callable-baseline-jit.md): Linux x86-64 callable-baseline contract
-- [../decisions/runtime-jit-instead-of-offline-pgo.md](../decisions/runtime-jit-instead-of-offline-pgo.md): accepted later tiers, OSR, and no-PGO contract
+- [baseline-jit.md](baseline-jit.md): callable scalar/forced-reference coverage, engines, PollV1,
+  code objects, W^X, and the selected automatic-promotion boundary
+- [../decisions/callable-baseline-jit.md](../decisions/jit/callable-baseline-jit.md): Linux x86-64
+  callable-baseline contract
+- [../decisions/runtime-jit-instead-of-offline-pgo.md](../decisions/jit/runtime-jit-instead-of-offline-pgo.md):
+  accepted later tiers, OSR, and no-PGO contract

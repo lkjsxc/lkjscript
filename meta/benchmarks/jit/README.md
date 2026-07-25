@@ -120,7 +120,7 @@ JSON SHA-256 is
 ## Prior Rejected Result At `063668e`
 
 The first run is preserved as
-[`results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json`](results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json).
+[rejected optimizing result][rejected-optimizing-result].
 Its repository record truthfully lists dirty benchmark README, harness, and
 Python-cache paths while identifying implementation commit `063668e`. SHA-256:
 `3e4341ffab5c0cbd976b3dc228d24dfdd8ff135247b91caafb74f0a571e71cec`.
@@ -145,3 +145,5 @@ compatible pre-JIT VM comparison remains in
 The release runtime emits metrics only when `LKJSCRIPT_METRICS` is present.
 `LKJSCRIPT_METRICS_FILE` writes the same line to a file. Both are separate from
 verbose `LKJSCRIPT_JIT_DIAGNOSTICS`; ordinary execution remains silent.
+
+[rejected-optimizing-result]: results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json

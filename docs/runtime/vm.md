@@ -32,7 +32,7 @@ next repairs.
 
 Mutable `Chunk` remains the compiler/test builder. The only executable boundary
 is opaque immutable `ValidatedChunk`, created by `validate_chunk`; public VM,
-disassembly, and JIT-observation APIs require it. The validator decodes all code
+disassembly, and runtime-tiering APIs require it. The validator decodes all code
 before effects and checks encoding/table/metadata limits, operands and indexes,
 function/main/local/global shape, zero captures, products, jump boundaries, CFG
 stack joins, definite local initialization, return/fallthrough shape, and
@@ -80,7 +80,7 @@ is attempted, and stdout is flushed before the CLI translates the outcome.
   formatting string before applying the output-byte limit.
 
 The numeric representation and behavior are specified by
-[Exact I64 And F64 Semantics](../decisions/numeric-semantics.md).
+[Exact I64 And F64 Semantics](../decisions/semantics/numeric-semantics.md).
 
 ## Current Baseline Tier Boundary
 

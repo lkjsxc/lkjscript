@@ -30,8 +30,13 @@ permanent property.
 
 ## Map
 
-- [current-state.md](current-state.md): observed baseline and accepted next state
-- [operations/architecture.md](operations/architecture.md): crate ownership and data flow
+- [current-state.md](current-state.md): observed baseline and accepted next contracts
+- [operations/architecture.md](operations/architecture.md): Current crate flow and accepted repository-intelligence flow
+- [bounded topology](decisions/platform/bounded-repository-topology.md): authored repository limits,
+  provenance, manifests, and audit contract
+- [repository graph/context](decisions/platform/repository-intelligence-graph.md): derived
+  identities, edges, budgets, and context profiles
+- [agent work state](decisions/platform/agent-work-state.md): atomic task scope, attempts, evidence, and publication
 - [language/](language/README.md): source format, semantics, imports, and limits
 - [runtime/](runtime/README.md): VM and explicitly labeled JIT placeholder
 - [operations/](operations/README.md): verification and engineering handoff

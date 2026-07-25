@@ -9,7 +9,7 @@ the compiler implementation or repository infrastructure.
 
 **Current** for Edition 1. It supersedes the former repository-wide
 eight-visible-child policy. Its permanent-language-rule status is
-**Superseded** by [Resource Budget Profiles](resource-budget-profiles.md); the
+**Superseded** by [Resource Budget Profiles](platform/resource-budget-profiles.md); the
 16-entry check remains enforced until aggregate source closure/import/byte/node
 bounds are Current.
 

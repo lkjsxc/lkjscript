@@ -8,7 +8,7 @@ Choose stable semantic budgets rather than misleading line-count rules.
 
 **Current** for Edition 1 nest, form-child, token, and top-level limits.
 The permanent-policy part of this record is **Superseded** by [Resource Budget
-Profiles](../resource-budget-profiles.md). No Current limit is weakened until
+Profiles](../platform/resource-budget-profiles.md). No Current limit is weakened until
 aggregate replacement bounds are Current.
 
 ## Decision

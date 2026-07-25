@@ -2,122 +2,80 @@
 
 ## Purpose
 
-Capture product intent and known sharp edges without preserving obsolete
-implementation contracts.
+Capture product intent, current sharp edges, accepted next contracts, and
+verification discipline without preserving obsolete implementation priorities.
 
 ## Status
 
-**Current** for engineering policy, the semantic/outcome foundation, verified
-typed SSA, independent evaluation/baseline normalization, reference-bytecode
-cutover, callable scalar and allocation-capable Linux x86-64 baseline tiers,
-and forced certificate-verified optimizing execution. Synchronous automatic
-baseline-to-proof promotion is an **Accepted Implementation Selection**, not yet
-Current. Ownership/traits, Handle/host transitions, and broader proof passes
-remain **Accepted Targets**.
+**Current** for the engineering policy and implementation boundaries linked from
+[Current State](../current-state.md). Bounded Repository Topology, Repository
+Intelligence Graph/context, agent work state, complete Semantic Source/Agent
+Protocol V1, and resource profiles are **Accepted Implementation Contracts**,
+not Current. Automatic proof promotion remains an **Accepted Implementation
+Selection**, not the immediate priority.
 
 ## Product Intent
 
-- Build the language, compiler, runtime, standard library, and future ecosystem
-  as one coherent product named `lkjscript`.
+- Build the language, compiler, runtime, standard library, and ecosystem as one
+  coherent product named `lkjscript`.
 - Canonical accepted sources use `.lkjscript`; do not preserve `.lkjml` support.
-- Keep the Rust host small, owned, and Linux-first. Grow policy in lkjscript
-  source rather than host frameworks.
-- Keep unsafe Rust inside `lkjscript-sys`, and require every safe wrapper to
-  uphold memory safety for arbitrary safe callers.
-- Do not add a crates.io dependency without an accepted decision record.
-- Backward compatibility is not required; remove stale aliases and contracts.
-- A source directory may contain at most 16 immediate files plus directories.
-  This language rule does not constrain Rust/docs/infrastructure layout.
-- Placeholders are allowed only when code, observable behavior, and docs all
-  explicitly label them `PLACEHOLDER`.
-- Prefer complete vertical slices and focused conformance tests over broad mock
-  scaffolding.
-
-## Layout
-
-```text
-src/std/          language standard library
-src/lib/          reusable language packages
-src/examples/     executable validation workloads
-crates/           typed SSA, compiler, core, VM, sys, CLI, and gates
-meta/             Docker, scripts, benchmark comparators, and configuration
-```
+- Keep the Rust host small and Linux-first; grow policy in lkjscript source.
+- Keep unsafe Rust inside `lkjscript-sys`, with safe APIs sound for every safe
+  caller.
+- Add no third-party Rust dependency without an accepted measured decision.
+- Remove stale aliases/contracts instead of preserving compatibility shims.
+- Mark every placeholder in code, behavior, and documentation as `PLACEHOLDER`.
+- Prefer complete vertical slices and focused conformance tests over mocks.
 
 ## Current Sharp Edges
 
-- Imports merge immutable function and product declarations into one program
-  declaration namespace; there are not yet modules or exports.
-- Function closures are still installed in internal VM global slots before
-  source main, but those slots are not source values or mutable source state.
-- `set` is local-only. It targets the nearest same-function `var` by stable HIR
-  BindingId and is environment-renamed into SSA; branch and loop state joins use
-  explicit block parameters in stable BindingId order. lkjedit, terminal, and
-  Brainfuck state is product-threaded.
-- `lkjscript-ir` is dependency-free and backend-independent. Its evaluator is
-  not a host-runtime substitute: console, filesystem, sockets, terminal, time,
-  and handle operations report explicit unsupported-evaluator outcomes.
-- Compiler results are `ExecutableProgram` values retaining verified normalized
-  SSA, deterministic function/prototype/main and bytecode-position links, and
-  validated bytecode through `bytecode()`. Do not reintroduce a HIR-to-bytecode
-  semantic emitter.
-- Raw terminal redraw must emit CR+LF; LF-only output causes staircase display.
-- lkjedit idle must wait without full repaint.
-- Final cursor placement must be followed by a flush.
-- Current string/file helpers may perform per-byte syscalls or quadratic string
-  construction.
-- VM host operations block; stdin/stdout, terminal guard, and some host
-  wrappers remain process-global, so concurrent VM supervision is unsupported.
-  Core exit is a structured outcome rather than process termination.
-- Bounded terminal operations, stale-safe handles, truthful Results, exact
-  I64/F64 execution, resolved typed HIR, Unit/strict-if, typed empty lists,
-  Option/no-nil, explicit equality families, immutable nominal products,
-  explicit main, declaration-only imports, local-only mutation, product-
-  threaded workload state, fixed-point effects, chunk validation, structured
-  process-safe outcomes, verified typed SSA, differential evaluation, baseline
-  passes, measured backend selection, SSA-to-bytecode cutover, bounded W^X code
-  objects, actually called synchronous Linux x86-64 baseline JIT, exact native
-  host-independent roots/allocation/collection, and the forced first
-  certificate-verified optimizing tier have landed. The next implementation
-  slice is the selected automatic proof-promotion boundary and retained gate;
-  broader ownership/coherent traits, Handle/host transitions, and broader proof
-  passes remain subsequent accepted work. Forced first-tier
-  performance is Adopted from the clean `cc967ff` run at 2.984780x after the
-  retained `063668e` run was Rejected by its scalar native sentinel; preserve
-  both records. Automatic promotion remains disabled and unmeasured, with no
-  OSR, deoptimization, or speculation claim. Its next slice is now selected:
-  keep baseline auto threshold 64; add initially disabled CLI proof-promotion
-  thresholds 64/256/1,024/4,096; count exact baseline root entries; make the Nth
-  entry compile/install synchronously but call the captured baseline object;
-  publish only on a later entry using exact function/object/tier tokens. Own
-  coexisting baseline/optimizing objects with one current and optional pending,
-  retain bounded stale mappings until session drop without selecting them, and
-  enforce one attempt per epoch, bounded total retries, same-epoch suppression,
-  structured baseline-preserving failure, and newer-epoch optimized invalidation
-  back to baseline. Main and reference VM/native entry remain VM-only; internal
-  generated reference helpers may call/allocate. Forced tiers stay unchanged
-  and fallback-free. The retained gate compares auto baseline-only with all four
-  thresholds plus forced/allocation/reference sentinels at >=4 warmups/31
-  randomized samples, requiring >=1.10x median process speedup, >2x combined
-  MAD improvement, p95 <=5% worse, repaid compile cost, <=5% historical scalar,
-  exact oracle/state/proof/W^X, and no repeated attempt/fallback. Pick the
-  largest candidate statistically tied with fastest or retain rejection and
-  remain disabled. Do not add inert engine flags or label baseline code
-  optimizing. Loop OSR and a minimal AOT
-  test emitter remain later targets, not current capability. The execution
-  portfolio reclassifies optional explicit local PGO and a content-addressed
-  cache as later measured Targets; neither is Current. See [Allocation-Capable Baseline
-  JIT](../decisions/allocation-capable-baseline-jit.md) and [Proof-Based
-  Optimizing JIT](../decisions/proof-based-optimizing-jit.md).
+- Edition 1 still enforces depth 8, 16 form children, 384 tokens per file,
+  8 top-level forms, 15 product fields, and 16 immediate source-directory
+  entries. Repository topology contracts do not change those language limits.
+- Imports still merge declarations into one loaded-closure namespace; modules,
+  exports, package coherence, and general ownership are incomplete.
+- `set` remains function-local and SSA joins use stable BindingId-ordered block
+  parameters. Workload state is product-threaded.
+- The independent SSA evaluator intentionally reports host operations as
+  unsupported; it is not a host-runtime substitute.
+- Compiler execution authority is verified normalized SSA plus validated
+  reference bytecode. Do not restore an independent HIR-to-bytecode emitter or
+  let a backend reinterpret source syntax.
+- VM host operations block, and process-global terminal/stdio wrappers prevent
+  concurrent VM supervision. Core exit remains a structured outcome.
+- Current auto execution is baseline-only. Forced proof optimization is Current,
+  but automatic promotion, OSR, deoptimization, and speculation are absent.
+- Linux x86-64 callable-native claims require real synchronous generated entry
+  from verified SSA. Emission, disassembly, or historical foundation scaffolding
+  alone is not current tier evidence.
+- String/file helpers may still perform per-byte calls or quadratic construction.
+  Raw terminal redraw requires CR+LF, idle editor operation must not repaint,
+  and final cursor placement requires a flush.
 
-## Host Boundary
+## Accepted Next Sequence
 
-Terminal, filesystem, network, and time policy belongs in the standard library
-when a safe thin primitive can support it. Do not reintroduce removed fat host
-features merely for convenience. Bulk operations are appropriate when they
-are necessary for correctness or measured performance.
+1. Implement [Bounded Repository Topology](../decisions/platform/bounded-repository-topology.md)
+   and deterministic `check-structure`/audit output without repository rewrites.
+2. Implement the [Repository Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md)
+   over validated topology, provenance, and authority identity.
+3. Implement [Agent Work State](../decisions/platform/agent-work-state.md) with
+   atomic task/scope/evidence publication.
+4. Implement the [first Semantic Source
+   operations](../decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md)
+   and [aggregate profile contract](../decisions/platform/resource-budget-profiles-candidate.md).
 
-## Verification Discipline
+This order is an accepted implementation contract, not a capability claim.
+Automatic proof promotion and its retained gate follow these foundations unless
+a later accepted decision changes priority.
 
-Use [verification.md](verification.md). Record commands that actually ran,
-including expected failures. Keep rejected experiment results in
-[../vision/experiments.md](../vision/experiments.md).
+## Change Discipline
+
+Update the authority before public behavior. Preserve Current, Accepted Target,
+Deferred, Rejected, and historical evidence distinctions. Moves require
+repository-wide link updates with no aliases. Generated outputs belong under
+`target/`; immutable evidence bytes are not reformatted.
+
+Use [Verification](verification.md). Record only commands that ran, with exact
+commit/environment/result, and retain every failed or rejected experiment.
+Code/build/runtime gates remain explicitly not tested for documentation-only
+changes.
