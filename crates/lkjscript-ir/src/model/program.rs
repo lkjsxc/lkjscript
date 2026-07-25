@@ -1,0 +1,66 @@
+use super::*;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Block {
+    pub id: BlockId,
+    pub parameters: Vec<BlockParameter>,
+    pub instructions: Vec<Instruction>,
+    pub terminator: Terminator,
+    pub metadata: BlockMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceMetadata {
+    pub id: PlaceId,
+    pub binding: BindingId,
+    pub ty: SsaType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Function {
+    pub id: FunctionId,
+    pub name: String,
+    pub signature: Signature,
+    pub places: Vec<PlaceMetadata>,
+    pub effects: EffectSet,
+    pub entry: BlockId,
+    pub blocks: Vec<Block>,
+    pub origin: Origin,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Program {
+    pub sources: Vec<SourceMetadata>,
+    pub products: Vec<ProductMetadata>,
+    pub traits: Vec<TraitMetadata>,
+    pub implementations: Vec<ImplMetadata>,
+    pub functions: Vec<Function>,
+    pub main: FunctionId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BytecodeInstructionLink {
+    pub value: ValueId,
+    pub offset: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BytecodeBlockLink {
+    pub block: BlockId,
+    pub offset: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionBytecodeLink {
+    pub function: FunctionId,
+    pub prototype: Option<u32>,
+    pub is_main: bool,
+    pub blocks: Vec<BytecodeBlockLink>,
+    pub instructions: Vec<BytecodeInstructionLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BytecodeLinkMetadata {
+    pub main: FunctionId,
+    pub functions: Vec<FunctionBytecodeLink>,
+}

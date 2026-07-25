@@ -1,0 +1,168 @@
+use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
+
+use crate::{
+    CallTarget, Constant, FunctionId, Instruction, InstructionKind, ProductId, RuntimeOp,
+    StructuredOutcome, Terminator, ValueId, VerifiedProgram,
+};
+
+#[derive(Clone)]
+pub struct EvalBuffer {
+    id: u64,
+    bytes: Rc<RefCell<Vec<u8>>>,
+}
+
+impl fmt::Debug for EvalBuffer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let length = self.bytes.try_borrow().map_or(0, |bytes| bytes.len());
+        formatter
+            .debug_struct("EvalBuffer")
+            .field("id", &self.id)
+            .field("length", &length)
+            .finish()
+    }
+}
+
+impl PartialEq for EvalBuffer {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum EvalValue {
+    Unit,
+    Bool(bool),
+    I64(i64),
+    F64(f64),
+    Str(String),
+    Symbol(String),
+    Buf(EvalBuffer),
+    Handle(u64),
+    Product(ProductId, Vec<Self>),
+    List(Vec<Self>),
+    None,
+    Some(Box<Self>),
+    Ok(Box<Self>),
+    Err(Box<Self>),
+    Function(FunctionId),
+}
+
+impl PartialEq for EvalValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Unit, Self::Unit) | (Self::None, Self::None) => true,
+            (Self::Bool(left), Self::Bool(right)) => left == right,
+            (Self::I64(left), Self::I64(right)) => left == right,
+            (Self::F64(left), Self::F64(right)) => left.to_bits() == right.to_bits(),
+            (Self::Str(left), Self::Str(right)) | (Self::Symbol(left), Self::Symbol(right)) => {
+                left == right
+            }
+            (Self::Buf(left), Self::Buf(right)) => left == right,
+            (Self::Handle(left), Self::Handle(right)) => left == right,
+            (Self::Product(left_id, left), Self::Product(right_id, right)) => {
+                left_id == right_id && left == right
+            }
+            (Self::List(left), Self::List(right)) => left == right,
+            (Self::Some(left), Self::Some(right))
+            | (Self::Ok(left), Self::Ok(right))
+            | (Self::Err(left), Self::Err(right)) => left == right,
+            (Self::Function(left), Self::Function(right)) => left == right,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EvalOutcome {
+    Returned(EvalValue),
+    Exited(i64),
+    Trapped(String),
+    UnsupportedOperation(RuntimeOp),
+    DeadlineExceeded,
+    ResourceLimitExceeded(String),
+    HostFailure(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvalConfig {
+    pub fuel: u64,
+    pub max_frames: usize,
+    pub max_allocations: u64,
+    pub max_heap_bytes: usize,
+    pub max_buffer_bytes: usize,
+    pub max_list_equal_steps: usize,
+    pub args: Vec<String>,
+}
+
+impl Default for EvalConfig {
+    fn default() -> Self {
+        Self {
+            fuel: 1_000_000,
+            max_frames: 1_024,
+            max_allocations: 1_000_000,
+            max_heap_bytes: usize::MAX,
+            max_buffer_bytes: 1_000_000,
+            max_list_equal_steps: 1_000_000,
+            args: Vec::new(),
+        }
+    }
+}
+
+pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
+    let mut evaluator = Evaluator {
+        program,
+        config,
+        fuel: config.fuel,
+        allocations: 0,
+        heap_bytes: 0,
+        next_buffer_id: 1,
+    };
+    match evaluator.call(program.program().main, Vec::new(), 0) {
+        Ok(value) => EvalOutcome::Returned(value),
+        Err(flow) => flow.outcome(),
+    }
+}
+
+pub(crate) struct Evaluator<'a> {
+    pub(crate) program: &'a VerifiedProgram,
+    pub(crate) config: &'a EvalConfig,
+    pub(crate) fuel: u64,
+    pub(crate) allocations: u64,
+    pub(crate) heap_bytes: usize,
+    pub(crate) next_buffer_id: u64,
+}
+
+#[derive(Debug)]
+pub(crate) enum Flow {
+    Exit(i64),
+    Trap(String),
+    Unsupported(RuntimeOp),
+    Deadline,
+    Resource(String),
+    HostFailure(String),
+}
+
+impl Flow {
+    fn outcome(self) -> EvalOutcome {
+        match self {
+            Self::Exit(code) => EvalOutcome::Exited(code),
+            Self::Trap(message) => EvalOutcome::Trapped(message),
+            Self::Unsupported(operation) => EvalOutcome::UnsupportedOperation(operation),
+            Self::Deadline => EvalOutcome::DeadlineExceeded,
+            Self::Resource(kind) => EvalOutcome::ResourceLimitExceeded(kind),
+            Self::HostFailure(message) => EvalOutcome::HostFailure(message),
+        }
+    }
+}
+
+mod allocation;
+#[cfg(test)]
+mod boundary_tests;
+mod control;
+mod instruction;
+mod runtime;
+mod values;
+
+pub(crate) use values::*;
