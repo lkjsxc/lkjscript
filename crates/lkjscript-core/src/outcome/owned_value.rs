@@ -1,82 +1,6 @@
-//! Process-safe execution outcomes and owned returned values.
-
 use std::fmt;
 
 use crate::{Error, HeapObj, ProductId, Result, Value};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResourceLimitKind {
-    InstructionFuel,
-    StackValues,
-    FrameDepth,
-    HeapBytes,
-    Allocations,
-    Handles,
-    OutputBytes,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Trap {
-    message: String,
-}
-
-impl Trap {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.message
-    }
-}
-
-impl fmt::Display for Trap {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HostError {
-    message: String,
-    prior_outcome: Option<String>,
-}
-
-impl HostError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            prior_outcome: None,
-        }
-    }
-
-    pub fn during_cleanup(message: impl Into<String>, prior_outcome: String) -> Self {
-        Self {
-            message: message.into(),
-            prior_outcome: Some(prior_outcome),
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.message
-    }
-
-    pub fn prior_outcome(&self) -> Option<&str> {
-        self.prior_outcome.as_deref()
-    }
-}
-
-impl fmt::Display for HostError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)?;
-        if let Some(prior) = &self.prior_outcome {
-            write!(formatter, " (prior outcome: {prior})")?;
-        }
-        Ok(())
-    }
-}
 
 /// A returned value plus a private snapshot of every reachable VM object.
 ///
@@ -227,38 +151,6 @@ impl fmt::Debug for OwnedValue {
                 formatter.write_str("#<owned-value>")
             }
             None => formatter.write_str("#<invalid-owned-value>"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExecutionOutcome {
-    Returned(OwnedValue),
-    Exited(i32),
-    Trapped(Trap),
-    DeadlineExceeded,
-    ResourceLimitExceeded(ResourceLimitKind),
-    HostFailure(HostError),
-}
-
-impl ExecutionOutcome {
-    pub fn returned(&self) -> Option<&OwnedValue> {
-        match self {
-            Self::Returned(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    pub fn summary(&self) -> String {
-        match self {
-            Self::Returned(value) => format!("Returned({value:?})"),
-            Self::Exited(code) => format!("Exited({code})"),
-            Self::Trapped(trap) => format!("Trapped({trap})"),
-            Self::DeadlineExceeded => "DeadlineExceeded".to_string(),
-            Self::ResourceLimitExceeded(kind) => {
-                format!("ResourceLimitExceeded({kind:?})")
-            }
-            Self::HostFailure(error) => format!("HostFailure({error})"),
         }
     }
 }
