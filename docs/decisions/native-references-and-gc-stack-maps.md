@@ -73,8 +73,10 @@ Unregister/HeapDispatch slots instead expose their exact
 context/ordinal/byte/pointer/safepoint/heap-site machine arguments through
 `internal_abi_signature`. In particular, the second `HeapDispatchV1` argument is
 a heap-site ID, not a safepoint ID. ABI-2 frame registration records the exact
-source-function entry, so source lowering does not emit a duplicate
-`EnterFunctionV1` transition. A verified transitive may-collect summary publishes
+source-function entry and consumes the mandatory entry poll before generated
+body effects, so source lowering does not emit duplicate `EnterFunctionV1` or
+entry `PollV1` transitions. Backedge and explicit polls remain ordinary runtime
+calls. A verified transitive may-collect summary publishes
 a caller safepoint only for a direct callee whose closure can collect; scalar
 non-collecting calls retain exact empty maps without paying a publication call.
 Every registered return, trap, exit, deadline, resource, host-failure, and propagated-callee edge

@@ -39,9 +39,10 @@ exit, and structured outcome propagation. Indirect calls remain unsupported.
 
 Native entry, call, and loop transitions use enum-identified versioned runtime
 calls. ABI-2 frame registration records exact per-source-function native entries
-without a duplicate source-level `EnterFunctionV1` call. `PollV1` consumes
-bounded native poll fuel, checks a monotonic deadline, counts polls, and
-propagates deadline, resource-limit, or host-clock status through the shared
+and consumes the mandatory entry poll before body effects without duplicate
+source-level `EnterFunctionV1` or entry `PollV1` calls. Explicit and backedge
+`PollV1` calls consume bounded native poll fuel, check a monotonic deadline,
+count polls, and propagate deadline, resource-limit, or host-clock status through the shared
 invocation state. Native ABI 2 prologues register initialized frames; verified
 transitive may-collect summaries publish dense caller safepoints only where a
 callee closure can collect, and every structured edge unregisters. Generated

@@ -179,8 +179,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   active value/home/root budget, and guarded current pthread stack bounds. The
   sys invocation caches immutable current-thread stack bounds once, then checks
   each generated reservation without repeating pthread attribute queries.
-  Registration itself records source-function entry, avoiding a duplicate
-  runtime call, and verified transitive may-collect summaries suppress caller
+  Registration itself records source-function entry and consumes the mandatory
+  entry poll before body effects, avoiding two duplicate runtime calls; backedge
+  polls remain explicit. Verified transitive may-collect summaries suppress caller
   publication calls for non-collecting scalar closures while retaining exact
   empty maps. Sys tracks exact reservation/release across nested frames. Collecting calls publish
   a dense safepoint, and every structured return/trap/exit/deadline/resource/host

@@ -963,6 +963,26 @@ impl<'a> NativeCallState<'a> {
         })
     }
 
+    fn poll(&mut self) {
+        if self.status != 0 {
+            return;
+        }
+        self.poll_count = self.poll_count.saturating_add(1);
+        if self.poll_fuel_remaining == 0 {
+            self.status = 4;
+            self.payload = 1;
+            return;
+        }
+        self.poll_fuel_remaining -= 1;
+        if self.deadline_ms >= 0 {
+            match crate::now_ms_monotonic() {
+                Ok(now) if now >= self.deadline_ms => self.status = 3,
+                Ok(_) => {}
+                Err(_) => self.status = 5,
+            }
+        }
+    }
+
     fn reserve_frame(&mut self, function_ordinal: u32, frame_bytes: u64, rbp: *mut u8) {
         if self.status != 0 {
             return;
@@ -1074,6 +1094,18 @@ impl<'a> NativeCallState<'a> {
             return;
         };
         *entries = entries.saturating_add(1);
+        self.poll();
+        if self.status != 0 {
+            if let Some(reservation) = self.pending_reservation.take() {
+                self.reserved_native_stack_bytes = self
+                    .reserved_native_stack_bytes
+                    .saturating_sub(reservation.frame_bytes);
+                self.active_value_homes = self
+                    .active_value_homes
+                    .saturating_sub(reservation.value_homes);
+            }
+            return;
+        }
         self.pending_reservation = None;
         self.active_frames[self.active_depth] = ActiveFrame {
             function_ordinal,
@@ -1613,23 +1645,7 @@ extern "C" fn runtime_poll_v1(state: *mut NativeCallState<'_>) {
     let Some(state) = (unsafe { state.as_mut() }) else {
         return;
     };
-    if state.status != 0 {
-        return;
-    }
-    state.poll_count = state.poll_count.saturating_add(1);
-    if state.poll_fuel_remaining == 0 {
-        state.status = 4;
-        state.payload = 1;
-        return;
-    }
-    state.poll_fuel_remaining -= 1;
-    if state.deadline_ms >= 0 {
-        match crate::now_ms_monotonic() {
-            Ok(now) if now >= state.deadline_ms => state.status = 3,
-            Ok(_) => {}
-            Err(_) => state.status = 5,
-        }
-    }
+    state.poll();
 }
 
 extern "C" fn runtime_enter_function_v1(state: *mut NativeCallState<'_>, function: u64) {

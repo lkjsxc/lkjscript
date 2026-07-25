@@ -623,12 +623,9 @@ fn lower_function(
             .write_local(entry, local, value)
             .map_err(LoweringError::backend)?;
     }
-    // ABI-2 frame registration records the exact source-function entry before
-    // generated body effects. A separate EnterFunctionV1 call would duplicate
-    // that accounting and add one runtime transition to every native call.
-    builder
-        .runtime_call(entry, RuntimeCallSlot::PollV1, Vec::new())
-        .map_err(LoweringError::backend)?;
+    // ABI-2 frame registration records the exact source-function entry and
+    // consumes its mandatory poll before generated body effects. Separate
+    // EnterFunctionV1 and PollV1 calls would duplicate transition overhead.
 
     for (index, block) in function.blocks.iter().enumerate() {
         let native_block = blocks[index];
