@@ -207,9 +207,13 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   diagnostics and never use stdout; allocation/object byte fields are labeled
   deterministic estimates, heap operation attempts and successes are distinct,
   and no collection-pause distribution is claimed. The standard-library harness
-  polls process RSS, checks exact result bits and stream silence, randomizes at
+  polls process RSS, checks exact results and stream silence, randomizes at
   least four warmups plus 31 samples, and retains every sample and distribution
-  under `meta/benchmarks/jit/results/`
+  under `meta/benchmarks/jit/results/`. The `063668e` forced optimizing workload
+  passed its 2.930761x native/noise/correctness gates, but the complete adoption
+  verdict is **Rejected** because the historical scalar native sentinel ratio
+  was 1.069928, above its 1.05 ceiling. Automatic optimizing promotion remains
+  disabled and unmeasured
 - Native references and heap sites: typed opaque stable-handle words use exact
   Buf/Str/List/Option/Result/product layout identities and verified frame homes,
   not raw object pointers; zero is accepted only for EmptyList/None; the Copy runtime-adapter token is non-Send/non-Sync.
@@ -301,6 +305,22 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The retained optimizing-JIT benchmark-only work based on
+`063668e08b92a97a2feae8397ff0d634887bd0b6` was run on Linux
+7.0.0-27-generic x86-64, AMD Ryzen 9 9955HX, with Rust/Cargo 1.96.0. It changes
+no engine behavior and makes only a forced first-tier performance measurement;
+automatic promotion remains disabled and unmeasured.
+
+| Retained optimizing benchmark command or check | Result |
+| --- | --- |
+| `python3 meta/benchmarks/jit/benchmark.py` | locked workspace release build passed; exact silent reference-VM I64 `3333` oracle and all forced outcomes passed; all 4 warmups and 31 measured samples per case were retained in deterministic randomized interleaving with monotonic process wall and polled peak RSS |
+| same-commit optimizing workload | baseline native median/MAD 1.997375/0.016721 ms; optimizing 0.681521/0.003567 ms; 2.930761x speedup; 1.315854 ms improvement versus 0.040576 ms twice-combined-MAD threshold; 72 checked proof records, 2,724 optimizing versus 13,956 baseline code bytes, 10,001 optimizing entries, zero baseline entry/fallback, and verified W^X |
+| retained scalar sentinel comparison | native median 8.182742 ms versus retained 7.647935 ms, ratio 1.069928: failed the 1.05 ceiling; process median 9.340049 versus 9.372036 ms, ratio 0.996587: passed. This cross-commit sentinel includes compiler/ABI/stack-check/code evolution and does not attribute the regression to optimizing passes |
+| allocation-graph correctness metrics, once | exact I64 `1`; 3 optimizing entries, 7 allocations, 6 collections, 14 attempted/14 successful heap calls, maximum 3 roots, 6 barriers, zero baseline entry/fallback, and W^X |
+| mechanical verdict | **Rejected** because every predeclared gate was required and the scalar native sentinel failed; forced optimizer correctness remains Current, but no optimizing performance adoption or automatic-promotion claim is made |
+| `cargo run --locked -p lkjscript-xtask -- check-docs`; `git diff --check` | passed |
+| Not tested | full canonical workspace verification, Docker, automatic optimizing promotion, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
 
 The final forced-optimizer hardening in this document's containing commit,
 based on `114196422fb41b8c1b1dab6304c1680000cf67ed`, was checked in the

@@ -834,6 +834,89 @@ server behavior. The 5x target passed, so no post-failure profiling or
 code-layout manipulation was performed. Docker and the 20-minute Brainfuck
 Mandelbrot were not run. Full Brainfuck Mandelbrot remains a later OSR workload.
 
+## C6 Forced Proof-Optimizing Performance Gate: Rejected
+
+- Status: **Rejected** for performance adoption. The forced proof-optimizing
+  correctness slice remains Current; automatic promotion remains disabled and
+  unmeasured.
+- Question: does the first proof pipeline beat same-commit forced baseline by
+  at least 1.20x beyond noise without hiding a greater-than-5% scalar sentinel
+  regression?
+- Baseline/candidate: both forced tiers and the same-commit scalar sentinel used
+  implementation commit `063668e08b92a97a2feae8397ff0d634887bd0b6` and one
+  locked release binary. The historical scalar sentinel is retained callable
+  baseline commit `025cbb2feadbb18fbae51e68e38b9c849798d068`.
+- Environment: Linux 7.0.0-27-generic x86-64/glibc 2.39, AMD Ryzen 9 9955HX,
+  20 logical CPUs available, 32 GiB RAM, Rust/Cargo 1.96.0, Git 2.43.0, and
+  Python 3.12.3. The 2,127,792-byte binary SHA-256 was
+  `07d307879cc4f8476efea6218ca5e3a0943f7cdceb378972195e18171657e3bb`.
+- Build and command: the standard-library harness ran `cargo build --locked
+  --workspace --release` itself, then `python3
+  meta/benchmarks/jit/benchmark.py`. Normal VM/baseline/optimizing streams were
+  empty. Timed runs opted into one `LKJSCRIPT_METRICS` JSON line.
+- Oracle: a separate reference-VM process returned exact I64 `3333` for
+  `src/examples/jit-optimizing`; Python independently computed scalar F64 bits
+  `0x401af3ef5a48f5f0`; the allocation graph returned exact I64 `1`.
+- Protocol: fixed seed `0x4c4b4a534f505449`, four warmups and 31 measured
+  samples for optimizing-workload baseline, optimizing-workload optimizing,
+  and scalar baseline in one deterministic randomized interleaving. Python
+  monotonic nanoseconds covered process creation through collection; Linux
+  `VmRSS` was polled about every 0.5 ms. P95 is nearest-rank, MAD is median
+  absolute deviation, and no sample was removed.
+- Predeclared adoption: at least 1.20x optimizing native speedup; median
+  improvement greater than twice combined MAD, where combined is the sum of
+  tier MADs; exact outcomes; nonzero optimizing entries and checked proof;
+  zero optimizing-sample baseline entries/fallback; baseline tier integrity;
+  W^X; allocation correctness; and both scalar native and process medians no
+  more than 5% over the retained callable baseline. Every criterion was
+  mandatory.
+
+Times below are median / MAD / nearest-rank p95 / minimum / maximum.
+
+| Case | Native execution ms | Process wall ms | Peak RSS KiB |
+| --- | ---: | ---: | ---: |
+| optimizing workload, baseline | 1.997375 / 0.016721 / 2.364345 / 1.972247 / 2.467920 | 3.584969 / 0.049302 / 4.415831 / 3.508204 / 4.879183 | 4,128 / 44 / 4,228 / 3,988 / 4,240 |
+| optimizing workload, optimizing | 0.681521 / 0.003567 / 0.843666 / 0.674839 / 0.978520 | 2.457400 / 0.053521 / 3.143670 / 2.391696 / 3.199314 | 4,048 / 28 / 4,136 / 3,908 / 4,148 |
+| scalar workload, baseline | 8.182742 / 0.044654 / 8.915169 / 8.073577 / 9.839367 | 9.340049 / 0.168027 / 11.450636 / 9.127458 / 12.328947 | 3,712 / 36 / 3,780 / 3,552 / 3,796 |
+
+The optimizer's native median was 2.930761x faster. Its 1.315854 ms improvement
+was greater than twice combined MAD, 0.040576 ms. Optimization,
+lowering/encoding, and install medians were 0.254879, 0.037590, and 0.047309
+ms; baseline lowering and install medians were 0.083547 and 0.061566 ms. Exact
+facts were invariant across every warmup and sample: baseline emitted 13,956
+code and 16,489 metadata bytes with 10,001 baseline entries; optimizing emitted
+2,724 code and 3,817 metadata bytes with 10,001 optimizing entries, 72
+checked-I64 GVN records, 2,816 estimated certificate bytes, 35 executed
+optimizing passes, zero baseline entries/fallback, and verified W^X.
+
+The scalar native median was 8.182742 ms versus retained 7.647935 ms, ratio
+1.069928: **failed** the 1.05 ceiling. Scalar process wall was 9.340049 versus
+9.372036 ms, ratio 0.996587: passed. The source SHA-256 remained
+`aa8acecbad8add81f7a3a79b19a69e8f503d36c8af6e1f503b572bfadd14157e`,
+but compiler, metrics, native ABI, stack checks, binary, and surrounding
+emitted code evolved across commits. This sentinel establishes a visible
+regression against the retained measurement; it does not attribute that
+regression to optimizing passes or compare algorithm-equivalent candidate
+engines.
+
+The one untimed allocation check reported 3 optimizing entries, 7 allocations,
+259 estimated allocation bytes, 6 collections, 225 peak estimated live bytes,
+maximum 3 roots, 14 attempted/14 successful heap calls, 6 barriers, zero
+baseline entries/fallback, and verified W^X. All of its correctness/accounting
+gates passed.
+
+The all-gates verdict is therefore **Rejected** despite the strong local
+optimizer result. No threshold was selected and no automatic promotion claim is
+made. Every warmup, sample, order, environment/tool record, source/binary hash,
+full metric, and distribution is retained under schema
+`lkjscript.optimizing-jit-benchmark.v1` in
+[`../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json`](../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json),
+SHA-256
+`3e4341ffab5c0cbd976b3dc228d24dfdd8ff135247b91caafb74f0a571e71cec`.
+Only the compact retained JSON is committed; reproducible build and Python
+cache artifacts are not evidence and are removed or remain in the shared
+ignored target tree.
+
 ## Deferred Matrices
 
 After process-safe VM outcomes exist, scheduler experiments will compare OS

@@ -43,13 +43,18 @@ It reuses ABI-2 exact roots, allocation runtime sites, active-frame bounds, W^X
 installation, and structured outcomes. It adds no guards, deoptimization, OSR,
 background compilation, or hidden source assumptions.
 
-Automatic promotion remains disabled until later same-commit benchmark evidence
-selects thresholds. The current smoke proves fewer generated code bytes and
-fewer retained SSA operations on the declared optimizing workload; it is not a
-1.20x speed claim. Inlining, general SCCP, range/check
-elimination, LICM, escape/scalar replacement, tail calls, unrolling, hot/cold
-layout, and host-capability optimization remain later accepted slices; the
-small first pipeline is not represented as completing those items.
+Automatic promotion remains disabled. The retained `063668e` forced-tier
+protocol measured a 2.930761x optimizing native-execution speedup over
+same-commit baseline on the declared workload, and the improvement exceeded
+its noise gate. The complete adoption verdict is nevertheless **Rejected**
+because the separate historical scalar sentinel's native median regressed
+6.99%, above the predeclared 5% ceiling. This does not reverse the Current
+forced correctness slice, but it prevents a retained optimizing performance
+adoption claim and does not select promotion thresholds. Inlining, general
+SCCP, range/check elimination, LICM, escape/scalar replacement, tail calls,
+unrolling, hot/cold layout, and host-capability optimization remain later
+accepted slices; the small first pipeline is not represented as completing
+those items.
 
 ## Engine And State
 
@@ -203,20 +208,31 @@ reported scalar statistic. These are deterministic accounting formulas, not
 Rust allocator-size claims. Forced tests require nonzero optimizing entries and
 zero baseline/VM downgrade.
 
-The final forced workload currently demonstrates 2,724 optimizing versus
-13,956 baseline generated code bytes, 72 retained checked-I64 GVN records, and
-10,001 optimizing entries with zero baseline entry or fallback. Current-thread
-stack bounds are queried once per invocation rather than once per generated
-frame reservation; every reservation still uses the cached guarded bounds.
-Preliminary timings are not retained adoption evidence. A randomized retained
-protocol must still establish the speed gate before automatic promotion is
-selected.
+The retained forced workload demonstrates 2,724 optimizing versus 13,956
+baseline generated code bytes, 72 checked-I64 GVN records, and 10,001
+optimizing entries with zero baseline entry or fallback. Current-thread stack
+bounds are queried once per invocation rather than once per generated frame
+reservation; every reservation still uses the cached guarded bounds.
 
-The aspirational adoption gate is at least 1.20x optimizing native execution
-speed over same-commit baseline on one declared general workload, with no
-hidden material retained-workload regression and no more than 5% median scalar
-native regression absent an accepted cross-workload decision. Negative results
-remain recorded and do not permit a false Current claim.
+At `063668e`, four warmups and 31 measured samples per forced case in one
+deterministically randomized interleaving produced native medians of 1.997375
+ms baseline (MAD 0.016721 ms) and 0.681521 ms optimizing (MAD 0.003567 ms):
+2.930761x. The 1.315854 ms improvement exceeded twice the combined MAD,
+0.040576 ms. Exact I64 `3333`, optimizing entries, zero downgrade, W^X, proof,
+and code-byte gates all passed. Same-commit scalar forced baseline measured
+8.182742 ms native and 9.340049 ms process wall. Against the retained callable
+baseline's 7.647935 and 9.372036 ms, the ratios were 1.069928 and 0.996587.
+Thus process wall passed while native execution exceeded the 5% regression
+ceiling.
+
+The mechanically complete adoption verdict is **Rejected**, despite the
+workload-local optimizing win. The scalar comparison is a sentinel across code
+evolution rather than an attribution experiment: its source is unchanged, but
+compiler, metrics, native ABI, stack checks, binary, and surrounding generated
+code evolved since the retained baseline. Negative evidence remains visible;
+a later accepted cross-workload decision or repaired scalar result requires a
+new predeclared protocol rather than reinterpretation. Automatic promotion is
+still disabled and unmeasured.
 
 ## Deferred And Rejected
 
