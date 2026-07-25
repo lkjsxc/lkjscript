@@ -1,15 +1,18 @@
 //! Pure language core: values, validated bytecode, limits, and outcomes.
 
+mod budget;
 mod chunk;
 mod error;
 mod gc;
 mod limits;
 mod opcode;
 mod outcome;
+mod profile;
 mod sha256;
 mod validation;
 mod value;
 
+pub use budget::{BudgetLedger, ResourceCategory, ResourceDiagnostic, ResourceUsage};
 pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
 };
@@ -23,6 +26,11 @@ pub use limits::{
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap};
+pub use profile::{
+    InvalidCeiling, ResourceCeilings, ResourceProfile, ResourceProfileIdentity,
+    ResourceProfileName, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,
+    RESOURCE_PROFILE_SCHEMA, RESOURCE_PROFILE_VERSION,
+};
 pub use sha256::sha256;
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{HeapObj, Value, MAX_SMALL_I64, MIN_SMALL_I64};

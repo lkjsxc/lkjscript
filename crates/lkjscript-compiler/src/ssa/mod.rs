@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use lkjscript_core::{Error, Result};
+use lkjscript_core::{BudgetLedger, Error, Result};
 use lkjscript_ir::{
     verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter,
     BorrowKind as SsaBorrowKind, CallTarget, Constant, EffectSet, FailureBehavior, FrameLocal,
@@ -24,8 +24,25 @@ pub(crate) struct SsaMetrics {
     pub normalization: Duration,
 }
 
+#[cfg(test)]
 pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
     lower_program_with_metrics(program).map(|(program, _)| program)
+}
+
+pub(crate) fn lower_program_with_budget(
+    program: &hir::Program,
+    ledger: &mut BudgetLedger,
+) -> Result<VerifiedProgram> {
+    lower_program_with_metrics_and_budget(program, ledger).map(|(program, _)| program)
+}
+
+pub(crate) fn lower_program_with_metrics_and_budget(
+    program: &hir::Program,
+    ledger: &mut BudgetLedger,
+) -> Result<(VerifiedProgram, SsaMetrics)> {
+    let (program, metrics) = lower_program_with_metrics(program)?;
+    crate::budget::charge_ssa(&program, ledger)?;
+    Ok((program, metrics))
 }
 
 pub(crate) fn lower_program_with_metrics(

@@ -20,3 +20,4 @@ mod ownership_boundaries;
 mod ownership_control;
 mod ownership_flow;
 mod paths;
+mod resources;

@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::ResourceLimitKind;
+use crate::{ResourceDiagnostic, ResourceLimitKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[doc(hidden)]
@@ -17,6 +17,7 @@ pub enum ErrorClass {
 pub struct Error {
     message: String,
     class: ErrorClass,
+    compiler_resource: Option<Box<ResourceDiagnostic>>,
 }
 
 impl Error {
@@ -24,6 +25,7 @@ impl Error {
         Self {
             message: message.into(),
             class: ErrorClass::Ordinary,
+            compiler_resource: None,
         }
     }
 
@@ -32,6 +34,7 @@ impl Error {
         Self {
             message: message.into(),
             class: ErrorClass::Deadline,
+            compiler_resource: None,
         }
     }
 
@@ -40,6 +43,7 @@ impl Error {
         Self {
             message: message.into(),
             class: ErrorClass::Resource(kind),
+            compiler_resource: None,
         }
     }
 
@@ -48,11 +52,24 @@ impl Error {
         Self {
             message: message.into(),
             class: ErrorClass::Host,
+            compiler_resource: None,
+        }
+    }
+
+    pub fn compiler_resource(diagnostic: ResourceDiagnostic) -> Self {
+        Self {
+            message: diagnostic.to_string(),
+            class: ErrorClass::Ordinary,
+            compiler_resource: Some(Box::new(diagnostic)),
         }
     }
 
     pub fn as_str(&self) -> &str {
         &self.message
+    }
+
+    pub fn compiler_resource_diagnostic(&self) -> Option<&ResourceDiagnostic> {
+        self.compiler_resource.as_deref()
     }
 
     #[doc(hidden)]

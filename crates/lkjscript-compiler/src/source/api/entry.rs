@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use lkjscript_core::{Limits, Result};
+use lkjscript_core::{BudgetLedger, Limits, Result};
 
 use crate::source::{
     load as loader, parse, validate as authority, SourceDiagnostic, SourceFoundationBudget,
@@ -62,6 +62,16 @@ pub(crate) fn load_with_metrics(
     loader::load_with_metrics(path, limits)
 }
 
+pub(crate) fn load_with_metrics_and_budget(
+    path: &Path,
+    limits: &Limits,
+    ledger: &mut BudgetLedger,
+) -> Result<(ValidatedSourceTree, LoadMetrics)> {
+    let (tree, metrics) = load_with_metrics(path, limits).map_err(SourceDiagnostic::into_core)?;
+    crate::budget::charge_source(&tree, ledger)?;
+    Ok((tree, metrics))
+}
+
 pub(crate) fn validate_for_compiler(
     source: &str,
     logical_path: &str,
@@ -70,8 +80,29 @@ pub(crate) fn validate_for_compiler(
     validate(source, logical_path, limits).map_err(SourceDiagnostic::into_core)
 }
 
+pub(crate) fn validate_for_compiler_with_budget(
+    source: &str,
+    logical_path: &str,
+    limits: &Limits,
+    ledger: &mut BudgetLedger,
+) -> Result<ValidatedSourceTree> {
+    let tree = validate_for_compiler(source, logical_path, limits)?;
+    crate::budget::charge_source(&tree, ledger)?;
+    Ok(tree)
+}
+
 pub(crate) fn load_for_compiler(path: &Path, limits: &Limits) -> Result<ValidatedSourceTree> {
     load(path, limits).map_err(SourceDiagnostic::into_core)
+}
+
+pub(crate) fn load_for_compiler_with_budget(
+    path: &Path,
+    limits: &Limits,
+    ledger: &mut BudgetLedger,
+) -> Result<ValidatedSourceTree> {
+    let tree = load_for_compiler(path, limits)?;
+    crate::budget::charge_source(&tree, ledger)?;
+    Ok(tree)
 }
 
 pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {

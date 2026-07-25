@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
+use lkjscript_core::{BudgetLedger, Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
 use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
@@ -18,9 +18,28 @@ pub const TRAIT_SOLVER_MAX_WORK: usize = 256;
 use crate::source::ValidatedSourceTree;
 use crate::types::parse_one;
 
+#[cfg(test)]
 pub(crate) fn analyze_program(program: &ValidatedSourceTree) -> Result<hir::Program> {
     let mut program = analyze_program_without_effects(program)?;
     crate::effects::infer(&mut program);
+    Ok(program)
+}
+
+pub(crate) fn analyze_program_with_budget(
+    source: &ValidatedSourceTree,
+    ledger: &mut BudgetLedger,
+) -> Result<hir::Program> {
+    let mut program = analyze_program_without_effects_with_budget(source, ledger)?;
+    crate::effects::infer(&mut program);
+    Ok(program)
+}
+
+pub(crate) fn analyze_program_without_effects_with_budget(
+    source: &ValidatedSourceTree,
+    ledger: &mut BudgetLedger,
+) -> Result<hir::Program> {
+    let program = analyze_program_without_effects(source)?;
+    crate::budget::charge_hir(&program, ledger)?;
     Ok(program)
 }
 
