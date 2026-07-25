@@ -1,4 +1,7 @@
 import/
+lib/lkjedit/interactions/buffer/backspace.lkjscript
+/import
+import/
 lib/lkjedit/lines.lkjscript
 /import
 def/
