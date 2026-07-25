@@ -51,7 +51,10 @@ every request and state boundary. JSON `Value` is not an authority or intermedia
 A checkpoint request names an exact expected state revision and one complete next snapshot. Revision zero creates a
 task; every later checkpoint increments by one. Task identity, base revision, goal, hard constraints, and capsule scope
 are immutable. Ordered action and command history, decisions, commits, invalidations, and references are append-only
-except for explicit compaction. Action and command sequence numbers are increasing and unique.
+except for explicit compaction. When referenced tracked content changes, a checkpoint appends the same path with its
+new hash in the same reference class. Validation checks the latest hash for each path while retaining prior hashes as
+history; an exact repeated path/hash or cross-class path reuse is rejected. Action and command sequence numbers are
+increasing and unique.
 
 Before publication the service checks request bytes before typed decoding, then validates string, collection, history,
 reference, output, and aggregate-work bounds immediately after that bounded decode and before repository work or

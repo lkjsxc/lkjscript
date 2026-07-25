@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path};
 
@@ -6,7 +6,7 @@ use super::model::{ContentReference, WorkState};
 
 pub fn validate(root: &Path, state: &WorkState) -> Result<(), String> {
     capsules(root, &state.selected_capsule_scope)?;
-    for reference in &state.accepted_decisions {
+    for (index, reference) in state.accepted_decisions.iter().enumerate() {
         if !reference.path.starts_with("docs/decisions/")
             || !super::git::tracked(root, &reference.path)?
         {
@@ -15,19 +15,21 @@ pub fn validate(root: &Path, state: &WorkState) -> Result<(), String> {
                 reference.path
             ));
         }
-        content(root, reference)?;
+        if latest(&state.accepted_decisions, index) {
+            content(root, reference)?;
+        }
     }
     let evidence: BTreeSet<_> = state
         .evidence_references
         .iter()
         .map(|item| item.path.as_str())
         .collect();
-    for reference in state
-        .artifact_references
-        .iter()
-        .chain(&state.evidence_references)
-    {
-        content(root, reference)?;
+    for values in [&state.artifact_references, &state.evidence_references] {
+        for (index, reference) in values.iter().enumerate() {
+            if latest(values, index) {
+                content(root, reference)?;
+            }
+        }
     }
     for path in state
         .completed_actions
@@ -43,27 +45,44 @@ pub fn validate(root: &Path, state: &WorkState) -> Result<(), String> {
 }
 
 pub fn shape(state: &WorkState) -> Result<(), String> {
-    let mut paths = BTreeSet::new();
-    for reference in state
-        .accepted_decisions
-        .iter()
-        .chain(&state.artifact_references)
-        .chain(&state.evidence_references)
-    {
-        if !safe_path(&reference.path)
-            || reference.sha256.len() != 64
-            || !reference
-                .sha256
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-        {
-            return Err(format!("invalid content reference: {}", reference.path));
-        }
-        if !paths.insert((&reference.path, &reference.sha256)) {
-            return Err(format!("duplicate content reference: {}", reference.path));
+    let mut identities = BTreeSet::new();
+    let mut classes = BTreeMap::new();
+    for (class, values) in [
+        ("decision", &state.accepted_decisions),
+        ("artifact", &state.artifact_references),
+        ("evidence", &state.evidence_references),
+    ] {
+        for reference in values {
+            if !safe_path(&reference.path)
+                || reference.sha256.len() != 64
+                || !reference
+                    .sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            {
+                return Err(format!("invalid content reference: {}", reference.path));
+            }
+            if !identities.insert((&reference.path, &reference.sha256)) {
+                return Err(format!("duplicate content reference: {}", reference.path));
+            }
+            if classes
+                .insert(&reference.path, class)
+                .is_some_and(|old| old != class)
+            {
+                return Err(format!(
+                    "content reference changes class: {}",
+                    reference.path
+                ));
+            }
         }
     }
     Ok(())
+}
+
+fn latest(values: &[ContentReference], index: usize) -> bool {
+    !values[index + 1..]
+        .iter()
+        .any(|candidate| candidate.path == values[index].path)
 }
 
 fn capsules(root: &Path, selected: &[String]) -> Result<(), String> {

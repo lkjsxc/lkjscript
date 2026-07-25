@@ -1,3 +1,5 @@
+use std::fs;
+
 use crate::agent::compact;
 use crate::agent::context;
 use crate::agent::model::{ActionOutcome, ResumeContext};
@@ -48,6 +50,31 @@ fn validates_artifact_hashes_and_evidence_declarations() {
     assert!(validate::validate(&repo.root, &state, true)
         .unwrap_err()
         .contains("content hash mismatch"));
+}
+
+#[test]
+fn append_only_reference_refresh_preserves_history_and_validates_latest_hash() {
+    let repo = support::repository("reference-refresh");
+    let old = support::state(&repo, "reference-refresh-task");
+    fs::write(repo.root.join("evidence.txt"), "updated evidence\n").unwrap();
+    let bytes = fs::read(repo.root.join("evidence.txt")).unwrap();
+    let mut next = old.clone();
+    next.state_revision = 2;
+    next.evidence_references
+        .push(crate::agent::model::ContentReference {
+            path: "evidence.txt".into(),
+            sha256: crate::sha256::digest(&bytes),
+        });
+    let request = support::request(next, 1);
+    validate::checkpoint(&repo.root, &request, Some(&old)).unwrap();
+
+    let mut duplicate = request.state;
+    duplicate
+        .evidence_references
+        .push(duplicate.evidence_references[1].clone());
+    assert!(validate::validate(&repo.root, &duplicate, true)
+        .unwrap_err()
+        .contains("duplicate content reference"));
 }
 
 #[test]
