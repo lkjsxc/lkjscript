@@ -2,6 +2,7 @@
 
 mod agent;
 mod documentation;
+mod documentation_status;
 mod model;
 mod sha256;
 #[cfg(test)]

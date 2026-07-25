@@ -19,10 +19,13 @@ The repository-wide sequence has made [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository
 Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md),
 and bounded [Agent Work State](../decisions/platform/agent-work-state.md) Current.
-The first [Semantic Source And Agent
-Protocol](../decisions/platform/semantic-source-and-agent-protocol.md) operations
-and [Resource Budget Profiles](../decisions/platform/resource-budget-profiles.md)
-remain Accepted. All Current source limits remain enforced until aggregate replacements are Current. The
+The bounded one-shot [Agent Foundation
+V1](../decisions/platform/semantic-source-and-agent-protocol.md) operations and
+compiler [Resource Profile V1](../decisions/platform/resource-budget-profiles.md)
+foundation are Current. Complete Semantic Source Schema V1, local sessions,
+typed holes, pre-allocation charging, and a shared request ledger remain
+Accepted Targets. All Current source limits remain enforced until aggregate
+replacements are Current. The
 [Measured Execution Portfolio](../decisions/execution/execution-portfolio.md) reclassifies
 AOT, content-addressed native caches, and optional explicit local PGO as later
 measured Targets; it does not add an engine or change Current runtime policy.

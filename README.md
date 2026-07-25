@@ -8,15 +8,18 @@ grow in lkjscript itself rather than in host frameworks.
 
 ## Status
 
+<!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
+
 Canonical source files use **`.lkjscript`**. Other extensions, including the
 superseded `.lkjml`, are rejected without a compatibility mode. Linux x86-64 is
 the current acceptance platform.
 
 Current capabilities and known defects are recorded in
-[docs/current-state.md](docs/current-state.md). Future installation, update,
-package, GUI, browser, server, loop-OSR, optimizing-JIT, and full-language
-native work remains direction rather than current product behavior. The exact
-current allocation-free scalar baseline tier is documented separately.
+[docs/current-state.md](docs/current-state.md). Forced proof-checked optimizing
+execution is Current for its documented supported slice. Future installation,
+update, package, GUI, browser, server, loop OSR, automatic optimizing promotion,
+and full-language native coverage remain direction rather than current product
+behavior. The exact Current native boundaries are documented separately.
 
 ## Development Commands
 

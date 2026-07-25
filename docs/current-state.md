@@ -7,6 +7,20 @@ next work without mixing them with long-term vision.
 
 ## Status
 
+<!-- LKJ-STATUS id=agent-foundation/1 status=current -->
+<!-- LKJ-STATUS id=agent-work-state/1 status=current -->
+<!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
+<!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
+<!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
+<!-- LKJ-STATUS id=repository-topology/1 status=current -->
+<!-- LKJ-STATUS id=resource-profile-compiler/1 status=current -->
+<!-- LKJ-STATUS id=resource-profile-preallocation/1 status=accepted-target -->
+<!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-session/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
+<!-- LKJ-STATUS id=semantic-source-schema/1 status=accepted-target -->
+<!-- LKJ-STATUS id=typed-holes/1 status=accepted-target -->
+
 **Current** only for implementation and evidence explicitly labeled Current in
 the manifest capsules. Bounded Repository Topology, Repository Intelligence
 Graph/context, externalized agent work state, the one-shot Agent Foundation V1

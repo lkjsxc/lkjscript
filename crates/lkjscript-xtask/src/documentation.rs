@@ -16,6 +16,7 @@ pub fn check(root: &Path) -> i32 {
         "docs/runtime/README.md",
         "docs/operations/README.md",
         "docs/operations/architecture.md",
+        "docs/operations/status-authority.md",
         "docs/operations/verification.md",
         "docs/product/README.md",
         "docs/decisions/README.md",
@@ -52,6 +53,7 @@ pub fn check(root: &Path) -> i32 {
         failures += 1;
     }
     failures += markdown(root);
+    failures += crate::documentation_status::check(root);
     failures += inert_markers(root);
     i32::from(failures > 0)
 }

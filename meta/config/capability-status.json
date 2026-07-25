@@ -1,0 +1,149 @@
+{
+  "schema": "lkjscript.capability-status",
+  "version": 1,
+  "capabilities": [
+    {
+      "id": "agent-foundation/1",
+      "status": "current",
+      "interface": "lkjscript.agent-foundation/1",
+      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+      "evidence": "docs/current-state/semantic-source-foundation-evidence.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "agent-work-state/1",
+      "status": "current",
+      "interface": "lkjscript.agent-work-state/1",
+      "authority": "docs/decisions/platform/agent-work-state.md",
+      "evidence": "docs/decisions/platform/agent-work-state.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "jit-auto-promotion/1",
+      "status": "accepted-selection",
+      "interface": "auto --auto-jit-threshold",
+      "authority": "docs/current-state/accepted-target-automatic-baseline-to-proof-promotion.md",
+      "evidence": "docs/operations/verification/accepted-automatic-promotion-gate.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "jit-proof-forced/1",
+      "status": "current",
+      "interface": "run --engine optimizing-jit",
+      "authority": "docs/decisions/jit/proof-based-optimizing-jit.md",
+      "evidence": "docs/current-state/optimizer-and-allocation-evidence.md",
+      "claimants": [
+        "README.md",
+        "docs/current-state.md"
+      ]
+    },
+    {
+      "id": "repository-graph-context/1",
+      "status": "current",
+      "interface": "lkjscript-xtask structure context",
+      "authority": "docs/decisions/platform/repository-intelligence-graph.md",
+      "evidence": "docs/decisions/platform/repository-intelligence-graph.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "repository-topology/1",
+      "status": "current",
+      "interface": "lkjscript-xtask structure check",
+      "authority": "docs/decisions/platform/bounded-repository-topology.md",
+      "evidence": "docs/decisions/platform/bounded-repository-topology.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "resource-profile-compiler/1",
+      "status": "current",
+      "interface": "lkjscript.resource-profile/1",
+      "authority": "docs/decisions/platform/resource-budget-profiles.md",
+      "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "resource-profile-preallocation/1",
+      "status": "accepted-target",
+      "interface": "lkjscript.resource-profile/1 pre-allocation ledger",
+      "authority": "docs/decisions/platform/resource-budget-profiles.md",
+      "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "resource-profile-shared-ledger/1",
+      "status": "accepted-target",
+      "interface": "request-owned hierarchical ledger",
+      "authority": "docs/decisions/platform/resource-budget-profiles.md",
+      "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "semantic-session/1",
+      "status": "accepted-target",
+      "interface": "lkjscript semantic serve --stdio",
+      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "semantic-source-foundation/1",
+      "status": "current",
+      "interface": "Semantic Source Foundation V1",
+      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+      "evidence": "docs/current-state/semantic-source-foundation-evidence.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "semantic-source-schema/1",
+      "status": "accepted-target",
+      "interface": "lkjscript.semantic-source/1",
+      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
+      "id": "typed-holes/1",
+      "status": "accepted-target",
+      "interface": "hole_context",
+      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    }
+  ]
+}

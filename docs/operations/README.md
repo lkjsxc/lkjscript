@@ -11,9 +11,10 @@ Document architecture, verification, and continuation rules.
 ## Table of Contents
 
 - [architecture.md](architecture.md): crate ownership and compile/runtime flow
+- [status-authority.md](status-authority.md): capability IDs and cross-authority status checking
 - [verification.md](verification.md): local, runtime, and Docker evidence gates
 - [agent-handoff.md](agent-handoff.md): product intent, sharp edges, and accepted next contracts
 
-The accepted repository topology, graph/context, and work-state contracts are
-indexed under [platform decisions](../decisions/platform/README.md). They are not
-Current commands or services.
+The Current repository topology, graph/context, and work-state services are
+indexed under [platform decisions](../decisions/platform/README.md). Broader
+protocol, session, and shared-ledger contracts remain Accepted Targets.

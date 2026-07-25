@@ -10,7 +10,8 @@
     "verification",
     "structure audit",
     "repository graph",
-    "agent work state"
+    "agent work state",
+    "capability status graph"
   ],
   "facade": [
     "crates/lkjscript-xtask/src/main.rs"
@@ -28,12 +29,14 @@
   "tests": [
     "crates/lkjscript-xtask/src/structure/graph_tests/mod.rs",
     "crates/lkjscript-xtask/src/structure/repository_tests.rs",
-    "crates/lkjscript-xtask/src/agent/tests/mod.rs"
+    "crates/lkjscript-xtask/src/agent/tests/mod.rs",
+    "crates/lkjscript-xtask/src/documentation_status/tests.rs"
   ],
   "decisions": [
     "docs/decisions/platform/bounded-repository-topology.md",
     "docs/decisions/platform/repository-intelligence-graph.md",
-    "docs/decisions/platform/agent-work-state.md"
+    "docs/decisions/platform/agent-work-state.md",
+    "docs/operations/status-authority.md"
   ],
   "unsafe_boundary": {
     "status": "forbidden",
@@ -64,7 +67,8 @@
     "invariants": [
       "Git-tracked authority",
       "atomic generated state",
-      "explicit staleness and truncation"
+      "explicit staleness and truncation",
+      "registered cross-authority capability status"
     ]
   }
 }

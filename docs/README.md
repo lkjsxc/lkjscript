@@ -31,6 +31,7 @@ permanent property.
 ## Map
 
 - [current-state.md](current-state.md): observed baseline and accepted next contracts
+- [capability status](operations/status-authority.md): registered cross-authority capability status
 - [operations/architecture.md](operations/architecture.md): Current crate flow and accepted repository-intelligence flow
 - [bounded topology](decisions/platform/bounded-repository-topology.md): authored repository limits,
   provenance, manifests, and audit contract

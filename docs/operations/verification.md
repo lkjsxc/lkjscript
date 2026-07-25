@@ -8,7 +8,8 @@ gates without claiming unimplemented checks.
 ## Status
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
-placeholder, retained-result, `structure`, repository graph/context,
+registered capability-status consistency, placeholder, retained-result,
+`structure`, repository graph/context,
 agent-state, one-shot Agent Foundation V1, and compiler resource-profile checks
 are described in the capsules. Complete future Schema V1 and shared-ledger
 gates remain **Accepted Targets**, not Current commands.
@@ -21,9 +22,11 @@ The existing command is:
 cargo run --locked -p lkjscript-xtask -- check-docs
 ```
 
-It checks a hardcoded required-document set and repository-local links. Any
-document move must update that required set in the integration change; moved
-paths must not be retained as aliases merely to satisfy the old checker.
+It checks a hardcoded required-document set, repository-local links, and the
+registered cross-authority capability claims defined by [Capability Status
+Authority](status-authority.md). Any document move must update those authorities
+in the integration change; moved paths must not be retained as aliases merely
+to satisfy the old checker.
 
 `structure check` is the hard repository topology gate. It checks every tracked
 authored text file for at most 200 physical lines, 32 KiB, and ordinary lines
