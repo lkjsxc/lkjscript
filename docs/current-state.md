@@ -63,14 +63,39 @@ new redesign Target as Current.
   cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
+- Semantic Source Foundation V1: public identity
+  `lkjscript.semantic-source-foundation` version 1; one opaque immutable
+  `ValidatedSourceTree` is the parser/load authority for compiler analysis;
+  it retains exact byte/line/Unicode-column spans and contained logical/host
+  origins, exact-input revision fingerprints, length-framed stable declaration
+  keys, dense revision-scoped preorder node IDs, deterministic structural
+  Edition 1 formatting, and source-foundation diagnostics with complete related
+  spans. The old `ast.rs`, `lex.rs`, `parse.rs`, `limits_check.rs`, and
+  `import.rs` authority paths are removed. Complete Semantic Source Schema V1,
+  transactions, JSON/daemon protocol, typed holes, and derived-fact queries are
+  not Current
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
-  directory
+  directory. Foundation implementation maxima additionally reject a source file
+  over 16 MiB, a loaded closure over 256 MiB exact input bytes, more than
+  65,536 source units, or more than 65,536 entries in a complete source-tree
+  traversal; opened regular-file reads are bounded by the smaller remaining
+  per-file/aggregate allowance plus one sentinel byte and reject metadata/read
+  size changes before parsing; iterative dependency-first import and source-tree
+  traversal avoid native stack growth, a directory rejects on entry 17 without
+  collecting the remainder, and all immediate entries count
 - Source-tree scope: the width rule applies to language source directories,
   not Rust, docs, metadata, `.git`, or generated Cargo output
 - Imports: contained `std/`, `lib/`, `examples/`, and `./` paths with installed
   fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
-  and canonicalized symlink escapes fail
+  non-regular source, non-UTF-8 host logical path, and containment failures
+  fail. On the Current Linux acceptance target, containment and identity use
+  the canonical path resolved from the stable opened descriptor through
+  `/proc/self/fd` before reading; changed/deleted/unresolvable descriptor paths
+  fail closed. Non-Linux host-path loading is not accepted and has only a
+  fail-closed compilation fallback. Public in-memory compile/validate APIs
+  require the same canonical relative non-dot `.lkjscript` logical paths as the
+  Semantic Source validator, without compatibility aliases
 - Compiler boundary: one analysis pass collects immutable headers and produces
   owned, resolved typed HIR with explicit Main and Functions, BindingIds,
   local-slot references, MutableLocal/SetLocal, ProductIds, numeric field
@@ -102,6 +127,15 @@ new redesign Target as Current.
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
   labels, and exact source-closure coverage are machine-checked
+- AI-authorability bootstrap: one replayable raw-text function-rename task and a
+  strict retained-result validator are Current. `gpt-5.6-sol` completed the
+  exact two-file change in 43,421 ms with 10 tool calls, one compiler run, zero
+  failed mutations/repairs, and no unrelated paths; `gpt-5.4-mini` reached a
+  correct branch but failed the benchmark because it transiently violated
+  requested worktree isolation after two failed mutations and two repair loops;
+  the available Qwen 3.5 9B request timed out before any tool call. This is
+  narrow raw-text evidence, not a general model/interface claim; semantic and
+  hole variants are not Current
 - Runtime: dense bytecode lowered only from normalized SSA, contiguous stacks,
   pure session-owned stable-index `GcHeap` in `lkjscript-core`, precise
   non-moving mark-sweep shared as the VM/JIT heap implementation, monotonic
@@ -299,6 +333,29 @@ new redesign Target as Current.
   Handle/host native allocation, native/VM reference transitions, persistent
   profiles, and persistent code caches remain absent
 
+## Semantic Source Foundation V1 Evidence
+
+The Foundation V1 implementation tree based on `e71c976` was checked on Ubuntu
+24.04.4 LTS, Linux 7.0.0-27-generic x86-64, with Rust/Cargo 1.96.0. It changes
+the source authority but not Edition 1 runtime semantics.
+
+| Command or check | Result |
+| --- | --- |
+| focused source-foundation tests | passed; 30 focused tests cover exact 113-file byte roundtrip, structural idempotence, UTF-8 spans, exact-input revision aliases, stale nodes, framed/adversarial keys, same/cross-file duplicates, strict public paths, 1,500-unit iterative import loading, 1,500-level iterative source-tree traversal, cycles, symlink/descriptor containment, non-regular/non-UTF-8 rejection, all-entry width, and checked file/closure/unit/tree budgets |
+| independent architect/adversarial/verification/AI-usability reviews | the first candidate was blocked for recursive import/tree stack overflow, normalized-revision aliases, unframed keys, public path aliases, unbounded reads, descriptor TOCTOU, lossy host paths, duplicate logical origins, and unbounded directory collection; every blocker received a focused repair and regression witness before acceptance |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed on the final tree; strict formatting/Clippy/docs/tree/source checks and all workspace tests passed, including 74 compiler tests |
+| `cargo build --workspace --release --locked` and default/VM/forced-baseline/threshold-2-auto scalar, forced optimizing, VM hello/Mandelbrot, Brainfuck, lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smokes | passed on the final tree; forced engine policy and normal streams remained unchanged |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | exited 0 in 103 s with `result=ok`; rebuilt release output and reran the canonical gate plus configured runtime smokes |
+| `python3 meta/benchmarks/ai-authoring/validate.py meta/benchmarks/ai-authoring/results/*.json`; `git diff --check` | passed; retained one strong raw-text pass, one medium isolation failure, and one weaker-provider timeout without deleting negative evidence |
+| Not tested | performance sampling, semantic transaction/entity/hole benchmark variants, full Brainfuck Mandelbrot, Miri, sanitizers, fuzzers, non-Linux host loading, AArch64, or Wasm/components |
+
+Two local verification attempts failed before the final pass: one found only
+required rustfmt changes, and the next found legacy duplicate-diagnostic wording
+regressions after moving duplicate rejection earlier. Both were corrected and
+rerun. One malformed focused Cargo command supplied two test filters and was
+rejected by Cargo; the two commands were rerun separately. No failed product
+command is reported as a pass.
+
 ## SQLite Evidence
 
 The SQLite implementation tree was verified on Linux x86-64 with the system
@@ -395,8 +452,11 @@ The highest-priority defects are:
 
 1. some library file operations remain per-byte or quadratic; application-level
    storage recovery is a language-consumer responsibility;
-2. source/import aggregate bytes and counts are not comprehensively bounded;
-   bytecode tables/data/code/metadata and VM execution resources are bounded;
+2. source files, aggregate closure bytes, and source-unit counts now have high
+   implementation maxima, but aggregate import edges, schema nodes, parser/type
+   work, compiler memory, and compiler wall time do not yet have named profile
+   budgets; bytecode tables/data/code/metadata and VM execution resources are
+   bounded;
 3. cooperative deadlines can overrun inside filesystem, console-write,
    send/write, terminal-cleanup, or other non-cancellable wrappers;
    hard-deadline mode reports those operations as unsupported `HostFailure`
@@ -769,30 +829,32 @@ so no failed product command is hidden.
 
 ## Accepted Next Target
 
-The first dependency-ordered slice is the complete Semantic Source foundation,
-not automatic optimizing promotion. It must:
+Semantic Source Foundation V1 now completes the parser/load/identity/formatter
+cutover and removes the duplicate legacy authority. The next dependency-ordered
+slice completes the first useful semantic edit loop:
 
-1. place the complete Current Edition 1 declaration/expression vocabulary
-   behind one opaque validated source-tree authority;
-2. preserve every exact corpus byte through deterministic parse/format/parse;
-3. provide deterministic stable declaration keys and revision-scoped dense node
-   IDs;
-4. provide bounded atomic semantic transactions with stale revision and exact
-   precondition rejection, no text substring replacement, and no partial file
-   publication;
-5. convert unmatched marker, duplicate declaration, unknown binding, arity,
-   type mismatch, and stale edit into versioned structured diagnostics while
-   retaining human rendering;
-6. support useful expression holes and bounded exact context/candidate queries,
-   while every executable/release path rejects unresolved holes; and
-7. establish retained raw-text/entity-edit/hole-fill benchmark cases without
-   claiming general AI superiority from the bootstrap sample.
+1. add explicit declaration/entity query records over the foundation tree so
+   clients do not reinterpret generic marker names;
+2. add bounded per-entity precondition fingerprints and atomic staged
+   insert/replace/delete plus resolved rename/expression replacement, with stale
+   revision rejection and no text substring mutation or partial publication;
+3. carry exact source-node identities through resolution so unknown binding,
+   arity, and type mismatch join unmatched marker, duplicate declaration, and
+   stale edit as complete structured diagnostics;
+4. add expression holes in the accepted positions, bounded expected-type/
+   visible-binding/effect candidate queries, and unconditional executable/
+   release rejection of unresolved holes;
+5. expose the versioned bounded protocol only after the accepted serialization
+   dependency, malformed-input, fuzz, resource, notice, and legal gates pass;
+   and
+6. rerun the retained rename task through semantic operations and add a real
+   hole-fill task, preserving the raw weak/medium/strong negative evidence.
 
 The exact contract and gates are [Semantic Source And Agent
-Protocol](decisions/semantic-source-and-agent-protocol.md). Phase 2 then adds
-aggregate source/compiler bounds and named profiles before any tiny Current
-source limit becomes a lint. Edition 2 and later package/capability/ownership
-work follows those foundations.
+Protocol](decisions/semantic-source-and-agent-protocol.md). Phase 2 then extends
+foundation byte/unit maxima into aggregate import/schema/type/ownership/compiler
+profiles before any tiny Current source limit becomes a lint. Edition 2 and
+later package/capability/ownership work follows those foundations.
 
 The previously selected process-local synchronous automatic baseline-to-proof
 promotion remains an **Accepted Implementation Selection** and valid later

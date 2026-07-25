@@ -180,11 +180,19 @@ fn construct_program(program: &hir::Program) -> Result<Program> {
         sources: program
             .sources
             .iter()
-            .map(|source| SourceMetadata {
-                id: source.id.raw(),
-                path: source.path.to_string_lossy().into_owned(),
+            .map(|source| {
+                let path = source.path.to_str().ok_or_else(|| {
+                    Error::msg(format!(
+                        "validated source path is not UTF-8: {:?}",
+                        source.path
+                    ))
+                })?;
+                Ok(SourceMetadata {
+                    id: source.id.raw(),
+                    path: path.to_owned(),
+                })
             })
-            .collect(),
+            .collect::<Result<Vec<_>>>()?,
         products: program
             .products
             .iter()

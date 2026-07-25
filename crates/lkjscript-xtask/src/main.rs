@@ -214,10 +214,18 @@ fn check_sources(root: &Path) -> i32 {
             }
             Some("lkjscript") => match fs::read_to_string(path) {
                 Ok(source) => {
-                    let label = path.display().to_string();
-                    if let Err(error) = validate_source(&source, &label, &limits) {
-                        eprintln!("{error}");
-                        failures += 1;
+                    let label = path.strip_prefix(root).ok().and_then(Path::to_str);
+                    match label {
+                        Some(label) => {
+                            if let Err(error) = validate_source(&source, label, &limits) {
+                                eprintln!("{error}");
+                                failures += 1;
+                            }
+                        }
+                        None => {
+                            eprintln!("source path is not repository-relative UTF-8: {path:?}");
+                            failures += 1;
+                        }
                     }
                 }
                 Err(error) => {

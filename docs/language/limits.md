@@ -41,6 +41,22 @@ blocks, represents dominators as bitsets, and caps charged dominator work at
 adversarial public IR before unbounded path-state retention or quadratic
 set-based dominance construction.
 
+## Semantic Source Foundation Safety Maxima
+
+Always-enforced implementation maxima in
+`lkjscript-compiler/src/source/mod.rs` reject more than:
+
+- 16 MiB of exact input bytes in one source file;
+- 256 MiB of exact input bytes in one loaded source closure;
+- 65,536 source units in one loaded closure; or
+- 65,536 entries traversed by one complete source-tree check.
+
+Opened regular files are read through the smaller remaining per-file/closure
+allowance plus one sentinel byte; metadata/read changes, non-regular files, and
+checked-arithmetic overflow fail before parsing. Import and source-tree
+traversals use explicit stacks. These are implementation safety maxima, not
+replacement language-shape limits or host profiles.
+
 ## Source-Directory Rule
 
 An lkjscript source directory may contain at most 16 immediate entries,
@@ -48,15 +64,19 @@ counting files and subdirectories together. Hidden source entries count.
 
 The rule applies to language source/package directories. It does not constrain
 Rust crates, documentation, repository metadata, `.git`, Cargo `target`, or
-other generated build trees. The repository gate recursively checks the in-tree
-`src` corpus. Compilation checks every directory reached by an entry or import,
-including external projects. Directory-read failures are errors, and symlinks
-cannot escape package containment.
+other generated build trees outside language source directories. If any file or
+directory, including `.git` or `target`, is placed inside a language source
+directory, it counts. The repository gate recursively checks the in-tree `src`
+corpus. Compilation checks every directory reached by an entry or import,
+including external projects. Enumeration rejects as soon as entry 17 is seen;
+directory-read failures are errors, and opened source descriptors cannot escape
+package containment.
 
 ## Policy
 
-Limits are language-version constants, not user configuration. A change
-requires documentation, boundary tests, and a contract update. The aggregate
-ownership-expression budget does not itself bound source bytes, raw-string
-bytes, import depth/count, constants, globals, or bytecode; those still need
-separate resource limits in a later safety cycle.
+Edition 1 shape limits remain language-version constants, not user
+configuration, until aggregate profile replacements are Current. A change
+requires documentation, boundary tests, and edition migration. Foundation
+maxima now bound exact source bytes and source-unit/tree counts; aggregate
+import edges, source-schema nodes, type/trait/compiler work, compiler memory,
+constants, globals, and other categories still need named resource profiles.

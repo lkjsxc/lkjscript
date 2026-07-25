@@ -6,6 +6,7 @@ mod gc;
 mod limits;
 mod opcode;
 mod outcome;
+mod sha256;
 mod validation;
 mod value;
 
@@ -22,5 +23,6 @@ pub use limits::{
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap};
+pub use sha256::sha256;
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{HeapObj, Value, MAX_SMALL_I64, MIN_SMALL_I64};

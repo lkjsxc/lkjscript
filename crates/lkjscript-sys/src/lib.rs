@@ -10,7 +10,6 @@ mod fd;
 mod file;
 mod poll;
 mod random;
-mod sha256;
 mod socket;
 mod sqlite;
 mod time;
@@ -23,7 +22,6 @@ pub use file::{
 };
 pub use poll::{poll_fd, PollError};
 pub use random::random_fill;
-pub use sha256::sha256;
 pub use socket::{
     accept_sock, bind_ipv4_any, listen_sock, recv_sock, send_sock, set_reuseaddr, tcp_socket,
     SockError,

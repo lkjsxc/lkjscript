@@ -8,13 +8,19 @@ agent-facing transaction/query slice.
 
 ## Status
 
-**Accepted Target.** No Semantic Source API, structured edit protocol, or typed
-hole is Current until its implementation and gates land. The Current parser and
-compiler behavior remain authoritative while this slice is built.
+**Current** for Semantic Source Foundation V1: one opaque validated Edition 1
+source authority, exact source origins/spans, exact-byte revision fingerprints,
+stable declaration keys, dense revision-scoped nodes, structured source-
+foundation diagnostics, deterministic formatting, checked source-closure safety
+maxima, and compiler/analyzer cutover. The obsolete AST/lexer/parser/import
+source-authority modules are removed.
 
-The first implementation may cover only the existing Edition 1 declaration and
-expression vocabulary, but every supported operation must be complete and
-non-placeholder. Unsupported schema nodes or edit operations fail explicitly.
+**Accepted Target** for the complete Semantic Source Schema V1, atomic semantic
+edit protocol, JSON/daemon transport, all six principal structured compiler
+errors, and typed holes. No complete Schema V1 or Agent Protocol V1 identity is
+emitted yet. The first implementation covers the existing Edition 1 vocabulary;
+every supported foundation operation is complete and non-placeholder.
+Unsupported protocol operations do not exist as inert endpoints.
 
 ## Problem
 
@@ -31,7 +37,7 @@ derived type, ownership, effect, layout, and proof facts authoritative.
 
 ## Versioned Identities
 
-The first registered identities are:
+The first registered complete-target identities are:
 
 - Semantic Source schema: `lkjscript.semantic-source`, version `1`;
 - agent protocol: `lkjscript.agent`, version `1`;
@@ -44,13 +50,34 @@ protocol diagnostics; they are not ignored. Canonical serialization uses
 UTF-8, deterministic field order, deterministic list order, and no
 floating-point numbers for identities or counters.
 
+The parser/load/identity cutover is an explicitly incomplete foundation, not
+Schema V1. Its registered identity is
+`lkjscript.semantic-source-foundation`, version `1`; its structured diagnostics
+use `lkjscript.source-diagnostic-foundation`, version `1`. Foundation V1
+contains the opaque validated Edition 1 source tree, deterministic dependency-
+first loading, exact source-byte revision identity, stable declaration keys,
+formatting, and structural source diagnostics. It does not claim the complete public Schema V1
+node vocabulary, serialization, transactions, JSON protocol, typed holes, or
+machine repairs. The complete `lkjscript.semantic-source` version `1` identity
+must not be emitted until all of its accepted contract is implemented.
+
 ## Source Authority Boundary
 
 A parser adapter accepts canonical Edition 1 `.lkjscript` and constructs a
-private mutable builder. Validation checks marker matching, source limits,
-declaration shape, stable-key uniqueness, source spans, and node-tree
-well-formedness. Only successful validation yields opaque immutable
-`ValidatedSourceTree` authority.
+private mutable builder. Public in-memory validation and compilation require a
+canonical relative non-dot UTF-8 logical path ending in `.lkjscript`; absolute,
+`./`, parent, doubled-separator, and legacy-extension spellings are rejected.
+Host loading rejects non-UTF-8 logical paths rather than applying replacement
+characters. On the Current Linux acceptance target, a source is opened as a
+stable regular-file descriptor, its actual path is resolved through
+`/proc/self/fd` and recontained under the canonical package or installed root,
+and only then is a per-file/aggregate bounded read performed. A one-byte
+sentinel detects growth past the remaining allowance; non-regular files and
+metadata/read size changes fail before parser copying. Validation checks marker
+matching, source limits, declaration shape, stable-key uniqueness, source
+spans, and node-tree well-formedness. Only successful validation yields opaque
+immutable `ValidatedSourceTree` authority. Non-Linux descriptor containment is
+not an accepted boundary and fails closed rather than weakening this contract.
 
 Consumers cannot construct a validated tree by deserializing an arbitrary
 public struct. HIR analysis accepts the validated boundary or a mechanically
@@ -100,18 +127,26 @@ schema version
 + declared name or reserved main identity
 ```
 
-Keys do not depend on byte offsets, declaration order, formatting, or dense
-compiler IDs. Rename and move operations report old and new keys plus the
-semantic relationship. Duplicate keys are rejected rather than disambiguated
-by source order. Package and module identities replace the Edition 1 root
-component when those contracts become Current.
+Each component is encoded as a length-framed byte field in schema, version,
+edition, package, canonical logical-path, declaration-kind, and declared-name
+order. Keys do not depend on byte offsets, declaration order, formatting, or
+dense compiler IDs. Exact duplicate detection compares the complete framed key
+bytes, not only its digest. Human projections escape field delimiters and are
+not key authority. Function, product, and trait names must be spellable source
+identifiers before key construction. Rename and move operations report old and
+new keys plus the semantic relationship. Duplicate keys are rejected rather
+than disambiguated by source order. Package and module identities replace the
+Edition 1 root component when those contracts become Current.
 
 ### Revision-scoped node IDs
 
-Every validated revision assigns dense preorder `NodeId` values. A node ID is
-valid only with its exact repository/tree revision. It is compact compiler and
-protocol data, not a cross-revision semantic identity. Transactions that refer
-to a node ID from another revision fail as stale.
+Every validated revision assigns dense preorder `NodeId` values. Foundation V1
+revision framing includes each source unit's canonical logical path and exact
+input byte length plus SHA-256, so distinct accepted spellings and line endings
+cannot share a revision merely because canonical formatting is equal. A node ID
+is valid only with its exact repository/tree revision. It is compact compiler
+and protocol data, not a cross-revision semantic identity. Transactions that
+refer to a node ID from another revision fail as stale.
 
 ## Revisions And Preconditions
 

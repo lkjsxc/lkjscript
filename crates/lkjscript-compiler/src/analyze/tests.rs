@@ -12,24 +12,17 @@ mod tests {
         BindingKind, BindingStorage, CoreTrait, EffectSet, ExprKind, Operation, Origin,
         TraitWitnessKind, Type,
     };
-    use crate::import::{Program as AstProgram, SourceFile};
-    use crate::lex::lex;
-    use crate::parse::parse_tokens;
+    use crate::source::{validate_source_set_for_analysis, ValidatedSourceTree};
     use crate::ssa::lower_program;
 
-    fn parsed_program(files: &[(&str, &str)]) -> Result<AstProgram> {
-        let mut parsed_files = Vec::with_capacity(files.len());
-        for (path, source) in files {
-            let forms = parse_tokens(&lex(source)?)?;
-            parsed_files.push(SourceFile {
-                path: PathBuf::from(path),
-                forms,
-            });
-        }
-        Ok(AstProgram {
-            root: PathBuf::from(files.last().map_or("test.lkjscript", |(path, _)| *path)),
-            files: parsed_files,
-        })
+    fn parsed_program(files: &[(&str, &str)]) -> Result<ValidatedSourceTree> {
+        let root = files.last().map_or("test.lkjscript", |(path, _)| *path);
+        let limits = lkjscript_core::Limits {
+            max_tokens_per_file: u32::MAX,
+            max_toplevel_forms: u32::MAX,
+            ..lkjscript_core::Limits::default()
+        };
+        validate_source_set_for_analysis(files, root, &limits)
     }
 
     fn analyze_one(source: &str) -> Result<crate::hir::Program> {
@@ -128,7 +121,7 @@ mod tests {
     fn top_level_do_and_runtime_value_definitions_are_removed() {
         assert!(analysis_error("do/\nunit\n/do\n").contains("top-level do"));
         let value = "def/\nname/\nx\n/name\ntype/\nI64\n/type\n1\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
-        assert!(analysis_error(value).contains("immutable fn"));
+        assert!(analysis_error(value).contains("malformed top-level def declaration shape"));
     }
 
     #[test]
@@ -598,7 +591,7 @@ mod tests {
             marker_trait("Marked"), POINT_PRODUCT,
             marker_impl("Marked", "Point"), marker_impl("Marked", "Point"), main
         );
-        assert!(analysis_error(&overlap).contains("overlapping marker impl"));
+        assert!(analysis_error(&overlap).contains("LKJ-DECL-DUPLICATE"));
         let unknown_trait = format!("{}{}{main}", POINT_PRODUCT, marker_impl("Missing", "Point"));
         assert!(analysis_error(&unknown_trait).contains("unknown trait"));
         let unknown_product = format!("{}{}{main}", marker_trait("Marked"), marker_impl("Marked", "Missing"));

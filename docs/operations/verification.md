@@ -6,9 +6,10 @@ Define current evidence gates and their exact boundaries.
 
 ## Status
 
-Source identity/closure, source-tree, documentation honesty, explicit inert
-markers, formatting, Clippy, and workspace tests are **Current**. Generated
-whole-prelude semantic conformance remains an **Accepted Target**.
+Semantic Source Foundation identity/roundtrip, source closure/tree,
+documentation honesty, explicit inert markers, formatting, Clippy, workspace
+tests, and retained AI-authorability result validation are **Current**.
+Generated whole-prelude semantic conformance remains an **Accepted Target**.
 
 ## Current Local Gates
 
@@ -18,6 +19,8 @@ cargo run --locked -p lkjscript-xtask -- check-tree
 cargo run --locked -p lkjscript-xtask -- check-sources
 cargo run --locked -p lkjscript-xtask -- quiet test
 cargo run --locked -p lkjscript-xtask -- quiet verify
+python3 meta/benchmarks/ai-authoring/validate.py \
+  meta/benchmarks/ai-authoring/results/*.json
 ```
 
 `quiet verify` currently checks:
@@ -34,13 +37,21 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
    lkjscript source;
 4. at most 16 immediate entries in every directory under the language `src`
    tree, using the compiler's shared language rule;
-5. rejection of `.lkjml` and syntax validation of every `.lkjscript` source;
+5. rejection of `.lkjml` and validated Semantic Source Foundation construction
+   for every `.lkjscript` source;
 6. successful compilation through verified normalized SSA and validated
    bytecode for every executable root, with exact equality between their
    reported import closures and all canonical sources in the corpus;
 7. `cargo fmt --all -- --check`;
 8. strict Clippy for the workspace, all targets, and all features;
 9. workspace unit tests with the locked Cargo graph.
+
+Workspace tests independently require exact structural parse/format/parse and
+byte roundtrip for all 113 tracked `.lkjscript` sources, revision/key/node/path
+invariants, iterative deep import/tree behavior, source safety maxima, and
+malformed source/descriptor containment boundaries. The Python command validates
+retained benchmark schemas and verdict consistency; it does not invoke a model
+or fabricate missing semantic/hole variants.
 
 Workspace tests also cover the initial `Owned Buf` safe island: exact type and
 operation signatures; generic-laundering and direct/nested aggregate-storage

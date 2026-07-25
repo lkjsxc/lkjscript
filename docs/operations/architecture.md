@@ -7,11 +7,11 @@ that own it.
 
 ## Status
 
-**Current** for the implementation map, with accepted foundation changes called
-out explicitly. The next repository-wide slice is the **Accepted Target**
-Semantic Source and agent-protocol boundary, not yet Current. Synchronous
-automatic proof promotion remains an **Accepted Implementation Selection** but
-is no longer the immediate priority.
+**Current** for the implementation map. Semantic Source Foundation V1 is
+Current; complete Schema/Agent Protocol V1, transactions, typed holes, and
+semantic derived-fact queries remain **Accepted Targets**. Synchronous automatic
+proof promotion remains an **Accepted Implementation Selection** but is no
+longer the immediate priority.
 
 ## Crate Graph
 
@@ -46,8 +46,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | --- | --- | --- |
 | CLI | `crates/lkjscript-app/src/main.rs` | `main`, `real_main` |
 | Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` |
-| Source loading/imports | `crates/lkjscript-compiler/src/import.rs` | `load_program`, import resolution |
-| Physical syntax | `crates/lkjscript-compiler/src/lex.rs`, `parse.rs` | `lex`, `parse_tokens` |
+| Validated Semantic Source foundation | `crates/lkjscript-compiler/src/source/` | opaque `ValidatedSourceTree`, iterative contained loading, parser/limits, spans/origins, revision/keys/nodes, structural formatter, source diagnostics |
 | Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `effects.rs`, `hir.rs`, `operation.rs` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects |
 | Ownership analysis | `crates/lkjscript-compiler/src/ownership.rs` | mandatory aggregate-bounded `Owned Buf` lexical place/move/same-block-loan analysis and exact joins |
 | HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa.rs` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect/ownership transfer |
@@ -71,10 +70,11 @@ checks. No workspace crate has a third-party Rust dependency.
 ```text
 CLI path
   -> compile_path
-  -> package-root and import resolution
-  -> lex each source
-  -> per-file source limits
-  -> parse matched forms
+  -> package-root and import resolution through an explicit dependency-first stack
+  -> checked source-unit/file/closure implementation maxima
+  -> lex/parse each source with exact spans and trivia
+  -> enforce unchanged Edition 1 per-file/tree limits
+  -> build opaque ValidatedSourceTree with exact revision, stable keys, and nodes
   -> enforce one root main and declaration-only imports
   -> collect immutable function and product headers
   -> resolve exact types, binding IDs, and local slots into owned HIR
@@ -105,8 +105,11 @@ are rejected.
 
 ## Compiler Pipeline Status
 
-Parsed AST -> resolved typed HIR -> verified typed SSA -> verified baseline
-normalization -> reference bytecode is **Current**. HIR owns an explicit Main
+Opaque validated Semantic Source Foundation tree -> resolved typed HIR ->
+verified typed SSA -> verified baseline normalization -> reference bytecode is
+**Current**. HIR currently consumes a private mechanically checked Edition 1
+form projection from the validated tree; no sibling parser or raw public AST can
+enter analysis. HIR owns an explicit Main
 and Functions, resolved binding IDs and local slot references, immutable
 declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs and field
 indexes, exact static type facts, source origins, canonical operation identities
@@ -274,12 +277,15 @@ goal/specification
       +-> Wasm/components
 ```
 
-The first implementation boundary is [Semantic Source And Agent
-Protocol](../decisions/semantic-source-and-agent-protocol.md): one validated
-source-tree authority, exact Edition 1 corpus roundtrip, two identity layers,
-atomic revisioned semantic edits, structured diagnostics, and useful typed
-holes. Existing HIR/SSA/VM/JIT behavior must remain unchanged through that
-cutover. No sibling parser/tree path may independently feed a backend.
+[Semantic Source And Agent
+Protocol](../decisions/semantic-source-and-agent-protocol.md) now has a Current
+Foundation V1: one validated source-tree authority, exact 113-file tracked
+source roundtrip, exact revision identity, stable declaration keys, dense nodes,
+and structural source diagnostics. Existing HIR/SSA/VM/JIT behavior remains
+unchanged through that cutover, and no sibling parser/tree path independently
+feeds a backend. Atomic semantic edits, resolved-reference facts, the remaining
+structured compiler diagnostics, typed holes, and bounded protocol transport
+are the next implementation boundary and are not Current.
 
 [AI-Native Language And Platform](../decisions/ai-native-platform.md) owns the
 long-term dependency order. [Resource Budget

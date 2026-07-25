@@ -168,7 +168,7 @@ pub fn sys_sha256(arena: &mut Arena, buffer: Value, offset: i64, requested: i64)
     let source = as_buf(arena, buffer)?
         .get(range)
         .ok_or_else(|| Error::msg("sys-sha256 range is invalid"))?;
-    let digest = lkjscript_sys::sha256(source);
+    let digest = lkjscript_core::sha256(source);
     arena.alloc(HeapObj::Buf(digest.to_vec()))
 }
 

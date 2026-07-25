@@ -2,16 +2,12 @@
 //! and validated reference bytecode.
 
 mod analyze;
-mod ast;
 mod codegen;
 mod effects;
 mod hir;
-mod import;
-mod lex;
-mod limits_check;
 mod operation;
 mod ownership;
-mod parse;
+pub mod source;
 mod ssa;
 mod types;
 
@@ -22,11 +18,8 @@ use lkjscript_core::{validate_chunk, Limits, Result, ValidatedChunk};
 use lkjscript_ir::{BytecodeLinkMetadata, VerifiedProgram};
 
 use crate::analyze::{analyze_program, analyze_program_without_effects};
-use crate::ast::Expr;
 use crate::codegen::compile_program;
-use crate::import::{load_program, load_program_with_metrics};
-use crate::limits_check::check_file_limits;
-use crate::parse::parse_tokens;
+use crate::source::{load_for_compiler, validate_for_compiler};
 use crate::ssa::{lower_program, lower_program_with_metrics};
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
@@ -84,8 +77,9 @@ pub fn compile_path_with_metrics(
 ) -> Result<(ExecutableProgram, CompileMetrics)> {
     let total_started = Instant::now();
     ensure_source_path(path)?;
-    let (program, loading) = load_program_with_metrics(path, limits)?;
-    let source_files = program.files.len();
+    let (program, loading) =
+        source::load_with_metrics(path, limits).map_err(source::SourceDiagnostic::into_core)?;
+    let source_files = program.files().len();
 
     let hir_started = Instant::now();
     let mut analyzed = analyze_program_without_effects(&program)?;
@@ -129,9 +123,9 @@ pub fn compile_path_with_sources(
     limits: &Limits,
 ) -> Result<(ExecutableProgram, Vec<PathBuf>)> {
     ensure_source_path(path)?;
-    let program = load_program(path, limits)?;
+    let program = load_for_compiler(path, limits)?;
     let sources = program
-        .files
+        .files()
         .iter()
         .map(|source| source.path.clone())
         .collect();
@@ -142,12 +136,7 @@ pub fn compile_path_with_sources(
 
 pub fn compile_source(source: &str, path: &str, limits: &Limits) -> Result<ExecutableProgram> {
     ensure_source_path(Path::new(path))?;
-    let forms = parse_source(source, path, limits)?;
-    let fake = PathBuf::from(path);
-    let program = import::Program {
-        root: fake.clone(),
-        files: vec![import::SourceFile { path: fake, forms }],
-    };
+    let program = validate_for_compiler(source, path, limits)?;
     let analyzed = analyze_program(&program)?;
     compile_analyzed(&analyzed, limits)
 }
@@ -165,31 +154,16 @@ fn compile_analyzed(analyzed: &hir::Program, limits: &Limits) -> Result<Executab
 
 pub fn validate_source(source: &str, path: &str, limits: &Limits) -> Result<()> {
     ensure_source_path(Path::new(path))?;
-    parse_source(source, path, limits).map(|_| ())
+    validate_for_compiler(source, path, limits).map(|_| ())
 }
 
 pub fn validate_source_tree(root: &Path, limits: &Limits) -> Result<()> {
-    import::validate_source_tree(root, limits)
+    source::validate_source_directory_tree(root, limits.max_dir_children)
+        .map_err(source::SourceDiagnostic::into_core)
 }
 
 pub(crate) fn ensure_source_path(path: &Path) -> Result<()> {
-    if path.extension().and_then(|extension| extension.to_str()) == Some(SOURCE_EXTENSION) {
-        return Ok(());
-    }
-    Err(lkjscript_core::Error::msg(format!(
-        "source path must end in .{SOURCE_EXTENSION}: {}",
-        path.display()
-    )))
-}
-
-fn parse_source(source: &str, path: &str, limits: &Limits) -> Result<Vec<Expr>> {
-    let tokens =
-        lex::lex(source).map_err(|error| lkjscript_core::Error::msg(format!("{path}: {error}")))?;
-    check_file_limits(&tokens, limits, path)?;
-    let forms = parse_tokens(&tokens)
-        .map_err(|error| lkjscript_core::Error::msg(format!("{path}: {error}")))?;
-    import::validate_top_level(&forms, limits, path)?;
-    Ok(forms)
+    source::ensure_source_path_for_compiler(path)
 }
 
 pub use lkjscript_core::Limits as CompileLimits;
@@ -201,7 +175,7 @@ mod tests {
 
     use lkjscript_core::{Constant, Limits};
 
-    use super::{compile_source, ensure_source_path};
+    use super::{compile_source, ensure_source_path, validate_source};
 
     fn unit_main(body: &str) -> String {
         format!("main/\nsig/\n->\nUnit\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
@@ -212,6 +186,31 @@ mod tests {
         assert!(ensure_source_path(Path::new("main.lkjscript")).is_ok());
         assert!(ensure_source_path(Path::new("main.lkjml")).is_err());
         assert!(ensure_source_path(Path::new("main")).is_err());
+    }
+
+    #[test]
+    fn public_in_memory_apis_require_canonical_relative_lkjscript_paths() {
+        let source = unit_main("unit");
+        for rejected in [
+            "../escape.lkjscript",
+            "./aliased.lkjscript",
+            "src//aliased.lkjscript",
+            "/absolute.lkjscript",
+            "legacy.lkjml",
+        ] {
+            assert!(
+                validate_source(&source, rejected, &Limits::default()).is_err(),
+                "validate_source accepted {rejected}"
+            );
+            assert!(
+                compile_source(&source, rejected, &Limits::default()).is_err(),
+                "compile_source accepted {rejected}"
+            );
+        }
+        validate_source(&source, "src/canonical.lkjscript", &Limits::default())
+            .expect("validate canonical logical path");
+        compile_source(&source, "src/canonical.lkjscript", &Limits::default())
+            .expect("compile canonical logical path");
     }
 
     #[test]

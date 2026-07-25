@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 
 use lkjscript_core::{Error, ProductId, Result, MAX_PRODUCT_FIELDS};
 
-use crate::ast::Expr as AstExpr;
 use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
     EffectSet, Expr, ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId,
@@ -12,19 +11,22 @@ use crate::hir::{
     SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
     TypeSubstitution,
 };
+use crate::source::Expr as AstExpr;
 
 pub const TRAIT_SOLVER_MAX_DEPTH: usize = 32;
 pub const TRAIT_SOLVER_MAX_WORK: usize = 256;
-use crate::import::Program as AstProgram;
+use crate::source::ValidatedSourceTree;
 use crate::types::parse_one;
 
-pub(crate) fn analyze_program(program: &AstProgram) -> Result<hir::Program> {
+pub(crate) fn analyze_program(program: &ValidatedSourceTree) -> Result<hir::Program> {
     let mut program = analyze_program_without_effects(program)?;
     crate::effects::infer(&mut program);
     Ok(program)
 }
 
-pub(crate) fn analyze_program_without_effects(program: &AstProgram) -> Result<hir::Program> {
+pub(crate) fn analyze_program_without_effects(
+    program: &ValidatedSourceTree,
+) -> Result<hir::Program> {
     let mut analyzer = Analyzer::new(program)?;
     analyzer.install_operations()?;
     analyzer.install_core_traits()?;
@@ -76,9 +78,9 @@ struct Analyzer {
 }
 
 impl Analyzer {
-    fn new(program: &AstProgram) -> Result<Self> {
-        let mut sources = Vec::with_capacity(program.files.len());
-        for file in &program.files {
+    fn new(program: &ValidatedSourceTree) -> Result<Self> {
+        let mut sources = Vec::with_capacity(program.files().len());
+        for file in program.files() {
             let raw = u32::try_from(sources.len())
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             sources.push(Source {
@@ -132,8 +134,8 @@ impl Analyzer {
         Ok(())
     }
 
-    fn collect_trait_names(&mut self, program: &AstProgram) -> Result<()> {
-        for (source_index, file) in program.files.iter().enumerate() {
+    fn collect_trait_names(&mut self, program: &ValidatedSourceTree) -> Result<()> {
+        for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
                 u32::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
@@ -186,8 +188,8 @@ impl Analyzer {
         Ok(())
     }
 
-    fn collect_product_names(&mut self, program: &AstProgram) -> Result<()> {
-        for (source_index, file) in program.files.iter().enumerate() {
+    fn collect_product_names(&mut self, program: &ValidatedSourceTree) -> Result<()> {
+        for (source_index, file) in program.files().iter().enumerate() {
             let source_raw = u32::try_from(source_index)
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             let source = SourceId::new(source_raw);
@@ -238,8 +240,8 @@ impl Analyzer {
         Ok(())
     }
 
-    fn collect_products(&mut self, program: &AstProgram) -> Result<()> {
-        for (source_index, file) in program.files.iter().enumerate() {
+    fn collect_products(&mut self, program: &ValidatedSourceTree) -> Result<()> {
+        for (source_index, file) in program.files().iter().enumerate() {
             let source_raw = u32::try_from(source_index)
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             let source = SourceId::new(source_raw);
@@ -322,9 +324,9 @@ impl Analyzer {
         Ok(())
     }
 
-    fn collect_implementations(&mut self, program: &AstProgram) -> Result<()> {
+    fn collect_implementations(&mut self, program: &ValidatedSourceTree) -> Result<()> {
         let mut coherent = HashSet::new();
-        for (source_index, file) in program.files.iter().enumerate() {
+        for (source_index, file) in program.files().iter().enumerate() {
             let source = SourceId::new(
                 u32::try_from(source_index)
                     .map_err(|_| Error::msg("too many source files for HIR SourceId"))?,
@@ -442,15 +444,15 @@ impl Analyzer {
 
     fn collect_headers<'a>(
         &mut self,
-        program: &'a AstProgram,
+        program: &'a ValidatedSourceTree,
     ) -> Result<(Vec<PendingFunction<'a>>, PendingMain<'a>)> {
         let mut functions = Vec::new();
         let mut main = None;
-        for (source_index, file) in program.files.iter().enumerate() {
+        for (source_index, file) in program.files().iter().enumerate() {
             let source_raw = u32::try_from(source_index)
                 .map_err(|_| Error::msg("too many source files for HIR SourceId"))?;
             let source = SourceId::new(source_raw);
-            let is_root = file.path == program.root;
+            let is_root = file.path == program.root_path();
             for form in &file.forms {
                 match form {
                     AstExpr::Call { name, .. }

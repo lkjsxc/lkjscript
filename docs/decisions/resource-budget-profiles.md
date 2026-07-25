@@ -17,6 +17,14 @@ execution bounds also remain Current.
 No limit is raised or reclassified until aggregate replacement bounds for its
 amplification path are implemented, tested, documented, and Current.
 
+Semantic Source Foundation V1 fixes always-enforced implementation safety
+maxima at 16 MiB of exact input bytes per source file, 256 MiB of exact input
+bytes across one loaded source closure, 65,536 source units, and 65,536 entries
+traversed by one complete source-tree check. Metadata and bytes actually read
+are checked before parser copying; source-unit, tree-entry, and byte
+charges use checked arithmetic. These maxima are defense in depth and do not
+raise, replace, or reclassify any tiny Current Edition 1 limit.
+
 This record supersedes the permanent-policy part of [Essential Source
 Limits](limits/essential-limits.md) and [Lkjscript Source-Tree
 Width](source-tree-limit.md). Those records remain authoritative descriptions
