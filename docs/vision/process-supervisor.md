@@ -120,11 +120,11 @@ Required supporting changes:
 
 | Approach | Useful experiment | Adoption condition |
 | --- | --- | --- |
-| One native thread per VM | Fastest path to validate isolation and lifecycle UX. | Transitional only; measured memory/thread limits must fit intended scale. |
-| Cooperative instruction quanta | Deterministic fairness for CPU-bound VMs. | Adopt when cancellation latency and throughput beat thread-per-VM. |
-| Nonblocking epoll plus quanta | Scalable Linux IO and timers in one runtime. | Linux production target after host effects can return `Blocked`. |
-| Async Rust framework | Broad ecosystem and portability. | Rejected by default because it violates the scratch-host law unless measured value justifies an ADR. |
-| OS process supervisor | Strong isolation with existing VM unchanged. | Keep as a fallback mode, not the one-runtime architecture. |
+| One native thread per VM | Fastest path to validate isolation and lifecycle UX. | Transitional only; measured memory/thread limits must fit intended scale. | <!-- LKJ-EXACT-DATA -->
+| Cooperative instruction quanta | Deterministic fairness for CPU-bound VMs. | Adopt when cancellation latency and throughput beat thread-per-VM. | <!-- LKJ-EXACT-DATA -->
+| Nonblocking epoll plus quanta | Scalable Linux IO and timers in one runtime. | Linux production target after host effects can return `Blocked`. | <!-- LKJ-EXACT-DATA -->
+| Async Rust framework | Broad ecosystem and portability. | Rejected by default because it violates the scratch-host law unless measured value justifies an ADR. | <!-- LKJ-EXACT-DATA -->
+| OS process supervisor | Strong isolation with existing VM unchanged. | Keep as a fallback mode, not the one-runtime architecture. | <!-- LKJ-EXACT-DATA -->
 
 The first implementation should compare native-thread and cooperative-quantum
 variants with the same workload. The eventual Linux design is likely epoll for

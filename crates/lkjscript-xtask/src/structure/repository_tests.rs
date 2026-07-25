@@ -65,6 +65,30 @@ fn tracked_hidden_symlink_and_ignored_boundaries() {
 }
 
 #[test]
+fn exact_data_width_classification_is_closed_and_visible() {
+    let fixture = "let source = \"main/\\n/main\";";
+    let measured = "| exact result | 123456 | <!-- LKJ-EXACT-DATA -->";
+    let unmarked = "| prose-shaped record | not exempt |";
+    let prose = "ordinary prose <!-- LKJ-EXACT-DATA -->";
+    assert_eq!(
+        super::repository_support::line_widths("crate/tests/example.rs", fixture),
+        Ok((fixture.len() as u64, 0, 1))
+    );
+    assert_eq!(
+        super::repository_support::line_widths("evidence.md", measured),
+        Ok((measured.len() as u64, 0, 1))
+    );
+    assert_eq!(
+        super::repository_support::line_widths("docs/current-state/evidence.md", unmarked),
+        Ok((unmarked.len() as u64, unmarked.len() as u64, 0))
+    );
+    assert_eq!(
+        super::repository_support::line_widths("evidence.md", prose),
+        Ok((prose.len() as u64, prose.len() as u64, 0))
+    );
+}
+
+#[test]
 fn tracked_non_utf8_is_unclassified() {
     let root = repository();
     assert!(fs::create_dir(&root).is_ok());

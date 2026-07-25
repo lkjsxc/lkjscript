@@ -67,9 +67,10 @@ pub(in crate::ownership) fn check_values_expr(
                 context,
                 UseContext::ExactReferenceArgument | UseContext::DirectLetInitializer
             ) {
-                return Err(Error::msg(
-                    "borrow is permitted only as an exact direct reference argument or direct let initializer in the initial ownership slice",
-                ));
+                return Err(Error::msg(concat!(
+                    "borrow is permitted only as an exact direct reference argument or ",
+                    "direct let initializer in the initial ownership slice"
+                )));
             }
             if places.get(&binding.binding) != Some(place) {
                 return Err(Error::msg("borrow has mismatched place/binding identity"));

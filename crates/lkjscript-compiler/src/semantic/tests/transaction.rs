@@ -143,7 +143,17 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
         &crate::semantic::execute(&request(&root, &replace("string", "\"wrong\"")))
             .expect("typed replacement failure response"),
     );
-    assert!(matches!(failed.result, ResponseResult::Error { .. }));
+    let ResponseResult::Error {
+        diagnostic: Some(diagnostic),
+        ..
+    } = failed.result
+    else {
+        panic!("typed replacement failure must carry a diagnostic");
+    };
+    assert_eq!(
+        diagnostic.code,
+        crate::semantic::schema::DiagnosticCode::TypeMismatch
+    );
     assert_eq!(
         std::fs::read(&root).expect("bytes after failure"),
         before_failure

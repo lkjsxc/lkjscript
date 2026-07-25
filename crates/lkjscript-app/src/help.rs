@@ -5,9 +5,10 @@ pub fn print() {
     println!(
         "  lkjscript run [--engine vm|auto|baseline-jit|optimizing-jit] [--auto-jit-threshold N]"
     );
-    println!("                 [--disable-auto-jit] <file.lkjscript> [--] [script-args...]");
+    println!("                 [--disable-auto-jit] [--resource-profile NAME]");
+    println!("                 <file.lkjscript> [--] [script-args...]");
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
-    println!("  lkjscript disasm <file.lkjscript>");
+    println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");
     println!("  lkjscript semantic [-] < request.json");
     println!("  lkjscript --help");
     println!("  lkjscript --version");

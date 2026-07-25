@@ -38,6 +38,11 @@ fn byte_and_width_boundaries() {
 }
 
 #[test]
+fn audit_capture_error_has_failure_status() {
+    assert_eq!(super::fail("audit", "capture failed"), 1);
+}
+
+#[test]
 fn stale_provenance_is_rejected() {
     let root = std::env::temp_dir().join(format!("lkjscript-provenance-{}", std::process::id()));
     assert!(std::fs::create_dir_all(&root).is_ok());
@@ -46,7 +51,9 @@ fn stale_provenance_is_rejected() {
         path: "a".into(),
         bytes: 6,
         lines: 1,
-        max_line_scalars: 6,
+        max_physical_line_scalars: 6,
+        max_ordinary_line_scalars: 6,
+        exact_data_lines: 0,
         class: "immutable-fixture".into(),
         capsule: None,
     }];

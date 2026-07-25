@@ -27,7 +27,6 @@ impl SourceDiagnostic {
     pub const fn schema(&self) -> &'static str {
         SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA
     }
-
     pub const fn schema_version(&self) -> u32 {
         SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION
     }
@@ -35,7 +34,6 @@ impl SourceDiagnostic {
     pub const fn code(&self) -> &'static str {
         self.code
     }
-
     pub const fn severity(&self) -> DiagnosticSeverity {
         self.severity
     }
@@ -43,7 +41,6 @@ impl SourceDiagnostic {
     pub const fn category(&self) -> DiagnosticCategory {
         self.category
     }
-
     pub const fn certainty(&self) -> DiagnosticCertainty {
         self.certainty
     }
@@ -92,7 +89,13 @@ impl SourceDiagnostic {
         let start = self.primary_span.start();
         let end = self.primary_span.end();
         let mut rendered = format!(
-            "schema={SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA};version={SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION};code={};severity={};category={};certainty={};origin={};span={}:{}:{}-{}:{}:{};message={}",
+            concat!(
+                "schema={};version={};",
+                "code={};severity={};category={};certainty={};origin={};",
+                "span={}:{}:{}-{}:{}:{};message={}"
+            ),
+            SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA,
+            SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION,
             self.code,
             self.severity.as_str(),
             self.category.as_str(),
@@ -110,7 +113,10 @@ impl SourceDiagnostic {
             let start = related.span.start();
             let end = related.span.end();
             rendered.push_str(&format!(
-                ";related[{index}].label={};related[{index}].origin={};related[{index}].span={}:{}:{}-{}:{}:{}",
+                concat!(
+                    ";related[{index}].label={};related[{index}].origin={};",
+                    "related[{index}].span={}:{}:{}-{}:{}:{}"
+                ),
                 crate::source::identity::escape_compact(&related.label),
                 crate::source::identity::escape_compact(related.origin.logical_path()),
                 start.byte(),
@@ -118,7 +124,8 @@ impl SourceDiagnostic {
                 start.column(),
                 end.byte(),
                 end.line(),
-                end.column()
+                end.column(),
+                index = index
             ));
         }
         rendered

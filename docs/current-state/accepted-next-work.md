@@ -16,8 +16,11 @@ The immediate implementation sequence has progressed as follows:
 2. bounded repository graph/context nodes, edges, identities, and profiles are Current;
 3. externalized agent work state with exact Git/state preconditions, action and
    command facts, content references, atomic replacement, and compaction is Current; and
-4. first Current-candidate Semantic Source operations and aggregate resource
-   profiles remain next without changing any Current Edition 1 limit.
+4. bounded one-shot Agent Foundation V1 operations and the compiler Resource
+   Profile V1 foundation are Current without changing an Edition 1 limit; and
+5. complete future Schema V1, daemon/typed-hole operations, pre-allocation
+   profile charging, and shared protocol/repository/task/runtime ledgers remain
+   next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository
@@ -25,8 +28,9 @@ Intelligence Graph And Context](../decisions/platform/repository-intelligence-gr
 [Agent Work State](../decisions/platform/agent-work-state.md), [Semantic Source
 And Agent Protocol](../decisions/platform/semantic-source-and-agent-protocol.md),
 and [Resource Budget Profiles](../decisions/platform/resource-budget-profiles.md).
-The first three authorities now describe Current bounded implementations. The
-Semantic Source operations and aggregate resource profiles remain Accepted, not Current.
+All five authorities now describe Current bounded slices. Their explicitly
+broader Schema, profile, daemon, package, and runtime targets remain Accepted,
+not Current.
 
 The previously selected process-local synchronous automatic baseline-to-proof
 promotion remains an **Accepted Implementation Selection** and valid later

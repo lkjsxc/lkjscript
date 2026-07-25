@@ -1,20 +1,28 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use lkjscript_compiler::compile_path;
-use lkjscript_core::{DecodedInstruction, FunctionProto, Limits, Op, ValidatedChunk};
+use lkjscript_compiler::compile_path_with_profile;
+use lkjscript_core::{
+    DecodedInstruction, FunctionProto, Limits, Op, ResourceProfile, ValidatedChunk,
+};
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
-    let file = args
-        .get(1)
-        .ok_or_else(|| "disasm needs a .lkjscript path".to_string())?;
-    if args.len() != 2 {
-        return Err("disasm accepts exactly one .lkjscript path".to_string());
-    }
-    let program = compile_path(&PathBuf::from(file), &Limits::default())
+    let (profile, file) = request(args)?;
+    let program = compile_path_with_profile(&PathBuf::from(file), &Limits::default(), profile)
         .map_err(|error| error.to_string())?;
     disassemble(program.bytecode())?;
     Ok(ExitCode::SUCCESS)
+}
+
+fn request(args: &[String]) -> Result<(ResourceProfile, &str), String> {
+    match args {
+        [command, file] if command == "disasm" => Ok((ResourceProfile::default(), file)),
+        [command, flag, name, file] if command == "disasm" && flag == "--resource-profile" => {
+            let profile = ResourceProfile::named(name).map_err(|error| error.to_string())?;
+            Ok((profile, file))
+        }
+        _ => Err("usage: disasm [--resource-profile NAME] <file.lkjscript>".to_string()),
+    }
 }
 
 fn disassemble(chunk: &ValidatedChunk) -> Result<(), String> {
@@ -122,7 +130,26 @@ mod tests {
         validate_chunk, Chunk, Op, ProductFieldRef, ProductId, ProductMetadata, ValidationLimits,
     };
 
-    use super::{operand_annotation, product_field};
+    use super::{operand_annotation, product_field, request};
+
+    #[test]
+    fn resource_profile_selection_is_strict() {
+        assert!(request(&["disasm".into(), "main.lkjscript".into()]).is_ok());
+        assert!(request(&[
+            "disasm".into(),
+            "--resource-profile".into(),
+            "sandbox".into(),
+            "main.lkjscript".into(),
+        ])
+        .is_ok());
+        assert!(request(&[
+            "disasm".into(),
+            "--resource-profile".into(),
+            "unknown".into(),
+            "main.lkjscript".into(),
+        ])
+        .is_err());
+    }
 
     #[test]
     fn product_annotations_only_receive_validated_metadata() {

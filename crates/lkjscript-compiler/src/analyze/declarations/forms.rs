@@ -4,7 +4,11 @@ pub(in crate::analyze) fn trait_declaration(
     args: &[AstExpr],
 ) -> std::result::Result<String, String> {
     let [name_form] = args else {
-        return Err("marker trait expects exactly one name/ form; methods and associated types are unsupported".into());
+        return Err(concat!(
+            "marker trait expects exactly one name/ form; ",
+            "methods and associated types are unsupported"
+        )
+        .into());
     };
     declared_name_form(name_form, "trait")
 }
@@ -13,7 +17,11 @@ pub(in crate::analyze) fn impl_declaration(
     args: &[AstExpr],
 ) -> std::result::Result<(String, Type), String> {
     let [trait_form, for_form] = args else {
-        return Err("marker impl expects exactly trait/ and for/ forms; methods, associated values, and generics are unsupported".into());
+        return Err(concat!(
+            "marker impl expects exactly trait/ and for/ forms; ",
+            "methods, associated values, and generics are unsupported"
+        )
+        .into());
     };
     let trait_name = match trait_form {
         AstExpr::Call { name, args } if name == "trait" => match args.as_slice() {

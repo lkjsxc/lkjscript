@@ -37,7 +37,7 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     let request = format!(
         concat!(
             "{{\"schema\":\"lkjscript.agent-foundation\",\"version\":1,",
-            "\"profile\":\"standard\",\"root\":{},",
+            "\"profile\":\"default\",\"root\":{},",
             "\"operation\":{{\"kind\":\"snapshot\"}}}}",
         ),
         format!("{:?}", root.to_string_lossy())

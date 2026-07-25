@@ -76,7 +76,8 @@ fn resume_context_reports_deterministic_output_truncation() {
         truncated: false,
         unsupported: Vec::new(),
     };
-    context::include(&mut response, context_result, "weak", 1).unwrap();
+    let limit = serde_json::to_vec_pretty(&response).unwrap().len() + 128;
+    context::include(&mut response, context_result, "weak", limit).unwrap();
     assert!(response.truncated);
     assert!(response.repository_context.is_empty());
     assert_eq!(response.omissions.len(), 1);
@@ -100,8 +101,16 @@ fn compaction_retains_failures_test_truth_commits_and_references() {
         .iter()
         .map(|action| action.sequence)
         .collect();
-    assert_eq!(sequences, [3, 4, 5]);
+    assert_eq!(sequences, [1, 3, 4, 5]);
     assert_eq!(compacted.produced_commits, state.produced_commits);
+    assert_eq!(compacted.open_defects, state.open_defects);
+    assert_eq!(compacted.risks, state.risks);
+    assert_eq!(compacted.external_blockers, state.external_blockers);
+    assert_eq!(compacted.next_actions, state.next_actions);
+    assert_eq!(
+        compacted.invalidated_assumptions,
+        state.invalidated_assumptions
+    );
     assert_eq!(compacted.evidence_references, state.evidence_references);
     assert!(compact::compact(&compacted).unwrap().is_none());
 }

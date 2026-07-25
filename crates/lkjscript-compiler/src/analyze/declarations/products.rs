@@ -58,7 +58,10 @@ impl Analyzer {
                     if contains_ownership_type(&ty) {
                         return Err(self.error(
                             source,
-                            format!("product {product_name} field {field_name}: ownership/reference types cannot be stored in products"),
+                            format!(
+                                "product {product_name} field {field_name}: ownership/reference \
+                                 types cannot be stored in products"
+                            ),
                         ));
                     }
                     let mut free = HashSet::new();
@@ -66,7 +69,10 @@ impl Analyzer {
                     if let Some(parameter) = free.into_iter().next() {
                         return Err(self.error(
                             source,
-                            format!("product {product_name} field {field_name}: type contains unbound parameter {parameter}"),
+                            format!(
+                                "product {product_name} field {field_name}: type contains unbound \
+                                 parameter {parameter}"
+                            ),
                         ));
                     }
                     fields.push(ProductField {

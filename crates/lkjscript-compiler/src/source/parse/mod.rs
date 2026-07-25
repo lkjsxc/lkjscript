@@ -1,4 +1,5 @@
 mod atom;
+mod declaration_shapes;
 mod declarations;
 mod element;
 mod lex;

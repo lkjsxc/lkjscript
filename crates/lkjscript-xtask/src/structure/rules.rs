@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::model::{Audit, ClassCount, Finding, Policy, Provenance, Ratchet};
+use crate::model::{Audit, ClassCount, Finding, Policy, Provenance};
 
 use super::repository::Snapshot;
 use super::validation::{capsules, metric, provenance, simple, warning};
@@ -34,7 +34,7 @@ pub fn audit(
                 &mut findings,
                 "LKJ-REPO-LINE-WIDTH",
                 &file.path,
-                file.max_line_scalars,
+                file.max_ordinary_line_scalars,
                 policy.limits.ordinary_line_scalars,
             );
             super::detector::content(root, &file.path, &mut findings);
@@ -130,35 +130,11 @@ fn vague_module(path: &str, findings: &mut Vec<Finding>) {
     }
 }
 
-pub fn check_findings(audit: &Audit, ratchet: &[Ratchet]) -> Vec<Finding> {
-    let mut result: Vec<_> = audit
+pub fn check_findings(audit: &Audit) -> Vec<Finding> {
+    audit
         .findings
         .iter()
         .filter(|finding| finding.severity == "error")
         .cloned()
-        .collect();
-    let observed: BTreeMap<_, _> = result
-        .iter()
-        .filter_map(|finding| {
-            finding
-                .observed
-                .map(|value| ((finding.rule.clone(), finding.path.clone()), value))
-        })
-        .collect();
-    for record in ratchet {
-        match observed.get(&(record.rule.clone(), record.path.clone())) {
-            Some(value) if *value <= record.observed => {
-                result.retain(|item| item.rule != record.rule || item.path != record.path);
-            }
-            Some(_) => {}
-            None => result.push(simple(
-                "error",
-                "LKJ-REPO-RATCHET-STALE",
-                &record.path,
-                &format!("stale ratchet record for {}", record.rule),
-            )),
-        }
-    }
-    result.sort_by(|left, right| left.sort_key.cmp(&right.sort_key));
-    result
+        .collect()
 }

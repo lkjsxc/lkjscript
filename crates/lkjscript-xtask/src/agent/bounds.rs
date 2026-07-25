@@ -2,6 +2,7 @@ use super::model::{CheckpointRequest, ContentReference, WorkState};
 
 pub const REQUEST_BYTES: usize = 262_144;
 pub const STATE_BYTES: usize = 262_144;
+pub const QUARANTINE_BYTES: u64 = 1_048_576;
 pub const CONTEXT_BYTES_WEAK: usize = 65_536;
 pub const CONTEXT_BYTES_STRONG: usize = 262_144;
 pub const OUTPUT_BYTES: usize = 524_288;

@@ -1,5 +1,8 @@
+use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use super::bounds;
 
@@ -85,18 +88,61 @@ fn text(root: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 fn run(root: &Path, args: &[&str]) -> Result<Output, String> {
-    let output = Command::new("git")
+    let mut child = Command::new("git")
         .args(args)
         .current_dir(root)
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| format!("run git {}: {error}", args.join(" ")))?;
-    let bytes = output
-        .stdout
-        .len()
-        .checked_add(output.stderr.len())
-        .ok_or("git output count overflow")?;
-    if bytes > bounds::GIT_OUTPUT_BYTES {
+    let stdout = child.stdout.take().ok_or("git stdout pipe is missing")?;
+    let stderr = child.stderr.take().ok_or("git stderr pipe is missing")?;
+    let retained = Arc::new(AtomicUsize::new(0));
+    let stdout_reader = read_pipe(stdout, Arc::clone(&retained));
+    let stderr_reader = read_pipe(stderr, retained);
+    let status = child
+        .wait()
+        .map_err(|error| format!("wait for git {}: {error}", args.join(" ")))?;
+    let (stdout, stdout_overflow) = stdout_reader
+        .join()
+        .map_err(|_| "git stdout reader panicked")??;
+    let (stderr, stderr_overflow) = stderr_reader
+        .join()
+        .map_err(|_| "git stderr reader panicked")??;
+    if stdout_overflow || stderr_overflow {
         return Err("git output exceeds bound".into());
     }
-    Ok(output)
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn read_pipe(
+    mut pipe: impl Read + Send + 'static,
+    retained: Arc<AtomicUsize>,
+) -> std::thread::JoinHandle<Result<(Vec<u8>, bool), String>> {
+    std::thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut buffer = [0u8; 8192];
+        let mut overflow = false;
+        loop {
+            let count = pipe
+                .read(&mut buffer)
+                .map_err(|error| format!("read git output: {error}"))?;
+            if count == 0 {
+                return Ok((output, overflow));
+            }
+            let before = retained
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                    Some(value.saturating_add(count))
+                })
+                .unwrap_or(usize::MAX);
+            let available = bounds::GIT_OUTPUT_BYTES.saturating_sub(before);
+            let keep = available.min(count);
+            output.extend_from_slice(&buffer[..keep]);
+            overflow |= keep != count;
+        }
+    })
 }

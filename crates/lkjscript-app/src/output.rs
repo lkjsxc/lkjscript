@@ -19,7 +19,12 @@ pub fn print_jit_diagnostics(program: &lkjscript_ir::VerifiedProgram, stats: &Ji
         }
     }
     eprintln!(
-        "jit.native_entries={} jit.baseline_entries={} jit.optimizing_entries={} jit.direct_native_calls={} jit.poll_v1_calls={} jit.vm_fallbacks={} jit.compile_failures={} jit.algebraic_rewrites={} jit.gvn_rewrites={} jit.checked_i64_rewrites={}",
+        concat!(
+            "jit.native_entries={} jit.baseline_entries={} jit.optimizing_entries={} ",
+            "jit.direct_native_calls={} jit.poll_v1_calls={} jit.vm_fallbacks={} ",
+            "jit.compile_failures={} jit.algebraic_rewrites={} jit.gvn_rewrites={} ",
+            "jit.checked_i64_rewrites={}"
+        ),
         stats.native_entries,
         stats.baseline_native_entries,
         stats.optimizing_native_entries,

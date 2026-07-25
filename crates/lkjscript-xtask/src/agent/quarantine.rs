@@ -3,7 +3,7 @@ use std::io::Read;
 use std::path::Path;
 
 pub fn move_file<T>(path: &Path, task_id: &str, reason: &str) -> Result<T, String> {
-    let hash = crate::sha256::digest_file(path)
+    let hash = crate::sha256::digest_file(path, super::bounds::QUARANTINE_BYTES)
         .map_err(|error| format!("hash corrupt state {}: {error}", path.display()))?;
     let directory = path
         .parent()
@@ -28,10 +28,20 @@ pub fn move_file<T>(path: &Path, task_id: &str, reason: &str) -> Result<T, Strin
 }
 
 fn equal_files(left: &Path, right: &Path) -> Result<bool, String> {
+    for path in [left, right] {
+        let bytes = path
+            .metadata()
+            .map_err(|error| format!("inspect quarantine candidate: {error}"))?
+            .len();
+        if bytes > super::bounds::QUARANTINE_BYTES {
+            return Err("quarantine comparison exceeds byte limit".into());
+        }
+    }
     let mut left = File::open(left).map_err(|error| format!("open corrupt state: {error}"))?;
     let mut right = File::open(right).map_err(|error| format!("open quarantine: {error}"))?;
     let mut left_bytes = [0u8; 8192];
     let mut right_bytes = [0u8; 8192];
+    let mut total = 0u64;
     loop {
         let left_count = left
             .read(&mut left_bytes)
@@ -44,6 +54,12 @@ fn equal_files(left: &Path, right: &Path) -> Result<bool, String> {
         }
         if left_count == 0 {
             return Ok(true);
+        }
+        total = total
+            .checked_add(u64::try_from(left_count).map_err(|_| "quarantine size overflow")?)
+            .ok_or("quarantine size overflow")?;
+        if total > super::bounds::QUARANTINE_BYTES {
+            return Err("quarantine comparison exceeds byte limit".into());
         }
     }
 }

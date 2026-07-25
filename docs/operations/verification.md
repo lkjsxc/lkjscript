@@ -8,9 +8,10 @@ gates without claiming unimplemented checks.
 ## Status
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
-placeholder, retained-result, `structure`, repository graph/context, and
-agent-state checks are described in the capsules. Complete Semantic Source
-protocol gates remain **Accepted Implementation Contracts**, not Current commands.
+placeholder, retained-result, `structure`, repository graph/context,
+agent-state, one-shot Agent Foundation V1, and compiler resource-profile checks
+are described in the capsules. Complete future Schema V1 and shared-ledger
+gates remain **Accepted Targets**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -24,11 +25,10 @@ It checks a hardcoded required-document set and repository-local links. Any
 document move must update that required set in the integration change; moved
 paths must not be retained as aliases merely to satisfy the old checker.
 
-Until `structure check` is implemented, each migration independently checks
-every tracked authored text file for at most 200 physical lines, 32 KiB, and
-ordinary lines at most 120 Unicode scalars; every authored directory for at most
-16 immediate tracked entries; path depth; local links; and stale old paths. The
-exact script/command and result belong in commit evidence.
+`structure check` is the hard repository topology gate. It checks every tracked
+authored text file for at most 200 physical lines, 32 KiB, and ordinary lines
+at most 120 Unicode scalars; every authored directory for at most 16 immediate
+tracked entries; path depth; local links; and stale old paths.
 
 ## Current Structure Gate
 
@@ -50,7 +50,7 @@ The structure gate must cover at least:
 
 - exact provenance, classification, capsule-manifest, and local-link rules;
 - file line/byte/width, directory width/depth, item, fan-out, and cycle rules;
-- generated location and temporary ratchet records; and
+- generated locations and the absence of a permanent exemption ratchet; and
 - symlink containment, malformed manifests, duplicate identities, unsupported
   analyses, and stale authority paths.
 
@@ -64,22 +64,25 @@ limits, revision, and total charge.
 Agent-state tests cover malformed, duplicate, unknown, and trailing JSON; stale
 and concurrent preconditions; exact and limit-plus-one bounds; checked revision
 overflow; deterministic quarantine; atomic failure before rename; evidence/hash
-validation; compaction retention and idempotence; and explicit context
-truncation. Generated snapshots stay under `target/lkjscript/agent-state/`.
+validation; ancestor-symlink rejection; bounded quarantine; crashed-lock
+recovery; compaction retention/idempotence; and explicit context truncation.
+Generated snapshots stay under `target/lkjscript/agent-state/`.
 
-## Accepted Semantic Operation Gate
+## Current Semantic Operation And Resource-Profile Gates
 
 The first protocol gate covers `snapshot`, `read_entity`, `query_node`,
 `diagnostics`, atomic `rename`, and atomic `replace_expression`. It includes
 strict schema/version/field/variant rejection; exact pinned serde boundary;
 duplicate/trailing/malformed Unicode JSON; aggregate budgets; deterministic
 ordering; stale identities/preconditions; rename collisions and complete
-references; expression type/effect/ownership constraints; publication failure;
-and byte-identical rollback.
+references; expression type/effect/ownership constraints; bounded response
+encoding before publish; publication failure; byte-identical rollback; and
+prepared-journal crash recovery before the next read.
 
-No protocol, graph, context, task-state, or resource-profile surface becomes
-Current until its focused fixtures, Current canonical semantics, and required
-runtime gates pass on the containing commit.
+Compiler resource-profile tests cover all five profiles, exact/lowered/+1/
+overflow boundaries, corpus roots, deterministic diagnostics, identity, and
+post-phase source/HIR/SSA publication guards. The broader pre-allocation and
+cross-authority ledger gates remain Accepted.
 
 ## Evidence Rule
 

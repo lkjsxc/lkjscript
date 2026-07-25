@@ -1,5 +1,5 @@
-#[cfg(test)]
-#[allow(clippy::expect_used)]
+#![allow(clippy::expect_used)]
+
 use super::{Value, MAX_SMALL_I64, MIN_SMALL_I64};
 
 #[test]

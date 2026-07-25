@@ -61,28 +61,74 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
         source_nodes: crate::semantic::codec::MAX_SCHEMA_NODES + 1,
         ..crate::semantic::schema::Charges::default()
     };
-    assert!(crate::semantic::engine::check_charges(&charges).is_err());
+    let limits = crate::semantic::charges::ProtocolLimits::for_profile(
+        crate::semantic::schema::ResourceProfile::Default,
+    );
+    assert!(limits.check_charges(&charges).is_err());
     let charges = crate::semantic::schema::Charges {
         work_units: crate::semantic::codec::MAX_WORK_UNITS + 1,
         ..crate::semantic::schema::Charges::default()
     };
-    assert!(crate::semantic::engine::check_charges(&charges).is_err());
+    assert!(limits.check_charges(&charges).is_err());
+    let sandbox = crate::semantic::charges::ProtocolLimits::for_profile(
+        crate::semantic::schema::ResourceProfile::Sandbox,
+    );
+    let charges = crate::semantic::schema::Charges {
+        work_units: 786_433,
+        ..crate::semantic::schema::Charges::default()
+    };
+    assert!(sandbox.check_charges(&charges).is_err());
+    assert!(limits.check_charges(&charges).is_ok());
     let response = crate::semantic::schema::Response {
         schema: crate::semantic::SCHEMA.to_string(),
         version: 1,
         compiler_build: "x".repeat(crate::semantic::codec::MAX_OUTPUT_BYTES),
-        profile: crate::semantic::schema::ResourceProfile::Standard,
+        profile: crate::semantic::schema::ResourceProfile::Default,
+        profile_identity: crate::semantic::charges::identity(
+            crate::semantic::schema::ResourceProfile::Default,
+        ),
+        limits: crate::semantic::charges::ProtocolLimits::for_profile(
+            crate::semantic::schema::ResourceProfile::Default,
+        )
+        .record(),
         revision: None,
         charges: crate::semantic::schema::Charges::default(),
         result: crate::semantic::schema::ResponseResult::Error {
             error: Box::new(crate::semantic::schema::ProtocolError {
                 code: crate::semantic::schema::ProtocolErrorCode::OutputLimit,
                 message: "bounded".to_string(),
+                diagnostic: None,
             }),
             diagnostic: None,
         },
     };
     assert!(crate::semantic::codec::encode_response(response).is_err());
+}
+
+#[test]
+fn all_core_profiles_are_closed_protocol_selections() {
+    let root = case_dir("profiles").join("main.lkjscript");
+    std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write source");
+    let default =
+        String::from_utf8(request(&root, "{\"kind\":\"snapshot\"}")).expect("request UTF-8");
+    for profile in [
+        "sandbox",
+        "default",
+        "build",
+        "trusted-local",
+        "deterministic",
+    ] {
+        let selected = default.replace(
+            "\"profile\":\"default\"",
+            &format!("\"profile\":\"{profile}\""),
+        );
+        let encoded = crate::semantic::execute(selected.as_bytes()).expect("selected profile");
+        let decoded = response(&encoded);
+        assert_eq!(decoded.profile.core().name().as_str(), profile);
+        assert_eq!(decoded.profile_identity.ceilings_sha256.len(), 64);
+    }
+    let unknown = default.replace("\"profile\":\"default\"", "\"profile\":\"standard\"");
+    assert!(crate::semantic::execute(unknown.as_bytes()).is_err());
 }
 
 #[test]

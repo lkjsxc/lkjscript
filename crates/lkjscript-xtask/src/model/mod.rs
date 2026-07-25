@@ -56,22 +56,6 @@ pub struct Provenance {
     pub generator: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RatchetFile {
-    pub schema: String,
-    pub version: u32,
-    pub records: Vec<Ratchet>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Ratchet {
-    pub rule: String,
-    pub path: String,
-    pub observed: u64,
-}
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Audit {
     pub schema: String,
@@ -92,7 +76,9 @@ pub struct FileRecord {
     pub path: String,
     pub bytes: u64,
     pub lines: u64,
-    pub max_line_scalars: u64,
+    pub max_physical_line_scalars: u64,
+    pub max_ordinary_line_scalars: u64,
+    pub exact_data_lines: u64,
     pub class: String,
     pub capsule: Option<String>,
 }

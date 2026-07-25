@@ -56,7 +56,25 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
         .map_or(Duration::ZERO, |stats| stats.native_execution);
     let jit = report.stats.map_or_else(|| "null".to_string(), jit);
     let json = format!(
-        "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},\"configured_auto_threshold\":{configured_threshold},\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},\"timings_ns\":{{\"compile_total\":{compile_total},\"source_loading\":{source_loading},\"parse\":{parsing},\"hir_analysis\":{hir_analysis},\"effect_analysis\":{effect_analysis},\"ssa_construction\":{ssa_construction},\"ssa_verification\":{ssa_verification},\"normalization\":{normalization},\"reference_bytecode_lowering\":{bytecode_lowering},\"reference_bytecode_validation\":{bytecode_validation},\"optimizing_passes\":{optimization},\"native_lowering_encoding\":{native_lowering},\"relocation_wx_installation\":{installation},\"time_to_first_native_entry\":{time_to_first_native},\"first_native_call\":{first_native},\"native_execution\":{native_execution},\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},\"source_files\":{source_files},\"jit\":{jit}}}",
+        concat!(
+            "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},",
+            "\"configured_auto_threshold\":{configured_threshold},",
+            "\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},",
+            "\"timings_ns\":{{\"compile_total\":{compile_total},",
+            "\"source_loading\":{source_loading},\"parse\":{parsing},",
+            "\"hir_analysis\":{hir_analysis},\"effect_analysis\":{effect_analysis},",
+            "\"ssa_construction\":{ssa_construction},",
+            "\"ssa_verification\":{ssa_verification},\"normalization\":{normalization},",
+            "\"reference_bytecode_lowering\":{bytecode_lowering},",
+            "\"reference_bytecode_validation\":{bytecode_validation},",
+            "\"optimizing_passes\":{optimization},",
+            "\"native_lowering_encoding\":{native_lowering},",
+            "\"relocation_wx_installation\":{installation},",
+            "\"time_to_first_native_entry\":{time_to_first_native},",
+            "\"first_native_call\":{first_native},\"native_execution\":{native_execution},",
+            "\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},",
+            "\"source_files\":{source_files},\"jit\":{jit}}}"
+        ),
         engine = string(engine),
         configured_threshold = report.configured_threshold,
         auto_enabled = report.auto_enabled,
@@ -74,10 +92,13 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
         optimization = optimization.as_nanos(),
         native_lowering = native_lowering.as_nanos(),
         installation = installation.as_nanos(),
+        time_to_first_native = time_to_first_native,
+        first_native = first_native,
         native_execution = native_execution.as_nanos(),
         vm_execution = report.vm_execution.as_nanos(),
         engine_execution = report.engine_execution.as_nanos(),
         source_files = report.compile.source_files,
+        jit = jit,
     );
     let line = format!("LKJSCRIPT_METRICS {json}\n");
     if let Some(path) = env::var_os("LKJSCRIPT_METRICS_FILE") {

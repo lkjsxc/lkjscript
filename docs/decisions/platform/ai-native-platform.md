@@ -15,12 +15,12 @@ the accepted destination and dependency order; it does not make complete
 Semantic Source/Agent Protocol V1, Edition 2, packages, general ownership, AOT,
 Wasm, concurrency, or self-hosting Current.
 
-The selected implementation sequence is bounded repository topology,
-repository graph/context, agent work state, first Semantic Source operations,
-and aggregate resource profiles. These are **Accepted Implementation
-Contracts**, not Current code; they are indexed in [Platform
-Decisions](README.md). Automatic optimizing promotion remains a valid later
-measured experiment.
+The selected foundation sequence is now Current for bounded repository
+topology, repository graph/context, agent work state, one-shot Agent Foundation
+V1 operations, and compiler Resource Profile V1 post-phase accounting. These
+bounded slices are indexed in [Platform Decisions](README.md); they do not make
+the complete future protocol, shared ledgers, or Edition 2 Current. Automatic
+optimizing promotion remains a valid later measured experiment.
 
 ## Problem
 
@@ -86,18 +86,18 @@ The following are no longer permanent product decisions:
 
 | Earlier assumption | Replacement authority | Current migration rule |
 | --- | --- | --- |
-| Physical named-open/named-close lines identify the language | Versioned Semantic Source with measured deterministic projections | Edition 1 text remains Current until roundtrip and migration gates pass |
-| Tiny depth, token, form, field, and directory-width numbers are semantic forever | Implementation safety maxima, host-selected profiles, and AI-maintainability lints | No Current limit is weakened before aggregate replacement bounds are Current |
-| One program-global imported declaration namespace is sufficient | Explicit package/module/declaration identities and qualified imports | Current resolution remains until package migration is complete |
-| `I64` and `F64` are the final numeric surface | Edition 2 exact-width numeric slices with explicit conversions | Current numeric behavior remains exact and unchanged |
-| `Result T Str` is a general system error model | Nominal typed provider/domain errors and distinct outcome channels | Current wrappers remain until mechanically migrated |
-| One universal `Handle` is the public resource model | Typed affine resources and typestate | Current handles retain stale-safe behavior during migration |
-| Host authority may be ambient | Explicit typed capabilities supplied through an application/component context | Existing ambient wrappers are transitional Current behavior |
-| Ordinary aggregates are semantically heap objects | Value semantics with compiler-selected placement | Current representation is not a future semantic promise |
-| Stable handles are the only native reference representation worth considering | Exact direct generated-code references may be measured behind stack maps; handles remain valid boundaries | No representation changes without exact-root and stale-reference evidence |
-| Runtime JIT is the only final deployment strategy; offline PGO/cache are permanently rejected | The measured execution portfolio in [Execution Portfolio](../execution/execution-portfolio.md) | Current JIT modes and evidence remain unchanged |
-| Zero dependencies is an end in itself | Measured trusted-computing-base classification | Every added dependency still requires an accepted measured decision |
-| `Owned Buf` is the final ownership surface | Inferred modes and type-specific ownership with place-based borrowing | The Current safe island remains honestly partial |
+| Physical named-open/named-close lines identify the language | Versioned Semantic Source with measured deterministic projections | Edition 1 text remains Current until roundtrip and migration gates pass | <!-- LKJ-EXACT-DATA -->
+| Tiny depth, token, form, field, and directory-width numbers are semantic forever | Implementation safety maxima, host-selected profiles, and AI-maintainability lints | No Current limit is weakened before aggregate replacement bounds are Current | <!-- LKJ-EXACT-DATA -->
+| One program-global imported declaration namespace is sufficient | Explicit package/module/declaration identities and qualified imports | Current resolution remains until package migration is complete | <!-- LKJ-EXACT-DATA -->
+| `I64` and `F64` are the final numeric surface | Edition 2 exact-width numeric slices with explicit conversions | Current numeric behavior remains exact and unchanged | <!-- LKJ-EXACT-DATA -->
+| `Result T Str` is a general system error model | Nominal typed provider/domain errors and distinct outcome channels | Current wrappers remain until mechanically migrated | <!-- LKJ-EXACT-DATA -->
+| One universal `Handle` is the public resource model | Typed affine resources and typestate | Current handles retain stale-safe behavior during migration | <!-- LKJ-EXACT-DATA -->
+| Host authority may be ambient | Explicit typed capabilities supplied through an application/component context | Existing ambient wrappers are transitional Current behavior | <!-- LKJ-EXACT-DATA -->
+| Ordinary aggregates are semantically heap objects | Value semantics with compiler-selected placement | Current representation is not a future semantic promise | <!-- LKJ-EXACT-DATA -->
+| Stable handles are the only native reference representation worth considering | Exact direct generated-code references may be measured behind stack maps; handles remain valid boundaries | No representation changes without exact-root and stale-reference evidence | <!-- LKJ-EXACT-DATA -->
+| Runtime JIT is the only final deployment strategy; offline PGO/cache are permanently rejected | The measured execution portfolio in [Execution Portfolio](../execution/execution-portfolio.md) | Current JIT modes and evidence remain unchanged | <!-- LKJ-EXACT-DATA -->
+| Zero dependencies is an end in itself | Measured trusted-computing-base classification | Every added dependency still requires an accepted measured decision | <!-- LKJ-EXACT-DATA -->
+| `Owned Buf` is the final ownership surface | Inferred modes and type-specific ownership with place-based borrowing | The Current safe island remains honestly partial | <!-- LKJ-EXACT-DATA -->
 
 The historical records remain evidence. Their incompatible permanent policy is
 superseded; their descriptions of Current behavior and measured results are not.
@@ -106,17 +106,17 @@ superseded; their descriptions of Current behavior and measured results are not.
 
 | Layer | Current at the adoption baseline | Accepted target | First acceptance evidence |
 | --- | --- | --- | --- |
-| Source | Edition 1 line syntax parsed to internal forms | Versioned Semantic Source, deterministic projections, typed holes | Exact corpus parse/format/parse and byte-canonical roundtrip |
-| Agent interface | Files, human diagnostics, CLI compilation | Revisioned semantic queries and atomic edits with structured diagnostics | Stale/precondition rejection and no partial writes |
-| Semantics | Products, marker traits, I64/F64, partial ownership island | Edition 2 ADTs/match/Never, exact widths, typed errors, general safe ownership | Cross-evaluator/VM differential and malformed-boundary gates per slice |
-| Authority | Operation/effect summaries plus transitional ambient host services | Explicit capabilities and typed provider resources | Capability-confinement and fake-provider tests |
-| Packages | Contained import roots and environment fallback | Manifest, lock, content identity, explicit modules/components | Clean locked hermetic rebuild and fingerprint tests |
-| IR | Resolved typed HIR, verified SSA, exact roots/proofs | Ownership/effect/capability/drop/metering-complete IR family | Independent verifier and differential gates |
-| Execution | Evaluator, validated VM, baseline JIT, forced proof JIT on Linux x86-64 | VM, generated baseline, optimizing JIT, AOT, cache, optional local PGO, OSR, Wasm | Workload-specific predeclared adoption gates |
-| Runtime | Precise non-moving traced heap and stable handles | Replaceable placement/collector plans and runtime profiles | Exact-root stress plus latency/throughput/RSS evidence |
-| Concurrency | Synchronous single-worker runtime | Isolates, structured task scopes, bounded channels, deterministic scheduler tests | Race/cancellation/leak schedule exploration |
-| Portability | Linux x86-64 acceptance | Linux AArch64, Wasm/components, then measured additional targets | Same semantic IR and explicit unsupported-target failures |
-| Self-hosting | Rust bootstrap implementation | Staged lkjscript frontend, analyses, optimizer, and tools | Reproducible normalized stage comparison |
+| Source | Edition 1 line syntax parsed to internal forms | Versioned Semantic Source, deterministic projections, typed holes | Exact corpus parse/format/parse and byte-canonical roundtrip | <!-- LKJ-EXACT-DATA -->
+| Agent interface | Files, human diagnostics, CLI compilation | Revisioned semantic queries and atomic edits with structured diagnostics | Stale/precondition rejection and no partial writes | <!-- LKJ-EXACT-DATA -->
+| Semantics | Products, marker traits, I64/F64, partial ownership island | Edition 2 ADTs/match/Never, exact widths, typed errors, general safe ownership | Cross-evaluator/VM differential and malformed-boundary gates per slice | <!-- LKJ-EXACT-DATA -->
+| Authority | Operation/effect summaries plus transitional ambient host services | Explicit capabilities and typed provider resources | Capability-confinement and fake-provider tests | <!-- LKJ-EXACT-DATA -->
+| Packages | Contained import roots and environment fallback | Manifest, lock, content identity, explicit modules/components | Clean locked hermetic rebuild and fingerprint tests | <!-- LKJ-EXACT-DATA -->
+| IR | Resolved typed HIR, verified SSA, exact roots/proofs | Ownership/effect/capability/drop/metering-complete IR family | Independent verifier and differential gates | <!-- LKJ-EXACT-DATA -->
+| Execution | Evaluator, validated VM, baseline JIT, forced proof JIT on Linux x86-64 | VM, generated baseline, optimizing JIT, AOT, cache, optional local PGO, OSR, Wasm | Workload-specific predeclared adoption gates | <!-- LKJ-EXACT-DATA -->
+| Runtime | Precise non-moving traced heap and stable handles | Replaceable placement/collector plans and runtime profiles | Exact-root stress plus latency/throughput/RSS evidence | <!-- LKJ-EXACT-DATA -->
+| Concurrency | Synchronous single-worker runtime | Isolates, structured task scopes, bounded channels, deterministic scheduler tests | Race/cancellation/leak schedule exploration | <!-- LKJ-EXACT-DATA -->
+| Portability | Linux x86-64 acceptance | Linux AArch64, Wasm/components, then measured additional targets | Same semantic IR and explicit unsupported-target failures | <!-- LKJ-EXACT-DATA -->
+| Self-hosting | Rust bootstrap implementation | Staged lkjscript frontend, analyses, optimizer, and tools | Reproducible normalized stage comparison | <!-- LKJ-EXACT-DATA -->
 
 A Target cell is not a capability claim.
 

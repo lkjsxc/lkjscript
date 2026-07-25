@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::semantic::codec::error;
 use crate::semantic::schema::{IdentityRelation, ProtocolError, ProtocolErrorCode};
 use crate::semantic::transaction::ResolvedOperation;
@@ -75,7 +77,63 @@ pub(super) fn identity_relations(
             }
         }
     }
+    append_changed_owners(base, next, operations, &mut output);
+    output.sort_by(|left, right| {
+        left.old_key
+            .cmp(&right.old_key)
+            .then_with(|| left.relation.cmp(&right.relation))
+    });
     Ok(output)
+}
+
+fn append_changed_owners(
+    base: &ValidatedSourceTree,
+    next: &ValidatedSourceTree,
+    operations: &[ResolvedOperation],
+    output: &mut Vec<IdentityRelation>,
+) {
+    let direct: HashSet<_> = output
+        .iter()
+        .filter_map(|item| item.old_key.clone())
+        .collect();
+    let base_nodes = crate::semantic::tree::source_nodes(base);
+    let next_nodes = crate::semantic::tree::source_nodes(next);
+    for old in base.declarations() {
+        let old_key = old.key().to_hex();
+        if direct.contains(&old_key) {
+            continue;
+        }
+        let renamed = operations.iter().find_map(|operation| match operation {
+            ResolvedOperation::Rename { key, new_name, .. } if key == &old_key => Some(new_name),
+            _ => None,
+        });
+        let expected_name = renamed.map_or_else(|| old.name(), String::as_str);
+        let Some(new) = next.declarations().iter().find(|candidate| {
+            candidate.kind() == old.kind()
+                && candidate.name() == expected_name
+                && candidate.origin().logical_path() == old.origin().logical_path()
+        }) else {
+            continue;
+        };
+        let old_index = usize::try_from(old.node().index()).ok();
+        let new_index = usize::try_from(new.node().index()).ok();
+        let changed = old_index
+            .and_then(|index| base_nodes.get(index))
+            .zip(new_index.and_then(|index| next_nodes.get(index)))
+            .is_some_and(|(left, right)| {
+                crate::semantic::tree::fingerprint(left)
+                    != crate::semantic::tree::fingerprint(right)
+            });
+        if changed {
+            output.push(IdentityRelation {
+                relation: "changed_reference_owner".into(),
+                old_key: Some(old_key),
+                new_key: Some(new.key().to_hex()),
+                old_node: Some(old.node().index()),
+                new_node: Some(new.node().index()),
+            });
+        }
+    }
 }
 
 fn follow_path(

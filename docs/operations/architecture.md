@@ -9,9 +9,11 @@ to their authorities.
 
 The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
 Semantic Source Foundation V1, Bounded Repository Topology, Repository
-Intelligence Graph/context, and externalized agent work state are Current.
-Complete Schema/Agent Protocol V1, transactions, typed holes, and aggregate
-profiles are **Accepted Implementation Contracts**, not Current code.
+Intelligence Graph/context, externalized agent work state, the bounded one-shot
+Agent Foundation V1 protocol, and the compiler resource-profile foundation are
+Current. Complete future Schema V1, daemon transport, typed holes,
+pre-allocation compiler profiles, and shared cross-authority ledgers are
+**Accepted Targets**, not Current code.
 
 ## Current Compiler/Runtime Boundary
 
@@ -50,21 +52,26 @@ The accepted ownership boundaries are:
 - Semantic Source/compiler boundary: source/entity/node identity, derived facts,
   diagnostics, and atomic semantic edits;
 - agent-state boundary: immutable task/base/scope preconditions, action and
-  command history, blockers/risks, exact references, compaction, and atomic state publication;
+  command history, blockers/risks, exact references, compaction, and atomic
+  state publication;
 - Git: reviewed authored-tree publication authority; and
 - `target/`: disposable generated audits, graphs, contexts, and state snapshots.
 
-The first four flow stages are Current in `lkjscript-xtask`; Semantic Source
-transactions remain Accepted. Generated indexes and task assertions never enter
-compiler semantic authority.
+The first four flow stages are Current in `lkjscript-xtask`; one-shot Semantic
+Source transactions are Current in `lkjscript-compiler` and the app CLI.
+Generated indexes and task assertions never enter compiler semantic authority.
 
 ## Aggregate Boundaries
 
-Topology, graph/context, task state, and Semantic Source share versioned resource
-profiles but retain exact subsystem categories. Checked charges precede
-allocation, traversal, staging, or publication. Exhaustion returns structured
-category/limit/attempted-charge diagnostics and cannot publish partial authority.
-Edition 1 source limits remain unchanged.
+The Semantic Protocol and compiler select the same five versioned profiles but
+retain independent request-local ledgers. Topology, graph/context, and task
+state use versioned bounded contracts without pretending to share that ledger.
+Topology and graph bound traversal; task state bounds decode, retained Git
+output, references, context, and publication; the protocol pre-bounds request,
+source bytes/units, work, and serialized output; compiler profile charges are
+exact post-phase guards before each downstream phase and artifact publication.
+Exhaustion cannot publish partial authority. Edition 1 source limits remain
+unchanged.
 
 ## Authority Links
 

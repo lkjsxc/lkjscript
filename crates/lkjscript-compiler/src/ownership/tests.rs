@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use super::{check, OWNERSHIP_ANALYSIS_MAX_EXPRESSION_NODES};
 use crate::hir::{EffectSet, Expr, ExprKind, Main, Program, SourceId, Type};
 

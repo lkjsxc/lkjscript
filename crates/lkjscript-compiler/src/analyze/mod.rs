@@ -18,7 +18,6 @@ pub const TRAIT_SOLVER_MAX_WORK: usize = 256;
 use crate::source::ValidatedSourceTree;
 use crate::types::parse_one;
 
-#[cfg(test)]
 pub(crate) fn analyze_program(program: &ValidatedSourceTree) -> Result<hir::Program> {
     let mut program = analyze_program_without_effects(program)?;
     crate::effects::infer(&mut program);

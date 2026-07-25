@@ -4,13 +4,43 @@ use crate::source::{
     FOUNDATION_MAX_SOURCE_UNITS,
 };
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct SourceFoundationBudget {
     source_units: u64,
     source_bytes: u64,
+    max_source_units: u64,
+    max_source_bytes: u64,
+}
+
+impl Default for SourceFoundationBudget {
+    fn default() -> Self {
+        Self {
+            source_units: 0,
+            source_bytes: 0,
+            max_source_units: FOUNDATION_MAX_SOURCE_UNITS,
+            max_source_bytes: FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
+        }
+    }
 }
 
 impl SourceFoundationBudget {
+    pub(crate) const fn with_limits(max_source_units: u64, max_source_bytes: u64) -> Self {
+        Self {
+            source_units: 0,
+            source_bytes: 0,
+            max_source_units: if max_source_units < FOUNDATION_MAX_SOURCE_UNITS {
+                max_source_units
+            } else {
+                FOUNDATION_MAX_SOURCE_UNITS
+            },
+            max_source_bytes: if max_source_bytes < FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES {
+                max_source_bytes
+            } else {
+                FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES
+            },
+        }
+    }
+
     pub(crate) fn check_metadata(
         &self,
         origin: &SourceOrigin,
@@ -22,15 +52,15 @@ impl SourceFoundationBudget {
                 origin.clone(),
                 "source-units",
                 u64::MAX,
-                FOUNDATION_MAX_SOURCE_UNITS,
+                self.max_source_units,
             )
         })?;
-        if units > FOUNDATION_MAX_SOURCE_UNITS {
+        if units > self.max_source_units {
             return Err(foundation_resource_error(
                 origin.clone(),
                 "source-units",
                 units,
-                FOUNDATION_MAX_SOURCE_UNITS,
+                self.max_source_units,
             ));
         }
         let bytes = self.source_bytes.checked_add(file_bytes).ok_or_else(|| {
@@ -38,29 +68,30 @@ impl SourceFoundationBudget {
                 origin.clone(),
                 "aggregate-source-bytes",
                 u64::MAX,
-                FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
+                self.max_source_bytes,
             )
         })?;
-        if bytes > FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES {
+        if bytes > self.max_source_bytes {
             return Err(foundation_resource_error(
                 origin.clone(),
                 "aggregate-source-bytes",
                 bytes,
-                FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
+                self.max_source_bytes,
             ));
         }
         Ok(())
     }
 
     pub(crate) fn remaining_read_allowance(&self, origin: &SourceOrigin) -> SourceResult<u64> {
-        let aggregate = FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES
+        let aggregate = self
+            .max_source_bytes
             .checked_sub(self.source_bytes)
             .ok_or_else(|| {
                 foundation_resource_error(
                     origin.clone(),
                     "aggregate-source-bytes",
                     self.source_bytes,
-                    FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
+                    self.max_source_bytes,
                 )
             })?;
         Ok(FOUNDATION_MAX_SOURCE_FILE_BYTES.min(aggregate))
@@ -77,7 +108,7 @@ impl SourceFoundationBudget {
                 origin.clone(),
                 "source-units",
                 u64::MAX,
-                FOUNDATION_MAX_SOURCE_UNITS,
+                self.max_source_units,
             )
         })?;
         self.source_bytes = self.source_bytes.checked_add(file_bytes).ok_or_else(|| {
@@ -85,7 +116,7 @@ impl SourceFoundationBudget {
                 origin.clone(),
                 "aggregate-source-bytes",
                 u64::MAX,
-                FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
+                self.max_source_bytes,
             )
         })?;
         Ok(())
@@ -96,6 +127,8 @@ impl SourceFoundationBudget {
         Self {
             source_units,
             source_bytes,
+            max_source_units: FOUNDATION_MAX_SOURCE_UNITS,
+            max_source_bytes: FOUNDATION_MAX_AGGREGATE_SOURCE_BYTES,
         }
     }
 }

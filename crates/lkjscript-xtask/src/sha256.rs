@@ -86,16 +86,32 @@ pub fn digest(input: &[u8]) -> String {
     digest.finish()
 }
 
-pub fn digest_file(path: &Path) -> io::Result<String> {
+pub fn digest_file(path: &Path, limit: u64) -> io::Result<String> {
     let mut file = std::fs::File::open(path)?;
     let mut digest = Sha256::new();
     let mut buffer = [0u8; 8192];
+    let mut total = 0u64;
     loop {
-        let read = file.read(&mut buffer)?;
-        if read == 0 {
+        let remaining = limit.saturating_sub(total);
+        let request = usize::try_from(remaining.saturating_add(1))
+            .unwrap_or(usize::MAX)
+            .min(buffer.len());
+        let read_bytes = file.read(&mut buffer[..request])?;
+        if read_bytes == 0 {
             break;
         }
-        digest.update(&buffer[..read]);
+        let read_count = u64::try_from(read_bytes)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "digest size overflow"))?;
+        total = total
+            .checked_add(read_count)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "digest size overflow"))?;
+        if total > limit {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "file exceeds digest byte limit",
+            ));
+        }
+        digest.update(&buffer[..read_bytes]);
     }
     Ok(digest.finish())
 }
@@ -145,4 +161,3 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
         *slot = slot.wrapping_add(value);
     }
 }
-

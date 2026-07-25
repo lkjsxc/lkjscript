@@ -14,14 +14,19 @@ foundation diagnostics, deterministic formatting, checked source-closure safety
 maxima, and compiler/analyzer cutover. The obsolete AST/lexer/parser/import
 source-authority modules are removed.
 
-**Accepted Implementation Contract** for the first Current-candidate
+**Current** for the bounded one-shot `lkjscript.agent-foundation` version 1
 `snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic `rename`, and
-atomic `replace_expression` operations, including the strict serde boundary.
-These endpoints are not Current. Complete Semantic Source Schema V1, the wider
-transaction vocabulary, daemon transport, all six principal structured compiler
-errors, and typed holes remain **Accepted Targets**. No complete Schema V1 or
-Agent Protocol V1 identity is emitted yet. Unsupported operations do not exist
-as inert endpoints.
+atomic `replace_expression` operations and their strict serde boundary. Publish
+responses are bounded before file changes; repository-local publication uses
+recovery journals and exclusion, and an interrupted prepared transaction is
+rolled back before the next protocol read. This identity is deliberately the
+Agent Foundation, not the complete future Semantic Source Schema V1.
+
+Complete Schema V1, a wider transaction vocabulary, daemon transport, exact
+source-node correlation for every HIR/ownership/control/layout/proof fact,
+typed holes, and pre-allocation node/work metering remain **Accepted Targets**.
+Unavailable query facts are explicit, not guessed. Unsupported operations do
+not exist as inert endpoints.
 
 ## Authority And Status Vocabulary
 

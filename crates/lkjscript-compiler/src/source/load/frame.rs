@@ -107,7 +107,10 @@ pub(super) fn load_frame(
         return Err(SourceDiagnostic::new(
             "LKJ-SRC-IMPORTED-MAIN",
             DiagnosticCategory::Declaration,
-            "imported file may contain only imports and function, product, trait, or impl declarations; main is forbidden",
+            concat!(
+                "imported file may contain only imports and function, product, trait, or ",
+                "impl declarations; main is forbidden"
+            ),
             origin,
             parsed
                 .syntax

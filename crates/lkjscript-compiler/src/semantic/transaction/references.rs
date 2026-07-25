@@ -138,12 +138,17 @@ fn symbolic_name(node: &SourceNode) -> Option<&str> {
 }
 
 fn rename_product_references(node: &mut SourceNode, old: &str, new: &str) {
-    for index in 0..node.children.len().saturating_sub(1) {
-        let (left, right) = node.children.split_at_mut(index + 1);
-        if matches!(&left[index].kind, SyntaxKind::Symbol { name } if name == "Product") {
-            if let SyntaxKind::Symbol { name } = &mut right[0].kind {
-                if name == old {
-                    *name = new.to_string();
+    if matches!(
+        &node.kind,
+        SyntaxKind::Call { name } if matches!(name.as_str(), "sig" | "params" | "type" | "for")
+    ) {
+        for index in 0..node.children.len().saturating_sub(1) {
+            let (left, right) = node.children.split_at_mut(index + 1);
+            if matches!(&left[index].kind, SyntaxKind::Symbol { name } if name == "Product") {
+                if let SyntaxKind::Symbol { name } = &mut right[0].kind {
+                    if name == old {
+                        *name = new.to_string();
+                    }
                 }
             }
         }

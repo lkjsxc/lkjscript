@@ -50,18 +50,25 @@ task; every later checkpoint increments by one. Task identity, base revision, go
 are immutable. Ordered action and command history, decisions, commits, invalidations, and references are append-only
 except for explicit compaction. Action and command sequence numbers are increasing and unique.
 
-Before publication the service validates request, string, collection, history, reference, output, and aggregate-work
-bounds with checked arithmetic. It verifies task identity, current `HEAD`, base ancestry, monotonic repository history,
-commit objects, capsule identities, normalized repository-relative paths, content hashes, and evidence references.
-Malformed, duplicate, unknown, trailing, stale, or over-limit input publishes nothing.
+Before publication the service checks request bytes before typed decoding, then validates string, collection, history,
+reference, output, and aggregate-work bounds immediately after that bounded decode and before repository work or
+publication. It verifies task identity, current `HEAD`, base ancestry, monotonic repository history, produced commits
+within the inclusive base-to-current ancestry range, capsule identities, exact normalized repository-relative paths,
+ancestor containment, content hashes, and evidence references. Malformed, duplicate, unknown, trailing, stale, or
+over-limit input publishes nothing.
 
-Publication uses a same-directory create-new temporary file, `write_all`, file synchronization where supported,
-atomic rename, and parent-directory synchronization where supported. A per-task local checkpoint exclusion file rejects
-concurrent updates; it is synchronization only, not a lease or task authority. No partial JSON becomes live.
+Publication uses a same-directory create-new temporary file, `write_all`, file
+synchronization where supported, atomic rename, and parent-directory
+synchronization where supported. Every live read, validation, compaction,
+quarantine, and write holds the same per-task local exclusion file. On the
+Current Linux target a lock records its process ID; a lock whose process no
+longer exists is removed before one bounded retry. The lock is synchronization only, not a lease or
+task authority. No partial JSON becomes live.
 
-Malformed or structurally corrupt live bytes are moved to a deterministic quarantine name containing their SHA-256.
-An existing different quarantine destination is never overwritten. The command fails after quarantine; a later explicit
-revision-zero checkpoint is the deterministic recovery path.
+Malformed or structurally corrupt live bytes within the quarantine byte ceiling are moved to a deterministic quarantine
+name containing their full SHA-256. An existing different quarantine destination is never overwritten. A file above
+that ceiling is rejected for explicit operator removal rather than scanned without a bound. The command fails after
+quarantine; a later explicit revision-zero checkpoint is the deterministic recovery path.
 
 ## Resume, Validation, And Compaction
 
@@ -76,10 +83,11 @@ command results, commits, and all artifact/evidence references. A second compact
 
 ## Bounds And Failure Policy
 
-V1 constants bound request and generated output bytes, each string, each collection, combined history, combined
-artifact/evidence references, aggregate validation work, capsule enumeration, Git output, and referenced artifact
-reads. Arithmetic overflow is an error before allocation or publication. Repository traversal uses bounded Git and the
-bounded repository graph; it never recursively walks untrusted state input.
+V1 constants bound request and generated output bytes, quarantine bytes, each string, each collection, combined
+history, combined artifact/evidence references, aggregate validation work, capsule enumeration, retained Git output,
+and referenced artifact reads. Git pipes are drained while retaining at most the configured bound. Arithmetic overflow
+is an error before repository work or publication. Repository traversal uses bounded Git and the bounded repository
+graph; it never recursively walks untrusted state input.
 
 ## Deferred And Rejected
 

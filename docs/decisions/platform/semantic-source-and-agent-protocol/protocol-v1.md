@@ -53,11 +53,11 @@ The first converted codes are:
 
 | Code | Meaning | Safe repair policy |
 | --- | --- | --- |
-| `LKJ-SRC-UNMATCHED-MARKER` | opening/closing marker mismatch | only offer an edit when the unique intended marker is structurally proven |
+| `LKJ-SRC-UNMATCHED-MARKER` | opening/closing marker mismatch | only offer an edit when the unique intended marker is structurally proven | <!-- LKJ-EXACT-DATA -->
 | `LKJ-DECL-DUPLICATE` | duplicate declaration key/name | no automatic rename without a requested name |
 | `LKJ-NAME-UNKNOWN` | unresolved binding/declaration | offer only uniquely proven visible-name replacement |
 | `LKJ-CALL-ARITY` | exact call arity mismatch | report missing/excess positions; do not invent effectful arguments |
-| `LKJ-TYPE-MISMATCH` | expected and actual types differ | offer only semantics-preserving coercion/construction known to be exact |
+| `LKJ-TYPE-MISMATCH` | expected and actual types differ | offer only semantics-preserving coercion/construction known to be exact | <!-- LKJ-EXACT-DATA -->
 | `LKJ-EDIT-STALE` | revision or precondition mismatch | refresh/rebase action; never apply the stale mutation |
 
 Human text is a projection of this record. Existing message wording may remain

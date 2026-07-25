@@ -44,22 +44,31 @@ pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<Diag
     if !include_hir || crate::analyze::analyze_program(tree).is_ok() {
         return Vec::new();
     }
-    let mut known = HashSet::new();
+    let mut globals = HashSet::new();
     let mut arities = HashMap::new();
     for declaration in tree.declarations() {
         if declaration.kind() == DeclarationKind::Function {
-            known.insert(declaration.name().to_string());
+            globals.insert(declaration.name().to_string());
         }
     }
     let source_nodes = crate::semantic::tree::source_nodes(tree);
     for node in &source_nodes {
-        collect_local_names(node, &mut known);
         if let Some((name, arity)) = function_arity(node) {
             arities.insert(name, arity);
         }
     }
+    let mut names_by_declaration = HashMap::new();
+    for declaration in tree.declarations() {
+        let mut names = globals.clone();
+        if let Ok(index) = usize::try_from(declaration.node().index()) {
+            if let Some(root) = source_nodes.get(index) {
+                collect_local_names(root, &mut names);
+            }
+        }
+        names_by_declaration.insert(declaration.key().to_hex(), names);
+    }
     let mut diagnostics = Vec::new();
-    for (index, node) in source_nodes.iter().enumerate() {
+    for (source_index, node) in source_nodes.iter().enumerate() {
         let SyntaxKind::Call { name } = &node.kind else {
             continue;
         };
@@ -68,8 +77,13 @@ pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<Diag
         {
             continue;
         }
-        let index = index as u32;
-        if !known.contains(name) {
+        let index = u32::try_from(source_index).unwrap_or(u32::MAX);
+        let known = tree
+            .nodes()
+            .get(source_index)
+            .and_then(|summary| crate::semantic::tree::containing_declaration(tree, summary))
+            .and_then(|declaration| names_by_declaration.get(&declaration.key().to_hex()));
+        if !known.is_some_and(|names| names.contains(name)) {
             diagnostics.push(super::diagnostic_records::node(
                 DiagnosticCode::UnknownName,
                 DiagnosticCategory::NameResolution,

@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
 use std::path::PathBuf;
 
 use lkjscript_core::{Op, Result};

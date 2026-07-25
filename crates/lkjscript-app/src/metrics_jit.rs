@@ -8,7 +8,11 @@ pub fn render(stats: &JitStats) -> String {
         .iter()
         .map(|function| {
             format!(
-                "{{\"id\":{},\"name\":{},\"state\":{},\"calls\":{},\"attempts\":{},\"failure\":{},\"code_object\":{},\"epoch\":{},\"native_entries\":{}}}",
+                concat!(
+                    "{{\"id\":{},\"name\":{},\"state\":{},\"calls\":{},",
+                    "\"attempts\":{},\"failure\":{},\"code_object\":{},",
+                    "\"epoch\":{},\"native_entries\":{}}}"
+                ),
                 function.function().raw(),
                 string(function.name()),
                 string(&format!("{:?}", function.state())),
@@ -18,7 +22,9 @@ pub fn render(stats: &JitStats) -> String {
                     || "null".to_string(),
                     |failure| string(&format!("{failure:?}"))
                 ),
-                function.code_object().map_or_else(|| "null".to_string(), |id| id.to_string()),
+                function
+                    .code_object()
+                    .map_or_else(|| "null".to_string(), |id| id.to_string()),
                 function.epoch(),
                 function.native_entries(),
             )
@@ -31,7 +37,23 @@ pub fn render(stats: &JitStats) -> String {
         .map(|object| {
             let optimization = object.optimization_stats.unwrap_or_default();
             format!(
-                "{{\"identity\":{},\"tier\":{},\"functions\":{},\"code_bytes\":{},\"metadata_bytes\":{},\"optimization_metadata_bytes_estimate\":{},\"accounted_allocation_bytes\":{},\"relocations\":{},\"safepoints\":{},\"optimization_ns\":{},\"lowering_encoding_ns\":{},\"installation_ns\":{},\"work_units\":{},\"optimization_work_units\":{},\"input_instructions\":{},\"output_instructions\":{},\"instruction_growth\":{},\"cleanup_removed_instructions\":{},\"iterations\":{},\"optimizing_passes\":{},\"discovery_passes\":{},\"checker_passes\":{},\"reconstruction_passes\":{},\"cleanup_passes\":{},\"validation_passes\":{},\"certificate_records\":{},\"certificate_bytes_estimate\":{},\"algebraic_rewrites\":{},\"gvn_rewrites\":{},\"checked_i64_rewrites\":{},\"native_entries\":{},\"wx_verified\":{}}}",
+                concat!(
+                    "{{\"identity\":{},\"tier\":{},\"functions\":{},\"code_bytes\":{},",
+                    "\"metadata_bytes\":{},\"optimization_metadata_bytes_estimate\":{},",
+                    "\"accounted_allocation_bytes\":{},\"relocations\":{},\"safepoints\":{},",
+                    "\"optimization_ns\":{},\"lowering_encoding_ns\":{},",
+                    "\"installation_ns\":{},\"work_units\":{},",
+                    "\"optimization_work_units\":{},\"input_instructions\":{},",
+                    "\"output_instructions\":{},\"instruction_growth\":{},",
+                    "\"cleanup_removed_instructions\":{},\"iterations\":{},",
+                    "\"optimizing_passes\":{},\"discovery_passes\":{},",
+                    "\"checker_passes\":{},\"reconstruction_passes\":{},",
+                    "\"cleanup_passes\":{},\"validation_passes\":{},",
+                    "\"certificate_records\":{},\"certificate_bytes_estimate\":{},",
+                    "\"algebraic_rewrites\":{},\"gvn_rewrites\":{},",
+                    "\"checked_i64_rewrites\":{},\"native_entries\":{},",
+                    "\"wx_verified\":{}}}"
+                ),
                 object.identity,
                 string(&format!("{:?}", object.tier)),
                 object.functions.len(),
@@ -69,7 +91,27 @@ pub fn render(stats: &JitStats) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "{{\"compile_failures\":{},\"vm_fallbacks\":{},\"native_entries\":{},\"baseline_native_entries\":{},\"optimizing_native_entries\":{},\"baseline_code_objects\":{},\"optimizing_code_objects\":{},\"optimizing_passes\":{},\"optimization_discovery_passes\":{},\"optimization_checker_passes\":{},\"optimization_reconstruction_passes\":{},\"optimization_cleanup_passes\":{},\"optimization_validation_passes\":{},\"optimization_certificate_records\":{},\"optimization_certificate_bytes_estimate\":{},\"algebraic_rewrites\":{},\"gvn_rewrites\":{},\"checked_i64_rewrites\":{},\"direct_native_calls\":{},\"poll_v1_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},\"auto_enabled\":{},\"code_cache_peak_objects\":{},\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},\"accounted_allocation_peak_bytes\":{},\"allocations\":{},\"allocation_bytes_estimate\":{},\"collections\":{},\"peak_live_heap_bytes_estimate\":{},\"maximum_roots\":{},\"runtime_heap_attempts\":{},\"runtime_heap_successes\":{},\"barrier_count\":{},\"peak_native_frame_depth\":{},\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},\"functions\":[{}],\"objects\":[{}]}}",
+        concat!(
+            "{{\"compile_failures\":{},\"vm_fallbacks\":{},\"native_entries\":{},",
+            "\"baseline_native_entries\":{},\"optimizing_native_entries\":{},",
+            "\"baseline_code_objects\":{},\"optimizing_code_objects\":{},",
+            "\"optimizing_passes\":{},\"optimization_discovery_passes\":{},",
+            "\"optimization_checker_passes\":{},\"optimization_reconstruction_passes\":{},",
+            "\"optimization_cleanup_passes\":{},\"optimization_validation_passes\":{},",
+            "\"optimization_certificate_records\":{},",
+            "\"optimization_certificate_bytes_estimate\":{},\"algebraic_rewrites\":{},",
+            "\"gvn_rewrites\":{},\"checked_i64_rewrites\":{},\"direct_native_calls\":{},",
+            "\"poll_v1_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},",
+            "\"auto_enabled\":{},\"code_cache_peak_objects\":{},",
+            "\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},",
+            "\"accounted_allocation_peak_bytes\":{},\"allocations\":{},",
+            "\"allocation_bytes_estimate\":{},\"collections\":{},",
+            "\"peak_live_heap_bytes_estimate\":{},\"maximum_roots\":{},",
+            "\"runtime_heap_attempts\":{},\"runtime_heap_successes\":{},",
+            "\"barrier_count\":{},\"peak_native_frame_depth\":{},",
+            "\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},",
+            "\"functions\":[{}],\"objects\":[{}]}}"
+        ),
         stats.compile_failures,
         stats.vm_fallbacks,
         stats.native_entries,

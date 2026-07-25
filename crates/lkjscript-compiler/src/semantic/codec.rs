@@ -1,7 +1,9 @@
 use crate::semantic::schema::{
-    ExpressionCounts, OperationRequest, ProtocolError, ProtocolErrorCode, Request, Response,
+    ExpressionCounts, OperationRequest, ProtocolError, ProtocolErrorCode, Request,
     TransactionOperation,
 };
+
+pub(crate) use super::response_codec::encode_response;
 
 pub const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_JSON_DEPTH: u32 = 64;
@@ -43,6 +45,7 @@ pub(crate) fn decode_request(input: &[u8]) -> Result<Request, ProtocolError> {
             format!("unsupported schema version {}", request.version),
         ));
     }
+    super::charges::ProtocolLimits::for_profile(request.profile).check_request(input.len())?;
     measure_request(&request)?;
     Ok(request)
 }
@@ -159,36 +162,10 @@ fn measure_request(request: &Request) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-pub(crate) fn encode_response(mut response: Response) -> Result<Vec<u8>, ProtocolError> {
-    for _ in 0..4 {
-        let mut output = serde_json::to_vec(&response).map_err(|failure| {
-            error(
-                ProtocolErrorCode::OutputLimit,
-                format!("serialize response: {failure}"),
-            )
-        })?;
-        output.push(b'\n');
-        if output.len() > MAX_OUTPUT_BYTES {
-            return Err(error(
-                ProtocolErrorCode::OutputLimit,
-                "response exceeds output byte limit",
-            ));
-        }
-        let measured = output.len() as u64;
-        if response.charges.output_bytes == measured {
-            return Ok(output);
-        }
-        response.charges.output_bytes = measured;
-    }
-    Err(error(
-        ProtocolErrorCode::OutputLimit,
-        "response charge did not stabilize",
-    ))
-}
-
 pub(crate) fn error(code: ProtocolErrorCode, message: impl Into<String>) -> ProtocolError {
     ProtocolError {
         code,
         message: message.into(),
+        diagnostic: None,
     }
 }

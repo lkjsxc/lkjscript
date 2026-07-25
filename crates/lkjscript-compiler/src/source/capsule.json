@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "semantic-source",
+  "root": "crates/lkjscript-compiler/src/source",
+  "kind": "source",
+  "purpose": "Own validated Edition 1 parsing, loading, identities, diagnostics, and deterministic formatting.",
+  "layer": "semantic source",
+  "concepts": ["validated source tree", "revision identity", "source diagnostics"],
+  "facade": ["crates/lkjscript-compiler/src/source/mod.rs"],
+  "allowed_dependencies": ["core"],
+  "forbidden_dependencies": ["app", "jit", "vm"],
+  "tests": ["crates/lkjscript-compiler/src/source/tests/mod.rs"],
+  "decisions": ["docs/decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "none", "names": [] },
+  "provenance": { "class": "authored", "source": "Compiler Semantic Source authority" },
+  "verification": ["cargo test --locked -p lkjscript-compiler source"],
+  "context_card": {
+    "goal": "Expose one opaque validated tree with exact revision-scoped identities.",
+    "interfaces": ["lkjscript_compiler::source::ValidatedSourceTree"],
+    "invariants": ["contained deterministic loading", "exact-source identity", "canonical structural formatting"]
+  }
+}

@@ -4,7 +4,7 @@ use std::path::Path;
 use super::model::{ActionOutcome, WorkState};
 
 pub fn run(root: &Path, task_id: &str) -> Result<bool, String> {
-    let _lock = super::storage::lock(root, task_id)?;
+    let _lock = super::checkpoint_lock::acquire(root, task_id)?;
     let state = super::storage::load(root, task_id)?.ok_or("task state does not exist")?;
     super::validate::validate(root, &state, true)?;
     let Some(compacted) = compact(&state)? else {
@@ -16,19 +16,17 @@ pub fn run(root: &Path, task_id: &str) -> Result<bool, String> {
 }
 
 pub fn compact(state: &WorkState) -> Result<Option<WorkState>, String> {
-    let superseded: BTreeSet<_> = state
-        .completed_actions
-        .iter()
-        .flat_map(|action| action.supersedes.iter().copied())
-        .collect();
-    let retained: Vec<_> = state
-        .completed_actions
-        .iter()
-        .filter(|action| {
-            !superseded.contains(&action.sequence) || action.outcome != ActionOutcome::Completed
-        })
-        .cloned()
-        .collect();
+    let mut superseded_by_retained = BTreeSet::new();
+    let mut retained = Vec::new();
+    for action in state.completed_actions.iter().rev() {
+        if action.outcome != ActionOutcome::Completed
+            || !superseded_by_retained.contains(&action.sequence)
+        {
+            superseded_by_retained.extend(action.supersedes.iter().copied());
+            retained.push(action.clone());
+        }
+    }
+    retained.reverse();
     if retained.len() == state.completed_actions.len() {
         return Ok(None);
     }

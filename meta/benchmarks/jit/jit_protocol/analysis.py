@@ -32,8 +32,12 @@ def analyze(summary, historical):
         "forced_baseline_nonzero_entries_zero_optimizing_entries_and_fallback": True,
         "all_native_objects_wx_verified": True,
         "optimizing_checked_proof_nonzero": True,
-        "scalar_native_median_no_more_than_5_percent_over_retained": current_scalar_native <= retained_native * REGRESSION_CEILING,
-        "scalar_process_median_no_more_than_5_percent_over_retained": current_scalar_process <= retained_process * REGRESSION_CEILING,
+        "scalar_native_median_no_more_than_5_percent_over_retained": (
+            current_scalar_native <= retained_native * REGRESSION_CEILING
+        ),
+        "scalar_process_median_no_more_than_5_percent_over_retained": (
+            current_scalar_process <= retained_process * REGRESSION_CEILING
+        ),
         "allocation_graph_exact_and_accounted_once": True,
     }
     comparisons = {

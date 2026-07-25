@@ -9,7 +9,9 @@
         "path",
         "bytes",
         "lines",
-        "max_line_scalars",
+        "max_physical_line_scalars",
+        "max_ordinary_line_scalars",
+        "exact_data_lines",
         "class",
         "capsule"
       ],
@@ -25,7 +27,15 @@
           "type": "integer",
           "minimum": 0
         },
-        "max_line_scalars": {
+        "max_physical_line_scalars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_ordinary_line_scalars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exact_data_lines": {
           "type": "integer",
           "minimum": 0
         },

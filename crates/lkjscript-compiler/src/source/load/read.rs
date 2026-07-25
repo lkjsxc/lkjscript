@@ -36,9 +36,14 @@ pub(super) fn read_bounded_source(
         return Err(SourceDiagnostic::loading(
             origin.clone(),
             format!(
-                "source size changed while reading {}: metadata={expected_bytes}; read={actual_bytes}; final-metadata={}",
+                concat!(
+                    "source size changed while reading {}: metadata={expected_bytes}; ",
+                    "read={actual_bytes}; final-metadata={}"
+                ),
                 canonical.display(),
-                final_metadata.len()
+                final_metadata.len(),
+                expected_bytes = expected_bytes,
+                actual_bytes = actual_bytes
             ),
         ));
     }

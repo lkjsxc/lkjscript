@@ -130,8 +130,13 @@ impl HeapCallDescriptor {
                 inputs == [Ty::Reference(Ref::Buf), Ty::Reference(Ref::Buf)] && result == Ty::Bool
             }
             Op::ListEqual => {
-                matches!(inputs, [Ty::Reference(Ref::List(left, _)), Ty::Reference(Ref::List(right, _))] if left == right)
-                    && result == Ty::Bool
+                matches!(
+                    inputs,
+                    [
+                        Ty::Reference(Ref::List(left, _)),
+                        Ty::Reference(Ref::List(right, _))
+                    ] if left == right
+                ) && result == Ty::Bool
             }
         }
     }

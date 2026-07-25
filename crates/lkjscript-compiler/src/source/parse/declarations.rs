@@ -2,6 +2,8 @@ use lkjscript_core::Limits;
 
 use crate::source::{SourceNode, SourceOrigin, SourceResult, SourceSpan, SyntaxKind};
 
+use super::declaration_shapes::{valid_function, valid_name, valid_product_field};
+
 pub(super) fn validate_top_level(
     forms: &[SourceNode],
     limits: &Limits,
@@ -75,8 +77,8 @@ fn validate_declaration_shape(
             }]
                 if name_marker == "name"
                     && function_marker == "fn"
-                    && matches!(name_children.as_slice(), [SourceNode { kind: SyntaxKind::Str { value }, .. }] if !value.is_empty())
-                    && valid_function_shape(function_children)
+                    && valid_name(name_children)
+                    && valid_function(function_children)
         ),
         "product" => matches!(
             form.children.as_slice(),
@@ -91,8 +93,8 @@ fn validate_declaration_shape(
             }]
                 if name_marker == "name"
                     && fields_marker == "fields"
-                    && matches!(name_children.as_slice(), [SourceNode { kind: SyntaxKind::Str { value }, .. }] if !value.is_empty())
-                    && fields.iter().all(valid_product_field_shape)
+                    && valid_name(name_children)
+                    && fields.iter().all(valid_product_field)
         ),
         "trait" => matches!(
             form.children.as_slice(),
@@ -101,8 +103,7 @@ fn validate_declaration_shape(
                 children: name_children,
                 ..
             }]
-                if name_marker == "name"
-                    && matches!(name_children.as_slice(), [SourceNode { kind: SyntaxKind::Str { value }, .. }] if !value.is_empty())
+                if name_marker == "name" && valid_name(name_children)
         ),
         "impl" => matches!(
             form.children.as_slice(),
@@ -130,44 +131,4 @@ fn validate_declaration_shape(
         form.span,
         format!("malformed top-level {name} declaration shape"),
     ))
-}
-
-fn valid_function_shape(children: &[SourceNode]) -> bool {
-    let mut index = 0;
-    if matches!(children.get(index), Some(SourceNode { kind: SyntaxKind::Call { name }, children, .. }) if name == "forall" && !children.is_empty())
-    {
-        index += 1;
-    }
-    if matches!(children.get(index), Some(SourceNode { kind: SyntaxKind::Call { name }, children, .. }) if name == "bounds" && !children.is_empty() && children.iter().all(|bound| matches!(bound, SourceNode { kind: SyntaxKind::Call { name }, children, .. } if name == "bound" && children.len() == 2)))
-    {
-        index += 1;
-    }
-    matches!(
-        children.get(index..),
-        Some([
-            SourceNode { kind: SyntaxKind::Call { name: signature }, children: signature_children, .. },
-            SourceNode { kind: SyntaxKind::Call { name: parameters }, .. },
-            _
-        ]) if signature == "sig"
-            && parameters == "params"
-            && signature_children.iter().any(|node| matches!(node.kind, SyntaxKind::Symbol { ref name } if name == "->"))
-    )
-}
-
-fn valid_product_field_shape(field: &SourceNode) -> bool {
-    matches!(
-        field,
-        SourceNode {
-            kind: SyntaxKind::Call { name },
-            children,
-            ..
-        } if name == "field"
-            && matches!(children.as_slice(), [
-                SourceNode { kind: SyntaxKind::Call { name: name_marker }, children: name_children, .. },
-                SourceNode { kind: SyntaxKind::Call { name: type_marker }, children: type_children, .. }
-            ] if name_marker == "name"
-                && type_marker == "type"
-                && !type_children.is_empty()
-                && matches!(name_children.as_slice(), [SourceNode { kind: SyntaxKind::Str { value }, .. }] if !value.is_empty()))
-    )
 }

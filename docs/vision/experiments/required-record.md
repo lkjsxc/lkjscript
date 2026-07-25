@@ -74,7 +74,7 @@ reason to retain complexity.
 | C0 | duplicated untyped AST interpretation | bytecode VM | superseded historical baseline |
 | C1 | resolved typed HIR | bytecode VM | adopted current baseline; isolate correctness and compile-time cost |
 | C2 | typed HIR + SSA | verifier + reference evaluator/VM | differential SSA semantics |
-| C3 | typed SSA | shared x86-64 code-object backend + minimal AOT test emitter | native ABI, relocation, and codegen boundary |
+| C3 | typed SSA | shared x86-64 code-object backend + minimal AOT test emitter | native ABI, relocation, and codegen boundary | <!-- LKJ-EXACT-DATA -->
 | C4 | typed SSA | synchronous function-triggered baseline JIT | callable native execution and break-even |
 | C5 | typed SSA | loop-triggered baseline JIT + OSR | long-running invocation transfer |
 | C6 | typed SSA | proof-based optimizing JIT | static optimization and tier promotion |

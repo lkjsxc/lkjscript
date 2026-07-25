@@ -1,169 +1,161 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::io::{Read, Write};
+use std::path::Path;
 
 use crate::semantic::codec::error;
 use crate::semantic::schema::{ProtocolError, ProtocolErrorCode};
-use crate::semantic::transaction::{StagedSource, StagedTransaction};
+use crate::semantic::transaction::StagedTransaction;
 
 pub(crate) fn publish(transaction: &StagedTransaction, root: &Path) -> Result<(), ProtocolError> {
-    let id = super::journal::transaction_id(transaction);
-    let staging_root = root
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("target/lkjscript/staging");
-    fs::create_dir_all(&staging_root)
-        .map_err(|failure| publication("create staging journal directory", failure))?;
-    let journal = staging_root.join(format!("{id}.journal"));
-    super::journal::write(&journal, transaction, "prepared")?;
-    let mut files = prepare_files(&transaction.sources, &id)?;
-    let mut published = 0_usize;
-    let result = (|| {
-        for file in &mut files {
-            fs::rename(&file.source.host_path, &file.backup)
-                .map_err(|failure| publication("rename original to recovery backup", failure))?;
-            file.backed_up = true;
-            fs::rename(&file.temporary, &file.source.host_path)
-                .map_err(|failure| publication("atomically install staged source", failure))?;
-            published += 1;
-            sync_parent(&file.source.host_path)?;
-        }
-        Ok(())
-    })();
-    if let Err(failure) = result {
-        let rollback = rollback(&mut files);
-        let _ = super::journal::write(&journal, transaction, "rolled_back");
-        return match rollback {
-            Ok(()) => Err(failure),
-            Err(rollback_failure) => Err(error(
-                ProtocolErrorCode::PublicationFailed,
-                format!("{failure:?}; rollback failed: {}", rollback_failure.message),
-            )),
-        };
+    let workspace = super::publication_lock::require_workspace(root)?;
+    let staging = super::publication_lock::staging_root(&workspace);
+    fs::create_dir_all(&staging).map_err(|cause| publication("create staging root", cause))?;
+    let id = transaction_id(transaction);
+    let journal_path = staging.join(format!("{id}.journal"));
+    if journal_path.exists() {
+        return Err(failure(
+            "pending journal exists after recovery; publication is blocked",
+        ));
     }
-    if let Err(failure) =
-        super::journal::write(&journal, transaction, &format!("committed:{published}"))
+    let mut journal = super::journal::build(transaction, &workspace)?;
+    super::journal::write(&journal_path, &journal)?;
+    if let Err(cause) = prepare(transaction, &workspace, &id, &journal.files)
+        .and_then(|()| install(transaction, &workspace, &id, &journal.files))
     {
-        let rollback = rollback(&mut files);
-        return rollback.map_or_else(Err, |()| Err(failure));
+        return rollback_failure(&workspace, &id, &journal_path, &journal.files, cause);
     }
-    for file in &files {
-        let _ = fs::remove_file(&file.backup);
+    if let Err(cause) = super::journal::mark_committed(&journal_path, &mut journal) {
+        return rollback_failure(&workspace, &id, &journal_path, &journal.files, cause);
+    }
+    if super::recovery::cleanup(&workspace, &id, &journal.files).is_ok() {
+        let _ = fs::remove_file(&journal_path);
+        let _ = super::journal::sync_parent(&journal_path);
     }
     Ok(())
 }
 
-struct PublicationFile<'a> {
-    source: &'a StagedSource,
-    temporary: PathBuf,
-    backup: PathBuf,
-    backed_up: bool,
-}
-
-fn prepare_files<'a>(
-    sources: &'a [StagedSource],
+fn prepare(
+    transaction: &StagedTransaction,
+    workspace: &Path,
     id: &str,
-) -> Result<Vec<PublicationFile<'a>>, ProtocolError> {
-    let mut output = Vec::with_capacity(sources.len());
-    for (index, source) in sources.iter().enumerate() {
-        let current = fs::read(&source.host_path)
-            .map_err(|failure| publication("reread source precondition", failure))?;
+    records: &[super::journal::JournalFile],
+) -> Result<(), ProtocolError> {
+    for (index, (source, record)) in transaction.sources.iter().zip(records).enumerate() {
+        let paths = super::journal::paths(workspace, record, id, index)?;
+        if paths.temporary.exists() || paths.backup.exists() {
+            return Err(failure("publication artifact already exists"));
+        }
+        let current = read_exact(&paths.host, source.old_bytes.len())?;
         if current != source.old_bytes {
-            cleanup_temporaries(&output);
             return Err(error(
                 ProtocolErrorCode::PreconditionFailed,
                 format!("source {} changed before publication", source.logical_path),
             ));
         }
-        let directory = source.host_path.parent().ok_or_else(|| {
-            error(
-                ProtocolErrorCode::PublicationFailed,
-                "source has no containing directory",
-            )
-        })?;
-        let leaf = source
-            .host_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| {
-                error(
-                    ProtocolErrorCode::PublicationFailed,
-                    "source filename is not UTF-8",
-                )
-            })?;
-        let temporary = directory.join(format!(".{leaf}.lkjscript-stage-{id}-{index}"));
-        let backup = directory.join(format!(".{leaf}.lkjscript-backup-{id}-{index}"));
-        if temporary.exists() || backup.exists() {
-            cleanup_temporaries(&output);
-            return Err(error(
-                ProtocolErrorCode::PublicationFailed,
-                "deterministic publication artifact already exists; recovery is required",
-            ));
-        }
-        let mut file = match OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
-            .open(&temporary)
-        {
-            Ok(file) => file,
-            Err(failure) => {
-                cleanup_temporaries(&output);
-                return Err(publication("create same-directory staged source", failure));
-            }
-        };
-        if let Err(failure) = file
-            .write_all(&source.new_bytes)
+            .open(&paths.temporary)
+            .map_err(|cause| publication("create staged source", cause))?;
+        file.write_all(&source.new_bytes)
             .and_then(|()| file.sync_all())
-        {
-            let _ = fs::remove_file(&temporary);
-            cleanup_temporaries(&output);
-            return Err(publication("flush same-directory staged source", failure));
+            .map_err(|cause| publication("flush staged source", cause))?;
+    }
+    Ok(())
+}
+
+fn install(
+    transaction: &StagedTransaction,
+    workspace: &Path,
+    id: &str,
+    records: &[super::journal::JournalFile],
+) -> Result<(), ProtocolError> {
+    for (index, (source, record)) in transaction.sources.iter().zip(records).enumerate() {
+        let paths = super::journal::paths(workspace, record, id, index)?;
+        fs::rename(&paths.host, &paths.backup)
+            .map_err(|cause| publication("rename source to recovery backup", cause))?;
+        verify_backup(&paths.backup, source)?;
+        fs::rename(&paths.temporary, &paths.host)
+            .map_err(|cause| publication("install staged source", cause))?;
+        super::journal::sync_parent(&paths.host)?;
+    }
+    for (index, (source, record)) in transaction.sources.iter().zip(records).enumerate() {
+        let paths = super::journal::paths(workspace, record, id, index)?;
+        verify_backup(&paths.backup, source)?;
+    }
+    Ok(())
+}
+
+fn verify_backup(backup: &Path, source: &super::StagedSource) -> Result<(), ProtocolError> {
+    let bytes = read_exact(backup, source.old_bytes.len())?;
+    if bytes == source.old_bytes {
+        Ok(())
+    } else {
+        Err(error(
+            ProtocolErrorCode::PreconditionFailed,
+            format!("source {} changed during publication", source.logical_path),
+        ))
+    }
+}
+
+fn read_exact(path: &Path, expected: usize) -> Result<Vec<u8>, ProtocolError> {
+    let expected_u64 = u64::try_from(expected).map_err(|_| failure("source size overflow"))?;
+    let metadata = path
+        .symlink_metadata()
+        .map_err(|cause| publication("inspect source", cause))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() != expected_u64 {
+        return Err(failure(
+            "source identity or size changed during publication",
+        ));
+    }
+    let mut file = File::open(path).map_err(|cause| publication("open source", cause))?;
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(expected_u64.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|cause| publication("read source", cause))?;
+    if bytes.len() != expected {
+        return Err(failure("source size changed during publication read"));
+    }
+    Ok(bytes)
+}
+
+fn rollback_failure(
+    workspace: &Path,
+    id: &str,
+    journal: &Path,
+    files: &[super::journal::JournalFile],
+    cause: ProtocolError,
+) -> Result<(), ProtocolError> {
+    match super::recovery::rollback(workspace, id, files) {
+        Ok(()) => {
+            let _ = fs::remove_file(journal);
+            let _ = super::journal::sync_parent(journal);
+            Err(cause)
         }
-        output.push(PublicationFile {
-            source,
-            temporary,
-            backup,
-            backed_up: false,
-        });
-    }
-    Ok(output)
-}
-
-fn rollback(files: &mut [PublicationFile<'_>]) -> Result<(), ProtocolError> {
-    let mut first_error = None;
-    for file in files.iter_mut().rev() {
-        if file.backed_up {
-            if let Err(failure) = fs::rename(&file.backup, &file.source.host_path) {
-                first_error.get_or_insert_with(|| publication("restore recovery backup", failure));
-            }
-        }
-        let _ = fs::remove_file(&file.temporary);
-        let _ = sync_parent(&file.source.host_path);
-    }
-    first_error.map_or(Ok(()), Err)
-}
-
-fn cleanup_temporaries(files: &[PublicationFile<'_>]) {
-    for file in files {
-        let _ = fs::remove_file(&file.temporary);
-    }
-}
-
-fn sync_parent(path: &Path) -> Result<(), ProtocolError> {
-    let parent = path.parent().ok_or_else(|| {
-        error(
+        Err(rollback) => Err(error(
             ProtocolErrorCode::PublicationFailed,
-            "source has no parent directory",
-        )
-    })?;
-    File::open(parent)
-        .and_then(|file| file.sync_all())
-        .map_err(|failure| publication("flush source directory", failure))
+            format!(
+                "{}; rollback pending after: {}",
+                cause.message, rollback.message
+            ),
+        )),
+    }
 }
 
-fn publication(action: &str, failure: std::io::Error) -> ProtocolError {
-    error(
-        ProtocolErrorCode::PublicationFailed,
-        format!("{action}: {failure}"),
-    )
+fn transaction_id(transaction: &StagedTransaction) -> String {
+    let mut bytes = transaction.tree.revision().as_bytes().to_vec();
+    for source in &transaction.sources {
+        bytes.extend_from_slice(source.logical_path.as_bytes());
+        bytes.extend_from_slice(&lkjscript_core::sha256(&source.new_bytes));
+    }
+    super::journal::hex(&lkjscript_core::sha256(&bytes))
+}
+
+fn publication(action: &str, cause: std::io::Error) -> ProtocolError {
+    failure(&format!("{action}: {cause}"))
+}
+
+fn failure(message: &str) -> ProtocolError {
+    error(ProtocolErrorCode::PublicationFailed, message)
 }

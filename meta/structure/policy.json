@@ -109,10 +109,6 @@
       "summary": "Repository revision and file sizes remain stable during audit."
     },
     {
-      "id": "LKJ-REPO-RATCHET-STALE", "level": "error",
-      "summary": "Ratchet records describe current stable-ID violations."
-    },
-    {
       "id": "LKJ-REPO-VAGUE-MODULE", "level": "error",
       "summary": "Tooling module names describe their exact responsibility."
     }

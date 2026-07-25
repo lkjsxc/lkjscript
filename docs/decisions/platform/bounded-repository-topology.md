@@ -48,8 +48,15 @@ The accepted repository-wide bounds are:
 These rules cover Rust, lkjscript, Markdown, scripts, schemas, manifests, test
 source, configuration, and CI files. Physical lines include comments, blank
 lines, module declarations, tests, and fenced examples. The width rule excludes
-only precisely recognized integrity strings, unavoidable external URLs,
-signatures, and exact test vectors. Those lines still count toward file bounds.
+only closed, executable classifications: escaped multiline fixture literals in
+Rust test paths; isolated integrity records and unavoidable external URLs;
+Markdown table/sequence records under `docs/current-state/` and
+`docs/vision/experiments/`; and other Markdown data records carrying the literal
+suffix `<!-- LKJ-EXACT-DATA -->`. That suffix is valid only for an exact
+measured, command, protocol-signature, integrity, or decision-matrix record; it
+is not a prose escape. Those lines still count toward file and byte bounds. Audit file records expose
+the maximum physical width, maximum ordinary width, and exact-data line count,
+so excluded data remains visible rather than disappearing from evidence.
 
 A directory warns above 12 entries. A single-child directory warns unless it is
 a stable namespace, target/platform, generated/evidence, edition/schema, trust,
@@ -110,9 +117,10 @@ versions or fields fail at consumers.
 
 ## Migration And Policy Coverage
 
-The initial migration uses an exact machine-readable ratchet: no new or worsened
-finding, monotonic removal only, and stale entries fail. It is deleted when zero
-authored violations is reached; no permanent exemption ledger remains.
+The completed migration used an exact machine-readable ratchet with no new or
+worsened finding, monotonic removal, and stale-entry failure. The ratchet is now
+deleted because authored hard violations reached zero. Current checks reject
+all hard findings directly; no permanent exemption ledger remains.
 
 The checker covers every tracked path, all authored text, containing
 directories, local documentation links, strict manifests, provenance, generated

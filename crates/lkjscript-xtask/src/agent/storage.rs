@@ -5,18 +5,6 @@ use std::path::{Path, PathBuf};
 use super::bounds;
 use super::model::WorkState;
 
-#[derive(Debug)]
-pub struct CheckpointLock {
-    path: PathBuf,
-    _file: File,
-}
-
-impl Drop for CheckpointLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FailurePoint {
     None,
@@ -37,18 +25,6 @@ pub fn state_dir(root: &Path) -> PathBuf {
 
 pub fn state_path(root: &Path, task_id: &str) -> PathBuf {
     state_dir(root).join(format!("{task_id}.json"))
-}
-
-pub fn lock(root: &Path, task_id: &str) -> Result<CheckpointLock, String> {
-    let directory = state_dir(root);
-    fs::create_dir_all(&directory).map_err(|error| format!("create state directory: {error}"))?;
-    let path = directory.join(format!("{task_id}.checkpoint.lock"));
-    let file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)
-        .map_err(|error| format!("concurrent checkpoint for {task_id}: {error}"))?;
-    Ok(CheckpointLock { path, _file: file })
 }
 
 pub fn load(root: &Path, task_id: &str) -> Result<Option<WorkState>, String> {

@@ -21,12 +21,18 @@ fn case_dir(label: &str) -> PathBuf {
     ));
     let _ = std::fs::remove_dir_all(&path);
     std::fs::create_dir_all(&path).expect("create semantic test directory");
+    let initialized = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&path)
+        .status()
+        .expect("run git init");
+    assert!(initialized.success());
     path
 }
 
 fn request(root: &std::path::Path, operation: &str) -> Vec<u8> {
     format!(
-        "{{\"schema\":\"{}\",\"version\":1,\"profile\":\"standard\",\"root\":{},\"operation\":{operation}}}",
+        "{{\"schema\":\"{}\",\"version\":1,\"profile\":\"default\",\"root\":{},\"operation\":{operation}}}",
         crate::semantic::SCHEMA,
         serde_json::to_string(&root.to_string_lossy()).expect("encode root")
     )

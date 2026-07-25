@@ -52,6 +52,18 @@ fn six_foundation_diagnostic_codes_have_closed_complete_records() {
 }
 
 #[test]
+fn unrelated_local_name_does_not_hide_an_unknown_call() {
+    let source = concat!(
+        "def/\nname/\nshadow\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
+        "let/\nbind/\nmissing\nunit\n/bind\nunit\n/let\n/fn\n/def\n",
+        "def/\nname/\nbad\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
+        "missing/\n/missing\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n"
+    );
+    let diagnostics = hir_diagnostics(source, "unrelated-local");
+    assert_eq!(diagnostics[0].code, DiagnosticCode::UnknownName);
+}
+
+#[test]
 fn source_and_stale_failures_use_registered_codes() {
     let root = case_dir("source-diagnostic").join("main.lkjscript");
     std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main-wrong\n")

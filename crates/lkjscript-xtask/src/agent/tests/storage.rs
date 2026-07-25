@@ -1,6 +1,8 @@
 use std::fs;
 
+use crate::agent::checkpoint_lock;
 use crate::agent::storage::{self, FailurePoint};
+use crate::agent::{references, validate};
 
 use super::support;
 
@@ -48,6 +50,22 @@ fn oversized_state_is_quarantined_with_full_content_hash() {
 }
 
 #[test]
+fn quarantine_scan_rejects_files_above_its_bound() {
+    let repo = support::repository("quarantine-bound");
+    let path = storage::state_path(&repo.root, "huge-task");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        vec![b'x'; usize::try_from(crate::agent::bounds::QUARANTINE_BYTES).unwrap() + 1],
+    )
+    .unwrap();
+    assert!(storage::load(&repo.root, "huge-task")
+        .unwrap_err()
+        .contains("digest byte limit"));
+    assert!(path.exists());
+}
+
+#[test]
 fn atomic_failures_leave_previous_state_byte_identical() {
     let repo = support::repository("atomic-failure");
     let state = support::state(&repo, "atomic-task");
@@ -70,13 +88,56 @@ fn atomic_failures_leave_previous_state_byte_identical() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn references_reject_noncanonical_and_ancestor_symlink_paths() {
+    use std::os::unix::fs::symlink;
+
+    let repo = support::repository("reference-containment");
+    let mut state = support::state(&repo, "reference-task");
+    state
+        .artifact_references
+        .push(crate::agent::model::ContentReference {
+            path: "evidence/../evidence.txt".into(),
+            sha256: repo.evidence.sha256.clone(),
+        });
+    assert!(validate::shape(&state).is_err());
+
+    let outside = repo.root.with_extension("outside");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("external.txt"), "external\n").unwrap();
+    symlink(&outside, repo.root.join("escape")).unwrap();
+    state.artifact_references[0] = crate::agent::model::ContentReference {
+        path: "escape/external.txt".into(),
+        sha256: crate::sha256::digest(b"external\n"),
+    };
+    assert!(references::validate(&repo.root, &state)
+        .unwrap_err()
+        .contains("escapes repository"));
+    fs::remove_dir_all(outside).unwrap();
+}
+
 #[test]
 fn concurrent_checkpoint_exclusion_rejects_second_writer() {
     let repo = support::repository("concurrent-lock");
-    let first = storage::lock(&repo.root, "concurrent-task").unwrap();
-    assert!(storage::lock(&repo.root, "concurrent-task")
+    let first = checkpoint_lock::acquire(&repo.root, "concurrent-task").unwrap();
+    assert!(checkpoint_lock::acquire(&repo.root, "concurrent-task")
         .unwrap_err()
         .contains("concurrent checkpoint"));
     drop(first);
-    assert!(storage::lock(&repo.root, "concurrent-task").is_ok());
+    assert!(checkpoint_lock::acquire(&repo.root, "concurrent-task").is_ok());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn crashed_process_lock_is_recovered_once() {
+    let repo = support::repository("stale-lock");
+    let directory = storage::state_dir(&repo.root);
+    fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("stale-task.checkpoint.lock");
+    fs::write(&path, "4294967295\n").unwrap();
+    let lock = checkpoint_lock::acquire(&repo.root, "stale-task").unwrap();
+    assert!(path.exists());
+    drop(lock);
+    assert!(!path.exists());
 }

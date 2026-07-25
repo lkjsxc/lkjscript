@@ -31,7 +31,13 @@ impl Analyzer {
                     .get(trait_id.index().unwrap_or(usize::MAX))
                     .ok_or_else(|| self.error(source, "impl resolved an unknown TraitId"))?;
                 if trait_definition.core.is_some() {
-                    return Err(self.error(source, format!("core trait {trait_name} cannot be explicitly implemented in the marker-trait slice")));
+                    return Err(self.error(
+                        source,
+                        format!(
+                            "core trait {trait_name} cannot be explicitly implemented in the \
+                             marker-trait slice"
+                        ),
+                    ));
                 }
                 let Type::Product(product_name) = target else {
                     return Err(self.error(
@@ -50,7 +56,13 @@ impl Analyzer {
                         )
                     })?;
                 if !coherent.insert((trait_id, product)) {
-                    return Err(self.error(source, format!("overlapping marker impl for trait {trait_name} and product {product_name} in the current program closure")));
+                    return Err(self.error(
+                        source,
+                        format!(
+                            "overlapping marker impl for trait {trait_name} and product \
+                             {product_name} in the current program closure"
+                        ),
+                    ));
                 }
                 let id = ImplId::new(
                     u32::try_from(self.implementations.len())

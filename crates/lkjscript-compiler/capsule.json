@@ -10,7 +10,11 @@
   "facade": ["crates/lkjscript-compiler/src/lib.rs"],
   "allowed_dependencies": ["core", "ir"],
   "forbidden_dependencies": ["app", "jit", "vm"],
-  "tests": ["crates/lkjscript-compiler/src/analyze/tests.rs", "crates/lkjscript-compiler/src/source/tests/mod.rs"],
+  "tests": [
+    "crates/lkjscript-compiler/src/analyze/tests/mod.rs",
+    "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
+    "crates/lkjscript-compiler/src/source/tests/mod.rs"
+  ],
   "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },

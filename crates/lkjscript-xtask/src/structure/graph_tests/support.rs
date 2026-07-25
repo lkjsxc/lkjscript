@@ -107,7 +107,9 @@ pub fn fixture(root: &Path, revision: &str) -> Audit {
             path: path.into(),
             bytes: text.len() as u64,
             lines: text.lines().count() as u64,
-            max_line_scalars: 80,
+            max_physical_line_scalars: 80,
+            max_ordinary_line_scalars: 80,
+            exact_data_lines: 0,
             class: "authored".into(),
             capsule: path.starts_with("crates/x/").then(|| "x".into()),
         });

@@ -4,18 +4,28 @@
 
 ## Status
 
-**Accepted Implementation Contract.** These are the complete operations for the
-first Current-candidate slice. They are not Current endpoints. Foundation V1 is
-Current; complete Schema/Protocol V1 remains an Accepted Target.
+**Current Agent Foundation V1.** These are the complete operations for the
+bounded one-shot `lkjscript.agent-foundation` version 1 slice. Foundation V1 is
+Current. Complete Semantic Source Schema/Protocol V1, daemon transport, typed
+holes, and wider operations remain Accepted Targets.
 
 ## Envelope
 
 Every request and response carries its exact registered schema name and integer
 version. Requests select a resource profile and name the complete loaded source
 closure. Success identifies compiler build, profile, exact source revision, and
-aggregate charges. Failure is a structured protocol diagnostic and grants no
-partial authority. Unknown fields, variants, duplicate fields, trailing values,
-and unknown versions fail.
+aggregate charges plus profile schema/version, implementation-maxima version,
+effective protocol ceilings, and core-ceiling SHA-256. The closed profile names
+are exactly `sandbox`, `default`,
+`build`, `trusted-local`, and `deterministic` from Resource Profile V1;
+`standard` and every other name fail. Protocol request/response bytes, source
+bytes/units/schema nodes, and validation work use the selected core ceilings
+intersected with stricter immutable protocol/foundation maxima. Transactions
+add the complete staged closure to source byte/unit/node charges before any
+publication. The protocol ledger remains request-local rather than pretending to be the compiler ledger.
+Failure is a structured protocol diagnostic and grants no partial authority.
+Unknown fields, variants, duplicate fields, trailing values, and unknown
+versions fail.
 
 ## `snapshot`
 
@@ -68,9 +78,14 @@ unsupported external reference domains, stale reads, and invalid spelling.
 Success changes the declaration and every resolved reference as one
 transaction, reruns structural/name/type checks, formats affected units, and
 returns old/new stable keys, exact changed entities, semantic diff, diagnostics,
-and one new revision. Any failed precondition/check/publication leaves memory
-and files byte-identical to the base revision. Comments and string contents are
-not renamed by text search.
+and one new revision. Before any source rename, the exact success response is
+encoded within its output bound. Repository publication holds one local
+repository exclusion lock and writes an atomically replaced, synchronized
+recovery journal below `target/lkjscript/semantic-staging/`. Every later request
+recovers an uncommitted journal before loading source. Final backup bytes are
+rechecked before commit. Any ordinary failed precondition/check/publication
+restores complete old files; a process crash is rolled back before the next
+protocol read. Comments and string contents are not renamed by text search.
 
 ## Atomic `replace_expression`
 
@@ -100,14 +115,17 @@ Before parsing, the endpoint checks exact request bytes. During/after parsing it
 checks nesting, strings, collection entries, schema nodes, operation count, and
 work categories. Duplicate fields, malformed Unicode/escapes, trailing data,
 unknown variants, non-integer identity/counter encodings, and overflow fail.
-The dependency addition remains not Current until license/notices, advisory,
-fuzzing, malformed-boundary, and locked-version gates pass.
+The locked dependency selection is Current. Both crates are MIT OR Apache-2.0;
+the reviewed OSV queries reported no advisory, and strict malformed-boundary
+tests pass. Dedicated fuzzing and `cargo-audit` remain explicitly untested; the
+latter tool is not installed. Those omissions are not presented as evidence.
 
 ## Acceptance
 
 Focused tests cover deterministic success, every stale identity/precondition,
-unknown versions/fields/variants, duplicate/trailing JSON, malformed Unicode,
-all aggregate boundaries, rename collisions/cross-unit references, replacement
+unknown versions/fields/variants/profiles, duplicate/trailing JSON, malformed
+Unicode, all five profile selections and aggregate boundaries, rename
+collisions/cross-unit references, replacement
 type/effect/ownership failures, rollback after each staged phase, and
 same-directory atomic publication failure. Canonical compile/evaluator/VM/JIT
 semantics must remain unchanged.

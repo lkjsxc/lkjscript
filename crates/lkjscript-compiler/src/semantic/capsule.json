@@ -1,0 +1,30 @@
+{
+  "schema": "lkjscript.capsule",
+  "version": 1,
+  "id": "semantic-protocol",
+  "root": "crates/lkjscript-compiler/src/semantic",
+  "kind": "source",
+  "purpose": "Own strict bounded Semantic Source queries, diagnostics, and atomic revisioned transactions.",
+  "layer": "agent protocol",
+  "concepts": ["strict JSON envelope", "semantic query", "atomic transaction"],
+  "facade": ["crates/lkjscript-compiler/src/semantic/mod.rs"],
+  "allowed_dependencies": ["core", "semantic-source"],
+  "forbidden_dependencies": ["app", "jit", "vm"],
+  "tests": [
+    "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
+    "crates/lkjscript-app/tests/semantic_cli.rs"
+  ],
+  "decisions": ["docs/decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "none", "names": [] },
+  "provenance": { "class": "authored", "source": "Semantic Source Agent Foundation V1 implementation" },
+  "verification": [
+    "cargo test --locked -p lkjscript-compiler semantic",
+    "cargo test --locked -p lkjscript-app --test semantic_cli"
+  ],
+  "context_card": {
+    "goal": "Return deterministic semantic facts and publish only fully validated revisions.",
+    "interfaces": ["lkjscript_compiler::semantic::execute", "lkjscript semantic"],
+    "invariants": ["closed JSON schemas", "stale identity rejection", "no partial publish"]
+  }
+}

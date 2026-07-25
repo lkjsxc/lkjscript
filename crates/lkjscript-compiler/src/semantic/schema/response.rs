@@ -28,6 +28,8 @@ pub(crate) enum ProtocolErrorCode {
 pub(crate) struct ProtocolError {
     pub code: ProtocolErrorCode,
     pub message: String,
+    #[serde(skip)]
+    pub diagnostic: Option<Box<DiagnosticRecord>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -84,11 +86,33 @@ pub(crate) enum ResponseResult {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct ResourceProfileIdentityRecord {
+    pub schema: String,
+    pub version: u32,
+    pub implementation_maxima_version: u32,
+    pub ceilings_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProtocolLimitsRecord {
+    pub request_bytes: u64,
+    pub response_bytes: u64,
+    pub source_bytes: u64,
+    pub source_units: u64,
+    pub source_nodes: u64,
+    pub work_units: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Response {
     pub schema: String,
     pub version: u32,
     pub compiler_build: String,
     pub profile: ResourceProfile,
+    pub profile_identity: ResourceProfileIdentityRecord,
+    pub limits: ProtocolLimitsRecord,
     pub revision: Option<String>,
     pub charges: Charges,
     pub result: ResponseResult,

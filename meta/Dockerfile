@@ -9,6 +9,7 @@ RUN rustup component add rustfmt clippy
 COPY Cargo.toml Cargo.lock README.md AGENTS.md ./
 COPY crates ./crates
 COPY meta/config ./meta/config
+COPY meta/agent-state ./meta/agent-state
 COPY docs ./docs
 COPY src ./src
 COPY meta/scripts ./meta/scripts

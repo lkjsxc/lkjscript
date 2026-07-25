@@ -62,6 +62,16 @@ pub(crate) fn load_with_metrics(
     loader::load_with_metrics(path, limits)
 }
 
+pub(crate) fn load_for_protocol(
+    path: &Path,
+    limits: &Limits,
+    max_source_bytes: u64,
+    max_source_units: u64,
+) -> SourceResult<ValidatedSourceTree> {
+    let budget = SourceFoundationBudget::with_limits(max_source_units, max_source_bytes);
+    loader::load_with_budget(path, limits, budget).map(|(tree, _)| tree)
+}
+
 pub(crate) fn load_with_metrics_and_budget(
     path: &Path,
     limits: &Limits,

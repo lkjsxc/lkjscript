@@ -55,6 +55,8 @@ pub(crate) fn include(
     profile: &str,
     limit: usize,
 ) -> Result<(), String> {
+    let omissions_before = response.omissions.len();
+    let truncated_before = response.truncated;
     if context.truncated {
         response.truncated = true;
         response.omissions.push(format!(
@@ -68,17 +70,35 @@ pub(crate) fn include(
             .push(format!("{}: {unsupported}", context.target));
     }
     response.repository_context.push(context);
-    let bytes = serde_json::to_vec_pretty(response)
-        .map_err(|error| format!("serialize resume context: {error}"))?;
-    if bytes.len() > limit {
-        let Some(omitted) = response.repository_context.pop() else {
-            return Err("repository context disappeared during output accounting".into());
-        };
-        response.truncated = true;
-        response.omissions.push(format!(
-            "repository context for {} omitted by {profile} output limit {limit}",
-            omitted.target
-        ));
+    if encoded_len(response)? <= limit {
+        return Ok(());
+    }
+    let omitted = response
+        .repository_context
+        .pop()
+        .ok_or("repository context disappeared during output accounting")?;
+    response.omissions.truncate(omissions_before);
+    response.truncated = true;
+    response.omissions.push(format!(
+        "repository context for {} omitted by {profile} output limit {limit}",
+        omitted.target
+    ));
+    if encoded_len(response)? > limit {
+        response.omissions.truncate(omissions_before);
+        response
+            .omissions
+            .push("repository context omitted by output limit".into());
+    }
+    if encoded_len(response)? > limit {
+        response.omissions.truncate(omissions_before);
+        response.truncated = truncated_before;
+        return Err("resume base state exceeds selected output limit".into());
     }
     Ok(())
+}
+
+fn encoded_len(response: &ResumeContext) -> Result<usize, String> {
+    serde_json::to_vec_pretty(response)
+        .map(|bytes| bytes.len())
+        .map_err(|error| format!("serialize resume context: {error}"))
 }

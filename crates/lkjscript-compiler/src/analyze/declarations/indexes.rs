@@ -91,7 +91,13 @@ impl Analyzer {
                     || is_contextual_name(&trait_name)
                     || is_builtin_type_name(&trait_name)
                 {
-                    return Err(self.error(source, format!("trait declaration {trait_name} collides with a reserved operation, form, or type")));
+                    return Err(self.error(
+                        source,
+                        format!(
+                            "trait declaration {trait_name} collides with a reserved \
+                             operation, form, or type"
+                        ),
+                    ));
                 }
                 if self.trait_names.contains_key(&trait_name) {
                     return Err(

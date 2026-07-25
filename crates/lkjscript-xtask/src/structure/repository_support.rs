@@ -62,11 +62,45 @@ pub fn physical_lines(text: &str) -> Result<u64, String> {
     u64::try_from(total).map_err(|_| "line count overflow".into())
 }
 
+pub fn line_widths(path: &str, text: &str) -> Result<(u64, u64, u64), String> {
+    let mut physical = 0usize;
+    let mut ordinary = 0usize;
+    let mut exact = 0usize;
+    for line in text.lines() {
+        let width = line.chars().count();
+        physical = physical.max(width);
+        if is_exact_data_line(path, line) {
+            exact = exact.checked_add(1).ok_or("exact-data count overflow")?;
+        } else {
+            ordinary = ordinary.max(width);
+        }
+    }
+    Ok((
+        u64::try_from(physical).map_err(|_| "physical width overflow")?,
+        u64::try_from(ordinary).map_err(|_| "ordinary width overflow")?,
+        u64::try_from(exact).map_err(|_| "exact-data count overflow")?,
+    ))
+}
+
+fn is_exact_data_line(path: &str, line: &str) -> bool {
+    let trimmed = line.trim();
+    let test_path = path.contains("/tests/") || path.starts_with("tests/");
+    let escaped_fixture = path.ends_with(".rs")
+        && test_path
+        && line.contains("\\n")
+        && line.matches('"').count() >= 2;
+    let markdown_record =
+        path.ends_with(".md") && (trimmed.starts_with('|') || trimmed.starts_with("- "));
+    let marked_record = markdown_record && trimmed.ends_with("<!-- LKJ-EXACT-DATA -->");
+    let isolated_url = (trimmed.starts_with("https://") || trimmed.starts_with("http://"))
+        && !trimmed.chars().any(char::is_whitespace);
+    let digest = trimmed.len() >= 64 && trimmed.bytes().all(|byte| byte.is_ascii_hexdigit());
+    escaped_fixture || marked_record || isolated_url || digest
+}
+
 pub fn classify(path: &str) -> &'static str {
     if path == "capsule.json" || path.ends_with("/capsule.json") {
         "capsule-manifest"
-    } else if path == "meta/structure/ratchet.json" {
-        "generated-migration-state"
     } else {
         "authored"
     }

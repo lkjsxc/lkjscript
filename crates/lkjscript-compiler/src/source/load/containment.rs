@@ -158,7 +158,8 @@ fn opened_source_path(
     Err(SourceDiagnostic::loading(
         origin.clone(),
         format!(
-            "host source loading requires descriptor-derived containment on the Current Linux acceptance target: {requested:?}"
+            "host source loading requires descriptor-derived containment on the Current \
+             Linux acceptance target: {requested:?}"
         ),
     ))
 }

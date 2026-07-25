@@ -38,21 +38,21 @@ checks. No workspace crate has a third-party Rust dependency.
 | Concern | Primary location | Entry symbols |
 | --- | --- | --- |
 | CLI | `crates/lkjscript-app/src/main.rs` | `main`, `real_main` |
-| Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` |
-| Validated Semantic Source foundation | `crates/lkjscript-compiler/src/source/` | opaque `ValidatedSourceTree`, iterative contained loading, parser/limits, spans/origins, revision/keys/nodes, structural formatter, source diagnostics |
-| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `effects.rs`, `hir.rs`, `operation.rs` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects |
-| Ownership analysis | `crates/lkjscript-compiler/src/ownership.rs` | mandatory aggregate-bounded `Owned Buf` lexical place/move/same-block-loan analysis and exact joins |
-| HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa.rs` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect/ownership transfer |
-| Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bounded proof optimization/certificate verification, bytecode link metadata |
+| Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` | <!-- LKJ-EXACT-DATA -->
+| Validated Semantic Source foundation | `crates/lkjscript-compiler/src/source/` | opaque `ValidatedSourceTree`, iterative contained loading, parser/limits, spans/origins, revision/keys/nodes, structural formatter, source diagnostics | <!-- LKJ-EXACT-DATA -->
+| Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze/`, `effects/`, `hir/`, `operation/` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects | <!-- LKJ-EXACT-DATA -->
+| Ownership analysis | `crates/lkjscript-compiler/src/ownership/` | mandatory aggregate-bounded `Owned Buf` lexical place/move/same-block-loan analysis and exact joins | <!-- LKJ-EXACT-DATA -->
+| HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa/` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect/ownership transfer | <!-- LKJ-EXACT-DATA -->
+| Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bounded proof optimization/certificate verification, bytecode link metadata | <!-- LKJ-EXACT-DATA -->
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
-| SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
-| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, ABI-2 reservation/encoding, opaque installable image |
-| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, `GcHeap` runtime services, code objects, tier state, forced/auto execution |
+| SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter | <!-- LKJ-EXACT-DATA -->
+| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, ABI-2 reservation/encoding, opaque installable image | <!-- LKJ-EXACT-DATA -->
+| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, `GcHeap` runtime services, code objects, tier state, forced/auto execution | <!-- LKJ-EXACT-DATA -->
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
-| VM loop | `crates/lkjscript-vm/src/run.rs`, `run/` | `Vm::run`, dispatch and calls |
-| Heap/GC | `crates/lkjscript-core/src/gc.rs` | pure session-owned non-reusing stable-index `GcHeap`, transactional estimated-byte-accounted mutation, transitive snapshots, bounded counters/collection policy, VM and forced-JIT use |
+| VM loop | `crates/lkjscript-vm/src/run/` | `Vm::run`, dispatch and calls |
+| Heap/GC | `crates/lkjscript-core/src/gc/` | pure session-owned non-reusing stable-index `GcHeap`, transactional estimated-byte-accounted mutation, transitive snapshots, bounded counters/collection policy, VM and forced-JIT use | <!-- LKJ-EXACT-DATA -->
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
-| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers, safe bounded executable installation/invocation, private raw active-frame chain, copied typed-root service callback |
+| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers, safe bounded executable installation/invocation, private raw active-frame chain, copied typed-root service callback | <!-- LKJ-EXACT-DATA -->
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
 | Language library | `src/std/` | imported `std/...` definitions |
 | Validation package | `src/lib/lkjedit/` | editor state and control loop |

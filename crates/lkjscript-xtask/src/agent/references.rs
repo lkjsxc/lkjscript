@@ -84,18 +84,30 @@ fn capsules(root: &Path, selected: &[String]) -> Result<(), String> {
 
 fn content(root: &Path, reference: &ContentReference) -> Result<(), String> {
     let path = root.join(&reference.path);
-    let metadata = fs::symlink_metadata(&path)
+    let lexical_metadata = fs::symlink_metadata(&path)
         .map_err(|error| format!("inspect {}: {error}", reference.path))?;
-    if !metadata.is_file()
-        || metadata.file_type().is_symlink()
-        || metadata.len() > super::bounds::REFERENCE_BYTES
-    {
+    if lexical_metadata.file_type().is_symlink() {
+        return Err(format!("reference is a symbolic link: {}", reference.path));
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("canonicalize repository root: {error}"))?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| format!("canonicalize {}: {error}", reference.path))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err(format!("reference escapes repository: {}", reference.path));
+    }
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("inspect {}: {error}", reference.path))?;
+    if !metadata.is_file() || metadata.len() > super::bounds::REFERENCE_BYTES {
         return Err(format!(
             "reference is not a bounded regular file: {}",
             reference.path
         ));
     }
-    let bytes = super::json::read_bounded(&path, super::bounds::REFERENCE_BYTES as usize)?;
+    let bytes = super::json::read_bounded(&canonical, super::bounds::REFERENCE_BYTES as usize)?;
     if crate::sha256::digest(&bytes) != reference.sha256 {
         return Err(format!("content hash mismatch: {}", reference.path));
     }
@@ -104,7 +116,13 @@ fn content(root: &Path, reference: &ContentReference) -> Result<(), String> {
 
 fn safe_path(value: &str) -> bool {
     !value.is_empty()
-        && Path::new(value)
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
+        && !value.contains('\\')
+        && value.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && Path::new(part)
+                    .components()
+                    .all(|item| matches!(item, Component::Normal(_)))
+        })
 }

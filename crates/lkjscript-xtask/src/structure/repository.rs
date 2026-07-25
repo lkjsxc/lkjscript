@@ -4,7 +4,8 @@ use std::path::Path;
 use std::process::Command;
 
 use super::repository_support::{
-    capsule_for, classify, directories, finding, git, load_capsules, physical_lines, read_bounded,
+    capsule_for, classify, directories, finding, git, line_widths, load_capsules, physical_lines,
+    read_bounded,
 };
 use crate::model::{Capsule, DirectoryRecord, FileRecord, Finding, Provenance};
 
@@ -145,16 +146,15 @@ fn inspect_file(
             ""
         }
     };
-    let width = text
-        .lines()
-        .map(|line| line.chars().count())
-        .max()
-        .unwrap_or(0);
+    let (max_physical_line_scalars, max_ordinary_line_scalars, exact_data_lines) =
+        line_widths(path, text)?;
     files.push(FileRecord {
         path: path.into(),
         bytes: u64::try_from(bytes.len()).map_err(|_| "byte count overflow")?,
         lines: physical_lines(text)?,
-        max_line_scalars: u64::try_from(width).map_err(|_| "width overflow")?,
+        max_physical_line_scalars,
+        max_ordinary_line_scalars,
+        exact_data_lines,
         class: classes
             .get(path)
             .copied()

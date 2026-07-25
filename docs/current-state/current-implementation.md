@@ -23,9 +23,11 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   keys, dense revision-scoped preorder node IDs, deterministic structural
   Edition 1 formatting, and source-foundation diagnostics with complete related
   spans. The old `ast.rs`, `lex.rs`, `parse.rs`, `limits_check.rs`, and
-  `import.rs` authority paths are removed. Complete Semantic Source Schema V1,
-  transactions, JSON/daemon protocol, typed holes, and derived-fact queries are
-  not Current
+  `import.rs` authority paths are removed. The strict bounded one-shot
+  `lkjscript.agent-foundation` V1 endpoint now provides snapshot/entity/node/
+  diagnostic queries plus preview/publish rename and expression replacement.
+  Complete future Schema V1, daemon transport, typed holes, and exact HIR fact
+  correlation for every source node are not Current
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
   directory. Foundation implementation maxima additionally reject a source file
@@ -74,8 +76,14 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   record sequence, reconstructs a private candidate, requires exact bitwise
   equality, verifies edit and cleanup stages, and rejects stale, forged,
   non-dominating, effectful, oversized, or aggregate-over-budget proofs
-- Host implementation: nine Rust workspace crates with no third-party Rust
-  dependencies; unsafe Rust is confined to `lkjscript-sys`
+- Compiler resource profiles: `lkjscript.resource-profile` V1 has exactly five
+  bounded profiles, lower-only ceilings, checked aggregate source/HIR/SSA
+  ledgers, profile-aware Rust and CLI entry points, successful usage metrics,
+  and publication guards. Charging is exact after each protected phase; current
+  fixed limits remain the pre-allocation defense
+- Host implementation: nine Rust workspace crates. Exact locked `serde` and
+  `serde_json` dependencies are confined to strict JSON protocol/tooling
+  boundaries; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
   Clippy for all targets/features; docs status/links, explicit `PLACEHOLDER`
   labels, and exact source-closure coverage are machine-checked

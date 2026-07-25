@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::agent::model::{ActionOutcome, CommandResult, ContentReference};
-use crate::agent::{bounds, json};
+use crate::agent::{bounds, json, validate};
 
 use super::support;
 
@@ -97,6 +97,21 @@ fn enforces_history_reference_output_and_work_boundaries() {
     assert!(bounds::checked_work(usize::MAX, 1)
         .unwrap_err()
         .contains("overflow"));
+}
+
+#[test]
+fn supersession_requires_unique_existing_actions() {
+    let repo = support::repository("supersession-shape");
+    let mut state = support::state(&repo, "supersession-task");
+    state.completed_actions = vec![
+        support::action(1, ActionOutcome::Completed, Vec::new()),
+        support::action(2, ActionOutcome::Completed, vec![1, 1]),
+    ];
+    assert!(validate::shape(&state).is_err());
+    state.completed_actions[1].supersedes = vec![1];
+    assert!(validate::shape(&state).is_ok());
+    state.completed_actions[1].supersedes = vec![3];
+    assert!(validate::shape(&state).is_err());
 }
 
 #[test]

@@ -1,3 +1,5 @@
+#![allow(clippy::panic, clippy::unwrap_used)]
+
 use std::path::Path;
 
 use lkjscript_core::{Constant, Limits};

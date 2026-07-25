@@ -57,6 +57,14 @@ pub(crate) fn load_with_metrics(
     path: &Path,
     limits: &Limits,
 ) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
+    load_with_budget(path, limits, SourceFoundationBudget::default())
+}
+
+pub(crate) fn load_with_budget(
+    path: &Path,
+    limits: &Limits,
+    budget: SourceFoundationBudget,
+) -> SourceResult<(ValidatedSourceTree, LoadMetrics)> {
     ensure_source_path(path)?;
     let loading_started = Instant::now();
     let entry = path.canonicalize().map_err(|error| {
@@ -76,7 +84,7 @@ pub(crate) fn load_with_metrics(
         loading: HashSet::new(),
         done: HashSet::new(),
         files: Vec::new(),
-        budget: SourceFoundationBudget::default(),
+        budget,
         metrics: LoadMetrics {
             source_loading: loading_started.elapsed(),
             ..LoadMetrics::default()

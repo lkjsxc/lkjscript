@@ -35,7 +35,7 @@ pub fn checkpoint(
             return Err(format!("next state revision must be {next}"));
         }
         immutable(old, state)?;
-        append_only(old, state)?;
+        super::history::append_only(old, state)?;
         super::git::require_ancestor(
             root,
             &old.current_repository_revision,
@@ -64,6 +64,8 @@ pub fn validate(root: &Path, state: &WorkState, require_head: bool) -> Result<()
     super::references::validate(root, state)?;
     for commit in &state.produced_commits {
         super::git::require_commit(root, commit)?;
+        super::git::require_ancestor(root, &state.base_repository_revision, commit)?;
+        super::git::require_ancestor(root, commit, &state.current_repository_revision)?;
     }
     Ok(())
 }
@@ -77,7 +79,7 @@ pub fn shape(state: &WorkState) -> Result<(), String> {
     if state.state_revision == 0 {
         return Err("state revision must be positive".into());
     }
-    sequence(state)?;
+    super::history::sequence(state)?;
     super::references::shape(state)?;
     unique("capsule scope", &state.selected_capsule_scope)?;
     unique("produced commits", &state.produced_commits)?;
@@ -106,39 +108,6 @@ fn unique(name: &str, values: &[String]) -> Result<(), String> {
     }
 }
 
-fn sequence(state: &WorkState) -> Result<(), String> {
-    increasing(
-        "completed action",
-        state.completed_actions.iter().map(|item| item.sequence),
-    )?;
-    increasing(
-        "command result",
-        state.command_results.iter().map(|item| item.sequence),
-    )?;
-    for action in &state.completed_actions {
-        for superseded in &action.supersedes {
-            if *superseded == 0 || *superseded >= action.sequence {
-                return Err(format!(
-                    "action {} has invalid superseded sequence {superseded}",
-                    action.sequence
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn increasing(name: &str, values: impl Iterator<Item = u64>) -> Result<(), String> {
-    let mut previous = 0;
-    for value in values {
-        if value == 0 || value <= previous {
-            return Err(format!("{name} sequence must be positive and increasing"));
-        }
-        previous = value;
-    }
-    Ok(())
-}
-
 fn immutable(old: &WorkState, new: &WorkState) -> Result<(), String> {
     if old.task_id != new.task_id
         || old.base_repository_revision != new.base_repository_revision
@@ -151,50 +120,4 @@ fn immutable(old: &WorkState, new: &WorkState) -> Result<(), String> {
         );
     }
     Ok(())
-}
-
-fn append_only(old: &WorkState, new: &WorkState) -> Result<(), String> {
-    prefix(
-        "accepted decisions",
-        &old.accepted_decisions,
-        &new.accepted_decisions,
-    )?;
-    prefix(
-        "completed actions",
-        &old.completed_actions,
-        &new.completed_actions,
-    )?;
-    prefix(
-        "command results",
-        &old.command_results,
-        &new.command_results,
-    )?;
-    prefix(
-        "produced commits",
-        &old.produced_commits,
-        &new.produced_commits,
-    )?;
-    prefix(
-        "invalidated assumptions",
-        &old.invalidated_assumptions,
-        &new.invalidated_assumptions,
-    )?;
-    prefix(
-        "artifact references",
-        &old.artifact_references,
-        &new.artifact_references,
-    )?;
-    prefix(
-        "evidence references",
-        &old.evidence_references,
-        &new.evidence_references,
-    )
-}
-
-fn prefix<T: PartialEq>(name: &str, old: &[T], new: &[T]) -> Result<(), String> {
-    if new.starts_with(old) {
-        Ok(())
-    } else {
-        Err(format!("{name} must be append-only"))
-    }
 }

@@ -8,14 +8,22 @@ safety during migration.
 
 ## Status
 
-**Accepted Target.** All Current Edition 1 limits remain enforced unchanged:
-source depth 8, form children 16, tokens per file 384, top-level forms 8,
-product fields 15, and 16 combined immediate entries per lkjscript source
-directory. Existing compiler, IR, bytecode, runtime, proof, native-image, and
-execution bounds also remain Current.
+**Current compiler foundation; broader target Accepted.** Resource Profile V1,
+five bounded named profiles, lower-only host overrides, checked aggregate
+ledgers, profile identity, and post-phase source/HIR/normalized-SSA accounting
+are implemented in `lkjscript-core` and `lkjscript-compiler`. The exact Current
+surface and remaining boundaries are defined by the
+[First Current-Candidate Contract](resource-budget-profiles-candidate.md).
+Repository topology, repository intelligence, agent work state, protocol,
+proof, native artifact, and runtime budgets do not yet share that compiler
+ledger.
 
-No limit is raised or reclassified until aggregate replacement bounds for its
-amplification path are implemented, tested, documented, and Current.
+All Current Edition 1 limits remain enforced unchanged: source depth 8, form
+children 16, tokens per file 384, top-level forms 8, product fields 15, and 16
+combined immediate entries per lkjscript source directory. Existing compiler,
+IR, bytecode, runtime, proof, native-image, and execution bounds also remain
+Current. No limit is raised or reclassified until aggregate replacement bounds
+for its amplification path are implemented, tested, documented, and Current.
 
 Semantic Source Foundation V1 fixes always-enforced implementation safety
 maxima at 16 MiB of exact input bytes per source file, 256 MiB of exact input
@@ -29,7 +37,6 @@ This record supersedes the permanent-policy part of [Essential Source
 Limits](../limits/essential-limits.md) and [Lkjscript Source-Tree
 Width](../source-tree-limit.md). Those records remain authoritative descriptions
 of Current Edition 1 behavior until the migration gate passes.
-
 ## Problem
 
 The tiny Current limits are effective adversarial scaffolding, but they force
@@ -84,7 +91,6 @@ The registered target profile names are:
 - `sandbox`: small untrusted inputs and strict deterministic amplification
   limits;
 - `default`: ordinary local development and execution;
-- `server`: bounded long-running throughput with explicit tail and queue limits;
 - `build`: larger compiler/proof/artifact budgets with hermetic inputs;
 - `trusted-local`: explicit local high ceilings, never an unsafe mode; and
 - `deterministic`: logical metering, reproducible scheduling/time/provider
@@ -178,15 +184,17 @@ depth, child, token, top-level, and field limits.
 - silently truncating source, diagnostics, proof search, or analysis and then
   granting verified authority; and
 - treating directory/file width alone as a proxy for AI maintainability.
-
 ## First Current-Candidate
 
 [First Current-Candidate Contract](resource-budget-profiles-candidate.md)
-defines the exact V1 aggregate categories and charging semantics. It is an
-**Accepted Implementation Contract**, not Current.
+defines the exact Current V1 compiler categories, ceilings, charging points,
+and diagnostics, and labels the remaining target behavior separately.
 
 ## Not Current
 
-No named profile, aggregate source budget, semantic-charge IR operation, or
-maintainability lint is implemented by this decision. Current limits and tests
-remain unchanged until complete Phase 2 slices replace them.
+Profile selection is not yet exposed by package manifests. Protocol bytes are
+charged in the one-shot protocol's separate request-local ledger, not the
+compiler ledger. Pre-allocation compiler profile charging, one ledger across
+protocol/repository/task/runtime authorities, semantic-charge IR operations,
+and maintainability lint migration are not Current. Current fixed limits remain unchanged until complete replacement
+slices pass their separate migration gates.

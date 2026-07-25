@@ -24,9 +24,9 @@ path><LF>` in byte-sorted tracked-path order:
 
 | Baseline set | Files | Bytes | Manifest SHA-256 |
 | --- | ---: | ---: | --- |
-| canonical `src` `.lkjscript` corpus | 109 | 67,520 | `84fbbac1ba744ed9376f8e98dcf3389d2d914fd2b22d88fcda39dcda022c87d3` |
-| all tracked `.lkjscript` sources/fixtures/workloads | 113 | 69,351 | `78d8469b697c4b6672f28bf47cfb7f96373151ef42c24b85321e6e571df3b737` |
-| `meta/bench`, `meta/benchmarks`, and `meta/scripts` evidence | 31 | 2,814,103 | `4779093114cfe083bd35a3331f5df502687bcf2a14cdc390b9e5a4816ce81af3` |
+| canonical `src` `.lkjscript` corpus | 109 | 67,520 | `84fbbac1ba744ed9376f8e98dcf3389d2d914fd2b22d88fcda39dcda022c87d3` | <!-- LKJ-EXACT-DATA -->
+| all tracked `.lkjscript` sources/fixtures/workloads | 113 | 69,351 | `78d8469b697c4b6672f28bf47cfb7f96373151ef42c24b85321e6e571df3b737` | <!-- LKJ-EXACT-DATA -->
+| `meta/bench`, `meta/benchmarks`, and `meta/scripts` evidence | 31 | 2,814,103 | `4779093114cfe083bd35a3331f5df502687bcf2a14cdc390b9e5a4816ce81af3` | <!-- LKJ-EXACT-DATA -->
 | `AGENTS.md` and tracked `docs` | 57 | 457,145 | `36a81144ed96508764f1ce435713ee4f0a86d33a942d6dc30865036e23ba9e5e` |
 | complete tracked tree | 287 | 5,050,416 | `1c07d270a667373edac03d5dd224e0deae8f8b2b3b7e0099624547f3b0b0ae34` |
 
@@ -39,12 +39,12 @@ Baseline commands actually run on that clean commit:
 
 | Command/gate | Result |
 | --- | --- |
-| `cargo run --locked -p lkjscript-xtask -- quiet verify` | exited 0 in 7 s; canonical format/Clippy/docs/tree/source and workspace tests passed |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | exited 0 in 7 s; canonical format/Clippy/docs/tree/source and workspace tests passed | <!-- LKJ-EXACT-DATA -->
 | `cargo build --workspace --release --locked` | exited 0 in 15 s |
-| default/VM/forced-baseline/threshold-2-auto scalar, forced optimizing, VM hello, and VM Mandelbrot runs | all exited 0; hello was `3628800`; Mandelbrot retained its canonical output |
-| `python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build` | exited 0; direct/run-folded correctness and failure checks passed |
+| default/VM/forced-baseline/threshold-2-auto scalar, forced optimizing, VM hello, and VM Mandelbrot runs | all exited 0; hello was `3628800`; Mandelbrot retained its canonical output | <!-- LKJ-EXACT-DATA -->
+| `python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build` | exited 0; direct/run-folded correctness and failure checks passed | <!-- LKJ-EXACT-DATA -->
 | lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smoke scripts with the release binary | all exited 0 |
-| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | exited 0 in 29 s with `result=ok` |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | exited 0 in 29 s with `result=ok` | <!-- LKJ-EXACT-DATA -->
 
 No retained performance sampling, full Brainfuck Mandelbrot, Miri, sanitizer,
 fuzzer, non-Linux target, AArch64, or Wasm/component acceptance was run for this

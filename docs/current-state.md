@@ -9,10 +9,11 @@ next work without mixing them with long-term vision.
 
 **Current** only for implementation and evidence explicitly labeled Current in
 the manifest capsules. Bounded Repository Topology, Repository Intelligence
-Graph/context, and the externalized agent work-state service are Current.
-Complete Semantic Source/Agent Protocol V1 and resource profiles remain
-**Accepted Implementation Contracts**, not Current code. Deferred and Rejected
-work remains non-current.
+Graph/context, externalized agent work state, the one-shot Agent Foundation V1
+protocol, and the compiler Resource Profile V1 foundation are Current. Complete
+Semantic Source Schema V1, daemon transport, typed holes, pre-allocation
+profile charging, and cross-authority resource ledgers remain Accepted.
+Deferred and Rejected work remains non-current.
 
 ## Current Baseline
 
@@ -21,18 +22,22 @@ reference bytecode/VM, callable host-independent Linux x86-64 baseline code,
 host-independent native allocation/collection, and forced proof-checked
 optimization are Current at baseline `dd8fb316`. Exact boundaries and retained
 historical command evidence are in the manifest below. Automatic proof
-promotion, complete protocol operations, aggregate profiles, OSR, AOT/cache,
-and wider host-native transitions are not Current. Structure, graph/context,
-and work-state commands are Current on the containing implementation commit.
+promotion, complete future Schema V1 operations, cross-authority aggregate
+profiles, OSR, AOT/cache, and wider host-native transitions are not Current.
+Structure, graph/context, work-state, one-shot protocol, and compiler-profile
+commands/APIs are Current on the containing implementation revision.
 
 ## Implementation Sequence
 
 1. [Bounded Repository Topology](decisions/platform/bounded-repository-topology.md) is Current.
 2. [Repository Intelligence Graph And Context](decisions/platform/repository-intelligence-graph.md) is Current.
 3. The bounded externalized [Agent Work State](decisions/platform/agent-work-state.md) service is Current.
-4. The [first Semantic Source/Agent
+4. The [Agent Foundation V1
    operations](decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md)
-   and [aggregate resource-profile candidate](decisions/platform/resource-budget-profiles-candidate.md) remain next.
+   are Current for the bounded one-shot protocol.
+5. The [compiler resource-profile
+   foundation](decisions/platform/resource-budget-profiles-candidate.md) is
+   Current at its documented post-phase charging boundaries.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

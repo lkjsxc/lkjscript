@@ -2,10 +2,10 @@ use std::path::Path;
 
 use lkjscript_core::Limits;
 
-use crate::semantic::codec::{self, error, MAX_SCHEMA_NODES, MAX_WORK_UNITS};
+use crate::semantic::codec::{self, error};
 use crate::semantic::operations;
 use crate::semantic::schema::{
-    Charges, OperationRequest, ProtocolError, ProtocolErrorCode, Request, Response, ResponseResult,
+    Charges, ProtocolError, ProtocolErrorCode, Request, Response, ResponseResult,
 };
 use crate::semantic::{SCHEMA, VERSION};
 
@@ -14,7 +14,22 @@ pub(crate) fn execute_request(
     request_bytes: usize,
 ) -> Result<Vec<u8>, ProtocolError> {
     let profile = request.profile;
-    let loaded = crate::source::load(Path::new(&request.root), &Limits::default());
+    let protocol_limits = super::charges::ProtocolLimits::for_profile(profile);
+    let root = Path::new(&request.root);
+    let request_charge = Charges {
+        request_bytes: u64::try_from(request_bytes).unwrap_or(u64::MAX),
+        ..Charges::default()
+    };
+    let _publication_guard = match super::transaction::begin(root) {
+        Ok(guard) => guard,
+        Err(failure) => return encode_error(profile, None, request_charge, failure, None),
+    };
+    let loaded = crate::source::load_for_protocol(
+        root,
+        &Limits::default(),
+        protocol_limits.source_bytes,
+        protocol_limits.source_units,
+    );
     let tree = match loaded {
         Ok(tree) => tree,
         Err(failure) => {
@@ -24,11 +39,10 @@ pub(crate) fn execute_request(
                 version: VERSION,
                 compiler_build: compiler_build(),
                 profile,
+                profile_identity: super::charges::identity(profile),
+                limits: protocol_limits.record(),
                 revision: None,
-                charges: Charges {
-                    request_bytes: request_bytes as u64,
-                    ..Charges::default()
-                },
+                charges: request_charge,
                 result: ResponseResult::Error {
                     error: Box::new(error(ProtocolErrorCode::SourceLoad, failure.render_human())),
                     diagnostic,
@@ -36,8 +50,19 @@ pub(crate) fn execute_request(
             });
         }
     };
-    let mut charges = charges(&tree, request_bytes, &request.operation);
-    if let Err(failure) = check_charges(&charges) {
+    let mut charges = match super::charges::measure(&tree, request_bytes, &request.operation) {
+        Ok(charges) => charges,
+        Err(failure) => {
+            return encode_error(
+                profile,
+                Some(tree.revision().to_hex()),
+                request_charge,
+                failure,
+                None,
+            )
+        }
+    };
+    if let Err(failure) = protocol_limits.check_charges(&charges) {
         return encode_error(
             profile,
             Some(tree.revision().to_hex()),
@@ -47,73 +72,53 @@ pub(crate) fn execute_request(
         );
     }
     let revision = tree.revision().to_hex();
-    match super::dispatch::dispatch(&tree, request.operation, &mut charges) {
-        Ok(result) => {
-            let response_revision = match &result {
+    match super::dispatch::dispatch(&tree, request.operation, &mut charges, protocol_limits) {
+        Ok(dispatched) => {
+            let response_revision = match &dispatched.result {
                 ResponseResult::ApplyTransaction { transaction } => {
                     transaction.new_revision.clone()
                 }
-                _ => revision,
+                _ => revision.clone(),
             };
             let encoded = codec::encode_response(Response {
                 schema: SCHEMA.to_string(),
                 version: VERSION,
                 compiler_build: compiler_build(),
                 profile,
+                profile_identity: super::charges::identity(profile),
+                limits: protocol_limits.record(),
                 revision: Some(response_revision.clone()),
                 charges: charges.clone(),
-                result,
+                result: dispatched.result,
             });
-            encoded.or_else(|failure| {
-                encode_error(profile, Some(response_revision), charges, failure, None)
-            })
+            let encoded = match encoded {
+                Ok(bytes) => bytes,
+                Err(failure) => {
+                    return encode_error(profile, Some(response_revision), charges, failure, None)
+                }
+            };
+            if let Some(publication) = dispatched.publication {
+                if let Err(failure) = super::transaction::publish(&publication, root) {
+                    return encode_error(profile, Some(revision), charges, failure, None);
+                }
+            }
+            Ok(encoded)
         }
         Err(failure) => {
-            let diagnostic = if matches!(
-                failure.code,
-                ProtocolErrorCode::StaleRevision | ProtocolErrorCode::PreconditionFailed
-            ) {
-                Some(operations::diagnostics::stale(
-                    tree.root_origin().logical_path(),
-                    &failure.message,
-                ))
-            } else {
-                None
-            };
+            let diagnostic = failure.diagnostic.as_deref().cloned().or_else(|| {
+                matches!(
+                    failure.code,
+                    ProtocolErrorCode::StaleRevision | ProtocolErrorCode::PreconditionFailed
+                )
+                .then(|| {
+                    operations::diagnostics::stale(
+                        tree.root_origin().logical_path(),
+                        &failure.message,
+                    )
+                })
+            });
             encode_error(profile, Some(revision), charges, failure, diagnostic)
         }
-    }
-}
-
-pub(super) fn check_charges(charges: &Charges) -> Result<(), ProtocolError> {
-    if charges.source_nodes > MAX_SCHEMA_NODES || charges.work_units > MAX_WORK_UNITS {
-        return Err(error(
-            ProtocolErrorCode::ResourceLimit,
-            "loaded source closure exceeds the standard protocol profile",
-        ));
-    }
-    Ok(())
-}
-
-fn charges(
-    tree: &crate::source::ValidatedSourceTree,
-    bytes: usize,
-    operation: &OperationRequest,
-) -> Charges {
-    let source_bytes = tree.files().iter().map(|file| file.exact_source_len).sum();
-    let operations = match operation {
-        OperationRequest::ApplyTransaction { operations, .. } => operations.len() as u64,
-        _ => 0,
-    };
-    let source_nodes = tree.nodes().len() as u64;
-    Charges {
-        request_bytes: bytes as u64,
-        source_bytes,
-        source_units: tree.files().len() as u64,
-        source_nodes,
-        operations,
-        work_units: source_nodes.saturating_add(operations.saturating_mul(16)),
-        output_bytes: 0,
     }
 }
 
@@ -129,6 +134,8 @@ fn encode_error(
         version: VERSION,
         compiler_build: compiler_build(),
         profile,
+        profile_identity: super::charges::identity(profile),
+        limits: super::charges::ProtocolLimits::for_profile(profile).record(),
         revision,
         charges,
         result: ResponseResult::Error {

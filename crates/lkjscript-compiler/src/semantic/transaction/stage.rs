@@ -55,8 +55,14 @@ pub(crate) fn stage(
         &Limits::default(),
     )
     .map_err(|failure| error(ProtocolErrorCode::ValidationFailed, failure.render_human()))?;
-    crate::analyze::analyze_program(&rebuilt)
-        .map_err(|failure| error(ProtocolErrorCode::ValidationFailed, failure.to_string()))?;
+    if let Err(failure) = crate::analyze::analyze_program(&rebuilt) {
+        let mut protocol = error(ProtocolErrorCode::ValidationFailed, failure.to_string());
+        protocol.diagnostic = crate::semantic::operations::diagnostics::collect(&rebuilt, true)
+            .into_iter()
+            .next()
+            .map(Box::new);
+        return Err(protocol);
+    }
     let (sources, changes) = super::files::changed_sources(tree, &rebuilt_sources)?;
     super::files::check_preconditions(tree, &changes, preconditions)?;
     let identities = super::relations::identity_relations(tree, &rebuilt, &resolved)?;
@@ -100,7 +106,7 @@ fn resolve_all(
 
 fn reject_overlaps(operations: &[ResolvedOperation]) -> Result<(), ProtocolError> {
     let mut declarations = HashSet::new();
-    let mut nodes = HashSet::new();
+    let mut replacements: Vec<&[usize]> = Vec::new();
     for operation in operations {
         match operation {
             ResolvedOperation::Rename { key, .. } if !declarations.insert(key) => {
@@ -109,11 +115,17 @@ fn reject_overlaps(operations: &[ResolvedOperation]) -> Result<(), ProtocolError
                     "declaration renamed more than once",
                 ));
             }
-            ResolvedOperation::Replace { node, .. } if !nodes.insert(node) => {
-                return Err(error(
-                    ProtocolErrorCode::InvalidOperation,
-                    "expression replaced more than once",
-                ));
+            ResolvedOperation::Replace { path, .. } => {
+                if replacements
+                    .iter()
+                    .any(|prior| path.starts_with(prior) || prior.starts_with(path.as_slice()))
+                {
+                    return Err(error(
+                        ProtocolErrorCode::InvalidOperation,
+                        "expression replacements overlap",
+                    ));
+                }
+                replacements.push(path);
             }
             _ => {}
         }

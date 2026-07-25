@@ -4,12 +4,12 @@ mod args;
 mod disasm;
 mod engine;
 mod errors;
+mod execution_command;
 mod help;
 mod metrics;
 mod metrics_jit;
 mod metrics_json;
 mod output;
-mod run;
 mod semantic;
 
 use std::env;
@@ -33,7 +33,7 @@ fn real_main() -> Result<ExitCode, String> {
             help::print();
             Ok(ExitCode::SUCCESS)
         }
-        Some("run") => run::command(&args),
+        Some("run") => execution_command::command(&args),
         Some("disasm") => disasm::command(&args),
         Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),

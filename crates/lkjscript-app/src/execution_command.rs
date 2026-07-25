@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use lkjscript_compiler::{compile_path, compile_path_with_metrics, CompileMetrics};
+use lkjscript_compiler::{
+    compile_path_with_profile, compile_path_with_profile_and_metrics, CompileMetrics,
+};
 use lkjscript_core::{ExecutionConfig, Limits};
 use lkjscript_jit::JitConfig;
 
@@ -16,12 +18,20 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let options = args::parse_run(args)?;
     let metrics_enabled = metrics::enabled();
     let (program, compile_metrics) = if metrics_enabled {
-        compile_path_with_metrics(&PathBuf::from(&options.file), &Limits::default())
-            .map_err(|error| error.to_string())?
+        compile_path_with_profile_and_metrics(
+            &PathBuf::from(&options.file),
+            &Limits::default(),
+            options.resource_profile,
+        )
+        .map_err(|error| error.to_string())?
     } else {
         (
-            compile_path(&PathBuf::from(&options.file), &Limits::default())
-                .map_err(|error| error.to_string())?,
+            compile_path_with_profile(
+                &PathBuf::from(&options.file),
+                &Limits::default(),
+                options.resource_profile,
+            )
+            .map_err(|error| error.to_string())?,
             CompileMetrics::default(),
         )
     };

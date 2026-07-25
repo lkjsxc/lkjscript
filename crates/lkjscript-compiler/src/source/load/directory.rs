@@ -42,7 +42,13 @@ fn source_tree_entry_limit_error(path: &Path, attempted: u64) -> SourceDiagnosti
         "LKJ-SRC-LIMIT",
         DiagnosticCategory::ResourceLimit,
         format!(
-            "Semantic Source Foundation V1 resource limit: category=source-tree-entries; attempted={attempted}; limit={FOUNDATION_MAX_SOURCE_TREE_ENTRIES}"
+            concat!(
+                "Semantic Source Foundation V1 resource limit: ",
+                "category=source-tree-entries; attempted={attempted}; ",
+                "limit={limit}"
+            ),
+            attempted = attempted,
+            limit = FOUNDATION_MAX_SOURCE_TREE_ENTRIES
         ),
         super::containment::host_diagnostic_origin(path),
         SourceSpan::zero(),
