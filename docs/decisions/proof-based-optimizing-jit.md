@@ -25,11 +25,16 @@ than the full progression below:
 3. ordinary verified copy/branch/unreachable/dead-code cleanup.
 
 Every rewrite is represented by a stable-ID edit certificate. An independent
-bounded verifier recomputes type, operation, operand, dominance/order, effect,
-trap, ownership, frame-state, and safepoint legality, applies only certified
-edits to a private clone, compares the exact candidate, and then runs the normal
-SSA verifier. Only an opaque `VerifiedOptimizedProgram` reaches optimizing
-lowering. Missing, stale, reordered, excessive, or forged edits fail closed.
+bounded checker builds checker-private immutable definition, type, constant,
+expression, predecessor, reachability, and dominance indexes. It does not call
+the discovery identity/GVN routines, discovery eligibility predicates or
+discovery dominator implementation. The checker independently derives exact
+type, operation, operand, dominance/order, effect, trap, ownership,
+frame-state, and safepoint legality, applies the ordered records to a private
+input clone, compares the exact candidate by reference (including F64 bits),
+and then runs the normal SSA verifier. Only an opaque
+`VerifiedOptimizedProgram` reaches optimizing lowering. Missing, stale,
+reordered, excessive, or forged edits fail closed.
 
 The selected forced engine is `--engine optimizing-jit`. It compiles the full
 required supported group before source effects, installs only `Tier::Optimizing`
@@ -70,7 +75,6 @@ OptimizingCandidate
 OptimizingCompiling
 OptimizedNative
 Disabled
-Invalidated
 ```
 
 Compilation remains synchronous, single-owner, bounded, and non-reentrant.
@@ -94,8 +98,15 @@ persistent code caches.
 boundaries. Only the latter can create the opaque `VerifiedOptimizedProgram`
 used by optimizing lowering. Ordered records retain stable function, block, and
 value IDs plus the expected canonical operation, exact operands, rewrite family,
-and replacement. Limits independently bound work units, records, certificate
-bytes, instruction growth, and cleanup iterations.
+and replacement. Public preflight limits functions, blocks, function and block
+parameters, instructions, operands, frame facts, recursive type nodes, metadata
+items, aggregate string/metadata bytes, certificate records and certificate
+bytes before cloning or general verification. Work, allocation-sized index
+construction, dominance intersections, expression probes, comparisons,
+certificate storage, reconstruction, cleanup, and final validation consume one
+aggregate configured work cap. Internal optimization also uses one budget across
+discovery and independent checking; cleanup iterations and instruction growth
+are aggregate caps rather than fresh per-phase allowances.
 
 The current algebraic vocabulary is I64 xor/or with zero, I64 and with all-ones,
 idempotent I64 and/or, and exact Bool double-not. Current GVN handles identical
@@ -106,12 +117,16 @@ affine, root, frame-state, and safepoint operations are ineligible. Existing
 verified copy, branch, unreachable, empty-block, effect-aware dead-code,
 direct-call, and canonical-order cleanup follows certified edits.
 
-The verifier re-verifies input, recomputes the canonical complete record sequence
-without consuming discovery state, checks every record and budget, applies edits
-to a private clone, verifies that edit-stage SSA, verifies every cleanup stage,
-requires exact equality with the supplied candidate, and runs ordinary SSA
-verification again. Missing, stale, reordered, forged, non-dominating,
-effectful, and over-budget proofs fail closed.
+The opaque verified input is preflighted, and the independent checker recomputes
+the canonical complete record sequence without consuming discovery state,
+checks every record and budget, applies edits to a private clone, verifies that
+edit-stage SSA, verifies every cleanup stage, requires exact equality with the
+supplied candidate, and runs ordinary SSA verification again. Discovery and the
+checker ignore unreachable blocks for rewrites; ordinary unreachable cleanup
+therefore removes valid disconnected diamonds and loops deterministically,
+while reachable dominance matches the ordinary verifier's path mathematics.
+Missing, stale, reordered, forged, non-dominating, effectful, and over-budget
+proofs fail closed.
 
 ## Initial Pass Pipeline
 
@@ -177,13 +192,25 @@ Counters are discarded at process exit and are not telemetry.
 
 Metrics distinguish baseline and optimizing compile/pass/install/entry times,
 object bytes, metadata, cache peaks, allocation/collection facts, failures,
-fallbacks, and exact tier transitions. Forced tests require nonzero optimizing
-entries and zero baseline/VM downgrade.
+fallbacks, and exact tier transitions. Optimization statistics retain separate
+executed discovery, checker, reconstruction, cleanup, and ordinary-validation
+pass counters; `optimizing_passes` is their actual optimizing-pass total rather
+than a value inferred from object and iteration counts. Certificate and retained
+optimization metadata byte fields are explicitly named `_estimate`: the
+certificate estimate is 8 bytes of canonical header plus 31 fixed bytes and 4
+bytes per operand for each record, and retained metadata adds eight bytes per
+reported scalar statistic. These are deterministic accounting formulas, not
+Rust allocator-size claims. Forced tests require nonzero optimizing entries and
+zero baseline/VM downgrade.
 
-The first forced workload currently demonstrates 2,788 optimizing versus 3,405
-baseline generated code bytes, four retained records, and 10,001 optimizing
-entries with zero baseline entry or fallback. No randomized timing protocol was
-run, so this is not a speedup claim.
+The final forced workload currently demonstrates 2,724 optimizing versus
+13,956 baseline generated code bytes, 72 retained checked-I64 GVN records, and
+10,001 optimizing entries with zero baseline entry or fallback. Current-thread
+stack bounds are queried once per invocation rather than once per generated
+frame reservation; every reservation still uses the cached guarded bounds.
+Preliminary timings are not retained adoption evidence. A randomized retained
+protocol must still establish the speed gate before automatic promotion is
+selected.
 
 The aspirational adoption gate is at least 1.20x optimizing native execution
 speed over same-commit baseline on one declared general workload, with no

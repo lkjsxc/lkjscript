@@ -206,12 +206,16 @@ resource failures are engine errors rather than VM fallback. Auto tests use a
 low deterministic threshold and prove compilation at one call is used only by
 later calls while unsupported code remains VM-correct and retry-suppressed.
 
-The CLI implements `vm`, `auto`, and `baseline-jit`; ordinary `run` defaults to
-`auto` at 64 function entries, while explicit `vm` remains deterministic.
+The CLI implements `vm`, `auto`, `baseline-jit`, and forced
+`optimizing-jit`; ordinary `run` defaults to `auto` at 64 function entries,
+while explicit `vm` remains deterministic and either forced JIT mode fails
+rather than downgrading.
 Tests check both selections. Machine diagnostics and low-overhead metrics are
 separate, stderr/file-only, opt-in, and silent during normal execution. Metrics retain exact outcome bits,
 compile/HIR/effect/SSA/bytecode/native/install/first-entry/first-call/VM/native/
 engine times, tier states and failures/fallbacks, entries/direct calls/PollV1,
+actual optimization phase/pass counts, aggregate optimization work,
+instruction growth/removal, estimated certificate/optimization metadata bytes,
 code/metadata/cache peaks, allocations/deterministic estimated object
 bytes/collections/estimated peak live heap, roots, distinct attempted and
 successful heap runtime calls, barriers, peak native frame depth, and transition

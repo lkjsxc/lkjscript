@@ -393,7 +393,7 @@ pub struct CodeObjectRecord {
     pub compile_stats: CompileStats,
     pub optimization_certificate: Option<OptimizationCertificate>,
     pub optimization_stats: Option<OptimizationStats>,
-    pub optimization_metadata_bytes: u64,
+    pub optimization_metadata_bytes_estimate: u64,
     pub invalidated: bool,
     pub native_entry_count: u64,
     pub wx_transition_verified: bool,
@@ -434,8 +434,13 @@ pub struct JitStats {
     pub baseline_code_objects: u64,
     pub optimizing_code_objects: u64,
     pub optimizing_passes: u64,
+    pub optimization_discovery_passes: u64,
+    pub optimization_checker_passes: u64,
+    pub optimization_reconstruction_passes: u64,
+    pub optimization_cleanup_passes: u64,
+    pub optimization_validation_passes: u64,
     pub optimization_certificate_records: u64,
-    pub optimization_certificate_bytes: u64,
+    pub optimization_certificate_bytes_estimate: u64,
     pub algebraic_rewrites: u64,
     pub gvn_rewrites: u64,
     pub checked_i64_rewrites: u64,
@@ -887,6 +892,17 @@ impl JitSession {
                 }
             }
         }
+        // The root machine entry was invoked even when its frame/value
+        // reservation failed before generated EnterFunctionV1. Count that
+        // actual entry once so forced-tier evidence never reports zero native
+        // execution for a structured pre-entry resource outcome.
+        if invocation_entries == 0 {
+            invocation_entries = 1;
+            self.native_entries = self.native_entries.saturating_add(1);
+            if let Some(record) = self.functions.get_mut(index) {
+                record.native_entries = record.native_entries.saturating_add(1);
+            }
+        }
         self.objects[object_index].native_entry_count = self.objects[object_index]
             .native_entry_count
             .saturating_add(invocation_entries);
@@ -961,7 +977,7 @@ impl JitSession {
         let metadata_cache_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
             total
                 .saturating_add(object.accounting.metadata_bytes())
-                .saturating_add(optimization_metadata_bytes(
+                .saturating_add(optimization_metadata_bytes_estimate(
                     object.optimization_stats.as_ref(),
                 ))
         });
@@ -998,12 +1014,26 @@ impl JitSession {
             .filter_map(|object| object.optimization_stats.as_ref())
             .fold(OptimizationStats::default(), |mut total, stats| {
                 total.iterations = total.iterations.saturating_add(stats.iterations);
+                total.discovery_passes = total
+                    .discovery_passes
+                    .saturating_add(stats.discovery_passes);
+                total.checker_passes = total.checker_passes.saturating_add(stats.checker_passes);
+                total.reconstruction_passes = total
+                    .reconstruction_passes
+                    .saturating_add(stats.reconstruction_passes);
+                total.cleanup_passes = total.cleanup_passes.saturating_add(stats.cleanup_passes);
+                total.validation_passes = total
+                    .validation_passes
+                    .saturating_add(stats.validation_passes);
+                total.optimizing_passes = total
+                    .optimizing_passes
+                    .saturating_add(stats.optimizing_passes);
                 total.certificate_records = total
                     .certificate_records
                     .saturating_add(stats.certificate_records);
-                total.certificate_bytes = total
-                    .certificate_bytes
-                    .saturating_add(stats.certificate_bytes);
+                total.certificate_bytes_estimate = total
+                    .certificate_bytes_estimate
+                    .saturating_add(stats.certificate_bytes_estimate);
                 total.algebraic_rewrites = total
                     .algebraic_rewrites
                     .saturating_add(stats.algebraic_rewrites);
@@ -1037,7 +1067,7 @@ impl JitSession {
                     compile_stats: object.compile_stats.clone(),
                     optimization_certificate: object.optimization_certificate.clone(),
                     optimization_stats: object.optimization_stats,
-                    optimization_metadata_bytes: optimization_metadata_bytes(
+                    optimization_metadata_bytes_estimate: optimization_metadata_bytes_estimate(
                         object.optimization_stats.as_ref(),
                     ),
                     invalidated: object.invalidated,
@@ -1075,11 +1105,14 @@ impl JitSession {
             optimizing_native_entries,
             baseline_code_objects,
             optimizing_code_objects,
-            optimizing_passes: optimizing_code_objects
-                .saturating_mul(2)
-                .saturating_add(optimization_totals.iterations),
+            optimizing_passes: optimization_totals.optimizing_passes,
+            optimization_discovery_passes: optimization_totals.discovery_passes,
+            optimization_checker_passes: optimization_totals.checker_passes,
+            optimization_reconstruction_passes: optimization_totals.reconstruction_passes,
+            optimization_cleanup_passes: optimization_totals.cleanup_passes,
+            optimization_validation_passes: optimization_totals.validation_passes,
             optimization_certificate_records: optimization_totals.certificate_records,
-            optimization_certificate_bytes: optimization_totals.certificate_bytes,
+            optimization_certificate_bytes_estimate: optimization_totals.certificate_bytes_estimate,
             algebraic_rewrites: optimization_totals.algebraic_rewrites,
             gvn_rewrites: optimization_totals.gvn_rewrites,
             checked_i64_rewrites: optimization_totals.checked_i64_rewrites,
@@ -1296,8 +1329,12 @@ impl JitSession {
     }
 }
 
-fn optimization_metadata_bytes(stats: Option<&OptimizationStats>) -> u64 {
-    stats.map_or(0, |stats| stats.certificate_bytes.saturating_add(11 * 8))
+fn optimization_metadata_bytes_estimate(stats: Option<&OptimizationStats>) -> u64 {
+    stats.map_or(0, |stats| {
+        stats
+            .certificate_bytes_estimate
+            .saturating_add(17_u64.saturating_mul(8))
+    })
 }
 
 pub fn execute_forced(
@@ -1348,15 +1385,10 @@ pub fn execute_optimizing(
     let outcome = scalar_to_execution(&session, main, invocation.outcome)?;
     let stats = session.stats();
     verify_forced_entry(&outcome, &stats, main, TierState::OptimizedNative)?;
-    let pre_entry_limit = matches!(
-        outcome,
-        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
-            | ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
-    );
     if stats.baseline_code_objects != 0
         || stats.baseline_native_entries != 0
         || stats.optimizing_code_objects == 0
-        || (!pre_entry_limit && stats.optimizing_native_entries == 0)
+        || stats.optimizing_native_entries == 0
         || stats.vm_fallbacks != 0
     {
         return Err(EngineError::new(
@@ -1369,23 +1401,17 @@ pub fn execute_optimizing(
 }
 
 fn verify_forced_entry(
-    outcome: &ExecutionOutcome,
+    _outcome: &ExecutionOutcome,
     stats: &JitStats,
     main: FunctionId,
     expected_state: TierState,
 ) -> Result<(), EngineError> {
-    let pre_entry_limit = matches!(
-        outcome,
-        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
-            | ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
-    );
-    if !pre_entry_limit
-        && (stats.native_entries == 0
-            || stats
-                .functions
-                .iter()
-                .filter(|record| record.code_object.is_some())
-                .any(|record| record.state != expected_state))
+    if stats.native_entries == 0
+        || stats
+            .functions
+            .iter()
+            .filter(|record| record.code_object.is_some())
+            .any(|record| record.state != expected_state)
     {
         return Err(EngineError::new(
             FailureCode::InvocationFailure,

@@ -216,6 +216,12 @@ pub fn empty_block_forwarding(verified: &VerifiedProgram) -> crate::Result<Verif
 pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedProgram> {
     let mut program = verified.program().clone();
     for function in &mut program.functions {
+        let definitions: HashMap<ValueId, Vec<ValueId>> = function
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+            .map(|instruction| (instruction.id, instruction.kind.operands()))
+            .collect();
         let mut live = HashSet::new();
         for block in &function.blocks {
             live.extend(block.terminator.operands());
@@ -233,7 +239,6 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
                             | InstructionKind::Borrow { .. }
                     )
                 {
-                    live.extend(instruction.kind.operands());
                     live.insert(instruction.id);
                 }
                 if let Some(frame) = &instruction.metadata.frame_state {
@@ -241,18 +246,12 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
                 }
             }
         }
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for instruction in function
-                .blocks
-                .iter()
-                .flat_map(|block| &block.instructions)
-                .rev()
-            {
-                if live.contains(&instruction.id) {
-                    for operand in instruction.kind.operands() {
-                        changed |= live.insert(operand);
+        let mut pending: Vec<ValueId> = live.iter().copied().collect();
+        while let Some(value) = pending.pop() {
+            if let Some(operands) = definitions.get(&value) {
+                for operand in operands {
+                    if live.insert(*operand) {
+                        pending.push(*operand);
                     }
                 }
             }

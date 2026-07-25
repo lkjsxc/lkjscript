@@ -48,9 +48,11 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   zero, and/all-ones, idempotent and/or, Bool double-not, and same-block or
   dominating exact scalar GVN/CSE. Duplicate checked I64 arithmetic/division is
   legal only behind an earlier identical dominating successful check. The
-  verifier independently checks the complete record sequence, reconstructs a
-  private candidate, requires exact equality, verifies edit and cleanup stages,
-  and rejects stale, forged, non-dominating, effectful, or over-budget proofs
+  checker builds private immutable semantic and CFG indexes without calling
+  discovery legality or dominance helpers, independently checks the complete
+  record sequence, reconstructs a private candidate, requires exact bitwise
+  equality, verifies edit and cleanup stages, and rejects stale, forged,
+  non-dominating, effectful, oversized, or aggregate-over-budget proofs
 - Host implementation: nine Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
@@ -174,7 +176,9 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   encoder-owned `ReserveFrameV1` after only minimal ABI setup and before frame
   subtraction/initialization. Sys validates descriptor bytes, configured
   aggregate/per-frame limits, active-frame capacity, the exact configured
-  active value/home/root budget, and guarded current pthread stack bounds, then
+  active value/home/root budget, and guarded current pthread stack bounds. The
+  sys invocation caches immutable current-thread stack bounds once, then checks
+  each generated reservation without repeating pthread attribute queries, and
   tracks exact reservation/release across nested frames. Collecting calls publish
   a dense safepoint, and every structured return/trap/exit/deadline/resource/host
   edge unregisters before status returns to the execution owner
@@ -197,7 +201,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   relocation/runtime/safepoint/source/outcome, compile/install, invalidation,
   W^X, entry metadata, and bounded optimizing certificate/stat accounting under
   synchronous session ownership. Metrics separately count baseline/optimizing
-  objects and entries, passes, certificate bytes/records, and exact rewrite families
+  objects and entries, actual executed optimization passes, certificate
+  byte estimates/records, explicit phase counters, and exact rewrite families
 - Retained JIT evidence: opt-in low-overhead JSON metrics are separate from full
   diagnostics and never use stdout; allocation/object byte fields are labeled
   deterministic estimates, heap operation attempts and successes are distinct,
@@ -296,6 +301,37 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The final forced-optimizer hardening in this document's containing commit,
+based on `114196422fb41b8c1b1dab6304c1680000cf67ed`, was checked in the
+primary Linux 7.0.0-27-generic x86-64 checkout with Rust/Cargo 1.96.0. It closes
+aggregate cleanup/preflight/pass-accounting and structured pre-entry evidence,
+and replaces per-entry pthread stack queries with one invocation-bound query.
+
+| Final forced-optimizer command or check | Result |
+| --- | --- |
+| focused IR/JIT/sys/app tests | passed; type-parameter-vector preflight, aggregate worst-case cleanup charging, unreachable-before-copy cleanup, validation-inclusive pass totals, and nonzero optimizing entry evidence for zero stack/frame structured outcomes plus prior proof/root/allocation coverage |
+| `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` | passed |
+| docs/tree/source checks and `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; rustfmt, strict Clippy, exact source closure, 213 unit/integration tests, and one non-Send compile-fail doctest |
+| `cargo build --workspace --release --locked`; default hello, forced scalar/allocation/optimizing JIT, Mandelbrot, Brainfuck, lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smokes | passed; declared optimizer workload returned I64 `3333`, retained 72 checked-I64 proof records, emitted 2,724 optimizing bytes, entered optimizing code 10,001 times, and recorded zero baseline entries/fallback; allocation optimization returned I64 `1` with 3 optimizing entries and zero downgrade |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | passed with `result=ok`, 213 tests plus the compile-fail doctest, and all configured smokes |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | retained performance sampling, automatic promotion, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
+
+The adversarial proof-optimizer repair in this document's containing commit,
+based on `1f9999854d91e3abc033c555bd465f8ce1be36c1`, was checked in an
+isolated Linux 7.0.0-27-generic x86-64 worktree with Rust/Cargo 1.96.0 and 96
+GiB free in the shared artifact filesystem.
+
+| Adversarial proof-optimizer command or check | Result |
+| --- | --- |
+| focused IR and app optimizer/JIT/CLI tests | passed; independent forged-proof rejection, exact checked trap identity from source, public oversized-candidate/growth rejection, charged duplicate-expression width, unreachable diamond/loop cleanup, optimizing recursive live roots/maps, help, metrics fields, and retained prior optimizer/JIT coverage |
+| `cargo test --locked --workspace` | passed; 213 unit/integration tests plus the non-Send compile-fail doctest |
+| `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`; `cargo fmt --all -- --check` | passed |
+| separate `check-docs`, `check-tree`, and `check-sources`; `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; the canonical gate reran formatting, strict Clippy, docs/tree/source closure, all 213 tests, and the compile-fail doctest |
+| `cargo build --locked --workspace --release`; forced release baseline scalar, optimizing scalar, baseline allocation graph, and optimizing allocation graph | passed; all four smokes exited zero with empty stdout/stderr and no forced downgrade |
+| `git diff --check` | passed |
+| Not tested | Docker, performance sampling, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
 
 The forced first proof-optimizing implementation in this document's containing
 commit, based on `cd4eee2d9381decf98ef89f6dc9f8526cbea3aa8`, was checked in an

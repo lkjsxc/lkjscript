@@ -171,7 +171,7 @@ forced main or hot scalar VM function entry
   -> verified scalar or host-independent reference eligibility and reachable SCC group
   -> synchronous typed-SSA lowering at a safepoint
   -> bounded W^X callable ABI-2 baseline code object
-  -> descriptor/budget/pthread-bounds frame reservation before stack subtraction
+  -> one invocation-time pthread stack-bounds query, then cached descriptor/budget/bounds frame reservation before each stack subtraction
   -> initialized registered frame and verifier-certified exact scalar or typed-reference call map
   -> unboxed direct call or canonical-fact verified-home HeapDispatchV1 safe runtime service
   -> GcHeap collection/allocation with root writeback, argument re-materialization,

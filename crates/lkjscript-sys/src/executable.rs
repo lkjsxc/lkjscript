@@ -853,6 +853,8 @@ struct NativeCallState<'a> {
     maximum_active_values: usize,
     maximum_native_stack_bytes: usize,
     maximum_native_frame_bytes: usize,
+    native_stack_low: usize,
+    native_stack_high: usize,
     pending_reservation: Option<PendingFrameReservation>,
     reserved_native_stack_bytes: usize,
     peak_native_stack_bytes: usize,
@@ -907,6 +909,11 @@ impl<'a> NativeCallState<'a> {
         heap_arguments
             .try_reserve_exact(16)
             .map_err(|_| InvocationError::RootCapacityExceeded)?;
+        // One generated invocation cannot migrate threads. Cache the current
+        // thread's fixed stack bounds once instead of repeating pthread
+        // attribute queries at every generated function entry.
+        let (native_stack_low, native_stack_high) =
+            platform::native_stack_bounds().unwrap_or((0, 0));
         let (deadline_ms, status) = match config.wall_time {
             Some(duration) => match crate::now_ms_monotonic() {
                 Ok(now) => {
@@ -935,6 +942,8 @@ impl<'a> NativeCallState<'a> {
             maximum_active_values: config.max_active_values,
             maximum_native_stack_bytes: config.max_native_stack_bytes,
             maximum_native_frame_bytes: config.max_native_frame_bytes,
+            native_stack_low,
+            native_stack_high,
             pending_reservation: None,
             reserved_native_stack_bytes: 0,
             peak_native_stack_bytes: 0,
@@ -1010,7 +1019,13 @@ impl<'a> NativeCallState<'a> {
         };
         if frame_bytes > self.maximum_native_frame_bytes
             || next_reserved_bytes > self.maximum_native_stack_bytes
-            || !platform::native_stack_reservation_fits(rbp, frame_bytes, NATIVE_STACK_GUARD_BYTES)
+            || !platform::native_stack_reservation_fits(
+                rbp,
+                frame_bytes,
+                NATIVE_STACK_GUARD_BYTES,
+                self.native_stack_low,
+                self.native_stack_high,
+            )
         {
             self.status = 4;
             self.payload = 5;
@@ -1811,11 +1826,7 @@ mod platform {
         fn pthread_attr_destroy(attributes: *mut c_void) -> i32;
     }
 
-    pub(super) fn native_stack_reservation_fits(
-        rbp: *mut u8,
-        frame_bytes: usize,
-        guard_bytes: usize,
-    ) -> bool {
+    pub(super) fn native_stack_bounds() -> Option<(usize, usize)> {
         // pthread_attr_t is opaque here. This word-aligned buffer is larger
         // than the Linux x86-64 glibc and musl objects passed to these APIs.
         let mut attributes = [0_usize; 16];
@@ -1825,7 +1836,7 @@ mod platform {
             unsafe { pthread_getattr_np(pthread_self(), attributes.as_mut_ptr().cast::<c_void>()) }
                 == 0;
         if !initialized {
-            return false;
+            return None;
         }
         let mut stack_address = std::ptr::null_mut();
         let mut stack_size = 0_usize;
@@ -1842,12 +1853,20 @@ mod platform {
         let destroy_result =
             unsafe { pthread_attr_destroy(attributes.as_mut_ptr().cast::<c_void>()) };
         if stack_result != 0 || destroy_result != 0 {
-            return false;
+            return None;
         }
         let stack_low = stack_address as usize;
-        let Some(stack_high) = stack_low.checked_add(stack_size) else {
-            return false;
-        };
+        let stack_high = stack_low.checked_add(stack_size)?;
+        (stack_low < stack_high).then_some((stack_low, stack_high))
+    }
+
+    pub(super) fn native_stack_reservation_fits(
+        rbp: *mut u8,
+        frame_bytes: usize,
+        guard_bytes: usize,
+        stack_low: usize,
+        stack_high: usize,
+    ) -> bool {
         let frame_base = rbp as usize;
         let Some(requested_low) = frame_base.checked_sub(frame_bytes) else {
             return false;
@@ -2234,10 +2253,16 @@ mod platform {
         PermissionProbeError, RawReturn, Signature,
     };
 
+    pub(super) fn native_stack_bounds() -> Option<(usize, usize)> {
+        None
+    }
+
     pub(super) fn native_stack_reservation_fits(
         _rbp: *mut u8,
         _frame_bytes: usize,
         _guard_bytes: usize,
+        _stack_low: usize,
+        _stack_high: usize,
     ) -> bool {
         false
     }

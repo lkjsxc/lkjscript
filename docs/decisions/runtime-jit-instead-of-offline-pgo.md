@@ -239,7 +239,7 @@ resolved direct calls.
 
 ## JIT State Machine
 
-Every compilable function or region begins with this accepted state model:
+The Current function state model is:
 
 ```text
 VmOnly -> Observed -> BaselineCompiling
@@ -248,9 +248,13 @@ VmOnly -> Observed -> BaselineCompiling
 BaselineNative -> OptimizingCandidate -> OptimizingCompiling
                                            | success -> OptimizedNative
                                            | failure -> BaselineNative
-BaselineNative | OptimizedNative -> Invalidated
-Invalidated -> BaselineNative | Observed | VmOnly(disabled)
+BaselineNative | OptimizedNative -- object invalidation --> Observed
 ```
+
+There is no Current `Invalidated` function-state variant. Installed code objects
+retain an implemented invalidated bit, but invalidating one clears its function
+links and transitions affected functions directly to `Observed`; a dedicated
+function state may be documented only after it is implemented.
 
 Initial compilation is synchronous at a safepoint. Background compiler threads
 are **Deferred** until VM outcomes, heap access, code-cache ownership,

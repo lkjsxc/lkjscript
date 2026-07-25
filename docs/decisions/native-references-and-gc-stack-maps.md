@@ -56,7 +56,9 @@ arguments in invocation-owned scratch, and call the encoder-owned
 The sys reservation validates the exact function descriptor and requested frame
 bytes, configured aggregate and per-frame native-stack budgets (4 MiB and 1 MiB
 by default), active-frame capacity, and the current Linux pthread stack bounds
-with a 16 KiB guard margin. Reservation failure reports exact `ActiveFrames` or
+with a 16 KiB guard margin. Those immutable bounds are queried once when the
+non-migrating invocation state is created and reused for each nested frame
+check. Reservation failure reports exact `ActiveFrames` or
 `NativeStackBytes` resource outcomes through an unregistered epilogue. Successful reservations are tracked
 and released byte-for-byte by matching registration/unregistration. A
 collecting call first publishes its dense safepoint identity. The sys trampoline
@@ -106,7 +108,7 @@ The record identifies:
 - source/outcome/frame-state metadata.
 
 Generated prologues reserve against descriptor, configured byte limits, active
-frame count, and actual guarded pthread stack bounds before they subtract or
+frame count, and the invocation-cached actual guarded pthread stack bounds before they subtract or
 initialize the requested storage. They register the frame only after its
 descriptor and storage are valid. Reservation and registration are matched, and
 every normal, trap, exit, deadline, resource, and host-failure edge unregisters

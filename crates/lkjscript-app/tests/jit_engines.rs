@@ -160,12 +160,23 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
     assert!(optimized_object.wx_transition_verified);
     assert!(optimized_object.native_entry_count > 0);
     assert!(optimized_object.optimization_certificate.is_some());
-    assert!(optimized_object.optimization_metadata_bytes > 0);
+    assert!(optimized_object.optimization_metadata_bytes_estimate > 0);
     assert!(optimized_object.code_bytes < baseline_object.code_bytes);
     let optimization = optimized_object
         .optimization_stats
         .expect("retained optimization accounting");
     assert!(optimization.output_instructions < optimization.input_instructions);
+    assert_eq!(
+        optimizing.stats.optimizing_passes,
+        optimization.optimizing_passes
+    );
+    assert_eq!(optimizing.stats.optimization_discovery_passes, 1);
+    assert_eq!(optimizing.stats.optimization_checker_passes, 1);
+    assert_eq!(optimizing.stats.optimization_reconstruction_passes, 2);
+    assert_eq!(optimizing.stats.optimization_cleanup_passes, 14);
+    assert_eq!(optimizing.stats.optimization_validation_passes, 17);
+    assert_eq!(optimization.instruction_growth, 0);
+    assert!(optimizing.stats.optimization_certificate_bytes_estimate > 0);
 }
 
 #[test]
@@ -230,6 +241,52 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
         .expect("optimizing trap remains structured");
         assert_eq!(execution(optimized.outcome), Scalar::Trapped);
         assert_eq!(optimized.stats.baseline_native_entries, 0);
+    }
+
+    for (name, operation, left, right, expected_trap) in [
+        (
+            "duplicate-overflow.lkjscript",
+            "+",
+            "9223372036854775807",
+            "1",
+            "checked I64 overflow",
+        ),
+        (
+            "duplicate-division.lkjscript",
+            "div",
+            "1",
+            "0",
+            "div: I64 division by zero",
+        ),
+    ] {
+        let expression = format!("{operation}/\nz\none\n/{operation}");
+        let source = format!(
+            "main/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nz\n{left}\n/bind\nlet/\nbind/\none\n{right}\n/bind\nlet/\nbind/\nfirst\n{expression}\n/bind\nlet/\nbind/\nsecond\n{expression}\n/bind\nsecond\n/let\n/let\n/let\n/let\n/main\n"
+        );
+        let program = compile(&source, name);
+        let baseline = execute_forced(
+            program.ssa(),
+            &ExecutionConfig::default(),
+            JitConfig::default(),
+        )
+        .expect("duplicate checked baseline trap");
+        let optimized = execute_optimizing(
+            program.ssa(),
+            &ExecutionConfig::default(),
+            JitConfig::default(),
+        )
+        .expect("duplicate checked optimizing trap");
+        assert!(matches!(
+            baseline.outcome,
+            ExecutionOutcome::Trapped(ref trap) if trap.as_str() == expected_trap
+        ));
+        assert!(matches!(
+            optimized.outcome,
+            ExecutionOutcome::Trapped(ref trap) if trap.as_str() == expected_trap
+        ));
+        assert_eq!(optimized.stats.baseline_native_entries, 0);
+        assert_eq!(optimized.stats.vm_fallbacks, 0);
+        assert_eq!(optimized.stats.checked_i64_rewrites, 1);
     }
 
     let exit = "main/\nsig/\n->\nUnit\n/sig\nexit/\n17\n/exit\n/main\n";
@@ -528,13 +585,33 @@ fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames()
     config.force_gc_before_allocation = true;
     let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
         .expect("recursive generated reference execution");
-    assert_eq!(execution(native.outcome), execution(vm));
+    let mut optimizing_config = JitConfig::default();
+    optimizing_config.force_gc_before_allocation = true;
+    let optimized = execute_optimizing(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        optimizing_config,
+    )
+    .expect("optimizing recursive generated reference execution");
+    assert_eq!(execution(native.outcome), execution(vm.clone()));
+    assert_eq!(execution(optimized.outcome), execution(vm));
     assert_eq!(native.stats.vm_fallbacks, 0);
+    assert_eq!(optimized.stats.vm_fallbacks, 0);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
     assert!(native.stats.native_entries >= 6);
+    assert!(optimized.stats.optimizing_native_entries >= 6);
     assert!(native.stats.peak_native_frame_depth >= 6);
+    assert!(optimized.stats.peak_native_frame_depth >= 6);
     assert!(native.stats.collections >= 2);
+    assert!(optimized.stats.collections >= 2);
     assert!(native.stats.maximum_roots >= 5);
+    assert!(optimized.stats.maximum_roots >= 5);
     assert!(native
+        .stats
+        .code_objects
+        .iter()
+        .any(|object| !object.exact_scalar_stack_maps));
+    assert!(optimized
         .stats
         .code_objects
         .iter()
@@ -546,12 +623,27 @@ fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames()
     config.force_gc_before_allocation = true;
     let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
         .expect("mutual recursive SCC with live reference executes natively");
+    let mut optimizing_config = JitConfig::default();
+    optimizing_config.force_gc_before_allocation = true;
+    let optimized = execute_optimizing(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        optimizing_config,
+    )
+    .expect("mutual recursive SCC with live reference optimizes natively");
     assert!(
         matches!(native.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0))
     );
+    assert!(
+        matches!(optimized.outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(0))
+    );
     assert_eq!(native.stats.vm_fallbacks, 0);
+    assert_eq!(optimized.stats.vm_fallbacks, 0);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
     assert!(native.stats.peak_native_frame_depth >= 7);
+    assert!(optimized.stats.peak_native_frame_depth >= 7);
     assert!(native.stats.maximum_roots >= 6);
+    assert!(optimized.stats.maximum_roots >= 6);
 }
 
 #[test]
@@ -615,7 +707,26 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
             ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
         );
         assert_eq!(outcome.stats.peak_native_frame_depth, 0);
+        let optimized = execute_optimizing(program.ssa(), &stack, JitConfig::default())
+            .expect("optimizing active-value limit is a language outcome");
+        assert_eq!(
+            optimized.outcome,
+            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+        );
+        assert!(optimized.stats.optimizing_native_entries > 0);
+        assert_eq!(optimized.stats.baseline_native_entries, 0);
     }
+
+    let mut no_frames = ExecutionConfig::default();
+    no_frames.max_frames = 0;
+    let optimized = execute_optimizing(program.ssa(), &no_frames, JitConfig::default())
+        .expect("optimizing frame limit is a language outcome");
+    assert_eq!(
+        optimized.outcome,
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
+    );
+    assert!(optimized.stats.optimizing_native_entries > 0);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     let allocation = compile(
         "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
