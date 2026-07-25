@@ -105,7 +105,7 @@ returned. Successful metrics expose the complete totals; failed requests do not
 yet return a complete ledger summary or responsible semantic node.
 
 `protocol_request_bytes` and `protocol_response_bytes` are reserved at zero in
-the compiler ledger. Agent Foundation V1 selects one of the same five profile
+the compiler ledger. Semantic Source V1 selects one of the same five profile
 identities and intersects its request/response, source, schema-node, and
 validation-work ceilings with stricter protocol/foundation maxima. Its ledger
 is request-local and does not silently claim to be the compiler ledger.

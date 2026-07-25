@@ -16,11 +16,12 @@ The immediate implementation sequence has progressed as follows:
 2. bounded repository graph/context nodes, edges, identities, and profiles are Current;
 3. externalized agent work state with exact Git/state preconditions, action and
    command facts, content references, atomic replacement, and compaction is Current; and
-4. bounded one-shot Agent Foundation V1 operations and the compiler Resource
-   Profile V1 foundation are Current without changing an Edition 1 limit; and
-5. complete future Schema V1, daemon/typed-hole operations, pre-allocation
-   profile charging, and shared protocol/repository/task/runtime ledgers remain
-   next.
+4. complete Semantic Source Schema V1 and its bounded one-shot operations are
+   Current, superseding the historical Agent Foundation identity;
+5. compiler Resource Profile V1 is Current without changing Edition 1 limits;
+   and
+6. Semantic Source V2, local sessions, typed holes/legal actions,
+   pre-allocation charging, and shared request ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

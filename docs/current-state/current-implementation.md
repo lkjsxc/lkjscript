@@ -15,19 +15,18 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
-- Semantic Source Foundation V1: public identity
-  `lkjscript.semantic-source-foundation` version 1; one opaque immutable
-  `ValidatedSourceTree` is the parser/load authority for compiler analysis;
-  it retains exact byte/line/Unicode-column spans and contained logical/host
-  origins, exact-input revision fingerprints, length-framed stable declaration
-  keys, dense revision-scoped preorder node IDs, deterministic structural
-  Edition 1 formatting, and source-foundation diagnostics with complete related
-  spans. The old `ast.rs`, `lex.rs`, `parse.rs`, `limits_check.rs`, and
-  `import.rs` authority paths are removed. The strict bounded one-shot
-  `lkjscript.agent-foundation` V1 endpoint now provides snapshot/entity/node/
-  diagnostic queries plus preview/publish rename and expression replacement.
-  Complete future Schema V1, daemon transport, typed holes, and exact HIR fact
-  correlation for every source node are not Current
+- Semantic Source V1: public identity `lkjscript.semantic-source` version 1;
+  one opaque immutable `ValidatedSourceTree` is parser/load authority. Closed
+  typed schema records cover every Edition 1 node/value/type/built-in,
+  declaration, trivia attachment, transaction expression, diagnostic, and
+  correlation category across all 125 tracked files. Schema/source subtrees
+  roundtrip deterministically; exact spans/origins/revisions, stable keys, dense
+  nodes, and canonical formatting remain authoritative. Unknown schema kinds,
+  fields, operations, versions, duplicates, and trailing input fail. The
+  bounded one-shot endpoint provides snapshot/entity/node/diagnostic queries
+  plus atomic rename/expression replacement. Agent Foundation V1 is historical.
+  Sessions, typed holes, Semantic Source V2, and unavailable exact downstream
+  correlations remain non-Current
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
   directory. Foundation implementation maxima additionally reject a source file

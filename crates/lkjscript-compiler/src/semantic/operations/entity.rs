@@ -48,13 +48,33 @@ pub(crate) fn read(
         })
         .map(|node| crate::semantic::tree::node_record(tree, node))
         .collect();
+    let subtree = crate::semantic::tree::subtree_record(tree, declaration.node().index())
+        .ok_or_else(|| {
+            error(
+                ProtocolErrorCode::UnknownNode,
+                "declaration subtree is unavailable",
+            )
+        })?;
+    let reconstructed = subtree.to_source().map_err(|message| {
+        error(
+            ProtocolErrorCode::ValidationFailed,
+            format!("closed semantic subtree is invalid: {message}"),
+        )
+    })?;
+    let canonical_subtree = crate::source::format_node_source(source);
+    if crate::source::format_node_source(&reconstructed) != canonical_subtree {
+        return Err(error(
+            ProtocolErrorCode::ValidationFailed,
+            "closed semantic subtree does not roundtrip exactly",
+        ));
+    }
     Ok(EntityRecord {
         declaration: crate::semantic::tree::declaration_record(tree, declaration),
         source: declaration.origin().logical_path().to_string(),
         fingerprint,
-        canonical_subtree: crate::source::format_node_source(source),
-        subtree: crate::semantic::tree::expression(source),
+        canonical_subtree,
+        subtree,
         descendants,
-        derived_summaries: vec!["query_node:lkjscript.agent-foundation:1".to_string()],
+        available_fact_schemas: vec![crate::semantic::schema::FactSchema::Binding],
     })
 }

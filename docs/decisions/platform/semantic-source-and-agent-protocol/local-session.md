@@ -10,7 +10,7 @@ bounds, invalidation, and shutdown behavior.
 ## Status
 
 **Accepted Target, not Current.** The Current command remains the bounded
-one-shot Agent Foundation V1 interface.
+one-shot `lkjscript.semantic-source/1` interface.
 
 ## Command And Framing
 

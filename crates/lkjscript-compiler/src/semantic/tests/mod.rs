@@ -1,11 +1,13 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 mod codec;
+mod corpus;
 mod diagnostics;
 mod publication;
 mod publication_conflict;
 mod query;
 mod transaction;
+mod transaction_rejection;
 
 use std::path::PathBuf;
 

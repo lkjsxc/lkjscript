@@ -7,27 +7,26 @@ the deterministic Edition 1 projection adapter, and the smallest complete
 agent-facing transaction/query slice.
 ## Status
 
-**Current** for Semantic Source Foundation V1: one opaque validated Edition 1
-source authority, exact source origins/spans, exact-byte revision fingerprints,
-stable declaration keys, dense revision-scoped nodes, structured source-
-foundation diagnostics, deterministic formatting, checked source-closure safety
-maxima, and compiler/analyzer cutover. The obsolete AST/lexer/parser/import
-source-authority modules are removed.
+**Current** for complete `lkjscript.semantic-source` version 1 over Edition 1:
+one opaque validated source authority; closed typed node, value, declaration,
+type, built-in, trivia, transaction-expression, diagnostic, and correlation
+schemas; exact source origins/spans/revisions; stable declaration keys; dense
+revision-scoped nodes; deterministic schema/source roundtrip; and all 125
+tracked sources. Unknown kinds, fields, operations, versions, duplicates, and
+trailing input fail. Inferred facts remain derived authority.
 
-**Current** for the bounded one-shot `lkjscript.agent-foundation` version 1
-`snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic `rename`, and
-atomic `replace_expression` operations and their strict serde boundary. Publish
-responses are bounded before file changes; repository-local publication uses
-recovery journals and exclusion, and an interrupted prepared transaction is
-rolled back before the next protocol read. This identity is deliberately the
-Agent Foundation, not the complete future Semantic Source Schema V1.
+The bounded one-shot `snapshot`, `read_entity`, `query_node`, `diagnostics`,
+atomic `rename`, and atomic `replace_expression` operations now emit that
+identity. Responses are bounded before publication; journaled local publication
+retains exclusion, rollback, descriptor anchoring, and conflict preservation.
+The former `lkjscript.agent-foundation/1` identity is historical and is rejected
+rather than retained as an alias. `lkjscript.agent/1` is not emitted.
 
-Complete Schema V1, `lkjscript.semantic-source/2`, Edition 2 authoring, typed
-holes and legal actions, the exact local stdio session, complete correlation,
-and pre-allocation node/work metering remain **Accepted Targets**. Their focused
-capsules are contracts, not Current endpoint claims. Unavailable query facts
-are explicit, not guessed. Unsupported operations do not exist as inert
-endpoints.
+`lkjscript.semantic-source/2`, Edition 2 authoring, typed holes/legal actions,
+the local stdio session, wider agent operations, and pre-allocation metering
+remain **Accepted Targets**. Unavailable HIR/SSA/layout/proof/native correlations
+are explicit and revisioned rather than guessed. Unsupported operations do not
+exist as inert endpoints.
 
 ## Authority And Status Vocabulary
 
@@ -45,5 +44,5 @@ capability beyond the explicit status in its text.
 - [Complete Schema V1](semantic-source-and-agent-protocol/complete-schema-v1.md)
 - [Typed holes and legal actions](semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md)
 - [Local session](semantic-source-and-agent-protocol/local-session.md)
-- [First Current-candidate operations](semantic-source-and-agent-protocol/first-current-candidate.md)
+- [Historical Agent Foundation operations](semantic-source-and-agent-protocol/first-current-candidate.md)
 - [Acceptance gates and deferred scope](semantic-source-and-agent-protocol/acceptance-gates.md)

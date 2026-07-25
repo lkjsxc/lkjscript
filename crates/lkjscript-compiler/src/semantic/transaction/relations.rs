@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use crate::semantic::codec::error;
-use crate::semantic::schema::{IdentityRelation, ProtocolError, ProtocolErrorCode};
+use crate::semantic::schema::{
+    IdentityRelation, IdentityRelationKind, ProtocolError, ProtocolErrorCode,
+};
 use crate::semantic::transaction::ResolvedOperation;
 use crate::source::ValidatedSourceTree;
 
@@ -30,7 +32,7 @@ pub(super) fn identity_relations(
                         )
                     })?;
                 output.push(IdentityRelation {
-                    relation: "renamed".to_string(),
+                    relation: IdentityRelationKind::RenamedDeclaration,
                     old_key: Some(key.clone()),
                     new_key: Some(new.key().to_hex()),
                     old_node: Some(old.node().index()),
@@ -68,7 +70,7 @@ pub(super) fn identity_relations(
                     })?;
                 let new_node = follow_path(next, new.node().index(), path)?;
                 output.push(IdentityRelation {
-                    relation: "replaced_expression".to_string(),
+                    relation: IdentityRelationKind::ReplacedExpression,
                     old_key: Some(key.clone()),
                     new_key: Some(new.key().to_hex()),
                     old_node: Some(*node),
@@ -126,7 +128,7 @@ fn append_changed_owners(
             });
         if changed {
             output.push(IdentityRelation {
-                relation: "changed_reference_owner".into(),
+                relation: IdentityRelationKind::ChangedReferenceOwner,
                 old_key: Some(old_key),
                 new_key: Some(new.key().to_hex()),
                 old_node: Some(old.node().index()),

@@ -16,10 +16,11 @@ Semantic Source/Agent Protocol V1, Edition 2, packages, general ownership, AOT,
 Wasm, concurrency, or self-hosting Current.
 
 The selected foundation sequence is now Current for bounded repository
-topology, repository graph/context, agent work state, one-shot Agent Foundation
-V1 operations, and compiler Resource Profile V1 post-phase accounting. These
-bounded slices are indexed in [Platform Decisions](README.md); they do not make
-the complete future protocol, shared ledgers, or Edition 2 Current. Automatic
+topology, repository graph/context, agent work state, complete Semantic Source
+Schema V1 with bounded one-shot operations, and compiler Resource Profile V1
+post-phase accounting. These slices are indexed in [Platform
+Decisions](README.md); they do not make sessions, wider Agent operations, shared
+ledgers, or Edition 2 Current. Automatic
 optimizing promotion remains a valid later measured experiment.
 
 ## Problem

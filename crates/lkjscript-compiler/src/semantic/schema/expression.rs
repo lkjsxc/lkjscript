@@ -1,11 +1,14 @@
+mod measure;
+
 use serde::{Deserialize, Serialize};
 
-use crate::source::{SourceNode, SourceSpan, SyntaxKind};
+use super::{ClosedBuiltinOperation, TypeExpression};
+use crate::source::{SourceNode, SourceSpan};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Expression {
-    Unit,
+    Unit {},
     Bool {
         value: bool,
     },
@@ -18,77 +21,93 @@ pub(crate) enum Expression {
     String {
         value: String,
     },
-    Symbol {
+    NameReference {
         name: String,
     },
-    Call {
+    EmptyList {
+        element: TypeExpression,
+    },
+    None {
+        value_type: TypeExpression,
+    },
+    Let {
+        bindings: Vec<ExpressionBinding>,
+        body: Box<Expression>,
+    },
+    Var {
         name: String,
-        children: Vec<Expression>,
+        value_type: TypeExpression,
+        initial: Box<Expression>,
+        body: Box<Expression>,
+    },
+    Set {
+        name: String,
+        value: Box<Expression>,
+    },
+    If {
+        condition: Box<Expression>,
+        then_branch: Box<Expression>,
+        else_branch: Box<Expression>,
+    },
+    While {
+        condition: Box<Expression>,
+        body: Vec<Expression>,
+    },
+    Do {
+        expressions: Vec<Expression>,
+    },
+    Quote {
+        name: String,
+    },
+    ProductValue {
+        product: String,
+        fields: Vec<ExpressionField>,
+    },
+    Field {
+        value: Box<Expression>,
+        field: String,
+    },
+    WithField {
+        value: Box<Expression>,
+        field: String,
+        replacement: Box<Expression>,
+    },
+    Move {
+        name: String,
+    },
+    Borrow {
+        name: String,
+    },
+    BorrowMut {
+        name: String,
+    },
+    BuiltinCall {
+        operation: ClosedBuiltinOperation,
+        arguments: Vec<Expression>,
+    },
+    UserCall {
+        name: String,
+        arguments: Vec<Expression>,
     },
 }
 
-impl Expression {
-    pub(crate) fn measure(&self, depth: u32, counts: &mut ExpressionCounts) {
-        counts.nodes = counts.nodes.saturating_add(1);
-        counts.depth = counts.depth.max(depth);
-        match self {
-            Self::F64 { value } | Self::String { value } | Self::Symbol { name: value } => {
-                counts.string_bytes = counts.string_bytes.saturating_add(value.len() as u64);
-            }
-            Self::Call { name, children } => {
-                counts.string_bytes = counts.string_bytes.saturating_add(name.len() as u64);
-                for child in children {
-                    child.measure(depth.saturating_add(1), counts);
-                }
-            }
-            Self::Unit | Self::Bool { .. } | Self::I64 { .. } => {}
-        }
-    }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ExpressionBinding {
+    pub name: String,
+    pub value: Expression,
+}
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ExpressionField {
+    pub name: String,
+    pub value: Expression,
+}
+
+impl Expression {
     pub(crate) fn to_source(&self, span: SourceSpan) -> Result<SourceNode, String> {
-        let (kind, children) = match self {
-            Self::Unit => (SyntaxKind::Unit, Vec::new()),
-            Self::Bool { value } => (SyntaxKind::Bool { value: *value }, Vec::new()),
-            Self::I64 { value } => (SyntaxKind::I64 { value: *value }, Vec::new()),
-            Self::F64 { value } => {
-                let parsed = value
-                    .parse::<f64>()
-                    .map_err(|_| format!("invalid canonical F64 value {value:?}"))?;
-                if !parsed.is_finite() || crate::source::format_f64(parsed) != *value {
-                    return Err(format!("non-canonical or non-finite F64 value {value:?}"));
-                }
-                (SyntaxKind::F64 { value: parsed }, Vec::new())
-            }
-            Self::String { value } => (
-                SyntaxKind::Str {
-                    value: value.clone(),
-                },
-                Vec::new(),
-            ),
-            Self::Symbol { name } => {
-                if !crate::source::is_source_identifier(name) {
-                    return Err(format!("invalid source symbol {name:?}"));
-                }
-                (SyntaxKind::Symbol { name: name.clone() }, Vec::new())
-            }
-            Self::Call { name, children } => {
-                if !crate::source::is_source_identifier(name) {
-                    return Err(format!("invalid source call name {name:?}"));
-                }
-                let children = children
-                    .iter()
-                    .map(|child| child.to_source(span))
-                    .collect::<Result<Vec<_>, _>>()?;
-                (SyntaxKind::Call { name: name.clone() }, children)
-            }
-        };
-        Ok(SourceNode {
-            kind,
-            span,
-            leading_trivia: Vec::new(),
-            before_close_trivia: Vec::new(),
-            children,
-        })
+        super::expression_source::to_source(self, span)
     }
 }
 

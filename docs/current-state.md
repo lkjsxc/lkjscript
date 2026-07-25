@@ -7,7 +7,7 @@ next work without mixing them with long-term vision.
 
 ## Status
 
-<!-- LKJ-STATUS id=agent-foundation/1 status=current -->
+<!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
@@ -19,17 +19,18 @@ next work without mixing them with long-term vision.
 <!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-session/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-schema/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-source-schema/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-schema/2 status=accepted-target -->
 <!-- LKJ-STATUS id=typed-holes/1 status=accepted-target -->
 
 **Current** only for implementation and evidence explicitly labeled Current in
 the manifest capsules. Bounded Repository Topology, Repository Intelligence
-Graph/context, externalized agent work state, the one-shot Agent Foundation V1
-protocol, and the compiler Resource Profile V1 foundation are Current. Complete
-Semantic Source Schema V1/2, local-session transport, typed holes, Edition 2,
-Profile V2 pre-allocation, logical metering, and cross-authority resource
-ledgers remain Accepted Targets, not Current.
+Graph/context, externalized agent work state, complete Semantic Source Schema V1
+and its one-shot query/edit protocol, and compiler Resource Profile V1 are
+Current. The superseded Agent Foundation V1 identity is historical. Semantic
+Source Schema V2, local sessions, typed holes, Edition 2, Profile V2
+pre-allocation, logical metering, and cross-authority ledgers remain Accepted
+Targets, not Current.
 Deferred and Rejected work remains non-current.
 
 ## Current Baseline
@@ -39,7 +40,7 @@ reference bytecode/VM, callable host-independent Linux x86-64 baseline code,
 host-independent native allocation/collection, and forced proof-checked
 optimization are Current at baseline `dd8fb316`. Exact boundaries and retained
 historical command evidence are in the manifest below. Automatic proof
-promotion, complete Schema V1/2 operations, all [Edition 2
+promotion, complete future Agent/Schema V2 operations, all [Edition 2
 surfaces](decisions/semantics/edition-2.md), cross-authority aggregate profiles,
 OSR, AOT/cache, and wider host-native transitions are not Current.
 Structure, graph/context, work-state, one-shot protocol, and compiler-profile
@@ -50,9 +51,9 @@ commands/APIs are Current on the containing implementation revision.
 1. [Bounded Repository Topology](decisions/platform/bounded-repository-topology.md) is Current.
 2. [Repository Intelligence Graph And Context](decisions/platform/repository-intelligence-graph.md) is Current.
 3. The bounded externalized [Agent Work State](decisions/platform/agent-work-state.md) service is Current.
-4. The [Agent Foundation V1
-   operations](decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md)
-   are Current for the bounded one-shot protocol.
+4. [Complete Semantic Source Schema
+   V1](decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md)
+   is Current for the closed Edition 1 tree and bounded one-shot protocol.
 5. The [compiler resource-profile
    foundation](decisions/platform/resource-budget-profiles-candidate.md) is
    Current at its documented post-phase charging boundaries.

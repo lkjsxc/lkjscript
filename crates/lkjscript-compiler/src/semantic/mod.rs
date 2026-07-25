@@ -1,10 +1,11 @@
-//! Strict one-shot Semantic Source Agent Foundation V1 protocol.
+//! Strict one-shot Edition 1 Semantic Source Schema V1 protocol.
 
 mod charges;
 mod codec;
 mod dispatch;
 mod engine;
 mod operations;
+mod projection;
 mod response_codec;
 mod schema;
 mod transaction;
@@ -17,7 +18,7 @@ use std::fmt;
 
 use schema::ProtocolError;
 
-pub const SCHEMA: &str = "lkjscript.agent-foundation";
+pub const SCHEMA: &str = "lkjscript.semantic-source";
 pub const VERSION: u32 = 1;
 pub use codec::MAX_REQUEST_BYTES;
 

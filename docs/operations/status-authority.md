@@ -24,7 +24,8 @@ record contains:
 - a sorted set of public claimant documents.
 
 Capability IDs separate bounded slices from broader targets. For example,
-`agent-foundation/1` and `semantic-source-schema/1` are not aliases. An internal
+`agent-foundation/1` and `semantic-source-schema/1` are not aliases. The former
+can be historical while the latter is Current. An internal
 file move does not create a new capability or status.
 
 ## Claim Directives
@@ -33,7 +34,7 @@ Every registered claimant repeats the exact status inside its `## Status`
 section:
 
 ```text
-<!-- LKJ-STATUS id=agent-foundation/1 status=current -->
+<!-- LKJ-STATUS id=semantic-source-schema/1 status=current -->
 ```
 
 The checker reads only this exact machine form. Natural-language words,

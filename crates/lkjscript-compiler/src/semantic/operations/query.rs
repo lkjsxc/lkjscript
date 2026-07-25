@@ -1,8 +1,15 @@
+mod binding;
+mod fact_records;
+
+use binding::binding_fact;
+use fact_records::{available_value, unavailable};
+
 use crate::semantic::codec::error;
 use crate::semantic::schema::{
-    FactRecord, NodeFacts, NodeQueryRecord, ProtocolError, ProtocolErrorCode,
+    FactSchema, FactValue, NodeFacts, NodeQueryRecord, ProducerStage, ProtocolError,
+    ProtocolErrorCode, SemanticEffect, UnavailableReason,
 };
-use crate::source::{DeclarationKind, NodeKind, SourceNode, SyntaxKind, ValidatedSourceTree};
+use crate::source::{NodeKind, ValidatedSourceTree};
 
 pub(crate) fn query(
     tree: &ValidatedSourceTree,
@@ -14,6 +21,7 @@ pub(crate) fn query(
             format!("unknown revision-scoped node index {index}"),
         )
     })?;
+    let revision = tree.revision().to_hex();
     let literal_type = match node.kind() {
         NodeKind::I64Literal => Some("I64"),
         NodeKind::F64Literal => Some("F64"),
@@ -23,113 +31,94 @@ pub(crate) fn query(
         NodeKind::Symbol | NodeKind::Call => None,
     };
     let static_type = literal_type.map_or_else(
-        || unavailable("the HIR does not retain a source-node correlation for this form"),
-        available,
+        || {
+            unavailable(
+                FactSchema::StaticType,
+                ProducerStage::Hir,
+                &revision,
+                UnavailableReason::NoExactSourceCorrelation,
+            )
+        },
+        |canonical| {
+            available_value(
+                FactSchema::StaticType,
+                ProducerStage::SourceResolution,
+                &revision,
+                FactValue::StaticType {
+                    canonical: canonical.to_string(),
+                },
+            )
+        },
     );
-    let effects = literal_type.map_or_else(
-        || unavailable("effect facts are declaration HIR facts without source-node correlation"),
-        |_| available("pure"),
+    let semantic_effects = literal_type.map_or_else(
+        || {
+            unavailable(
+                FactSchema::SemanticEffects,
+                ProducerStage::Hir,
+                &revision,
+                UnavailableReason::NoExactSourceCorrelation,
+            )
+        },
+        |_| {
+            available_value(
+                FactSchema::SemanticEffects,
+                ProducerStage::SourceResolution,
+                &revision,
+                FactValue::SemanticEffects {
+                    effects: Vec::<SemanticEffect>::new(),
+                },
+            )
+        },
     );
-    let binding = binding_fact(tree, index, node);
     Ok(NodeQueryRecord {
         node: crate::semantic::tree::node_record(tree, node),
         facts: NodeFacts {
-            binding,
+            binding: binding_fact(tree, index, node, &revision),
+            hir: unavailable_fact(FactSchema::Hir, ProducerStage::Hir, &revision),
             static_type,
-            effects,
-            ownership: unavailable("no ownership place or loan is correlated to this source node"),
-            control_flow: unavailable("no control-flow relation is correlated to source nodes"),
-            layout: unavailable("layout facts are not produced for semantic source nodes"),
-            proof: unavailable("proof relations are not produced for this node"),
+            semantic_effects,
+            ownership_place_loan: unavailable_fact(
+                FactSchema::OwnershipPlaceLoan,
+                ProducerStage::Ownership,
+                &revision,
+            ),
+            control_flow_graph: unavailable_fact(
+                FactSchema::ControlFlowGraph,
+                ProducerStage::Ssa,
+                &revision,
+            ),
+            ssa_values_blocks: unavailable_fact(
+                FactSchema::SsaValuesBlocks,
+                ProducerStage::Ssa,
+                &revision,
+            ),
+            frame_states_safepoints_roots: unavailable(
+                FactSchema::FrameStatesSafepointsRoots,
+                ProducerStage::Runtime,
+                &revision,
+                UnavailableReason::NotProduced,
+            ),
+            layout: unavailable_fact(FactSchema::Layout, ProducerStage::Runtime, &revision),
+            proof: unavailable_fact(FactSchema::Proof, ProducerStage::ProofChecker, &revision),
+            bytecode: unavailable_fact(FactSchema::Bytecode, ProducerStage::Bytecode, &revision),
+            native_location: unavailable_fact(
+                FactSchema::NativeLocation,
+                ProducerStage::Native,
+                &revision,
+            ),
         },
     })
 }
 
-fn binding_fact(
-    tree: &ValidatedSourceTree,
-    index: u32,
-    node: &crate::source::NodeSummary,
-) -> FactRecord {
-    if !matches!(node.kind(), NodeKind::Call | NodeKind::Symbol) {
-        return unavailable("literal nodes do not resolve a binding");
-    }
-    let Some(name) = node.label() else {
-        return unavailable("source node has no binding spelling");
-    };
-    let Some(owner) = crate::semantic::tree::containing_declaration(tree, node) else {
-        return unavailable("source node has no containing declaration");
-    };
-    let nodes = crate::semantic::tree::source_nodes(tree);
-    let Some(root) = nodes.get(owner.node().index() as usize) else {
-        return unavailable("containing declaration source is unavailable");
-    };
-    let expression =
-        crate::semantic::transaction::path_from_owner(tree, owner.node().index(), index)
-            .ok()
-            .is_some_and(|path| crate::semantic::transaction::is_expression_path(root, &path));
-    if !expression || has_local_name(root, name) {
-        return unavailable("the source position is structural or may resolve a lexical binding");
-    }
-    let Some(declaration) = tree.declarations().iter().find(|declaration| {
-        declaration.kind() == DeclarationKind::Function && declaration.name() == name
-    }) else {
-        return unavailable("no source-closure function declaration resolves this spelling");
-    };
-    available(&format!("declaration:{}", declaration.key().to_hex()))
-}
-
-fn has_local_name(node: &SourceNode, target: &str) -> bool {
-    if let SyntaxKind::Call { name } = &node.kind {
-        if name == "params"
-            && node
-                .children
-                .iter()
-                .step_by(2)
-                .any(|child| source_name(child) == Some(target))
-        {
-            return true;
-        }
-        if matches!(name.as_str(), "var" | "bind")
-            && node
-                .children
-                .first()
-                .and_then(|child| {
-                    if name == "var" {
-                        child.children.first()
-                    } else {
-                        Some(child)
-                    }
-                })
-                .and_then(source_name)
-                == Some(target)
-        {
-            return true;
-        }
-    }
-    node.children
-        .iter()
-        .any(|child| has_local_name(child, target))
-}
-
-fn source_name(node: &SourceNode) -> Option<&str> {
-    match &node.kind {
-        SyntaxKind::Str { value } => Some(value),
-        SyntaxKind::Symbol { name } => Some(name),
-        _ => None,
-    }
-}
-
-fn available(value: &str) -> FactRecord {
-    FactRecord::Available {
-        producer: "lkjscript-compiler-hir".to_string(),
-        version: 1,
-        certainty: "guaranteed".to_string(),
-        value: value.to_string(),
-    }
-}
-
-fn unavailable(reason: &str) -> FactRecord {
-    FactRecord::Unavailable {
-        reason: reason.to_string(),
-    }
+fn unavailable_fact(
+    schema: FactSchema,
+    stage: ProducerStage,
+    revision: &str,
+) -> crate::semantic::schema::FactRecord {
+    unavailable(
+        schema,
+        stage,
+        revision,
+        UnavailableReason::NoExactSourceCorrelation,
+    )
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::Expression;
+use super::{FactSchema, NodeFacts, NodeRecord, SemanticSubtreeRecord, TriviaRecord};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -33,8 +33,20 @@ pub(crate) struct SpanRecord {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SourceUnitRecord {
     pub path: String,
+    pub edition: u32,
     pub bytes: u64,
     pub sha256: String,
+    pub trailing_trivia: Vec<TriviaRecord>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SemanticDeclarationKind {
+    Main,
+    Function,
+    Product,
+    MarkerTrait,
+    TraitImplementation,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -42,25 +54,11 @@ pub(crate) struct SourceUnitRecord {
 pub(crate) struct DeclarationRecord {
     pub key: String,
     pub identity: String,
-    pub kind: String,
+    pub kind: SemanticDeclarationKind,
     pub name: String,
     pub source: String,
     pub span: SpanRecord,
     pub node: u32,
-    pub fingerprint: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct NodeRecord {
-    pub index: u32,
-    pub kind: String,
-    pub label: Option<String>,
-    pub source: String,
-    pub span: SpanRecord,
-    pub parent: Option<u32>,
-    pub children: Vec<u32>,
-    pub declaration: Option<String>,
     pub fingerprint: String,
 }
 
@@ -71,35 +69,9 @@ pub(crate) struct EntityRecord {
     pub source: String,
     pub fingerprint: String,
     pub canonical_subtree: String,
-    pub subtree: Expression,
+    pub subtree: SemanticSubtreeRecord,
     pub descendants: Vec<NodeRecord>,
-    pub derived_summaries: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "availability", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum FactRecord {
-    Available {
-        producer: String,
-        version: u32,
-        certainty: String,
-        value: String,
-    },
-    Unavailable {
-        reason: String,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct NodeFacts {
-    pub binding: FactRecord,
-    pub static_type: FactRecord,
-    pub effects: FactRecord,
-    pub ownership: FactRecord,
-    pub control_flow: FactRecord,
-    pub layout: FactRecord,
-    pub proof: FactRecord,
+    pub available_fact_schemas: Vec<FactSchema>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -109,10 +81,18 @@ pub(crate) struct NodeQueryRecord {
     pub facts: NodeFacts,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum IdentityRelationKind {
+    RenamedDeclaration,
+    ReplacedExpression,
+    ChangedReferenceOwner,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct IdentityRelation {
-    pub relation: String,
+    pub relation: IdentityRelationKind,
     pub old_key: Option<String>,
     pub new_key: Option<String>,
     pub old_node: Option<u32>,

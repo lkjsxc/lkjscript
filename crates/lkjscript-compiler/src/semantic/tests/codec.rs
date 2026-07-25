@@ -16,6 +16,7 @@ fn strict_codec_rejects_every_json_boundary() {
         duplicate,
         unknown_field,
         valid.replace("\"version\":1", "\"version\":2"),
+        valid.replace(crate::semantic::SCHEMA, "lkjscript.agent-foundation"),
         valid.replace("\"kind\":\"snapshot\"", "\"kind\":\"invented\""),
         format!("{valid} false"),
     ];
@@ -30,6 +31,39 @@ fn strict_codec_rejects_every_json_boundary() {
     assert!(crate::semantic::execute(deeply_nested.as_bytes()).is_err());
     let oversized = vec![b' '; crate::semantic::MAX_REQUEST_BYTES + 1];
     assert!(crate::semantic::execute(&oversized).is_err());
+}
+
+#[test]
+fn closed_nested_kinds_and_operations_reject_unknown_input() {
+    use crate::semantic::schema::{
+        ClosedBuiltinOperation, SemanticNodeKind, SemanticNodeValue, TypeExpression,
+    };
+
+    assert!(serde_json::from_str::<SemanticNodeKind>("\"invented\"").is_err());
+    assert!(serde_json::from_str::<SemanticNodeValue>("{\"kind\":\"invented\"}").is_err());
+    assert!(serde_json::from_str::<ClosedBuiltinOperation>("\"invented\"").is_err());
+    assert!(serde_json::from_str::<TypeExpression>("{\"kind\":\"unit\",\"extra\":false}").is_err());
+    let root = case_dir("nested-codec").join("main.lkjscript");
+    for expression in [
+        "{\"kind\":\"invented\"}",
+        "{\"kind\":\"unit\",\"extra\":false}",
+        "{\"kind\":\"builtin_call\",\"operation\":\"invented\",\"arguments\":[]}",
+    ] {
+        let operation = format!(
+            concat!(
+                "{{\"kind\":\"apply_transaction\",\"mode\":\"preview\",",
+                "\"base_revision\":\"r\",\"file_preconditions\":[],",
+                "\"operations\":[{{\"kind\":\"replace_expression\",",
+                "\"declaration_key\":\"k\",\"entity_fingerprint\":\"f\",",
+                "\"node\":0,\"node_fingerprint\":\"n\",\"expression\":{expression}}}]}}"
+            ),
+            expression = expression
+        );
+        assert!(
+            crate::semantic::execute(&request(&root, &operation)).is_err(),
+            "accepted closed expression {expression}"
+        );
+    }
 }
 
 #[test]

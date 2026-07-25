@@ -9,11 +9,11 @@ gates without claiming unimplemented checks.
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
-`structure`, repository graph/context, agent-state, one-shot Agent Foundation
-V1, and compiler resource-profile checks are described in the capsules.
-Complete Schema V1, Edition 2 cross-engine acceptance, local sessions, Profile
-V2 pre-allocation, and logical-metering gates remain **Accepted Targets**, not
-Current commands.
+`structure`, repository graph/context, agent-state, complete Semantic Source
+Schema V1 and its one-shot protocol, and compiler resource-profile checks are
+described in the capsules. Edition 2 cross-engine acceptance, local sessions,
+typed holes, Profile V2 pre-allocation, and logical metering remain **Accepted
+Targets**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -74,9 +74,11 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Current Semantic Operation And Resource-Profile Gates
 
-The first protocol gate covers `snapshot`, `read_entity`, `query_node`,
-`diagnostics`, atomic `rename`, and atomic `replace_expression`. It includes
-strict schema/version/field/variant rejection; exact pinned serde boundary;
+The Semantic Source V1 gate covers all 125 tracked files, closed node/value/type/
+built-in/declaration/trivia/expression/correlation records, schema/source
+roundtrip, `snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic
+`rename`, and atomic `replace_expression`. It includes strict
+schema/version/field/variant rejection; exact pinned serde boundary;
 duplicate/trailing/malformed Unicode JSON; aggregate budgets; deterministic
 ordering; stale identities/preconditions; rename collisions and complete
 references; expression type/effect/ownership constraints; bounded response

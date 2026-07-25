@@ -6,18 +6,22 @@
   "kind": "source",
   "purpose": "Own strict bounded Semantic Source queries, diagnostics, and atomic revisioned transactions.",
   "layer": "agent protocol",
-  "concepts": ["strict JSON envelope", "semantic query", "atomic transaction"],
+  "concepts": ["closed Semantic Source schema", "semantic query", "atomic transaction"],
   "facade": ["crates/lkjscript-compiler/src/semantic/mod.rs"],
   "allowed_dependencies": ["core", "semantic-source"],
   "forbidden_dependencies": ["app", "jit", "vm"],
   "tests": [
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
+    "crates/lkjscript-compiler/src/semantic/tests/corpus.rs",
     "crates/lkjscript-app/tests/semantic_cli.rs"
   ],
-  "decisions": ["docs/decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md"],
+  "decisions": [
+    "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+    "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md"
+  ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
-  "provenance": { "class": "authored", "source": "Semantic Source Agent Foundation V1 implementation" },
+  "provenance": { "class": "authored", "source": "Complete Semantic Source Schema V1 implementation" },
   "verification": [
     "cargo test --locked -p lkjscript-compiler semantic",
     "cargo test --locked -p lkjscript-app --test semantic_cli"

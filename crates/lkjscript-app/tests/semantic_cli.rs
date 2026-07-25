@@ -36,7 +36,7 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write CLI fixture");
     let request = format!(
         concat!(
-            "{{\"schema\":\"lkjscript.agent-foundation\",\"version\":1,",
+            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":1,",
             "\"profile\":\"default\",\"root\":{},",
             "\"operation\":{{\"kind\":\"snapshot\"}}}}",
         ),
@@ -50,6 +50,6 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     assert!(explicit.stderr.is_empty());
     assert_eq!(redirected.stdout, explicit.stdout);
     let stdout = String::from_utf8(redirected.stdout).expect("UTF-8 protocol");
-    assert!(stdout.contains("\"schema\":\"lkjscript.agent-foundation\""));
+    assert!(stdout.contains("\"schema\":\"lkjscript.semantic-source\""));
     assert!(!stdout.contains("lkjscript: "));
 }

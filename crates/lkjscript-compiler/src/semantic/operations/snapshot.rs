@@ -10,10 +10,6 @@ pub(crate) fn build(tree: &ValidatedSourceTree) -> SnapshotResult {
             .iter()
             .map(|declaration| crate::semantic::tree::declaration_record(tree, declaration))
             .collect(),
-        nodes: tree
-            .nodes()
-            .iter()
-            .map(|node| crate::semantic::tree::node_record(tree, node))
-            .collect(),
+        nodes: crate::semantic::tree::node_records(tree),
     }
 }

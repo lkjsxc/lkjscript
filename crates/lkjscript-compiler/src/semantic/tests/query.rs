@@ -29,7 +29,11 @@ fn query_reports_only_correlated_compiler_facts() {
         .nodes
         .iter()
         .find(|node| {
-            node.label.as_deref() == Some("f") && node.declaration.as_deref() == Some(&main.key)
+            matches!(
+                &node.value,
+                Some(crate::semantic::schema::SemanticNodeValue::UserFunction { name })
+                    if name == "f"
+            ) && node.declaration.as_deref() == Some(&main.key)
         })
         .expect("global call node");
     let operation = format!(
@@ -42,10 +46,39 @@ fn query_reports_only_correlated_compiler_facts() {
         panic!("expected node query");
     };
     assert!(matches!(query.facts.binding, FactRecord::Available { .. }));
-    assert!(matches!(
-        query.facts.ownership,
-        FactRecord::Unavailable { .. }
-    ));
+    let FactRecord::Available {
+        source_revision,
+        cardinality,
+        producer,
+        ..
+    } = &query.facts.binding
+    else {
+        panic!("binding must be available");
+    };
+    assert_eq!(source_revision, &revision);
+    assert_eq!(producer.component, "lkjscript-compiler");
+    assert_eq!(
+        *cardinality,
+        crate::semantic::schema::RelationCardinality::One
+    );
+    let FactRecord::Unavailable {
+        source_revision,
+        cardinality,
+        reason,
+        ..
+    } = &query.facts.ownership_place_loan
+    else {
+        panic!("ownership correlation must be unavailable");
+    };
+    assert_eq!(source_revision, &revision);
+    assert_eq!(
+        *cardinality,
+        crate::semantic::schema::RelationCardinality::Zero
+    );
+    assert_eq!(
+        *reason,
+        crate::semantic::schema::UnavailableReason::NoExactSourceCorrelation
+    );
 
     let shadow = snapshot
         .declarations
@@ -57,7 +90,13 @@ fn query_reports_only_correlated_compiler_facts() {
         .iter()
         .rev()
         .find(|node| {
-            node.label.as_deref() == Some("f") && node.declaration.as_deref() == Some(&shadow.key)
+            node.kind == crate::semantic::schema::SemanticNodeKind::NameReference
+                && matches!(
+                    &node.value,
+                    Some(crate::semantic::schema::SemanticNodeValue::SourceName { name })
+                        if name == "f"
+                )
+                && node.declaration.as_deref() == Some(&shadow.key)
         })
         .expect("local binding node");
     let operation = format!(

@@ -1,11 +1,21 @@
+mod builtin;
 mod diagnostic;
 mod expression;
+mod expression_source;
+mod facts;
+mod nodes;
 mod records;
 mod request;
 mod response;
+mod subtree_source;
+mod type_expression;
 
+pub(crate) use builtin::*;
 pub(crate) use diagnostic::*;
 pub(crate) use expression::*;
+pub(crate) use facts::*;
+pub(crate) use nodes::*;
 pub(crate) use records::*;
 pub(crate) use request::*;
 pub(crate) use response::*;
+pub(crate) use type_expression::*;

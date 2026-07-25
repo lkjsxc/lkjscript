@@ -4,10 +4,11 @@
 
 ## Status
 
-**Current Agent Foundation V1.** These are the complete operations for the
-bounded one-shot `lkjscript.agent-foundation` version 1 slice. Foundation V1 is
-Current. Complete Semantic Source Schema/Protocol V1, daemon transport, typed
-holes, and wider operations remain Accepted Targets.
+**Historical.** This records the formerly Current bounded one-shot
+`lkjscript.agent-foundation/1` slice. Complete Semantic Source Schema V1
+superseded its public identity without retaining an accepted alias. Its exact
+operations and evidence remain historical; sessions, typed holes, and wider
+operations remain Accepted Targets.
 
 ## Envelope
 

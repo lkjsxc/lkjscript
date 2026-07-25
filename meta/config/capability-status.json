@@ -4,7 +4,7 @@
   "capabilities": [
     {
       "id": "agent-foundation/1",
-      "status": "current",
+      "status": "historical",
       "interface": "lkjscript.agent-foundation/1",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/current-state/semantic-source-foundation-evidence.md",
@@ -136,10 +136,10 @@
     },
     {
       "id": "semantic-source-schema/1",
-      "status": "accepted-target",
+      "status": "current",
       "interface": "lkjscript.semantic-source/1",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
       "claimants": [
         "docs/current-state.md",
         "docs/operations/agent-handoff.md"

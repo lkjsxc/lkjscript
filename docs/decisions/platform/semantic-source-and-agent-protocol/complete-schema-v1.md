@@ -9,8 +9,8 @@ compiler and execution facts before Schema 2 extends it for Edition 2.
 
 ## Status
 
-**Accepted Target, not Current.** Semantic Source Foundation V1 and Agent
-Foundation V1 remain the only Current subsets.
+**Current.** `lkjscript.semantic-source/1` is the closed Edition 1 schema used
+by the bounded one-shot protocol. Agent Foundation V1 is historical.
 
 ## Closed Source Schema
 
@@ -63,11 +63,11 @@ Optimization deletion or fusion is represented, not reverse-engineered.
 
 ## Registration
 
-`lkjscript.semantic-source/1` is emitted only after complete vocabulary,
-roundtrip, malformed-boundary, correlation, diagnostic, and transaction gates
-pass. The older `lkjscript.agent-foundation/1` remains historical evidence, not
-a competing Current source schema. `lkjscript.agent/1` is emitted only when its
-selected complete operation contract passes; identities are never relabeled.
+`lkjscript.semantic-source/1` is emitted after complete vocabulary, schema/source
+roundtrip, malformed-boundary, correlation, diagnostic, and transaction gates.
+The older `lkjscript.agent-foundation/1` is historical evidence, not a competing
+Current source schema. `lkjscript.agent/1` is emitted only when its selected
+complete operation contract passes; identities are never relabeled.
 
 Schema 2 reuses this closure discipline and has identity
 `lkjscript.semantic-source/2`; it does not mutate or overload Schema V1.

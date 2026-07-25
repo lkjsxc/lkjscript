@@ -1,9 +1,13 @@
+mod projection;
+
+use projection::{projections, Projection};
+
 use crate::semantic::schema::{
-    DeclarationRecord, Expression, NodeRecord, PositionRecord, SourceUnitRecord, SpanRecord,
+    DeclarationRecord, NodeRecord, PositionRecord, SemanticDeclarationKind, SemanticSubtreeRecord,
+    SourceUnitRecord, SpanRecord, TriviaAttachment, TriviaRecord,
 };
 use crate::source::{
-    DeclarationSummary, NodeKind, NodeSummary, SourceNode, SourceSpan, SyntaxKind,
-    ValidatedSourceTree,
+    DeclarationKind, DeclarationSummary, NodeSummary, SourceNode, SourceSpan, ValidatedSourceTree,
 };
 
 pub(crate) fn hex(bytes: &[u8]) -> String {
@@ -38,25 +42,6 @@ pub(crate) fn span_record(span: SourceSpan) -> SpanRecord {
     }
 }
 
-pub(crate) fn expression(node: &SourceNode) -> Expression {
-    match &node.kind {
-        SyntaxKind::Unit => Expression::Unit,
-        SyntaxKind::Bool { value } => Expression::Bool { value: *value },
-        SyntaxKind::I64 { value } => Expression::I64 { value: *value },
-        SyntaxKind::F64 { value } => Expression::F64 {
-            value: crate::source::format_f64(*value),
-        },
-        SyntaxKind::Str { value } => Expression::String {
-            value: value.clone(),
-        },
-        SyntaxKind::Symbol { name } => Expression::Symbol { name: name.clone() },
-        SyntaxKind::Call { name } => Expression::Call {
-            name: name.clone(),
-            children: node.children.iter().map(expression).collect(),
-        },
-    }
-}
-
 pub(crate) fn source_units(tree: &ValidatedSourceTree) -> Vec<SourceUnitRecord> {
     let mut files: Vec<_> = tree.files().iter().collect();
     files.sort_by(|a, b| a.origin.logical_path.cmp(&b.origin.logical_path));
@@ -64,8 +49,13 @@ pub(crate) fn source_units(tree: &ValidatedSourceTree) -> Vec<SourceUnitRecord> 
         .into_iter()
         .map(|file| SourceUnitRecord {
             path: file.origin.logical_path.clone(),
+            edition: 1,
             bytes: file.exact_source_len,
             sha256: hex(&file.exact_source_sha256),
+            trailing_trivia: vec![TriviaRecord {
+                attachment: TriviaAttachment::SourceUnitTrailing,
+                lines: file.trailing_trivia.clone(),
+            }],
         })
         .collect()
 }
@@ -98,12 +88,22 @@ pub(crate) fn declaration_record(
     DeclarationRecord {
         key: declaration.key().to_hex(),
         identity: declaration.key().canonical_identity().to_string(),
-        kind: declaration.kind().as_str().to_string(),
+        kind: declaration_kind(declaration.kind()),
         name: declaration.name().to_string(),
         source: declaration.origin().logical_path().to_string(),
         span: span_record(declaration.span()),
         node: declaration.node().index(),
         fingerprint: node.map_or_else(String::new, |node| fingerprint(node)),
+    }
+}
+
+fn declaration_kind(kind: DeclarationKind) -> SemanticDeclarationKind {
+    match kind {
+        DeclarationKind::Main => SemanticDeclarationKind::Main,
+        DeclarationKind::Function => SemanticDeclarationKind::Function,
+        DeclarationKind::Product => SemanticDeclarationKind::Product,
+        DeclarationKind::Trait => SemanticDeclarationKind::MarkerTrait,
+        DeclarationKind::Implementation => SemanticDeclarationKind::TraitImplementation,
     }
 }
 
@@ -125,31 +125,64 @@ pub(crate) fn containing_declaration<'a>(
     }
 }
 
+pub(crate) fn node_records(tree: &ValidatedSourceTree) -> Vec<NodeRecord> {
+    let source = source_nodes(tree);
+    let projection = projections(tree);
+    tree.nodes()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| {
+            Some(node_record_parts(
+                tree,
+                node,
+                source.get(index)?,
+                projection.get(index)?,
+            ))
+        })
+        .collect()
+}
+
 pub(crate) fn node_record(tree: &ValidatedSourceTree, node: &NodeSummary) -> NodeRecord {
-    let syntax = source_nodes(tree);
+    let index = node.id().index() as usize;
+    let source = source_nodes(tree);
+    let projection = projections(tree);
+    node_record_parts(tree, node, source[index], &projection[index])
+}
+
+fn node_record_parts(
+    tree: &ValidatedSourceTree,
+    node: &NodeSummary,
+    source: &SourceNode,
+    projection: &Projection,
+) -> NodeRecord {
     NodeRecord {
         index: node.id().index(),
-        kind: node_kind(node.kind()).to_string(),
-        label: node.label().map(str::to_string),
+        kind: projection.kind,
+        value: projection.value.clone(),
         source: node.origin().logical_path().to_string(),
         span: span_record(node.span()),
         parent: node.parent().map(|id| id.index()),
         children: node.children().iter().map(|id| id.index()).collect(),
         declaration: containing_declaration(tree, node).map(|decl| decl.key().to_hex()),
-        fingerprint: syntax
-            .get(node.id().index() as usize)
-            .map_or_else(String::new, |source| fingerprint(source)),
+        fingerprint: fingerprint(source),
+        trivia: projection.trivia.clone(),
     }
 }
 
-fn node_kind(kind: NodeKind) -> &'static str {
-    match kind {
-        NodeKind::I64Literal => "i64_literal",
-        NodeKind::F64Literal => "f64_literal",
-        NodeKind::BoolLiteral => "bool_literal",
-        NodeKind::UnitLiteral => "unit_literal",
-        NodeKind::StringLiteral => "string_literal",
-        NodeKind::Symbol => "symbol",
-        NodeKind::Call => "call",
-    }
+pub(crate) fn subtree_record(
+    tree: &ValidatedSourceTree,
+    root_index: u32,
+) -> Option<SemanticSubtreeRecord> {
+    let records = node_records(tree);
+    build_subtree(&records, root_index)
+}
+
+fn build_subtree(records: &[NodeRecord], index: u32) -> Option<SemanticSubtreeRecord> {
+    let node = records.get(index as usize)?.clone();
+    let children = node
+        .children
+        .iter()
+        .map(|child| build_subtree(records, *child))
+        .collect::<Option<Vec<_>>>()?;
+    Some(SemanticSubtreeRecord { node, children })
 }

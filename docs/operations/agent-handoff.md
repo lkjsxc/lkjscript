@@ -7,7 +7,7 @@ verification discipline without preserving obsolete implementation priorities.
 
 ## Status
 
-<!-- LKJ-STATUS id=agent-foundation/1 status=current -->
+<!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
@@ -18,15 +18,16 @@ verification discipline without preserving obsolete implementation priorities.
 <!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-session/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-schema/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-source-schema/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-schema/2 status=accepted-target -->
 <!-- LKJ-STATUS id=typed-holes/1 status=accepted-target -->
 
 **Current** for the engineering policy and implementation boundaries linked from
 [Current State](../current-state.md). Bounded Repository Topology, Repository
-Intelligence Graph/context, agent work state, one-shot Agent Foundation V1, and
-the compiler Resource Profile V1 foundation are Current. Complete Semantic
-Source Schema V1/2, local sessions, typed holes, all [Edition
+Intelligence Graph/context, agent work state, complete Semantic Source Schema V1
+and its one-shot protocol, and compiler Resource Profile V1 are Current. Agent
+Foundation V1 is a superseded historical identity. Semantic Source Schema V2,
+local sessions, typed holes, all [Edition
 2](../decisions/semantics/edition-2.md) surfaces, Profile V2
 pre-allocation/logical metering, and a shared ledger remain Accepted Targets.
 Automatic proof promotion remains
@@ -72,10 +73,9 @@ an Accepted Implementation Selection, not the immediate priority.
 
 ## Accepted Next Sequence
 
-1. Complete [Semantic Source V1 and the local agent
-   boundary](../decisions/platform/semantic-source-and-agent-protocol.md).
-2. Add meaningful typed holes, bounded legal actions, and a revisioned local
-   semantic session.
+1. Add meaningful typed holes and bounded legal actions to Current [Semantic
+   Source V1](../decisions/platform/semantic-source-and-agent-protocol.md).
+2. Add the revisioned local semantic session over the same engine.
 3. Move the [resource profile](../decisions/platform/resource-budget-profiles.md)
    to pre-allocation hierarchical request charging.
 4. Define Edition 2 through accepted ADT, pattern, control-flow, numeric, value,

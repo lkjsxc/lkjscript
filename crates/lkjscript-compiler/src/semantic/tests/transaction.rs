@@ -114,8 +114,11 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
         .nodes
         .iter()
         .find(|node| {
-            node.label.as_deref() == Some("increment")
-                && node.declaration.as_deref() == Some(&main.key)
+            matches!(
+                &node.value,
+                Some(crate::semantic::schema::SemanticNodeValue::UserFunction { name })
+                    if name == "increment"
+            ) && node.declaration.as_deref() == Some(&main.key)
         })
         .expect("main call");
     let replace = |kind: &str, value: &str| {
@@ -166,33 +169,12 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
         ResponseResult::ApplyTransaction { transaction } => transaction,
         other => panic!("expected replacement transaction, got {other:?}"),
     };
-    assert_eq!(transaction.identities[0].relation, "replaced_expression");
+    assert_eq!(
+        transaction.identities[0].relation,
+        crate::semantic::schema::IdentityRelationKind::ReplacedExpression
+    );
     assert_eq!(
         transaction.identities[0].old_node,
         transaction.identities[0].new_node
-    );
-}
-
-#[test]
-fn stale_revision_and_collision_leave_sources_identical() {
-    let directory = case_dir("stale");
-    let root = directory.join("main.lkjscript");
-    let source = concat!(
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
-        "params/\n/params\nunit\n/fn\n/def\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
-    );
-    std::fs::write(&root, source).expect("write stale source");
-    let stale = response(
-        &crate::semantic::execute(&request(
-            &root,
-            "{\"kind\":\"query_node\",\"revision\":\"00\",\"node\":0}",
-        ))
-        .expect("stale response"),
-    );
-    assert!(matches!(stale.result, ResponseResult::Error { .. }));
-    assert_eq!(
-        std::fs::read_to_string(root).expect("unchanged stale source"),
-        source
     );
 }
