@@ -3,7 +3,7 @@ use std::fmt;
 
 use lkjscript_ir::{
     Block, CallTarget, Constant, Function, FunctionId, Instruction, InstructionKind, RuntimeOp,
-    SsaType, StructuredOutcome, Terminator, ValueId, VerifiedProgram,
+    SsaType, StructuredOutcome, Terminator, ValueId, VerifiedOptimizedProgram, VerifiedProgram,
 };
 use lkjscript_native::{
     AllocationClass, BackendLimits, BoolComparison, F64Comparison, FunctionBuilder,
@@ -79,11 +79,10 @@ pub(crate) struct LoweredGroup {
     pub(crate) explicit_traps: Vec<(u32, String)>,
 }
 
-pub(crate) fn reachable_group(
-    verified: &VerifiedProgram,
+fn reachable_group(
+    program: &lkjscript_ir::Program,
     root: FunctionId,
 ) -> Result<Vec<FunctionId>, LoweringError> {
-    let program = verified.program();
     let mut marks = vec![0_u8; program.functions.len()];
     let mut reached = Vec::new();
     visit(program, root, &mut marks, &mut reached)?;
@@ -152,13 +151,28 @@ fn visit(
     Ok(())
 }
 
-pub(crate) fn lower_group(
+pub(crate) fn lower_baseline_group(
     verified: &VerifiedProgram,
     root: FunctionId,
     limits: BackendLimits,
 ) -> Result<LoweredGroup, LoweringError> {
-    let functions = reachable_group(verified, root)?;
-    let program = verified.program();
+    lower_group(verified.program(), root, limits)
+}
+
+pub(crate) fn lower_optimizing_group(
+    verified: &VerifiedOptimizedProgram,
+    root: FunctionId,
+    limits: BackendLimits,
+) -> Result<LoweredGroup, LoweringError> {
+    lower_group(verified.program(), root, limits)
+}
+
+fn lower_group(
+    program: &lkjscript_ir::Program,
+    root: FunctionId,
+    limits: BackendLimits,
+) -> Result<LoweredGroup, LoweringError> {
+    let functions = reachable_group(program, root)?;
     let layouts = LayoutInterner::build(program, &functions)?;
     for function in &functions {
         let item = source_function(program, *function)?;

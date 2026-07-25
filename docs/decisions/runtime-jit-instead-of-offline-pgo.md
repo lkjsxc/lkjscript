@@ -8,18 +8,19 @@ and the reference VM as the cold tier and correctness oracle.
 
 ## Status
 
-**Current** for the reference VM plus synchronous scalar and host-independent
-allocation/recursion Linux x86-64 baseline tier. Handle/host-capability
-allocation, lexical ownership adapters, native/VM reference transitions, a
-proof-based optimizing tier, and later OSR remain **Accepted Targets**.
+**Current** for the reference VM, synchronous scalar and host-independent
+allocation/recursion Linux x86-64 baseline tier, and the forced first
+proof-based optimizing pipeline. Handle/host-capability allocation, lexical
+ownership adapters, native/VM reference transitions, automatic optimizing
+promotion, broader proof passes, and later OSR remain **Accepted Targets**.
 Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
 by measurement. Canonical source/verified-SSA linkage, bounded code objects,
-VM/native transfer, `vm`/`auto`/`baseline-jit`, PollV1, and actual generated
+VM/native transfer, `vm`/`auto`/`baseline-jit`/`optimizing-jit`, PollV1, and actual generated
 calls are implemented. Closed machine plans also have ABI-2 exact typed
 reference frames/maps and a collecting Buf-reference slot. Source-level host-independent native references/allocation and recursive SCCs
 are implemented. Handle/host calls, lexical ownership adapters, native/VM
-reference transitions, OSR, optimizing/speculative tiers, background work, and
-deoptimization are absent.
+reference transitions, automatic optimizing promotion, broader proof passes,
+OSR, speculative tiers, background work, and deoptimization are absent.
 
 ## Decision
 
@@ -74,8 +75,9 @@ back. Emission, object bytes, assembly text, disassembly, a Rust simulation,
 hotness counters, or the observation hook are insufficient.
 
 Only whole-function function-entry tiering is Current. Host-independent native
-allocation/collection is Current in forced mode; ownership/host-capability
-adapters, proof-based optimizing promotion, and then loop OSR remain later; background compilation, guards, deoptimization, persistent
+allocation/collection and proof-certified optimizing execution are Current in
+forced mode; ownership/host-capability adapters, automatic optimizing promotion,
+broader passes, and then loop OSR remain later; background compilation, guards, deoptimization, persistent
 profiles/caches, and non-Linux/non-x86-64 platforms remain later or rejected as
 classified below. The detailed prerequisite,
 backend-selection, ABI, safety, coverage, and evidence contract is
@@ -92,8 +94,10 @@ The following are **Current**:
 - a verified-SSA adapter for Unit/Bool/I64/F64 plus host-independent Str, legacy
   Buf, Product, List, Option, Result allocation/operations, direct recursive
   SCCs, checked numerics, branches/loops, and outcomes;
-- bounded code objects and explicit per-function baseline tier states;
-- forced generated main execution with no fallback, and automatic synchronous
+- bounded baseline/optimizing code objects and explicit per-function tier states;
+- bounded complete stable-ID certificates, opaque optimized-program authority,
+  private candidate reconstruction, and verified algebraic/GVN cleanup output;
+- forced generated baseline or optimizing main execution with no fallback, and automatic synchronous
   function-entry compilation used by later calls;
 - enum-identified EnterFunctionV1/PollV1 calls with native entry, fuel,
   deadline, and structured-status accounting.
@@ -104,8 +108,8 @@ not consume source/HIR/SSA itself; only the narrow adapter consumes
 engine error in forced mode. Auto conservatively retains reference-typed and
 unsupported functions in VM.
 
-Broader ownership/traits, host-capability allocation, the optimizing
-sections below, and later OSR remain **Accepted Targets** unless explicitly
+Broader ownership/traits, host-capability allocation, automatic optimizing
+promotion and broader Tier 2A passes, and later OSR remain **Accepted Targets** unless explicitly
 labeled Deferred or Rejected. Their exact contracts are [Ownership And
 Borrowing](ownership-and-borrowing.md), [Coherent Traits And Static
 Dispatch](traits-and-static-dispatch.md), [Native References, Frames, And Exact
@@ -192,9 +196,11 @@ does not require deoptimization.
 
 ## Tier 2A: Proof-Based Optimizing JIT
 
-After baseline correctness and whole-program measurements pass, Tier 2A adds
-optimizations proved by types, SSA facts, effects, ownership, and control flow.
-Candidates include:
+The Current forced first Tier 2A slice adds exact scalar algebraic identities,
+same-block/dominating exact scalar GVN (including checked-I64 successful-check
+reuse), and existing verified cleanup behind an independent bounded certificate
+verifier. It is not automatically promoted and has no 1.20x performance claim.
+Later candidates include:
 
 - inlining and monomorphization under budgets;
 - sparse conditional constant propagation;
@@ -383,8 +389,7 @@ formats.
 
 ## Engine Selection Contract
 
-The current CLI implements the following three baseline-cycle modes; the
-`optimizing-jit` line remains a future target. Ordinary `run` defaults to
+The current CLI implements all four modes below. Ordinary `run` defaults to
 `auto` with a conservative 64-entry threshold, while explicit `vm` remains the
 deterministic path:
 
@@ -482,8 +487,9 @@ implied by a non-speculative optimizing tier.
 5. Add sound ownership/coherent traits, exact native frame roots, allocation,
    barriers, recursion, and collection exercised while generated frames are
    active.
-6. Add a distinct proof-based optimizing engine and measured process-local
-   promotion with current-process layout data.
+6. Add a distinct proof-based optimizing engine, then separately measure and
+   select process-local promotion with current-process layout data. The forced
+   first engine is Current; promotion remains pending.
 7. Add bounded loop-backedge counters and verified OSR in a later cycle; use
    unmodified Brainfuck Mandelbrot only as an appropriate long-loop diagnostic.
 8. Consider guarded specialization and deoptimization only from measured need.

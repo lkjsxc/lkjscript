@@ -12,10 +12,11 @@ reinterpret the language.
 Buf` ownership analysis with fixed-point function effects -> verified typed SSA -> verified baseline normalization -> reference
 bytecode. The independent bounded SSA evaluator and bytecode link metadata are
 also Current. The selected owned Linux x86-64 scalar machine-plan encoder, safe W^X boundary,
-narrow verified-SSA adapter, bounded code objects, and forced/automatic callable
-allocation-free scalar baseline tier are **Current**. Native references and
-allocation, loop OSR, proof-based optimizing JIT, minimal AOT test emission,
-and direct Wasm are **Accepted Targets**. The backend is specified by
+narrow verified-SSA adapter, bounded code objects, forced/automatic callable
+baseline tier, host-independent native references/allocation, and the forced
+first proof-based optimizing slice are **Current**. Handle/host native calls,
+native/VM reference transitions, automatic optimizing promotion, loop OSR,
+minimal AOT test emission, and direct Wasm are **Accepted Targets**. The backend is specified by
 [Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
 **Rejected by Product Decision** in
 [Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
@@ -95,13 +96,16 @@ direct-call resolution, and canonical block/fallthrough order. There is no
 speculation, native lowering, engine selection, OSR, guard, or deoptimization
 in this cutover.
 
-The **Accepted Next** optimizing boundary starts from this verified baseline
-form and returns an opaque separately verified optimized program. Its first
+The **Current forced first** optimizing boundary starts from this verified
+baseline form and returns an opaque separately verified optimized program. Its
 certificate vocabulary is exact scalar algebraic replacement and local/
 dominator-ordered value numbering, followed by the existing cleanup passes.
-The certificate verifier reconstructs the candidate from checked edits and the
-ordinary SSA verifier runs again. Baseline normalization is not relabeled as
-optimization, and unchecked optimizer output cannot reach native lowering.
+The separate bounded certificate verifier reconstructs the candidate from
+checked stable-ID edits on a private clone, requires exact candidate equality,
+and runs the ordinary SSA verifier again. Baseline normalization is not relabeled
+as optimization, and unchecked optimizer output cannot reach optimizing native
+lowering. `auto` remains baseline-only; automatic promotion and broader passes
+remain Accepted Targets.
 
 ## HIR Resolution Invariants
 
@@ -160,7 +164,8 @@ trap/exit code. Safe APIs expose no arbitrary bytes, addresses, mappings, or
 function pointers; unsafe memory and invocation remain in `lkjscript-sys`.
 
 The foundation itself remains source/SSA-independent. The separate
-`lkjscript-jit` adapter now consumes only `VerifiedProgram`, lowers eligible
+`lkjscript-jit` adapter now consumes only `VerifiedProgram` for baseline or the
+opaque `VerifiedOptimizedProgram` for optimizing code, and lowers eligible
 scalar groups into the closed plan, attaches versioned PollV1/entry calls and
 bounded code-object/VM tier ownership, and executes generated entries. Callable
 baseline JIT is the current first adaptive performance path for this exact

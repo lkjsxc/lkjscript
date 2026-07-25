@@ -16,7 +16,11 @@ use lkjscript_core::{
     HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, Trap, Value, MAX_BUFFER_BYTES,
     MAX_LIST_EQUAL_STEPS,
 };
-use lkjscript_ir::{BytecodeLinkMetadata, Signature as IrSignature, SsaType, VerifiedProgram};
+use lkjscript_ir::{
+    optimize, BytecodeLinkMetadata, OptimizationCertificate, OptimizationFailureCode,
+    OptimizationLimits, OptimizationStats, Signature as IrSignature, SsaType,
+    VerifiedOptimizedProgram, VerifiedProgram,
+};
 use lkjscript_native::{
     AbiVersions, BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation,
     HeapRuntimeSite, OutcomeMapEntry, ReferenceType, Relocation, RuntimeCallSlot, Safepoint,
@@ -37,6 +41,7 @@ pub use lower::{LoweringError, LoweringFailureCode};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tier {
     Baseline,
+    Optimizing,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -45,6 +50,9 @@ pub enum TierState {
     Observed,
     BaselineCompiling,
     BaselineNative,
+    OptimizingCandidate,
+    OptimizingCompiling,
+    OptimizedNative,
     Disabled,
 }
 
@@ -57,6 +65,8 @@ pub enum FailureCode {
     RecursionUnsupported,
     InvalidVerifiedProgram,
     BackendVerification,
+    OptimizationBudget,
+    CertificateVerification,
     CompileWallTime,
     InstallLimit,
     InstallFailure,
@@ -106,13 +116,13 @@ impl fmt::Display for EngineError {
         if let Some(function) = self.function {
             write!(
                 formatter,
-                "baseline JIT {:?} in function {}: {}",
+                "JIT {:?} in function {}: {}",
                 self.code,
                 function.raw(),
                 self.detail
             )
         } else {
-            write!(formatter, "baseline JIT {:?}: {}", self.code, self.detail)
+            write!(formatter, "JIT {:?}: {}", self.code, self.detail)
         }
     }
 }
@@ -149,6 +159,7 @@ pub struct JitConfig {
     pub epoch: u64,
     /// Force exact-root collection before every allocation-capable heap site.
     pub force_gc_before_allocation: bool,
+    pub optimization_limits: OptimizationLimits,
 }
 
 impl Default for JitConfig {
@@ -166,6 +177,7 @@ impl Default for JitConfig {
             max_diagnostic_bytes: 16 * 1024 * 1024,
             epoch: 1,
             force_gc_before_allocation: false,
+            optimization_limits: OptimizationLimits::default(),
         }
     }
 }
@@ -228,12 +240,17 @@ impl FunctionTierRecord {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompileStats {
+    optimization: Duration,
     lowering_and_encoding: Duration,
     installation: Duration,
     work_units: u64,
 }
 
 impl CompileStats {
+    pub const fn optimization(&self) -> Duration {
+        self.optimization
+    }
+
     pub const fn lowering_and_encoding(&self) -> Duration {
         self.lowering_and_encoding
     }
@@ -264,6 +281,8 @@ pub struct CodeObject {
     trap_map: Vec<TrapMapEntry>,
     outcome_map: Vec<OutcomeMapEntry>,
     compile_stats: CompileStats,
+    optimization_certificate: Option<OptimizationCertificate>,
+    optimization_stats: Option<OptimizationStats>,
     invalidated: bool,
     explicit_traps: Vec<(u32, String)>,
     diagnostic_machine_code: Option<Vec<u8>>,
@@ -332,6 +351,14 @@ impl CodeObject {
         &self.compile_stats
     }
 
+    pub fn optimization_certificate(&self) -> Option<&OptimizationCertificate> {
+        self.optimization_certificate.as_ref()
+    }
+
+    pub const fn optimization_stats(&self) -> Option<&OptimizationStats> {
+        self.optimization_stats.as_ref()
+    }
+
     pub const fn invalidated(&self) -> bool {
         self.invalidated
     }
@@ -364,6 +391,9 @@ pub struct CodeObjectRecord {
     pub exact_scalar_stack_maps: bool,
     pub diagnostic_machine_code: Option<Vec<u8>>,
     pub compile_stats: CompileStats,
+    pub optimization_certificate: Option<OptimizationCertificate>,
+    pub optimization_stats: Option<OptimizationStats>,
+    pub optimization_metadata_bytes: u64,
     pub invalidated: bool,
     pub native_entry_count: u64,
     pub wx_transition_verified: bool,
@@ -399,6 +429,16 @@ pub struct JitStats {
     pub peak_native_frame_depth: usize,
     pub vm_to_native_transitions: u64,
     pub native_to_vm_transitions: u64,
+    pub baseline_native_entries: u64,
+    pub optimizing_native_entries: u64,
+    pub baseline_code_objects: u64,
+    pub optimizing_code_objects: u64,
+    pub optimizing_passes: u64,
+    pub optimization_certificate_records: u64,
+    pub optimization_certificate_bytes: u64,
+    pub algebraic_rewrites: u64,
+    pub gvn_rewrites: u64,
+    pub checked_i64_rewrites: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -445,8 +485,30 @@ pub struct ScalarInvocation {
     pub poll_count: u64,
 }
 
+#[derive(Clone)]
+enum ProgramAuthority {
+    Baseline(VerifiedProgram),
+    Optimizing(VerifiedOptimizedProgram),
+}
+
+impl ProgramAuthority {
+    fn program(&self) -> &lkjscript_ir::Program {
+        match self {
+            Self::Baseline(program) => program.program(),
+            Self::Optimizing(program) => program.program(),
+        }
+    }
+
+    const fn tier(&self) -> Tier {
+        match self {
+            Self::Baseline(_) => Tier::Baseline,
+            Self::Optimizing(_) => Tier::Optimizing,
+        }
+    }
+}
+
 pub struct JitSession {
-    program: VerifiedProgram,
+    program: ProgramAuthority,
     links: Option<BytecodeLinkMetadata>,
     installer: ExecutableInstaller,
     config: JitConfig,
@@ -454,6 +516,7 @@ pub struct JitSession {
     objects: Vec<CodeObject>,
     next_object: u64,
     total_compile_time: Duration,
+    optimization_time: Duration,
     native_entries: u64,
     direct_native_calls: u64,
     poll_v1_calls: u64,
@@ -494,14 +557,46 @@ impl JitSession {
         links: &BytecodeLinkMetadata,
         config: JitConfig,
     ) -> Self {
-        Self::new(program, Some(links.clone()), config)
+        Self::new(
+            ProgramAuthority::Baseline(program.clone()),
+            Some(links.clone()),
+            config,
+            Duration::ZERO,
+        )
+    }
+
+    fn new_baseline(program: &VerifiedProgram, config: JitConfig) -> Self {
+        Self::new(
+            ProgramAuthority::Baseline(program.clone()),
+            None,
+            config,
+            Duration::ZERO,
+        )
+    }
+
+    fn new_optimizing(
+        program: VerifiedOptimizedProgram,
+        config: JitConfig,
+        optimization_time: Duration,
+    ) -> Self {
+        Self::new(
+            ProgramAuthority::Optimizing(program),
+            None,
+            config,
+            optimization_time,
+        )
     }
 
     fn new(
-        program: &VerifiedProgram,
+        program: ProgramAuthority,
         links: Option<BytecodeLinkMetadata>,
         config: JitConfig,
+        optimization_time: Duration,
     ) -> Self {
+        let initial_state = match program.tier() {
+            Tier::Baseline => TierState::VmOnly,
+            Tier::Optimizing => TierState::OptimizingCandidate,
+        };
         let functions = program
             .program()
             .functions
@@ -509,7 +604,7 @@ impl JitSession {
             .map(|function| FunctionTierRecord {
                 function: function.id,
                 name: function.name.clone(),
-                state: TierState::VmOnly,
+                state: initial_state,
                 call_count: 0,
                 attempts: 0,
                 last_failure: None,
@@ -525,14 +620,15 @@ impl JitSession {
             })
             .collect();
         Self {
-            program: program.clone(),
+            program,
             links,
             installer: ExecutableInstaller::new(config.executable_limits),
             config,
             functions,
             objects: Vec::new(),
             next_object: 1,
-            total_compile_time: Duration::ZERO,
+            total_compile_time: optimization_time,
+            optimization_time,
             native_entries: 0,
             direct_native_calls: 0,
             poll_v1_calls: 0,
@@ -687,16 +783,20 @@ impl JitSession {
                 "function ID cannot index tier state",
             )
         })?;
+        let expected_state = match self.program.tier() {
+            Tier::Baseline => TierState::BaselineNative,
+            Tier::Optimizing => TierState::OptimizedNative,
+        };
         let object_id = self
             .functions
             .get(index)
-            .filter(|record| record.state == TierState::BaselineNative)
+            .filter(|record| record.state == expected_state)
             .and_then(|record| record.code_object)
             .ok_or_else(|| {
                 EngineError::new(
                     FailureCode::InvocationFailure,
                     Some(function),
-                    "function has no installed baseline code object",
+                    "function has no installed code object for the selected tier",
                 )
             })?;
         let object_index = self
@@ -707,7 +807,7 @@ impl JitSession {
                 EngineError::new(
                     FailureCode::InvocationFailure,
                     Some(function),
-                    "installed baseline code object is unavailable",
+                    "installed code object is unavailable",
                 )
             })?;
         let native = self.objects[object_index]
@@ -859,11 +959,60 @@ impl JitSession {
             total.saturating_add(object.accounting.code_bytes())
         });
         let metadata_cache_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
-            total.saturating_add(object.accounting.metadata_bytes())
+            total
+                .saturating_add(object.accounting.metadata_bytes())
+                .saturating_add(optimization_metadata_bytes(
+                    object.optimization_stats.as_ref(),
+                ))
         });
         let accounted_allocation_peak_bytes = self.objects.iter().fold(0_u64, |total, object| {
             total.saturating_add(object.accounted_allocation_bytes)
         });
+        let baseline_native_entries = self
+            .objects
+            .iter()
+            .filter(|object| object.tier == Tier::Baseline)
+            .fold(0_u64, |total, object| {
+                total.saturating_add(object.native_entry_count)
+            });
+        let optimizing_native_entries = self
+            .objects
+            .iter()
+            .filter(|object| object.tier == Tier::Optimizing)
+            .fold(0_u64, |total, object| {
+                total.saturating_add(object.native_entry_count)
+            });
+        let baseline_code_objects = self
+            .objects
+            .iter()
+            .filter(|object| object.tier == Tier::Baseline)
+            .count() as u64;
+        let optimizing_code_objects = self
+            .objects
+            .iter()
+            .filter(|object| object.tier == Tier::Optimizing)
+            .count() as u64;
+        let optimization_totals = self
+            .objects
+            .iter()
+            .filter_map(|object| object.optimization_stats.as_ref())
+            .fold(OptimizationStats::default(), |mut total, stats| {
+                total.iterations = total.iterations.saturating_add(stats.iterations);
+                total.certificate_records = total
+                    .certificate_records
+                    .saturating_add(stats.certificate_records);
+                total.certificate_bytes = total
+                    .certificate_bytes
+                    .saturating_add(stats.certificate_bytes);
+                total.algebraic_rewrites = total
+                    .algebraic_rewrites
+                    .saturating_add(stats.algebraic_rewrites);
+                total.gvn_rewrites = total.gvn_rewrites.saturating_add(stats.gvn_rewrites);
+                total.checked_i64_rewrites = total
+                    .checked_i64_rewrites
+                    .saturating_add(stats.checked_i64_rewrites);
+                total
+            });
         JitStats {
             functions: self.functions.clone(),
             code_objects: self
@@ -886,6 +1035,11 @@ impl JitSession {
                         .all(|point| point.stack_map().roots().is_empty()),
                     diagnostic_machine_code: object.diagnostic_machine_code.clone(),
                     compile_stats: object.compile_stats.clone(),
+                    optimization_certificate: object.optimization_certificate.clone(),
+                    optimization_stats: object.optimization_stats,
+                    optimization_metadata_bytes: optimization_metadata_bytes(
+                        object.optimization_stats.as_ref(),
+                    ),
                     invalidated: object.invalidated,
                     native_entry_count: object.native_entry_count,
                     wx_transition_verified: object.wx_transition_verified(),
@@ -917,6 +1071,18 @@ impl JitSession {
             peak_native_frame_depth: self.peak_native_frame_depth,
             vm_to_native_transitions: self.vm_to_native_transitions,
             native_to_vm_transitions: self.native_to_vm_transitions,
+            baseline_native_entries,
+            optimizing_native_entries,
+            baseline_code_objects,
+            optimizing_code_objects,
+            optimizing_passes: optimizing_code_objects
+                .saturating_mul(2)
+                .saturating_add(optimization_totals.iterations),
+            optimization_certificate_records: optimization_totals.certificate_records,
+            optimization_certificate_bytes: optimization_totals.certificate_bytes,
+            algebraic_rewrites: optimization_totals.algebraic_rewrites,
+            gvn_rewrites: optimization_totals.gvn_rewrites,
+            checked_i64_rewrites: optimization_totals.checked_i64_rewrites,
         }
     }
 
@@ -940,10 +1106,24 @@ impl JitSession {
                 "automatic tiering conservatively keeps reference-typed functions in the VM",
             ));
         }
+        let tier = self.program.tier();
+        if tier == Tier::Optimizing {
+            if let Some(record) = root.index().and_then(|index| self.functions.get_mut(index)) {
+                record.state = TierState::OptimizingCompiling;
+            }
+        }
         let started = Instant::now();
-        let lowered = lower::lower_group(&self.program, root, self.config.backend_limits)?;
+        let lowered = match &self.program {
+            ProgramAuthority::Baseline(program) => {
+                lower::lower_baseline_group(program, root, self.config.backend_limits)?
+            }
+            ProgramAuthority::Optimizing(program) => {
+                lower::lower_optimizing_group(program, root, self.config.backend_limits)?
+            }
+        };
         let lowering_and_encoding = started.elapsed();
-        if lowering_and_encoding > self.config.max_object_compile_time
+        if self.optimization_time.saturating_add(lowering_and_encoding)
+            > self.config.max_object_compile_time
             || self
                 .total_compile_time
                 .saturating_add(lowering_and_encoding)
@@ -1001,7 +1181,7 @@ impl JitSession {
         let installation = install_started.elapsed();
         let accounted_allocation_bytes = installed.accounted_allocation_bytes();
         let total = lowering_and_encoding.saturating_add(installation);
-        if total > self.config.max_object_compile_time
+        if self.optimization_time.saturating_add(total) > self.config.max_object_compile_time
             || self.total_compile_time.saturating_add(total) > self.config.max_total_compile_time
         {
             return Err(EngineError::new(
@@ -1013,10 +1193,16 @@ impl JitSession {
         self.total_compile_time = self.total_compile_time.saturating_add(total);
         let identity = self.next_object;
         self.next_object = self.next_object.saturating_add(1);
+        let (optimization_certificate, optimization_stats) = match &self.program {
+            ProgramAuthority::Baseline(_) => (None, None),
+            ProgramAuthority::Optimizing(program) => {
+                (Some(program.certificate().clone()), Some(*program.stats()))
+            }
+        };
         let object = CodeObject {
             identity,
             functions: lowered.functions.clone(),
-            tier: Tier::Baseline,
+            tier,
             versions,
             entries,
             accounting,
@@ -1029,10 +1215,15 @@ impl JitSession {
             trap_map,
             outcome_map,
             compile_stats: CompileStats {
+                optimization: self.optimization_time,
                 lowering_and_encoding,
                 installation,
-                work_units: accounting.work_units(),
+                work_units: accounting
+                    .work_units()
+                    .saturating_add(optimization_stats.map_or(0, |stats| stats.work_units)),
             },
+            optimization_certificate,
+            optimization_stats,
             invalidated: false,
             explicit_traps: lowered.explicit_traps,
             diagnostic_machine_code,
@@ -1047,7 +1238,10 @@ impl JitSession {
                     record.epoch = self.config.epoch;
                     if self.links.is_none() || record.auto_entry_eligible {
                         record.attempts = record.attempts.max(1);
-                        record.state = TierState::BaselineNative;
+                        record.state = match tier {
+                            Tier::Baseline => TierState::BaselineNative,
+                            Tier::Optimizing => TierState::OptimizedNative,
+                        };
                         record.last_failure = None;
                     }
                 }
@@ -1102,17 +1296,84 @@ impl JitSession {
     }
 }
 
+fn optimization_metadata_bytes(stats: Option<&OptimizationStats>) -> u64 {
+    stats.map_or(0, |stats| stats.certificate_bytes.saturating_add(11 * 8))
+}
+
 pub fn execute_forced(
     program: &VerifiedProgram,
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     let main = program.program().main;
-    let mut session = JitSession::new(program, None, config);
+    let mut session = JitSession::new_baseline(program, config);
     session.compile_group(main)?;
     let invocation = session.invoke_scalar(main, &[], execution)?;
     let outcome = scalar_to_execution(&session, main, invocation.outcome)?;
     let stats = session.stats();
+    verify_forced_entry(&outcome, &stats, main, TierState::BaselineNative)?;
+    if stats.optimizing_code_objects != 0 || stats.optimizing_native_entries != 0 {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(main),
+            "forced baseline engine installed or entered optimizing code",
+        ));
+    }
+    Ok(JitExecution { outcome, stats })
+}
+
+/// Proof-optimize the complete verified program, install only optimizing-tier
+/// code for the required reachable group, and enter optimized main.
+pub fn execute_optimizing(
+    program: &VerifiedProgram,
+    execution: &ExecutionConfig,
+    config: JitConfig,
+) -> Result<JitExecution, EngineError> {
+    let started = Instant::now();
+    let optimized = optimize(program, config.optimization_limits).map_err(optimization_error)?;
+    let optimization_time = started.elapsed();
+    if optimization_time > config.max_object_compile_time
+        || optimization_time > config.max_total_compile_time
+    {
+        return Err(EngineError::new(
+            FailureCode::CompileWallTime,
+            Some(program.program().main),
+            "optimizing pass wall-time budget exceeded",
+        ));
+    }
+    let main = optimized.program().main;
+    let mut session = JitSession::new_optimizing(optimized, config, optimization_time);
+    session.compile_group(main)?;
+    let invocation = session.invoke_scalar(main, &[], execution)?;
+    let outcome = scalar_to_execution(&session, main, invocation.outcome)?;
+    let stats = session.stats();
+    verify_forced_entry(&outcome, &stats, main, TierState::OptimizedNative)?;
+    let pre_entry_limit = matches!(
+        outcome,
+        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
+            | ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
+    );
+    if stats.baseline_code_objects != 0
+        || stats.baseline_native_entries != 0
+        || stats.optimizing_code_objects == 0
+        || (!pre_entry_limit && stats.optimizing_native_entries == 0)
+        || stats.vm_fallbacks != 0
+    {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(main),
+            "forced optimizing engine did not remain optimizing-only",
+        ));
+    }
+    Ok(JitExecution { outcome, stats })
+}
+
+fn verify_forced_entry(
+    outcome: &ExecutionOutcome,
+    stats: &JitStats,
+    main: FunctionId,
+    expected_state: TierState,
+) -> Result<(), EngineError> {
     let pre_entry_limit = matches!(
         outcome,
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
@@ -1124,15 +1385,27 @@ pub fn execute_forced(
                 .functions
                 .iter()
                 .filter(|record| record.code_object.is_some())
-                .any(|record| record.state != TierState::BaselineNative))
+                .any(|record| record.state != expected_state))
     {
         return Err(EngineError::new(
             FailureCode::InvocationFailure,
             Some(main),
-            "forced engine did not enter every installed required native function",
+            "forced engine did not enter installed code in the selected tier",
         ));
     }
-    Ok(JitExecution { outcome, stats })
+    Ok(())
+}
+
+fn optimization_error(error: lkjscript_ir::OptimizationError) -> EngineError {
+    let code = match error.code() {
+        OptimizationFailureCode::BudgetExceeded => FailureCode::OptimizationBudget,
+        OptimizationFailureCode::InputVerification
+        | OptimizationFailureCode::CertificateMismatch
+        | OptimizationFailureCode::IllegalEdit
+        | OptimizationFailureCode::CandidateMismatch
+        | OptimizationFailureCode::OutputVerification => FailureCode::CertificateVerification,
+    };
+    EngineError::new(code, None, error.to_string())
 }
 
 fn scalar_to_execution(

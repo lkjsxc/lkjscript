@@ -83,6 +83,14 @@ signatures, code/metadata/work and aggregate install limits, and ABI mismatches;
 observe RW then RX permissions through a sys-internal `/proc/self/maps` probe;
 and repeat owned install/invoke/drop accounting.
 
+Proof-optimization tests cover deterministic stable-ID algebraic and same-block/
+dominator GVN certificates, checked-I64 successful-check reuse, evaluator
+equivalence, independently reconstructed exact candidates, ordinary post-pass
+verification, and rejection of missing/stale/reordered/wrong-operation/
+wrong-operand/non-dominating/effectful/over-budget certificates, plus 64
+bounded randomized type-correct scalar evaluator differentials. The public
+optimizing authority has no raw `Program` constructor.
+
 Source-native tests additionally prove canonical source -> HIR -> verified
 normalized SSA -> scalar/reference machine plan -> encoded image -> RW/RX
 install -> actual native entry and typed heap runtime sites. They assert installed code/W^X metadata, nonzero native
@@ -112,6 +120,7 @@ cargo build --workspace --release --locked
 ./target/release/lkjscript run src/examples/jit-scalar/main.lkjscript
 ./target/release/lkjscript run --engine vm src/examples/jit-scalar/main.lkjscript
 ./target/release/lkjscript run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine optimizing-jit src/examples/jit-optimizing/main.lkjscript
 ./target/release/lkjscript run --engine auto --auto-jit-threshold 2 src/examples/jit-scalar/main.lkjscript
 ./target/release/lkjscript run --engine vm src/examples/hello/main.lkjscript
 ./target/release/lkjscript run --engine vm src/examples/mandel/main.lkjscript
@@ -187,7 +196,7 @@ native execution, 37.829x forced process wall, and 1.653x auto process wall over
 same-commit VM; the full environment, dispersion, costs, pre-JIT diagnostic,
 and limitations are in [Experiment C4](../vision/experiments.md#c4-callable-scalar-baseline-jit-adopted).
 
-## Current Baseline-JIT Gates
+## Current Native-JIT Gates
 
 Focused forced-native tests prove an installed W^X code object, actual generated
 main and callee entries, direct relocatable native calls, versioned PollV1
@@ -207,9 +216,17 @@ code/metadata/cache peaks, allocations/deterministic estimated object
 bytes/collections/estimated peak live heap, roots, distinct attempted and
 successful heap runtime calls, barriers, peak native frame depth, and transition
 counts. Collection pause distribution is not currently measured.
-Owned-buffer/lexical-reference, Handle/host paths, native/VM reference
-transitions, OSR, optimizing JIT, and background compilation are outside the
-current baseline subset. Host-independent GC references/allocation and
+Forced optimizing tests additionally require a retained bounded certificate,
+exact rewrite counts, `Tier::Optimizing`, W^X installation, nonzero optimizing
+entries, zero baseline entries/objects, zero VM fallback, smaller generated
+code for the declared repeated-expression workload, and exact evaluator/VM/
+baseline/optimizing values or structured outcomes. Allocation-graph attempts,
+successes, bytes, collections, and returned values remain equal between forced
+baseline and optimizing execution. Budget and unsupported failures are visible
+engine errors. `auto` remains baseline-only. Owned-buffer/lexical-reference,
+Handle/host paths, native/VM reference transitions, OSR, automatic optimizing
+promotion, broader proof passes, and background compilation are outside the
+current subsets. Host-independent GC references/allocation and
 recursive SCCs are Current only in forced mode; auto remains conservative. The containing host-independent allocation commit based on `0daa7a0` passed
 focused core/native/sys/JIT/VM/app tests, strict affected Clippy, separate
 docs/tree/source checks, `quiet verify` with 182 unit/integration tests plus one
@@ -217,6 +234,15 @@ compile-fail doctest, a locked release build, scalar/hello/Brainfuck smokes, and
 a forced allocation-graph metrics smoke. Docker, performance, and full
 Brainfuck Mandelbrot were not run. Broader host-capability/native-transition
 and performance evidence remain separate gates.
+
+The containing forced first optimizing commit, based on `cd4eee2`, passed the
+locked 209-test workspace suite plus compile-fail doctest, strict workspace
+Clippy, separate docs/tree/source checks, `quiet verify`, locked release build,
+and forced scalar/allocation/optimizing smokes recorded in
+[Current State](../current-state.md). The optimizing workload emitted 2,788
+versus baseline 3,405 code bytes and entered optimizing code 10,001 times with
+zero baseline entry or fallback. This is operation/code-size evidence, not a
+1.20x runtime-performance result. Docker and performance sampling were not run.
 
 ## Rule
 

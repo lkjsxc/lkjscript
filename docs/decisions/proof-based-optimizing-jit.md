@@ -7,15 +7,16 @@ proved by verified typed-SSA facts and whose generated code is actually called.
 
 ## Status
 
-Deterministic baseline SSA normalization is **Current**. An optimizing engine,
-optimizing code objects, optimized execution, and automatic promotion are an
-**Accepted Target**. No baseline code is labeled optimizing.
+Deterministic baseline SSA normalization and the forced first proof-based
+pipeline described in Selected First Delivery are **Current** on Linux x86-64.
+Automatic promotion and every broader optimization listed below remain
+**Accepted Targets**. No baseline code is labeled optimizing, and `auto` remains
+baseline-only.
 
 ## Selected First Delivery
 
-**Accepted Next Slice; not Current until forced generated execution and retained
-measurement pass.** The first optimizing pipeline is deliberately narrower than
-the full progression below:
+**Current forced slice.** The first optimizing pipeline is deliberately narrower
+than the full progression below:
 
 1. scalar algebraic identities whose exact typed operation proves the rewrite;
 2. dominator/same-block global value numbering for exact deterministic scalar
@@ -37,8 +38,10 @@ It reuses ABI-2 exact roots, allocation runtime sites, active-frame bounds, W^X
 installation, and structured outcomes. It adds no guards, deoptimization, OSR,
 background compilation, or hidden source assumptions.
 
-Automatic promotion remains disabled until same-commit forced correctness and
-benchmark evidence select thresholds. Inlining, general SCCP, range/check
+Automatic promotion remains disabled until later same-commit benchmark evidence
+selects thresholds. The current smoke proves fewer generated code bytes and
+fewer retained SSA operations on the declared optimizing workload; it is not a
+1.20x speed claim. Inlining, general SCCP, range/check
 elimination, LICM, escape/scalar replacement, tail calls, unrolling, hot/cold
 layout, and host-capability optimization remain later accepted slices; the
 small first pipeline is not represented as completing those items.
@@ -85,6 +88,31 @@ The tier is proof-based and non-speculative. There are no guards,
 deoptimization, undefined-behavior assumptions, offline profiles, or
 persistent code caches.
 
+## Current First-Pipeline Boundary
+
+`lkjscript-ir` exposes bounded `optimize` and separate `verify_optimization`
+boundaries. Only the latter can create the opaque `VerifiedOptimizedProgram`
+used by optimizing lowering. Ordered records retain stable function, block, and
+value IDs plus the expected canonical operation, exact operands, rewrite family,
+and replacement. Limits independently bound work units, records, certificate
+bytes, instruction growth, and cleanup iterations.
+
+The current algebraic vocabulary is I64 xor/or with zero, I64 and with all-ones,
+idempotent I64 and/or, and exact Bool double-not. Current GVN handles identical
+deterministic scalar comparisons, Bool not, I64 bit operations, F64 arithmetic,
+and checked I64 arithmetic/division only when the earlier identical dominating
+operation establishes successful completion. Allocation, identity/memory/host,
+affine, root, frame-state, and safepoint operations are ineligible. Existing
+verified copy, branch, unreachable, empty-block, effect-aware dead-code,
+direct-call, and canonical-order cleanup follows certified edits.
+
+The verifier re-verifies input, recomputes the canonical complete record sequence
+without consuming discovery state, checks every record and budget, applies edits
+to a private clone, verifies that edit-stage SSA, verifies every cleanup stage,
+requires exact equality with the supplied candidate, and runs ordinary SSA
+verification again. Missing, stale, reordered, forged, non-dominating,
+effectful, and over-budget proofs fail closed.
+
 ## Initial Pass Pipeline
 
 Each pass has a separate deterministic implementation and work/code-growth
@@ -129,8 +157,11 @@ Every pass:
 - is differentially compared with the independent evaluator and VM;
 - exposes bounded before/after diagnostics and pass statistics.
 
-A budget exhaustion leaves a verified less-optimized program; it does not skip
-verification or weaken semantics.
+Budget exhaustion never mutates or invalidates the verified input. The current
+forced engine reports it as a visible engine error before effects; a later
+automatic policy may retain a separately verified less-optimized tier without
+claiming the failed optimizing object. No path skips verification or weakens
+semantics.
 
 ## Automatic Promotion
 
@@ -148,6 +179,11 @@ Metrics distinguish baseline and optimizing compile/pass/install/entry times,
 object bytes, metadata, cache peaks, allocation/collection facts, failures,
 fallbacks, and exact tier transitions. Forced tests require nonzero optimizing
 entries and zero baseline/VM downgrade.
+
+The first forced workload currently demonstrates 2,788 optimizing versus 3,405
+baseline generated code bytes, four retained records, and 10,001 optimizing
+entries with zero baseline entry or fallback. No randomized timing protocol was
+run, so this is not a speedup claim.
 
 The aspirational adoption gate is at least 1.20x optimizing native execution
 speed over same-commit baseline on one declared general workload, with no

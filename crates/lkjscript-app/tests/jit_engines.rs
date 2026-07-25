@@ -4,8 +4,10 @@ use std::time::Duration;
 
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, OwnedValue, ResourceLimitKind};
-use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{execute_forced, FailureCode, JitConfig, JitSession, TierState};
+use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue, OptimizationLimits};
+use lkjscript_jit::{
+    execute_forced, execute_optimizing, FailureCode, JitConfig, JitSession, Tier, TierState,
+};
 use lkjscript_vm::{run_chunk, run_chunk_auto};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +105,93 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_v1_without_fallback(
         .functions
         .iter()
         .all(|function| function.native_entries() > 0));
+
+    let optimized = execute_optimizing(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect("source-derived forced optimizing JIT");
+    assert_eq!(execution(optimized.outcome), vm);
+    assert!(optimized.stats.optimizing_native_entries > 0);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
+    assert_eq!(optimized.stats.vm_fallbacks, 0);
+}
+
+#[test]
+fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade() {
+    let source = include_str!("fixtures/optimizing-loop.lkjscript");
+    let program = compile(source, "optimizing-loop.lkjscript");
+    let evaluated = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
+    let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let baseline = execute_forced(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect("forced baseline execution");
+    let optimizing = execute_optimizing(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect("forced proof optimizing execution");
+
+    assert_eq!(evaluated, Scalar::I64(0));
+    assert_eq!(vm, evaluated);
+    assert_eq!(execution(baseline.outcome), evaluated);
+    assert_eq!(execution(optimizing.outcome), evaluated);
+    assert_eq!(optimizing.stats.vm_fallbacks, 0);
+    assert_eq!(optimizing.stats.baseline_code_objects, 0);
+    assert_eq!(optimizing.stats.baseline_native_entries, 0);
+    assert_eq!(optimizing.stats.optimizing_code_objects, 1);
+    assert!(optimizing.stats.optimizing_native_entries > 0);
+    assert!(optimizing.stats.algebraic_rewrites >= 3);
+    assert!(optimizing.stats.gvn_rewrites >= 1);
+    assert!(optimizing.stats.checked_i64_rewrites >= 1);
+    assert!(optimizing
+        .stats
+        .functions
+        .iter()
+        .all(|function| function.state() == TierState::OptimizedNative));
+    let baseline_object = &baseline.stats.code_objects[0];
+    let optimized_object = &optimizing.stats.code_objects[0];
+    assert_eq!(optimized_object.tier, Tier::Optimizing);
+    assert!(optimized_object.wx_transition_verified);
+    assert!(optimized_object.native_entry_count > 0);
+    assert!(optimized_object.optimization_certificate.is_some());
+    assert!(optimized_object.optimization_metadata_bytes > 0);
+    assert!(optimized_object.code_bytes < baseline_object.code_bytes);
+    let optimization = optimized_object
+        .optimization_stats
+        .expect("retained optimization accounting");
+    assert!(optimization.output_instructions < optimization.input_instructions);
+}
+
+#[test]
+fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() {
+    let unsupported = compile(
+        "main/\nsig/\n->\nUnit\n/sig\nflush/\n/flush\n/main\n",
+        "optimizing-unsupported.lkjscript",
+    );
+    let error = execute_optimizing(
+        unsupported.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect_err("forced optimizing host operation must not fall back");
+    assert_eq!(error.code(), FailureCode::UnsupportedOperation);
+
+    let source = include_str!("fixtures/optimizing-loop.lkjscript");
+    let program = compile(source, "optimizing-budget.lkjscript");
+    let mut config = JitConfig::default();
+    config.optimization_limits = OptimizationLimits {
+        max_work_units: 0,
+        ..OptimizationLimits::default()
+    };
+    let error = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+        .expect_err("forced optimizing budget must not run baseline or VM");
+    assert_eq!(error.code(), FailureCode::OptimizationBudget);
 }
 
 #[test]
@@ -133,11 +222,32 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
             Scalar::Trapped
         );
         assert_eq!(execution(forced(&source, name).outcome), Scalar::Trapped);
+        let optimized = execute_optimizing(
+            program.ssa(),
+            &ExecutionConfig::default(),
+            JitConfig::default(),
+        )
+        .expect("optimizing trap remains structured");
+        assert_eq!(execution(optimized.outcome), Scalar::Trapped);
+        assert_eq!(optimized.stats.baseline_native_entries, 0);
     }
 
     let exit = "main/\nsig/\n->\nUnit\n/sig\nexit/\n17\n/exit\n/main\n";
     assert_eq!(
         execution(forced(exit, "exit.lkjscript").outcome),
+        Scalar::Exited(17)
+    );
+    let exit_program = compile(exit, "optimizing-exit.lkjscript");
+    assert_eq!(
+        execution(
+            execute_optimizing(
+                exit_program.ssa(),
+                &ExecutionConfig::default(),
+                JitConfig::default(),
+            )
+            .expect("optimizing exit remains structured")
+            .outcome,
+        ),
         Scalar::Exited(17)
     );
 }
@@ -374,10 +484,30 @@ fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
     config.force_gc_before_allocation = true;
     let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
         .expect("nested graph executes through generated heap sites");
+    let optimized = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
+        .expect("nested graph executes through optimized generated heap sites");
     assert_eq!(expected, Scalar::I64(1));
     assert_eq!(vm, expected);
     assert_eq!(execution(native.outcome), expected);
+    assert_eq!(execution(optimized.outcome), expected);
     assert_eq!(native.stats.vm_fallbacks, 0);
+    assert_eq!(optimized.stats.vm_fallbacks, 0);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
+    assert!(optimized.stats.optimizing_native_entries > 0);
+    assert_eq!(optimized.stats.allocations, native.stats.allocations);
+    assert_eq!(
+        optimized.stats.allocation_bytes_estimate,
+        native.stats.allocation_bytes_estimate
+    );
+    assert_eq!(optimized.stats.collections, native.stats.collections);
+    assert_eq!(
+        optimized.stats.runtime_heap_attempts,
+        native.stats.runtime_heap_attempts
+    );
+    assert_eq!(
+        optimized.stats.runtime_heap_successes,
+        native.stats.runtime_heap_successes
+    );
     assert!(native.stats.allocations >= 7);
     assert!(native.stats.collections >= 7);
     assert!(native.stats.maximum_roots > 0);
@@ -460,12 +590,20 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     let outcome = execute_forced(program.ssa(), &deadline, JitConfig::default())
         .expect("deadline is a language outcome");
     assert_eq!(execution(outcome.outcome), Scalar::Deadline);
+    let optimized = execute_optimizing(program.ssa(), &deadline, JitConfig::default())
+        .expect("optimizing deadline is a language outcome");
+    assert_eq!(execution(optimized.outcome), Scalar::Deadline);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     let mut fuel = ExecutionConfig::default();
     fuel.instruction_fuel = 0;
     let outcome = execute_forced(program.ssa(), &fuel, JitConfig::default())
         .expect("fuel is a language outcome");
     assert_eq!(execution(outcome.outcome), Scalar::Fuel);
+    let optimized = execute_optimizing(program.ssa(), &fuel, JitConfig::default())
+        .expect("optimizing fuel is a language outcome");
+    assert_eq!(execution(optimized.outcome), Scalar::Fuel);
+    assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     for maximum in [0, 1] {
         let mut stack = ExecutionConfig::default();

@@ -2,11 +2,13 @@
 
 use crate::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,
-    effect_aware_dce, empty_block_forwarding, evaluate, normalize_baseline, simplify_branches,
-    unreachable_blocks, verify, Block, BlockId, BlockMetadata, BlockParameter, BorrowKind,
-    CallTarget, Constant, EffectSet, EvalConfig, EvalOutcome, EvalValue, FailureBehavior,
-    FrameState, Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction,
-    InstructionKind, InstructionMetadata, LoanId, Origin, PlaceId, ProductMetadata, Program,
+    effect_aware_dce, empty_block_forwarding, evaluate, normalize_baseline, optimize,
+    simplify_branches, unreachable_blocks, verify, verify_optimization, Block, BlockId,
+    BlockMetadata, BlockParameter, BorrowKind, CallTarget, Constant, EffectSet, EvalConfig,
+    EvalOutcome, EvalValue, FailureBehavior, FrameState, Function, FunctionId,
+    GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind, InstructionMetadata,
+    LoanId, OptimizationCertificate, OptimizationCertificateRecord, OptimizationEditKind,
+    OptimizationFailureCode, OptimizationLimits, Origin, PlaceId, ProductMetadata, Program,
     RuntimeOp, Safepoint, Signature, SourceMetadata, SsaType, Terminator, TraitBound, TraitId,
     TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
 };
@@ -1818,4 +1820,479 @@ fn evaluator_bounds_and_explicit_trap_exit_outcomes_are_deterministic() {
         evaluate(&bounded, &config),
         EvalOutcome::ResourceLimitExceeded("fuel".into())
     );
+}
+
+fn optimizable_checked_program() -> Program {
+    let checked = EffectSet::MAY_TRAP;
+    let runtime = |id, operation, arguments, effects| Instruction {
+        id: ValueId::new(id),
+        ty: SsaType::I64,
+        kind: InstructionKind::Runtime {
+            operation,
+            arguments,
+            signature: Signature::monomorphic(vec![SsaType::I64, SsaType::I64], SsaType::I64),
+        },
+        metadata: metadata(effects),
+    };
+    Program {
+        sources: Vec::new(),
+        products: Vec::new(),
+        traits: core_traits(),
+        implementations: Vec::new(),
+        functions: vec![
+            Function {
+                id: FunctionId::new(0),
+                name: "step".into(),
+                signature: Signature::monomorphic(vec![SsaType::I64], SsaType::I64),
+                places: Vec::new(),
+                effects: checked,
+                entry: BlockId::new(0),
+                blocks: vec![Block {
+                    id: BlockId::new(0),
+                    parameters: vec![BlockParameter {
+                        id: ValueId::new(0),
+                        ty: SsaType::I64,
+                        owner_place: None,
+                        origin: Origin::SYNTHETIC,
+                    }],
+                    instructions: vec![
+                        constant(1, 0),
+                        runtime(
+                            2,
+                            RuntimeOp::BitXor,
+                            vec![ValueId::new(0), ValueId::new(1)],
+                            EffectSet::PURE,
+                        ),
+                        constant(3, -1),
+                        runtime(
+                            4,
+                            RuntimeOp::BitAnd,
+                            vec![ValueId::new(2), ValueId::new(3)],
+                            EffectSet::PURE,
+                        ),
+                        runtime(
+                            5,
+                            RuntimeOp::Add,
+                            vec![ValueId::new(4), ValueId::new(0)],
+                            checked,
+                        ),
+                        runtime(
+                            6,
+                            RuntimeOp::Add,
+                            vec![ValueId::new(4), ValueId::new(0)],
+                            checked,
+                        ),
+                        runtime(
+                            7,
+                            RuntimeOp::BitXor,
+                            vec![ValueId::new(5), ValueId::new(6)],
+                            EffectSet::PURE,
+                        ),
+                    ],
+                    terminator: Terminator::Return(ValueId::new(7)),
+                    metadata: block_metadata(),
+                }],
+                origin: Origin::SYNTHETIC,
+            },
+            Function {
+                id: FunctionId::new(1),
+                name: "main".into(),
+                signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+                places: Vec::new(),
+                effects: checked,
+                entry: BlockId::new(0),
+                blocks: vec![Block {
+                    id: BlockId::new(0),
+                    parameters: Vec::new(),
+                    instructions: vec![
+                        constant(0, 9),
+                        Instruction {
+                            id: ValueId::new(1),
+                            ty: SsaType::I64,
+                            kind: InstructionKind::Call {
+                                target: CallTarget::Direct(FunctionId::new(0)),
+                                arguments: vec![ValueId::new(0)],
+                                signature: Signature::monomorphic(vec![SsaType::I64], SsaType::I64),
+                                instantiation: None,
+                            },
+                            metadata: InstructionMetadata {
+                                origin: Origin::SYNTHETIC,
+                                effects: checked,
+                                safepoint: Safepoint::Required,
+                                failure: FailureBehavior::Trap,
+                                frame_state: Some(FrameState {
+                                    bytecode_position: 0,
+                                    locals: Vec::new(),
+                                    operand_stack: Vec::new(),
+                                }),
+                            },
+                        },
+                    ],
+                    terminator: Terminator::Return(ValueId::new(1)),
+                    metadata: block_metadata(),
+                }],
+                origin: Origin::SYNTHETIC,
+            },
+        ],
+        main: FunctionId::new(1),
+    }
+}
+
+#[test]
+fn proof_optimization_is_deterministic_and_evaluator_equivalent() {
+    let input = verify(optimizable_checked_program()).expect("verify optimization input");
+    let first = optimize(&input, OptimizationLimits::default()).expect("optimize first");
+    let second = optimize(&input, OptimizationLimits::default()).expect("optimize second");
+    assert_eq!(first.program(), second.program());
+    assert_eq!(first.certificate(), second.certificate());
+    assert_eq!(first.stats(), second.stats());
+    assert_eq!(first.stats().algebraic_rewrites, 2);
+    assert_eq!(first.stats().checked_i64_rewrites, 1);
+    assert!(first.stats().output_instructions < first.stats().input_instructions);
+    assert_eq!(
+        evaluate(&input, &EvalConfig::default()),
+        evaluate(first.verified_program(), &EvalConfig::default())
+    );
+
+    let mut division = optimizable_checked_program();
+    for instruction in &mut division.functions[0].blocks[0].instructions {
+        if matches!(instruction.id.raw(), 5 | 6) {
+            let InstructionKind::Runtime { operation, .. } = &mut instruction.kind else {
+                panic!("checked division fixture lost runtime instruction");
+            };
+            *operation = RuntimeOp::Divide;
+        }
+    }
+    let division = verify(division).expect("verify duplicate checked division");
+    let optimized_division = optimize(&division, OptimizationLimits::default())
+        .expect("optimize duplicate checked division");
+    assert_eq!(optimized_division.stats().checked_i64_rewrites, 1);
+    assert_eq!(
+        evaluate(&division, &EvalConfig::default()),
+        evaluate(
+            optimized_division.verified_program(),
+            &EvalConfig::default()
+        )
+    );
+
+    let mut trapping_division = division.into_program();
+    trapping_division.functions[1].blocks[0].instructions[0].kind =
+        InstructionKind::Constant(Constant::I64(0));
+    let trapping_division = verify(trapping_division).expect("verify trapping division");
+    let optimized_trap = optimize(&trapping_division, OptimizationLimits::default())
+        .expect("optimize trapping checked division");
+    assert!(matches!(
+        evaluate(&trapping_division, &EvalConfig::default()),
+        EvalOutcome::Trapped(_)
+    ));
+    assert_eq!(
+        evaluate(&trapping_division, &EvalConfig::default()),
+        evaluate(optimized_trap.verified_program(), &EvalConfig::default())
+    );
+}
+
+#[test]
+fn forged_stale_wrong_operation_operand_and_nondominating_certificates_fail_closed() {
+    let input = verify(optimizable_checked_program()).expect("verify optimization input");
+    let optimized = optimize(&input, OptimizationLimits::default()).expect("optimize");
+    let candidate = optimized.program().clone();
+
+    let reject = |certificate: OptimizationCertificate| {
+        let error = verify_optimization(
+            &input,
+            candidate.clone(),
+            certificate,
+            OptimizationLimits::default(),
+        )
+        .expect_err("forged certificate must fail");
+        assert!(matches!(
+            error.code(),
+            OptimizationFailureCode::CertificateMismatch
+                | OptimizationFailureCode::IllegalEdit
+                | OptimizationFailureCode::CandidateMismatch
+        ));
+    };
+
+    let mut stale = optimized.certificate().clone();
+    stale.records[0].value = ValueId::new(u32::MAX);
+    reject(stale);
+
+    let mut wrong_operation = optimized.certificate().clone();
+    wrong_operation.records[0].expected_operation = RuntimeOp::BitOr;
+    reject(wrong_operation);
+
+    let mut wrong_operand = optimized.certificate().clone();
+    wrong_operand.records[0].expected_operands[0] = ValueId::new(7);
+    reject(wrong_operand);
+
+    let mut nondominating = optimized.certificate().clone();
+    nondominating.records[0].replacement = ValueId::new(7);
+    reject(nondominating);
+
+    let mut wrong_candidate = candidate;
+    wrong_candidate.functions[0].name = "stale-step".into();
+    let error = verify_optimization(
+        &input,
+        wrong_candidate,
+        optimized.certificate().clone(),
+        OptimizationLimits::default(),
+    )
+    .expect_err("stale candidate must fail");
+    assert_eq!(error.code(), OptimizationFailureCode::CandidateMismatch);
+}
+
+#[test]
+fn forged_effectful_edit_and_all_optimization_budgets_fail_closed() {
+    let allocation_effects = EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP);
+    let mut program = one_block_program();
+    program.functions[0].signature = Signature::monomorphic(Vec::new(), SsaType::Str);
+    program.functions[0].effects = allocation_effects;
+    program.functions[0].blocks[0].instructions = vec![Instruction {
+        id: ValueId::new(0),
+        ty: SsaType::Str,
+        kind: InstructionKind::Runtime {
+            operation: RuntimeOp::EmptyStr,
+            arguments: Vec::new(),
+            signature: Signature::monomorphic(Vec::new(), SsaType::Str),
+        },
+        metadata: InstructionMetadata {
+            origin: Origin::SYNTHETIC,
+            effects: allocation_effects,
+            safepoint: Safepoint::Required,
+            failure: FailureBehavior::TrapOrOutcome,
+            frame_state: Some(FrameState {
+                bytecode_position: 0,
+                locals: Vec::new(),
+                operand_stack: Vec::new(),
+            }),
+        },
+    }];
+    let input = verify(program).expect("verify effectful input");
+    let unmodified = optimize(&input, OptimizationLimits::default()).expect("no effectful edits");
+    assert!(unmodified.certificate().records.is_empty());
+    let forged = OptimizationCertificate {
+        records: vec![OptimizationCertificateRecord {
+            sequence: 0,
+            function: FunctionId::new(0),
+            block: BlockId::new(0),
+            value: ValueId::new(0),
+            kind: OptimizationEditKind::GlobalValueNumbering,
+            expected_operation: RuntimeOp::EmptyStr,
+            expected_operands: Vec::new(),
+            replacement: ValueId::new(0),
+        }],
+    };
+    let error = verify_optimization(
+        &input,
+        unmodified.program().clone(),
+        forged,
+        OptimizationLimits::default(),
+    )
+    .expect_err("allocation certificate must fail");
+    assert_eq!(error.code(), OptimizationFailureCode::CertificateMismatch);
+
+    let optimizable = verify(optimizable_checked_program()).expect("verify budget input");
+    for limits in [
+        OptimizationLimits {
+            max_work_units: 0,
+            ..OptimizationLimits::default()
+        },
+        OptimizationLimits {
+            max_certificate_records: 0,
+            ..OptimizationLimits::default()
+        },
+        OptimizationLimits {
+            max_certificate_bytes: 0,
+            ..OptimizationLimits::default()
+        },
+        OptimizationLimits {
+            max_iterations: 0,
+            ..OptimizationLimits::default()
+        },
+    ] {
+        let error = optimize(&optimizable, limits).expect_err("budget must fail closed");
+        assert_eq!(error.code(), OptimizationFailureCode::BudgetExceeded);
+    }
+}
+
+#[test]
+fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
+    let checked = EffectSet::MAY_TRAP;
+    let add = |id| Instruction {
+        id: ValueId::new(id),
+        ty: SsaType::I64,
+        kind: InstructionKind::Runtime {
+            operation: RuntimeOp::Add,
+            arguments: vec![ValueId::new(0), ValueId::new(0)],
+            signature: Signature::monomorphic(vec![SsaType::I64, SsaType::I64], SsaType::I64),
+        },
+        metadata: metadata(checked),
+    };
+    let dominating = Program {
+        sources: Vec::new(),
+        products: Vec::new(),
+        traits: core_traits(),
+        implementations: Vec::new(),
+        functions: vec![Function {
+            id: FunctionId::new(0),
+            name: "main".into(),
+            signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+            places: Vec::new(),
+            effects: checked,
+            entry: BlockId::new(0),
+            blocks: vec![
+                Block {
+                    id: BlockId::new(0),
+                    parameters: Vec::new(),
+                    instructions: vec![constant(0, 9), add(1)],
+                    terminator: Terminator::Branch {
+                        target: BlockId::new(1),
+                        arguments: Vec::new(),
+                    },
+                    metadata: block_metadata(),
+                },
+                Block {
+                    id: BlockId::new(1),
+                    parameters: Vec::new(),
+                    instructions: vec![add(2)],
+                    terminator: Terminator::Return(ValueId::new(2)),
+                    metadata: block_metadata(),
+                },
+            ],
+            origin: Origin::SYNTHETIC,
+        }],
+        main: FunctionId::new(0),
+    };
+    let dominating = verify(dominating).expect("verify dominating GVN input");
+    let optimized = optimize(&dominating, OptimizationLimits::default()).expect("dominating GVN");
+    assert_eq!(optimized.stats().checked_i64_rewrites, 1);
+    assert_eq!(
+        evaluate(optimized.verified_program(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::I64(18))
+    );
+
+    let siblings = Program {
+        sources: Vec::new(),
+        products: Vec::new(),
+        traits: core_traits(),
+        implementations: Vec::new(),
+        functions: vec![Function {
+            id: FunctionId::new(0),
+            name: "main".into(),
+            signature: Signature::monomorphic(Vec::new(), SsaType::I64),
+            places: Vec::new(),
+            effects: checked,
+            entry: BlockId::new(0),
+            blocks: vec![
+                Block {
+                    id: BlockId::new(0),
+                    parameters: Vec::new(),
+                    instructions: vec![
+                        constant(0, 9),
+                        Instruction {
+                            id: ValueId::new(1),
+                            ty: SsaType::Bool,
+                            kind: InstructionKind::Constant(Constant::Bool(true)),
+                            metadata: metadata(EffectSet::PURE),
+                        },
+                    ],
+                    terminator: Terminator::ConditionalBranch {
+                        condition: ValueId::new(1),
+                        true_target: BlockId::new(1),
+                        true_arguments: Vec::new(),
+                        false_target: BlockId::new(2),
+                        false_arguments: Vec::new(),
+                    },
+                    metadata: block_metadata(),
+                },
+                Block {
+                    id: BlockId::new(1),
+                    parameters: Vec::new(),
+                    instructions: vec![add(2)],
+                    terminator: Terminator::Branch {
+                        target: BlockId::new(3),
+                        arguments: vec![ValueId::new(2)],
+                    },
+                    metadata: block_metadata(),
+                },
+                Block {
+                    id: BlockId::new(2),
+                    parameters: Vec::new(),
+                    instructions: vec![add(3)],
+                    terminator: Terminator::Branch {
+                        target: BlockId::new(3),
+                        arguments: vec![ValueId::new(3)],
+                    },
+                    metadata: block_metadata(),
+                },
+                Block {
+                    id: BlockId::new(3),
+                    parameters: vec![BlockParameter {
+                        id: ValueId::new(4),
+                        ty: SsaType::I64,
+                        owner_place: None,
+                        origin: Origin::SYNTHETIC,
+                    }],
+                    instructions: Vec::new(),
+                    terminator: Terminator::Return(ValueId::new(4)),
+                    metadata: block_metadata(),
+                },
+            ],
+            origin: Origin::SYNTHETIC,
+        }],
+        main: FunctionId::new(0),
+    };
+    let siblings = verify(siblings).expect("verify sibling GVN input");
+    let sibling_output =
+        optimize(&siblings, OptimizationLimits::default()).expect("optimize siblings");
+    assert_eq!(sibling_output.stats().gvn_rewrites, 0);
+    let forged = OptimizationCertificate {
+        records: vec![OptimizationCertificateRecord {
+            sequence: 0,
+            function: FunctionId::new(0),
+            block: BlockId::new(2),
+            value: ValueId::new(3),
+            kind: OptimizationEditKind::CheckedI64GlobalValueNumbering,
+            expected_operation: RuntimeOp::Add,
+            expected_operands: vec![ValueId::new(0), ValueId::new(0)],
+            replacement: ValueId::new(2),
+        }],
+    };
+    let error = verify_optimization(
+        &siblings,
+        sibling_output.program().clone(),
+        forged,
+        OptimizationLimits::default(),
+    )
+    .expect_err("sibling expression does not dominate");
+    assert_eq!(error.code(), OptimizationFailureCode::CertificateMismatch);
+}
+
+#[test]
+fn optimization_candidate_equality_is_exact_for_f64_bits() {
+    let mut program = one_block_program();
+    program.functions[0].signature = Signature::monomorphic(Vec::new(), SsaType::F64);
+    program.functions[0].blocks[0].instructions[0] = Instruction {
+        id: ValueId::new(0),
+        ty: SsaType::F64,
+        kind: InstructionKind::Constant(Constant::F64(-0.0)),
+        metadata: metadata(EffectSet::PURE),
+    };
+    let input = verify(program).expect("verify signed-zero proof input");
+    let optimized = optimize(&input, OptimizationLimits::default()).expect("optimize signed zero");
+    let mut forged = optimized.program().clone();
+    let InstructionKind::Constant(Constant::F64(value)) =
+        &mut forged.functions[0].blocks[0].instructions[0].kind
+    else {
+        panic!("expected retained F64 constant");
+    };
+    *value = 0.0;
+    let error = verify_optimization(
+        &input,
+        forged,
+        optimized.certificate().clone(),
+        OptimizationLimits::default(),
+    )
+    .expect_err("signed-zero candidate forgery must fail");
+    assert_eq!(error.code(), OptimizationFailureCode::CandidateMismatch);
 }

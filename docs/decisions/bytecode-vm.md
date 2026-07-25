@@ -9,11 +9,12 @@ seam under the runtime-JIT-first plan.
 
 Dense Rust bytecode lowered from verified normalized typed SSA, tagged values,
 precise mark-sweep, whole-chunk validation, structured process-safe outcomes,
-configured VM resource limits, bounded function-entry hotness, and callable
-allocation-free scalar Linux x86-64 baseline code objects are **Current**. The
-old observation hook is removed. Loop hotness/OSR, native references and
-allocation, and optimizing tiers remain **Accepted Targets** and are not
-implemented.
+configured VM resource limits, bounded function-entry hotness, callable
+host-independent Linux x86-64 baseline code objects, and the forced first
+proof-based optimizing tier are **Current**. The old observation hook is
+removed. Loop hotness/OSR, Handle/host native calls, native/VM reference
+transitions, automatic optimizing promotion, and broader proof passes remain
+**Accepted Targets** and are not implemented.
 
 ## Decision
 

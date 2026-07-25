@@ -42,6 +42,15 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   bounded evaluator, deterministic isolated baseline passes, and bytecode link
   metadata; SSA conversion renames local mutation and uses stable BindingId-
   ordered block parameters at branch and loop joins
+- Proof optimization: `lkjscript-ir` provides bounded deterministic discovery
+  and separate verification for ordered stable-ID certificates, with opaque
+  `VerifiedOptimizedProgram` authority. Current edits cover exact I64 xor/or
+  zero, and/all-ones, idempotent and/or, Bool double-not, and same-block or
+  dominating exact scalar GVN/CSE. Duplicate checked I64 arithmetic/division is
+  legal only behind an earlier identical dominating successful check. The
+  verifier independently checks the complete record sequence, reconstructs a
+  private candidate, requires exact equality, verifies edit and cleanup stages,
+  and rejects stale, forged, non-dominating, effectful, or over-budget proofs
 - Host implementation: nine Rust workspace crates with no third-party Rust
   dependencies; unsafe Rust is confined to `lkjscript-sys`
 - Quality gate: the complete Rust workspace is rustfmt-clean and passes strict
@@ -169,19 +178,26 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   tracks exact reservation/release across nested frames. Collecting calls publish
   a dense safepoint, and every structured return/trap/exit/deadline/resource/host
   edge unregisters before status returns to the execution owner
-- Engine modes: explicit `vm`, `baseline-jit`, and `auto` work; ordinary `run`
+- Engine modes: explicit `vm`, `baseline-jit`, `optimizing-jit`, and `auto` work; ordinary `run`
   defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
   remains deterministic, forced baseline compiles the complete reachable
   supported SCC group before main effects and never falls back, and auto
   compiles scalar-adapter hot entries for later calls while conservatively
   retaining reference-signature and unsupported VM entries; compiled groups
-  may contain reference helpers only as direct generated callees
+  may contain reference helpers only as direct generated callees. Forced
+  `optimizing-jit` proof-optimizes before effects, compiles the complete required
+  reachable supported group, installs only `Tier::Optimizing`, enters optimized
+  main, and returns an engine error rather than baseline/VM downgrade on proof,
+  budget, support, install, or invocation failure. `auto` is baseline-only
 - Tier/code ownership: the former observation hook is removed. Per-function
-  states are `VmOnly`, `Observed`, `BaselineCompiling`, `BaselineNative`, or
-  `Disabled` with saturating calls, bounded attempts, epoch/failure/object facts,
+  states additionally distinguish `OptimizingCandidate`, `OptimizingCompiling`,
+  and `OptimizedNative`; code-object tier is `Baseline` or `Optimizing`. Records
+  retain saturating calls, bounded attempts, epoch/failure/object facts,
   and native entries. Code objects retain ABI/tier/group, size/accounting,
   relocation/runtime/safepoint/source/outcome, compile/install, invalidation,
-  W^X, and entry metadata under bounded synchronous session ownership
+  W^X, entry metadata, and bounded optimizing certificate/stat accounting under
+  synchronous session ownership. Metrics separately count baseline/optimizing
+  objects and entries, passes, certificate bytes/records, and exact rewrite families
 - Retained JIT evidence: opt-in low-overhead JSON metrics are separate from full
   diagnostics and never use stdout; allocation/object byte fields are labeled
   deterministic estimates, heap operation attempts and successes are distinct,
@@ -218,8 +234,8 @@ explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
   prevents a compiled reference helper from ever labeling a direct VM call
   native. Explicit trap sites carry deterministic selected message identity
   through lowering, image metadata, sys outcome, and JIT lookup
-- Deferred tiers/surfaces: loop OSR, background compilation,
-  optimizing/speculative tiers, deoptimization, Handle/host native allocation,
+- Deferred tiers/surfaces: automatic optimizing promotion, broader optimizing
+  passes, loop OSR, background compilation, speculative tiers, deoptimization, Handle/host native allocation,
   native/VM reference transitions, persistent profiles, and persistent code
   caches remain absent
 
@@ -244,9 +260,10 @@ ABI-2 frames/roots, and host-independent source allocation/recursive SCC slice
 are Current. General ownership, full static trait methods/associated items,
 Handle/host native calls, and native/VM reference transitions are not. The next implementation sequence
 broadens only proved ownership and the next coherent static-trait slice, then
-allocation-capable baseline execution and a distinct proof-based
-optimizing tier with measured process-local promotion. These remaining steps
-are **Accepted Targets**, not Current behavior. The authoritative records
+allocation-capable baseline execution and broader proof-based
+optimization with measured process-local promotion. The forced first optimizing
+pipeline is Current; promotion and broader passes are **Accepted Targets**, not
+Current behavior. The authoritative records
 are [Ownership And Borrowing](decisions/ownership-and-borrowing.md), [Coherent
 Traits And Static Dispatch](decisions/traits-and-static-dispatch.md), [Native
 References, Frames, And Exact GC Stack Maps](decisions/native-references-and-gc-stack-maps.md),
@@ -279,6 +296,21 @@ The highest-priority defects are:
    monotonically allocated until that VM ends.
 
 ## Evidence
+
+The forced first proof-optimizing implementation in this document's containing
+commit, based on `cd4eee2d9381decf98ef89f6dc9f8526cbea3aa8`, was checked in an
+isolated Linux x86-64 worktree with Rust/Cargo 1.96.0. It makes only the forced
+first pipeline Current; it does not select automatic promotion or establish the
+1.20x aspirational performance gate.
+
+| First proof-optimizing command or check | Result |
+| --- | --- |
+| `cargo test --locked --workspace` | passed; 209 unit/integration tests plus the non-Send compile-fail doctest, including deterministic certificates, same-block/dominator checked GVN, forged proof rejection, 64 randomized scalar differentials, evaluator/VM/baseline/optimizing exact outcomes, allocation graphs, traps/exits/deadline/fuel, unsupported/budget no-downgrade, W^X, and entry/tier facts |
+| `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` | passed |
+| separate `check-docs`, `check-tree`, `check-sources`; `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; canonical source closure includes the new optimizing workload and the gate reran formatting, strict Clippy, all 209 tests, and the compile-fail doctest |
+| `cargo build --workspace --release --locked`; forced scalar baseline, allocation baseline, explicit-VM optimizing workload, forced optimizing scalar/allocation smokes | passed with silent normal streams; optimizing workload returned exact I64 `0`, installed one optimizing object, entered optimizing code 10,001 times, retained 4 records (3 algebraic, 1 GVN, 1 checked-I64 subset), emitted 2,788 versus baseline 3,405 code bytes, and had zero baseline entries/objects or VM fallback; optimizing allocation returned exact I64 `1` with 7 allocations, 6 collections, 14 attempted/14 successful heap calls, and zero downgrade |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | Docker, 1.20x performance sampling, automatic promotion, broader optimization passes, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
 
 The final allocation-baseline hardening in this document's containing commit,
 based on `7942d4e0d57e863b9ffe071cf07dc3ad252c1e23`, was checked in the
@@ -589,9 +621,9 @@ The next dependency sequence is:
    transitions without weakening the Current host-independent heap slice;
 3. design loop-header state transfer separately before making any OSR claim.
 
-OSR, background compilation, optimizing JIT, guards, deoptimization, persistent
-profiles/caches, offline PGO, and non-Linux/non-x86-64 acceptance are outside
-this cycle. The exact syntax, validation, outcome, SSA, backend-selection, ABI,
+Automatic optimizing promotion, broader proof passes, OSR, background
+compilation, guards, deoptimization, persistent profiles/caches, offline PGO,
+and non-Linux/non-x86-64 acceptance are outside this first optimizing cycle. The exact syntax, validation, outcome, SSA, backend-selection, ABI,
 engine, safety, and evidence contract is
 [Callable Linux x86-64 Baseline JIT Cycle](decisions/callable-baseline-jit.md).
 

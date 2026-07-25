@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod eval;
+mod optimize;
 mod passes;
 mod verify;
 
@@ -11,6 +12,11 @@ mod tests;
 use std::fmt;
 
 pub use eval::{evaluate, EvalConfig, EvalOutcome, EvalValue};
+pub use optimize::{
+    optimize, verify_optimization, OptimizationCertificate, OptimizationCertificateRecord,
+    OptimizationEditKind, OptimizationError, OptimizationFailureCode, OptimizationLimits,
+    OptimizationStats, VerifiedOptimizedProgram,
+};
 pub use passes::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,
     effect_aware_dce, empty_block_forwarding, normalize_baseline, simplify_branches,

@@ -73,10 +73,11 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   threaded workload state, fixed-point effects, chunk validation, structured
   process-safe outcomes, verified typed SSA, differential evaluation, baseline
   passes, measured backend selection, SSA-to-bytecode cutover, bounded W^X code
-  objects, and an actually called synchronous Linux x86-64 scalar baseline JIT
-  have landed. The active sequence is ownership and coherent traits, exact
-  native frame roots/allocation/collection, and then a distinct proof-based
-  optimizing tier with measured process-local promotion. Do not add inert
+  objects, actually called synchronous Linux x86-64 baseline JIT, exact native
+  host-independent roots/allocation/collection, and the forced first
+  certificate-verified optimizing tier have landed. The active sequence is
+  broader ownership/coherent traits and Handle/host transitions, then measured
+  automatic optimizing promotion and broader proof passes. Do not add inert
   engine flags or label baseline code optimizing. Loop OSR and a minimal AOT
   test emitter remain later targets, not current capability. Offline PGO is
   rejected by product decision. See [Allocation-Capable Baseline

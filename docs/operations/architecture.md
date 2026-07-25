@@ -47,7 +47,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze.rs`, `effects.rs`, `hir.rs`, `operation.rs` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects |
 | Ownership analysis | `crates/lkjscript-compiler/src/ownership.rs` | mandatory aggregate-bounded `Owned Buf` lexical place/move/same-block-loan analysis and exact joins |
 | HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa.rs` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect/ownership transfer |
-| Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bytecode link metadata |
+| Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bounded proof optimization/certificate verification, bytecode link metadata |
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter |
 | Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, ABI-2 reservation/encoding, opaque installable image |
@@ -87,9 +87,11 @@ CLI path
   -> validate_chunk -> opaque immutable ValidatedChunk
   -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
       +-> vm: run_chunk_with_args(program.bytecode(), ExecutionConfig)
-      +-> baseline-jit: verified scalar/reference SCC group -> ABI-2 code object
+      +-> baseline-jit: VerifiedProgram scalar/reference SCC group -> ABI-2 baseline object
           -> typed frame-home HeapDispatchV1 -> session GcHeap -> native main
-      +-> auto: VM entries -> bounded hotness -> later native function calls
+      +-> optimizing-jit: bounded stable-ID proof edits -> private reconstruction
+          -> VerifiedOptimizedProgram -> shared lowering -> optimizing-only object/main entry
+      +-> auto: VM entries -> bounded hotness -> later baseline native function calls
 ```
 
 Imported immutable function and product declarations share one program
@@ -117,11 +119,14 @@ independent semantics and does not call bytecode, VM, native, or host helpers.
 Console, filesystem, sockets, terminal, time, and handle operations are
 explicitly unsupported in it. The selected owned Linux x86-64 closed scalar
 machine plan, encoder, metadata, safe W^X boundary, verified SSA adapter,
-bounded code objects, and callable function-entry baseline tier are **Current**
-for allocation-free Unit/Bool/I64/F64 acyclic direct-call groups. Forced and
-auto engines execute real entries. The initial `Owned Buf` ownership safe island,
-marker traits, and closed-plan ABI-2 typed-reference frames/maps are Current;
-general ownership, Handle/host native allocation, native/VM reference transitions, loop OSR, an optimizing tier,
+bounded code objects, callable function-entry baseline tier, host-independent
+reference/allocation SCC groups in forced mode, and the forced first proof-based
+optimizing pipeline are **Current**. Forced and auto baseline engines plus forced
+optimizing execution enter real generated code. The initial `Owned Buf`
+ownership safe island, marker traits, and closed-plan ABI-2 typed-reference
+frames/maps are Current;
+general ownership, Handle/host native allocation, native/VM reference transitions,
+automatic optimizing promotion, broader optimization passes, loop OSR,
 minimal AOT file emission, and direct Wasm remain **Accepted Targets** or later
 work. The VM remains the cold tier and runtime oracle. See [Ownership And
 Borrowing](../decisions/ownership-and-borrowing.md), [Coherent Traits And Static
@@ -175,8 +180,11 @@ forced main or hot scalar VM function entry
   -> exactly one unregister on every registered outcome
 ```
 
-Forced mode enters generated main and never falls back. Auto compiles at one
-eligible scalar-adapter function entry and uses the object only on later calls;
+Forced baseline and optimizing modes enter generated main and never fall back.
+The optimizing mode verifies the bounded complete proof before source effects,
+lowers only opaque `VerifiedOptimizedProgram`, installs only optimizing objects,
+and retains certificate/accounting metadata. Auto compiles at one
+eligible scalar-adapter function entry and uses the baseline object only on later calls;
 reference-signature helpers may be generated direct callees but remain
 ineligible VM/native entries. Unsupported code stays VM-correct with same-epoch
 retry suppression. The old observation-only hook is
@@ -184,8 +192,9 @@ removed. Closed plans retain exact Buf-reference collection. Forced SSA/source e
 also supports Str, legacy Buf, Product, List, Option, and Result allocation and
 direct/mutual recursion. Auto intentionally keeps reference-typed functions in
 VM because reference transitions remain absent. Loop
-OSR, background compilation, optimizing tiers, persistent profiles, and
-persistent code caches are absent.
+OSR, automatic optimizing promotion, broader proof passes, background
+compilation, speculative tiers, persistent profiles, and persistent code caches
+are absent.
 
 ## Source Layout Rule
 
@@ -218,7 +227,8 @@ x86-64/W^X foundation are now Current. SSA-to-native lowering and exact VM/code-
 object tier ownership follow. The first adaptive execution target remains
 synchronous callable baseline JIT. Exact native roots/allocation and a
 proof-based optimizing tier now precede later loop OSR in the accepted sequence.
-The allocation-free scalar callable baseline tier is Current; minimal file
+The forced first proof pipeline and callable baseline tier are Current;
+automatic optimizing promotion is not. Minimal file
 emission remains only for diagnostics and backend tests, and offline PGO is
 rejected. The exact active boundary is [Callable Linux x86-64 Baseline JIT
 Cycle](../decisions/callable-baseline-jit.md); the next contracts are

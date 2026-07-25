@@ -10,7 +10,7 @@ use lkjscript_core::{
     DecodedInstruction, ExecutionConfig, ExecutionOutcome, FunctionProto, Limits, Op,
     ValidatedChunk,
 };
-use lkjscript_jit::{execute_forced, JitConfig, JitSession, JitStats};
+use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig, JitSession, JitStats};
 use lkjscript_vm::{run_chunk_auto, run_chunk_with_args};
 
 fn main() -> ExitCode {
@@ -45,6 +45,7 @@ enum Engine {
     Vm,
     Auto,
     BaselineJit,
+    OptimizingJit,
 }
 
 struct RunOptions {
@@ -93,6 +94,11 @@ fn run_command(args: &[String]) -> Result<ExitCode, String> {
                 .map_err(|error| format!("engine error: {error}"))?;
             (execution.outcome, Some(execution.stats))
         }
+        Engine::OptimizingJit => {
+            let execution = execute_optimizing(program.ssa(), &execution, jit_config)
+                .map_err(|error| format!("engine error: {error}"))?;
+            (execution.outcome, Some(execution.stats))
+        }
         Engine::Auto => {
             let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), jit_config);
             let started = metrics_enabled.then(Instant::now);
@@ -137,13 +143,14 @@ fn parse_run_options(args: &[String]) -> Result<RunOptions, String> {
     while let Some(argument) = args.get(index).map(String::as_str) {
         match argument {
             "--engine" => {
-                let value = args
-                    .get(index + 1)
-                    .ok_or_else(|| "--engine needs vm, auto, or baseline-jit".to_string())?;
+                let value = args.get(index + 1).ok_or_else(|| {
+                    "--engine needs vm, auto, baseline-jit, or optimizing-jit".to_string()
+                })?;
                 engine = match value.as_str() {
                     "vm" => Engine::Vm,
                     "auto" => Engine::Auto,
                     "baseline-jit" => Engine::BaselineJit,
+                    "optimizing-jit" => Engine::OptimizingJit,
                     other => return Err(format!("unknown execution engine: {other}")),
                 };
                 index += 2;
@@ -209,11 +216,14 @@ fn emit_metrics(report: MetricReport<'_>) -> Result<(), String> {
         Engine::Vm => "vm",
         Engine::Auto => "auto",
         Engine::BaselineJit => "baseline-jit",
+        Engine::OptimizingJit => "optimizing-jit",
     };
+    let mut optimization = Duration::ZERO;
     let mut native_lowering = Duration::ZERO;
     let mut installation = Duration::ZERO;
     if let Some(stats) = report.stats {
         for object in &stats.code_objects {
+            optimization = optimization.saturating_add(object.compile_stats.optimization());
             native_lowering =
                 native_lowering.saturating_add(object.compile_stats.lowering_and_encoding());
             installation = installation.saturating_add(object.compile_stats.installation());
@@ -234,7 +244,7 @@ fn emit_metrics(report: MetricReport<'_>) -> Result<(), String> {
         .stats
         .map_or_else(|| "null".to_string(), jit_metrics_json);
     let json = format!(
-        "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},\"configured_auto_threshold\":{configured_threshold},\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},\"timings_ns\":{{\"compile_total\":{compile_total},\"source_loading\":{source_loading},\"parse\":{parsing},\"hir_analysis\":{hir_analysis},\"effect_analysis\":{effect_analysis},\"ssa_construction\":{ssa_construction},\"ssa_verification\":{ssa_verification},\"normalization\":{normalization},\"reference_bytecode_lowering\":{bytecode_lowering},\"reference_bytecode_validation\":{bytecode_validation},\"native_lowering_encoding\":{native_lowering},\"relocation_wx_installation\":{installation},\"time_to_first_native_entry\":{time_to_first_native},\"first_native_call\":{first_native},\"native_execution\":{native_execution},\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},\"source_files\":{source_files},\"jit\":{jit}}}",
+        "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},\"configured_auto_threshold\":{configured_threshold},\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},\"timings_ns\":{{\"compile_total\":{compile_total},\"source_loading\":{source_loading},\"parse\":{parsing},\"hir_analysis\":{hir_analysis},\"effect_analysis\":{effect_analysis},\"ssa_construction\":{ssa_construction},\"ssa_verification\":{ssa_verification},\"normalization\":{normalization},\"reference_bytecode_lowering\":{bytecode_lowering},\"reference_bytecode_validation\":{bytecode_validation},\"optimizing_passes\":{optimization},\"native_lowering_encoding\":{native_lowering},\"relocation_wx_installation\":{installation},\"time_to_first_native_entry\":{time_to_first_native},\"first_native_call\":{first_native},\"native_execution\":{native_execution},\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},\"source_files\":{source_files},\"jit\":{jit}}}",
         engine = json_string(engine),
         configured_threshold = report.configured_threshold,
         auto_enabled = report.auto_enabled,
@@ -249,6 +259,7 @@ fn emit_metrics(report: MetricReport<'_>) -> Result<(), String> {
         normalization = report.compile.normalization.as_nanos(),
         bytecode_lowering = report.compile.bytecode_lowering.as_nanos(),
         bytecode_validation = report.compile.bytecode_validation.as_nanos(),
+        optimization = optimization.as_nanos(),
         native_lowering = native_lowering.as_nanos(),
         installation = installation.as_nanos(),
         native_execution = native_execution.as_nanos(),
@@ -349,18 +360,27 @@ fn jit_metrics_json(stats: &JitStats) -> String {
         .code_objects
         .iter()
         .map(|object| {
+            let optimization = object.optimization_stats.unwrap_or_default();
             format!(
-                "{{\"identity\":{},\"functions\":{},\"code_bytes\":{},\"metadata_bytes\":{},\"accounted_allocation_bytes\":{},\"relocations\":{},\"safepoints\":{},\"lowering_encoding_ns\":{},\"installation_ns\":{},\"work_units\":{},\"native_entries\":{},\"wx_verified\":{}}}",
+                "{{\"identity\":{},\"tier\":{},\"functions\":{},\"code_bytes\":{},\"metadata_bytes\":{},\"optimization_metadata_bytes\":{},\"accounted_allocation_bytes\":{},\"relocations\":{},\"safepoints\":{},\"optimization_ns\":{},\"lowering_encoding_ns\":{},\"installation_ns\":{},\"work_units\":{},\"certificate_records\":{},\"certificate_bytes\":{},\"algebraic_rewrites\":{},\"gvn_rewrites\":{},\"checked_i64_rewrites\":{},\"native_entries\":{},\"wx_verified\":{}}}",
                 object.identity,
+                json_string(&format!("{:?}", object.tier)),
                 object.functions.len(),
                 object.code_bytes,
                 object.metadata_bytes,
+                object.optimization_metadata_bytes,
                 object.accounted_allocation_bytes,
                 object.relocation_count,
                 object.safepoint_count,
+                object.compile_stats.optimization().as_nanos(),
                 object.compile_stats.lowering_and_encoding().as_nanos(),
                 object.compile_stats.installation().as_nanos(),
                 object.compile_stats.work_units(),
+                optimization.certificate_records,
+                optimization.certificate_bytes,
+                optimization.algebraic_rewrites,
+                optimization.gvn_rewrites,
+                optimization.checked_i64_rewrites,
                 object.native_entry_count,
                 object.wx_transition_verified,
             )
@@ -368,10 +388,20 @@ fn jit_metrics_json(stats: &JitStats) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "{{\"compile_failures\":{},\"vm_fallbacks\":{},\"native_entries\":{},\"direct_native_calls\":{},\"poll_v1_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},\"auto_enabled\":{},\"code_cache_peak_objects\":{},\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},\"accounted_allocation_peak_bytes\":{},\"allocations\":{},\"allocation_bytes_estimate\":{},\"collections\":{},\"peak_live_heap_bytes_estimate\":{},\"maximum_roots\":{},\"runtime_heap_attempts\":{},\"runtime_heap_successes\":{},\"barrier_count\":{},\"peak_native_frame_depth\":{},\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},\"functions\":[{}],\"objects\":[{}]}}",
+        "{{\"compile_failures\":{},\"vm_fallbacks\":{},\"native_entries\":{},\"baseline_native_entries\":{},\"optimizing_native_entries\":{},\"baseline_code_objects\":{},\"optimizing_code_objects\":{},\"optimizing_passes\":{},\"optimization_certificate_records\":{},\"optimization_certificate_bytes\":{},\"algebraic_rewrites\":{},\"gvn_rewrites\":{},\"checked_i64_rewrites\":{},\"direct_native_calls\":{},\"poll_v1_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},\"auto_enabled\":{},\"code_cache_peak_objects\":{},\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},\"accounted_allocation_peak_bytes\":{},\"allocations\":{},\"allocation_bytes_estimate\":{},\"collections\":{},\"peak_live_heap_bytes_estimate\":{},\"maximum_roots\":{},\"runtime_heap_attempts\":{},\"runtime_heap_successes\":{},\"barrier_count\":{},\"peak_native_frame_depth\":{},\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},\"functions\":[{}],\"objects\":[{}]}}",
         stats.compile_failures,
         stats.vm_fallbacks,
         stats.native_entries,
+        stats.baseline_native_entries,
+        stats.optimizing_native_entries,
+        stats.baseline_code_objects,
+        stats.optimizing_code_objects,
+        stats.optimizing_passes,
+        stats.optimization_certificate_records,
+        stats.optimization_certificate_bytes,
+        stats.algebraic_rewrites,
+        stats.gvn_rewrites,
+        stats.checked_i64_rewrites,
         stats.direct_native_calls,
         stats.poll_v1_calls,
         stats.native_invocations,
@@ -418,18 +448,31 @@ fn json_string(value: &str) -> String {
 }
 
 fn print_jit_diagnostics(program: &lkjscript_ir::VerifiedProgram, stats: &JitStats) {
-    eprintln!("jit.pre_native_ssa={:?}", program.program());
-    eprintln!("jit.post_native_ssa={:?}", program.program());
+    eprintln!("jit.verified_baseline_ssa={:?}", program.program());
+    if stats.optimizing_code_objects > 0 {
+        match lkjscript_ir::optimize(program, lkjscript_ir::OptimizationLimits::default()) {
+            Ok(optimized) => eprintln!("jit.verified_optimized_ssa={:?}", optimized.program()),
+            Err(error) => eprintln!("jit.optimized_ssa_diagnostic_error={error}"),
+        }
+    }
     eprintln!(
-        "jit.native_entries={} jit.direct_native_calls={} jit.poll_v1_calls={} jit.vm_fallbacks={} jit.compile_failures={}",
+        "jit.native_entries={} jit.baseline_entries={} jit.optimizing_entries={} jit.direct_native_calls={} jit.poll_v1_calls={} jit.vm_fallbacks={} jit.compile_failures={} jit.algebraic_rewrites={} jit.gvn_rewrites={} jit.checked_i64_rewrites={}",
         stats.native_entries,
+        stats.baseline_native_entries,
+        stats.optimizing_native_entries,
         stats.direct_native_calls,
         stats.poll_v1_calls,
         stats.vm_fallbacks,
-        stats.compile_failures
+        stats.compile_failures,
+        stats.algebraic_rewrites,
+        stats.gvn_rewrites,
+        stats.checked_i64_rewrites,
     );
     for object in &stats.code_objects {
         eprintln!("jit.code_object={object:?}");
+        if let Some(certificate) = &object.optimization_certificate {
+            eprintln!("jit.optimization_certificate={certificate:?}");
+        }
         if let Some(bytes) = &object.diagnostic_machine_code {
             let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
             eprintln!("jit.machine_code.{}={hex}", object.identity);
@@ -587,7 +630,9 @@ fn print_help() {
     println!("lkjscript - typed line-oriented language runtime");
     println!();
     println!("Usage:");
-    println!("  lkjscript run [--engine vm|auto|baseline-jit] [--auto-jit-threshold N]");
+    println!(
+        "  lkjscript run [--engine vm|auto|baseline-jit|optimizing-jit] [--auto-jit-threshold N]"
+    );
     println!("                 [--disable-auto-jit] <file.lkjscript> [--] [script-args...]");
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
     println!("  lkjscript disasm <file.lkjscript>");
@@ -628,6 +673,15 @@ mod tests {
         ])
         .expect("parse explicit VM run");
         assert_eq!(explicit_vm.engine, Engine::Vm);
+
+        let optimizing = parse_run_options(&[
+            "run".into(),
+            "--engine".into(),
+            "optimizing-jit".into(),
+            "main.lkjscript".into(),
+        ])
+        .expect("parse forced optimizing run");
+        assert_eq!(optimizing.engine, Engine::OptimizingJit);
     }
 
     #[test]

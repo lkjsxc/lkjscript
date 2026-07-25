@@ -9,10 +9,11 @@ without turning aspiration into a current release claim.
 
 The reference bytecode VM, exact I64/F64 execution, precise mark-sweep, resolved
 typed HIR, verified normalized SSA, selected owned Linux x86-64 backend, bounded
-code objects, and callable allocation-free scalar baseline JIT are **Current**.
-The old observation hook is removed. Ownership/traits, native
-references/allocation, proof-based optimizing JIT, later loop OSR, and direct
-Wasm are **Accepted Targets**. Guarded
+code objects, callable host-independent baseline JIT, and the forced first
+proof-based optimizing pipeline are **Current**. The old observation hook is
+removed. Broader ownership/traits, Handle/host native calls, native/VM
+reference transitions, automatic optimizing promotion, later loop OSR, and
+direct Wasm are **Accepted Targets**. Guarded
 specialization is **Deferred** until justified. Offline PGO is **Rejected by
 Product Decision**.
 
@@ -29,7 +30,8 @@ truthful semantics and safety
   -> function-triggered scalar baseline JIT
   -> ownership, coherent traits, and exact native roots
   -> allocation-capable baseline JIT
-  -> proof-based optimizing JIT and measured automatic promotion
+  -> forced first proof-based optimizing JIT
+  -> measured automatic promotion and broader proof passes
   -> loop-triggered JIT and OSR in a later cycle
   -> guarded specialization and deoptimization only when justified
   -> direct Wasm and additional targets
@@ -50,11 +52,13 @@ wide I64/F64 values, precise non-moving mark-sweep collection, and
 return-adjacent frame reuse. Source is compiled on every CLI invocation. Host
 effects block synchronously. Linux x86-64 now has a callable scalar baseline
 compiler, bounded code objects, explicit engines, and a retained scalar
-performance result. Generated forced execution reached 46.146x same-commit VM
-execution and auto reached 1.653x process-wall speedup at threshold 64 on the
-100,000-call F64 workload. There is no native reference/allocation support,
-OSR, optimizing tier, or deoptimization; the scalar result is not a
-full-language claim.
+performance result. Generated forced baseline execution reached 46.146x
+same-commit VM execution and auto reached 1.653x process-wall speedup at
+threshold 64 on the 100,000-call F64 workload. Host-independent native
+reference/allocation and the forced first optimizing tier now exist, but no
+optimizing performance protocol has run. There is no automatic optimizing
+promotion, OSR, guarded specialization, or deoptimization; the scalar baseline
+result is not a full-language or optimizing-speed claim.
 
 Historical debug figures and single-shot C comparisons lack preserved machine,
 variance, or artifact data and remain diagnostic rather than baselines. The

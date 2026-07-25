@@ -11,12 +11,14 @@ presenting the selection as an implemented JIT.
 source-independent Linux x86-64 scalar machine-plan verifier, encoder, opaque
 installable image, and safe bounded `lkjscript-sys` W^X boundary remain the
 backend foundation. A separate narrow `lkjscript-jit` adapter now consumes only
-verified typed SSA and provides callable allocation-free scalar code objects,
-VM/native transfer, tier state, and `vm`/`auto`/`baseline-jit` engines. The
-closed machine-plan/sys boundary now supports exact ABI-2 typed stable
-references and active frames. Source-level native allocation/references, host
-operations, recursion, OSR, and optimizing tiers remain outside current
-coverage.
+verified typed SSA for baseline or opaque proof-verified optimized SSA for
+optimizing code and provides callable host-independent code objects, tier state,
+and `vm`/`auto`/`baseline-jit`/`optimizing-jit` engines. The closed
+machine-plan/sys boundary supports exact ABI-2 typed stable references, active
+frames, host-independent source allocation/recursion, and shared baseline or
+optimizing lowering. Handle/host operations, native/VM reference transitions,
+automatic optimizing promotion, broader proof passes, and OSR remain outside
+current coverage.
 
 ## Decision
 
