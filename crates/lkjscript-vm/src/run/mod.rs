@@ -111,6 +111,7 @@ pub struct Vm<'a, J: RuntimeTier> {
     config: ExecutionConfig,
     fuel_remaining: u64,
     output_bytes: usize,
+    allocation_error: Option<Error>,
     started: Instant,
 }
 
@@ -137,6 +138,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             resources: ResourceTable::new(config.max_handles),
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
+            allocation_error: None,
             started: Instant::now(),
             config,
         }
@@ -211,6 +213,9 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 self.collect();
             }
             self.step()?;
+            if let Some(error) = self.allocation_error.take() {
+                return Err(error);
+            }
             self.check_runtime_limits()?;
         }
     }
@@ -388,8 +393,11 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         self.stack.push(value);
     }
 
-    pub(crate) fn make_i64(&mut self, number: i64) -> Value {
-        Value::from_small_i64(number).unwrap_or_else(|| self.arena.alloc(HeapObj::Int(number)))
+    pub(crate) fn make_i64(&mut self, number: i64) -> Result<Value> {
+        match Value::from_small_i64(number) {
+            Some(value) => Ok(value),
+            None => self.arena.alloc(HeapObj::Int(number)),
+        }
     }
 
     pub(crate) fn as_i64(&self, value: Value) -> Result<i64> {
@@ -432,11 +440,11 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             .get(id)
             .ok_or_else(|| Error::msg("bad const"))?
         {
-            Constant::I64(number) => Ok(self.make_i64(*number)),
-            Constant::F64(number) => Ok(self.arena.alloc(HeapObj::Float(*number))),
-            Constant::Str(text) => Ok(self.arena.alloc(HeapObj::Str(text.clone()))),
-            Constant::Symbol(symbol) => Ok(self.arena.alloc(HeapObj::Symbol(symbol.clone()))),
-            Constant::Proto(proto) => Ok(self.make_i64(i64::from(*proto))),
+            Constant::I64(number) => self.make_i64(*number),
+            Constant::F64(number) => self.arena.alloc(HeapObj::Float(*number)),
+            Constant::Str(text) => self.arena.alloc(HeapObj::Str(text.clone())),
+            Constant::Symbol(symbol) => self.arena.alloc(HeapObj::Symbol(symbol.clone())),
+            Constant::Proto(proto) => self.make_i64(i64::from(*proto)),
         }
     }
 

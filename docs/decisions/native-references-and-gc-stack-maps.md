@@ -35,8 +35,12 @@ is used by both execution implementations. Automatic reference transitions are
 still absent, so auto conservatively retains reference-typed functions in VM.
 
 Native plans identify each GC reference by an exact reference/layout identity.
-Frame descriptors enumerate every reference-capable value/local home. The
-machine-plan verifier runs bounded backward CFG reference liveness and retains a
+Nested List/Option/Result identities are dense deterministic interned identities
+of the complete structural `SsaType`, not truncated structural hashes; the
+identity and its exact component identities remain in runtime-site metadata and
+heap tags. The machine-plan verifier rejects one retained identity describing
+two layouts. Frame descriptors enumerate every reference-capable value/local
+home. The machine-plan verifier runs bounded backward CFG reference liveness and retains a
 per-call sorted typed root-requirement certificate. It charges analysis work
 and every retained root record before allocation against the backend work and
 metadata-derived root budgets. The encoder must consume that certificate, and
@@ -63,8 +67,10 @@ setup does not multiply one shallow map by the maximum possible frame depth.
 Runtime-service resource rejection is reported as `RuntimeService`, distinct
 from `MaterializedRoots`. `RuntimeCallSlot::plan_signature` exposes only
 plan-callable typed signatures; encoder-owned Reserve/Register/Publish/
-Unregister slots instead expose their exact context/ordinal/byte/pointer/ID
-machine arguments through `internal_abi_signature`. Every registered return,
+Unregister/HeapDispatch slots instead expose their exact
+context/ordinal/byte/pointer/safepoint/heap-site machine arguments through
+`internal_abi_signature`. In particular, the second `HeapDispatchV1` argument is
+a heap-site ID, not a safepoint ID. Every registered return,
 trap, exit, deadline, resource, host-failure, and propagated-callee edge
 unregisters once. Reports
 retain peak depth and native-stack bytes, collection calls, maximum roots, and
@@ -157,9 +163,12 @@ worker-local allocation context
 
 The first correct implementation may use the slow call for every allocation.
 It receives a verified layout identity and fully initialized reference inputs;
-it returns a typed GC handle or structured resource/host failure. Partially
-initialized objects are runtime-private and never visible to source or the
-collector as complete objects.
+it returns a typed GC handle or structured resource/host failure. Every
+publication path, including the VM compatibility path, checks allocation,
+heap-byte, and stable `u32` handle-index exhaustion before publication; index
+exhaustion is an allocation resource outcome and cannot create a duplicate
+handle. Partially initialized objects are runtime-private and never visible to
+source or the collector as complete objects.
 
 ## Write Barrier ABI
 

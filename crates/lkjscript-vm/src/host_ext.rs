@@ -31,7 +31,7 @@ pub fn str_ref(arena: &Arena, string: Value, index: i64) -> Result<i64> {
 pub fn str_append(arena: &mut Arena, left: Value, right: Value) -> Result<Value> {
     let mut output = as_str(arena, left)?.to_string();
     output.push_str(as_str(arena, right)?);
-    Ok(arena.alloc(HeapObj::Str(output)))
+    arena.alloc(HeapObj::Str(output))
 }
 
 pub fn str_slice(arena: &mut Arena, string: Value, start: i64, end: i64) -> Result<Value> {
@@ -43,12 +43,12 @@ pub fn str_slice(arena: &mut Arena, string: Value, start: i64, end: i64) -> Resu
     }
     let text = std::str::from_utf8(&bytes[start..end])
         .map_err(|_| Error::msg("str-slice splits UTF-8"))?;
-    Ok(arena.alloc(HeapObj::Str(text.to_string())))
+    arena.alloc(HeapObj::Str(text.to_string()))
 }
 
 pub fn str_from_byte(arena: &mut Arena, number: i64) -> Result<Value> {
     let byte = u8::try_from(number).map_err(|_| Error::msg("str-from-byte out of range"))?;
-    Ok(arena.alloc(HeapObj::Str(String::from(char::from(byte)))))
+    arena.alloc(HeapObj::Str(String::from(char::from(byte))))
 }
 
 enum OwnedResource {
@@ -208,7 +208,7 @@ impl ResourceTable {
             .map_err(|error| Error::msg(format!("sys-recv: {error}")))?;
         buffer.truncate(received);
         let text = String::from_utf8_lossy(&buffer).into_owned();
-        Ok(arena.alloc(HeapObj::Str(text)))
+        arena.alloc(HeapObj::Str(text))
     }
 
     pub fn sys_send(&self, arena: &Arena, handle: Value, data: Value) -> Result<i64> {
@@ -727,19 +727,19 @@ impl ResourceTable {
     }
 }
 
-pub fn result_ok(arena: &mut Arena, value: Value) -> Value {
+pub fn result_ok(arena: &mut Arena, value: Value) -> Result<Value> {
     arena.alloc(HeapObj::ResultOk(value))
 }
 
-pub fn result_err(arena: &mut Arena, value: Value) -> Value {
+pub fn result_err(arena: &mut Arena, value: Value) -> Result<Value> {
     arena.alloc(HeapObj::ResultErr(value))
 }
 
-pub fn language_result(arena: &mut Arena, result: Result<Value>) -> Value {
+pub fn language_result(arena: &mut Arena, result: Result<Value>) -> Result<Value> {
     match result {
         Ok(value) => result_ok(arena, value),
         Err(error) => {
-            let message = arena.alloc(HeapObj::Str(error.to_string()));
+            let message = arena.alloc(HeapObj::Str(error.to_string()))?;
             result_err(arena, message)
         }
     }
@@ -775,7 +775,7 @@ pub fn unwrap_err(arena: &Arena, value: Value) -> Result<Value> {
     }
 }
 
-pub fn option_some(arena: &mut Arena, value: Value) -> Value {
+pub fn option_some(arena: &mut Arena, value: Value) -> Result<Value> {
     arena.alloc(HeapObj::OptionSome(value))
 }
 
@@ -799,7 +799,7 @@ pub fn unwrap_some(arena: &Arena, value: Value) -> Result<Value> {
     }
 }
 
-pub fn str_from_i64(arena: &mut Arena, number: i64) -> Value {
+pub fn str_from_i64(arena: &mut Arena, number: i64) -> Result<Value> {
     arena.alloc(HeapObj::Str(number.to_string()))
 }
 
@@ -807,7 +807,7 @@ pub fn str_from_f64(arena: &mut Arena, number: Value) -> Result<Value> {
     let HeapObj::Float(number) = arena.get(number)? else {
         return Err(Error::msg("str-from-f64 expects F64"));
     };
-    Ok(arena.alloc(HeapObj::Str(number.to_string())))
+    arena.alloc(HeapObj::Str(number.to_string()))
 }
 
 #[cfg(test)]
@@ -970,7 +970,8 @@ mod tests {
     #[test]
     fn language_results_preserve_operation_error_text() {
         let mut arena = Arena::default();
-        let result = language_result(&mut arena, Err(Error::msg("sys-example: failure")));
+        let result = language_result(&mut arena, Err(Error::msg("sys-example: failure")))
+            .expect("language error allocation");
         assert_eq!(is_ok(&arena, result).ok(), Some(Value::FALSE));
         let error = unwrap_err(&arena, result).expect("unwrap Result error");
         assert_eq!(as_str(&arena, error).ok(), Some("sys-example: failure"));
@@ -993,7 +994,7 @@ mod tests {
             .contains("unwrap-some on none"));
 
         let payload = Value::from_small_i64(7).expect("7 is an immediate I64");
-        let some = option_some(&mut arena, payload);
+        let some = option_some(&mut arena, payload).expect("option allocation");
         assert_eq!(is_some(&arena, some).ok(), Some(Value::TRUE));
         assert_eq!(unwrap_some(&arena, some).ok(), Some(payload));
         assert!(is_some(&arena, Value::UNIT).is_err());
@@ -1003,12 +1004,14 @@ mod tests {
     #[test]
     fn numeric_string_conversions_are_type_strict_and_exact() {
         let mut arena = Arena::default();
-        let text = str_from_i64(&mut arena, i64::MIN);
+        let text = str_from_i64(&mut arena, i64::MIN).expect("integer string allocation");
         assert_eq!(as_str(&arena, text).ok(), Some("-9223372036854775808"));
 
         let integer = Value::from_small_i64(2).expect("2 is an immediate I64");
         assert!(str_from_f64(&mut arena, integer).is_err());
-        let float = arena.alloc(HeapObj::Float(2.0));
+        let float = arena
+            .alloc(HeapObj::Float(2.0))
+            .expect("test float allocation");
         let text = str_from_f64(&mut arena, float).expect("format F64");
         assert_eq!(as_str(&arena, text).ok(), Some("2"));
     }

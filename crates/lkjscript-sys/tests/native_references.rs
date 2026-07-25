@@ -130,7 +130,7 @@ fn heap_dispatch_rematerializes_moved_argument_after_root_writeback(
 #[test]
 fn generic_heap_dispatch_propagates_service_status_and_unwinds(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::new(1)));
+    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
     let function = plan.declare_function(
         SourceFunctionId::new(42),

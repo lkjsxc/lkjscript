@@ -87,10 +87,10 @@ impl GcHeap {
         self.config = config;
     }
 
-    /// Compatibility allocation for the VM's existing instruction-boundary
-    /// accounting. Bounded generated execution uses `try_alloc`.
-    pub fn alloc(&mut self, object: HeapObj) -> Value {
-        self.publish(object)
+    /// Compatibility allocation for VM and host helpers. Publication checks
+    /// configured limits and stable-handle exhaustion before assigning an ID.
+    pub fn alloc(&mut self, object: HeapObj) -> Result<Value> {
+        self.try_alloc(object).map_err(gc_limit_error)
     }
 
     /// Publish one completely initialized object after checking exact aggregate
@@ -98,7 +98,7 @@ impl GcHeap {
     /// `collect_before_allocation` is true.
     pub fn try_alloc(&mut self, object: HeapObj) -> std::result::Result<Value, GcLimit> {
         if self.stats.allocations >= self.config.max_allocations
-            || self.objs.len() > u32::MAX as usize
+            || !stable_index_available(self.objs.len())
         {
             return Err(GcLimit::Allocations);
         }
@@ -111,7 +111,7 @@ impl GcHeap {
         if next > self.config.max_heap_bytes {
             return Err(GcLimit::HeapBytes);
         }
-        Ok(self.publish_with_layout(object, None))
+        self.publish_with_layout(object, None)
     }
 
     /// Bounded typed publication used by generated runtime adapters. The
@@ -122,7 +122,7 @@ impl GcHeap {
         layout: u64,
     ) -> std::result::Result<Value, GcLimit> {
         if self.stats.allocations >= self.config.max_allocations
-            || self.objs.len() > u32::MAX as usize
+            || !stable_index_available(self.objs.len())
         {
             return Err(GcLimit::Allocations);
         }
@@ -135,14 +135,15 @@ impl GcHeap {
         if next > self.config.max_heap_bytes {
             return Err(GcLimit::HeapBytes);
         }
-        Ok(self.publish_with_layout(object, Some(layout)))
+        self.publish_with_layout(object, Some(layout))
     }
 
-    fn publish(&mut self, object: HeapObj) -> Value {
-        self.publish_with_layout(object, None)
-    }
-
-    fn publish_with_layout(&mut self, object: HeapObj, layout: Option<u64>) -> Value {
+    fn publish_with_layout(
+        &mut self,
+        object: HeapObj,
+        layout: Option<u64>,
+    ) -> std::result::Result<Value, GcLimit> {
+        let index = u32::try_from(self.objs.len()).map_err(|_| GcLimit::Allocations)?;
         let bytes = estimated_object_bytes(&object);
         self.allocs_since_gc = self.allocs_since_gc.saturating_add(1);
         self.stats.allocations = self.stats.allocations.saturating_add(1);
@@ -158,10 +159,9 @@ impl GcHeap {
         // Handles are never reused during a heap session. The language value
         // has no generation bits, so monotonic indices are the only sound way
         // to prevent a swept stale handle from resolving to a later object.
-        let index = u32::try_from(self.objs.len()).unwrap_or(u32::MAX);
         self.objs.push(Some(object));
         self.layout_tags.push(layout);
-        Value::from_heap(index)
+        Ok(Value::from_heap(index))
     }
 
     pub fn get(&self, value: Value) -> Result<&HeapObj> {
@@ -376,6 +376,23 @@ impl GcHeap {
     }
 }
 
+fn stable_index_available(slot_count: usize) -> bool {
+    u32::try_from(slot_count).is_ok()
+}
+
+fn gc_limit_error(limit: GcLimit) -> Error {
+    match limit {
+        GcLimit::Allocations => Error::resource(
+            ResourceLimitKind::Allocations,
+            "heap allocation or stable handle limit exceeded",
+        ),
+        GcLimit::HeapBytes => Error::resource(
+            ResourceLimitKind::HeapBytes,
+            "heap live byte limit exceeded",
+        ),
+    }
+}
+
 fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
     match (old, new) {
         (HeapObj::Int(_), HeapObj::Int(_))
@@ -476,17 +493,27 @@ mod tests {
             collect_before_every_allocation: true,
             ..GcConfig::default()
         });
-        let payload = heap.alloc(HeapObj::Str("nested".into()));
-        let list = heap.alloc(HeapObj::Pair {
-            car: payload,
-            cdr: Value::EMPTY_LIST,
-        });
-        let result = heap.alloc(HeapObj::ResultOk(list));
-        let option = heap.alloc(HeapObj::OptionSome(result));
-        let product = heap.alloc(HeapObj::Product {
-            product: crate::ProductId::new(0),
-            fields: vec![option],
-        });
+        let payload = heap
+            .alloc(HeapObj::Str("nested".into()))
+            .expect("payload allocation");
+        let list = heap
+            .alloc(HeapObj::Pair {
+                car: payload,
+                cdr: Value::EMPTY_LIST,
+            })
+            .expect("list allocation");
+        let result = heap
+            .alloc(HeapObj::ResultOk(list))
+            .expect("result allocation");
+        let option = heap
+            .alloc(HeapObj::OptionSome(result))
+            .expect("option allocation");
+        let product = heap
+            .alloc(HeapObj::Product {
+                product: crate::ProductId::new(0),
+                fields: vec![option],
+            })
+            .expect("product allocation");
         heap.collect(&[product]);
         for value in [payload, list, result, option, product] {
             assert!(heap.get(value).is_ok());
@@ -495,6 +522,15 @@ mod tests {
         assert_eq!(heap.collections(), 1);
         assert!(heap.total_allocated_bytes() >= heap.heap_bytes() as u64);
         assert!(heap.peak_live_heap_bytes() >= heap.heap_bytes());
+    }
+
+    #[test]
+    fn stable_index_boundary_model_rejects_before_duplicate_u32_handles() {
+        let last_valid_slot_count = u32::MAX as usize;
+        assert!(stable_index_available(last_valid_slot_count));
+        if let Some(exhausted_slot_count) = last_valid_slot_count.checked_add(1) {
+            assert!(!stable_index_available(exhausted_slot_count));
+        }
     }
 
     #[test]
@@ -508,6 +544,13 @@ mod tests {
             heap.try_alloc(HeapObj::Str("two".into())),
             Err(GcLimit::Allocations)
         );
+        assert_eq!(heap.total_allocations(), 1);
+        assert!(matches!(
+            heap.alloc(HeapObj::Str("compatibility".into())),
+            Err(ref error)
+                if error.class()
+                    == crate::ErrorClass::Resource(ResourceLimitKind::Allocations)
+        ));
         assert_eq!(heap.total_allocations(), 1);
     }
 
@@ -537,7 +580,7 @@ mod tests {
             },
         ] {
             let mut heap = GcHeap::default();
-            let value = heap.alloc(object.clone());
+            let value = heap.alloc(object.clone()).expect("test object allocation");
             heap.set_config(GcConfig {
                 max_heap_bytes: heap.heap_bytes(),
                 ..heap.config()
@@ -560,7 +603,9 @@ mod tests {
         }
 
         let mut heap = GcHeap::default();
-        let value = heap.alloc(HeapObj::Buf(vec![1]));
+        let value = heap
+            .alloc(HeapObj::Buf(vec![1]))
+            .expect("growth buffer allocation");
         let before_growth = heap.stats();
         heap.mutate(value, |object| {
             let HeapObj::Buf(bytes) = object else {
@@ -576,7 +621,9 @@ mod tests {
         assert!(after_growth.peak_live_heap_bytes >= after_growth.live_heap_bytes);
 
         let mut heap = GcHeap::default();
-        let value = heap.alloc(HeapObj::Buf(vec![1, 2]));
+        let value = heap
+            .alloc(HeapObj::Buf(vec![1, 2]))
+            .expect("rollback buffer allocation");
         let before = heap.stats();
         let result: Result<()> = heap.mutate(value, |object| {
             let HeapObj::Buf(bytes) = object else {
@@ -603,9 +650,15 @@ mod tests {
     #[test]
     fn snapshot_clones_only_transitively_reachable_objects() {
         let mut heap = GcHeap::default();
-        let child = heap.alloc(HeapObj::Str("child".into()));
-        let root = heap.alloc(HeapObj::OptionSome(child));
-        let _unreachable = heap.alloc(HeapObj::Str("unreachable".into()));
+        let child = heap
+            .alloc(HeapObj::Str("child".into()))
+            .expect("snapshot child allocation");
+        let root = heap
+            .alloc(HeapObj::OptionSome(child))
+            .expect("snapshot root allocation");
+        let _unreachable = heap
+            .alloc(HeapObj::Str("unreachable".into()))
+            .expect("snapshot unreachable allocation");
         let snapshot = heap.snapshot(root).expect("reachable snapshot");
         assert_eq!(snapshot.snapshot_object_count(), 2);
         assert!(heap.get(root).is_ok());

@@ -5,12 +5,14 @@ use lkjscript_core::{HeapObj, Op, Result, Value};
 use crate::run::{RuntimeTier, Vm};
 
 fn push_language_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<Value>) {
-    let value = crate::host_ext::language_result(&mut vm.arena, result);
-    vm.push(value);
+    match crate::host_ext::language_result(&mut vm.arena, result) {
+        Ok(value) => vm.push(value),
+        Err(error) => vm.allocation_error = Some(error),
+    }
 }
 
 fn push_i64_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<i64>) {
-    let result = result.map(|number| vm.make_i64(number));
+    let result = result.and_then(|number| vm.make_i64(number));
     push_language_result(vm, result);
 }
 
@@ -42,7 +44,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         x if x == Op::StrLen as u8 => {
             let v = vm.pop()?;
             let number = crate::host_ext::str_len(&vm.arena, v)?;
-            let value = vm.make_i64(number);
+            let value = vm.make_i64(number)?;
             vm.push(value);
             Ok(true)
         }
@@ -51,7 +53,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let string = vm.pop()?;
             let index = vm.as_i64(index)?;
             let number = crate::host_ext::str_ref(&vm.arena, string, index)?;
-            let value = vm.make_i64(number);
+            let value = vm.make_i64(number)?;
             vm.push(value);
             Ok(true)
         }
@@ -75,7 +77,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         x if x == Op::StrFromI64 as u8 => {
             let value = vm.pop()?;
             let number = vm.as_i64(value)?;
-            let string = crate::host_ext::str_from_i64(&mut vm.arena, number);
+            let string = crate::host_ext::str_from_i64(&mut vm.arena, number)?;
             vm.push(string);
             Ok(true)
         }
@@ -415,16 +417,16 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let index = vm.pop()?;
             let index = vm.as_i64(index)?;
             let handle = vm.pop()?;
-            let result = vm
-                .resources
-                .sqlite_column_i64(handle, index)
-                .map(|value| match value {
-                    Some(value) => {
-                        let value = vm.make_i64(value);
-                        crate::host_ext::option_some(&mut vm.arena, value)
-                    }
-                    None => Value::NONE,
-                });
+            let result =
+                vm.resources
+                    .sqlite_column_i64(handle, index)
+                    .and_then(|value| match value {
+                        Some(value) => {
+                            let value = vm.make_i64(value)?;
+                            crate::host_ext::option_some(&mut vm.arena, value)
+                        }
+                        None => Ok(Value::NONE),
+                    });
             push_language_result(vm, result);
             Ok(true)
         }
@@ -432,16 +434,16 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let index = vm.pop()?;
             let index = vm.as_i64(index)?;
             let handle = vm.pop()?;
-            let result = vm
-                .resources
-                .sqlite_column_f64(handle, index)
-                .map(|value| match value {
-                    Some(value) => {
-                        let value = vm.arena.alloc(HeapObj::Float(value));
-                        crate::host_ext::option_some(&mut vm.arena, value)
-                    }
-                    None => Value::NONE,
-                });
+            let result =
+                vm.resources
+                    .sqlite_column_f64(handle, index)
+                    .and_then(|value| match value {
+                        Some(value) => {
+                            let value = vm.arena.alloc(HeapObj::Float(value))?;
+                            crate::host_ext::option_some(&mut vm.arena, value)
+                        }
+                        None => Ok(Value::NONE),
+                    });
             push_language_result(vm, result);
             Ok(true)
         }
@@ -452,12 +454,12 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let result = vm
                 .resources
                 .sqlite_column_text(handle, index, lkjscript_core::MAX_BUFFER_BYTES)
-                .map(|value| match value {
+                .and_then(|value| match value {
                     Some(value) => {
-                        let value = vm.arena.alloc(HeapObj::Str(value));
+                        let value = vm.arena.alloc(HeapObj::Str(value))?;
                         crate::host_ext::option_some(&mut vm.arena, value)
                     }
-                    None => Value::NONE,
+                    None => Ok(Value::NONE),
                 });
             push_language_result(vm, result);
             Ok(true)
@@ -469,12 +471,12 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let result = vm
                 .resources
                 .sqlite_column_bytes(handle, index, lkjscript_core::MAX_BUFFER_BYTES)
-                .map(|value| match value {
+                .and_then(|value| match value {
                     Some(value) => {
-                        let value = vm.arena.alloc(HeapObj::Buf(value));
+                        let value = vm.arena.alloc(HeapObj::Buf(value))?;
                         crate::host_ext::option_some(&mut vm.arena, value)
                     }
-                    None => Value::NONE,
+                    None => Ok(Value::NONE),
                 });
             push_language_result(vm, result);
             Ok(true)
@@ -515,8 +517,8 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             if index.is_none_or(|index| index >= vm.args.len()) {
                 vm.push(Value::NONE);
             } else if let Some(index) = index {
-                let string = vm.arena.alloc(HeapObj::Str(vm.args[index].clone()));
-                let value = crate::host_ext::option_some(&mut vm.arena, string);
+                let string = vm.arena.alloc(HeapObj::Str(vm.args[index].clone()))?;
+                let value = crate::host_ext::option_some(&mut vm.arena, string)?;
                 vm.push(value);
             }
             Ok(true)
@@ -524,12 +526,12 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         x if x == Op::Argc as u8 => {
             let count = i64::try_from(vm.args.len())
                 .map_err(|_| lkjscript_core::Error::msg("argc out of range"))?;
-            let value = vm.make_i64(count);
+            let value = vm.make_i64(count)?;
             vm.push(value);
             Ok(true)
         }
         x if x == Op::EmptyStr as u8 => {
-            let v = vm.arena.alloc(HeapObj::Str(String::new()));
+            let v = vm.arena.alloc(HeapObj::Str(String::new()))?;
             vm.push(v);
             Ok(true)
         }
@@ -543,7 +545,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         x if x == Op::BufLen as u8 => {
             let v = vm.pop()?;
             let length = crate::host_buf::buf_len(&vm.arena, v)?;
-            let value = vm.make_i64(length);
+            let value = vm.make_i64(length)?;
             vm.push(value);
             Ok(true)
         }
@@ -552,7 +554,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let buffer = vm.pop()?;
             let index = vm.as_i64(index)?;
             let byte = crate::host_buf::buf_ref(&vm.arena, buffer, index)?;
-            let value = vm.make_i64(byte);
+            let value = vm.make_i64(byte)?;
             vm.push(value);
             Ok(true)
         }
@@ -571,7 +573,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
             let buffer = vm.pop()?;
             let index = vm.as_i64(index)?;
             let number = crate::host_buf::buf_get_u32(&vm.arena, buffer, index)?;
-            let value = vm.make_i64(number);
+            let value = vm.make_i64(number)?;
             vm.push(value);
             Ok(true)
         }
@@ -759,13 +761,13 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         }
         x if x == Op::OkWrap as u8 => {
             let v = vm.pop()?;
-            let __r = crate::host_ext::result_ok(&mut vm.arena, v);
+            let __r = crate::host_ext::result_ok(&mut vm.arena, v)?;
             vm.push(__r);
             Ok(true)
         }
         x if x == Op::ErrWrap as u8 => {
             let v = vm.pop()?;
-            let __r = crate::host_ext::result_err(&mut vm.arena, v);
+            let __r = crate::host_ext::result_err(&mut vm.arena, v)?;
             vm.push(__r);
             Ok(true)
         }
@@ -786,7 +788,7 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         }
         x if x == Op::SomeWrap as u8 => {
             let value = vm.pop()?;
-            let wrapped = crate::host_ext::option_some(&mut vm.arena, value);
+            let wrapped = crate::host_ext::option_some(&mut vm.arena, value)?;
             vm.push(wrapped);
             Ok(true)
         }

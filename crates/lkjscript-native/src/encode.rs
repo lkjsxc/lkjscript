@@ -774,9 +774,9 @@ impl FunctionEncoder<'_> {
                         to_u32(offset)?,
                         OutcomeKind::Trap(*trap),
                     ));
+                    self.load_rax_immediate(u64::from(*site))?;
                     self.load_integer_register(1, self.context_offset())?;
-                    self.emit(&[0x48, 0xc7, 0x41, 0x08])?;
-                    self.emit(&site.to_le_bytes())?;
+                    self.emit(&[0x48, 0x89, 0x41, 0x08])?;
                 }
                 self.emit_jump(FixupTarget::Trap(*trap))
             }

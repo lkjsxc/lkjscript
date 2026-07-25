@@ -17,7 +17,7 @@ pub fn buf_new(arena: &mut Arena, size: i64) -> Result<Value> {
         return Err(Error::msg("buf-new size out of range"));
     }
     let size = usize::try_from(size).map_err(|_| Error::msg("buf-new size out of range"))?;
-    Ok(arena.alloc(HeapObj::Buf(vec![0_u8; size])))
+    arena.alloc(HeapObj::Buf(vec![0_u8; size]))
 }
 
 pub fn buf_len(arena: &Arena, value: Value) -> Result<i64> {
@@ -80,7 +80,7 @@ pub fn buf_set_u32(arena: &mut Arena, value: Value, index: i64, number: i64) -> 
 
 pub fn buf_clone(arena: &mut Arena, value: Value) -> Result<Value> {
     let bytes = as_buf(arena, value)?.to_vec();
-    Ok(arena.alloc(HeapObj::Buf(bytes)))
+    arena.alloc(HeapObj::Buf(bytes))
 }
 
 pub fn buf_from_str(arena: &mut Arena, value: Value) -> Result<Value> {
@@ -88,13 +88,13 @@ pub fn buf_from_str(arena: &mut Arena, value: Value) -> Result<Value> {
     if bytes.len() > MAX_BUFFER_BYTES {
         return Err(Error::msg("buf-from-str string exceeds buffer limit"));
     }
-    Ok(arena.alloc(HeapObj::Buf(bytes.to_vec())))
+    arena.alloc(HeapObj::Buf(bytes.to_vec()))
 }
 
 pub fn buf_to_str(arena: &mut Arena, value: Value) -> Result<Value> {
     let text = std::str::from_utf8(as_buf(arena, value)?)
         .map_err(|_| Error::msg("buf-to-str: invalid UTF-8"))?;
-    Ok(arena.alloc(HeapObj::Str(text.to_owned())))
+    arena.alloc(HeapObj::Str(text.to_owned()))
 }
 
 pub fn buf_slice(arena: &mut Arena, value: Value, offset: i64, length: i64) -> Result<Value> {
@@ -103,7 +103,7 @@ pub fn buf_slice(arena: &mut Arena, value: Value, offset: i64, length: i64) -> R
         .get(range)
         .ok_or_else(|| Error::msg("buf-slice range is invalid"))?
         .to_vec();
-    Ok(arena.alloc(HeapObj::Buf(bytes)))
+    arena.alloc(HeapObj::Buf(bytes))
 }
 
 pub fn sys_read_into(
@@ -169,7 +169,7 @@ pub fn sys_sha256(arena: &mut Arena, buffer: Value, offset: i64, requested: i64)
         .get(range)
         .ok_or_else(|| Error::msg("sys-sha256 range is invalid"))?;
     let digest = lkjscript_sys::sha256(source);
-    Ok(arena.alloc(HeapObj::Buf(digest.to_vec())))
+    arena.alloc(HeapObj::Buf(digest.to_vec()))
 }
 
 pub fn sys_tty_get(
@@ -324,7 +324,9 @@ mod tests {
     #[test]
     fn buffers_convert_exact_utf8_without_replacement() {
         let mut arena = Arena::default();
-        let text = arena.alloc(lkjscript_core::HeapObj::Str("nul\0é".into()));
+        let text = arena
+            .alloc(lkjscript_core::HeapObj::Str("nul\0é".into()))
+            .expect("test text allocation");
         let buffer = buf_from_str(&mut arena, text).expect("encode exact UTF-8");
         assert_eq!(as_buf(&arena, buffer).ok(), Some("nul\0é".as_bytes()));
         let round_trip = buf_to_str(&mut arena, buffer).expect("decode exact UTF-8");
@@ -337,7 +339,8 @@ mod tests {
         buf_set(&mut arena, invalid, 0, 0xc3).expect("set invalid prefix");
         buf_set(&mut arena, invalid, 1, 0x28).expect("set invalid suffix");
         let conversion = buf_to_str(&mut arena, invalid);
-        let result = crate::host_ext::language_result(&mut arena, conversion);
+        let result = crate::host_ext::language_result(&mut arena, conversion)
+            .expect("language Result allocation");
         assert_eq!(
             crate::host_ext::is_ok(&arena, result).ok(),
             Some(Value::FALSE)
@@ -351,7 +354,9 @@ mod tests {
     #[test]
     fn buf_slice_copies_exact_bounded_ranges() {
         let mut arena = Arena::default();
-        let source = arena.alloc(lkjscript_core::HeapObj::Buf(vec![0, 1, 2, 3]));
+        let source = arena
+            .alloc(lkjscript_core::HeapObj::Buf(vec![0, 1, 2, 3]))
+            .expect("test source buffer allocation");
         let slice = buf_slice(&mut arena, source, 1, 2).expect("slice range");
         assert_eq!(as_buf(&arena, slice).expect("slice bytes"), &[1, 2]);
         assert!(buf_slice(&mut arena, source, -1, 1).is_err());

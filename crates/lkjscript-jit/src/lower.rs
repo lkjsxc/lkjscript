@@ -159,17 +159,17 @@ pub(crate) fn lower_group(
 ) -> Result<LoweredGroup, LoweringError> {
     let functions = reachable_group(verified, root)?;
     let program = verified.program();
-    verify_layout_identities(program, &functions)?;
+    let layouts = LayoutInterner::build(program, &functions)?;
     for function in &functions {
         let item = source_function(program, *function)?;
-        preflight_function(item)?;
+        preflight_function(item, &layouts)?;
     }
 
     let mut plan = MachinePlanBuilder::new();
     let mut native_functions = Vec::with_capacity(functions.len());
     for function in &functions {
         let item = source_function(program, *function)?;
-        let signature = lower_signature(*function, &item.signature)?;
+        let signature = lower_signature(*function, &item.signature, &layouts)?;
         let native = plan
             .declare_function(SourceFunctionId::new(function.raw()), signature)
             .map_err(LoweringError::backend)?;
@@ -183,7 +183,13 @@ pub(crate) fn lower_group(
         let mut builder = plan
             .function_builder(native)
             .map_err(LoweringError::backend)?;
-        lower_function(item, &native_functions, &mut builder, &mut explicit_traps)?;
+        lower_function(
+            item,
+            &native_functions,
+            &layouts,
+            &mut builder,
+            &mut explicit_traps,
+        )?;
         plan.define_function(builder.finish())
             .map_err(LoweringError::backend)?;
     }
@@ -200,41 +206,81 @@ pub(crate) fn lower_group(
     })
 }
 
-fn verify_layout_identities(
-    program: &lkjscript_ir::Program,
-    functions: &[FunctionId],
-) -> Result<(), LoweringError> {
-    let mut identities: HashMap<ReferenceType, SsaType> = HashMap::new();
-    for function in functions {
-        let item = source_function(program, *function)?;
-        for ty in item
-            .signature
-            .parameters
-            .iter()
-            .chain(std::iter::once(item.signature.result.as_ref()))
-            .chain(item.blocks.iter().flat_map(|block| {
-                block
-                    .parameters
-                    .iter()
-                    .map(|parameter| &parameter.ty)
-                    .chain(block.instructions.iter().map(|instruction| &instruction.ty))
-            }))
-        {
-            let Ok(ValueType::Reference(reference_type)) = lower_type(item.id, ty) else {
-                continue;
-            };
-            if let Some(previous) = identities.insert(reference_type, ty.clone()) {
-                if previous != *ty {
-                    return Err(LoweringError::new(
-                        LoweringFailureCode::UnsupportedType,
-                        Some(item.id),
-                        "distinct GC layouts collide in the bounded native layout identity space",
-                    ));
-                }
+struct LayoutInterner {
+    identities: HashMap<SsaType, LayoutIdentity>,
+    next: u32,
+}
+
+impl LayoutInterner {
+    const FIRST_NESTED_IDENTITY: u32 = 32 + u16::MAX as u32 + 1;
+
+    fn build(
+        program: &lkjscript_ir::Program,
+        functions: &[FunctionId],
+    ) -> Result<Self, LoweringError> {
+        let mut interner = Self {
+            identities: HashMap::new(),
+            next: Self::FIRST_NESTED_IDENTITY,
+        };
+        for function in functions {
+            let item = source_function(program, *function)?;
+            for ty in item
+                .signature
+                .parameters
+                .iter()
+                .chain(std::iter::once(item.signature.result.as_ref()))
+                .chain(item.blocks.iter().flat_map(|block| {
+                    block
+                        .parameters
+                        .iter()
+                        .map(|parameter| &parameter.ty)
+                        .chain(block.instructions.iter().map(|instruction| &instruction.ty))
+                }))
+            {
+                interner.intern(ty)?;
             }
         }
+        Ok(interner)
     }
-    Ok(())
+
+    fn intern(&mut self, ty: &SsaType) -> Result<(), LoweringError> {
+        match ty {
+            SsaType::List(inner) | SsaType::Option(inner) => self.intern(inner)?,
+            SsaType::Result(ok, error) => {
+                self.intern(ok)?;
+                self.intern(error)?;
+            }
+            _ => return Ok(()),
+        }
+        if !self.identities.contains_key(ty) {
+            let identity = LayoutIdentity::new(self.next);
+            self.next = self.next.checked_add(1).ok_or_else(|| {
+                LoweringError::new(
+                    LoweringFailureCode::UnsupportedType,
+                    None,
+                    "native structural layout identity space exhausted",
+                )
+            })?;
+            self.identities.insert(ty.clone(), identity);
+        }
+        Ok(())
+    }
+
+    fn identity(&self, ty: &SsaType) -> Option<LayoutIdentity> {
+        match ty {
+            SsaType::Unit => Some(ValueType::Unit.layout_identity()),
+            SsaType::Bool => Some(ValueType::Bool.layout_identity()),
+            SsaType::I64 => Some(ValueType::I64.layout_identity()),
+            SsaType::F64 => Some(ValueType::F64.layout_identity()),
+            SsaType::Str => Some(ValueType::Reference(ReferenceType::Str).layout_identity()),
+            SsaType::Buf => Some(ValueType::Reference(ReferenceType::Buf).layout_identity()),
+            SsaType::Product(product) => Some(LayoutIdentity::product(u32::from(product.raw()))),
+            SsaType::List(_) | SsaType::Option(_) | SsaType::Result(_, _) => {
+                self.identities.get(ty).copied()
+            }
+            _ => None,
+        }
+    }
 }
 
 fn source_function(
@@ -254,8 +300,8 @@ fn source_function(
         })
 }
 
-fn preflight_function(function: &Function) -> Result<(), LoweringError> {
-    lower_signature(function.id, &function.signature)?;
+fn preflight_function(function: &Function, layouts: &LayoutInterner) -> Result<(), LoweringError> {
+    lower_signature(function.id, &function.signature, layouts)?;
     if function.id.raw() >= 64 {
         return Err(LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
@@ -265,10 +311,10 @@ fn preflight_function(function: &Function) -> Result<(), LoweringError> {
     }
     for block in &function.blocks {
         for parameter in &block.parameters {
-            lower_type(function.id, &parameter.ty)?;
+            lower_type(function.id, &parameter.ty, layouts)?;
         }
         for instruction in &block.instructions {
-            lower_type(function.id, &instruction.ty)?;
+            lower_type(function.id, &instruction.ty, layouts)?;
             match &instruction.kind {
                 InstructionKind::Constant(constant) => match constant {
                     Constant::Unit
@@ -298,7 +344,7 @@ fn preflight_function(function: &Function) -> Result<(), LoweringError> {
                     signature,
                     ..
                 } => {
-                    lower_signature(function.id, signature)?;
+                    lower_signature(function.id, signature, layouts)?;
                 }
                 InstructionKind::Call {
                     target: CallTarget::Indirect(_),
@@ -397,6 +443,7 @@ fn unsupported_operation<T>(function: FunctionId, operation: &str) -> Result<T, 
 fn lower_signature(
     function: FunctionId,
     signature: &lkjscript_ir::Signature,
+    layouts: &LayoutInterner,
 ) -> Result<Signature, LoweringError> {
     if !signature.type_parameters.is_empty() {
         return Err(LoweringError::new(
@@ -408,9 +455,9 @@ fn lower_signature(
     let parameters = signature
         .parameters
         .iter()
-        .map(|ty| lower_type(function, ty))
+        .map(|ty| lower_type(function, ty, layouts))
         .collect::<Result<Vec<_>, _>>()?;
-    let result = lower_type(function, &signature.result)?;
+    let result = lower_type(function, &signature.result, layouts)?;
     Signature::new(parameters, result).map_err(|error| {
         LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
@@ -420,7 +467,11 @@ fn lower_signature(
     })
 }
 
-fn lower_type(function: FunctionId, ty: &SsaType) -> Result<ValueType, LoweringError> {
+fn lower_type(
+    function: FunctionId,
+    ty: &SsaType,
+    layouts: &LayoutInterner,
+) -> Result<ValueType, LoweringError> {
     match ty {
         SsaType::Unit => Ok(ValueType::Unit),
         SsaType::Bool => Ok(ValueType::Bool),
@@ -429,17 +480,20 @@ fn lower_type(function: FunctionId, ty: &SsaType) -> Result<ValueType, LoweringE
         SsaType::Str => Ok(ValueType::Reference(ReferenceType::Str)),
         SsaType::Buf => Ok(ValueType::Reference(ReferenceType::Buf)),
         SsaType::Product(product) => Ok(ValueType::Reference(ReferenceType::Product(
-            LayoutIdentity::new(u32::from(product.raw()).saturating_add(1)),
+            LayoutIdentity::product(u32::from(product.raw())),
         ))),
         SsaType::List(element) => Ok(ValueType::Reference(ReferenceType::List(
-            LayoutIdentity::new(layout_identity(element)),
+            exact_layout_identity(function, layouts, ty)?,
+            exact_layout_identity(function, layouts, element)?,
         ))),
         SsaType::Option(element) => Ok(ValueType::Reference(ReferenceType::Option(
-            LayoutIdentity::new(layout_identity(element)),
+            exact_layout_identity(function, layouts, ty)?,
+            exact_layout_identity(function, layouts, element)?,
         ))),
         SsaType::Result(ok, error) => Ok(ValueType::Reference(ReferenceType::Result(
-            LayoutIdentity::new(layout_identity(ok)),
-            LayoutIdentity::new(layout_identity(error)),
+            exact_layout_identity(function, layouts, ty)?,
+            exact_layout_identity(function, layouts, ok)?,
+            exact_layout_identity(function, layouts, error)?,
         ))),
         SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
@@ -454,33 +508,18 @@ fn lower_type(function: FunctionId, ty: &SsaType) -> Result<ValueType, LoweringE
     }
 }
 
-fn layout_identity(ty: &SsaType) -> u32 {
-    fn mix(state: u32, value: u32) -> u32 {
-        state.wrapping_mul(16_777_619) ^ value
-    }
-    let identity = match ty {
-        SsaType::Unit => 1,
-        SsaType::Bool => 2,
-        SsaType::I64 => 3,
-        SsaType::F64 => 4,
-        SsaType::Str => 5,
-        SsaType::Symbol => 6,
-        SsaType::Buf => 7,
-        SsaType::Product(product) => mix(8, u32::from(product.raw()).saturating_add(1)),
-        SsaType::List(inner) => mix(9, layout_identity(inner)),
-        SsaType::Option(inner) => mix(10, layout_identity(inner)),
-        SsaType::Result(ok, error) => mix(mix(11, layout_identity(ok)), layout_identity(error)),
-        SsaType::Owned(inner) => mix(12, layout_identity(inner)),
-        SsaType::Ref(inner) => mix(13, layout_identity(inner)),
-        SsaType::RefMut(inner) => mix(14, layout_identity(inner)),
-        SsaType::Handle => 15,
-        SsaType::Function(_) => 16,
-        SsaType::TypeParameter(name) => name
-            .as_bytes()
-            .iter()
-            .fold(17, |state, byte| mix(state, u32::from(*byte))),
-    };
-    identity.max(1)
+fn exact_layout_identity(
+    function: FunctionId,
+    layouts: &LayoutInterner,
+    ty: &SsaType,
+) -> Result<LayoutIdentity, LoweringError> {
+    layouts.identity(ty).ok_or_else(|| {
+        LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            format!("type {ty:?} has no supported structural layout identity"),
+        )
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -493,10 +532,11 @@ struct EdgeBlocks {
 fn lower_function(
     function: &Function,
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
+    layouts: &LayoutInterner,
     builder: &mut FunctionBuilder,
     explicit_traps: &mut Vec<(u32, String)>,
 ) -> Result<(), LoweringError> {
-    let value_types = collect_value_types(function)?;
+    let value_types = collect_value_types(function, layouts)?;
     let mut locals = Vec::with_capacity(value_types.len());
     for value_type in &value_types {
         locals.push(
@@ -608,21 +648,24 @@ fn lower_function(
     Ok(())
 }
 
-fn collect_value_types(function: &Function) -> Result<Vec<ValueType>, LoweringError> {
+fn collect_value_types(
+    function: &Function,
+    layouts: &LayoutInterner,
+) -> Result<Vec<ValueType>, LoweringError> {
     let mut types: Vec<Option<ValueType>> = Vec::new();
     for block in &function.blocks {
         for parameter in &block.parameters {
             set_value_type(
                 &mut types,
                 parameter.id,
-                lower_type(function.id, &parameter.ty)?,
+                lower_type(function.id, &parameter.ty, layouts)?,
             )?;
         }
         for instruction in &block.instructions {
             set_value_type(
                 &mut types,
                 instruction.id,
-                lower_type(function.id, &instruction.ty)?,
+                lower_type(function.id, &instruction.ty, layouts)?,
             )?;
         }
     }
@@ -1304,5 +1347,40 @@ impl From<lkjscript_native::PlanError> for LoweringError {
 impl From<NativeError> for LoweringError {
     fn from(error: NativeError) -> Self {
         Self::backend(error)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::{LayoutInterner, LoweringError, SsaType};
+
+    #[test]
+    fn nested_layout_interner_is_injective_for_previous_result_tag_collision() {
+        let first = SsaType::Result(
+            Box::new(SsaType::Product(lkjscript_ir::ProductId::new(11))),
+            Box::new(SsaType::Product(lkjscript_ir::ProductId::new(0))),
+        );
+        let second = SsaType::Result(
+            Box::new(SsaType::Product(lkjscript_ir::ProductId::new(19))),
+            Box::new(SsaType::Unit),
+        );
+        let mut layouts = LayoutInterner {
+            identities: std::collections::HashMap::new(),
+            next: LayoutInterner::FIRST_NESTED_IDENTITY,
+        };
+        layouts.intern(&first).expect("first exact layout");
+        layouts.intern(&second).expect("second exact layout");
+        assert_ne!(layouts.identity(&first), layouts.identity(&second));
+    }
+
+    #[test]
+    fn layout_identity_exhaustion_is_structured() {
+        let ty = SsaType::List(Box::new(SsaType::Unit));
+        let mut layouts = LayoutInterner {
+            identities: std::collections::HashMap::new(),
+            next: u32::MAX,
+        };
+        assert!(matches!(layouts.intern(&ty), Err(LoweringError { .. })));
     }
 }

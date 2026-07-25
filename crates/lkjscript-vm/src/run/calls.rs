@@ -16,7 +16,7 @@ pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let v = vm.arena.alloc(HeapObj::Closure {
         proto: proto_id,
         captures: Vec::new(),
-    });
+    })?;
     vm.push(v);
     Ok(())
 }
@@ -97,7 +97,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                         match invocation.outcome {
                             ScalarInvocationOutcome::Returned(value) => {
                                 vm.stack.truncate(args_start);
-                                let value = box_native(vm, value);
+                                let value = box_native(vm, value)?;
                                 vm.push(value);
                                 return Ok(());
                             }
@@ -195,10 +195,10 @@ fn unbox_native<J: RuntimeTier>(
     }
 }
 
-fn box_native<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: NativeValue) -> Value {
+fn box_native<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: NativeValue) -> Result<Value> {
     match value {
-        NativeValue::Unit => Value::UNIT,
-        NativeValue::Bool(value) => Value::from_bool(value),
+        NativeValue::Unit => Ok(Value::UNIT),
+        NativeValue::Bool(value) => Ok(Value::from_bool(value)),
         NativeValue::I64(value) => vm.make_i64(value),
         NativeValue::F64Bits(bits) => vm.arena.alloc(HeapObj::Float(f64::from_bits(bits))),
         NativeValue::Reference(_) => {
@@ -256,12 +256,15 @@ mod tests {
             stack_base: 0,
             locals_base: 0,
         });
-        let argument = vm.make_i64(42);
+        let argument = vm.make_i64(42).expect("test argument");
         vm.push(argument);
-        let callee = vm.arena.alloc(HeapObj::Closure {
-            proto: 0,
-            captures: Vec::new(),
-        });
+        let callee = vm
+            .arena
+            .alloc(HeapObj::Closure {
+                proto: 0,
+                captures: Vec::new(),
+            })
+            .expect("test closure allocation");
         vm.push(callee);
 
         call(&mut vm, 1).expect("tail call");

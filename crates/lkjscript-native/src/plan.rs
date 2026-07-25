@@ -10,9 +10,16 @@ static NEXT_PLAN_ID: AtomicU64 = AtomicU64::new(1);
 pub struct LayoutIdentity(u32);
 
 impl LayoutIdentity {
+    const PRODUCT_BASE: u32 = 32;
+
     #[must_use]
     pub const fn new(value: u32) -> Self {
         Self(value)
+    }
+
+    #[must_use]
+    pub const fn product(product: u32) -> Self {
+        Self(Self::PRODUCT_BASE + product)
     }
 
     #[must_use]
@@ -28,9 +35,12 @@ impl LayoutIdentity {
 pub enum ReferenceType {
     Buf,
     Str,
-    List(LayoutIdentity),
-    Option(LayoutIdentity),
-    Result(LayoutIdentity, LayoutIdentity),
+    /// Complete interned list identity followed by its element identity.
+    List(LayoutIdentity, LayoutIdentity),
+    /// Complete interned option identity followed by its payload identity.
+    Option(LayoutIdentity, LayoutIdentity),
+    /// Complete interned result identity followed by its Ok and Err identities.
+    Result(LayoutIdentity, LayoutIdentity, LayoutIdentity),
     Product(LayoutIdentity),
 }
 
@@ -52,30 +62,23 @@ impl ValueType {
         }
     }
 
-    /// Deterministic structural identity used by List/Option/Result payload
-    /// facts. This identifies language value layout, not an object address.
+    /// Exact structural identity used by List/Option/Result payload facts.
+    /// Nested reference variants retain their pre-interned complete identity.
     #[must_use]
     pub const fn layout_identity(self) -> LayoutIdentity {
-        let raw = match self {
-            Self::Unit => 1,
-            Self::Bool => 2,
-            Self::I64 => 3,
-            Self::F64 => 4,
-            Self::Reference(ReferenceType::Str) => 5,
-            Self::Reference(ReferenceType::Buf) => 7,
-            Self::Reference(ReferenceType::Product(product)) => mix_layout(8, product.get()),
-            Self::Reference(ReferenceType::List(payload)) => mix_layout(9, payload.get()),
-            Self::Reference(ReferenceType::Option(payload)) => mix_layout(10, payload.get()),
-            Self::Reference(ReferenceType::Result(ok, error)) => {
-                mix_layout(mix_layout(11, ok.get()), error.get())
-            }
-        };
-        LayoutIdentity::new(if raw == 0 { 1 } else { raw })
+        match self {
+            Self::Unit => LayoutIdentity::new(1),
+            Self::Bool => LayoutIdentity::new(2),
+            Self::I64 => LayoutIdentity::new(3),
+            Self::F64 => LayoutIdentity::new(4),
+            Self::Reference(ReferenceType::Str) => LayoutIdentity::new(5),
+            Self::Reference(ReferenceType::Buf) => LayoutIdentity::new(7),
+            Self::Reference(ReferenceType::Product(layout))
+            | Self::Reference(ReferenceType::List(layout, _))
+            | Self::Reference(ReferenceType::Option(layout, _))
+            | Self::Reference(ReferenceType::Result(layout, _, _)) => layout,
+        }
     }
-}
-
-const fn mix_layout(state: u32, value: u32) -> u32 {
-    state.wrapping_mul(16_777_619) ^ value
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -426,16 +429,13 @@ impl HeapCallDescriptor {
             Op::ConstantStr(_) | Op::EmptyStr => {
                 inputs.is_empty() && result == Ty::Reference(Ref::Str)
             }
-            Op::EmptyList => inputs.is_empty() && matches!(result, Ty::Reference(Ref::List(_))),
-            Op::None => inputs.is_empty() && matches!(result, Ty::Reference(Ref::Option(_))),
+            Op::EmptyList => inputs.is_empty() && matches!(result, Ty::Reference(Ref::List(_, _))),
+            Op::None => inputs.is_empty() && matches!(result, Ty::Reference(Ref::Option(_, _))),
             Op::ProductValue { product, fields } => {
                 usize::from(*fields) == inputs.len()
                     && usize::from(*fields) <= 15
                     && u16::try_from(*product).is_ok()
-                    && result
-                        == Ty::Reference(Ref::Product(LayoutIdentity::new(
-                            product.saturating_add(1),
-                        )))
+                    && result == Ty::Reference(Ref::Product(LayoutIdentity::product(*product)))
             }
             Op::ProductField {
                 product,
@@ -446,7 +446,7 @@ impl HeapCallDescriptor {
                     && u16::try_from(*product).is_ok()
                     && result == *field_type
                     && matches!(inputs, [Ty::Reference(Ref::Product(layout))]
-                        if layout.get() == product.saturating_add(1))
+                        if *layout == LayoutIdentity::product(*product))
             }
             Op::WithProductField {
                 product,
@@ -456,37 +456,39 @@ impl HeapCallDescriptor {
                 *field < 15
                     && u16::try_from(*product).is_ok()
                     && matches!(inputs, [Ty::Reference(Ref::Product(layout)), replacement]
-                        if layout.get() == product.saturating_add(1) && replacement == field_type)
-                    && result
-                        == Ty::Reference(Ref::Product(LayoutIdentity::new(
-                            product.saturating_add(1),
-                        )))
+                        if *layout == LayoutIdentity::product(*product) && replacement == field_type)
+                    && result == Ty::Reference(Ref::Product(LayoutIdentity::product(*product)))
             }
             Op::Cons => matches!(inputs, [payload, list]
                 if *list == result
-                    && matches!(result, Ty::Reference(Ref::List(identity))
-                        if identity == payload.layout_identity())),
-            Op::Car => matches!(inputs, [Ty::Reference(Ref::List(identity))]
-                if *identity == result.layout_identity()),
+                    && matches!(result, Ty::Reference(Ref::List(_, element))
+                        if element == payload.layout_identity())),
+            Op::Car => matches!(inputs, [Ty::Reference(Ref::List(_, element))]
+                if *element == result.layout_identity()),
             Op::Cdr => {
-                matches!(inputs, [list] if *list == result && matches!(result, Ty::Reference(Ref::List(_))))
+                matches!(inputs, [list] if *list == result && matches!(result, Ty::Reference(Ref::List(_, _))))
             }
             Op::IsEmptyList => {
-                matches!(inputs, [Ty::Reference(Ref::List(_))]) && result == Ty::Bool
+                matches!(inputs, [Ty::Reference(Ref::List(_, _))]) && result == Ty::Bool
             }
             Op::Some => matches!(inputs, [payload]
-                if result == Ty::Reference(Ref::Option(payload.layout_identity()))),
-            Op::IsSome => matches!(inputs, [Ty::Reference(Ref::Option(_))]) && result == Ty::Bool,
-            Op::UnwrapSome => matches!(inputs, [Ty::Reference(Ref::Option(payload))]
+                if matches!(result, Ty::Reference(Ref::Option(_, value))
+                    if value == payload.layout_identity())),
+            Op::IsSome => {
+                matches!(inputs, [Ty::Reference(Ref::Option(_, _))]) && result == Ty::Bool
+            }
+            Op::UnwrapSome => matches!(inputs, [Ty::Reference(Ref::Option(_, payload))]
                 if *payload == result.layout_identity()),
             Op::Ok => matches!(inputs, [payload]
-                if matches!(result, Ty::Reference(Ref::Result(ok, _)) if ok == payload.layout_identity())),
+                if matches!(result, Ty::Reference(Ref::Result(_, ok, _)) if ok == payload.layout_identity())),
             Op::Err => matches!(inputs, [payload]
-                if matches!(result, Ty::Reference(Ref::Result(_, error)) if error == payload.layout_identity())),
-            Op::IsOk => matches!(inputs, [Ty::Reference(Ref::Result(_, _))]) && result == Ty::Bool,
-            Op::UnwrapOk => matches!(inputs, [Ty::Reference(Ref::Result(ok, _))]
+                if matches!(result, Ty::Reference(Ref::Result(_, _, error)) if error == payload.layout_identity())),
+            Op::IsOk => {
+                matches!(inputs, [Ty::Reference(Ref::Result(_, _, _))]) && result == Ty::Bool
+            }
+            Op::UnwrapOk => matches!(inputs, [Ty::Reference(Ref::Result(_, ok, _))]
                 if *ok == result.layout_identity()),
-            Op::UnwrapErr => matches!(inputs, [Ty::Reference(Ref::Result(_, error))]
+            Op::UnwrapErr => matches!(inputs, [Ty::Reference(Ref::Result(_, _, error))]
                 if *error == result.layout_identity()),
             Op::BufNew => inputs == [Ty::I64] && result == Ty::Reference(Ref::Buf),
             Op::BufLen => inputs == [Ty::Reference(Ref::Buf)] && result == Ty::I64,
@@ -506,6 +508,7 @@ impl HeapCallDescriptor {
                 inputs == [Ty::Reference(Ref::Buf)]
                     && result
                         == Ty::Reference(Ref::Result(
+                            result.layout_identity(),
                             Ty::Reference(Ref::Str).layout_identity(),
                             Ty::Reference(Ref::Str).layout_identity(),
                         ))
@@ -514,6 +517,7 @@ impl HeapCallDescriptor {
                 inputs == [Ty::Reference(Ref::Buf), Ty::I64, Ty::I64]
                     && result
                         == Ty::Reference(Ref::Result(
+                            result.layout_identity(),
                             Ty::Reference(Ref::Buf).layout_identity(),
                             Ty::Reference(Ref::Str).layout_identity(),
                         ))
@@ -535,7 +539,7 @@ impl HeapCallDescriptor {
             Op::EqualValue => {
                 matches!(
                     inputs,
-                    [left @ Ty::Reference(Ref::Str | Ref::Option(_) | Ref::Result(_, _)), right]
+                    [left @ Ty::Reference(Ref::Str | Ref::Option(_, _) | Ref::Result(_, _, _)), right]
                         if left == right
                 ) && result == Ty::Bool
             }
@@ -543,7 +547,7 @@ impl HeapCallDescriptor {
                 inputs == [Ty::Reference(Ref::Buf), Ty::Reference(Ref::Buf)] && result == Ty::Bool
             }
             Op::ListEqual => {
-                matches!(inputs, [Ty::Reference(Ref::List(left)), Ty::Reference(Ref::List(right))] if left == right)
+                matches!(inputs, [Ty::Reference(Ref::List(left, _)), Ty::Reference(Ref::List(right, _))] if left == right)
                     && result == Ty::Bool
             }
         }
@@ -578,6 +582,7 @@ pub enum InternalMachineArgument {
     FrameBytes,
     FramePointer,
     SafepointId,
+    HeapSiteId,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -665,7 +670,7 @@ impl RuntimeCallSlot {
             Self::HeapDispatchV1 => Some(InternalRuntimeSignature {
                 parameters: &[
                     InternalMachineArgument::InvocationContext,
-                    InternalMachineArgument::SafepointId,
+                    InternalMachineArgument::HeapSiteId,
                 ],
                 result: InternalMachineResult::Unit,
             }),

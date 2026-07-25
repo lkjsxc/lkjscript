@@ -74,9 +74,15 @@ fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
 fn public_heap_descriptors_reject_noncanonical_operation_facts() {
     let buf = ValueType::Reference(ReferenceType::Buf);
     let string = ValueType::Reference(ReferenceType::Str);
-    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::new(1)));
-    let list_i64 = ValueType::Reference(ReferenceType::List(ValueType::I64.layout_identity()));
-    let option_i64 = ValueType::Reference(ReferenceType::Option(ValueType::I64.layout_identity()));
+    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
+    let list_i64 = ValueType::Reference(ReferenceType::List(
+        LayoutIdentity::new(100),
+        ValueType::I64.layout_identity(),
+    ));
+    let option_i64 = ValueType::Reference(ReferenceType::Option(
+        LayoutIdentity::new(101),
+        ValueType::I64.layout_identity(),
+    ));
 
     let malformed = [
         HeapCallDescriptor::new(
@@ -165,6 +171,40 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts() {
     assert!(malformed
         .into_iter()
         .all(|descriptor| descriptor == Err(PlanError::InvalidHeapCall)));
+}
+
+#[test]
+fn rejects_reused_interned_identity_for_distinct_structural_layouts(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let reused = LayoutIdentity::new(70_000);
+    let list = ValueType::Reference(ReferenceType::List(
+        reused,
+        ValueType::I64.layout_identity(),
+    ));
+    let option = ValueType::Reference(ReferenceType::Option(
+        reused,
+        ValueType::I64.layout_identity(),
+    ));
+    let mut plan = MachinePlanBuilder::new();
+    for (source, value_type) in [(1, list), (2, option)] {
+        let function = plan.declare_function(
+            SourceFunctionId::new(source),
+            Signature::new(vec![value_type], value_type)?,
+        )?;
+        let mut builder = plan.function_builder(function)?;
+        let entry = builder.create_block()?;
+        builder.set_entry(entry)?;
+        let value = builder.parameter(0)?;
+        builder.return_value(entry, value)?;
+        plan.define_function(builder.finish())?;
+    }
+    assert!(matches!(
+        plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            "structural layout identity"
+        )))
+    ));
+    Ok(())
 }
 
 #[test]
@@ -464,6 +504,16 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         &[
             InternalMachineArgument::InvocationContext,
             InternalMachineArgument::SafepointId,
+        ]
+    );
+    assert_eq!(
+        RuntimeCallSlot::HeapDispatchV1
+            .internal_abi_signature()
+            .ok_or_else(|| missing("missing heap dispatch ABI"))?
+            .parameters(),
+        &[
+            InternalMachineArgument::InvocationContext,
+            InternalMachineArgument::HeapSiteId,
         ]
     );
     assert_eq!(

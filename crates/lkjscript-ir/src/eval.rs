@@ -90,6 +90,7 @@ pub struct EvalConfig {
     pub fuel: u64,
     pub max_frames: usize,
     pub max_allocations: u64,
+    pub max_heap_bytes: usize,
     pub max_buffer_bytes: usize,
     pub max_list_equal_steps: usize,
     pub args: Vec<String>,
@@ -101,6 +102,7 @@ impl Default for EvalConfig {
             fuel: 1_000_000,
             max_frames: 1_024,
             max_allocations: 1_000_000,
+            max_heap_bytes: usize::MAX,
             max_buffer_bytes: 1_000_000,
             max_list_equal_steps: 1_000_000,
             args: Vec::new(),
@@ -114,6 +116,7 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         config,
         fuel: config.fuel,
         allocations: 0,
+        heap_bytes: 0,
         next_buffer_id: 1,
     };
     match evaluator.call(program.program().main, Vec::new(), 0) {
@@ -127,6 +130,7 @@ struct Evaluator<'a> {
     config: &'a EvalConfig,
     fuel: u64,
     allocations: u64,
+    heap_bytes: usize,
     next_buffer_id: u64,
 }
 
@@ -463,13 +467,7 @@ impl Evaluator<'_> {
                 if size > self.config.max_buffer_bytes || size > 1_000_000 {
                     return Err(Flow::Trap("buf-new size out of range".into()));
                 }
-                self.allocate()?;
-                let id = self.next_buffer_id;
-                self.next_buffer_id = self.next_buffer_id.saturating_add(1);
-                Ok(EvalValue::Buf(EvalBuffer {
-                    id,
-                    bytes: Rc::new(RefCell::new(vec![0; size])),
-                }))
+                self.allocate_buffer(vec![0; size])
             }),
             Op::BufLen | Op::OwnedBufLen => unary(&arguments, |buffer| {
                 let buffer = as_buffer(buffer)?;
@@ -502,72 +500,43 @@ impl Evaluator<'_> {
             }),
             Op::BufClone => unary(&arguments, |buffer| {
                 let buffer = as_buffer(buffer)?;
-                self.allocate()?;
-                let id = self.next_buffer_id;
-                self.next_buffer_id = self.next_buffer_id.saturating_add(1);
-                Ok(EvalValue::Buf(EvalBuffer {
-                    id,
-                    bytes: Rc::new(RefCell::new(buffer.bytes.borrow().clone())),
-                }))
+                self.allocate_buffer(buffer.bytes.borrow().clone())
             }),
             Op::BufFromStr => unary(&arguments, |text| {
-                self.allocate()?;
-                let id = self.next_buffer_id;
-                self.next_buffer_id = self.next_buffer_id.saturating_add(1);
-                Ok(EvalValue::Buf(EvalBuffer {
-                    id,
-                    bytes: Rc::new(RefCell::new(as_str(text)?.as_bytes().to_vec())),
-                }))
+                self.allocate_buffer(as_str(text)?.as_bytes().to_vec())
             }),
             Op::BufToStr => unary(&arguments, |buffer| {
                 let buffer = as_buffer(buffer)?;
-                self.allocate()?;
                 match String::from_utf8(buffer.bytes.borrow().clone()) {
-                    Ok(text) => Ok(EvalValue::Ok(Box::new(EvalValue::Str(text)))),
-                    Err(_) => Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                        "buf-to-str: invalid UTF-8".into(),
-                    )))),
+                    Ok(text) => {
+                        let payload = self.allocate_string(text)?;
+                        self.allocate_result(payload, true)
+                    }
+                    Err(_) => self.allocate_result_error("buf-to-str: invalid UTF-8"),
                 }
             }),
             Op::BufSlice => ternary(&arguments, |buffer, offset, length| {
                 let buffer = as_buffer(buffer)?;
                 let offset = match usize::try_from(as_i64(offset)?) {
                     Ok(offset) => offset,
-                    Err(_) => {
-                        return Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                            "buf-slice offset out of range".into(),
-                        ))))
-                    }
+                    Err(_) => return self.allocate_result_error("buf-slice offset out of range"),
                 };
                 let length = match usize::try_from(as_i64(length)?) {
                     Ok(length) => length,
-                    Err(_) => {
-                        return Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                            "buf-slice length out of range".into(),
-                        ))))
-                    }
+                    Err(_) => return self.allocate_result_error("buf-slice length out of range"),
                 };
                 let Some(end) = offset.checked_add(length) else {
-                    return Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                        "buf-slice range overflow".into(),
-                    ))));
+                    return self.allocate_result_error("buf-slice range overflow");
                 };
                 let bytes = {
                     let bytes = buffer.bytes.borrow();
                     let Some(bytes) = bytes.get(offset..end) else {
-                        return Ok(EvalValue::Err(Box::new(EvalValue::Str(
-                            "buf-slice range out of bounds".into(),
-                        ))));
+                        return self.allocate_result_error("buf-slice range out of bounds");
                     };
                     bytes.to_vec()
                 };
-                self.allocate()?;
-                let id = self.next_buffer_id;
-                self.next_buffer_id = self.next_buffer_id.saturating_add(1);
-                Ok(EvalValue::Ok(Box::new(EvalValue::Buf(EvalBuffer {
-                    id,
-                    bytes: Rc::new(RefCell::new(bytes)),
-                }))))
+                let payload = self.allocate_buffer(bytes)?;
+                self.allocate_result(payload, true)
             }),
             Op::BufGetU32 => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
@@ -817,12 +786,64 @@ impl Evaluator<'_> {
     }
 
     fn allocate(&mut self) -> std::result::Result<(), Flow> {
+        self.allocate_dynamic(0)
+    }
+
+    fn allocate_dynamic(&mut self, dynamic_bytes: usize) -> std::result::Result<(), Flow> {
         if self.allocations >= self.config.max_allocations {
             return Err(Flow::Resource("allocations".into()));
         }
+        let object_bytes = evaluator_heap_object_bytes().saturating_add(dynamic_bytes);
+        let next_heap_bytes = self
+            .heap_bytes
+            .checked_add(object_bytes)
+            .ok_or_else(|| Flow::Resource("heap bytes".into()))?;
+        if next_heap_bytes > self.config.max_heap_bytes {
+            return Err(Flow::Resource("heap bytes".into()));
+        }
         self.allocations += 1;
+        self.heap_bytes = next_heap_bytes;
         Ok(())
     }
+
+    fn allocate_buffer(&mut self, bytes: Vec<u8>) -> std::result::Result<EvalValue, Flow> {
+        self.allocate_dynamic(bytes.capacity())?;
+        let id = self.next_buffer_id;
+        self.next_buffer_id = self.next_buffer_id.saturating_add(1);
+        Ok(EvalValue::Buf(EvalBuffer {
+            id,
+            bytes: Rc::new(RefCell::new(bytes)),
+        }))
+    }
+
+    fn allocate_string(&mut self, text: String) -> std::result::Result<EvalValue, Flow> {
+        self.allocate_dynamic(text.capacity())?;
+        Ok(EvalValue::Str(text))
+    }
+
+    fn allocate_result(
+        &mut self,
+        payload: EvalValue,
+        is_ok: bool,
+    ) -> std::result::Result<EvalValue, Flow> {
+        self.allocate()?;
+        if is_ok {
+            Ok(EvalValue::Ok(Box::new(payload)))
+        } else {
+            Ok(EvalValue::Err(Box::new(payload)))
+        }
+    }
+
+    fn allocate_result_error(&mut self, message: &str) -> std::result::Result<EvalValue, Flow> {
+        let payload = self.allocate_string(message.to_owned())?;
+        self.allocate_result(payload, false)
+    }
+}
+
+const fn evaluator_heap_object_bytes() -> usize {
+    // Mirrors the deterministic base estimate of the current `HeapObj` enum
+    // without coupling the dependency-free IR crate to the runtime crate.
+    4 * std::mem::size_of::<usize>()
 }
 
 fn compare_values<T: PartialOrd>(
@@ -994,14 +1015,23 @@ fn list_values_equal(
     right: &[EvalValue],
     limit: usize,
 ) -> std::result::Result<bool, Flow> {
-    if left.len().max(right.len()) > limit {
-        return Err(Flow::Trap("list-equal step limit exceeded".into()));
+    let mut steps = 0_usize;
+    loop {
+        let left_head = left.get(steps);
+        let right_head = right.get(steps);
+        let (left_head, right_head) = match (left_head, right_head) {
+            (None, None) => return Ok(true),
+            (None, Some(_)) | (Some(_), None) => return Ok(false),
+            (Some(left_head), Some(right_head)) => (left_head, right_head),
+        };
+        if steps == limit {
+            return Err(Flow::Trap("list-equal step limit exceeded".into()));
+        }
+        steps += 1;
+        if !value_equal(left_head, right_head)? {
+            return Ok(false);
+        }
     }
-    Ok(left.len() == right.len()
-        && left
-            .iter()
-            .zip(right)
-            .all(|(left, right)| value_equal(left, right).unwrap_or(false)))
 }
 
 fn index_value(value: &EvalValue, operation: &str) -> std::result::Result<usize, Flow> {
@@ -1016,7 +1046,9 @@ fn _block_id_is_used(id: BlockId) -> BlockId {
 
 #[cfg(test)]
 mod boundary_tests {
-    use super::{list_values_equal, EvalValue};
+    use super::{list_values_equal, EvalBuffer, EvalValue, Flow};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     #[test]
     fn evaluator_list_equality_accepts_limit_and_rejects_limit_plus_one() {
@@ -1026,6 +1058,33 @@ mod boundary_tests {
             list_values_equal(&values[..limit], &values[..limit], limit).ok(),
             Some(true)
         );
-        assert!(list_values_equal(&values, &values, limit).is_err());
+        assert!(matches!(
+            list_values_equal(&values, &values, limit),
+            Err(Flow::Trap(message)) if message == "list-equal step limit exceeded"
+        ));
+    }
+
+    #[test]
+    fn evaluator_list_equality_is_incremental_at_difference_and_length_boundaries() {
+        let left = [EvalValue::I64(1), EvalValue::Unit, EvalValue::Unit];
+        let different_head = [EvalValue::I64(2), EvalValue::Unit, EvalValue::Unit];
+        assert_eq!(
+            list_values_equal(&left, &different_head, 2).ok(),
+            Some(false)
+        );
+        assert_eq!(list_values_equal(&left[..2], &left, 2).ok(), Some(false));
+        assert!(list_values_equal(&left, &left, 2).is_err());
+    }
+
+    #[test]
+    fn evaluator_list_equality_propagates_element_comparison_errors() {
+        let buffer = EvalValue::Buf(EvalBuffer {
+            id: 1,
+            bytes: Rc::new(RefCell::new(Vec::new())),
+        });
+        assert!(matches!(
+            list_values_equal(&[buffer], &[EvalValue::Unit], 1),
+            Err(Flow::Trap(message)) if message == "equal-value category mismatch"
+        ));
     }
 }

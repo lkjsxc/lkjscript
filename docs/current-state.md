@@ -280,6 +280,22 @@ The highest-priority defects are:
 
 ## Evidence
 
+The final allocation-baseline hardening in this document's containing commit,
+based on `7942d4e0d57e863b9ffe071cf07dc3ad252c1e23`, was checked in the
+primary Linux 7.0.0-27-generic x86-64 checkout with Rust/Cargo 1.96.0. It closes
+remaining exact ABI, evaluator accounting, trap identity, stable-index, and
+structural-layout boundaries without changing canonical language sources.
+
+| Final allocation-hardening command or check | Result |
+| --- | --- |
+| focused core/IR/native/sys/JIT/VM/app tests | passed; exact heap-site ABI identity, incremental list equality and error propagation, evaluator buffer payload/wrapper allocation limits, full-u32 explicit trap sites, stable-handle ID exhaustion, and collision-free interned nested layouts plus prior allocation/native coverage |
+| `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` | passed |
+| docs/tree/source checks and `cargo run --locked -p lkjscript-xtask -- quiet verify` | passed; rustfmt, strict Clippy, exact source closure, 202 unit/integration tests, and one non-Send compile-fail doctest |
+| `cargo build --workspace --release --locked`; default hello, forced scalar/allocation JIT, Mandelbrot, Brainfuck, lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smokes | passed; allocation graph returned I64 `1` with 3 native entries, 7 allocations, 6 collections, maximum 3 roots, 14 attempted/14 successful heap calls, 6 barriers, and zero fallback; Mandelbrot remained 1,176 bytes with SHA-256 `222c57ba490929db28c8f122d76f3bdbf0282ffd70d7686734e98ae1a7d9c907` |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | passed with `result=ok`, 202 tests plus the compile-fail doctest, and all configured smokes |
+| `cargo fmt --all -- --check`; `git diff --check` | passed |
+| Not tested | performance sampling, full Brainfuck Mandelbrot, Handle/host native calls, native/VM reference transitions, Miri, sanitizers, or non-Linux targets |
+
 The adversarial allocation-baseline repair in this document's containing
 commit, based on `3467137b3e2ad9cf15ff55cd4cf38a134126e373`, was checked in
 an isolated worktree on Linux x86-64 with Rust/Cargo 1.96.0. It repairs the

@@ -57,15 +57,21 @@ them.
 `GcHeap` is the pure stable-index mark/sweep heap in `lkjscript-core`; VM and
 forced JIT sessions use that implementation with exact allocation counts,
 deterministic estimated object-byte accounting, collection counts, estimated
-peak-live bytes, and stress-collection APIs. Because a language `Value` has no
-generation field, swept object indices are never reused within a session.
-Mutation is transactional and layout-preserving: growth is estimated and
+peak-live bytes, and stress-collection APIs. The independent evaluator mirrors
+these allocation and estimated-live-byte limits for its heap-producing
+operations; buffer conversion and slicing charge both payload and Result
+wrapper on success, and error string payload plus Result wrapper on failure.
+Because a language `Value` has no generation field, swept object indices are
+never reused within a session, and all publication paths reject before the
+stable `u32` handle space is exhausted. Mutation is transactional and
+layout-preserving: growth is estimated and
 checked before accounting commits, and closure, layout, or limit failure
 restores the prior object. ABI-2 images
 retain bounded `HeapDispatchV1` sites with canonical operation-specific
 input/result/layout/allocation/store facts, including nominal product field
-facts and List/Option/Result payload identities, plus source, safepoint, and
-verified frame homes. The sys trampoline alone reads raw homes, copies typed
+facts and collision-free interned full structural List/Option/Result identities
+plus their payload identities, source, safepoint, and verified frame homes. The
+sys trampoline alone reads raw homes, copies typed
 arguments and roots into a safe service, writes exact roots/results back,
 re-materializes arguments after any moving root writeback, and propagates
 structured status. Empty List and None use only the exact zero niche; other references

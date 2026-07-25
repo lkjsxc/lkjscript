@@ -203,7 +203,7 @@ fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         fields.push(vm.pop()?);
     }
     fields.reverse();
-    let value = vm.arena.alloc(HeapObj::Product { product, fields });
+    let value = vm.arena.alloc(HeapObj::Product { product, fields })?;
     vm.push(value);
     Ok(())
 }
@@ -251,7 +251,7 @@ fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let updated = vm.arena.alloc(HeapObj::Product {
         product: field_ref.product,
         fields,
-    });
+    })?;
     vm.push(updated);
     Ok(())
 }
@@ -265,7 +265,7 @@ fn bin_bits<J: RuntimeTier>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Resul
     let left = vm
         .as_i64(left)
         .map_err(|_| Error::msg("bit op expects I64"))?;
-    let result = vm.make_i64(f(left, right));
+    let result = vm.make_i64(f(left, right))?;
     vm.push(result);
     Ok(())
 }
@@ -398,7 +398,7 @@ pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
             let v = vm.arena.alloc(HeapObj::Pair {
                 car: car_v,
                 cdr: cdr_v,
-            });
+            })?;
             vm.push(v);
             Ok(())
         }
@@ -430,7 +430,7 @@ pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
         x if x == Op::ReadByte as u8 => {
             vm.wait_for_stdin()?;
             let number = read_byte()?;
-            let value = vm.make_i64(number);
+            let value = vm.make_i64(number)?;
             vm.push(value);
             Ok(())
         }
@@ -524,11 +524,19 @@ mod tests {
             .expect("Bool result")
     }
 
+    fn test_i64(vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
+        vm.make_i64(number).expect("test I64 allocation")
+    }
+
+    fn test_alloc(vm: &mut Vm<'_, NullJit>, object: HeapObj) -> Value {
+        vm.arena.alloc(object).expect("test heap allocation")
+    }
+
     fn i64_list(vm: &mut Vm<'_, NullJit>, values: &[i64]) -> Value {
         let mut list = Value::EMPTY_LIST;
         for number in values.iter().rev() {
-            let car = vm.make_i64(*number);
-            list = vm.arena.alloc(HeapObj::Pair { car, cdr: list });
+            let car = test_i64(vm, *number);
+            list = test_alloc(vm, HeapObj::Pair { car, cdr: list });
         }
         list
     }
@@ -539,27 +547,27 @@ mod tests {
 
         assert!(compare(&mut vm, Op::EqualValue, Value::UNIT, Value::UNIT));
         assert!(!compare(&mut vm, Op::EqualValue, Value::TRUE, Value::FALSE));
-        let wide_left = vm.make_i64(i64::MAX);
-        let wide_right = vm.make_i64(i64::MAX);
+        let wide_left = test_i64(&mut vm, i64::MAX);
+        let wide_right = test_i64(&mut vm, i64::MAX);
         assert!(compare(&mut vm, Op::EqualValue, wide_left, wide_right));
 
-        let positive_zero = vm.arena.alloc(HeapObj::Float(0.0));
-        let negative_zero = vm.arena.alloc(HeapObj::Float(-0.0));
+        let positive_zero = test_alloc(&mut vm, HeapObj::Float(0.0));
+        let negative_zero = test_alloc(&mut vm, HeapObj::Float(-0.0));
         assert!(compare(
             &mut vm,
             Op::EqualValue,
             positive_zero,
             negative_zero
         ));
-        let nan_left = vm.arena.alloc(HeapObj::Float(f64::NAN));
-        let nan_right = vm.arena.alloc(HeapObj::Float(f64::NAN));
+        let nan_left = test_alloc(&mut vm, HeapObj::Float(f64::NAN));
+        let nan_right = test_alloc(&mut vm, HeapObj::Float(f64::NAN));
         assert!(!compare(&mut vm, Op::EqualValue, nan_left, nan_right));
 
-        let text_left = vm.arena.alloc(HeapObj::Str("same".into()));
-        let text_right = vm.arena.alloc(HeapObj::Str("same".into()));
+        let text_left = test_alloc(&mut vm, HeapObj::Str("same".into()));
+        let text_right = test_alloc(&mut vm, HeapObj::Str("same".into()));
         assert!(compare(&mut vm, Op::EqualValue, text_left, text_right));
-        let symbol_left = vm.arena.alloc(HeapObj::Symbol("same".into()));
-        let symbol_right = vm.arena.alloc(HeapObj::Symbol("same".into()));
+        let symbol_left = test_alloc(&mut vm, HeapObj::Symbol("same".into()));
+        let symbol_right = test_alloc(&mut vm, HeapObj::Symbol("same".into()));
         assert!(compare(&mut vm, Op::EqualValue, symbol_left, symbol_right));
         vm.push(text_left);
         vm.push(symbol_left);
@@ -571,32 +579,32 @@ mod tests {
         let mut vm = test_vm();
         assert!(compare(&mut vm, Op::EqualValue, Value::NONE, Value::NONE));
 
-        let one_left = vm.make_i64(1);
-        let one_right = vm.make_i64(1);
-        let some_left = vm.arena.alloc(HeapObj::OptionSome(one_left));
-        let some_right = vm.arena.alloc(HeapObj::OptionSome(one_right));
+        let one_left = test_i64(&mut vm, 1);
+        let one_right = test_i64(&mut vm, 1);
+        let some_left = test_alloc(&mut vm, HeapObj::OptionSome(one_left));
+        let some_right = test_alloc(&mut vm, HeapObj::OptionSome(one_right));
         assert!(compare(&mut vm, Op::EqualValue, some_left, some_right));
         assert!(!compare(&mut vm, Op::EqualValue, Value::NONE, some_left));
 
-        let ok_left = vm.arena.alloc(HeapObj::ResultOk(one_left));
-        let ok_right = vm.arena.alloc(HeapObj::ResultOk(one_right));
-        let err = vm.arena.alloc(HeapObj::ResultErr(one_right));
+        let ok_left = test_alloc(&mut vm, HeapObj::ResultOk(one_left));
+        let ok_right = test_alloc(&mut vm, HeapObj::ResultOk(one_right));
+        let err = test_alloc(&mut vm, HeapObj::ResultErr(one_right));
         assert!(compare(&mut vm, Op::EqualValue, ok_left, ok_right));
         assert!(!compare(&mut vm, Op::EqualValue, ok_left, err));
 
         let mut deep_left = one_left;
         let mut deep_right = one_right;
         for _ in 0..10_000 {
-            deep_left = vm.arena.alloc(HeapObj::OptionSome(deep_left));
-            deep_right = vm.arena.alloc(HeapObj::OptionSome(deep_right));
+            deep_left = test_alloc(&mut vm, HeapObj::OptionSome(deep_left));
+            deep_right = test_alloc(&mut vm, HeapObj::OptionSome(deep_right));
         }
         assert!(compare(&mut vm, Op::EqualValue, deep_left, deep_right));
 
         let mut result_left = one_left;
         let mut result_right = one_right;
         for _ in 0..10_000 {
-            result_left = vm.arena.alloc(HeapObj::ResultOk(result_left));
-            result_right = vm.arena.alloc(HeapObj::ResultOk(result_right));
+            result_left = test_alloc(&mut vm, HeapObj::ResultOk(result_left));
+            result_right = test_alloc(&mut vm, HeapObj::ResultOk(result_right));
         }
         assert!(compare(&mut vm, Op::EqualValue, result_left, result_right));
     }
@@ -604,8 +612,8 @@ mod tests {
     #[test]
     fn object_identity_is_limited_to_buffers_and_handles() {
         let mut vm = test_vm();
-        let buffer = vm.arena.alloc(HeapObj::Buf(vec![1, 2, 3]));
-        let clone = vm.arena.alloc(HeapObj::Buf(vec![1, 2, 3]));
+        let buffer = test_alloc(&mut vm, HeapObj::Buf(vec![1, 2, 3]));
+        let clone = test_alloc(&mut vm, HeapObj::Buf(vec![1, 2, 3]));
         assert!(compare(&mut vm, Op::SameObject, buffer, buffer));
         assert!(!compare(&mut vm, Op::SameObject, buffer, clone));
         assert!(compare(
@@ -621,15 +629,18 @@ mod tests {
             Value::from_handle(8)
         ));
 
-        let integer = vm.make_i64(1);
+        let integer = test_i64(&mut vm, 1);
         vm.push(integer);
         vm.push(integer);
         assert!(dispatch(&mut vm, Op::SameObject as u8).is_err());
 
-        let closure = vm.arena.alloc(HeapObj::Closure {
-            proto: 0,
-            captures: Vec::new(),
-        });
+        let closure = test_alloc(
+            &mut vm,
+            HeapObj::Closure {
+                proto: 0,
+                captures: Vec::new(),
+            },
+        );
         vm.push(closure);
         vm.push(closure);
         assert!(dispatch(&mut vm, Op::EqualValue as u8).is_err());
@@ -658,12 +669,15 @@ mod tests {
         );
         assert!(list_values_equal(&vm.arena, first, same, 1).is_err());
 
-        let improper_car = vm.make_i64(1);
-        let improper_cdr = vm.make_i64(2);
-        let improper = vm.arena.alloc(HeapObj::Pair {
-            car: improper_car,
-            cdr: improper_cdr,
-        });
+        let improper_car = test_i64(&mut vm, 1);
+        let improper_cdr = test_i64(&mut vm, 2);
+        let improper = test_alloc(
+            &mut vm,
+            HeapObj::Pair {
+                car: improper_car,
+                cdr: improper_cdr,
+            },
+        );
         vm.push(improper);
         vm.push(first);
         assert!(dispatch(&mut vm, Op::ListEqual as u8).is_err());
@@ -681,19 +695,25 @@ mod tests {
         let mut vm = test_vm();
         let mut at_limit = Value::EMPTY_LIST;
         for _ in 0..MAX_LIST_EQUAL_STEPS {
-            at_limit = vm.arena.alloc(HeapObj::Pair {
-                car: Value::UNIT,
-                cdr: at_limit,
-            });
+            at_limit = test_alloc(
+                &mut vm,
+                HeapObj::Pair {
+                    car: Value::UNIT,
+                    cdr: at_limit,
+                },
+            );
         }
         assert_eq!(
             list_values_equal(&vm.arena, at_limit, at_limit, MAX_LIST_EQUAL_STEPS).ok(),
             Some(true)
         );
-        let over_limit = vm.arena.alloc(HeapObj::Pair {
-            car: Value::UNIT,
-            cdr: at_limit,
-        });
+        let over_limit = test_alloc(
+            &mut vm,
+            HeapObj::Pair {
+                car: Value::UNIT,
+                cdr: at_limit,
+            },
+        );
         assert!(
             list_values_equal(&vm.arena, over_limit, over_limit, MAX_LIST_EQUAL_STEPS).is_err()
         );
@@ -702,8 +722,8 @@ mod tests {
     #[test]
     fn f64_bit_equality_distinguishes_signed_zero_and_accepts_equal_nan_bits() {
         let mut vm = test_vm();
-        let positive_zero = vm.arena.alloc(HeapObj::Float(0.0));
-        let negative_zero = vm.arena.alloc(HeapObj::Float(-0.0));
+        let positive_zero = test_alloc(&mut vm, HeapObj::Float(0.0));
+        let negative_zero = test_alloc(&mut vm, HeapObj::Float(-0.0));
         assert!(!compare(
             &mut vm,
             Op::F64BitsEqual,
@@ -711,12 +731,13 @@ mod tests {
             negative_zero
         ));
         let bits = 0x7ff8_0000_0000_0042_u64;
-        let nan_left = vm.arena.alloc(HeapObj::Float(f64::from_bits(bits)));
-        let nan_right = vm.arena.alloc(HeapObj::Float(f64::from_bits(bits)));
+        let nan_left = test_alloc(&mut vm, HeapObj::Float(f64::from_bits(bits)));
+        let nan_right = test_alloc(&mut vm, HeapObj::Float(f64::from_bits(bits)));
         assert!(compare(&mut vm, Op::F64BitsEqual, nan_left, nan_right));
-        let different_nan = vm
-            .arena
-            .alloc(HeapObj::Float(f64::from_bits(bits.wrapping_add(1))));
+        let different_nan = test_alloc(
+            &mut vm,
+            HeapObj::Float(f64::from_bits(bits.wrapping_add(1))),
+        );
         assert!(!compare(&mut vm, Op::F64BitsEqual, nan_left, different_nan));
     }
 }

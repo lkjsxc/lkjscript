@@ -1995,11 +1995,9 @@ fn reference_layout_key(reference_type: ReferenceType) -> u64 {
     match reference_type {
         ReferenceType::Buf => 1_u64 << 56,
         ReferenceType::Str => 2_u64 << 56,
-        ReferenceType::List(layout) => (3_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Option(layout) => (4_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Result(ok, error) => {
-            (5_u64 << 56) | u64::from(ok.get().wrapping_mul(16_777_619) ^ error.get())
-        }
+        ReferenceType::List(layout, _) => (3_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Option(layout, _) => (4_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Result(layout, _, _) => (5_u64 << 56) | u64::from(layout.get()),
         ReferenceType::Product(layout) => (6_u64 << 56) | u64::from(layout.get()),
     }
 }
@@ -2012,8 +2010,8 @@ fn native_reference_value(
     let word = reference.opaque_word();
     if word == 0 {
         return match reference_type {
-            ReferenceType::List(_) => Ok(Value::EMPTY_LIST),
-            ReferenceType::Option(_) => Ok(Value::NONE),
+            ReferenceType::List(_, _) => Ok(Value::EMPTY_LIST),
+            ReferenceType::Option(_, _) => Ok(Value::NONE),
             _ => Err("zero native reference is invalid for this category".into()),
         };
     }
@@ -2025,11 +2023,13 @@ fn native_reference_value(
     let category_matches = match (reference_type, heap.get(value)) {
         (ReferenceType::Buf, Ok(HeapObj::Buf(_)))
         | (ReferenceType::Str, Ok(HeapObj::Str(_)))
-        | (ReferenceType::List(_), Ok(HeapObj::Pair { .. }))
-        | (ReferenceType::Option(_), Ok(HeapObj::OptionSome(_)))
-        | (ReferenceType::Result(_, _), Ok(HeapObj::ResultOk(_) | HeapObj::ResultErr(_))) => true,
+        | (ReferenceType::List(_, _), Ok(HeapObj::Pair { .. }))
+        | (ReferenceType::Option(_, _), Ok(HeapObj::OptionSome(_)))
+        | (ReferenceType::Result(_, _, _), Ok(HeapObj::ResultOk(_) | HeapObj::ResultErr(_))) => {
+            true
+        }
         (ReferenceType::Product(layout), Ok(HeapObj::Product { product, .. })) => {
-            layout.get() == u32::from(product.raw()).saturating_add(1)
+            layout == lkjscript_native::LayoutIdentity::product(u32::from(product.raw()))
         }
         _ => false,
     };
@@ -2044,8 +2044,8 @@ fn reference_native_value(
     value: Value,
     reference_type: ReferenceType,
 ) -> Result<NativeValue, String> {
-    if value.is_empty_list() && matches!(reference_type, ReferenceType::List(_))
-        || value.is_none() && matches!(reference_type, ReferenceType::Option(_))
+    if value.is_empty_list() && matches!(reference_type, ReferenceType::List(_, _))
+        || value.is_none() && matches!(reference_type, ReferenceType::Option(_, _))
     {
         return Ok(NativeValue::Reference(
             lkjscript_native::NativeReference::new(reference_type, 0),
@@ -2216,23 +2216,72 @@ mod tests {
     }
 
     #[test]
+    fn product11_product0_and_product19_unit_result_layouts_reject_cross_handles() {
+        let mix = |state: u32, value: u32| state.wrapping_mul(16_777_619) ^ value;
+        let old_product = |product: u32| mix(8, product + 1);
+        assert_eq!(
+            mix(old_product(11), old_product(0)),
+            mix(
+                old_product(19),
+                lkjscript_native::ValueType::Unit.layout_identity().get(),
+            ),
+            "the superseded 32-bit Result heap tag collided"
+        );
+
+        let first = lkjscript_native::ReferenceType::Result(
+            lkjscript_native::LayoutIdentity::new(70_000),
+            lkjscript_native::LayoutIdentity::product(11),
+            lkjscript_native::LayoutIdentity::product(0),
+        );
+        let second = lkjscript_native::ReferenceType::Result(
+            lkjscript_native::LayoutIdentity::new(70_001),
+            lkjscript_native::LayoutIdentity::product(19),
+            lkjscript_native::ValueType::Unit.layout_identity(),
+        );
+        assert_ne!(
+            super::reference_layout_key(first),
+            super::reference_layout_key(second)
+        );
+
+        let mut heap = GcHeap::default();
+        let value = heap
+            .try_alloc_with_layout(
+                HeapObj::ResultOk(Value::UNIT),
+                super::reference_layout_key(first),
+            )
+            .expect("first Result layout allocation");
+        let reference = lkjscript_native::NativeReference::new(
+            second,
+            u64::from(value.as_heap().expect("heap handle")) + 1,
+        );
+        assert_eq!(
+            super::native_reference_value(&heap, reference),
+            Err("native heap handle layout mismatch".into())
+        );
+    }
+
+    #[test]
     fn generated_list_equality_accepts_exact_limit_and_rejects_limit_plus_one() {
         let mut heap = GcHeap::default();
         let mut at_limit = Value::EMPTY_LIST;
         for _ in 0..MAX_LIST_EQUAL_STEPS {
-            at_limit = heap.alloc(HeapObj::Pair {
-                car: Value::UNIT,
-                cdr: at_limit,
-            });
+            at_limit = heap
+                .alloc(HeapObj::Pair {
+                    car: Value::UNIT,
+                    cdr: at_limit,
+                })
+                .expect("list allocation");
         }
         assert_eq!(
             super::list_values_equal(&heap, at_limit, at_limit, MAX_LIST_EQUAL_STEPS),
             Ok(true)
         );
-        let over_limit = heap.alloc(HeapObj::Pair {
-            car: Value::UNIT,
-            cdr: at_limit,
-        });
+        let over_limit = heap
+            .alloc(HeapObj::Pair {
+                car: Value::UNIT,
+                cdr: at_limit,
+            })
+            .expect("over-limit list allocation");
         assert_eq!(
             super::list_values_equal(&heap, over_limit, over_limit, MAX_LIST_EQUAL_STEPS),
             Err("list-equal step limit exceeded".into())
