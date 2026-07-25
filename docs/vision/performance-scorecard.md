@@ -78,9 +78,11 @@ Every retained result records:
   where applicable.
 
 A field that does not apply is recorded as not applicable; a metric that was not
-collected is recorded as not measured. Offline PGO profile identity is not
-required because offline PGO is rejected by
-[Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
+collected is recorded as not measured. No Current mode has an offline profile.
+If optional explicit local PGO is later implemented, its workload/profile
+identity, training/build cost, privacy boundary, and no-PGO comparison become
+mandatory under [Measured Execution
+Portfolio](../decisions/execution-portfolio.md).
 
 Comparisons use algorithm-equivalent implementations and also disclose
 idiomatic optimized competitors separately. Portable and native-target binaries

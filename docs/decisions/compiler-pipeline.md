@@ -17,10 +17,11 @@ baseline tier, host-independent native references/allocation, and the forced
 first proof-based optimizing slice are **Current**. Synchronous automatic
 proof promotion is an **Accepted Implementation Selection**, not Current.
 Handle/host native calls, native/VM reference transitions, loop OSR, minimal AOT
-test emission, and direct Wasm are **Accepted Targets**. The backend is specified by
-[Linux x86-64 Native Backend](linux-x86-64-native-backend.md). Offline PGO is
-**Rejected by Product Decision** in
-[Runtime JIT Instead of Offline PGO](runtime-jit-instead-of-offline-pgo.md).
+test emission, production AOT, content-addressed cache, and direct Wasm are
+**Accepted Targets**. The backend is specified by [Linux x86-64 Native
+Backend](linux-x86-64-native-backend.md). Optional explicit local PGO is a
+**Deferred Optional Target**, not Current, under [Measured Execution
+Portfolio](execution-portfolio.md).
 
 ## Pipeline
 

@@ -103,8 +103,9 @@ meta/             Docker, scripts, benchmark comparators, and configuration
   largest candidate statistically tied with fastest or retain rejection and
   remain disabled. Do not add inert engine flags or label baseline code
   optimizing. Loop OSR and a minimal AOT
-  test emitter remain later targets, not current capability. Offline PGO is
-  rejected by product decision. See [Allocation-Capable Baseline
+  test emitter remain later targets, not current capability. The execution
+  portfolio reclassifies optional explicit local PGO and a content-addressed
+  cache as later measured Targets; neither is Current. See [Allocation-Capable Baseline
   JIT](../decisions/allocation-capable-baseline-jit.md) and [Proof-Based
   Optimizing JIT](../decisions/proof-based-optimizing-jit.md).
 

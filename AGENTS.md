@@ -6,17 +6,21 @@ Define the working contract for automated engineering in this repository.
 
 ## Product Direction
 
-`lkjscript` is a typed, line-oriented, AI-authored language implemented by a
-small Rust compiler and reference bytecode VM. Canonical explicit source feeds
-a resolved typed pipeline for the VM and current allocation-free scalar runtime
-baseline JIT. The accepted sequence is sound ownership/coherent traits, exact
-native references/allocation/GC roots, and a distinct proof-based optimizing
-JIT, with later OSR, minimal AOT tests, and Wasm. Linux x86-64 tier evidence
-requires real synchronous calls from verified SSA; code emission, disassembly,
-SSA scaffolding, or observation alone is insufficient.
-The canonical accepted extension is `.lkjscript`; `.lkjml` is rejected without
-a compatibility mode. Linux x86-64 is the current acceptance platform.
-Portability is a design constraint, not a current support claim.
+`lkjscript` is an AI-primary, statically typed, memory-safe language and
+platform implemented today by a small Rust compiler, verified typed SSA,
+reference bytecode VM, callable Linux x86-64 baseline JIT, and forced
+proof-checked optimizing JIT. The accepted destination is a versioned Semantic
+Source system, explicit capabilities/effects, value semantics, hybrid
+affine/region/traced memory safety, reproducible packages/components, and one
+semantic IR family feeding a measured evaluator/VM/JIT/AOT/cache/Wasm
+portfolio. Current line-oriented Edition 1 source remains the deterministic
+text projection during migration; it is not the permanent editing identity.
+Linux x86-64 tier evidence requires real synchronous calls from verified SSA;
+code emission, disassembly, SSA scaffolding, or observation alone is
+insufficient. The canonical accepted extension is `.lkjscript`; `.lkjml` is
+rejected without an explicitly editioned migration mode. Linux x86-64 is the
+current acceptance platform. Portability is a design constraint, not a current
+support claim.
 
 ## Non-Negotiable Rules
 
@@ -28,10 +32,11 @@ Portability is a design constraint, not a current support claim.
    defect and must be implemented or removed.
 4. Backward compatibility is not required. Remove obsolete paths instead of
    retaining aliases, fallback behavior, or shims.
-5. An lkjscript source directory may contain at most 16 immediate entries,
-   counting files and subdirectories together. This is a language source-tree
-   rule, not a rule for Rust crates, documentation, metadata, or generated
-   build trees.
+5. Do not weaken any Current source or artifact limit before aggregate checked
+   replacement bounds are Current. The Edition 1 16-entry source-directory
+   rule remains enforced during that migration; its accepted destination is an
+   AI-maintainability lint under versioned implementation maxima and host
+   resource profiles, not permanent language semantics.
 6. Keep pure compiler/runtime state separate from host effects. Unsafe Rust is
    confined to `lkjscript-sys`, whose safe API must uphold Rust safety for all
    callers.
@@ -52,30 +57,36 @@ Portability is a design constraint, not a current support claim.
 13. Record rejected experiments as carefully as adopted ones, including
     combinations that may become useful under different conditions.
 14. Keep commits coherent and include `Tested:` and `Not-tested:` trailers.
-15. Runtime JIT is the adaptive-performance path. Do not add offline PGO,
-    training builds, persistent profiles, or cross-run code caches without a
-    later explicit product decision.
+15. Runtime JIT remains the primary adaptive-performance path, but not the only
+    final execution strategy. AOT, content-addressed native caches, and optional
+    explicit local PGO require the shared verified SSA/artifact-identity
+    foundations, an accepted measured slice, and no uploaded telemetry or
+    semantic divergence.
 
 ## Read Order
 
 1. [docs/current-state.md](docs/current-state.md)
 2. [docs/operations/architecture.md](docs/operations/architecture.md)
-3. [docs/language/README.md](docs/language/README.md)
-4. [docs/decisions/semantic-core.md](docs/decisions/semantic-core.md)
-5. [docs/decisions/equality-families.md](docs/decisions/equality-families.md)
-6. [docs/decisions/immutable-nominal-products.md](docs/decisions/immutable-nominal-products.md)
-7. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
-8. [docs/decisions/ownership-and-borrowing.md](docs/decisions/ownership-and-borrowing.md)
-9. [docs/decisions/traits-and-static-dispatch.md](docs/decisions/traits-and-static-dispatch.md)
-10. [docs/decisions/native-references-and-gc-stack-maps.md](docs/decisions/native-references-and-gc-stack-maps.md)
-11. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
-12. [docs/decisions/callable-baseline-jit.md](docs/decisions/callable-baseline-jit.md)
-13. [docs/decisions/allocation-capable-baseline-jit.md](docs/decisions/allocation-capable-baseline-jit.md)
-14. [docs/decisions/proof-based-optimizing-jit.md](docs/decisions/proof-based-optimizing-jit.md)
-15. [docs/operations/verification.md](docs/operations/verification.md)
-16. [docs/vision/README.md](docs/vision/README.md)
-17. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
-18. [docs/vision/experiments.md](docs/vision/experiments.md)
+3. [docs/decisions/ai-native-platform.md](docs/decisions/ai-native-platform.md)
+4. [docs/decisions/semantic-source-and-agent-protocol.md](docs/decisions/semantic-source-and-agent-protocol.md)
+5. [docs/decisions/resource-budget-profiles.md](docs/decisions/resource-budget-profiles.md)
+6. [docs/decisions/execution-portfolio.md](docs/decisions/execution-portfolio.md)
+7. [docs/language/README.md](docs/language/README.md)
+8. [docs/decisions/semantic-core.md](docs/decisions/semantic-core.md)
+9. [docs/decisions/equality-families.md](docs/decisions/equality-families.md)
+10. [docs/decisions/immutable-nominal-products.md](docs/decisions/immutable-nominal-products.md)
+11. [docs/decisions/compiler-pipeline.md](docs/decisions/compiler-pipeline.md)
+12. [docs/decisions/ownership-and-borrowing.md](docs/decisions/ownership-and-borrowing.md)
+13. [docs/decisions/traits-and-static-dispatch.md](docs/decisions/traits-and-static-dispatch.md)
+14. [docs/decisions/native-references-and-gc-stack-maps.md](docs/decisions/native-references-and-gc-stack-maps.md)
+15. [docs/decisions/runtime-jit-instead-of-offline-pgo.md](docs/decisions/runtime-jit-instead-of-offline-pgo.md)
+16. [docs/decisions/callable-baseline-jit.md](docs/decisions/callable-baseline-jit.md)
+17. [docs/decisions/allocation-capable-baseline-jit.md](docs/decisions/allocation-capable-baseline-jit.md)
+18. [docs/decisions/proof-based-optimizing-jit.md](docs/decisions/proof-based-optimizing-jit.md)
+19. [docs/operations/verification.md](docs/operations/verification.md)
+20. [docs/vision/README.md](docs/vision/README.md)
+21. [docs/vision/performance-scorecard.md](docs/vision/performance-scorecard.md)
+22. [docs/vision/experiments.md](docs/vision/experiments.md)
 
 ## Development Loop
 

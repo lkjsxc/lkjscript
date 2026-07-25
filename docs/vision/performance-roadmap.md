@@ -14,9 +14,11 @@ proof-based optimizing pipeline are **Current**. The old observation hook is
 removed. Broader ownership/traits, Handle/host native calls, native/VM
 reference transitions, later loop OSR, and direct Wasm are **Accepted Targets**.
 The synchronous automatic baseline-to-proof promotion slice is an **Accepted
-Implementation Selection**, not yet Current. Guarded
-specialization is **Deferred** until justified. Offline PGO is **Rejected by
-Product Decision**.
+Implementation Selection**, not yet Current and no longer the immediate
+repository priority. Guarded specialization is **Deferred** until justified.
+Production AOT and a content-addressed cache are **Accepted Targets**; optional
+explicit local PGO is a **Deferred Optional Target** under the execution
+portfolio.
 
 ## Sequence
 
@@ -32,10 +34,13 @@ truthful semantics and safety
   -> ownership, coherent traits, and exact native roots
   -> allocation-capable baseline JIT
   -> forced first proof-based optimizing JIT
+  -> Semantic Source and aggregate resource-budget foundations
   -> selected synchronous automatic proof promotion and retained threshold gate
   -> broader proof passes
+  -> shared AOT/artifact identity and measured cache candidates
   -> loop-triggered JIT and OSR in a later cycle
   -> guarded specialization and deoptimization only when justified
+  -> optional explicit local PGO only after common AOT identity
   -> direct Wasm and additional targets
 ```
 
@@ -71,8 +76,10 @@ result that will later expose the need for loop-triggered JIT and OSR.
 
 ## Phase 0: Policy Cutover — Current
 
-The planning cutover now rejects offline PGO, makes runtime JIT the primary
-adaptive strategy, defines the VM/baseline/proof-based/guarded tiers, and fixes
+The historical planning cutover rejected offline PGO and made runtime JIT the
+primary adaptive strategy. The later execution portfolio retains JIT primacy
+while permitting measured AOT/cache and optional explicit local PGO after
+shared identity. It defines the VM/baseline/proof-based/guarded tiers and fixes
 the contracts for local ephemeral hotness, synchronous compilation, states,
 fallback, resource budgets, code objects, W^X, safepoints, OSR, and forced
 testing. That policy is now realized by callable scalar forced/auto engines; the former
@@ -280,18 +287,21 @@ compilation/OSR/fallback/deoptimization counts, code and metadata bytes, peak
 RSS/cache, repetitions, dispersion/tails, and cleanup. A faster steady state is
 not called an end-to-end speedup when total execution is slower.
 
-The exact next implementation boundary is the **Accepted Implementation
-Selection** in [Proof-Based Optimizing
+The exact next repository-wide implementation boundary is [Semantic Source And
+Agent Protocol](../decisions/semantic-source-and-agent-protocol.md), followed by
+aggregate budget profiles. The automatic promotion selection remains a later
+exact implementation contract in [Proof-Based Optimizing
 JIT](../decisions/proof-based-optimizing-jit.md). The callable baseline and
 forced optimizing tiers remain the Current foundations.
 
 ## Rejected And Deferred
 
-**Rejected by Product Decision:** offline PGO, instrumented training builds,
-profile generation/merge/use, persistent PGO artifacts, PGO-specific decisions,
-and any gate requiring JIT to beat PGO AOT.
+**Rejected:** mandatory uploaded telemetry, hidden fallback, incomplete cache
+keys, and any gate requiring JIT to beat PGO AOT independent of workload cost.
 
-**Deferred:** guarded specialization/deoptimization until Tier 2A evidence,
-background compilation until process-safe ownership, eviction until native
-relationships are modeled, persistent profiles/caches pending a new explicit
-decision, and non-Linux native backends until Linux x86-64 passes.
+**Deferred:** optional explicit local PGO until common SSA/AOT/artifact identity,
+guarded specialization/deoptimization until Tier 2A evidence, background
+compilation until process-safe ownership, cache eviction until native
+relationships are modeled, production AOT/cache implementation until complete
+artifact identity, and non-Linux native backends until the required foundation
+slices pass.

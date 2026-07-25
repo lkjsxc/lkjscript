@@ -1,0 +1,56 @@
+{
+  "schema": "lkjscript.ai-authorability-result/v1",
+  "taskId": "rename-function-v1",
+  "taskSha256": "9f1f155d073e126efbef3330a3b638ed1f34d05dabab2a150435fc1cfa730cde",
+  "baseCommit": "f6410a22bdcf8e516e5f2a771428f74edf4fcfa1",
+  "interface": "raw-text",
+  "model": "lm-studio-02/qwen3.5-9b-uncensored-hauhaucs-aggressive",
+  "harness": {
+    "name": "pi Agent",
+    "isolation": "git-worktree",
+    "maxTurns": 20
+  },
+  "run": {
+    "startedAt": "2026-07-25T04:02:38.350Z",
+    "endedAt": null,
+    "status": "provider-request-timeout",
+    "eventLogSha256": "6f2f62d7639a0214370395b9f5e99abe287f03d328dbfb020a869349a05b4297",
+    "agentResultCommit": null
+  },
+  "metrics": {
+    "wallMilliseconds": 56300,
+    "inputTokens": null,
+    "cachedInputTokens": null,
+    "outputTokens": null,
+    "reasoningTokens": null,
+    "toolCalls": 0,
+    "toolCallsByName": {},
+    "failedMutations": 0,
+    "compilerInvocations": 0,
+    "repairIterations": 0
+  },
+  "acceptance": {
+    "commands": [
+      {
+        "command": "cargo run --locked -q -p lkjscript-app -- run --engine vm src/examples/jit-scalar/main.lkjscript",
+        "exitCode": null
+      },
+      {
+        "command": "git diff --check",
+        "exitCode": null
+      }
+    ],
+    "structurallyValid": false,
+    "compilerValid": false,
+    "functionallyCorrect": false,
+    "diffChecked": false
+  },
+  "changedPaths": [],
+  "unrelatedPaths": [],
+  "unmeasured": [
+    "provider token accounting was unavailable because the request timed out",
+    "no model response or tool operation was produced",
+    "sampling seed and provider queue time"
+  ],
+  "verdict": "failed"
+}

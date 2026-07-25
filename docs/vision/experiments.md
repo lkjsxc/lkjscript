@@ -93,9 +93,12 @@ require differential values, output, traps, outcomes, GC, and resource-limit
 tests before performance measurement. C4-C7 forced modes must prove native code
 actually executed rather than silently falling back to the VM.
 
-## P0 Offline PGO: Rejected
+## P0 Offline PGO: Historical Rejection, Reclassified Optional Target
 
-- Status: **Rejected by Product Decision**, not by measurement.
+- Status: **Historical Rejection by Product Decision**, not by measurement.
+  [Measured Execution Portfolio](../decisions/execution-portfolio.md) now permits
+  a later optional explicit local PGO experiment after common SSA/AOT/artifact
+  identity; no implementation or measurement is Current.
 - Removed mechanism: instrumented training builds, profile generation/merging,
   profile-use rebuilds, persistent profile artifacts, and PGO-specific release
   decisions.
@@ -103,8 +106,9 @@ actually executed rather than silently falling back to the VM.
   for its own runtime JIT tiers and discarded at exit.
 - Evidence boundary: no offline PGO implementation or benchmark was run, so no
   performance conclusion about PGO is claimed.
-- Reconsideration condition: a later explicit product decision must supersede
-  [Runtime JIT Instead of Offline PGO](../decisions/runtime-jit-instead-of-offline-pgo.md).
+- Reconsideration condition: the superseding execution-portfolio decision is
+  satisfied only by a new predeclared local-PGO slice with exact profile
+  identity, privacy, build-cost, no-PGO/JIT comparison, and semantic validation.
 
 ## C1 Resolved Typed HIR: Adopted
 

@@ -24,13 +24,17 @@ Rank the invariants used when architectural goals conflict.
 11. Keep unsafe Rust isolated in `lkjscript-sys`; safe wrappers uphold safety.
 12. Add no third-party Rust dependency without a measured decision record that
     distinguishes runtime, build-time backend, and language-package impact.
-13. Keep language source shallow and at most 16 entries wide per directory.
+13. Keep Current Edition 1 source limits until aggregate checked replacements
+    are Current; then measure semantic-cohesion and AI-context lints rather than
+    treating 16-entry directory width as permanent language identity.
 14. Keep the reference VM cache-conscious, but do not carry universal tagged
     values into typed native hot paths when static representation is available.
 15. Use one typed semantic IR family for VM, runtime JIT, minimal AOT tests,
     and Wasm lowering.
-16. Keep adaptive observations bounded, process-local, ephemeral, and distinct
-    from telemetry; offline PGO is not an accepted strategy.
+16. Keep adaptive observations bounded, process-local, and distinct from
+    telemetry. Runtime JIT is the primary adaptive strategy; optional explicit
+    local PGO is deferred until common AOT/artifact identity and is never
+    uploaded telemetry.
 17. Build portability seams honestly while accepting Linux-first delivery.
 18. Delete redundant tests and generated artifacts only when stronger evidence
     or reproducibility makes them unnecessary.

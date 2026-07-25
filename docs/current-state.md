@@ -11,6 +11,50 @@ next work without mixing them with long-term vision.
 explicitly labeled **Accepted Target**, **Placeholder**, **Deferred**, or
 **Rejected**.
 
+## Resolved AI-Native Redesign Baseline
+
+The redesign started from clean `main` at
+`f6410a22bdcf8e516e5f2a771428f74edf4fcfa1`, one commit after the observed
+forced-optimizer evidence commit `ccf53f1937951fc2535b2359fe704c66be0c1010`.
+That additional commit selected synchronous automatic proof promotion but did
+not implement it. The baseline host was Ubuntu 24.04.4 LTS, Linux
+7.0.0-27-generic x86-64, Rust `1.96.0 (ac68faa20 2026-05-25)`, Cargo `1.96.0
+(30a34c682 2026-05-25)`, with 96 GiB free on the 512 GiB artifact filesystem.
+The workspace had nine Rust packages, zero third-party Cargo packages, and a
+clean tree tracking `origin/main`.
+
+Deterministic SHA-256 manifests hash lines of `<file SHA-256><two spaces><tracked
+path><LF>` in byte-sorted tracked-path order:
+
+| Baseline set | Files | Bytes | Manifest SHA-256 |
+| --- | ---: | ---: | --- |
+| canonical `src` `.lkjscript` corpus | 109 | 67,520 | `84fbbac1ba744ed9376f8e98dcf3389d2d914fd2b22d88fcda39dcda022c87d3` |
+| all tracked `.lkjscript` sources/fixtures/workloads | 113 | 69,351 | `78d8469b697c4b6672f28bf47cfb7f96373151ef42c24b85321e6e571df3b737` |
+| `meta/bench`, `meta/benchmarks`, and `meta/scripts` evidence | 31 | 2,814,103 | `4779093114cfe083bd35a3331f5df502687bcf2a14cdc390b9e5a4816ce81af3` |
+| `AGENTS.md` and tracked `docs` | 57 | 457,145 | `36a81144ed96508764f1ce435713ee4f0a86d33a942d6dc30865036e23ba9e5e` |
+| complete tracked tree | 287 | 5,050,416 | `1c07d270a667373edac03d5dd224e0deae8f8b2b3b7e0099624547f3b0b0ae34` |
+
+The immutable Brainfuck reference source hash was
+`af6250f93ef18b35e35788958e6c1feed1a20155011e7208546940661dbedf1d`;
+the benchmark driver hash was
+`bd9d6e7f237834592941d53fde484a66cf99c3f240b22c2141003176e92bb220`.
+
+Baseline commands actually run on that clean commit:
+
+| Command/gate | Result |
+| --- | --- |
+| `cargo run --locked -p lkjscript-xtask -- quiet verify` | exited 0 in 7 s; canonical format/Clippy/docs/tree/source and workspace tests passed |
+| `cargo build --workspace --release --locked` | exited 0 in 15 s |
+| default/VM/forced-baseline/threshold-2-auto scalar, forced optimizing, VM hello, and VM Mandelbrot runs | all exited 0; hello was `3628800`; Mandelbrot retained its canonical output |
+| `python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build` | exited 0; direct/run-folded correctness and failure checks passed |
+| lkjedit, HTTP, bulk-byte, durable-file, SHA-256, and SQLite smoke scripts with the release binary | all exited 0 |
+| `docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify` | exited 0 in 29 s with `result=ok` |
+
+No retained performance sampling, full Brainfuck Mandelbrot, Miri, sanitizer,
+fuzzer, non-Linux target, AArch64, or Wasm/component acceptance was run for this
+baseline. The baseline runs establish current health; they do not establish any
+new redesign Target as Current.
+
 ## Current Implementation
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
@@ -269,23 +313,32 @@ The SQLite implementation tree was verified on Linux x86-64 with the system
 These are VM and generic host-boundary results. They are not JIT evidence and
 do not establish application durability or migration behavior.
 
-## Accepted Platform Direction
+## Accepted AI-Native Platform Direction
+
+[AI-Native Language And Platform](decisions/ai-native-platform.md) supersedes
+implementation-era permanent assumptions while preserving the Current typed
+HIR/verified SSA, opaque verifier/proof authority, exact roots, structured
+outcomes, deterministic budgets, W^X, and fallback-free forced native evidence.
+The accepted destination is versioned Semantic Source, semantic agent edits,
+Edition 2 ADTs and exact control/numerics, explicit capabilities, hybrid safe
+memory, reproducible packages/components, one semantic IR family, and a
+measured evaluator/VM/JIT/AOT/cache/Wasm portfolio. None of those absent layers
+is Current by adoption of the direction.
+
+The immediate repository-wide implementation priority is [Semantic Source And
+Agent Protocol](decisions/semantic-source-and-agent-protocol.md), followed by
+[Resource Budget Profiles](decisions/resource-budget-profiles.md). All Current
+source limits remain enforced until aggregate replacements are Current. The
+[Measured Execution Portfolio](decisions/execution-portfolio.md) reclassifies
+AOT, content-addressed native caches, and optional explicit local PGO as later
+measured Targets; it does not add an engine or change Current runtime policy.
 
 The marker-trait foundation, initial `Owned Buf` ownership safe island, exact
-ABI-2 frames/roots, and host-independent source allocation/recursive SCC slice
-are Current. General ownership, full static trait methods/associated items,
-Handle/host native calls, and native/VM reference transitions are not. The
-immediate implementation selection is the automatic promotion slice below;
-proved ownership, coherent static traits, Handle/host transitions, and broader
-proof optimization remain subsequent accepted work. The forced first optimizing
-pipeline is Current. The exact synchronous automatic
-promotion slice is an **Accepted Implementation Selection**; broader passes are
-**Accepted Targets**. Neither is Current behavior. The authoritative records
-are [Ownership And Borrowing](decisions/ownership-and-borrowing.md), [Coherent
-Traits And Static Dispatch](decisions/traits-and-static-dispatch.md), [Native
-References, Frames, And Exact GC Stack Maps](decisions/native-references-and-gc-stack-maps.md),
-[Allocation-Capable Baseline JIT](decisions/allocation-capable-baseline-jit.md),
-and [Proof-Based Optimizing JIT](decisions/proof-based-optimizing-jit.md).
+ABI-2 frames/roots, host-independent source allocation/recursive SCC slice, and
+forced first optimizing pipeline remain Current. General ownership, full static
+trait methods/associated items, Handle/host native calls, native/VM reference
+transitions, and broader proof optimization remain absent. Their existing
+accepted contracts remain compatible foundations unless explicitly superseded.
 
 ## Accepted Target: Automatic Baseline-To-Proof Promotion
 
@@ -716,48 +769,52 @@ so no failed product command is hidden.
 
 ## Accepted Next Target
 
-The real callable allocation-free scalar baseline-JIT cycle is Current on Linux
-x86-64. Emission alone did not complete it: canonical source now reaches actual
-installed calls with nonzero main/callee/PollV1 counts and no forced fallback.
-The next dependency sequence is:
+The first dependency-ordered slice is the complete Semantic Source foundation,
+not automatic optimizing promotion. It must:
 
-1. implement the selected process-local synchronous automatic proof promotion
-   without weakening baseline threshold-64 behavior or exact code ownership;
-2. run and retain the predeclared automatic threshold gate before changing its
-   default-disabled policy;
-3. return to Handle/host transitions, broader proved passes, and separately
-   designed loop-header state transfer without making an OSR claim.
+1. place the complete Current Edition 1 declaration/expression vocabulary
+   behind one opaque validated source-tree authority;
+2. preserve every exact corpus byte through deterministic parse/format/parse;
+3. provide deterministic stable declaration keys and revision-scoped dense node
+   IDs;
+4. provide bounded atomic semantic transactions with stale revision and exact
+   precondition rejection, no text substring replacement, and no partial file
+   publication;
+5. convert unmatched marker, duplicate declaration, unknown binding, arity,
+   type mismatch, and stale edit into versioned structured diagnostics while
+   retaining human rendering;
+6. support useful expression holes and bounded exact context/candidate queries,
+   while every executable/release path rejects unresolved holes; and
+7. establish retained raw-text/entity-edit/hole-fill benchmark cases without
+   claiming general AI superiority from the bootstrap sample.
 
-The next implementation slice is the selected process-local synchronous
-automatic baseline-to-proof promotion contract above. It must land disabled by
-default with candidate CLI threshold controls, then run the predeclared retained
-benchmark before any default adoption. Broader proof passes, OSR, background
-compilation, guards, deoptimization, persistent profiles/caches, offline PGO,
-and non-Linux/non-x86-64 acceptance remain outside that slice. The exact
-promotion contract is [Proof-Based Optimizing
-JIT](decisions/proof-based-optimizing-jit.md); the existing baseline contract is
-[Callable Linux x86-64 Baseline JIT Cycle](decisions/callable-baseline-jit.md).
+The exact contract and gates are [Semantic Source And Agent
+Protocol](decisions/semantic-source-and-agent-protocol.md). Phase 2 then adds
+aggregate source/compiler bounds and named profiles before any tiny Current
+source limit becomes a lint. Edition 2 and later package/capability/ownership
+work follows those foundations.
 
-The supporting contracts are [AI-First Semantic Core](decisions/semantic-core.md),
-[Explicit Equality Families](decisions/equality-families.md),
-[Immutable Nominal Products](decisions/immutable-nominal-products.md),
-[Linux x86-64 Native Backend](decisions/linux-x86-64-native-backend.md),
-[Typed Compiler Pipeline And Runtime JIT](decisions/compiler-pipeline.md),
-[Runtime JIT Instead of Offline PGO](decisions/runtime-jit-instead-of-offline-pgo.md),
-and the [Performance Scorecard](vision/performance-scorecard.md).
+The previously selected process-local synchronous automatic baseline-to-proof
+promotion remains an **Accepted Implementation Selection** and valid later
+experiment. Its threshold gate and default-disabled policy remain unchanged;
+it is no longer the immediate repository priority. Broader proof passes, OSR,
+background compilation, guards, deoptimization, AOT, caches, optional local
+PGO, and non-Linux targets remain non-Current.
 
 ## Rejected
 
-Offline PGO, instrumented training builds, profile generation/merging/use, and
-persistent PGO artifacts are rejected by product decision, not measurement.
-Persistent cross-run JIT profiles and native-code caches are not planned without
-a later explicit decision. Current-process bounded JIT counters are local,
-ephemeral, and not telemetry.
+Mandatory uploaded telemetry, hidden forced-engine fallback, incomplete artifact
+cache keys, separate backend semantic compilers, unbounded optimizer search,
+and optimizer-dependent deterministic semantic charges are rejected.
+Current-process bounded JIT counters remain local, ephemeral, and not telemetry.
 
 ## Deferred
 
-Package installation and update, package manifests/locks/registry,
-supervisor/scheduler, adaptive or generational GC, background JIT compilation,
-guarded runtime specialization/deoptimization, non-Linux native backends,
-browser, general HTTP server/framework, and GUI runtime are later cycles.
-Their documents are designs or experiments, not capability claims.
+Production AOT, content-addressed native caches, optional explicit local PGO,
+automatic optimizing promotion, OSR, package installation/update/manifests/
+locks/registry, supervisor/scheduler, adaptive or generational GC, background
+JIT compilation, guarded runtime specialization/deoptimization, non-Linux native
+backends, browser, general HTTP server/framework, and GUI runtime are later
+cycles. Local PGO is optional and is considered only after common SSA/AOT and
+complete artifact identity; no uploaded telemetry is accepted. These documents
+are decisions or experiments, not capability claims.

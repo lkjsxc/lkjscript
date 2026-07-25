@@ -7,9 +7,11 @@ that own it.
 
 ## Status
 
-**Current**, with accepted foundation changes called out explicitly. The next
-synchronous automatic proof-promotion architecture is an **Accepted
-Implementation Selection**, not yet Current.
+**Current** for the implementation map, with accepted foundation changes called
+out explicitly. The next repository-wide slice is the **Accepted Target**
+Semantic Source and agent-protocol boundary, not yet Current. Synchronous
+automatic proof promotion remains an **Accepted Implementation Selection** but
+is no longer the immediate priority.
 
 ## Crate Graph
 
@@ -220,18 +222,21 @@ deoptimization, guard, or speculation.
 
 ## Source Layout Rule
 
-The current language rule limits each lkjscript source directory to 16
-immediate entries, counting files and subdirectories together. Rust crates,
-documentation, metadata, `.git`, and build output are not language source
-and are outside this rule.
+The current Edition 1 language rule limits each lkjscript source directory to
+16 immediate entries, counting files and subdirectories together. Rust crates,
+documentation, metadata, `.git`, and build output are not language source and
+are outside this rule.
 
 The repository gate checks the complete in-tree language corpus. The compiler
 also rejects an entry or imported source directory that violates the rule, so
-an external project receives the same contract.
+an external project receives the same contract. The accepted destination is an
+AI-maintainability lint, but this check is not weakened until aggregate source
+closure/import/byte/node safety bounds are Current. See [Resource Budget
+Profiles](../decisions/resource-budget-profiles.md).
 
 ## Change Guide
 
-- Change syntax: lexer/parser docs, compiler lexer/parser, corpus, and negative fixtures.
+- Change source semantics/projection: Semantic Source schema/validator, edition adapter/formatter, language docs, complete mechanical corpus migration, semantic transaction tests, and negative fixtures; backends never interpret spelling.
 - Change types: language docs, type prelude/inference, lowering, VM behavior, and conformance tests.
 - Add an opcode: core ABI, code generation, dispatch, disassembly, and malformed-bytecode validation.
 - Add host capability: accepted decision, sys safety wrapper, VM resource boundary, typed prelude, script policy wrapper, and failure tests.
@@ -241,25 +246,49 @@ an external project receives the same contract.
 ## Accepted Redesign Direction
 
 Explicit main, effect-free imported libraries, local-only mutation,
-product-threaded editor, terminal, and Brainfuck state, whole-chunk validation,
+product-threaded editor/terminal/Brainfuck state, whole-chunk validation,
 structured process-safe outcomes, bounded VM execution, deterministic
-fixed-point function effects, typed SSA, verification, independent evaluation,
-baseline normalization, reference-bytecode cutover, and the owned low-level
-x86-64/W^X foundation are now Current. SSA-to-native lowering and exact VM/code-
-object tier ownership follow. The first adaptive execution target remains
-synchronous callable baseline JIT. Exact native roots/allocation and a
-proof-based optimizing tier now precede later loop OSR in the accepted sequence.
-The forced first proof pipeline and callable baseline tier are Current. The
-process-local synchronous automatic promotion state/object/epoch/benchmark
-boundary is selected for the next implementation but is not Current. Minimal file
-emission remains only for diagnostics and backend tests, and offline PGO is
-rejected. The exact next implementation boundary is the **Accepted Implementation
-Selection** in [Proof-Based Optimizing
-JIT](../decisions/proof-based-optimizing-jit.md), built on the Current [Callable
-Linux x86-64 Baseline JIT Cycle](../decisions/callable-baseline-jit.md) and
-[Allocation-Capable Baseline JIT](../decisions/allocation-capable-baseline-jit.md).
-Real modules, process-safe host services, byte strings/views, and measured
-memory strategies build on those layers as vertical slices.
+fixed-point effects, resolved typed HIR, verified typed SSA, independent
+evaluation, baseline normalization, reference bytecode, exact roots, owned
+x86-64/W^X code, callable baseline execution, and forced proof-checked
+optimizing execution are Current.
+
+The accepted Target architecture is:
+
+```text
+goal/specification
+  -> versioned Semantic Source with typed holes
+  -> opaque validated source graph and deterministic Edition adapter
+  -> resolved typed Core HIR
+  -> ownership/effect/capture/capability analysis
+  -> verified semantic SSA
+  -> verified memory/region/drop lowering
+  -> deterministic baseline normalization
+  -> optional proof-checked optimization
+  -> target-neutral verified machine plan
+      +-> deterministic evaluators
+      +-> validated portable VM artifact
+      +-> baseline native compiler
+      +-> optimizing JIT
+      +-> AOT/cache
+      +-> Wasm/components
+```
+
+The first implementation boundary is [Semantic Source And Agent
+Protocol](../decisions/semantic-source-and-agent-protocol.md): one validated
+source-tree authority, exact Edition 1 corpus roundtrip, two identity layers,
+atomic revisioned semantic edits, structured diagnostics, and useful typed
+holes. Existing HIR/SSA/VM/JIT behavior must remain unchanged through that
+cutover. No sibling parser/tree path may independently feed a backend.
+
+[AI-Native Language And Platform](../decisions/ai-native-platform.md) owns the
+long-term dependency order. [Resource Budget
+Profiles](../decisions/resource-budget-profiles.md) prevents weakening tiny
+Current limits before aggregate replacements exist. [Measured Execution
+Portfolio](../decisions/execution-portfolio.md) accepts later AOT, cache,
+optional local PGO, and Wasm measurement without making them Current. The
+process-local automatic proof-promotion contract remains selected and disabled
+by default, but no longer pre-empts the Semantic Source foundation.
 
 The containing host-independent allocation slice based on `0daa7a0` passed the
 focused cross-crate tests, strict affected Clippy, docs/tree/source checks,

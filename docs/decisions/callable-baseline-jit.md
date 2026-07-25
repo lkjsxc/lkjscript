@@ -27,8 +27,10 @@ reference VM
 
 The baseline tier is non-speculative. It does not require guards,
 deoptimization, background compilation, compiler threads, loop OSR, a
-persistent profile, or a persistent native-code cache. Offline PGO remains
-rejected. Later loop-triggered compilation and OSR, proof-based optimization,
+persistent profile, or a persistent native-code cache. Offline PGO was rejected
+for this implementation cycle; the later [Execution
+Portfolio](execution-portfolio.md) reclassifies optional explicit local PGO and
+a content-addressed cache without making either Current. Later loop-triggered compilation and OSR, proof-based optimization,
 and only then justified guarded specialization remain separate cycles.
 
 Generated-code execution speed is the primary performance objective after

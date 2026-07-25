@@ -10,6 +10,10 @@ Index active architecture decisions separately from superseded history.
 
 ## Active And Accepted Decisions
 
+- [ai-native-platform.md](ai-native-platform.md): overarching AI-primary language/platform identity, preserved invariants, superseded assumptions, and dependency order
+- [semantic-source-and-agent-protocol.md](semantic-source-and-agent-protocol.md): versioned validated source graph, stable/revision identities, semantic transactions, diagnostics, and typed-hole foundation
+- [resource-budget-profiles.md](resource-budget-profiles.md): implementation maxima, host profiles, maintainability lints, and semantic metering migration
+- [execution-portfolio.md](execution-portfolio.md): measured evaluator/VM/JIT/AOT/cache/optional-local-PGO/Wasm direction
 - [allocation-capable-baseline-jit.md](allocation-capable-baseline-jit.md): exact native references, allocation, recursion, and host runtime-call target
 - [bytecode-vm.md](bytecode-vm.md): dense Rust bytecode VM
 - [callable-baseline-jit.md](callable-baseline-jit.md): current allocation-free scalar callable Linux x86-64 baseline-JIT cycle and later boundaries
@@ -23,7 +27,7 @@ Index active architecture decisions separately from superseded history.
 - [sha256.md](sha256.md): fixed digest primitive for verifier and integrity use
 - [sqlite-capabilities.md](sqlite-capabilities.md): generic owned SQLite handles
   and bounded statement operations for Candidate A consumers
-- [runtime-jit-instead-of-offline-pgo.md](runtime-jit-instead-of-offline-pgo.md): runtime JIT tiers and rejection of offline PGO
+- [runtime-jit-instead-of-offline-pgo.md](runtime-jit-instead-of-offline-pgo.md): Current runtime-JIT implementation/evidence; permanent JIT-only and PGO/cache rejection is superseded by the execution portfolio
 - [modules-and-packages.md](modules-and-packages.md): explicit modules, reproducible locks, and capability manifests
 - [native-references-and-gc-stack-maps.md](native-references-and-gc-stack-maps.md): exact native frames, roots, allocation, and barrier ABI
 - [numeric-semantics.md](numeric-semantics.md): exact I64/F64 source-to-host contract
@@ -37,8 +41,8 @@ Index active architecture decisions separately from superseded history.
 - [resource-handles.md](resource-handles.md): stale-safe resources and bounded terminal ABI
 - [system-results.md](system-results.md): truthful host failures as language values
 - [web-platform-roadmap.md](web-platform-roadmap.md): ownership-first async Web framework and TLS-provider sequence
-- [limits/essential-limits.md](limits/essential-limits.md): fixed semantic source budgets
-- [source-tree-limit.md](source-tree-limit.md): 16-entry lkjscript source-directory rule
+- [limits/essential-limits.md](limits/essential-limits.md): Current Edition 1 fixed source budgets during aggregate-budget migration; permanent semantic-limit policy is superseded
+- [source-tree-limit.md](source-tree-limit.md): Current 16-entry Edition 1 source-directory rule during aggregate-budget migration; permanent language-rule policy is superseded
 - [scratch-host.md](scratch-host.md): owned Linux sys layer and thin host policy
 
 ## Superseded

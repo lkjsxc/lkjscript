@@ -6,8 +6,10 @@ Choose stable semantic budgets rather than misleading line-count rules.
 
 ## Status
 
-**Current** for nest, form-child, token, and top-level limits.
-**Accepted Target** for the 16-entry language source-directory rule.
+**Current** for Edition 1 nest, form-child, token, and top-level limits.
+The permanent-policy part of this record is **Superseded** by [Resource Budget
+Profiles](../resource-budget-profiles.md). No Current limit is weakened until
+aggregate replacement bounds are Current.
 
 ## Decision
 
@@ -18,10 +20,13 @@ Choose stable semantic budgets rather than misleading line-count rules.
 - Do not expose user configuration or CLI overrides for syntax validity.
 - Apply source-directory width only to lkjscript language trees.
 
-## Consequences
+## Current Migration Consequences
 
-Authors split source by meaning. Changing a limit changes the language contract
-and requires docs, boundary tests, and migration rather than local config.
+Edition 1 authors still split source to satisfy these exact limits. Changing a
+Current limit requires docs, aggregate replacement boundaries, adversarial
+tests, and edition migration rather than an unbounded local override. The
+accepted destination reclassifies maintainability thresholds without making
+source/compiler work unbounded.
 
 ## Supersedes
 

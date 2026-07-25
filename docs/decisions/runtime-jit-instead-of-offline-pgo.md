@@ -15,14 +15,24 @@ optimizing slice is an **Accepted Implementation Selection**, not yet Current.
 Handle/host-capability allocation, lexical ownership adapters, native/VM
 reference transitions, broader proof passes, and later OSR remain **Accepted
 Targets**.
-Offline or ahead-of-time PGO is **Rejected by Product Decision**, not rejected
-by measurement. Canonical source/verified-SSA linkage, bounded code objects,
+Offline PGO was **Rejected by Product Decision**, not by measurement; optional
+explicit local PGO is now a **Deferred Optional Target** under the superseding
+execution portfolio. Canonical source/verified-SSA linkage, bounded code objects,
 VM/native transfer, `vm`/`auto`/`baseline-jit`/`optimizing-jit`, PollV1, and actual generated
 calls are implemented. Closed machine plans also have ABI-2 exact typed
 reference frames/maps and a collecting Buf-reference slot. Source-level host-independent native references/allocation and recursive SCCs
 are implemented. Handle/host calls, lexical ownership adapters, native/VM
 reference transitions, automatic optimizing promotion, broader proof passes,
 OSR, speculative tiers, background work, and deoptimization are absent.
+
+## Supersession
+
+[Measured Execution Portfolio](execution-portfolio.md) supersedes this record's
+permanent rejection of production AOT, optional explicit local PGO, and
+content-addressed cross-run native caches. Runtime JIT remains the primary
+adaptive path, and every Current VM/JIT contract and retained result in this
+record remains authoritative evidence. No newly accepted portfolio mode is
+Current merely because the long-term policy changed.
 
 ## Decision
 
@@ -37,9 +47,10 @@ reference bytecode VM
 
 Runtime JIT is the primary path for adaptive performance. This supersedes the
 former active ordering `native AOT -> PGO AOT -> baseline JIT -> optimizing
-JIT` and its gate requiring optimizing JIT to beat PGO AOT. The project will
-not build an offline PGO pipeline unless a later explicit product decision
-supersedes this record.
+JIT` and its gate requiring optimizing JIT to beat PGO AOT. That ordering governed the Current JIT implementation. The later execution-
+portfolio decision now permits optional explicit local PGO only after common
+SSA/AOT/artifact identity and a new measured implementation slice; it does not
+change Current behavior.
 
 The compiler architecture is:
 
@@ -122,9 +133,9 @@ GC Stack Maps](native-references-and-gc-stack-maps.md), [Allocation-Capable
 Baseline JIT](allocation-capable-baseline-jit.md), and [Proof-Based Optimizing
 JIT](proof-based-optimizing-jit.md).
 
-## Rejected Offline PGO
+## Historical Rejection And Current Absence Of Offline PGO
 
-The active plan does not include:
+The Current implementation does not include:
 
 - instrumented training builds followed by release recompilation;
 - profile-generation or profile-use compiler modes;
@@ -159,8 +170,10 @@ The VM does not increment a profiling counter for every ordinary bytecode
 instruction.
 
 Persistent cross-run JIT profiles and persistent native-code caches are not
-planned. They require a later explicit decision covering identity, invalidation,
-privacy, portability, artifact limits, and reproducibility.
+Current. The superseding portfolio accepts a content-addressed native cache only
+after complete identity, invalidation, privacy, portability, artifact-limit,
+and reproducibility foundations; persistent profiles remain absent unless an
+explicit optional local-PGO slice justifies them.
 
 ## Tier 0: Reference VM
 

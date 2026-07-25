@@ -185,8 +185,11 @@ semantics.
 
 ## Accepted Implementation Selection: Automatic Baseline-To-Proof Promotion
 
-This section is authoritative for the next implementation slice and is **not
-yet Current**. It selects a process-local, synchronous auto session. Existing
+This section retains an **Accepted Implementation Selection** and is **not yet
+Current**. The AI-native platform decision supersedes its former status as the
+immediate repository-wide priority; Semantic Source now lands first. When this
+promotion slice resumes, this exact process-local synchronous contract and its
+predeclared gate remain authoritative. Existing
 automatic baseline behavior is unchanged: ordinary `auto` still uses the
 64-VM-entry baseline threshold, the threshold call compiles synchronously but
 runs in the VM, and only a later call may select baseline native code.
@@ -352,13 +355,14 @@ the mandatory generated-function entry poll into ABI-2 frame registration,
 removing a separate runtime transition without weakening polling or optimizer
 proofs. Neither cross-commit scalar comparison attributes performance to the
 optimizer, and adoption does not erase the first run's negative evidence.
-Automatic promotion remains disabled and unmeasured. Its next implementation
-and benchmark are selected above but are not Current; OSR, deoptimization, and
-speculation were not measured or added.
+Automatic promotion remains disabled and unmeasured. Its implementation and
+benchmark remain selected above but are not Current and no longer have immediate
+priority; OSR, deoptimization, and speculation were not measured or added.
 
 ## Deferred And Rejected
 
 OSR, background compilation, speculation, guards, deoptimization, vectorization,
-persistent profiles/caches, and offline PGO are **Deferred** or **Rejected** as
-specified above. Backend-only hidden optimization, unchecked hints, benchmark-
+persistent caches, and optional explicit local PGO are **Deferred** under the
+superseding [Execution Portfolio](execution-portfolio.md); persistent uploaded
+profiles remain rejected. Backend-only hidden optimization, unchecked hints, benchmark-
 specific passes, and calling baseline code optimizing code are **Rejected**.
