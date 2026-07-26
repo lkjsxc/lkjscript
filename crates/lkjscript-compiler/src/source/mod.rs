@@ -1,13 +1,15 @@
-//! Semantic Source Foundation V1 validated Edition 1 authority capsule.
+//! Validated Semantic Source authority for Edition 1 and Edition 2 identity.
 //!
 //! Parsing, loading, identity, and construction remain private. The only
 //! public source representation is the opaque [`ValidatedSourceTree`].
 
 mod api;
 mod diagnostics;
+mod edition;
 mod format;
 mod identity;
 mod load;
+mod migration;
 mod model;
 mod parse;
 mod validate;
@@ -17,18 +19,21 @@ pub(crate) use api::validate_source_set_for_analysis;
 pub(crate) use api::{
     ensure_source_path_for_compiler, load_for_compiler_with_budget, load_for_protocol,
     load_with_metrics_and_budget, rebuild_staged_sources, validate_for_compiler_with_budget,
+    ValidatedSourceParts,
 };
 pub use api::{load, validate, ValidatedSourceTree};
 pub use diagnostics::{
     DiagnosticCategory, DiagnosticCertainty, DiagnosticSeverity, RelatedSourceSpan,
     SourceDiagnostic, SourceOrigin, SourcePosition, SourceResult, SourceSpan,
 };
+pub use edition::SourceEdition;
 pub(crate) use format::{format_f64, format_file, format_node_identity, format_node_source};
 pub use identity::{
     DeclarationKey, DeclarationKind, DeclarationSummary, NodeId, NodeKind, NodeSummary, RevisionId,
-    StaleNodeId,
+    SourceIdentity, SourceTreeIdentity, StaleNodeId,
 };
 pub use load::validate_source_directory_tree;
+pub use migration::{check_edition2_migration, EditionMigrationChange, EditionMigrationPlan};
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
 pub(crate) use parse::is_source_identifier;
 pub(crate) use validate::SourceFoundationBudget;
@@ -37,7 +42,6 @@ pub(crate) use validate::SourceFoundationBudget;
 pub const SEMANTIC_SOURCE_FOUNDATION_SCHEMA: &str = "lkjscript.semantic-source-foundation";
 /// Version of the incomplete parser/load/identity foundation.
 pub const SEMANTIC_SOURCE_FOUNDATION_SCHEMA_VERSION: u32 = 1;
-pub const SOURCE_EDITION: u32 = 1;
 /// Always-enforced Foundation V1 maximum for exact bytes in one source file.
 pub const FOUNDATION_MAX_SOURCE_FILE_BYTES: u64 = 16 * 1024 * 1024;
 /// Always-enforced Foundation V1 maximum for exact bytes in a source closure.

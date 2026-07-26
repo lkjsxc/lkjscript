@@ -10,6 +10,7 @@ next work without mixing them with long-term vision.
 <!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/2 status=current -->
+<!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
@@ -29,11 +30,13 @@ the manifest capsules. Bounded Repository Topology, Repository Intelligence
 Graph/context, externalized Agent Work State V2 with semantic references,
 complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
-local stdio sessions, compiler Resource Profile V2, and the core hierarchical
-pre-allocation foundation are Current. Agent Foundation V1 and Semantic Source
-Schema V1 identities are historical and rejected. Edition 2, whole-pipeline
-pre-allocation, logical metering integration, nonzero query caching, and
-cross-authority ledgers remain Accepted Targets, not Current.
+local stdio sessions, the Edition 2 identity/non-publishing migration slice,
+compiler Resource Profile V2, and the core hierarchical pre-allocation
+foundation are Current. Agent Foundation V1 and Semantic Source Schema V1
+identities are historical and rejected. Edition 2 ADTs, changed semantics,
+execution cutover, migration publication, whole-pipeline pre-allocation,
+logical metering integration, nonzero query caching, and cross-authority
+ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
 
 ## Current Baseline
@@ -61,6 +64,11 @@ commands/APIs are Current on the containing implementation revision.
 5. The [Profile V2 resource foundation](decisions/platform/resource-budget-profiles-candidate.md)
    is Current for core hierarchical reservation and the documented legacy
    compiler post-phase charging boundaries; whole-pipeline migration is not.
+
+6. Explicit Edition 2 markers, homogeneous closure identity, edition-separated
+   source/tree/revision/declaration identities, Schema V2 facts, and strict
+   non-publishing Edition 1-to-2 migration check/diff are Current. Enum, match,
+   changed execution, publish, and corpus cutover remain targets.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

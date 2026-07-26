@@ -6,12 +6,15 @@
   "kind": "source",
   "purpose": "Own compiler implementation and the public validated Semantic Source facts API.",
   "layer": "compiler source",
-  "concepts": ["declaration identity", "source origin", "source diagnostics"],
+  "concepts": ["edition identity", "declaration identity", "source origin", "source diagnostics"],
   "facade": ["crates/lkjscript-compiler/src/lib.rs", "crates/lkjscript-compiler/src/source/mod.rs"],
   "allowed_dependencies": ["core", "ir"],
   "forbidden_dependencies": ["app", "jit", "vm"],
   "tests": ["crates/lkjscript-compiler/src/source/tests/mod.rs"],
-  "decisions": ["docs/decisions/platform/semantic-source-and-agent-protocol.md"],
+  "decisions": [
+    "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+    "docs/decisions/semantics/edition-2/identity-and-migration.md"
+  ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Compiler source tree" },

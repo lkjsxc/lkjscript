@@ -11,7 +11,8 @@
     "semantic query",
     "atomic transaction",
     "bounded local session",
-    "typed holes and legal actions"
+    "typed holes and legal actions",
+    "Edition 2 identity projection"
   ],
   "facade": ["crates/lkjscript-compiler/src/semantic/mod.rs"],
   "allowed_dependencies": ["core", "semantic-source"],
@@ -19,6 +20,7 @@
   "tests": [
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/semantic/tests/corpus.rs",
+    "crates/lkjscript-compiler/src/semantic/tests/edition.rs",
     "crates/lkjscript-compiler/src/semantic/tests/holes/mod.rs",
     "crates/lkjscript-compiler/src/semantic/session/tests/mod.rs",
     "crates/lkjscript-app/tests/semantic_cli.rs"
@@ -27,7 +29,8 @@
     "docs/decisions/platform/semantic-source-and-agent-protocol.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
-    "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
+    "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md",
+    "docs/decisions/semantics/edition-2/identity-and-migration.md"
   ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },

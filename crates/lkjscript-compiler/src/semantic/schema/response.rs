@@ -37,6 +37,8 @@ pub(crate) struct ProtocolError {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SnapshotResult {
     pub repository_identity: String,
+    pub tree_identity: String,
+    pub edition: u32,
     pub source_units: Vec<SourceUnitRecord>,
     pub declarations: Vec<DeclarationRecord>,
     pub nodes: Vec<NodeRecord>,

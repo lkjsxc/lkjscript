@@ -9,4 +9,5 @@ pub(crate) use entry::{
     LoadMetrics,
 };
 pub use entry::{load, validate};
+pub(crate) use tree::ValidatedSourceParts;
 pub use tree::ValidatedSourceTree;

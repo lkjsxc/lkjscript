@@ -13,8 +13,10 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
 - Corpus: all canonical language files under `src` have executable roots that
   cover the exact corpus closure
-- Physical format: one column-one marker/atom per line with matched markers and
-  raw `str/`, `name/`, and `import/` blocks
+- Physical format: one column-one marker/atom per line. Edition 1 has no marker.
+  Edition 2 requires exact first form `edition/`, `2`, `/edition`; leading trivia
+  is retained, loaded units must agree, and the marker consumes no body token or
+  top-level declaration budget
 - Semantic Source V2: public identity `lkjscript.semantic-source` version 2;
   version 1 input is historical and rejected. One opaque immutable
   `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition
@@ -31,7 +33,14 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   framing, pins one profile/root/revision, rejects stale/external changes,
   refreshes explicitly, intersects Profile V2 session ceilings, and publishes
   through the same engine. Nonzero query caching, shared ledgers, and
-  unavailable exact downstream correlations remain non-Current
+  unavailable exact downstream correlations remain non-Current. Schema V2 also
+  represents Edition 2 without another version: identities are edition-separated,
+  and snapshots expose marker/number nodes plus source/tree identity facts
+- Migration: `check_edition2_migration` pins a homogeneous closure revision,
+  pre-reserves Profile V2 staging, inserts only the marker after leading trivia,
+  and reports exact old/new editions, bytes, identities, revisions, offsets, and
+  replacement sources. It is deterministic, stale-rejecting, Edition 2-idempotent,
+  and cannot write or publish. Semantic publish and corpus migration are absent
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
   directory. Foundation implementation maxima additionally reject a source file

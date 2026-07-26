@@ -43,6 +43,7 @@ pub(crate) struct SpanRecord {
 pub(crate) struct SourceUnitRecord {
     pub path: String,
     pub edition: u32,
+    pub identity: String,
     pub bytes: u64,
     pub sha256: String,
     pub trailing_trivia: Vec<TriviaRecord>,

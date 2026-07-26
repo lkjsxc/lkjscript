@@ -1,5 +1,6 @@
 mod builtin;
 mod diagnostic;
+mod edition_source;
 mod expression;
 mod expression_source;
 mod facts;

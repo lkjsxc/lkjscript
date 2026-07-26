@@ -55,6 +55,9 @@ fn format_node(node: &SourceNode, output: &mut String, emit_trivia: bool) {
             output.push_str(name);
             output.push('\n');
         }
+        SyntaxKind::EditionMarker => {
+            output.push_str("edition/\n2\n/edition\n");
+        }
         SyntaxKind::Call { name } => {
             if matches!(name.as_str(), "name" | "import") {
                 if let [SourceNode {

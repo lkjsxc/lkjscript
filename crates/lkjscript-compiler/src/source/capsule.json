@@ -4,21 +4,42 @@
   "id": "semantic-source",
   "root": "crates/lkjscript-compiler/src/source",
   "kind": "source",
-  "purpose": "Own validated Edition 1 parsing, loading, identities, diagnostics, and deterministic formatting.",
+  "purpose": "Own validated source editions, loading, identity, migration diffs, diagnostics, and formatting.",
   "layer": "semantic source",
-  "concepts": ["validated source tree", "revision identity", "source diagnostics"],
+  "concepts": [
+    "validated source tree",
+    "edition identity",
+    "revision identity",
+    "non-publishing migration",
+    "source diagnostics"
+  ],
   "facade": ["crates/lkjscript-compiler/src/source/mod.rs"],
   "allowed_dependencies": ["core"],
   "forbidden_dependencies": ["app", "jit", "vm"],
-  "tests": ["crates/lkjscript-compiler/src/source/tests/mod.rs"],
-  "decisions": ["docs/decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md"],
+  "tests": [
+    "crates/lkjscript-compiler/src/source/tests/mod.rs",
+    "crates/lkjscript-compiler/src/source/tests/edition.rs",
+    "crates/lkjscript-compiler/src/source/tests/migration.rs"
+  ],
+  "decisions": [
+    "docs/decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md",
+    "docs/decisions/semantics/edition-2/identity-and-migration.md"
+  ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Compiler Semantic Source authority" },
   "verification": ["cargo test --locked -p lkjscript-compiler source"],
   "context_card": {
     "goal": "Expose one opaque validated tree with exact revision-scoped identities.",
-    "interfaces": ["lkjscript_compiler::source::ValidatedSourceTree"],
-    "invariants": ["contained deterministic loading", "exact-source identity", "canonical structural formatting"]
+    "interfaces": [
+      "lkjscript_compiler::source::ValidatedSourceTree",
+      "lkjscript_compiler::source::check_edition2_migration"
+    ],
+    "invariants": [
+      "explicit homogeneous editions",
+      "edition-separated identities",
+      "non-publishing migration",
+      "canonical structural formatting"
+    ]
   }
 }

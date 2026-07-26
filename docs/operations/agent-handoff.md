@@ -10,6 +10,7 @@ verification discipline without preserving obsolete implementation priorities.
 <!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/2 status=current -->
+<!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
@@ -30,9 +31,11 @@ Semantic Source Schema V2 with its exact V1 base, typed holes/legal actions,
 closed hole transactions, one-shot protocol, compiler Resource Profile V2, and
 the core hierarchical pre-allocation foundation are Current. Agent Foundation
 V1 and Semantic Source Schema V1 are historical rejected identities. Bounded
-local stdio sessions serve V2 and are Current. All [Edition
-2](../decisions/semantics/edition-2.md) surfaces, whole-pipeline pre-allocation,
-logical metering integration, and a shared ledger remain Accepted Targets.
+local stdio sessions serve V2 and are Current. Edition 2 identity, homogeneous
+closures, marker projection, and non-publishing migration check/diff are
+Current. Edition 2 ADTs, changed execution, migration publication and cutover,
+whole-pipeline pre-allocation, logical metering integration, and a shared ledger
+remain Accepted Targets.
 Automatic proof promotion remains
 an Accepted Implementation Selection, not the immediate priority.
 

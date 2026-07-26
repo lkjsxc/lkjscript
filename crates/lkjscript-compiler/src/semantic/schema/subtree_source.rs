@@ -1,7 +1,8 @@
 use crate::source::{SourceNode, SourceSpan, SyntaxKind};
 
 use super::{
-    SemanticNodeKind as Kind, SemanticNodeValue as Value, SemanticSubtreeRecord, TriviaAttachment,
+    edition_source, SemanticNodeKind as Kind, SemanticNodeValue as Value, SemanticSubtreeRecord,
+    TriviaAttachment,
 };
 
 impl SemanticSubtreeRecord {
@@ -21,12 +22,14 @@ impl SemanticSubtreeRecord {
         if child_ids != self.node.children {
             return Err("semantic subtree child identity mismatch".into());
         }
-        let (leading_trivia, before_close_trivia) = trivia(self)?;
+        let (leading, before_close) = trivia(self)?;
+        let kind = source_kind(self.node.kind, self.node.value.as_ref())?;
+        edition_source::validate(self.node.kind, &children, &leading, &before_close)?;
         Ok(SourceNode {
-            kind: source_kind(self.node.kind, self.node.value.as_ref())?,
+            kind,
             span: SourceSpan::zero(),
-            leading_trivia,
-            before_close_trivia,
+            leading_trivia: leading,
+            before_close_trivia: before_close,
             children,
         })
     }
@@ -35,6 +38,9 @@ impl SemanticSubtreeRecord {
 fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> {
     if let Some(name) = marker(kind) {
         return no_value(value).map(|()| SyntaxKind::Call { name: name.into() });
+    }
+    if let Some(edition) = edition_source::kind(kind, value) {
+        return edition;
     }
     match (kind, value) {
         (Kind::UnitLiteral, None) => Ok(SyntaxKind::Unit),

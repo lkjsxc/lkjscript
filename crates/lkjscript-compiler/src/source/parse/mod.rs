@@ -44,12 +44,28 @@ pub(crate) fn parse_file(
     let lines = lines::source_lines(source);
     let lexed = lex::lex(&lines, &origin)?;
     limits::check_file_limits(&lexed.tokens, limits, &origin)?;
-    let syntax = syntax::parse_tokens(&lexed.tokens, &origin)?;
-    declarations::validate_top_level(&syntax, limits, &origin)?;
-    let forms = syntax.iter().map(SourceNode::project).collect();
+    let mut syntax = syntax::parse_tokens(&lexed.tokens, &origin)?;
+    let edition =
+        crate::source::edition::validate_marker(source, &mut syntax, &lexed.tokens, &origin)?;
+    let declarations = if edition == crate::source::SourceEdition::Edition2 {
+        &syntax[1..]
+    } else {
+        &syntax
+    };
+    declarations::validate_top_level(declarations, limits, &origin)?;
+    let forms = declarations.iter().map(SourceNode::project).collect();
+    let identity = crate::source::identity::source_identity(
+        edition,
+        origin.logical_path(),
+        exact_source_len,
+        exact_source_sha256,
+    );
     Ok(SourceFile {
         path,
         origin,
+        edition,
+        identity,
+        exact_source: source.to_owned(),
         exact_source_len,
         exact_source_sha256,
         forms,

@@ -10,7 +10,10 @@ textual or destructive-edit ambiguity.
 ## Status
 
 **Accepted Target, not Current.** An operation is absent until its complete
-validation, impact, transaction, and publication contract is implemented.
+validation, impact, transaction, and publication contract is implemented. The
+Current non-publishing compiler API `check_edition2_migration` is the bounded
+first identity/migration slice; it is not the `migrate_edition` Semantic Source
+operation and does not expose a partial publish endpoint.
 
 ## Exact Operation Vocabulary
 

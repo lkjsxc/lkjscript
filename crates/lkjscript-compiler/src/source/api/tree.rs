@@ -2,17 +2,32 @@ use std::path::{Path, PathBuf};
 
 use crate::source::{
     format, validate::validate_logical_source_path, DeclarationKey, DeclarationSummary, NodeId,
-    NodeSummary, RevisionId, SourceFile, SourceOrigin, StaleNodeId,
+    NodeSummary, RevisionId, SourceEdition, SourceFile, SourceIdentity, SourceOrigin,
+    SourceTreeIdentity, StaleNodeId,
 };
 
-/// Opaque, immutable Semantic Source Foundation V1 authority.
+/// Opaque, immutable validated source authority for one explicit edition.
 ///
 /// Source origins, declarations, and nodes are exposed in deterministic
 /// canonical logical-path and stable-key order. Raw forms and the mutable
 /// builder remain private. This type does not claim the complete Semantic
 /// Source schema, transaction protocol, JSON transport, or typed holes.
+pub(crate) struct ValidatedSourceParts {
+    pub(crate) edition: SourceEdition,
+    pub(crate) identity: SourceTreeIdentity,
+    pub(crate) revision: RevisionId,
+    pub(crate) root: PathBuf,
+    pub(crate) root_origin: SourceOrigin,
+    pub(crate) files: Vec<SourceFile>,
+    pub(crate) origins: Vec<SourceOrigin>,
+    pub(crate) declarations: Vec<DeclarationSummary>,
+    pub(crate) nodes: Vec<NodeSummary>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ValidatedSourceTree {
+    edition: SourceEdition,
+    identity: SourceTreeIdentity,
     revision: RevisionId,
     root: PathBuf,
     root_origin: SourceOrigin,
@@ -23,28 +38,38 @@ pub struct ValidatedSourceTree {
 }
 
 impl ValidatedSourceTree {
-    pub(crate) fn from_authority(
-        revision: RevisionId,
-        root: PathBuf,
-        root_origin: SourceOrigin,
-        files: Vec<SourceFile>,
-        origins: Vec<SourceOrigin>,
-        declarations: Vec<DeclarationSummary>,
-        nodes: Vec<NodeSummary>,
-    ) -> Self {
+    pub(crate) fn from_authority(parts: ValidatedSourceParts) -> Self {
         Self {
-            revision,
-            root,
-            root_origin,
-            files,
-            origins,
-            declarations,
-            nodes,
+            edition: parts.edition,
+            identity: parts.identity,
+            revision: parts.revision,
+            root: parts.root,
+            root_origin: parts.root_origin,
+            files: parts.files,
+            origins: parts.origins,
+            declarations: parts.declarations,
+            nodes: parts.nodes,
         }
+    }
+
+    pub const fn edition(&self) -> SourceEdition {
+        self.edition
+    }
+
+    pub const fn identity(&self) -> SourceTreeIdentity {
+        self.identity
     }
 
     pub const fn revision(&self) -> RevisionId {
         self.revision
+    }
+
+    pub fn source_identity(&self, logical_path: &str) -> Option<SourceIdentity> {
+        let origin = validate_logical_source_path(logical_path).ok()?;
+        self.files
+            .iter()
+            .find(|file| file.origin.logical_path == origin.logical_path)
+            .map(|file| file.identity)
     }
 
     pub fn root_origin(&self) -> &SourceOrigin {

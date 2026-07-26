@@ -73,7 +73,7 @@ pub(crate) fn build_declarations(
                 }
                 global_names.insert(name.clone(), (kind, file.origin.clone(), form.span));
             }
-            let exact = declaration_key_bytes(&file.origin.logical_path, kind, &name);
+            let exact = declaration_key_bytes(file.edition, &file.origin.logical_path, kind, &name);
             if let Some((first_origin, first_span)) = exact_keys.get(&exact) {
                 return Err(SourceDiagnostic::new(
                     "LKJ-DECL-DUPLICATE",
@@ -100,6 +100,7 @@ pub(crate) fn build_declarations(
                     digest: lkjscript_core::sha256(&exact),
                     exact_identity: exact,
                     canonical_identity: declaration_key_human_identity(
+                        file.edition,
                         &file.origin.logical_path,
                         kind,
                         &name,

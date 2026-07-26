@@ -20,9 +20,11 @@ The immediate implementation sequence has progressed as follows:
    one-shot operations, typed holes/legal actions, and the framed local session
    are Current, superseding and rejecting V1 input identities;
 5. compiler Resource Profile V2 and hole/transaction pre-allocation are Current
-   without changing Edition 1 limits; and
-6. nonzero query caching, whole-pipeline pre-allocation, and shared request
-   ledgers remain next.
+   without changing Edition 1 limits;
+6. Edition 2 identity, homogeneous closures, Schema V2 marker facts, and strict
+   non-publishing Edition 1-to-2 migration check/diff are Current; and
+7. Edition 2 ADTs/execution, migration publication, nonzero query caching,
+   whole-pipeline pre-allocation, and shared request ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

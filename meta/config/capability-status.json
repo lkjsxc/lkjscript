@@ -36,6 +36,21 @@
       ]
     },
     {
+      "id": "edition-2-identity-migration/1",
+      "status": "current",
+      "interface": "Edition 2 identity and check_edition2_migration",
+      "authority": "docs/decisions/semantics/edition-2/identity-and-migration.md",
+      "evidence": "docs/current-state/edition-2-identity-migration-evidence.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+        "docs/decisions/semantics/edition-2.md",
+        "docs/decisions/semantics/edition-2/identity-and-migration.md",
+        "docs/language/source-format.md",
+        "docs/operations/agent-handoff.md"
+      ]
+    },
+    {
       "id": "edition-2-semantic-core/2",
       "status": "accepted-target",
       "interface": "lkjscript.edition/2",

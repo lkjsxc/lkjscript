@@ -3,6 +3,7 @@
 mod codec;
 mod corpus;
 mod diagnostics;
+mod edition;
 mod holes;
 mod publication;
 mod publication_conflict;

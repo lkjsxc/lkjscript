@@ -5,6 +5,8 @@ use super::{ClosedBuiltinOperation, SpanRecord};
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SemanticNodeKind {
+    EditionMarker,
+    EditionNumber,
     Import,
     Main,
     FunctionDeclaration,
@@ -108,6 +110,9 @@ pub(crate) enum SemanticNodeValue {
     TypedHole {
         identity: String,
         goal: Option<String>,
+    },
+    EditionIdentity {
+        edition: u32,
     },
 }
 

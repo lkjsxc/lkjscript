@@ -14,6 +14,21 @@ pub(crate) fn classify(
     index: usize,
 ) -> (Kind, Option<Value>) {
     match &node.kind {
+        SyntaxKind::EditionMarker => (
+            Kind::EditionMarker,
+            Some(Value::EditionIdentity { edition: 2 }),
+        ),
+        SyntaxKind::I64 { .. }
+            if matches!(
+                parent.map(|node| &node.kind),
+                Some(SyntaxKind::EditionMarker)
+            ) =>
+        {
+            (
+                Kind::EditionNumber,
+                Some(Value::EditionIdentity { edition: 2 }),
+            )
+        }
         SyntaxKind::Unit => (Kind::UnitLiteral, None),
         SyntaxKind::Bool { value } => (Kind::BoolLiteral, Some(Value::Bool { value: *value })),
         SyntaxKind::I64 { value } => (Kind::I64Literal, Some(Value::I64 { value: *value })),

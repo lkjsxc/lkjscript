@@ -47,8 +47,10 @@ fn named_def(name: &str) -> String {
 }
 
 mod diagnostics;
+mod edition;
 mod format;
 mod identity;
 mod limits;
 mod linux_safety;
 mod loading;
+mod migration;

@@ -5,6 +5,7 @@ mod keys;
 mod node_types;
 mod nodes;
 mod revision;
+mod source_types;
 
 pub use declaration_types::{DeclarationKey, DeclarationKind, DeclarationSummary, StaleNodeId};
 pub(super) use declarations::build_declarations;
@@ -15,4 +16,5 @@ pub(super) use keys::{
 };
 pub use node_types::{NodeId, NodeKind, NodeSummary, RevisionId};
 pub(super) use nodes::flatten_files;
-pub(super) use revision::order_and_revision;
+pub(super) use revision::{order_and_revision, source_identity, tree_identity};
+pub use source_types::{SourceIdentity, SourceTreeIdentity};

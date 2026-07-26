@@ -62,6 +62,8 @@ fn project_source(workspace: &Path, path: &Path) -> std::io::Result<()> {
     }
     let snapshot = crate::semantic::schema::SnapshotResult {
         repository_identity: "corpus-fixture".to_string(),
+        tree_identity: tree.identity().to_hex(),
+        edition: tree.edition().number(),
         source_units: units,
         declarations,
         nodes,

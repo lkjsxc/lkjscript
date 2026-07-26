@@ -73,11 +73,22 @@ fn declaration_key_framing_prevents_delimiter_and_path_false_collisions() {
     );
     assert_eq!(old_left, old_right, "adversarial delimiter setup");
     assert_ne!(
-        super::declaration_key_bytes(left_path, DeclarationKind::Function, left_name),
-        super::declaration_key_bytes(right_path, DeclarationKind::Trait, right_name)
+        super::declaration_key_bytes(
+            crate::source::SourceEdition::Edition1,
+            left_path,
+            DeclarationKind::Function,
+            left_name,
+        ),
+        super::declaration_key_bytes(
+            crate::source::SourceEdition::Edition1,
+            right_path,
+            DeclarationKind::Trait,
+            right_name,
+        )
     );
 
     let human = super::declaration_key_human_identity(
+        crate::source::SourceEdition::Edition1,
         "src/a=b;path.lkjscript",
         DeclarationKind::Function,
         "callable=name",
