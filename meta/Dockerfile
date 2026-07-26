@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt clippy
-COPY Cargo.toml Cargo.lock README.md AGENTS.md ./
+COPY Cargo.toml Cargo.lock README.md AGENTS.md lkjscript.package.json lkjscript.lock.json ./
 COPY crates ./crates
 COPY meta/config ./meta/config
 COPY meta/agent-state ./meta/agent-state
@@ -50,5 +50,6 @@ ENV LKJSCRIPT_ROOT=/usr/local/share/lkjscript
 COPY src /usr/local/share/lkjscript/src
 WORKDIR /usr/local/share/lkjscript
 COPY meta/config ./meta/config
+COPY lkjscript.package.json lkjscript.lock.json ./
 ENTRYPOINT ["lkjscript"]
 CMD ["--help"]
