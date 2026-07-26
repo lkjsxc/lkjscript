@@ -1,141 +1,128 @@
 # Current State
 
-## Purpose
-
-State implemented behavior, evidence boundaries, known defects, and accepted
-next work without mixing them with long-term vision.
-
 ## Status
 
-<!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
-<!-- LKJ-STATUS id=agent-work-state/1 status=historical -->
-<!-- LKJ-STATUS id=agent-work-state/2 status=current -->
-<!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
-<!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
-<!-- LKJ-STATUS id=edition-2-never-control/1 status=current -->
-<!-- LKJ-STATUS id=edition-2-numeric-conversions/1 status=current -->
-<!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
-<!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
-<!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
-<!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
-<!-- LKJ-STATUS id=repository-topology/1 status=current -->
-<!-- LKJ-STATUS id=resource-profile-compiler/2 status=current -->
-<!-- LKJ-STATUS id=resource-profile-preallocation/2 status=current -->
-<!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-session/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-schema/1 status=historical -->
-<!-- LKJ-STATUS id=semantic-source-schema/2 status=current -->
-<!-- LKJ-STATUS id=typed-holes/1 status=current -->
+<!-- LKJ-STATUS id=affine-resource-handles status=current -->
+<!-- LKJ-STATUS id=agent-work-state status=current -->
+<!-- LKJ-STATUS id=enum-declarations status=current -->
+<!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
+<!-- LKJ-STATUS id=jit-proof-forced status=current -->
+<!-- LKJ-STATUS id=modules-and-packages status=current -->
+<!-- LKJ-STATUS id=never-control status=current -->
+<!-- LKJ-STATUS id=numeric-conversions status=current -->
+<!-- LKJ-STATUS id=repository-graph-context status=current -->
+<!-- LKJ-STATUS id=repository-topology status=current -->
+<!-- LKJ-STATUS id=resource-profile-compiler status=current -->
+<!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
+<!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-session status=current -->
+<!-- LKJ-STATUS id=semantic-source status=current -->
+<!-- LKJ-STATUS id=typed-holes status=current -->
 
-**Current** only for implementation and evidence explicitly labeled Current in
-the manifest capsules. Bounded Repository Topology, Repository Intelligence
-Graph/context, externalized Agent Work State V2 with semantic references,
-complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
-legal actions, closed hole transactions, one-shot query/edit protocol, bounded
-local stdio sessions, exact atomic Edition 2 migration and corpus cutover,
-generic enum declarations/resolved type facts, exact `variant-value`
-construction, exhaustive source match, Never/structured control, the generic
-prelude `Option`/`Result` cutover with closed typed errors, and the four explicit
-numeric conversions through verified ordinary SSA, the evaluator, validated
-bytecode, reference VM, and forced Linux x86-64 baseline/proof execution,
-compiler Resource Profile V2, core hierarchical pre-allocation and deterministic
-journaling, and outer-owned one-shot/session semantic ledgers are Current. All
-125 canonical sources are exact Edition 2 and
-ordinary compilation rejects Edition 1. Agent Foundation V1 and Semantic
-Source Schema V1 identities are historical and rejected. Other Edition 2
-changed semantics, parser-wide and whole-platform pre-allocation, exact
-bytecode-output metering, logical metering beyond enum construction, nonzero
-query caching, and cross-authority ledgers remain Accepted Targets, not Current.
-Deferred and Rejected work remains non-current.
+This file is the concise Current authority. Historical source generations,
+protocol experiments, candidate resource profiles, rejected performance
+results, and immutable AI-authorability records live only under
+`docs/history/`, `docs/vision/experiments/`, retained benchmark result trees, or
+Git history. They do not provide aliases or acceptance fallbacks.
 
-## Current Baseline
+## Language and source
 
-Semantic Source Foundation V1, resolved typed HIR, verified typed SSA,
-reference bytecode/VM, callable host-independent Linux x86-64 baseline code,
-host-independent native allocation/collection, and forced proof-checked
-optimization are Current at baseline `dd8fb316`. Exact boundaries and retained
-historical command evidence are in the manifest below. Automatic proof
-promotion, wider future Agent operations, Edition 2 surfaces beyond the Current
-identity/migration, enums/match, and Never/control slices, cross-authority
-aggregate profiles, OSR, AOT/cache, and wider host-native transitions are not
-Current.
-Structure, graph/context, work-state, one-shot protocol, and compiler-profile
-commands/APIs are Current on the containing implementation revision.
+- `.lkjscript` is the only accepted source suffix.
+- Source is marker-free and has one exact contract digest. Unknown or removed
+  marker forms are ordinary syntax errors.
+- Generic enums, exhaustive `match`, `Never`, structured control, and explicit
+  numeric conversions run through evaluator, VM, baseline JIT, and proof JIT
+  where each engine supports the relevant operation set.
+- Source, declaration, node, revision, and Semantic Source identities frame the
+  full current source/semantic contract digest.
+- Semantic Source requests, sessions, diagnostics, typed holes, transactions,
+  and publications require stable schema names plus exact full contract
+  digests. No generation-numbered envelope is accepted.
 
-## Implementation Sequence
+## Modules and local packages
 
-1. [Bounded Repository Topology](decisions/platform/bounded-repository-topology.md) is Current.
-2. [Repository Intelligence Graph And Context](decisions/platform/repository-intelligence-graph.md) is Current.
-3. The bounded externalized [Agent Work State](decisions/platform/agent-work-state.md) service is Current.
-4. [Complete Semantic Source Schema
-   V2](decisions/platform/semantic-source-and-agent-protocol.md) is Current for
-   the closed Edition 1 tree, typed holes/legal actions, transactions, and
-   bounded one-shot/session protocol; its exact V1 base remains documented.
-5. The [Profile V2 resource foundation](decisions/platform/resource-budget-profiles-candidate.md)
-   is Current for core hierarchical reservation, its deterministic journal,
-   public outer-owned compiler and Semantic Source ledger APIs, direct typed
-   session requests, and typed preflight through semantic transactions and
-   migration plus validated source to enum/match HIR allocations, immutable HIR
-   to SSA construction, and immutable normalized SSA to bytecode construction.
-   Source parsing and exact bytecode-output sizing are not profile-preflight
-   Current; whole-platform shared-ledger migration is not Current.
+- Every source file is a module identified only by its package-root-relative
+  UTF-8 path.
+- Declarations are private by default. The `public` field is explicit; each
+  `import/` records exact module paths and sorted declaration lists. Wildcards,
+  transitive visibility, ambient root search, dot-relative paths, collisions,
+  private names, and path/symlink escape are rejected.
+- Equal declaration spellings coexist in distinct module scopes. Qualification
+  occurs once before HIR; runtime metrics retain source-visible names.
+- `lkjscript.package.json` and canonical `lkjscript.lock.json` bind exact
+  modules, exports, local dependency hashes, targets, package content, and full
+  language/source/module/package contract identities.
+- `lkjscript package lock` writes atomically. `package check`, `run`, and
+  `disasm` reject missing, noncanonical, stale, or mismatched locks. Registry,
+  network, home-directory, and environment fallback resolution do not exist.
 
-6. Explicit Edition 2 markers, homogeneous closure identity, edition-separated
-   source/tree/revision/declaration/node identities, Schema V2 facts, exact
-   checked migration diff, compiler-owned atomic publication, rollback/crash
-   recovery, the 125-file corpus migration, and ordinary-compilation cutover
-   are Current.
-7. Generic nominal enum declarations, stable enum/variant/field identities,
-   invariant resolved HIR type facts, bounded recursion/ownership validation,
-   exact Profile V2 enum-shape preallocation, exact enum value construction,
-   target-independent layout facts, verified SSA primitives/evaluator,
-   validated bytecode, boxed active-payload GC representation, reference VM,
-   exhaustive match planning/lowering, and forced Linux x86-64 baseline/proof
-   JIT execution are Current. Typed prelude runtime boundaries are the Current
-   native-host exception; broader transitions remain targets.
-8. Edition 2 Never is Current as a join-only HIR type with no value/storage/ABI
-   representation. Typed loop and while control lower to verified SSA block
-   parameters and ordinary terminators consumed by evaluator, bytecode/VM,
-   forced baseline, and proof JIT; Semantic Source V2 and typed-hole operations
-   expose the closed forms and exact control constraints.
-9. Edition 2 numeric conversion is Current for exactly four canonical source,
-   HIR, and SSA operations with stable nominal `NumericError`, host-independent
-   bit/exponent algorithms, validated bytecode/VM, and forced baseline/proof JIT
-   runtime calls with zero fallback. Edition 1 mixed numeric behavior remains
-   migration input and is not available in Edition 2.
-10. Prelude `Option T` and `Result T E` are ordinary stable-identity generic
-   enums across HIR, SSA, evaluator, bytecode/VM, GC, and native plans. Closed
-   `NumericError`, `Utf8Error`, and `SystemError` values use the same enum path;
-   UTF-8 and host failures are classified once at their capability boundary,
-   and dedicated option/result opcodes, heap objects, and native types are absent.
+## Ownership and resources
 
-Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
-Automatic baseline-to-proof promotion remains an Accepted Implementation
-Selection after these repository-intelligence foundations; it is not enabled.
+- Fresh `Owned Buf`, whole-place `move`, and bounded lexical `borrow` /
+  `borrow-mut` remain the Current ownership island.
+- Owned `Handle` locals are affine. They must be returned, explicitly moved, or
+  cleaned up with `drop`; leak, double-drop, borrowed-handle drop, and use after
+  move/drop are compile errors.
+- Generic `drop`, SQLite close, and SQLite finalize consume ownership through
+  HIR and verified SSA. VM resource-table teardown is a deterministic safety
+  net for host failure, not an implicit source cleanup policy.
+- Opaque monotonic handle tokens remain stale-safe and disjoint from integers
+  and borrowed standard streams.
 
-## Strict Capsule Manifest
+## Compiler and execution
 
-### Current implementation and direction
+- One validated source tree feeds module resolution, typed HIR, ownership and
+  effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
+- Linux x86-64 baseline acceptance requires real synchronous native calls. The
+  forced proof JIT accepts only proof-checked optimized SSA and has no VM
+  fallback.
+- Native image compatibility is the exact tuple of language, verified-SSA,
+  runtime-call, and native-layout contract digests. Runtime calls and public
+  metrics use stable unnumbered names.
+- Metrics use schema `lkjscript.metrics` and the full metrics contract digest.
+- Resource categories and profiles use full category/profile/maxima/ceiling
+  digests. The selected ledger spans compiler phases; one request-owned ledger
+  across every compiler/runtime authority remains an accepted target.
 
-- [resolved AI-native redesign baseline](current-state/resolved-ai-native-redesign-baseline.md)
-- [compiler, semantic, and runtime implementation](current-state/current-implementation.md)
-- [host capabilities and native runtime](current-state/current-native-runtime.md)
-- [forced enum JIT evidence](current-state/forced-enum-jit-evidence.md)
-- [accepted platform direction](current-state/accepted-platform-direction.md)
-- [automatic proof-promotion selection](current-state/accepted-target-automatic-baseline-to-proof-promotion.md)
+## Repository and agent platform
 
-### Historical evidence
+- `lkjscript describe --json` and `semantic describe` expose the deterministic
+  closed contract registry.
+- Capsule manifests, repository policy/provenance, graph/query outputs,
+  capability status, and agent work state use stable schemas plus exact contract
+  digests.
+- The repository graph remains bounded and evidence-backed. Agent checkpoints
+  remain revision-checked, append-only, and fail closed on stale semantic or
+  repository identities.
+- The machine `LKJ-DOC-GENERATION` rule rejects numbered language, schema,
+  protocol, profile, ABI, and standalone generation names in Current-owned
+  code, tests, fixtures, examples, config, and documentation. Immutable
+  historical evidence is explicitly excluded rather than rewritten.
 
-- [Semantic Source Foundation V1](current-state/semantic-source-foundation-evidence.md)
-- [SQLite](current-state/sqlite-evidence.md)
-- [optimizer and allocation](current-state/optimizer-and-allocation-evidence.md)
-- [ownership through native foundation](current-state/ownership-through-native-foundation-evidence.md)
-- [callable baseline](current-state/callable-baseline-evidence.md)
+## Accepted targets not claimed Current
 
-### Status boundaries
+- first-class typed capability values threaded through main and library APIs;
+- complete region/borrow/drop semantics for resources nested in products and
+  collections;
+- an opaque byte-preserving path type and portable path policy;
+- persistent verified compilation/artifact caching and measured cache adoption;
+- component interfaces, Wasm, AOT, native caches, and remote distribution;
+- automatic baseline-to-proof promotion acceptance beyond its selected
+  measured candidate;
+- portability acceptance beyond Linux x86-64.
 
-- [accepted next work, rejected work, and deferred work](current-state/accepted-next-work.md)
+These are not placeholders and expose no inert endpoints.
 
-Historical evidence remains command- and commit-specific. It does not make an
-Accepted Implementation Contract Current on a later revision.
+## Verification authority
+
+The canonical local gate is:
+
+```sh
+cargo run --locked -p lkjscript-xtask -- quiet verify
+```
+
+Runtime, forced-tier, Docker, retained-result validation, Miri, sanitizers,
+fuzzing, and performance gates are separate evidence classes. Exact commands,
+commit, environment, result, and untested gates must be reported; an unrun gate
+is never implied.

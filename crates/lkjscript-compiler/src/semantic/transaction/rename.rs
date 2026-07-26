@@ -41,7 +41,8 @@ pub(crate) fn resolve(
         ));
     }
     if tree.declarations().iter().any(|candidate| {
-        candidate.name() == new_name
+        candidate.origin().logical_path() == declaration.origin().logical_path()
+            && candidate.name() == new_name
             && matches!(
                 candidate.kind(),
                 DeclarationKind::Function
@@ -59,6 +60,7 @@ pub(crate) fn resolve(
         key: key.to_string(),
         old_name: declaration.name().to_string(),
         new_name: new_name.to_string(),
+        module: declaration.origin().logical_path().to_string(),
         declaration_node: declaration.node().index(),
     })
 }
@@ -71,6 +73,7 @@ pub(crate) fn apply(
     let ResolvedOperation::Rename {
         old_name,
         new_name,
+        module,
         declaration_node,
         ..
     } = operation
@@ -103,9 +106,59 @@ pub(crate) fn apply(
         }
     }
     for file in files {
-        for form in &mut file.syntax {
-            super::references::rename_references(form, kind, old_name, new_name, false, false);
+        let owns_declaration = file.origin.logical_path() == module;
+        let imports_declaration = rename_module_metadata(file, module, old_name, new_name);
+        if owns_declaration || imports_declaration {
+            for form in &mut file.syntax {
+                super::references::rename_references(form, kind, old_name, new_name, false, false);
+            }
         }
     }
     Ok(())
+}
+
+fn rename_module_metadata(
+    file: &mut SourceFile,
+    module: &str,
+    old_name: &str,
+    new_name: &str,
+) -> bool {
+    file.syntax
+        .iter_mut()
+        .filter(|form| matches!(&form.kind, SyntaxKind::Call { name } if name == "imports"))
+        .flat_map(|imports| &mut imports.children)
+        .any(|import| rename_one_import(import, module, old_name, new_name))
+}
+
+fn rename_one_import(
+    import: &mut crate::source::SourceNode,
+    module: &str,
+    old_name: &str,
+    new_name: &str,
+) -> bool {
+    let Some(crate::source::SourceNode {
+        kind: SyntaxKind::Str { value },
+        ..
+    }) = import.children.first_mut()
+    else {
+        return false;
+    };
+    let Some((path, encoded_names)) = value.split_once('#') else {
+        return false;
+    };
+    if path != module {
+        return false;
+    }
+    let path = path.to_string();
+    let mut renamed = false;
+    let mut names: Vec<_> = encoded_names.split(',').map(str::to_string).collect();
+    for name in &mut names {
+        if name == old_name {
+            *name = new_name.to_string();
+            renamed = true;
+        }
+    }
+    names.sort();
+    *value = format!("{path}#{}", names.join(","));
+    renamed
 }

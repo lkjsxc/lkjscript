@@ -1,70 +1,108 @@
-# Modules And Reproducible Packages
-
-## Purpose
-
-Define the accepted replacement for the current program-global imported
-namespace before self-hosting, framework, or database ecosystems depend on it.
+# Modules And Reproducible Local Packages
 
 ## Status
 
-Contained `.lkjscript` imports and exact executable source closure are
-**Current**. Explicit modules, exports, manifests, lockfiles, package graphs,
-and a registry are not implemented. The module/package model in this record is
-an **Accepted Target**.
+**Current** for exact source modules, private-by-default declarations, explicit
+imports/exports, the strict local manifest, canonical lock generation and
+verification, source/module/package hashes, and run/disassembly lock checks.
+Network and registry resolution are **Rejected** for the Current platform.
+Components and remote distribution remain **Accepted Targets**.
 
-## Decision
+## Module identity
 
-The global imported declaration namespace will be replaced, without aliases or
-compatibility lookup, by:
+A module has no author-chosen alias. Its identity is its normalized UTF-8
+`.lkjscript` path relative to the package source root. Absolute paths, `..`,
+dot-relative imports, legacy suffixes, symlinks, duplicate module IDs, and
+ambient root search are rejected. Absolute host paths never enter an identity.
 
-- explicit module identities;
-- explicit exports and qualified imports;
-- one package manifest format;
-- exact lockfiles;
-- content hashes over canonical package contents;
-- reproducible dependency resolution;
-- local path dependencies;
-- semantic ABI and native ABI identities;
-- declared native/host capabilities;
-- bounded deterministic graph and conflict diagnostics.
+Declarations are private unless their declaration carries the explicit
+`public` visibility field:
 
-A package graph is resolved before source name resolution. Two packages cannot
-be conflated because source names happen to match. Every resolved function,
-product, trait, implementation, generic instantiation, runtime capability, and
-native artifact retains its package/module identity through HIR and SSA.
+```text
+def/
+name/
+parse
+/name
+public
+fn/
+...
+/fn
+/def
+```
 
-## Native Capabilities
+Imports name one exact module and a sorted, nonempty declaration list:
 
-Ordinary packages cannot call arbitrary addresses or declare raw native
-pointers. Native integration is available only through audited capability
-packages whose manifests record a versioned ABI, ownership/lifetime contract,
-required platform capability, and safe lkjscript wrapper. Unsafe
-implementation remains in the trusted native boundary.
+```text
+imports/
+import/
+src/parser/token.lkjscript#Token,parse
+/import
+/imports
+```
 
-## Resolution And Locking
+Wildcards, transitive visibility, private names, duplicate names, collisions,
+unknown modules, and undeclared names are errors. Imported names enter only the
+importing module scope. Equal private or public spellings may coexist in
+distinct modules. The compiler uses deterministic internal qualified names but
+preserves source-visible names in diagnostics and runtime metrics.
 
-Resolution is deterministic under explicit bounded work and depth. Lockfiles
-record exact package identities, content hashes, dependency edges, selected
-features if features are later accepted, semantic ABI, and capability grants.
-A lock mismatch is a build error rather than a best-effort fallback.
+## Manifest
 
-## Sequence
+`lkjscript.package.json` is a strict `lkjscript.package` object containing:
 
-1. module and export syntax decision;
-2. package identity in HIR/SSA and diagnostics;
-3. manifest and local-path graph;
-4. exact lockfile and content hashing;
-5. package-capability enforcement;
-6. self-hosted package manager and build driver;
-7. registry protocol only after local reproducibility is proven.
+- the full package-contract digest;
+- package name and contained source root;
+- sorted exact module and public-root lists;
+- sorted local path dependencies with full expected package hashes;
+- requested capability names;
+- sorted named targets; and
+- an optional exact resource-profile name.
 
-## Deferred
+Unknown fields, noncanonical paths, missing modules, unsorted/duplicate values,
+undeclared public roots or targets, path escapes, and symlink components fail.
+Only dependencies contained beneath the root package are Current. No network,
+registry, home-directory, environment-variable, or current-directory search is
+performed.
 
-Registry publication, remote resolution, signatures/transparency logs, and
-binary distribution are **Deferred**.
+## Lock and identities
 
-## Rejected
+`lkjscript.lock.json` has stable schema `lkjscript.package-lock` and the full
+lock-contract digest. It records a sorted package DAG, local relative origins,
+dependency content hashes, canonical manifest hashes, and each module's exact
+source hash, interface hash, and sorted exports. It also records full current
+digests for the language, source, module-interface, manifest, and lock
+contracts.
 
-Ambient global lookup, implicit exports, unlocked network resolution, package
-identity inferred only from a path string, arbitrary native FFI, and preserving
-the old namespace as a fallback are **Rejected**.
+Identity encoding is length-framed and domain separated:
+
+- source identity hashes exact bytes;
+- module identity hashes the module-interface contract, module path, source
+  hash, and sorted exports;
+- package identity hashes the package-manifest contract, canonical manifest,
+  and sorted module identities.
+
+`lkjscript package lock` writes one canonical lock atomically.
+`lkjscript package check`, `run`, and `disasm` rebuild the graph and reject a
+missing, noncanonical, stale, or mismatched lock. Creation order and working
+directory do not affect bytes.
+
+## Pipeline rule
+
+Module qualification occurs before HIR construction. HIR, verified SSA,
+bytecode, VM, JITs, diagnostics, transactions, and metrics consume that one
+resolved program; no backend or agent endpoint repeats source namespace logic.
+Semantic Source rename transactions update declarations, exports, exact import
+lists, and scoped references atomically.
+
+## Rejected alternatives
+
+- program-global declaration lookup;
+- wildcard or implicit prelude imports;
+- transitive re-export by accident;
+- nearest `src/std` discovery or `LKJSCRIPT_ROOT` fallback;
+- source-declared module aliases;
+- lock prefixes or generation numbers;
+- package registries, network fetches, and mutable external resolution.
+
+Historical package-import experiments are retained under `docs/history/` and
+have no Current acceptance role.

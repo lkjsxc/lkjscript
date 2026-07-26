@@ -121,7 +121,7 @@ pub(super) fn enum_layout(id: EnumId, recursive: bool) -> EnumLayoutFacts {
     let identity = RuntimeLayoutId::new(crate::source::enum_member_identity(
         id.bytes(),
         "runtime-layout",
-        "boxed-enum-v1",
+        "boxed-enum",
     ));
     EnumLayoutFacts {
         identity,

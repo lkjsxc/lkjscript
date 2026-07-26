@@ -141,38 +141,6 @@ fn digest_existing(path: &Path) -> Result<Option<String>, ProtocolError> {
     Ok(Some(journal::hex(&lkjscript_core::sha256(&bytes))))
 }
 
-#[cfg(test)]
-pub(crate) fn publish_with_install_failure(
-    transaction: &super::StagedTransaction,
-    root: &Path,
-) -> Result<(), ProtocolError> {
-    let workspace = super::publication_lock::require_workspace(root)?;
-    let staging = super::publication_lock::staging_root(&workspace);
-    fs::create_dir_all(&staging)
-        .map_err(|cause| journal::failure(&format!("create staging root: {cause}")))?;
-    let id = super::publish::transaction_id(transaction);
-    let journal_path = staging.join(format!("{id}.journal"));
-    let record = journal::build(transaction, &workspace)?;
-    journal::write(&journal_path, &record)?;
-    let result =
-        super::publish::prepare(transaction, &workspace, &id, &record.files).and_then(|()| {
-            super::publish::install_with_failure(
-                transaction,
-                &workspace,
-                &id,
-                &record.files,
-                Some(1),
-            )
-        });
-    let cause = result.err().ok_or_else(|| {
-        crate::semantic::codec::error(
-            crate::semantic::schema::ProtocolErrorCode::PublicationFailed,
-            "injected publication failure unexpectedly succeeded",
-        )
-    })?;
-    super::publish::rollback_failure(&workspace, &id, &journal_path, &record.files, cause)
-}
-
 pub(super) fn cleanup(
     workspace: &Path,
     id: &str,

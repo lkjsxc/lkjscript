@@ -52,6 +52,10 @@ pub(in crate::ownership) fn is_owned(ty: &Type) -> bool {
     matches!(ty, Type::Owned(inner) if inner.as_ref() == &Type::Buf)
 }
 
+pub(in crate::ownership) fn is_affine_resource(ty: &Type) -> bool {
+    ty == &Type::Handle
+}
+
 pub(in crate::ownership) fn is_ref(ty: &Type) -> bool {
     matches!(ty, Type::Ref(inner) if inner.as_ref() == &Type::Buf)
 }

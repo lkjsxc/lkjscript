@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.capsule",
-  "version": 1,
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
   "id": "xtask",
   "root": "crates/lkjscript-xtask",
   "kind": "crate",
@@ -19,6 +19,7 @@
   "allowed_dependencies": [
     "compiler",
     "compiler.source",
+    "contracts",
     "core"
   ],
   "forbidden_dependencies": [
@@ -34,6 +35,7 @@
   ],
   "decisions": [
     "docs/decisions/platform/bounded-repository-topology.md",
+    "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/repository-intelligence-graph.md",
     "docs/decisions/platform/agent-work-state.md",
     "docs/operations/status-authority.md"

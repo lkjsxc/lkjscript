@@ -12,9 +12,7 @@ use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, OwnedValu
 use lkjscript_vm::run_chunk;
 
 fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<OwnedValue> {
-    let source = format!(
-        "edition/\n2\n/edition\nmain/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n"
-    );
+    let source = format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n");
     let program = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
     match run_chunk(program.bytecode(), &ExecutionConfig::default()) {
         ExecutionOutcome::Returned(value) => Ok(value),

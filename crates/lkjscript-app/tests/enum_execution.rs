@@ -8,12 +8,14 @@ use lkjscript_vm::run_chunk;
 
 #[path = "enum_execution/adversarial.rs"]
 mod adversarial;
+#[path = "enum_execution/enum_source_variants.rs"]
+mod enum_source_variants;
 #[path = "enum_execution/native_ssa.rs"]
 mod native_ssa;
 
 fn source() -> String {
     concat!(
-        "edition/\n2\n/edition\n",
+        "",
         "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
         "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
         "variant/\nname/\nSome\n/name\nfields/\n",
@@ -52,7 +54,7 @@ fn source_construction_is_differential_on_evaluator_and_vm() {
 
 fn ordered_source() -> String {
     concat!(
-        "edition/\n2\n/edition\n",
+        "",
         "enum/\nname/\nPair\n/name\nvariants/\n",
         "variant/\nname/\nBoth\n/name\nfields/\n",
         "variant-field/\nname/\nfirst\n/name\ntype/\nI64\n/type\n/variant-field\n",

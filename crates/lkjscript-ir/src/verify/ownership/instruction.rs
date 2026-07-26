@@ -101,10 +101,25 @@ pub(crate) fn process_ownership_instruction(
                     return fail("SSA RefMut user-call forwarding is unavailable in this slice");
                 }
             }
-            consume_affine_arguments(arguments, state, types, true)?;
+            consume_affine_arguments(arguments, state, types, true, false)?;
         }
-        InstructionKind::Runtime { arguments, .. } => {
-            consume_affine_arguments(arguments, state, types, false)?;
+        InstructionKind::Runtime {
+            operation,
+            arguments,
+            ..
+        } => {
+            consume_affine_arguments(
+                arguments,
+                state,
+                types,
+                false,
+                matches!(
+                    operation,
+                    crate::RuntimeOp::SysClose
+                        | crate::RuntimeOp::SysSqliteClose
+                        | crate::RuntimeOp::SysSqliteFinalize
+                ),
+            )?;
         }
         InstructionKind::Constant(_)
         | InstructionKind::Copy(_)
@@ -121,7 +136,8 @@ pub(crate) fn process_ownership_instruction(
         | InstructionKind::EnumField { .. } => {}
     }
 
-    if is_owned_buf(&instruction.ty) && !matches!(instruction.kind, InstructionKind::Move { .. }) {
+    if is_owned_value(&instruction.ty) && !matches!(instruction.kind, InstructionKind::Move { .. })
+    {
         state.affine.insert(
             instruction.id,
             AffineFact {

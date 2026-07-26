@@ -5,7 +5,7 @@ use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, 
 use lkjscript_vm::run_chunk;
 
 #[test]
-fn canonical_source_ssa_installs_and_calls_main_callee_poll_v1_without_fallback() {
+fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
     let program = compile(&f64_loop(), "f64-loop.lkjscript");
     let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
     let evaluated = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
@@ -23,17 +23,17 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_v1_without_fallback(
     assert!(native.stats.code_objects[0].relocation_count >= 2);
     assert!(native.stats.code_objects[0]
         .runtime_calls
-        .contains(&lkjscript_native::RuntimeCallSlot::PollV1));
+        .contains(&lkjscript_native::RuntimeCallSlot::Poll));
     assert!(native.stats.code_objects[0]
         .runtime_calls
-        .contains(&lkjscript_native::RuntimeCallSlot::PublishSafepointV1));
+        .contains(&lkjscript_native::RuntimeCallSlot::PublishSafepoint));
     assert!(native.stats.code_objects[0]
         .runtime_calls
-        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatchV1));
+        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch));
     assert!(!native.stats.code_objects[0]
         .runtime_calls
-        .contains(&lkjscript_native::RuntimeCallSlot::EnterFunctionV1));
-    assert!(native.stats.poll_v1_calls > 0);
+        .contains(&lkjscript_native::RuntimeCallSlot::EnterFunction));
+    assert!(native.stats.poll_calls > 0);
     assert!(native.stats.direct_native_calls > 0);
     assert_eq!(native.stats.vm_fallbacks, 0);
     assert_eq!(native.stats.functions.len(), 2);

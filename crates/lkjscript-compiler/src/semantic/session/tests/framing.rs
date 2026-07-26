@@ -91,7 +91,11 @@ fn strict_session_envelope_rejects_malformed_duplicate_and_unknown_input() {
     for invalid in [
         format!("{valid} false"),
         valid.replacen("{", "{\"schema\":\"duplicate\",", 1),
-        valid.replace("\"version\":1", "\"version\":1,\"extra\":false"),
+        valid.replacen("\"contract\":", "\"extra\":false,\"contract\":", 1),
+        valid.replace(
+            &crate::semantic::session::CONTRACT.to_hex(),
+            &"0".repeat(64),
+        ),
         valid.replace("\"kind\":\"shutdown\"", "\"kind\":\"invented\""),
     ] {
         let error = SemanticSession::new()

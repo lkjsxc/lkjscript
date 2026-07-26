@@ -16,12 +16,12 @@ The immediate implementation sequence has progressed as follows:
 2. bounded repository graph/context nodes, edges, identities, and profiles are Current;
 3. externalized agent work state with exact Git/state preconditions, action and
    command facts, content references, atomic replacement, and compaction is Current; and
-4. complete Semantic Source Schema V2 with its preserved V1 base, bounded
+4. complete Semantic Source Schema with its preserved legacy contract base, bounded
    one-shot operations, typed holes/legal actions, and the framed local session
-   are Current, superseding and rejecting V1 input identities;
-5. compiler Resource Profile V2 and hole/transaction pre-allocation are Current
-   without changing Edition 1 limits;
-6. Edition 2 identity, homogeneous closures, Schema V2 marker facts, exact
+   are Current, superseding and rejecting legacy contract input identities;
+5. compiler Resource resource profile and hole/transaction pre-allocation are Current
+   without changing the removed legacy source contract limits;
+6. the canonical source contract identity, homogeneous closures, Schema marker facts, exact
    compiler-owned check/diff/publish, atomic recovery, corpus migration, and
    ordinary-compilation cutover are Current;
 7. generic enum declarations/type facts plus exact construction, independent
@@ -29,7 +29,7 @@ The immediate implementation sequence has progressed as follows:
    active-payload GC values, reference VM execution, enum construction
    precharging, exhaustive source match, and forced Linux x86-64 baseline/proof
    JIT are Current;
-8. Edition 2 Never/structured control, typed loop/while SSA block parameters,
+8. the canonical source contract Never/structured control, typed loop/while SSA block parameters,
    dynamic trap values, all-four-engine differentials, and precise Semantic
    Source/hole control facts and actions are Current;
 9. the four explicit numeric conversions and the generic `Option`/`Result`

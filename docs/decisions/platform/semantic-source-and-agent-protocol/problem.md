@@ -35,18 +35,18 @@ UTF-8, deterministic field order, deterministic list order, and no
 floating-point numbers for identities or counters.
 
 The parser/load/identity cutover is an explicitly incomplete foundation, not
-Schema V1. Its registered identity is
+Schema. Its registered identity is
 `lkjscript.semantic-source-foundation`, version `1`; its structured diagnostics
-use `lkjscript.source-diagnostic-foundation`, version `1`. Foundation V1
-contains the opaque validated Edition 1 source tree, deterministic dependency-
+use `lkjscript.source-diagnostic-foundation`, version `1`. Foundation legacy contract
+contains the opaque validated the removed legacy source contract source tree, deterministic dependency-
 first loading, exact source-byte revision identity, stable declaration keys,
-formatting, and structural source diagnostics. It does not claim the complete public Schema V1
+formatting, and structural source diagnostics. It does not claim the complete public Schema
 node vocabulary, serialization, transactions, JSON protocol, typed holes, or
 machine repairs. The complete `lkjscript.semantic-source` version `1` identity
 must not be emitted until all of its accepted contract is implemented.
 ## Source Authority Boundary
 
-A parser adapter accepts canonical Edition 1 `.lkjscript` and constructs a
+A parser adapter accepts canonical the removed legacy source contract `.lkjscript` and constructs a
 private mutable builder. Public in-memory validation and compilation require a
 canonical relative non-dot UTF-8 logical path ending in `.lkjscript`; absolute,
 `./`, parent, doubled-separator, and legacy-extension spellings are rejected.
@@ -71,13 +71,13 @@ The first cutover must replace the old parser/form authority rather than retain
 two independently interpreted source trees. A temporary mechanically checked
 adapter may feed unchanged analysis during the cutover. It is removed once HIR
 consumes the validated source nodes directly.
-## Schema V1
+## Schema
 
-Schema V1 represents the complete Current Edition 1 source vocabulary:
+Schema represents the complete Current the removed legacy source contract source vocabulary:
 
 - source unit, edition, schema version, canonical relative origin, and imports;
 - top-level main, function, product, trait, and implementation declarations;
-- declaration visibility as an explicit closed value, even where Edition 1
+- declaration visibility as an explicit closed value, even where the removed legacy source contract
   permits only its default;
 - names, type forms, parameters, generic bounds, product fields, trait markers,
   and implementation targets;
@@ -102,7 +102,7 @@ A stable declaration key is derived deterministically from:
 ```text
 schema version
 + edition
-+ future package identity (an explicit Edition 1 root identity initially)
++ future package identity (an explicit the removed legacy source contract root identity initially)
 + canonical relative source-unit identity
 + declaration kind
 + declared name or reserved main identity
@@ -117,11 +117,11 @@ not key authority. Function, product, and trait names must be spellable source
 identifiers before key construction. Rename and move operations report old and
 new keys plus the semantic relationship. Duplicate keys are rejected rather
 than disambiguated by source order. Package and module identities replace the
-Edition 1 root component when those contracts become Current.
+the removed legacy source contract root component when those contracts become Current.
 
 ### Revision-scoped node IDs
 
-Every validated revision assigns dense preorder `NodeId` values. Foundation V1
+Every validated revision assigns dense preorder `NodeId` values. Foundation legacy contract
 revision framing includes each source unit's canonical logical path and exact
 input byte length plus SHA-256, so distinct accepted spellings and line endings
 cannot share a revision merely because canonical formatting is equal. A node ID
@@ -145,7 +145,7 @@ its initial identity from the complete loaded source closure rather than wall
 clock, process ID, or filesystem enumeration order.
 ## Atomic Semantic Edits
 
-Protocol V1 supports these complete operations for schema nodes that exist in
+Protocol supports these complete operations for schema nodes that exist in
 the first implementation:
 
 - insert a top-level declaration at an explicit semantic position;

@@ -15,8 +15,8 @@ cargo run --locked -p lkjscript-xtask -- check-tree
 cargo run --locked -p lkjscript-xtask -- check-sources
 cargo run --locked -p lkjscript-xtask -- quiet test
 cargo run --locked -p lkjscript-xtask -- quiet verify
-python3 meta/benchmarks/ai-authoring/validate.py \
-  meta/benchmarks/ai-authoring/results/*.json
+python3 meta/results/ai-authoring/validate.py \
+  meta/results/ai-authoring/results/*.json
 ```
 
 `quiet verify` currently checks:
@@ -43,7 +43,7 @@ python3 meta/benchmarks/ai-authoring/validate.py \
 9. workspace unit tests with the locked Cargo graph.
 
 Workspace tests independently require exact structural parse/format/parse and
-byte roundtrip for all 125 tracked `.lkjscript` sources, revision/key/node/path
+byte roundtrip for all 124 tracked `.lkjscript` sources, revision/key/node/path
 invariants, iterative deep import/tree behavior, source safety maxima, and
 malformed source/descriptor containment boundaries. The Python command validates
 retained benchmark schemas and verdict consistency; it does not invoke a model
@@ -98,7 +98,7 @@ wrong-operand/non-dominating/effectful/over-budget certificates, plus 64
 bounded randomized type-correct scalar evaluator differentials. The public
 optimizing authority has no raw `Program` constructor.
 
-Edition 2 control tests cover early return, divergent `Never` joins, nearest
+the canonical source contract control tests cover early return, divergent `Never` joins, nearest
 nested continue, typed value-loop break, Unit-only while break, dynamic Str
 trap values, and structured exit across the independent SSA evaluator,
 validated reference bytecode/VM, forced baseline, and forced proof JIT. They

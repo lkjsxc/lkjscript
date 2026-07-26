@@ -1,17 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.capsule.v1",
+  "$id": "lkjscript.capsule",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema", "version", "id", "root", "kind", "purpose", "layer",
+    "schema", "contract", "id", "root", "kind", "purpose", "layer",
     "concepts", "facade", "allowed_dependencies", "forbidden_dependencies",
     "tests", "decisions", "unsafe_boundary", "capability", "provenance",
     "verification", "context_card"
   ],
   "properties": {
     "schema": { "const": "lkjscript.capsule" },
-    "version": { "const": 1 },
+    "contract": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "id": { "$ref": "#/$defs/id" },
     "root": { "type": "string", "minLength": 1 },
     "kind": {

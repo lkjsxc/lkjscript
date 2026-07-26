@@ -14,10 +14,10 @@ pub(crate) fn build_declarations(
 ) -> SourceResult<Vec<DeclarationSummary>> {
     let mut declarations = Vec::new();
     let mut exact_keys: HashMap<Vec<u8>, (SourceOrigin, SourceSpan)> = HashMap::new();
-    let mut global_names: HashMap<String, (DeclarationKind, SourceOrigin, SourceSpan)> =
-        HashMap::new();
     for file_index in ordered {
         let file = &files[*file_index];
+        let mut module_names: HashMap<String, (DeclarationKind, SourceOrigin, SourceSpan)> =
+            HashMap::new();
         for (form_index, form) in file.syntax.iter().enumerate() {
             let Some((kind, name)) = declaration_identity(form) else {
                 continue;
@@ -48,7 +48,7 @@ pub(crate) fn build_declarations(
                     | DeclarationKind::Enum
                     | DeclarationKind::Trait
             ) {
-                if let Some((first_kind, first_origin, first_span)) = global_names.get(&name) {
+                if let Some((first_kind, first_origin, first_span)) = module_names.get(&name) {
                     let message = if *first_kind == kind {
                         format!("duplicate {} declaration {name}", kind.as_str())
                     } else if matches!(
@@ -67,7 +67,7 @@ pub(crate) fn build_declarations(
                         )
                     } else {
                         format!(
-                            "duplicate global declaration {name}: {} conflicts with {}",
+                            "duplicate module declaration {name}: {} conflicts with {}",
                             kind.as_str(),
                             first_kind.as_str()
                         )
@@ -85,9 +85,15 @@ pub(crate) fn build_declarations(
                         *first_span,
                     ));
                 }
-                global_names.insert(name.clone(), (kind, file.origin.clone(), form.span));
+                module_names.insert(name.clone(), (kind, file.origin.clone(), form.span));
             }
-            let exact = declaration_key_bytes(file.edition, &file.origin.logical_path, kind, &name);
+            let exact =
+                declaration_key_bytes(&file.origin.logical_path, kind, &name).map_err(|error| {
+                    SourceDiagnostic::generic(
+                        file.origin.clone(),
+                        format!("cannot encode declaration identity: {error:?}"),
+                    )
+                })?;
             if let Some((first_origin, first_span)) = exact_keys.get(&exact) {
                 return Err(SourceDiagnostic::new(
                     "LKJ-DECL-DUPLICATE",
@@ -114,7 +120,6 @@ pub(crate) fn build_declarations(
                     digest: lkjscript_core::sha256(&exact),
                     exact_identity: exact,
                     canonical_identity: declaration_key_human_identity(
-                        file.edition,
                         &file.origin.logical_path,
                         kind,
                         &name,

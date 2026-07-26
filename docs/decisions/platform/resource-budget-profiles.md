@@ -7,8 +7,8 @@ resource profiles, and AI-maintainability lints without weakening safety during 
 
 ## Status
 
-**Current Profile V2 core and compiler foundation; broader migration Accepted.**
-Profile V2, five bounded named profiles, lower-only host overrides, closed hierarchical authorities, fixed paths,
+**Current resource profile core and compiler foundation; broader migration Accepted.**
+resource profile, five bounded named profiles, lower-only host overrides, closed hierarchical authorities, fixed paths,
 conservative reservations, and a fixed nonallocating deterministic journal are in `lkjscript-core`. Public compiler
 `_with_ledger` entry points let one outer compile request own and accumulate one ledger. Compiler source-shape,
 immutable HIR, match, normalized-SSA, bytecode-input, and diagnostic checks use typed authorities and preserve
@@ -19,25 +19,25 @@ intelligence, agent state, protocol, proof, native artifact, and runtime budgets
 Logical-charge IR preservation, aggregate parser preflight, bytecode-output sizing, and whole-platform pre-allocation
 remain **Accepted Targets**, not Current behavior.
 
-All Current Edition 1 limits remain enforced unchanged: source depth 8, form
+All Current the removed legacy source contract limits remain enforced unchanged: source depth 8, form
 children 16, tokens per file 384, top-level forms 8, product fields 15, and 16
 combined immediate entries per lkjscript source directory. Existing compiler,
 IR, bytecode, runtime, proof, native-image, and execution bounds also remain
 Current. No limit is raised or reclassified until aggregate replacement bounds
 for its amplification path are implemented, tested, documented, and Current.
 
-Semantic Source Foundation V1 fixes always-enforced implementation safety
+Semantic Source foundation fixes always-enforced implementation safety
 maxima at 16 MiB of exact input bytes per source file, 256 MiB of exact input
 bytes across one loaded source closure, 65,536 source units, and 65,536 entries
 traversed by one complete source-tree check. Metadata and bytes actually read
 are checked before parser copying; source-unit, tree-entry, and byte
 charges use checked arithmetic. These maxima are defense in depth and do not
-raise, replace, or reclassify any tiny Current Edition 1 limit.
+raise, replace, or reclassify any tiny Current the removed legacy source contract limit.
 
 This record supersedes the permanent-policy part of [Essential Source
 Limits](../limits/essential-limits.md) and [Lkjscript Source-Tree
 Width](../source-tree-limit.md). Those records remain authoritative descriptions
-of Current Edition 1 behavior until the migration gate passes.
+of Current the removed legacy source contract behavior until the migration gate passes.
 ## Problem
 
 The tiny Current limits are effective adversarial scaffolding, but they force
@@ -186,7 +186,7 @@ depth, child, token, top-level, and field limits.
 
 ## Capsule Manifest
 
-- [Current Profile V2 compiler foundation](resource-budget-profiles-candidate.md)
+- [Current resource profile compiler foundation](resource-budget-profiles-candidate.md)
 - [Current core hierarchical preallocation](resource-budget-profiles/hierarchical-preallocation.md)
 - [Current logical category; Accepted metering](resource-budget-profiles/logical-metering.md)
 

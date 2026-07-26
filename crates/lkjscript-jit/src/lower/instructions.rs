@@ -78,7 +78,7 @@ pub(super) fn lower_instruction(
             ..
         } => {
             builder
-                .runtime_call(block, RuntimeCallSlot::PollV1, Vec::new())
+                .runtime_call(block, RuntimeCallSlot::Poll, Vec::new())
                 .map_err(LoweringError::backend)?;
             let arguments = read_values(builder, block, locals, arguments, function.id)?;
             let callee = native_function(native_functions, *callee)?;

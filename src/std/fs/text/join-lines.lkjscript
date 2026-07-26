@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-std/list/nth.lkjscript
+src/std/list/nth.lkjscript#nth
 /import
+/imports
 def/
 name/
 join-lines
 /name
+public
 fn/
 sig/
 List

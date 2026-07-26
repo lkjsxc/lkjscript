@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/http/crlf.lkjscript
+src/examples/http/crlf.lkjscript#crlf
 /import
+/imports
 def/
 name/
 hello-resp
 /name
+public
 fn/
 sig/
 ->

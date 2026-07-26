@@ -10,6 +10,7 @@ name = "lkjscript"
 path = "src/main.rs"
 
 [dependencies]
+lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-ir = { path = "../lkjscript-ir" }

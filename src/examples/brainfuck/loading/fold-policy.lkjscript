@@ -1,9 +1,8 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/brainfuck/state.lkjscript
+src/examples/brainfuck/state.lkjscript#BrainfuckState
 /import
+/imports
 def/
 name/
 bf-foldable?
@@ -46,6 +45,7 @@ def/
 name/
 bf-can-extend?
 /name
+public
 fn/
 sig/
 Product

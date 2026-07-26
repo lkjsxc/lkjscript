@@ -74,12 +74,9 @@ pub(crate) fn load_with_budget(
         )
     })?;
     let package_root = containment::find_package_root(&entry);
-    let installed_root = std::env::var_os("LKJSCRIPT_ROOT")
-        .map(PathBuf::from)
-        .and_then(|root| root.canonicalize().ok());
     let mut state = LoadState {
         package_root: &package_root,
-        installed_root: installed_root.as_deref(),
+        installed_root: None,
         limits,
         loading: HashSet::new(),
         done: HashSet::new(),

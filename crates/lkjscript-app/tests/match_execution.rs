@@ -8,7 +8,7 @@ use lkjscript_vm::run_chunk;
 
 fn enum_match_source() -> String {
     concat!(
-        "edition/\n2\n/edition\n",
+        "",
         "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
         "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
         "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
@@ -22,7 +22,7 @@ fn enum_match_source() -> String {
 
 fn single_evaluation_source() -> String {
     concat!(
-        "edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\n",
+        "main/\nsig/\n->\nI64\n/sig\n",
         "var/\nname/\ncounter\n/name\ntype/\nI64\n/type\n0\n",
         "match/\ndo/\nset/\ncounter\n+/\ncounter\n1\n/+\n/set\ncounter\n/do\n",
         "arms/\narm/\ni64-pattern/\n1\n/i64-pattern\ncounter\n/arm\n",

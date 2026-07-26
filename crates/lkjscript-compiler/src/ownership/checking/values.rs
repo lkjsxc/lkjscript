@@ -14,6 +14,14 @@ pub(in crate::ownership) fn check_values_expr(
                 .binding(reference.binding)
                 .ok_or_else(|| Error::msg("ownership load references unknown binding"))?
                 .ty;
+            if is_affine_resource(ty) {
+                let place = places
+                    .get(&reference.binding)
+                    .ok_or_else(|| Error::msg("affine Handle has no ownership place"))?;
+                if state.initialized.get(place) != Some(&true) {
+                    return Err(Error::msg("affine Handle was already moved or dropped"));
+                }
+            }
             if is_owned(ty) {
                 return Err(Error::msg(
                     "Owned Buf is affine and cannot be loaded or copied; use move/ name /move",
@@ -46,14 +54,14 @@ pub(in crate::ownership) fn check_values_expr(
                 return Err(Error::msg("move has mismatched place/binding identity"));
             }
             if !state.initialized.get(place).copied().unwrap_or(false) {
-                return Err(Error::msg("use after move or double move of Owned Buf"));
+                return Err(Error::msg("use after move or double move of affine value"));
             }
             if state
                 .loans
                 .get(place)
                 .is_some_and(|loans| !loans.is_empty())
             {
-                return Err(Error::msg("cannot move Owned Buf while it is borrowed"));
+                return Err(Error::msg("cannot move affine value while it is borrowed"));
             }
             state.initialized.insert(*place, false);
         }

@@ -2,16 +2,22 @@ use super::*;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[test]
-fn enforces_versions_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::error::Error>> {
-    let mismatched = AbiVersions::new(1, 1, 1);
+fn enforces_contracts_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::error::Error>> {
+    let current = ImageContracts::current();
+    let mismatched = ImageContracts::new(
+        current.native_layout(),
+        current.verified_ssa(),
+        current.runtime_calls(),
+        current.native_layout(),
+    );
     let (image, _) = scalar_image(mismatched)?;
     let installer = ExecutableInstaller::default();
     assert!(matches!(
         installer.install(image),
-        Err(InstallError::VersionMismatch { .. })
+        Err(InstallError::ContractMismatch { .. })
     ));
 
-    let (image, _) = scalar_image(AbiVersions::current())?;
+    let (image, _) = scalar_image(ImageContracts::current())?;
     let accounting = image.accounting();
     let limits = ExecutableLimits::new(
         accounting.code_bytes() - 1,
@@ -30,8 +36,8 @@ fn enforces_versions_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::er
         ))
     ));
 
-    let (first_image, _) = scalar_image(AbiVersions::current())?;
-    let (second_image, _) = scalar_image(AbiVersions::current())?;
+    let (first_image, _) = scalar_image(ImageContracts::current())?;
+    let (second_image, _) = scalar_image(ImageContracts::current())?;
     let one_object_limits = ExecutableLimits::new(
         u64::MAX,
         u64::MAX,
@@ -52,7 +58,7 @@ fn enforces_versions_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::er
     drop(first_installed);
     assert_eq!(one_object_installer.usage().objects(), 0);
 
-    let (image, _) = scalar_image(AbiVersions::current())?;
+    let (image, _) = scalar_image(ImageContracts::current())?;
     let installer = ExecutableInstaller::default();
     {
         let installed = installer.install(image)?;
@@ -67,7 +73,7 @@ fn enforces_versions_limits_wx_and_repeated_drop() -> Result<(), Box<dyn std::er
     assert_eq!(installer.usage().code_bytes(), 0);
 
     for _ in 0..32 {
-        let (image, entries) = scalar_image(AbiVersions::current())?;
+        let (image, entries) = scalar_image(ImageContracts::current())?;
         let installed = installer.install(image)?;
         assert_eq!(
             installed.invoke(entries.direct_call, &[NativeValue::I64(9)])?,

@@ -109,9 +109,6 @@ pub(super) fn verify_instruction(
 }
 
 pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), VerificationError> {
-    if slot.version() != 1 {
-        return Err(VerificationError::TypeMismatch("runtime-call version"));
-    }
     if !slot.plan_callable() {
         return Err(VerificationError::TypeMismatch(
             "encoder-owned runtime call",
@@ -123,22 +120,20 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
             "encoder-owned runtime call",
         ))?;
     match slot {
-        RuntimeCallSlot::CollectReferenceV1
+        RuntimeCallSlot::CollectReference
             if signature.parameters() == [ValueType::Reference(crate::ReferenceType::Buf)]
                 && signature.result() == ValueType::Reference(crate::ReferenceType::Buf) => {}
-        RuntimeCallSlot::CollectReferenceV1 => {
+        RuntimeCallSlot::CollectReference => {
             return Err(VerificationError::TypeMismatch(
                 "collecting runtime-call signature",
             ));
         }
-        RuntimeCallSlot::IdentityI64V1
-        | RuntimeCallSlot::PollV1
-        | RuntimeCallSlot::EnterFunctionV1 => {}
-        RuntimeCallSlot::HeapDispatchV1
-        | RuntimeCallSlot::ReserveFrameV1
-        | RuntimeCallSlot::RegisterFrameV1
-        | RuntimeCallSlot::PublishSafepointV1
-        | RuntimeCallSlot::UnregisterFrameV1 => {
+        RuntimeCallSlot::IdentityI64 | RuntimeCallSlot::Poll | RuntimeCallSlot::EnterFunction => {}
+        RuntimeCallSlot::HeapDispatch
+        | RuntimeCallSlot::ReserveFrame
+        | RuntimeCallSlot::RegisterFrame
+        | RuntimeCallSlot::PublishSafepoint
+        | RuntimeCallSlot::UnregisterFrame => {
             return Err(VerificationError::TypeMismatch(
                 "encoder-owned runtime call",
             ));

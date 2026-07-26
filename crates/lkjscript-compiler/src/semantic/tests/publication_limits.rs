@@ -38,7 +38,8 @@ fn setup(label: &str) -> Case {
     let publish = request(&root, &operation.replace("\"preview\"", "\"publish\""));
     let mut output_bytes = ResourceProfile::default()
         .ceilings()
-        .limit(ResourceCategory::ProtocolResponseBytes);
+        .limit(ResourceCategory::ProtocolResponseBytes)
+        - 1;
     for _ in 0..4 {
         let profile = ResourceProfile::default()
             .lowered(ResourceCategory::ProtocolResponseBytes, output_bytes)

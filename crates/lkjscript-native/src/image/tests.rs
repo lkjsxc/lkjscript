@@ -59,8 +59,7 @@ fn integrity_rejects_out_of_frame_root_without_accounting_change(
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
     let input = builder.parameter(0)?;
-    let collected =
-        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![input])?;
+    let collected = builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![input])?;
     builder.return_value(entry, collected)?;
     plan.define_function(builder.finish())?;
     let mut image = encode(

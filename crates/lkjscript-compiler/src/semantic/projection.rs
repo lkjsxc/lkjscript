@@ -12,24 +12,8 @@ pub(crate) fn classify(
     parent: Option<&SourceNode>,
     parent_kind: Option<Kind>,
     index: usize,
-    edition2: bool,
 ) -> (Kind, Option<Value>) {
     match &node.kind {
-        SyntaxKind::EditionMarker => (
-            Kind::EditionMarker,
-            Some(Value::EditionIdentity { edition: 2 }),
-        ),
-        SyntaxKind::I64 { .. }
-            if matches!(
-                parent.map(|node| &node.kind),
-                Some(SyntaxKind::EditionMarker)
-            ) =>
-        {
-            (
-                Kind::EditionNumber,
-                Some(Value::EditionIdentity { edition: 2 }),
-            )
-        }
         SyntaxKind::Unit => (Kind::UnitLiteral, None),
         SyntaxKind::Bool { value } => (Kind::BoolLiteral, Some(Value::Bool { value: *value })),
         SyntaxKind::I64 { value } => (Kind::I64Literal, Some(Value::I64 { value: *value })),
@@ -42,7 +26,7 @@ pub(crate) fn classify(
         SyntaxKind::Str { value } => classify_text(value, parent),
         SyntaxKind::Symbol { name } => classify_symbol(name, parent, parent_kind, index),
         SyntaxKind::Call { name } if name == "hole" => (Kind::TypedHole, hole::value(node)),
-        SyntaxKind::Call { name } => classify_call(node, name, parent, edition2),
+        SyntaxKind::Call { name } => classify_call(node, name, parent),
     }
 }
 
@@ -121,7 +105,6 @@ fn classify_call(
     node: &SourceNode,
     name: &str,
     parent: Option<&SourceNode>,
-    edition2: bool,
 ) -> (Kind, Option<Value>) {
     if let Some(kind) = matches::call(node, name) {
         return (kind, None);
@@ -158,12 +141,12 @@ fn classify_call(
         "set" => Kind::Set,
         "if" => Kind::If,
         "while" => Kind::While,
-        "loop" if edition2 => Kind::Loop,
-        "return" if edition2 => Kind::Return,
-        "break" if edition2 => Kind::Break,
-        "continue" if edition2 => Kind::Continue,
-        "trap" if edition2 => Kind::Trap,
-        "exit" if edition2 => Kind::Exit,
+        "loop" => Kind::Loop,
+        "return" => Kind::Return,
+        "break" => Kind::Break,
+        "continue" => Kind::Continue,
+        "trap" => Kind::Trap,
+        "exit" => Kind::Exit,
         "do" => Kind::Do,
         "quote" => Kind::Quote,
         "product-value" => Kind::ProductValue,

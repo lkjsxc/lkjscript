@@ -53,7 +53,7 @@ pub(in crate::ssa) fn runtime_operation(operation: Operation) -> Result<RuntimeO
         Operation::StrFromF64 => RuntimeOp::StrFromF64,
         Operation::StdinHandle => RuntimeOp::StdinHandle,
         Operation::SysIsatty => RuntimeOp::SysIsatty,
-        Operation::SysClose => RuntimeOp::SysClose,
+        Operation::DropResource => RuntimeOp::SysClose,
         Operation::SysReadByte => RuntimeOp::SysReadByte,
         Operation::SysWriteByte => RuntimeOp::SysWriteByte,
         Operation::SysReadInto => RuntimeOp::SysReadInto,

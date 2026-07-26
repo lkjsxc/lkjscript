@@ -26,8 +26,7 @@ fn shallow_wide_root_image() -> Result<(InstallableImage, FunctionId), Box<dyn s
         let _write = builder.write_local(entry, local, input)?;
         locals.push(local);
     }
-    let collected =
-        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![input])?;
+    let collected = builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![input])?;
     for pair in locals.chunks_exact(2) {
         let first = builder.read_local(entry, pair[0])?;
         let second = builder.read_local(entry, pair[1])?;

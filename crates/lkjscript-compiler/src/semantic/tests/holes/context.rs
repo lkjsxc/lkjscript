@@ -104,7 +104,7 @@ fn exact_conversion_candidates_are_complete_and_checker_validated() {
 }
 
 #[test]
-fn edition2_numeric_conversion_candidates_use_canonical_operations() {
+fn canonical_source_numeric_conversion_candidates_use_canonical_operations() {
     for (name, ty, operation) in [
         ("rounded", "F64", "f64-from-i64-rounded"),
         (
@@ -116,7 +116,7 @@ fn edition2_numeric_conversion_candidates_use_canonical_operations() {
         let directory = case_dir(&format!("hole-numeric-conversion-{name}"));
         let root = directory.join("main.lkjscript");
         let source = format!(
-            "edition/\n2\n/edition\nmain/\nsig/\n->\n{ty}\n/sig\n{}/main\n",
+            "main/\nsig/\n->\n{ty}\n/sig\n{}/main\n",
             hole("numeric", None),
         );
         std::fs::write(&root, source).expect("write numeric conversion hole");

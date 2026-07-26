@@ -2,7 +2,7 @@ use super::*;
 use lkjscript_ir::{verify, InstructionKind, SsaType};
 
 const EXACT: &str = concat!(
-    "edition/\n2\n/edition\nmain/\nsig/\n->\nResult/\nF64\nNumericError\n/Result\n/sig\n",
+    "main/\nsig/\n->\nResult/\nF64\nNumericError\n/Result\n/sig\n",
     "f64-from-i64-exact/\n9007199254740993\n/f64-from-i64-exact\n/main\n",
 );
 
@@ -92,8 +92,7 @@ fn source_lowers_to_exactly_four_distinct_ssa_conversion_kinds() {
     ];
     let mut seen = [false; 4];
     for (ty, expression, expected) in forms {
-        let source =
-            format!("edition/\n2\n/edition\nmain/\nsig/\n->\n{ty}\n/sig\n{expression}\n/main\n");
+        let source = format!("main/\nsig/\n->\n{ty}\n/sig\n{expression}\n/main\n");
         let compiled = compile_source(&source, "four-kinds.lkjscript", &Limits::default())
             .expect("compile conversion kind");
         let kind = compiled

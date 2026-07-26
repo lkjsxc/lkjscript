@@ -46,7 +46,6 @@ pub enum NodeKind {
     StringLiteral,
     Symbol,
     Call,
-    EditionMarker,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

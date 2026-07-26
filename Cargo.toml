@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/lkjscript-contracts",
     "crates/lkjscript-ir",
     "crates/lkjscript-core",
     "crates/lkjscript-compiler",

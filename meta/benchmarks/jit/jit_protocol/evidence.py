@@ -77,7 +77,7 @@ def exact_jit_facts(metrics: dict[str, Any]) -> dict[str, Any] | None:
         "gvn_rewrites",
         "checked_i64_rewrites",
         "direct_native_calls",
-        "poll_v1_calls",
+        "poll_calls",
         "native_invocations",
         "code_cache_peak_objects",
         "code_cache_peak_bytes",

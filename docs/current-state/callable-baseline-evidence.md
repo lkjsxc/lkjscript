@@ -46,5 +46,5 @@ command had exited 0. The corrected complete wrapper was rerun and exited 0,
 so no failed product command is hidden.
 ## Accepted Next Target
 
-Semantic Source Foundation V1 now completes the parser/load/identity/formatter
+Semantic Source foundation now completes the parser/load/identity/formatter
 cutover and removes the duplicate legacy authority. The next dependency-ordered

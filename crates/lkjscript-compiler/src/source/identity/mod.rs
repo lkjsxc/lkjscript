@@ -10,7 +10,7 @@ mod source_types;
 pub use declaration_types::{DeclarationKey, DeclarationKind, DeclarationSummary, StaleNodeId};
 pub(super) use declarations::build_declarations;
 pub(crate) use encoding::escape_compact;
-pub(super) use encoding::{append_framed, hex};
+pub(super) use encoding::{append_framed, hex, IdentityEncodingError};
 pub(crate) use keys::enum_member_identity;
 pub(super) use keys::{
     declaration_identity, declaration_key_bytes, declaration_key_human_identity,

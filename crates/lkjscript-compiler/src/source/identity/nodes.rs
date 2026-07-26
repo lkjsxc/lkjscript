@@ -46,7 +46,6 @@ fn flatten_node(
         SyntaxKind::Str { value } => (NodeKind::StringLiteral, Some(value.clone())),
         SyntaxKind::Symbol { name } => (NodeKind::Symbol, Some(name.clone())),
         SyntaxKind::Call { name } => (NodeKind::Call, Some(name.clone())),
-        SyntaxKind::EditionMarker => (NodeKind::EditionMarker, Some("2".into())),
     };
     output.push(NodeSummary {
         id,

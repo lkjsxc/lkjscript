@@ -4,9 +4,9 @@ use super::*;
 pub enum InstallError {
     UnsupportedPlatform,
     InvalidImage(ImageIntegrityError),
-    VersionMismatch {
-        expected: AbiVersions,
-        actual: AbiVersions,
+    ContractMismatch {
+        expected: Box<ImageContracts>,
+        actual: Box<ImageContracts>,
     },
     LimitExceeded(ExecutableLimitKind),
     AllocationFailed,
@@ -22,9 +22,9 @@ impl fmt::Display for InstallError {
                 formatter.write_str("native executable images are supported only on Linux x86-64")
             }
             Self::InvalidImage(error) => write!(formatter, "invalid installable image: {error}"),
-            Self::VersionMismatch { expected, actual } => write!(
+            Self::ContractMismatch { expected, actual } => write!(
                 formatter,
-                "native ABI version mismatch: expected {expected:?}, received {actual:?}"
+                "native image contract mismatch: expected {expected:?}, received {actual:?}; rebuild the image"
             ),
             Self::LimitExceeded(kind) => {
                 write!(formatter, "executable install limit exceeded: {kind:?}")

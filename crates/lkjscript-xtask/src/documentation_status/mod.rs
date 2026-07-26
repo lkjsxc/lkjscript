@@ -9,7 +9,6 @@ mod scan;
 mod tests;
 
 const SCHEMA: &str = "lkjscript.capability-status";
-const VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -45,7 +44,7 @@ impl Status {
 #[serde(deny_unknown_fields)]
 struct Registry {
     schema: String,
-    version: u32,
+    contract: String,
     capabilities: Vec<Capability>,
 }
 
@@ -77,8 +76,17 @@ pub(crate) fn check(root: &Path) -> usize {
         }
     };
     let mut failures = validate_registry(root, &registry);
-    if registry.schema != SCHEMA || registry.version != VERSION {
-        eprintln!("unsupported capability status registry identity");
+    let expected_contract = lkjscript_contracts::current_contracts()
+        .ok()
+        .and_then(|contracts| {
+            contracts
+                .get(lkjscript_contracts::CAPABILITY_STATUS)
+                .map(lkjscript_contracts::RegisteredContract::digest)
+        });
+    if registry.schema != SCHEMA
+        || lkjscript_contracts::ContractDigest::from_hex(&registry.contract) != expected_contract
+    {
+        eprintln!("capability status contract mismatch; update the registry");
         failures += 1;
     }
     let expected = expected_claims(&registry);
@@ -123,6 +131,23 @@ fn validate_registry(root: &Path, registry: &Registry) -> usize {
             failures += 1;
         }
         prior = &capability.id;
+        if !capability
+            .id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+            || capability.id.contains('/')
+            || capability
+                .id
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_digit)
+        {
+            eprintln!(
+                "capability ID must be a stable unnumbered name: {}",
+                capability.id
+            );
+            failures += 1;
+        }
         if capability.interface.is_empty() || capability.claimants.is_empty() {
             eprintln!("incomplete capability status record: {}", capability.id);
             failures += 1;

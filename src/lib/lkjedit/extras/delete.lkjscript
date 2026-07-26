@@ -1,9 +1,14 @@
-edition/
-2
-/edition
+imports/
 import/
-lib/lkjedit/extras/line.lkjscript
+src/lib/lkjedit/extras/line.lkjscript#editor-list-remove
 /import
+import/
+src/lib/lkjedit/state.lkjscript#EditorState
+/import
+import/
+src/std/list/len.lkjscript#list-len
+/import
+/imports
 def/
 name/
 editor-normalize-lines
@@ -41,6 +46,7 @@ def/
 name/
 editor-delete-line
 /name
+public
 fn/
 sig/
 Product

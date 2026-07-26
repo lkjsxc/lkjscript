@@ -38,8 +38,12 @@ pub(crate) fn is_owned_buf(ty: &SsaType) -> bool {
     matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
 }
 
+pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
+    is_owned_buf(ty) || ty == &SsaType::Handle
+}
+
 pub(crate) fn is_affine(ty: &SsaType) -> bool {
-    is_owned_buf(ty) || matches!(ty, SsaType::RefMut(inner) if inner.as_ref() == &SsaType::Buf)
+    is_owned_value(ty) || matches!(ty, SsaType::RefMut(inner) if inner.as_ref() == &SsaType::Buf)
 }
 
 pub(crate) fn is_numeric(ty: &SsaType) -> bool {

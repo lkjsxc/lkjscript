@@ -1,10 +1,8 @@
-edition/
-2
-/edition
 def/
 name/
 sqlite-exec
 /name
+public
 fn/
 sig/
 Handle

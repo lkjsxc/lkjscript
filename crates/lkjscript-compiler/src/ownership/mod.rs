@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use lkjscript_core::{Error, Result};
 
-use crate::hir::{BindingId, BorrowKind, Expr, ExprKind, Function, LoanId, PlaceId, Program};
+use crate::hir::{
+    BindingId, BorrowKind, Expr, ExprKind, Function, LoanId, Operation, PlaceId, Program,
+};
 use crate::types::Type;
 
 pub(crate) const OWNERSHIP_ANALYSIS_MAX_EXPRESSION_NODES: usize = 16_384;
@@ -71,7 +73,7 @@ fn check_function(program: &Program, function: &Function) -> Result<()> {
             .binding(binding)
             .ok_or_else(|| Error::msg("ownership parameter references unknown binding"))?
             .ty;
-        if is_owned(ty) {
+        if is_owned(ty) || is_affine_resource(ty) {
             state.initialized.insert(place, true);
         }
     }

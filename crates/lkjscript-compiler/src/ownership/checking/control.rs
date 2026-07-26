@@ -19,8 +19,16 @@ pub(in crate::ownership) fn check_control_expr(
             }
             check_arguments(program, args, places, state, future)?;
         }
-        ExprKind::Operation { args, .. } => {
+        ExprKind::Operation {
+            operation, args, ..
+        } => {
             check_arguments(program, args, places, state, future)?;
+            if matches!(
+                operation,
+                Operation::DropResource | Operation::SysSqliteClose | Operation::SysSqliteFinalize
+            ) {
+                consume_resource(args, places, state)?;
+            }
         }
         ExprKind::F64FromI64Exact(value)
         | ExprKind::F64FromI64Rounded(value)
@@ -131,5 +139,28 @@ pub(in crate::ownership) fn check_control_expr(
         ExprKind::Continue { .. } => {}
         _ => unreachable!("ownership expression category mismatch"),
     }
+    Ok(())
+}
+
+fn consume_resource(
+    arguments: &[Expr],
+    places: &BTreeMap<BindingId, PlaceId>,
+    state: &mut State,
+) -> Result<()> {
+    let [Expr {
+        kind: ExprKind::Load(reference),
+        ty: Type::Handle,
+        ..
+    }] = arguments
+    else {
+        return Err(Error::msg("drop expects one direct affine Handle local"));
+    };
+    let place = places
+        .get(&reference.binding)
+        .ok_or_else(|| Error::msg("drop Handle has no ownership place"))?;
+    if state.initialized.get(place) != Some(&true) {
+        return Err(Error::msg("affine Handle was already moved or dropped"));
+    }
+    state.initialized.insert(*place, false);
     Ok(())
 }

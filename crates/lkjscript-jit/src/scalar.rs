@@ -87,7 +87,7 @@ pub(crate) fn scalar_to_execution(
             ExecutionOutcome::ResourceLimitExceeded(kind)
         }
         ScalarInvocationOutcome::HostFailure => {
-            ExecutionOutcome::HostFailure(HostError::new("native PollV1 host clock failure"))
+            ExecutionOutcome::HostFailure(HostError::new("native Poll host clock failure"))
         }
     })
 }

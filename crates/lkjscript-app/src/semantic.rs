@@ -2,6 +2,12 @@ use std::io::{Read, Write};
 use std::process::ExitCode;
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
+    if args.get(1).map(String::as_str) == Some("describe") {
+        if args.len() != 2 {
+            return Err("semantic describe accepts no arguments".to_string());
+        }
+        return crate::describe::semantic();
+    }
     if args.get(1).map(String::as_str) == Some("serve") {
         if args.get(2).map(String::as_str) != Some("--stdio") || args.len() != 3 {
             return Err("semantic session command is exactly: semantic serve --stdio".to_string());

@@ -1,24 +1,24 @@
 {
   "schema": "lkjscript.capsule",
-  "version": 1,
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
   "id": "workspace",
   "root": ".",
   "kind": "workspace",
   "purpose": "Bind repository authorities, source corpus, workspace crates, and verification policy.",
   "layer": "repository",
-  "concepts": ["repository authority", "workspace verification", "Semantic Source corpus"],
-  "facade": ["Cargo.toml", "README.md", "AGENTS.md"],
+  "concepts": ["repository authority", "workspace verification", "Semantic Source corpus", "local package graph"],
+  "facade": ["Cargo.toml", "README.md", "AGENTS.md", "lkjscript.package.json", "lkjscript.lock.json"],
   "allowed_dependencies": ["crates"],
   "forbidden_dependencies": [],
   "tests": ["crates/lkjscript-xtask/src/structure/graph_tests/mod.rs"],
-  "decisions": ["docs/decisions/platform/bounded-repository-topology.md", "docs/decisions/platform/repository-intelligence-graph.md"],
+  "decisions": ["docs/decisions/platform/bounded-repository-topology.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/repository-intelligence-graph.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "defines", "names": ["repository policy"] },
   "provenance": { "class": "authored", "source": "Git-tracked repository authority" },
   "verification": ["cargo run --locked -p lkjscript-xtask -- quiet verify", "cargo run --locked -p lkjscript-xtask -- structure check"],
   "context_card": {
     "goal": "Orient changes around accepted authority and deterministic verification.",
-    "interfaces": ["Cargo.toml", "meta/structure/policy.json"],
+    "interfaces": ["Cargo.toml", "lkjscript.package.json", "lkjscript.lock.json", "meta/structure/policy.json"],
     "invariants": ["tracked authority only", "generated projections remain under target"]
   }
 }

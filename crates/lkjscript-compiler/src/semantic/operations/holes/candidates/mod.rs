@@ -74,11 +74,6 @@ pub(super) fn enumerate_with_ledger(
         }
     }
     for operation in crate::hir::Operation::ALL {
-        if operation.edition2_only()
-            && site.tree.edition() != crate::source::SourceEdition::Edition2
-        {
-            continue;
-        }
         let crate::hir::Type::Fn { params, ret } = operation.signature() else {
             continue;
         };
@@ -133,8 +128,7 @@ pub(super) fn enumerate_with_ledger(
     }
     reservation.return_unused();
     candidates.sort_by(|a, b| rank_key(a).cmp(&rank_key(b)));
-    let edition2 = site.tree.edition() == crate::source::SourceEdition::Edition2;
-    let omitted = omitted_categories(rejected, edition2);
+    let omitted = omitted_categories(rejected);
     let exploration = ExplorationRecord {
         supported: true,
         truncated: false,
@@ -144,7 +138,7 @@ pub(super) fn enumerate_with_ledger(
         omitted,
         reason: None,
     };
-    let blockers = unsupported_blockers(edition2);
+    let blockers = unsupported_blockers();
     Ok((candidates, exploration, blockers))
 }
 
@@ -160,11 +154,10 @@ fn bounded_failure(message: String) -> (Vec<HoleCandidate>, ExplorationRecord, V
 
 fn omitted_categories(
     rejected: std::collections::BTreeMap<CandidateCategory, u64>,
-    edition2: bool,
 ) -> Vec<OmittedCategory> {
-    super::candidate_support::omitted_categories(rejected, edition2)
+    super::candidate_support::omitted_categories(rejected)
 }
 
-fn unsupported_blockers(edition2: bool) -> Vec<ActionBlocker> {
-    super::candidate_support::unsupported_blockers(edition2)
+fn unsupported_blockers() -> Vec<ActionBlocker> {
+    super::candidate_support::unsupported_blockers()
 }

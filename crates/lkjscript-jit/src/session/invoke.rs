@@ -99,7 +99,7 @@ impl JitSession {
             }
         }
         let report = report.map_err(|error| invocation_error(function, error))?;
-        self.poll_v1_calls = self.poll_v1_calls.saturating_add(report.poll_count());
+        self.poll_calls = self.poll_calls.saturating_add(report.poll_count());
         self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
         self.runtime_heap_attempts = self
             .runtime_heap_attempts

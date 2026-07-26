@@ -60,7 +60,7 @@ impl<'a> FunctionBuilder<'a> {
         let binding = SsaBindingId::new(binding.raw());
         let place = self.places.iter().find(|place| place.binding == binding);
         match place {
-            Some(place) if is_owned_buf(&place.ty) => Ok(Some(place.id)),
+            Some(place) if is_owned_value(&place.ty) => Ok(Some(place.id)),
             Some(_) => Ok(None),
             None => Err(Error::msg(format!(
                 "HIR binding {} has no registered SSA place",

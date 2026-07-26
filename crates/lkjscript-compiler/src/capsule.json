@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.capsule",
-  "version": 1,
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
   "id": "compiler.source",
   "root": "crates/lkjscript-compiler/src",
   "kind": "source",
@@ -13,7 +13,7 @@
   "tests": ["crates/lkjscript-compiler/src/source/tests/mod.rs"],
   "decisions": [
     "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-    "docs/decisions/semantics/edition-2/identity-and-migration.md"
+    "docs/history/semantics/edition/identity-and-migration.md"
   ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },

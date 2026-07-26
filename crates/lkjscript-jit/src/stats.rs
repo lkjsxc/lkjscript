@@ -88,7 +88,7 @@ pub struct JitStats {
     pub code_objects: Vec<CodeObjectRecord>,
     pub native_entries: u64,
     pub direct_native_calls: u64,
-    pub poll_v1_calls: u64,
+    pub poll_calls: u64,
     pub vm_fallbacks: u64,
     pub compile_failures: u64,
     pub native_invocations: u64,

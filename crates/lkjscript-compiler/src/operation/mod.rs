@@ -65,7 +65,7 @@ pub enum Operation {
     StrFromF64,
     StdinHandle,
     SysIsatty,
-    SysClose,
+    DropResource,
     SysReadByte,
     SysWriteByte,
     SysReadInto,
@@ -126,18 +126,6 @@ pub enum Operation {
     Some,
     IsSome,
     UnwrapSome,
-}
-
-impl Operation {
-    pub const fn edition2_only(self) -> bool {
-        matches!(
-            self,
-            Self::F64FromI64Exact
-                | Self::F64FromI64Rounded
-                | Self::I64FromF64Exact
-                | Self::I64FromF64Trunc
-        )
-    }
 }
 
 mod catalog;

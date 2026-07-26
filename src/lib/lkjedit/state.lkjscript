@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-std/term/tty-state.lkjscript
+src/std/term/tty-state.lkjscript#TerminalState
 /import
+/imports
 product/
 name/
 EditorState
 /name
+public
 fields/
 field/
 name/

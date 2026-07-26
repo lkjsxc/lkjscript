@@ -1,11 +1,11 @@
 {
-  "schema": "lkjscript.structure.provenance.v1",
-  "version": 1,
+  "schema": "lkjscript.structure.provenance",
+  "contract": "0788e47b76cfc6c30ec4f75b204566a371aba70ef322db1a89831cf9f28c733a",
   "entries": [
     {
       "path": "Cargo.lock",
       "class": "generated-mutable",
-      "sha256": "efdbe3c7ef52db97016d05e3bbed3e7429e8f13a0e4dda45ef8d3368b134ab7e",
+      "sha256": "27e71584a1ba988f1ab6df3519127538b2207b0568dfeb5185b62a5464c8d771",
       "generator": "cargo 1.96.0 lockfile v4; Cargo.toml workspace dependency resolution"
     },
     {
@@ -15,28 +15,10 @@
       "generator": null
     },
     {
-      "path": "meta/benchmarks/ai-authoring/results/raw-rename-gpt-5.4-mini-isolation-failure.json",
-      "class": "immutable-benchmark-result",
-      "sha256": "99b8ab17897c9f61c1fcb1feb803573aafdd010f2202e1275bd0b78662d7b9ba",
-      "generator": null
-    },
-    {
-      "path": "meta/benchmarks/ai-authoring/results/raw-rename-gpt-5.6-sol.json",
-      "class": "immutable-benchmark-result",
-      "sha256": "7317ff4ca5dfea8af0936938eb28728ec1894a4e132141db2316f22324e3efba",
-      "generator": null
-    },
-    {
-      "path": "meta/benchmarks/ai-authoring/results/raw-rename-qwen3.5-9b-timeout.json",
-      "class": "immutable-benchmark-result",
-      "sha256": "2f6ce734b4919529457d20a610571d879dec3cd8b265d838cb3bfc57bd59c844",
-      "generator": null
-    },
-    {
-      "path": "meta/benchmarks/ai-authoring/tasks/rename-function-v1.json",
-      "class": "immutable-fixture",
-      "sha256": "a1a5ae28621091381d93b068ba4c62daba74afbc5febc710722af2f7cd3876da",
-      "generator": null
+      "path": "lkjscript.lock.json",
+      "class": "generated-mutable",
+      "sha256": "b2163ad225d284a4782e1a55a6f93b6a35ae07cc77390c9e433ee9e56932325d",
+      "generator": "lkjscript package lock; canonical local package graph and current contract registry"
     },
     {
       "path": "meta/benchmarks/brainfuck/fixtures/comments.bf",
@@ -126,6 +108,30 @@
       "path": "meta/benchmarks/jit/results/pre-jit-c4-vm-comparison.json",
       "class": "immutable-benchmark-result",
       "sha256": "771d5206229f6452f96f5186d82353b80111b455f9e09c894c7c531206246884",
+      "generator": null
+    },
+    {
+      "path": "meta/results/ai-authoring/results/raw-rename-gpt-5.4-mini-isolation-failure.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "99b8ab17897c9f61c1fcb1feb803573aafdd010f2202e1275bd0b78662d7b9ba",
+      "generator": null
+    },
+    {
+      "path": "meta/results/ai-authoring/results/raw-rename-gpt-5.6-sol.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "7317ff4ca5dfea8af0936938eb28728ec1894a4e132141db2316f22324e3efba",
+      "generator": null
+    },
+    {
+      "path": "meta/results/ai-authoring/results/raw-rename-qwen3.5-9b-timeout.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "2f6ce734b4919529457d20a610571d879dec3cd8b265d838cb3bfc57bd59c844",
+      "generator": null
+    },
+    {
+      "path": "meta/results/ai-authoring/tasks/rename-function-v1.json",
+      "class": "immutable-fixture",
+      "sha256": "a1a5ae28621091381d93b068ba4c62daba74afbc5febc710722af2f7cd3876da",
       "generator": null
     }
   ]

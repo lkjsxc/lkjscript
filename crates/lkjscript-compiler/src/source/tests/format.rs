@@ -1,18 +1,4 @@
 use super::*;
-use crate::source::{SourceNode, SyntaxKind};
-
-#[test]
-fn edition_marker_kind_cannot_be_authored_by_other_syntax() {
-    let source = "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
-    let tree = validate(source, "src/main.lkjscript", &Limits::default()).unwrap();
-    assert!(tree.files()[0].syntax.iter().all(|node| !matches!(
-        node,
-        SourceNode {
-            kind: SyntaxKind::EditionMarker,
-            ..
-        }
-    )));
-}
 
 #[test]
 fn formatter_is_structural_idempotent_and_handles_escape_zero_utf8_and_lf() {
@@ -43,7 +29,7 @@ fn formatter_is_structural_idempotent_and_handles_escape_zero_utf8_and_lf() {
 }
 
 #[test]
-fn all_125_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
+fn all_124_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files = Vec::new();
     collect_sources(&workspace.join("src"), &mut files)?;
@@ -56,7 +42,7 @@ fn all_125_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()
         &mut files,
     )?;
     files.sort();
-    assert_eq!(files.len(), 125, "tracked source corpus changed");
+    assert_eq!(files.len(), 124, "tracked source corpus changed");
     for path in files {
         let source = fs::read_to_string(&path)?;
         let logical = path
@@ -66,10 +52,9 @@ fn all_125_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()
             .expect("workspace source path must be UTF-8");
         let tree = validate(&source, logical, &Limits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        assert_eq!(
-            tree.edition(),
-            crate::source::SourceEdition::Edition2,
-            "{} is not exact Edition 2",
+        assert!(
+            !source.starts_with("edition/\n") && !source.contains("\n/edition\n"),
+            "{} contains a removed edition marker",
             path.display()
         );
         let formatted = tree.format_single_source().expect("single file");

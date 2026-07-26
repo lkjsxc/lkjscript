@@ -1,12 +1,11 @@
-edition/
-2
-/edition
+imports/
 import/
-std/term/banner.lkjscript
+src/std/io/get-byte.lkjscript#get-byte
 /import
 import/
-std/io/get-byte.lkjscript
+src/std/term/banner.lkjscript#banner
 /import
+/imports
 main/
 sig/
 ->

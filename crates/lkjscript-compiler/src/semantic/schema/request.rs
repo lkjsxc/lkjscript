@@ -30,7 +30,7 @@ impl ResourceProfile {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Request {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub profile: ResourceProfile,
     pub root: String,
     pub operation: OperationRequest,

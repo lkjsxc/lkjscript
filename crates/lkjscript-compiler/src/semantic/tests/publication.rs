@@ -124,11 +124,11 @@ fn prepared_journal_is_rolled_back_before_the_next_read() {
     let root = directory.join("main.lkjscript");
     let library = directory.join("lib.lkjscript");
     let root_source = concat!(
-        "import/\nlib.lkjscript\n/import\n",
+        "imports/\nimport/\nlib.lkjscript#f\n/import\n/imports\n",
         "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n"
     );
     let library_source = concat!(
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+        "def/\nname/\nf\n/name\npublic\nfn/\nsig/\n->\nUnit\n/sig\n",
         "params/\n/params\nunit\n/fn\n/def\n"
     );
     std::fs::write(&root, root_source).expect("write recovery root");

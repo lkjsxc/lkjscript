@@ -16,22 +16,16 @@ use crate::output;
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let options = args::parse_run(args)?;
+    let source = PathBuf::from(&options.file);
+    lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
     let metrics_enabled = metrics::enabled();
     let (program, compile_metrics) = if metrics_enabled {
-        compile_path_with_profile_and_metrics(
-            &PathBuf::from(&options.file),
-            &Limits::default(),
-            options.resource_profile,
-        )
-        .map_err(|error| error.to_string())?
+        compile_path_with_profile_and_metrics(&source, &Limits::default(), options.resource_profile)
+            .map_err(|error| error.to_string())?
     } else {
         (
-            compile_path_with_profile(
-                &PathBuf::from(&options.file),
-                &Limits::default(),
-                options.resource_profile,
-            )
-            .map_err(|error| error.to_string())?,
+            compile_path_with_profile(&source, &Limits::default(), options.resource_profile)
+                .map_err(|error| error.to_string())?,
             CompileMetrics::default(),
         )
     };

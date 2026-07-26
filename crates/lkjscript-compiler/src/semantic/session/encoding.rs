@@ -14,7 +14,7 @@ impl SemanticSession {
     ) -> Result<Vec<u8>, SessionProcessError> {
         let envelope = SessionResponse {
             schema: super::SCHEMA,
-            version: super::VERSION,
+            contract: super::CONTRACT.to_hex(),
             request_id: request_id.clone(),
             revision: self.revision,
             response: result,
@@ -25,7 +25,7 @@ impl SemanticSession {
         self.discard_pending();
         let fallback = SessionResponse {
             schema: super::SCHEMA,
-            version: super::VERSION,
+            contract: super::CONTRACT.to_hex(),
             request_id,
             revision: self.revision,
             response: SessionResult::Error {

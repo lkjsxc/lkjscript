@@ -43,7 +43,7 @@ pub(super) fn define(
         builder.set_entry(entry)?;
         let input = builder.parameter(0)?;
         let called = builder.call(entry, entries.callee, vec![input])?;
-        let returned = builder.runtime_call(entry, RuntimeCallSlot::IdentityI64V1, vec![called])?;
+        let returned = builder.runtime_call(entry, RuntimeCallSlot::IdentityI64, vec![called])?;
         builder.return_value(entry, returned)?;
         plan.define_function(builder.finish())?;
     }

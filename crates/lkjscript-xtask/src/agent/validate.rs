@@ -8,8 +8,13 @@ pub fn checkpoint(
     request: &CheckpointRequest,
     current: Option<&WorkState>,
 ) -> Result<(), String> {
-    if request.schema != "lkjscript.agent-work-state-checkpoint" || request.version != 2 {
-        return Err("unsupported checkpoint schema or version".into());
+    if request.schema != "lkjscript.agent-work-state-checkpoint"
+        || !contract_matches(
+            &request.contract,
+            lkjscript_contracts::AGENT_WORK_STATE_DIGEST,
+        )
+    {
+        return Err("checkpoint contract mismatch; update the producer".into());
     }
     let state = &request.state;
     validate(root, state, true)?;
@@ -72,8 +77,13 @@ pub fn validate(root: &Path, state: &WorkState, require_head: bool) -> Result<()
 
 pub fn shape(state: &WorkState) -> Result<(), String> {
     super::bounds::state(state)?;
-    if state.schema != "lkjscript.agent-work-state" || state.version != 2 {
-        return Err("unsupported work-state schema or version".into());
+    if state.schema != "lkjscript.agent-work-state"
+        || !contract_matches(
+            &state.contract,
+            lkjscript_contracts::AGENT_WORK_STATE_DIGEST,
+        )
+    {
+        return Err("work-state contract mismatch; update the producer".into());
     }
     task_id(&state.task_id)?;
     if state.state_revision == 0 {
@@ -102,8 +112,13 @@ pub fn task_id(value: &str) -> Result<(), String> {
 
 fn semantic_context(state: &WorkState) -> Result<(), String> {
     if let Some(session) = &state.semantic_context.session {
-        if session.schema != "lkjscript.semantic-session" || session.version != 1 {
-            return Err("unsupported semantic session reference".into());
+        if session.schema != "lkjscript.semantic-session"
+            || !contract_matches(
+                &session.contract,
+                lkjscript_contracts::AGENT_PROTOCOL_DIGEST,
+            )
+        {
+            return Err("semantic session reference contract mismatch".into());
         }
         exact_sha256("semantic session identity", &session.identity)?;
         exact_sha256("semantic session source revision", &session.source_revision)?;
@@ -116,15 +131,15 @@ fn semantic_context(state: &WorkState) -> Result<(), String> {
         .chain(&state.semantic_context.diagnostics)
         .chain(&state.semantic_context.unresolved_holes)
     {
-        let known = matches!(
-            (reference.schema.as_str(), reference.version),
-            ("lkjscript.semantic-source", 1 | 2)
-                | ("lkjscript.semantic-transaction", 1)
-                | ("lkjscript.diagnostic", 1)
-                | ("lkjscript.typed-hole", 1)
-        );
-        if !known {
-            return Err("unsupported semantic work reference".into());
+        let expected = match reference.schema.as_str() {
+            "lkjscript.semantic-source"
+            | "lkjscript.semantic-transaction"
+            | "lkjscript.typed-hole" => lkjscript_contracts::SEMANTIC_SOURCE_DIGEST,
+            "lkjscript.diagnostics" => lkjscript_contracts::DIAGNOSTICS_DIGEST,
+            _ => return Err("unsupported semantic work reference schema".into()),
+        };
+        if !contract_matches(&reference.contract, expected) {
+            return Err("semantic work reference contract mismatch".into());
         }
         exact_sha256(
             "semantic reference source revision",
@@ -132,6 +147,10 @@ fn semantic_context(state: &WorkState) -> Result<(), String> {
         )?;
     }
     Ok(())
+}
+
+fn contract_matches(value: &str, expected: lkjscript_contracts::ContractDigest) -> bool {
+    lkjscript_contracts::ContractDigest::from_hex(value) == Some(expected)
 }
 
 fn exact_sha256(name: &str, value: &str) -> Result<(), String> {

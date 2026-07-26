@@ -10,7 +10,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 HIR/verified SSA, opaque verifier/proof authority, exact roots, structured
 outcomes, deterministic budgets, W^X, and fallback-free forced native evidence.
 The accepted destination is versioned Semantic Source, semantic agent edits,
-Edition 2 ADTs and exact control/numerics, explicit capabilities, hybrid safe
+the canonical source contract ADTs and exact control/numerics, explicit capabilities, hybrid safe
 memory, reproducible packages/components, one semantic IR family, and a
 measured evaluator/VM/JIT/AOT/cache/Wasm portfolio. None of those absent layers
 is Current by adoption of the direction.
@@ -20,10 +20,10 @@ Topology](../decisions/platform/bounded-repository-topology.md), [Repository
 Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md),
 and bounded [Agent Work State](../decisions/platform/agent-work-state.md) Current.
 Complete [Semantic Source Schema
-V2](../decisions/platform/semantic-source-and-agent-protocol.md), bounded
+canonical contract](../decisions/platform/semantic-source-and-agent-protocol.md), bounded
 one-shot/session operations, typed holes/legal actions, and compiler [Resource
-Profile V2](../decisions/platform/resource-budget-profiles.md) are Current. The
-former Agent Foundation and Semantic Source V1 identities are historical.
+resource profile](../decisions/platform/resource-budget-profiles.md) are Current. The
+former Agent Foundation and legacy Semantic Source contract identities are historical.
 Whole-pipeline pre-allocation and a shared request ledger remain Accepted
 Targets.
 All Current source limits remain enforced until aggregate replacements are
@@ -33,7 +33,7 @@ AOT, content-addressed native caches, and optional explicit local PGO as later
 measured Targets; it does not add an engine or change Current runtime policy.
 
 The marker-trait foundation, initial `Owned Buf` ownership safe island, exact
-ABI-2 frames/roots, host-independent source allocation/recursive SCC slice, and
+canonical native contract frames/roots, host-independent source allocation/recursive SCC slice, and
 forced first optimizing pipeline remain Current. General ownership, full static
 trait methods/associated items, Handle/host native calls, native/VM reference
 transitions, and broader proof optimization remain absent. Their existing

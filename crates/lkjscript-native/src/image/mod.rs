@@ -47,7 +47,7 @@ pub struct InstallableImage {
     trap_map: Box<[TrapMapEntry]>,
     outcome_map: Box<[OutcomeMapEntry]>,
     accounting: CodeAccounting,
-    versions: AbiVersions,
+    contracts: ImageContracts,
 }
 
 pub(crate) struct ImageParts {
@@ -63,5 +63,5 @@ pub(crate) struct ImageParts {
     pub(crate) trap_map: Vec<TrapMapEntry>,
     pub(crate) outcome_map: Vec<OutcomeMapEntry>,
     pub(crate) work_units: u64,
-    pub(crate) versions: AbiVersions,
+    pub(crate) contracts: ImageContracts,
 }

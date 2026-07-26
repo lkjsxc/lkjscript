@@ -96,7 +96,10 @@ fn diagnostics_are_complete_and_deterministic() {
     let first = run();
     let second = run();
     assert_eq!(first, second);
-    assert_eq!(first.profile.version, 2);
+    assert_eq!(
+        first.profile.contract,
+        lkjscript_contracts::RESOURCE_PROFILES_DIGEST
+    );
     assert_eq!(first.category, CATEGORY);
     assert_eq!(first.authority, Some(BudgetAuthority::ProtocolEncode));
     assert_eq!(first.path.to_string(), "semantic_request/protocol_encode");

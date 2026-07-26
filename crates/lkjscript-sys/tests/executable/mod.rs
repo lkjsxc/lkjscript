@@ -1,8 +1,8 @@
 #![allow(clippy::panic)]
 
 use lkjscript_native::{
-    encode, AbiVersions, BackendLimits, EncodingConfig, F64Comparison, FunctionId, I64Comparison,
-    InstallableImage, MachinePlanBuilder, NativeValue, RuntimeCallSlot, Signature,
+    encode, BackendLimits, EncodingConfig, F64Comparison, FunctionId, I64Comparison,
+    ImageContracts, InstallableImage, MachinePlanBuilder, NativeValue, RuntimeCallSlot, Signature,
     SourceFunctionId, TrapCode, ValueType,
 };
 use lkjscript_sys::executable::{
@@ -40,7 +40,7 @@ mod outcomes;
 mod traps;
 
 fn scalar_image(
-    versions: AbiVersions,
+    contracts: ImageContracts,
 ) -> Result<(InstallableImage, Entries), Box<dyn std::error::Error>> {
     let mut plan = MachinePlanBuilder::new();
     let entries = declarations::declare(&mut plan)?;
@@ -49,7 +49,7 @@ fn scalar_image(
     calls::define(&mut plan, entries)?;
     let image = encode(
         plan.verify(BackendLimits::default())?,
-        EncodingConfig::new(versions),
+        EncodingConfig::new(contracts),
     )?;
     Ok((image, entries))
 }

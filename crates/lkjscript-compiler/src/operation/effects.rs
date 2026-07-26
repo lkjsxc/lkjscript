@@ -86,7 +86,7 @@ impl Operation {
             | Self::Arg
             | Self::StdinHandle
             | Self::SysIsatty
-            | Self::SysClose
+            | Self::DropResource
             | Self::SysReadByte
             | Self::SysWriteByte
             | Self::SysTtyGuardSave

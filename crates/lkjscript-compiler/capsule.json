@@ -1,28 +1,29 @@
 {
   "schema": "lkjscript.capsule",
-  "version": 1,
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
   "id": "compiler",
   "root": "crates/lkjscript-compiler",
   "kind": "crate",
   "purpose": "Validate canonical source and lower it through HIR into verified typed SSA and bytecode.",
   "layer": "compiler",
-  "concepts": ["Semantic Source", "HIR analysis", "SSA lowering"],
+  "concepts": ["Semantic Source", "explicit modules", "local packages", "affine resources", "HIR analysis", "SSA lowering"],
   "facade": ["crates/lkjscript-compiler/src/lib.rs"],
-  "allowed_dependencies": ["core", "ir"],
+  "allowed_dependencies": ["contracts", "core", "ir"],
   "forbidden_dependencies": ["app", "jit", "vm"],
   "tests": [
     "crates/lkjscript-compiler/src/analyze/tests/mod.rs",
+    "crates/lkjscript-compiler/src/package/tests.rs",
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/source/tests/mod.rs"
   ],
-  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md"],
+  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md", "docs/decisions/semantics/ownership-and-borrowing.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-compiler"],
   "context_card": {
     "goal": "Retain one validated source-to-SSA semantic pipeline.",
-    "interfaces": ["crates/lkjscript-compiler/src/lib.rs", "crates/lkjscript-compiler/src/source/mod.rs"],
-    "invariants": ["canonical .lkjscript extension", "verified SSA before backend use"]
+    "interfaces": ["crates/lkjscript-compiler/src/lib.rs", "crates/lkjscript-compiler/src/package/mod.rs", "crates/lkjscript-compiler/src/source/mod.rs"],
+    "invariants": ["canonical .lkjscript extension", "exact module imports", "private declarations by default", "verified SSA before backend use"]
   }
 }

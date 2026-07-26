@@ -33,7 +33,7 @@ reordered, excessive, or forged edits fail closed.
 The selected forced engine is `--engine optimizing-jit`. It compiles the full
 required supported group before source effects, installs only `Tier::Optimizing`
 objects, actually enters optimized main, and never substitutes baseline or VM.
-It reuses ABI-2 exact roots, allocation runtime sites, active-frame bounds, W^X
+It reuses canonical native contract exact roots, allocation runtime sites, active-frame bounds, W^X
 installation, and structured outcomes. It adds no guards, deoptimization, OSR,
 background compilation, or hidden source assumptions.
 

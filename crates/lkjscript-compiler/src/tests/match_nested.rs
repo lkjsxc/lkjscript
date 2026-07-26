@@ -4,7 +4,7 @@ use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 fn product_source(arms: &str) -> String {
     format!(
         concat!(
-            "edition/\n2\n/edition\nproduct/\nname/\nPair\n/name\nfields/\n",
+            "product/\nname/\nPair\n/name\nfields/\n",
             "field/\nname/\nleft\n/name\ntype/\nBool\n/type\n/field\n",
             "field/\nname/\nright\n/name\ntype/\nBool\n/type\n/field\n/fields\n/product\n",
             "main/\nsig/\n->\nI64\n/sig\nmatch/\nproduct-value/\nPair\n",
@@ -66,7 +66,7 @@ fn nested_product_matrix_is_complete_and_ordered() {
 
 fn enum_bool_source() -> String {
     concat!(
-        "edition/\n2\n/edition\nenum/\nname/\nFlag\n/name\nvariants/\n",
+        "enum/\nname/\nFlag\n/name\nvariants/\n",
         "variant/\nname/\nEmpty\n/name\nfields/\n/fields\n/variant\n",
         "variant/\nname/\nValue\n/name\nfields/\nvariant-field/\nname/\nbit\n/name\ntype/\nBool\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
         "main/\nsig/\n->\nI64\n/sig\nmatch/\nvariant-value/\ntype/\nFlag/\n/Flag\n/type\nvariant/\nValue\n/variant\nfields/\nvariant-field/\nname/\nbit\n/name\ntrue\n/variant-field\n/fields\n/variant-value\n",

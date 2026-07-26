@@ -15,12 +15,12 @@ pub(crate) fn collect_values(
             verify_type(program, &parameter.ty, type_parameters)?;
             if let Some(place) = parameter.owner_place {
                 let declared = place_by_id(function, place)?;
-                if !is_owned_buf(&parameter.ty)
+                if !is_owned_value(&parameter.ty)
                     || declared.ty != parameter.ty
                     || !owner_places.insert(place)
                 {
                     return fail(
-                        "SSA block owner parameters require unique matching Owned Buf places",
+                        "SSA block owner parameters require unique matching affine places",
                     );
                 }
             }

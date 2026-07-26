@@ -19,7 +19,7 @@ pub(super) fn apply(
         .collect();
     let request = Request {
         schema: crate::semantic::SCHEMA.into(),
-        version: crate::semantic::VERSION,
+        contract: crate::semantic::CONTRACT.to_hex(),
         profile: ResourceProfile::Sandbox,
         root: root.to_string_lossy().into_owned(),
         operation: OperationRequest::ApplyTransaction {

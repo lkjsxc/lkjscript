@@ -61,15 +61,14 @@ Index active architecture decisions separately from superseded history.
 - [self-hosted-platform-roadmap.md](platform/self-hosted-platform-roadmap.md): staged bootstrap-to-self-hosting boundary
 - [traits-and-static-dispatch.md](semantics/traits-and-static-dispatch.md): coherent bounded traits,
   auto traits, and monomorphization
-- [package-imports.md](platform/package-imports.md): package-root source paths
 - [resource-handles.md](capabilities/resource-handles.md): stale-safe resources and bounded terminal ABI
 - [system-results.md](semantics/system-results.md): truthful host failures as language values
 - [web-platform-roadmap.md](roadmaps/web-platform-roadmap.md): ownership-first async Web framework
   and TLS-provider sequence
-- [limits/essential-limits.md](limits/essential-limits.md): Current Edition 1 fixed source budgets
-  during aggregate-budget migration; permanent semantic-limit policy is superseded
-- [source-tree-limit.md](source-tree-limit.md): Current 16-entry Edition 1 source-directory rule
-  during aggregate-budget migration; permanent language-rule policy is superseded
+- [limits/essential-limits.md](limits/essential-limits.md): Current fixed source budgets during
+  aggregate-budget migration; permanent semantic-limit policy is superseded
+- [source-tree-limit.md](source-tree-limit.md): Current 16-entry source-directory rule during
+  aggregate-budget migration; permanent language-rule policy is superseded
 - [scratch-host.md](capabilities/scratch-host.md): owned Linux sys layer and thin host policy
 
 ## Superseded

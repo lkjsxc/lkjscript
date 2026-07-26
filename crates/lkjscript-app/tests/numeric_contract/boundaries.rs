@@ -1,4 +1,4 @@
-use super::support::{assert_scalar, edition2, Expected};
+use super::support::{assert_scalar, program, Expected};
 use super::*;
 
 #[test]
@@ -15,7 +15,7 @@ fn rounded_i64_boundaries_preserve_exact_f64_bits_on_four_engines() {
     ];
     for (value, bits) in cases {
         let expression = format!("f64-from-i64-rounded/\n{value}\n/f64-from-i64-rounded");
-        assert_scalar(&edition2("F64", &expression), Expected::F64(bits));
+        assert_scalar(&program("F64", &expression), Expected::F64(bits));
     }
 }
 
@@ -32,7 +32,7 @@ fn exact_i64_boundaries_distinguish_representability() {
     ] {
         let expression =
             format!("is-ok/\nf64-from-i64-exact/\n{value}\n/f64-from-i64-exact\n/is-ok");
-        assert_scalar(&edition2("Bool", &expression), Expected::Bool(exact));
+        assert_scalar(&program("Bool", &expression), Expected::Bool(exact));
     }
 }
 
@@ -53,17 +53,17 @@ fn f64_to_i64_boundaries_cover_zero_fraction_nonfinite_and_range() {
     for (value, accepted) in exact {
         let expression =
             format!("is-ok/\ni64-from-f64-exact/\n{value}\n/i64-from-f64-exact\n/is-ok");
-        assert_scalar(&edition2("Bool", &expression), Expected::Bool(accepted));
+        assert_scalar(&program("Bool", &expression), Expected::Bool(accepted));
     }
     for (value, expected) in [("1.9", 1), ("-1.9", -1), ("0.0", 0), ("-0.0", 0)] {
         let expression =
             format!("unwrap-ok/\ni64-from-f64-trunc/\n{value}\n/i64-from-f64-trunc\n/unwrap-ok");
-        assert_scalar(&edition2("I64", &expression), Expected::I64(expected));
+        assert_scalar(&program("I64", &expression), Expected::I64(expected));
     }
     let subnormal = format!("0.{}5", "0".repeat(323));
     let expression =
         format!("unwrap-ok/\ni64-from-f64-trunc/\n{subnormal}\n/i64-from-f64-trunc\n/unwrap-ok");
-    assert_scalar(&edition2("I64", &expression), Expected::I64(0));
+    assert_scalar(&program("I64", &expression), Expected::I64(0));
 }
 
 fn error_code(expression: &str) -> String {
@@ -78,7 +78,7 @@ fn error_code(expression: &str) -> String {
             "arm/\nvariant-pattern/\ntype/\nNumericError/\n/NumericError\n/type\nvariant/\n{name}\n/variant\nfields/\n/fields\n/variant-pattern\n{code}\n/arm\n"
         ));
     }
-    edition2(
+    program(
         "I64",
         &format!("match/\nunwrap-err/\n{expression}\n/unwrap-err\narms/\n{arms}/arms\n/match"),
     )
@@ -115,10 +115,10 @@ fn numeric_error_cases_are_stable_nominal_values_on_four_engines() {
 }
 
 #[test]
-fn edition2_rejects_mixed_numeric_operations_and_edition1_has_no_conversions() {
-    let mixed = edition2("F64", "+/\n1\n2.0\n/+");
+fn canonical_numeric_operations_require_exact_types_and_explicit_conversions() {
+    let mixed = program("F64", "+/\n1\n2.0\n/+");
     assert!(compile_source(&mixed, "mixed.lkjscript", &Limits::default()).is_err());
-    let edition1 =
+    let explicit =
         "main/\nsig/\n->\nF64\n/sig\nf64-from-i64-rounded/\n1\n/f64-from-i64-rounded\n/main\n";
-    assert!(compile_source(edition1, "edition1.lkjscript", &Limits::default()).is_err());
+    assert!(compile_source(explicit, "explicit.lkjscript", &Limits::default()).is_ok());
 }

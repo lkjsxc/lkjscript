@@ -24,7 +24,7 @@ Rank the invariants used when architectural goals conflict.
 11. Keep unsafe Rust isolated in `lkjscript-sys`; safe wrappers uphold safety.
 12. Add no third-party Rust dependency without a measured decision record that
     distinguishes runtime, build-time backend, and language-package impact.
-13. Keep Current Edition 1 source limits until aggregate checked replacements
+13. Keep Current the removed legacy source contract source limits until aggregate checked replacements
     are Current; then measure semantic-cohesion and AI-context lints rather than
     treating 16-entry directory width as permanent language identity.
 14. Keep the reference VM cache-conscious, but do not carry universal tagged

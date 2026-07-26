@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/jit-optimizing/kernel/redundant-divisions.lkjscript
+src/examples/jit-optimizing/kernel/redundant-divisions.lkjscript#optimized-redundant-division-batch
 /import
+/imports
 def/
 name/
 optimized-step
 /name
+public
 fn/
 sig/
 I64

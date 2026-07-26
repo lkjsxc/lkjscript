@@ -4,10 +4,10 @@ use lkjscript_jit::{execute_forced, JitConfig};
 
 pub fn compile(source: &str, name: &str) -> lkjscript_compiler::ExecutableProgram {
     let marked;
-    let source = if source.starts_with("edition/\n2\n/edition\n") {
+    let source = if source.starts_with("") {
         source
     } else {
-        marked = format!("edition/\n2\n/edition\n{source}");
+        marked = source.to_string();
         &marked
     };
     compile_source(source, name, &Limits::default()).expect("compile JIT source fixture")

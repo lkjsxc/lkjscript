@@ -147,7 +147,7 @@ a shared VM/native heap.
 The closed-machine-plan native-reference/active-frame implementation in this
 document's containing commit, based on HEAD
 `ec54cde9b93a302c1310d2107c10b785001f184d`, was checked on Linux
-7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. It establishes ABI-2 typed
+7.0.0-27-generic x86-64 with Rust/Cargo 1.96.0. It establishes canonical native contract typed
 stable words, exact closed-plan Buf roots, generated active frames, and actual
 safe-service collection; it does not establish source-level allocation or a
 shared VM/native heap.

@@ -68,7 +68,7 @@ impl Operation {
             Self::StrFromF64 => "str-from-f64",
             Self::StdinHandle => "stdin-handle",
             Self::SysIsatty => "sys-isatty",
-            Self::SysClose => "sys-close",
+            Self::DropResource => "drop",
             Self::SysReadByte => "sys-read-byte",
             Self::SysWriteByte => "sys-write-byte",
             Self::SysReadInto => "sys-read-into",

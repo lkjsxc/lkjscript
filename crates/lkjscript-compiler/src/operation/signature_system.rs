@@ -7,7 +7,7 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
     match operation {
         Operation::StdinHandle => function(Vec::new(), Type::Handle),
         Operation::SysIsatty => function(vec![Type::Handle], system_result(Type::Bool)),
-        Operation::SysClose => function(vec![Type::Handle], system_result(Type::Unit)),
+        Operation::DropResource => function(vec![Type::Handle], system_result(Type::Unit)),
         Operation::SysReadByte => function(vec![Type::Handle], system_result(Type::I64)),
         Operation::SysWriteByte => {
             function(vec![Type::Handle, Type::I64], system_result(Type::Unit))

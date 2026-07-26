@@ -145,7 +145,7 @@ impl InstallableImage {
             }
         }
         if self.heap_runtime_sites.is_empty()
-            == runtime_calls.contains(&RuntimeCallSlot::HeapDispatchV1)
+            == runtime_calls.contains(&RuntimeCallSlot::HeapDispatch)
         {
             return Err(ImageIntegrityError::HeapRuntimeSite);
         }

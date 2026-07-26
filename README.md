@@ -8,7 +8,7 @@ grow in lkjscript itself rather than in host frameworks.
 
 ## Status
 
-<!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
+<!-- LKJ-STATUS id=jit-proof-forced status=current -->
 
 Canonical source files use **`.lkjscript`**. Other extensions, including the
 superseded `.lkjml`, are rejected without a compatibility mode. Linux x86-64 is

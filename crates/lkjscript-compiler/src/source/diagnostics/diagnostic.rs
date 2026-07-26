@@ -6,10 +6,6 @@ use super::{
     DiagnosticCategory, DiagnosticCertainty, DiagnosticSeverity, RelatedSourceSpan, SourceOrigin,
     SourceSpan,
 };
-use crate::source::{
-    SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA, SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION,
-};
-
 /// Structured source-foundation diagnostic rendered by compiler entry points.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceDiagnostic {
@@ -26,10 +22,10 @@ pub struct SourceDiagnostic {
 
 impl SourceDiagnostic {
     pub const fn schema(&self) -> &'static str {
-        SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA
+        lkjscript_contracts::DIAGNOSTICS
     }
-    pub const fn schema_version(&self) -> u32 {
-        SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION
+    pub const fn contract(&self) -> lkjscript_contracts::ContractDigest {
+        lkjscript_contracts::DIAGNOSTICS_DIGEST
     }
     pub const fn code(&self) -> &'static str {
         self.code
@@ -86,12 +82,12 @@ impl SourceDiagnostic {
         let end = self.primary_span.end();
         let mut rendered = format!(
             concat!(
-                "schema={};version={};",
+                "schema={};contract={};",
                 "code={};severity={};category={};certainty={};origin={};",
                 "span={}:{}:{}-{}:{}:{};message={}"
             ),
-            SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA,
-            SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION,
+            lkjscript_contracts::DIAGNOSTICS,
+            lkjscript_contracts::DIAGNOSTICS_DIGEST,
             self.code,
             self.severity.as_str(),
             self.category.as_str(),
@@ -144,10 +140,6 @@ impl SourceDiagnostic {
             related: Vec::new(),
             budget: None,
         }
-    }
-    pub(crate) fn with_budget(mut self, failure: lkjscript_core::BudgetError) -> Self {
-        self.budget = Some(Box::new(failure));
-        self
     }
     pub(crate) fn with_related(
         mut self,

@@ -32,24 +32,24 @@ pub(crate) fn expected_instruction_effects(
         }
         InstructionKind::PlaceInit { place, value } => {
             let declared = place_by_id(function, *place)?;
-            if !is_owned_buf(&declared.ty)
-                || !is_owned_buf(value_type(types, *value)?)
+            if !is_owned_value(&declared.ty)
+                || !is_owned_value(value_type(types, *value)?)
                 || instruction.ty != SsaType::Unit
             {
-                return fail("SSA PlaceInit requires an exact Owned Buf place and owner value");
+                return fail("SSA PlaceInit requires an exact affine place and owner value");
             }
             EffectSet::PURE
         }
         InstructionKind::PlaceEnd { place } => {
             let declared = place_by_id(function, *place)?;
-            if !is_owned_buf(&declared.ty) || instruction.ty != SsaType::Unit {
-                return fail("SSA PlaceEnd requires an exact Owned Buf place and Unit result");
+            if !is_owned_value(&declared.ty) || instruction.ty != SsaType::Unit {
+                return fail("SSA PlaceEnd requires an exact affine place and Unit result");
             }
             EffectSet::PURE
         }
         InstructionKind::Move { value, .. } => {
-            if value_type(types, *value)? != &instruction.ty || !is_owned_buf(&instruction.ty) {
-                return fail("SSA Move requires matching exact Owned Buf input and result");
+            if value_type(types, *value)? != &instruction.ty || !is_owned_value(&instruction.ty) {
+                return fail("SSA Move requires matching exact affine input and result");
             }
             EffectSet::PURE
         }

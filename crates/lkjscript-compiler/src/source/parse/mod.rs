@@ -29,7 +29,7 @@ pub(crate) fn parse_file(
         limits::resource_error(
             &origin,
             crate::source::SourceSpan::zero(),
-            "source exceeds the Edition 1 byte-addressable span limit",
+            "source exceeds the byte-addressable span limit",
         )
     })?;
     check_foundation_file_bytes(&origin, exact_source_len)?;
@@ -37,35 +37,22 @@ pub(crate) fn parse_file(
         return Err(limits::resource_error(
             &origin,
             crate::source::SourceSpan::zero(),
-            "source exceeds the Edition 1 byte-addressable span limit",
+            "source exceeds the byte-addressable span limit",
         ));
     }
     let exact_source_sha256 = lkjscript_core::sha256(source.as_bytes());
     let lines = lines::source_lines(source);
     let lexed = lex::lex(&lines, &origin)?;
     limits::check_file_limits(&lexed.tokens, limits, &origin)?;
-    let mut syntax = syntax::parse_tokens(&lexed.tokens, &origin)?;
-    let edition =
-        crate::source::edition::validate_marker(source, &mut syntax, &lexed.tokens, &origin)?;
-    let declarations = if edition == crate::source::SourceEdition::Edition2 {
-        &syntax[1..]
-    } else {
-        &syntax
-    };
-    declarations::validate_top_level(declarations, limits, &origin)?;
-    let forms = declarations.iter().map(SourceNode::project).collect();
-    let identity = crate::source::identity::source_identity(
-        edition,
-        origin.logical_path(),
-        exact_source_len,
-        exact_source_sha256,
-    );
+    let syntax = syntax::parse_tokens(&lexed.tokens, &origin)?;
+    declarations::validate_top_level(&syntax, limits, &origin)?;
+    let forms = syntax.iter().map(SourceNode::project).collect();
+    let identity =
+        crate::source::identity::source_identity(&origin, exact_source_len, exact_source_sha256)?;
     Ok(SourceFile {
         path,
         origin,
-        edition,
         identity,
-        exact_source: source.to_owned(),
         exact_source_len,
         exact_source_sha256,
         forms,

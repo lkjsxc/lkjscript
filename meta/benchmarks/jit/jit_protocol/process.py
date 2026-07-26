@@ -11,6 +11,8 @@ from typing import Any
 
 from jit_protocol.constants import METRICS_PREFIX
 
+METRICS_CONTRACT = "11bbd59871b1a8164af16bba28eede6e9ae19c00db955ab789b0f7c542e3094e"
+
 def clean_environment(metrics: bool) -> dict[str, str]:
     environment = os.environ.copy()
     for name in (
@@ -110,8 +112,12 @@ def parse_metrics(process: dict[str, Any], engine: str, expected: dict[str, str]
         metrics = json.loads(lines[0][len(METRICS_PREFIX) :])
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError(f"{engine} emitted malformed metrics: {error}") from error
-    if metrics.get("schema") != "lkjscript.metrics.v1":
+    if metrics.get("schema") != "lkjscript.metrics":
         raise RuntimeError(f"{engine} emitted unknown metrics schema {metrics.get('schema')!r}")
+    if metrics.get("contract") != METRICS_CONTRACT:
+        raise RuntimeError(
+            f"{engine} emitted mismatched metrics contract {metrics.get('contract')!r}"
+        )
     if metrics.get("engine") != engine:
         raise RuntimeError(f"{engine} metrics reported {metrics.get('engine')!r}")
     if metrics.get("outcome") != expected:

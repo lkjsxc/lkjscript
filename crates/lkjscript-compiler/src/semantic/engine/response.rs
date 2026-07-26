@@ -4,7 +4,7 @@ use crate::semantic::codec::{self, error};
 use crate::semantic::schema::{
     Charges, ProtocolError, ProtocolErrorCode, Response, ResponseResult,
 };
-use crate::semantic::{SCHEMA, VERSION};
+use crate::semantic::{CONTRACT, SCHEMA};
 
 use super::EngineOutcome;
 
@@ -51,7 +51,7 @@ pub(super) fn base_response(
 ) -> Response {
     Response {
         schema: SCHEMA.to_string(),
-        version: VERSION,
+        contract: CONTRACT.to_hex(),
         compiler_build: format!("lkjscript-compiler-{}", env!("CARGO_PKG_VERSION")),
         profile,
         profile_identity: crate::semantic::charges::identity_core(ledger.profile()),

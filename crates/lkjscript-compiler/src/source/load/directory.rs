@@ -43,7 +43,7 @@ fn source_tree_entry_limit_error(path: &Path, attempted: u64) -> SourceDiagnosti
         DiagnosticCategory::ResourceLimit,
         format!(
             concat!(
-                "Semantic Source Foundation V1 resource limit: ",
+                "Semantic Source resource limit: ",
                 "category=source-tree-entries; attempted={attempted}; ",
                 "limit={limit}"
             ),

@@ -9,7 +9,7 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
         "",
         "cons/\n1\nempty-list/\nI64\n/empty-list\n/cons",
     );
-    let trap = function_source("trap", &[], "->\nI64", "", "div/\n8\n2\n/div");
+    let trapper = function_source("trapper", &[], "->\nI64", "", "div/\n8\n2\n/div");
     let host = function_source(
         "host",
         &[],
@@ -40,7 +40,7 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
         "buf-set/\nvalue\n0\n1\n/buf-set",
     );
     let source = format!(
-        "{allocation}{trap}{host}{outcome}{mutation}{read}{write}{}",
+        "{allocation}{trapper}{host}{outcome}{mutation}{read}{write}{}",
         main_source("Unit", "unit")
     );
     let program = analyze_one(&source).expect("analyze direct effect categories");
@@ -48,7 +48,7 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
         summary(&program, "allocation"),
         EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP)
     );
-    assert_eq!(summary(&program, "trap"), EffectSet::MAY_TRAP);
+    assert_eq!(summary(&program, "trapper"), EffectSet::MAY_TRAP);
     assert_eq!(
         summary(&program, "host"),
         EffectSet::HOST_IO
@@ -57,9 +57,7 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
     );
     assert_eq!(
         summary(&program, "outcome"),
-        EffectSet::HOST_IO
-            .union(EffectSet::MAY_EXIT)
-            .union(EffectSet::MAY_TRAP)
+        EffectSet::HOST_IO.union(EffectSet::MAY_EXIT)
     );
     assert_eq!(summary(&program, "mutation"), EffectSet::MUTATES_LOCAL);
     assert_eq!(summary(&program, "memory-read"), EffectSet::READS_MEMORY);

@@ -9,12 +9,12 @@ Define the working contract for automated engineering in this repository.
 `lkjscript` is an AI-primary, statically typed, memory-safe language and
 platform implemented today by a small Rust compiler, verified typed SSA,
 reference bytecode VM, callable Linux x86-64 baseline JIT, and forced
-proof-checked optimizing JIT. The accepted destination is a versioned Semantic
-Source system, explicit capabilities/effects, value semantics, hybrid
+proof-checked optimizing JIT. The language has one content-addressed semantic
+contract, explicit capabilities/effects, value semantics, hybrid
 affine/region/traced memory safety, reproducible packages/components, and one
 semantic IR family feeding a measured evaluator/VM/JIT/AOT/cache/Wasm
-portfolio. Current line-oriented Edition 1 source remains the deterministic
-text projection during migration; it is not the permanent editing identity.
+portfolio. Current line-oriented source is the deterministic text projection;
+it is not the permanent editing identity.
 Linux x86-64 tier evidence requires real synchronous calls from verified SSA;
 code emission, disassembly, SSA scaffolding, or observation alone is
 insufficient. The canonical accepted extension is `.lkjscript`; `.lkjml` is
@@ -72,14 +72,14 @@ support claim.
 1. [Current state](docs/current-state.md)
 2. [Capability status](docs/operations/status-authority.md)
 3. [Architecture](docs/operations/architecture.md)
-4. [AI-native platform](docs/decisions/platform/ai-native-platform.md)
-5. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
-6. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
-7. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
-8. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
-9. [Language](docs/language/README.md)
-10. [Semantic core](docs/decisions/semantics/semantic-core.md)
-11. [Edition 2](docs/decisions/semantics/edition-2.md)
+4. [Content-addressed contracts](docs/decisions/platform/content-addressed-contracts.md)
+5. [AI-native platform](docs/decisions/platform/ai-native-platform.md)
+6. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
+7. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
+8. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
+9. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
+10. [Language](docs/language/README.md)
+11. [Semantic core](docs/decisions/semantics/semantic-core.md)
 12. [Equality](docs/decisions/semantics/equality-families.md)
 13. [Products](docs/decisions/semantics/immutable-nominal-products.md)
 14. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)

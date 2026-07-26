@@ -34,7 +34,7 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
     let root = directory.join("main.lkjscript");
     let library = directory.join("lib.lkjscript");
     let original_root = concat!(
-        "import/\nlib.lkjscript\n/import\n;; inc stays in a comment\n",
+        "imports/\nimport/\nlib.lkjscript#inc\n/import\n/imports\n;; inc stays in a comment\n",
         "def/\nname/\ntext\n/name\nfn/\nsig/\n->\nStr\n/sig\n",
         "params/\n/params\nstr/\ninc stays in a string\n/str\n/fn\n/def\n",
         "def/\nname/\nshadow\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
@@ -42,7 +42,7 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
         "main/\nsig/\n->\nI64\n/sig\ninc/\n2\n/inc\n/main\n",
     );
     let original_library = concat!(
-        "def/\nname/\ninc\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\n",
+        "def/\nname/\ninc\n/name\npublic\nfn/\nsig/\nI64\n->\nI64\n/sig\n",
         "params/\nx\nI64\n/params\n+/\nx\n1\n/+\n/fn\n/def\n",
     );
     std::fs::write(&root, original_root).expect("write root");

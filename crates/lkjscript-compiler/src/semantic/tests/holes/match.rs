@@ -7,7 +7,7 @@ fn match_arm_hole_has_join_expectation_and_typed_pattern_scope() {
     let root = directory.join("main.lkjscript");
     let source = format!(
         concat!(
-            "edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\n",
+            "main/\nsig/\n->\nI64\n/sig\n",
             "match/\n7\narms/\narm/\nbinding/\nname/\nx\n/name\n/binding\n",
             "{}\n/arm\n/arms\n/match\n/main\n",
         ),
@@ -33,7 +33,7 @@ fn match_scrutinee_hole_uses_exact_instantiated_enum_pattern_type() {
     let root = directory.join("main.lkjscript");
     let source = format!(
         concat!(
-            "edition/\n2\n/edition\nenum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
+            "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
             "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
             "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
             "main/\nsig/\n->\nI64\n/sig\nmatch/\n{}\narms/\n",

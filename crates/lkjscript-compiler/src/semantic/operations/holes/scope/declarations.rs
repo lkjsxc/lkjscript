@@ -69,7 +69,7 @@ pub(super) fn insert(
         identity.clone(),
         ScopeEntity {
             schema: "lkjscript.semantic-entity".into(),
-            version: 2,
+            contract: crate::semantic::CONTRACT.to_hex(),
             source_revision: revision.into(),
             identity,
             kind,

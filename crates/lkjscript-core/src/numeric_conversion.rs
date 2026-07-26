@@ -1,4 +1,4 @@
-//! Host-independent Edition 2 I64/F64 conversions.
+//! Host-independent canonical I64/F64 conversions.
 
 #[cfg(test)]
 mod tests;

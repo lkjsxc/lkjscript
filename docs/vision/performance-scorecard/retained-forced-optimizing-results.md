@@ -41,7 +41,7 @@ performance: every exact, stream, tier, proof, W^X, allocation, speed, noise,
 and scalar criterion passed. Same-commit scalar native median was 7,982,586 ns
 versus retained 7,647,935 ns, ratio 1.043757; process wall was 9,207,038 versus
 9,372,036 ns, ratio 0.982395. The recovery followed folding the mandatory entry
-poll into ABI-2 frame registration, removing a separate runtime transition
+poll into canonical native contract frame registration, removing a separate runtime transition
 without weakening polling or proof checks.
 
 The earlier `063668e08b92a97a2feae8397ff0d634887bd0b6` result remains visible in

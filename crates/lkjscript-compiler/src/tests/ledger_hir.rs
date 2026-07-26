@@ -4,7 +4,7 @@ use crate::{BudgetAuthority, ResourceCategory, ResourceProfile};
 #[test]
 fn hir_shape_reservations_are_exact_plus_one_and_deterministic() {
     let source = concat!(
-        "edition/\n2\n/edition\n",
+        "",
         "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
         "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
         "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\n",

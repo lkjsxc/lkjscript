@@ -10,6 +10,7 @@ name = "lkjscript-xtask"
 path = "src/main.rs"
 
 [dependencies]
+lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-core = { path = "../lkjscript-core" }
 serde.workspace = true

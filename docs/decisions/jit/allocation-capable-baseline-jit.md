@@ -17,10 +17,10 @@ not Current. This status does not claim an optimizing tier or OSR.
 
 The implementation proceeds through separately honest boundaries:
 
-1. **Current:** native ABI 2 typed references, exact non-empty stack maps,
+1. **Current:** native canonical native contract typed references, exact non-empty stack maps,
    bounded active generated frames, and a safe collection-dispatch boundary;
 2. **Current:** source-to-generated host-independent allocation for Str, legacy
-   Buf, products, List, Option, Result, and monomorphic Edition 2 enums,
+   Buf, products, List, Option, Result, and monomorphic the canonical source contract enums,
    including construction, field/tag/read/write operations, direct and mutual
    recursion, forced collection, and VM/evaluator/native equality;
 3. **Accepted Target:** versioned Handle and host-capability calls, native/VM
@@ -66,7 +66,7 @@ never reused within a session, and all publication paths reject before the
 stable `u32` handle space is exhausted. Mutation is transactional and
 layout-preserving: growth is estimated and
 checked before accounting commits, and closure, layout, or limit failure
-restores the prior object. ABI-2 images
+restores the prior object. canonical native contract images
 retain bounded `HeapDispatchV1` sites with canonical operation-specific
 input/result/layout/allocation/store facts, including nominal product field
 facts and collision-free interned full structural List/Option/Result identities

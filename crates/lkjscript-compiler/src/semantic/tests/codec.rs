@@ -11,11 +11,11 @@ fn strict_codec_rejects_every_json_boundary() {
         &format!("{{\"schema\":\"{}\",", crate::semantic::SCHEMA),
         1,
     );
-    let unknown_field = valid.replacen("\"version\":2", "\"version\":2,\"unknown\":false", 1);
+    let unknown_field = valid.replacen("\"contract\":", "\"unknown\":false,\"contract\":", 1);
     let invalid = [
         duplicate,
         unknown_field,
-        valid.replace("\"version\":2", "\"version\":1"),
+        valid.replace(&crate::semantic::CONTRACT.to_hex(), &"0".repeat(64)),
         valid.replace(crate::semantic::SCHEMA, "lkjscript.agent-foundation"),
         valid.replace("\"kind\":\"snapshot\"", "\"kind\":\"invented\""),
         format!("{valid} false"),
@@ -115,7 +115,7 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
     assert!(limits.check_charges(&charges).is_ok());
     let response = crate::semantic::schema::Response {
         schema: crate::semantic::SCHEMA.to_string(),
-        version: 1,
+        contract: crate::semantic::CONTRACT.to_hex(),
         compiler_build: "x".repeat(crate::semantic::codec::MAX_OUTPUT_BYTES),
         profile: crate::semantic::schema::ResourceProfile::Default,
         profile_identity: crate::semantic::charges::identity(

@@ -51,7 +51,6 @@ pub(crate) fn source_units(tree: &ValidatedSourceTree) -> Vec<SourceUnitRecord> 
         .into_iter()
         .map(|file| SourceUnitRecord {
             path: file.origin.logical_path.clone(),
-            edition: file.edition.number(),
             identity: file.identity.to_hex(),
             bytes: file.exact_source_len,
             sha256: hex(&file.exact_source_sha256),

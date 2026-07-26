@@ -46,7 +46,6 @@ fn named_def(name: &str) -> String {
     )
 }
 
-mod cutover;
 mod diagnostics;
 mod edition;
 mod format;
@@ -54,7 +53,4 @@ mod identity;
 mod limits;
 mod linux_safety;
 mod loading;
-mod migration;
-mod migration_budget;
-mod migration_conflict;
-mod migration_publication;
+mod modules;

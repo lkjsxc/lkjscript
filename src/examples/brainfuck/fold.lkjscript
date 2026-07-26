@@ -1,12 +1,11 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/brainfuck/state.lkjscript
+src/examples/brainfuck/loading/fold-policy.lkjscript#bf-can-extend?
 /import
 import/
-examples/brainfuck/loading/fold-policy.lkjscript
+src/examples/brainfuck/state.lkjscript#BrainfuckState
 /import
+/imports
 def/
 name/
 bf-extend-command
@@ -130,6 +129,7 @@ def/
 name/
 bf-store-filtered
 /name
+public
 fn/
 sig/
 Product

@@ -9,11 +9,11 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 ## Selected Implementation Contract
 
-**Current for closed machine plans and actual sys invocation.** Semantic ABI
-version 1 remains stable. Reference-capable and scalar code objects both use
-native ABI version 2. Runtime ABI version 1 has enum-identified V1 frame and
-collection-dispatch calls; ABI-1 objects are rejected rather than reinterpreted
-as ABI 2.
+**Current for closed machine plans and actual sys invocation.** Semantic,
+native-layout, verified-SSA, and runtime-call identities are full contract
+digests. Reference-capable and scalar code objects use the same contract tuple.
+Frame and collection-dispatch calls are enum identified; objects with any
+mismatched contract are rejected rather than reinterpreted.
 
 `lkjscript-native` owns pure typed handle, frame-home, liveness, exact-map, and
 bounded generic heap-site metadata. `lkjscript-sys` alone retains installed
@@ -63,7 +63,7 @@ plan-callable typed signatures; encoder-owned Reserve/Register/Publish/
 Unregister/HeapDispatch slots instead expose their exact
 context/ordinal/byte/pointer/safepoint/heap-site machine arguments through
 `internal_abi_signature`. In particular, the second `HeapDispatchV1` argument is
-a heap-site ID, not a safepoint ID. ABI-2 frame registration records the exact
+a heap-site ID, not a safepoint ID. canonical native contract frame registration records the exact
 source-function entry and consumes the mandatory entry poll before generated
 body effects, so source lowering does not emit duplicate `EnterFunctionV1` or
 entry `PollV1` transitions. Backedge and explicit polls remain ordinary runtime

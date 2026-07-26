@@ -78,15 +78,15 @@ pub fn encode(
 
     let mut runtime_calls: Vec<_> = runtime_call_set.into_iter().collect();
     runtime_calls.sort_by_key(|slot| match slot {
-        RuntimeCallSlot::IdentityI64V1 => 1_u8,
-        RuntimeCallSlot::PollV1 => 2_u8,
-        RuntimeCallSlot::EnterFunctionV1 => 3_u8,
-        RuntimeCallSlot::CollectReferenceV1 => 4_u8,
-        RuntimeCallSlot::HeapDispatchV1 => 5_u8,
-        RuntimeCallSlot::ReserveFrameV1 => 6_u8,
-        RuntimeCallSlot::RegisterFrameV1 => 7_u8,
-        RuntimeCallSlot::PublishSafepointV1 => 8_u8,
-        RuntimeCallSlot::UnregisterFrameV1 => 9_u8,
+        RuntimeCallSlot::IdentityI64 => 1_u8,
+        RuntimeCallSlot::Poll => 2_u8,
+        RuntimeCallSlot::EnterFunction => 3_u8,
+        RuntimeCallSlot::CollectReference => 4_u8,
+        RuntimeCallSlot::HeapDispatch => 5_u8,
+        RuntimeCallSlot::ReserveFrame => 6_u8,
+        RuntimeCallSlot::RegisterFrame => 7_u8,
+        RuntimeCallSlot::PublishSafepoint => 8_u8,
+        RuntimeCallSlot::UnregisterFrame => 9_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -102,7 +102,7 @@ pub fn encode(
         trap_map,
         outcome_map,
         work_units: plan.work_units,
-        versions: config.versions,
+        contracts: config.contracts,
     })
     .map_err(NativeError::Image)?;
     if image.accounting().metadata_bytes() > plan.limits.max_metadata_bytes() {

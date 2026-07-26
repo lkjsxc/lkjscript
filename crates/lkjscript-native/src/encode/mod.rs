@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 use crate::image::{
     entry_metadata, exact_safepoint, frame_facts, frame_home, heap_runtime_site, outcome_map_entry,
-    relocation, root_location, root_map_requirement, source_map_entry, trap_map_entry, AbiVersions,
-    FrameHomeKind, ImageParts, InstallableImage, OutcomeKind, RelocationKind, RelocationTarget,
-    RootLocation,
+    relocation, root_location, root_map_requirement, source_map_entry, trap_map_entry,
+    FrameHomeKind, ImageContracts, ImageParts, InstallableImage, OutcomeKind, RelocationKind,
+    RelocationTarget, RootLocation,
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
@@ -36,24 +36,24 @@ const SCRATCH_FLOAT_ARGUMENT_1: u8 = 40;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EncodingConfig {
-    versions: AbiVersions,
+    contracts: ImageContracts,
 }
 
 impl EncodingConfig {
     #[must_use]
-    pub const fn new(versions: AbiVersions) -> Self {
-        Self { versions }
+    pub const fn new(contracts: ImageContracts) -> Self {
+        Self { contracts }
     }
 
     #[must_use]
-    pub const fn versions(self) -> AbiVersions {
-        self.versions
+    pub const fn contracts(self) -> ImageContracts {
+        self.contracts
     }
 }
 
 impl Default for EncodingConfig {
     fn default() -> Self {
-        Self::new(AbiVersions::current())
+        Self::new(ImageContracts::current())
     }
 }
 

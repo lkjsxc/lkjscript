@@ -1,6 +1,3 @@
-edition/
-2
-/edition
 def/
 name/
 append-record
@@ -40,9 +37,9 @@ writer
 /sys-fsync
 /unwrap-ok
 unwrap-ok/
-sys-close/
+drop/
 writer
-/sys-close
+/drop
 /unwrap-ok
 /do
 /let
@@ -91,9 +88,9 @@ payload
 /bind
 do/
 unwrap-ok/
-sys-close/
+drop/
 reader
-/sys-close
+/drop
 /unwrap-ok
 received
 /do

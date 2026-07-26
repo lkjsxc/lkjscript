@@ -65,7 +65,7 @@ impl Operation {
             | Self::StrFromF64 => memory_signature(self),
             Self::StdinHandle
             | Self::SysIsatty
-            | Self::SysClose
+            | Self::DropResource
             | Self::SysReadByte
             | Self::SysWriteByte
             | Self::SysReadInto

@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-std/io/put-byte.lkjscript
+src/std/io/put-byte.lkjscript#put-byte
 /import
+/imports
 def/
 name/
 esc
 /name
+public
 fn/
 sig/
 ->

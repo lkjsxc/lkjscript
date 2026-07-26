@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.agent-work-state-checkpoint.v2",
+  "$id": "lkjscript.agent-work-state-checkpoint",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "version", "expected_state_revision", "state"],
+  "required": ["schema", "contract", "expected_state_revision", "state"],
   "properties": {
     "schema": { "const": "lkjscript.agent-work-state-checkpoint" },
-    "version": { "const": 2 },
+    "contract": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "expected_state_revision": { "type": "integer", "minimum": 0 },
     "state": { "$ref": "work-state.schema.json" }
   }

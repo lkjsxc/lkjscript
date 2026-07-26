@@ -29,10 +29,13 @@ fn framed(payload: &[u8]) -> Vec<u8> {
 
 #[test]
 fn semantic_session_uses_exact_framing_and_command() {
-    let payload = concat!(
-        "{\"schema\":\"lkjscript.semantic-session\",\"version\":1,",
-        "\"request_id\":\"stop\",\"revision\":0,",
-        "\"request\":{\"kind\":\"shutdown\"}}",
+    let payload = format!(
+        concat!(
+            "{{\"schema\":\"lkjscript.semantic-session\",\"contract\":\"{}\",",
+            "\"request_id\":\"stop\",\"revision\":0,",
+            "\"request\":{{\"kind\":\"shutdown\"}}}}"
+        ),
+        lkjscript_contracts::AGENT_PROTOCOL_DIGEST,
     );
     let output = invoke(
         &["semantic", "serve", "--stdio"],
@@ -72,10 +75,11 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write CLI fixture");
     let request = format!(
         concat!(
-            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":2,",
+            "{{\"schema\":\"lkjscript.semantic-source\",\"contract\":\"{}\",",
             "\"profile\":\"default\",\"root\":{},",
             "\"operation\":{{\"kind\":\"snapshot\"}}}}",
         ),
+        lkjscript_contracts::SEMANTIC_SOURCE_DIGEST,
         format!("{:?}", root.to_string_lossy())
     );
     let redirected = invoke(&["semantic"], request.as_bytes());

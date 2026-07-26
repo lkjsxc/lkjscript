@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn calls_multiblock_loop_scalar_and_structured_outcomes() -> Result<(), Box<dyn std::error::Error>>
 {
-    let (image, entries) = scalar_image(AbiVersions::current())?;
+    let (image, entries) = scalar_image(ImageContracts::current())?;
     assert!(!image.bytes().is_empty());
     assert!(!image.source_map().is_empty());
     assert!(!image.trap_map().is_empty());

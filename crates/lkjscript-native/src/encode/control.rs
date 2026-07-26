@@ -109,13 +109,12 @@ impl FunctionEncoder<'_> {
     }
 
     pub(super) fn emit_unregister_frame(&mut self) -> Result<(), NativeError> {
-        self.runtime_calls
-            .insert(RuntimeCallSlot::UnregisterFrameV1);
+        self.runtime_calls.insert(RuntimeCallSlot::UnregisterFrame);
         self.load_integer_register(7, self.context_offset())?;
         self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
         // mov rdx, rbp; sys validates both the descriptor and frame base.
         self.emit(&[0x48, 0x89, 0xea])?;
-        self.emit_runtime_call_target(RuntimeCallSlot::UnregisterFrameV1)
+        self.emit_runtime_call_target(RuntimeCallSlot::UnregisterFrame)
     }
 
     pub(super) fn emit_registered_zero_return(&mut self) -> Result<(), NativeError> {

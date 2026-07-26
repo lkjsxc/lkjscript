@@ -38,11 +38,11 @@ impl ExecutableInstaller {
         image
             .validate_integrity()
             .map_err(InstallError::InvalidImage)?;
-        let expected = AbiVersions::current();
-        if image.versions() != expected {
-            return Err(InstallError::VersionMismatch {
-                expected,
-                actual: image.versions(),
+        let expected = ImageContracts::current();
+        if image.contracts() != expected {
+            return Err(InstallError::ContractMismatch {
+                expected: Box::new(expected),
+                actual: Box::new(image.contracts()),
             });
         }
         let accounting = image.accounting();

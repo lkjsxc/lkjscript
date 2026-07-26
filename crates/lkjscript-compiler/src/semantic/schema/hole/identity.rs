@@ -6,7 +6,7 @@ use super::super::{SemanticEffect, SpanRecord};
 #[serde(deny_unknown_fields)]
 pub(crate) struct TypedHoleIdentity {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub source_revision: String,
     pub identity: String,
     pub declaration_key: String,
@@ -42,7 +42,7 @@ pub(crate) enum TypeUnavailableReason {
 #[serde(deny_unknown_fields)]
 pub(crate) struct ScopeEntity {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub source_revision: String,
     pub identity: String,
     pub kind: ScopeEntityKind,

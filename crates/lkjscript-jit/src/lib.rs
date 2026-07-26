@@ -22,8 +22,8 @@ use lkjscript_ir::{
     VerifiedOptimizedProgram, VerifiedProgram,
 };
 use lkjscript_native::{
-    AbiVersions, BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation,
-    HeapRuntimeSite, OutcomeMapEntry, ReferenceType, Relocation, RuntimeCallSlot, Safepoint,
+    BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation, HeapRuntimeSite,
+    ImageContracts, OutcomeMapEntry, ReferenceType, Relocation, RuntimeCallSlot, Safepoint,
     SourceMapEntry, TrapMapEntry,
 };
 use lkjscript_sys::executable::{
@@ -33,9 +33,7 @@ use lkjscript_sys::executable::{
 };
 
 pub use lkjscript_ir::FunctionId;
-pub use lkjscript_native::{
-    NativeValue, TrapCode, ValueType, CURRENT_NATIVE_ABI_VERSION, CURRENT_RUNTIME_ABI_VERSION,
-};
+pub use lkjscript_native::{NativeValue, TrapCode, ValueType};
 pub use lower::{LoweringError, LoweringFailureCode};
 
 mod code;
@@ -97,7 +95,7 @@ pub struct JitSession {
     optimization_time: Duration,
     native_entries: u64,
     direct_native_calls: u64,
-    poll_v1_calls: u64,
+    poll_calls: u64,
     vm_fallbacks: u64,
     compile_failures: u64,
     native_invocations: u64,

@@ -31,8 +31,10 @@ pub fn compile_source_with_ledger(
     let result = (|| {
         crate::ensure_source_path(Path::new(path))?;
         let program = validate_for_compiler_with_budget(source, path, limits, ledger)?;
-        crate::source::require_edition2_for_compiler(&program)?;
-        let analyzed = analyze_program_with_budget(&program, ledger)?;
+        let projection = program
+            .module_scoped_projection()
+            .map_err(crate::source::SourceDiagnostic::into_core)?;
+        let analyzed = analyze_program_with_budget(&projection, ledger)?;
         compile_analyzed(&analyzed, limits, ledger)
     })();
     finish(result, ledger)

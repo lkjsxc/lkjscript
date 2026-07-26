@@ -40,7 +40,7 @@ impl JitSession {
         }
 
         let accounting = lowered.image.accounting();
-        let versions = lowered.image.versions();
+        let contracts = lowered.image.contracts();
         let diagnostic_machine_code = if self.config.retain_machine_code_diagnostics {
             let bytes = u64::try_from(lowered.image.bytes().len()).map_err(|_| {
                 EngineError::new(
@@ -107,7 +107,7 @@ impl JitSession {
             identity,
             functions: lowered.functions.clone(),
             tier,
-            versions,
+            contracts,
             entries,
             accounting,
             accounted_allocation_bytes,

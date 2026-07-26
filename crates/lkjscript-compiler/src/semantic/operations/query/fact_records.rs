@@ -39,9 +39,9 @@ fn available(
     FactRecord::Available {
         producer: producer(stage),
         fact_schema: schema,
-        fact_version: 1,
+        fact_contract: crate::semantic::CONTRACT.to_hex(),
         source_revision: revision.to_string(),
-        derived_artifact_revision: format!("{schema:?}/1:{revision}"),
+        derived_artifact_identity: format!("{}:{schema:?}:{revision}", crate::semantic::CONTRACT),
         certainty: FactCertainty::Guaranteed,
         cardinality: RelationCardinality::One,
         values,
@@ -58,9 +58,9 @@ pub(super) fn unavailable(
     FactRecord::Unavailable {
         producer: producer(stage),
         fact_schema: schema,
-        fact_version: 1,
+        fact_contract: crate::semantic::CONTRACT.to_hex(),
         source_revision: revision.to_string(),
-        derived_artifact_revision: None,
+        derived_artifact_identity: None,
         certainty: FactCertainty::Informational,
         cardinality: RelationCardinality::Zero,
         reason,

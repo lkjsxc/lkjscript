@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.structure.audit.records.v1",
+  "$id": "lkjscript.structure.audit.records",
   "$defs": {
     "file": {
       "type": "object",

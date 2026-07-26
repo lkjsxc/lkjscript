@@ -1,5 +1,9 @@
 use super::super::*;
 
+fn exact_import(path: &str, name: &str) -> String {
+    format!("imports/\nimport/\n{path}#{name}\n/import\n/imports\n")
+}
+
 #[test]
 fn loader_uses_explicit_dependency_first_dfs_for_deep_import_chain() -> std::io::Result<()> {
     const DEPTH: usize = 1_500;
@@ -20,7 +24,7 @@ fn loader_uses_explicit_dependency_first_dfs_for_deep_import_chain() -> std::io:
     }
     for (index, path) in paths.iter().enumerate() {
         let source = if let Some(next) = logical_paths.get(index + 1) {
-            format!("import/\n{next}\n/import\n")
+            exact_import(next, "leaf")
         } else {
             named_def("leaf")
         };
@@ -30,8 +34,8 @@ fn loader_uses_explicit_dependency_first_dfs_for_deep_import_chain() -> std::io:
     fs::write(
         &root,
         format!(
-            "import/\n{}\n/import\n{}",
-            logical_paths[0],
+            "{}{}",
+            exact_import(&logical_paths[0], "leaf"),
             unit_main("unit")
         ),
     )?;
@@ -67,13 +71,17 @@ fn loader_cycle_diagnostic_retains_deterministic_related_import_spans() -> std::
     let second = directory.0.join("second.lkjscript");
     fs::write(
         &root,
-        format!("import/\n./first.lkjscript\n/import\n{}", unit_main("unit")),
+        format!(
+            "{}{}",
+            exact_import("first.lkjscript", "cycle"),
+            unit_main("unit")
+        ),
     )?;
-    fs::write(&first, "import/\n./second.lkjscript\n/import\n")?;
-    fs::write(&second, "import/\n./main.lkjscript\n/import\n")?;
+    fs::write(&first, exact_import("second.lkjscript", "cycle"))?;
+    fs::write(&second, exact_import("main.lkjscript", "cycle"))?;
     let error = load(&root, &Limits::default()).expect_err("import cycle");
     assert_eq!(error.code(), "LKJ-SRC-LOAD");
-    assert_eq!(error.primary_span().start().line(), 1);
+    assert_eq!(error.primary_span().start().line(), 2);
     assert_eq!(error.related_spans().len(), 2);
     let compact = error.render_compact_agent();
     assert!(compact.contains("related[0].label=earlier import in cycle"));
@@ -90,7 +98,11 @@ fn loader_retains_logical_origin_separate_from_canonical_host_path() -> std::io:
     fs::write(&dependency, named_def("helper"))?;
     fs::write(
         &root,
-        format!("import/\n./dep.lkjscript\n/import\n{}", unit_main("unit")),
+        format!(
+            "{}{}",
+            exact_import("dep.lkjscript", "helper"),
+            unit_main("unit")
+        ),
     )?;
     let tree = load(&root, &Limits::default())
         .map_err(|error| std::io::Error::other(error.to_string()))?;
@@ -133,7 +145,8 @@ fn loader_rejects_wide_entry_directories_and_accepts_imported_declarations() -> 
     fs::write(
         &root,
         format!(
-            "import/\n./traits.lkjscript\n/import\n{}",
+            "{}{}",
+            exact_import("traits.lkjscript", "Marked"),
             unit_main("unit")
         ),
     )?;

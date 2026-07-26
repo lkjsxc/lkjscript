@@ -58,7 +58,7 @@ pub(super) enum MaterializeRootError {
 #[repr(C)]
 pub(super) struct NativeCallState<'a> {
     // These first three fields are the stable runtime ABI consumed directly by
-    // generated code. Native ABI 2 adds frame operations without changing the
+    // generated code. The native contract adds frame operations without changing the
     // semantic or runtime ABI versions.
     pub(super) status: u32,
     pub(super) trap: u32,

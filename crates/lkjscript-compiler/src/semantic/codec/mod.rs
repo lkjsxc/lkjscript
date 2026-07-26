@@ -68,10 +68,18 @@ pub(crate) fn decode_request_with_ledger(
             format!("unknown schema {:?}", request.schema),
         ));
     }
-    if request.version != super::VERSION {
+    if lkjscript_contracts::ContractDigest::from_hex(&request.contract) != Some(super::CONTRACT) {
         return Err(error(
-            ProtocolErrorCode::UnsupportedVersion,
-            format!("unsupported schema version {}", request.version),
+            ProtocolErrorCode::ContractMismatch,
+            format!(
+                concat!(
+                    "contract mismatch for {}: expected {}, actual {}; ",
+                    "producer=semantic request, consumer=lkjscript compiler; update the producer"
+                ),
+                super::SCHEMA,
+                super::CONTRACT,
+                request.contract,
+            ),
         ));
     }
     super::charges::ProtocolLimits::for_core(ledger.profile()).check_request(input.len())?;

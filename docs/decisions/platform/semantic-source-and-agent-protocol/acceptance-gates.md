@@ -26,13 +26,13 @@ The first slice is Current only when:
 - stale/type/effect/ownership-invalid hole transactions reject atomically,
   exact/+1 hole/action/transaction reservations reject before allocation, and
   release compilation rejects every reachable hole;
-- unchanged Edition 1 compile/evaluator/VM/JIT semantics pass the canonical and
+- unchanged the removed legacy source contract compile/evaluator/VM/JIT semantics pass the canonical and
   runtime gates; and
 - an initial retained harness compares raw text, entity edits, and hole filling
   without making a general superiority claim.
 ## Not Current And Deferred
 
-Schema V2 does not itself provide Edition 2, modules/packages, semantic merge,
+Schema does not itself provide the canonical source contract, modules/packages, semantic merge,
 multi-agent task ownership, general proof holes, complete type inhabitation,
 full-language constrained decoding, a network daemon, nonzero query caching, or
 a selected replacement text syntax. Those remain later measured slices.

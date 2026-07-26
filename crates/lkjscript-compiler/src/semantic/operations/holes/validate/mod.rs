@@ -31,7 +31,9 @@ pub(crate) fn source_holes(tree: &ValidatedSourceTree) -> Result<(), String> {
 
 pub(super) fn checker_accepts(site: &super::site::HoleSite<'_>, expression: &Expression) -> bool {
     completed_tree(site.tree, Some((site.node, expression.clone())))
-        .and_then(|tree| crate::analyze::analyze_program(&tree).map_err(|error| error.to_string()))
+        .and_then(|tree| {
+            crate::analyze::analyze_module_program(&tree).map_err(|error| error.to_string())
+        })
         .is_ok()
 }
 
@@ -39,13 +41,13 @@ pub(super) fn completed_program(
     site: &super::site::HoleSite<'_>,
 ) -> Result<crate::hir::Program, String> {
     let tree = completed_tree(site.tree, None)?;
-    crate::analyze::analyze_program(&tree).map_err(|failure| failure.to_string())
+    crate::analyze::analyze_module_program(&tree).map_err(|failure| failure.to_string())
 }
 
 pub(crate) fn validate_incomplete(tree: &ValidatedSourceTree) -> Result<(), String> {
     source_holes(tree)?;
     let completed = completed_tree(tree, None)?;
-    crate::analyze::analyze_program(&completed)
+    crate::analyze::analyze_module_program(&completed)
         .map(|_| ())
         .map_err(|failure| failure.to_string())
 }
@@ -85,9 +87,6 @@ pub(super) fn completed_tree(
     }
     replacements.sort_by_key(|(index, _)| std::cmp::Reverse(*index));
     for (index, expression) in replacements {
-        if !expression.supports_edition(tree.edition()) {
-            return Err("hole expression requires Edition 2".into());
-        }
         let target = crate::semantic::transaction::node_mut(&mut files, index)
             .ok_or("hole node disappeared during validation")?;
         *target = expression.to_source(target.span)?;

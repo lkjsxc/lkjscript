@@ -5,11 +5,11 @@
 ## Status
 
 **Current for the compiler and core foundation described here.** Resource
-Profile V2, one request-owned compiler ledger, five named ceiling sets,
+resource profile, one request-owned compiler ledger, five named ceiling sets,
 profile-aware and public `_with_ledger` compiler entry points, successful
 compile metrics, typed preflight reservations, publication guards, and the
 hierarchical pre-allocation core are implemented. This does not weaken or
-replace an Edition 1 or implementation safety limit. The one-shot Semantic
+replace an the removed legacy source contract or implementation safety limit. The one-shot Semantic
 Protocol selects the same profile identity and ceilings for its request-local
 categories. Parser-wide pre-allocation and one ledger shared across compiler,
 protocol, repository, agent-state, artifact, proof, or runtime authorities
@@ -35,9 +35,9 @@ Successful `CompileMetrics` exposes profile identity and exact charged totals,
 and `ExecutableProgram` retains the profile identity. Package manifests do not
 yet select profiles.
 
-## Closed V2 Categories
+## Closed canonical contract Categories
 
-The first 25 categories preserve the V1 names and order: `source_bytes`,
+The first 25 categories preserve the legacy contract names and order: `source_bytes`,
 `source_units`, `import_edges`, `tokens`,
 `schema_nodes`, `top_level_declarations`, `product_fields`, `parser_work`,
 `validation_work`, `path_work`, `type_nesting`, `type_work`, `trait_work`,
@@ -48,7 +48,7 @@ The first 25 categories preserve the V1 names and order: `source_bytes`,
 
 The 29 appended categories and their units are closed by
 [Hierarchical Preallocation](resource-budget-profiles/hierarchical-preallocation.md).
-Unknown categories require Profile V3 rather than an alias.
+Unknown categories require a different exact profile contract rather than an alias.
 
 ## Concrete Ceilings
 
@@ -91,7 +91,7 @@ exhaustion rejects the attempted increment without mutating the recorded total.
 - A complete validated source tree is measured after loading/parsing. Aggregate
   source-shape reservations then complete before HIR construction. Enum shape
   and match pattern/arm/matrix/plan/witness reservations complete before their
-  HIR allocations. Edition 1 limits remain; closed match wrapper depth has its
+  HIR allocations. the removed legacy source contract limits remain; closed match wrapper depth has its
   own fixed physical bound.
 - Constructed and ownership-checked immutable HIR is measured once; typed
   `ssa_construction` reservations for HIR/type/trait/ownership input shape
@@ -99,7 +99,7 @@ exhaustion rejects the attempted increment without mutating the recorded total.
   ownership, and HIR maxima still protect HIR construction itself.
 - Verified normalized immutable SSA is measured once; typed `bytecode`
   reservations for exact SSA function/block/value/edge/frame-state input shape
-  complete before bytecode construction and executable publication. Profile V2
+  complete before bytecode construction and executable publication. resource profile
   has no bytecode-output categories, so bytecode allocation remains protected
   by existing fixed bytecode limits rather than an overclaimed output preflight.
 - Match reservations use `pattern_usefulness`; enum HIR reservations use `hir`;
@@ -112,7 +112,7 @@ exhaustion rejects the attempted increment without mutating the recorded total.
   available through the core `Error` accessor.
 
 This is pre-allocation accounting for the named target phases, not a claim that
-Profile V2 preflights source parser allocation, HIR construction generally, SSA
+resource profile preflights source parser allocation, HIR construction generally, SSA
 normalization, or exact bytecode output. Those paths retain fixed hard limits.
 
 ## Diagnostics And Failure
@@ -126,16 +126,16 @@ outer ledger after failure. Responsible semantic nodes are present only where
 the preceding immutable representation already provides one.
 
 `protocol_request_bytes` and `protocol_response_bytes` are reserved at zero in
-the compiler ledger. Semantic Source V2 selects one of the same five profile
+the compiler ledger. Semantic Source contract selects one of the same five profile
 identities and intersects its request/response, source, schema-node, and
 validation-work ceilings with stricter protocol/foundation maxima. Its ledger
 is request-local and does not silently claim to be the compiler ledger.
 
-## Edition 1 Non-Regression
+## the removed legacy source contract Non-Regression
 
 Source depth 8, form children 16, 384 tokens per file, 8 top-level forms,
 15 product fields, and 16 combined immediate source-directory entries remain
-Current and unchanged. Foundation V1 source byte/unit/tree limits and all
+Current and unchanged. Foundation legacy contract source byte/unit/tree limits and all
 compiler, IR, bytecode, proof, native-image, and execution maxima also remain
 enforced. No fixed source rule becomes a profile or lint through this slice.
 

@@ -45,17 +45,8 @@ pub(crate) fn bounded_failure(
 
 pub(crate) fn omitted_categories(
     rejected: std::collections::BTreeMap<CandidateCategory, u64>,
-    edition2: bool,
 ) -> Vec<OmittedCategory> {
-    let mut result = if edition2 {
-        Vec::new()
-    } else {
-        vec![
-            omitted(CandidateCategory::MatchSkeleton),
-            omitted(CandidateCategory::ControlForm),
-            omitted(CandidateCategory::NeverForm),
-        ]
-    };
+    let mut result = Vec::new();
     result.extend(
         rejected
             .into_iter()
@@ -68,27 +59,10 @@ pub(crate) fn omitted_categories(
     result
 }
 
-fn omitted(category: CandidateCategory) -> OmittedCategory {
-    OmittedCategory {
-        category,
-        known_count: Some(0),
-        blocker: BlockerCode::UnsupportedEditionOneForm,
-    }
-}
-
-pub(crate) fn unsupported_blockers(edition2: bool) -> Vec<ActionBlocker> {
-    let mut blockers = Vec::new();
-    if !edition2 {
-        blockers.push(ActionBlocker {
-            code: BlockerCode::UnsupportedEditionOneForm,
-            subject: "match/return/break/continue/Never".into(),
-            reason: "not present in the closed Edition 1 source vocabulary".into(),
-        });
-    }
-    blockers.push(ActionBlocker {
+pub(crate) fn unsupported_blockers() -> Vec<ActionBlocker> {
+    vec![ActionBlocker {
         code: BlockerCode::QualificationUnsupported,
         subject: "imports_and_qualification".into(),
         reason: "no qualified reference form is available".into(),
-    });
-    blockers
+    }]
 }

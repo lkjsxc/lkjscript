@@ -13,6 +13,7 @@ name = "lkjscript-app"
 version = "0.1.0"
 dependencies = [
  "lkjscript-compiler",
+ "lkjscript-contracts",
  "lkjscript-core",
  "lkjscript-ir",
  "lkjscript-jit",
@@ -24,6 +25,7 @@ dependencies = [
 name = "lkjscript-compiler"
 version = "0.1.0"
 dependencies = [
+ "lkjscript-contracts",
  "lkjscript-core",
  "lkjscript-ir",
  "serde",
@@ -31,8 +33,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lkjscript-contracts"
+version = "0.1.0"
+
+[[package]]
 name = "lkjscript-core"
 version = "0.1.0"
+dependencies = [
+ "lkjscript-contracts",
+]
 
 [[package]]
 name = "lkjscript-ir"
@@ -51,6 +60,9 @@ dependencies = [
 [[package]]
 name = "lkjscript-native"
 version = "0.1.0"
+dependencies = [
+ "lkjscript-contracts",
+]
 
 [[package]]
 name = "lkjscript-sys"
@@ -73,6 +85,7 @@ name = "lkjscript-xtask"
 version = "0.1.0"
 dependencies = [
  "lkjscript-compiler",
+ "lkjscript-contracts",
  "lkjscript-core",
  "serde",
  "serde_json",

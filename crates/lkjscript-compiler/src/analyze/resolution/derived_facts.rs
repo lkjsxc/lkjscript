@@ -16,7 +16,7 @@ pub(in crate::analyze) fn callable_arity(ty: &Type) -> Option<usize> {
     }
 }
 
-pub(in crate::analyze) fn is_edition2_control_name(name: &str) -> bool {
+pub(in crate::analyze) fn is_control_name(name: &str) -> bool {
     matches!(name, "loop" | "return" | "break" | "continue" | "trap")
 }
 

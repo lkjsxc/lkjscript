@@ -71,7 +71,7 @@ pub fn run(
     }
     QueryResult {
         schema: "lkjscript.repository-query".into(),
-        version: 1,
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         command: command.into(),
         target: target.into(),
         profile: profile.map(str::to_owned),

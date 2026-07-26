@@ -19,7 +19,7 @@ impl Resolver<'_> {
             Type::Bool | Type::I64 | Type::Enum { .. } | Type::Product(_)
         ) {
             return Err(self.error(format!(
-                "type {:?} has no closed Edition 2 pattern space",
+                "type {:?} has no closed pattern space",
                 scrutinee_value.ty,
             )));
         }

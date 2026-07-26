@@ -37,7 +37,7 @@ pub(super) fn snapshot(
 ) -> Result<SourceSnapshot, SessionError> {
     let request = Request {
         schema: crate::semantic::SCHEMA.to_string(),
-        version: crate::semantic::VERSION,
+        contract: crate::semantic::CONTRACT.to_hex(),
         profile,
         root: root.to_string(),
         operation: OperationRequest::Snapshot {
@@ -108,7 +108,7 @@ pub(super) fn session_identity(
     let fields = (
         compiler_build,
         crate::semantic::SCHEMA,
-        crate::semantic::VERSION,
+        crate::semantic::CONTRACT.to_hex(),
         profile.core().name().as_str(),
         root,
         source_revision,

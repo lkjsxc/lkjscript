@@ -8,6 +8,7 @@ pub(crate) enum ResolvedOperation {
         key: String,
         old_name: String,
         new_name: String,
+        module: String,
         declaration_node: u32,
     },
     Replace {

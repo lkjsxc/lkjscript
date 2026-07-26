@@ -74,7 +74,7 @@ package containment.
 
 ## Policy
 
-Edition 1 shape limits remain language-version constants, not user
+the removed legacy source contract shape limits remain language-version constants, not user
 configuration, until aggregate profile replacements are Current. A change
 requires documentation, boundary tests, and edition migration. Foundation
 maxima now bound exact source bytes and source-unit/tree counts; aggregate

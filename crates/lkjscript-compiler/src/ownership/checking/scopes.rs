@@ -25,7 +25,9 @@ pub(in crate::ownership) fn check_scopes_expr(
                     &later,
                     initializer_context,
                 )?;
-                if is_owned(&expression_of_binding(program, local.binding)?) {
+                if is_owned(&expression_of_binding(program, local.binding)?)
+                    || is_affine_resource(&expression_of_binding(program, local.binding)?)
+                {
                     state.initialized.insert(local.place, true);
                 }
                 if let ExprKind::Borrow {
@@ -52,6 +54,7 @@ pub(in crate::ownership) fn check_scopes_expr(
             check_expr(program, body, places, state, future, UseContext::Ordinary)?;
             for local in bindings.iter().rev() {
                 end_reference_binding(state, local.binding);
+                require_resource_consumed(program, local.binding, local.place, state)?;
                 end_place_scope(state, local.place);
                 state.consumed_ref_mut.remove(&local.binding);
             }
@@ -71,24 +74,27 @@ pub(in crate::ownership) fn check_scopes_expr(
                 &uses(body),
                 UseContext::Ordinary,
             )?;
-            if is_owned(&expression_of_binding(program, *binding)?) {
+            if is_owned(&expression_of_binding(program, *binding)?)
+                || is_affine_resource(&expression_of_binding(program, *binding)?)
+            {
                 state.initialized.insert(*place, true);
             }
             check_expr(program, body, places, state, future, UseContext::Ordinary)?;
             end_reference_binding(state, *binding);
+            require_resource_consumed(program, *binding, *place, state)?;
             end_place_scope(state, *place);
             state.consumed_ref_mut.remove(binding);
         }
         ExprKind::SetLocal { target, value, .. } => {
             check_expr(program, value, places, state, future, UseContext::Ordinary)?;
             let ty = expression_of_binding(program, *target)?;
-            if is_owned(&ty) {
+            if is_owned(&ty) || is_affine_resource(&ty) {
                 let place = places
                     .get(target)
                     .ok_or_else(|| Error::msg("Owned Buf assignment target has no PlaceId"))?;
                 if state.initialized.get(place).copied().unwrap_or(false) {
                     return Err(Error::msg(
-                        "Owned Buf var assignment is only reinitialization after move in this slice",
+                        "affine assignment is only reinitialization after move or drop",
                     ));
                 }
                 if state
@@ -96,7 +102,9 @@ pub(in crate::ownership) fn check_scopes_expr(
                     .get(place)
                     .is_some_and(|loans| !loans.is_empty())
                 {
-                    return Err(Error::msg("cannot reinitialize Owned Buf while borrowed"));
+                    return Err(Error::msg(
+                        "cannot reinitialize affine value while borrowed",
+                    ));
                 }
                 state.initialized.insert(*place, true);
             }
@@ -127,7 +135,34 @@ pub(in crate::ownership) fn check_scopes_expr(
                 UseContext::Ordinary,
             )?;
         }
+        ExprKind::EnumValue { fields, .. } => {
+            check_sequence(program, fields, places, state, future)?;
+        }
+        ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => {
+            check_expr(program, value, places, state, future, UseContext::Ordinary)?;
+        }
         _ => unreachable!("ownership expression category mismatch"),
     }
     Ok(())
+}
+
+fn require_resource_consumed(
+    program: &Program,
+    binding: BindingId,
+    place: PlaceId,
+    state: &State,
+) -> Result<()> {
+    let ty = expression_of_binding(program, binding)?;
+    if is_affine_resource(&ty) && state.initialized.get(&place) == Some(&true) {
+        let name = program
+            .binding(binding)
+            .map_or("<unknown>", |binding| binding.name.as_str());
+        Err(Error::msg(format!(
+            "affine Handle local {name} ({binding:?}) must be returned, moved, or dropped before scope exit"
+        )))
+    } else {
+        Ok(())
+    }
 }

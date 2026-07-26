@@ -8,6 +8,7 @@ pub(crate) fn consume_affine_arguments(
     state: &mut OwnershipState,
     types: &[SsaType],
     user_call: bool,
+    consume_handles: bool,
 ) -> crate::Result<()> {
     let mut seen = BTreeSet::new();
     for argument in arguments {
@@ -18,18 +19,28 @@ pub(crate) fn consume_affine_arguments(
         if !seen.insert(*argument) {
             return fail("SSA call duplicates one affine argument");
         }
-        let fact = state
-            .affine
-            .get(argument)
-            .ok_or_else(|| IrError::new("SSA call uses an unavailable affine argument"))?;
+        let handle = ty == &SsaType::Handle;
+        let Some(fact) = state.affine.get(argument) else {
+            if handle && !consume_handles {
+                continue;
+            }
+            return Err(IrError::new("SSA call uses an unavailable affine argument"));
+        };
+        if handle && !fact.transferred && !consume_handles {
+            continue;
+        }
         if user_call && is_owned_buf(ty) && !fact.transferred {
             return fail("SSA Owned call argument requires explicit Move transfer provenance");
         }
         if let Some(place) = current_owner_place(state, *argument) {
-            return fail(format!(
-                "SSA call consumes current owner of PlaceId {} without explicit Move",
-                place.raw()
-            ));
+            if handle && consume_handles {
+                state.owners.remove(&place);
+            } else {
+                return fail(format!(
+                    "SSA call consumes current owner of PlaceId {} without explicit Move",
+                    place.raw()
+                ));
+            }
         }
         state.affine.remove(argument);
     }

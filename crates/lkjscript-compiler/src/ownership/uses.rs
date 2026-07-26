@@ -54,11 +54,14 @@ pub(in crate::ownership) fn collect_uses(expression: &Expr, output: &mut BTreeSe
         ExprKind::SetLocal { value, .. } | ExprKind::ProductField { value, .. } => {
             collect_uses(value, output);
         }
-        ExprKind::ProductValue { fields, .. } => {
+        ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
             for field in fields {
                 collect_uses(field, output);
             }
         }
+        ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => collect_uses(value, output),
         ExprKind::WithProductField {
             value, replacement, ..
         } => {
@@ -133,11 +136,14 @@ pub(in crate::ownership) fn walk_children(expression: &Expr, action: &mut impl F
             action(body);
         }
         ExprKind::SetLocal { value, .. } | ExprKind::ProductField { value, .. } => action(value),
-        ExprKind::ProductValue { fields, .. } => {
+        ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
             for field in fields {
                 action(field);
             }
         }
+        ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => action(value),
         ExprKind::WithProductField {
             value, replacement, ..
         } => {

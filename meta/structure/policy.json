@@ -1,6 +1,6 @@
 {
-  "schema": "lkjscript.structure.policy.v1",
-  "version": "1.1.0",
+  "schema": "lkjscript.structure.policy",
+  "contract": "0788e47b76cfc6c30ec4f75b204566a371aba70ef322db1a89831cf9f28c733a",
   "limits": {
     "authored_lines": 200,
     "authored_bytes": 32768,
@@ -78,7 +78,7 @@
     },
     {
       "id": "LKJ-REPO-CAPSULE-SCHEMA", "level": "error",
-      "summary": "Capsules use the strict closed capsule.json v1 contract."
+      "summary": "Capsules use the strict content-addressed capsule.json contract."
     },
     {
       "id": "LKJ-REPO-CAPSULE-ID", "level": "error",

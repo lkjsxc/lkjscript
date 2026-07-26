@@ -1,4 +1,4 @@
-//! Strict one-shot Semantic Source Schema V2 protocol.
+//! Strict one-shot Semantic Source protocol for the current exact contract.
 
 mod budget;
 mod charges;
@@ -21,7 +21,8 @@ use lkjscript_core::{BudgetError, BudgetLedger};
 use schema::{ProtocolError, ProtocolErrorCode};
 
 pub const SCHEMA: &str = "lkjscript.semantic-source";
-pub const VERSION: u32 = 2;
+pub const CONTRACT: lkjscript_contracts::ContractDigest =
+    lkjscript_contracts::SEMANTIC_SOURCE_DIGEST;
 pub use codec::MAX_REQUEST_BYTES;
 
 #[derive(Debug)]
@@ -54,7 +55,7 @@ impl fmt::Display for SemanticProcessError {
 
 impl std::error::Error for SemanticProcessError {}
 
-/// Encoded Schema V2 response plus an internal typed budget failure, if any.
+/// Encoded current-contract response plus an internal typed budget failure, if any.
 pub struct SemanticExecution {
     response: Vec<u8>,
     budget: Option<Box<BudgetError>>,

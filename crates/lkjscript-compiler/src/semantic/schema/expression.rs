@@ -1,4 +1,3 @@
-mod edition;
 mod matching;
 mod measure;
 
@@ -140,10 +139,6 @@ pub(crate) struct ExpressionField {
 }
 
 impl Expression {
-    pub(crate) fn supports_edition(&self, edition: crate::source::SourceEdition) -> bool {
-        edition == crate::source::SourceEdition::Edition2 || !edition::requires_edition2(self)
-    }
-
     pub(crate) fn to_source(&self, span: SourceSpan) -> Result<SourceNode, String> {
         super::expression_source::to_source(self, span)
     }

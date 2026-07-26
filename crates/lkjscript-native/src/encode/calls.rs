@@ -85,10 +85,10 @@ impl FunctionEncoder<'_> {
             .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
         let roots = certified_root_locations(self.function, certificate)?;
         self.emit_publish_safepoint(safepoint_id)?;
-        self.runtime_calls.insert(RuntimeCallSlot::HeapDispatchV1);
+        self.runtime_calls.insert(RuntimeCallSlot::HeapDispatch);
         self.load_integer_register(7, self.context_offset())?;
         self.load_integer_register_immediate(6, u64::from(site_id))?;
-        self.emit_call_target(RelocationTarget::Runtime(RuntimeCallSlot::HeapDispatchV1))?;
+        self.emit_call_target(RelocationTarget::Runtime(RuntimeCallSlot::HeapDispatch))?;
         let call_offset = self.bytes.len();
         self.emit(&[0x41, 0xff, 0xd3])?;
         self.safepoints.push(exact_safepoint(
@@ -119,11 +119,10 @@ impl FunctionEncoder<'_> {
     }
 
     pub(super) fn emit_publish_safepoint(&mut self, safepoint_id: u32) -> Result<(), NativeError> {
-        self.runtime_calls
-            .insert(RuntimeCallSlot::PublishSafepointV1);
+        self.runtime_calls.insert(RuntimeCallSlot::PublishSafepoint);
         self.load_integer_register(7, self.context_offset())?;
         self.load_integer_register_immediate(6, u64::from(safepoint_id))?;
-        self.emit_runtime_call_target(RuntimeCallSlot::PublishSafepointV1)
+        self.emit_runtime_call_target(RuntimeCallSlot::PublishSafepoint)
     }
 
     pub(super) fn emit_call_target(&mut self, target: RelocationTarget) -> Result<(), NativeError> {

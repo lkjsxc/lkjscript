@@ -6,7 +6,7 @@ use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
-const E2: &str = "edition/\n2\n/edition\n";
+const E2: &str = "";
 
 fn main_source(result: &str, body: &str) -> String {
     format!("{E2}main/\nsig/\n->\n{result}\n/sig\n{body}\n/main\n")
@@ -14,7 +14,7 @@ fn main_source(result: &str, body: &str) -> String {
 
 fn assert_i64_all(source: &str, expected: i64) {
     let program = compile_source(source, "never-control.lkjscript", &Limits::default())
-        .expect("compile Edition 2 control source");
+        .expect("compile canonical control source");
     assert_eq!(
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(expected)),

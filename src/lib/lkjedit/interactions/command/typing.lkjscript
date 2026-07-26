@@ -1,12 +1,11 @@
-edition/
-2
-/edition
+imports/
 import/
-lib/lkjedit/state.lkjscript
+src/lib/lkjedit/state.lkjscript#EditorState
 /import
 import/
-std/buffer/insert-at.lkjscript
+src/std/buffer/insert-at.lkjscript#insert-at
 /import
+/imports
 def/
 name/
 editor-drop-command-byte
@@ -54,6 +53,7 @@ def/
 name/
 editor-command-type
 /name
+public
 fn/
 sig/
 Product

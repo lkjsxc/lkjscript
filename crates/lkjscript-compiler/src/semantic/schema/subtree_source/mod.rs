@@ -3,8 +3,7 @@ mod markers;
 use crate::source::{SourceNode, SourceSpan, SyntaxKind};
 
 use super::{
-    edition_source, SemanticNodeKind as Kind, SemanticNodeValue as Value, SemanticSubtreeRecord,
-    TriviaAttachment,
+    SemanticNodeKind as Kind, SemanticNodeValue as Value, SemanticSubtreeRecord, TriviaAttachment,
 };
 use markers::marker;
 
@@ -27,7 +26,6 @@ impl SemanticSubtreeRecord {
         }
         let (leading, before_close) = trivia(self)?;
         let kind = source_kind(self.node.kind, self.node.value.as_ref())?;
-        edition_source::validate(self.node.kind, &children, &leading, &before_close)?;
         Ok(SourceNode {
             kind,
             span: SourceSpan::zero(),
@@ -41,9 +39,6 @@ impl SemanticSubtreeRecord {
 fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> {
     if let Some(name) = marker(kind) {
         return no_value(value).map(|()| SyntaxKind::Call { name: name.into() });
-    }
-    if let Some(edition) = edition_source::kind(kind, value) {
-        return edition;
     }
     match (kind, value) {
         (Kind::UnitLiteral, None) => Ok(SyntaxKind::Unit),

@@ -100,6 +100,21 @@ impl FunctionBuilder<'_> {
             expression.origin,
         )?;
         self.forget_consumed_ref_mut_arguments(args);
+        if matches!(
+            operation,
+            Operation::DropResource | Operation::SysSqliteClose | Operation::SysSqliteFinalize
+        ) {
+            let [Expr {
+                kind: ExprKind::Load(reference),
+                ..
+            }] = args
+            else {
+                return Err(Error::msg(
+                    "resource close lowering requires one direct Handle local",
+                ));
+            };
+            self.env.remove(&reference.binding);
+        }
         Ok(Some(result))
     }
 }

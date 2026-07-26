@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-std/sqlite/exec.lkjscript
+src/std/sqlite/exec.lkjscript#sqlite-exec
 /import
+/imports
 def/
 name/
 sqlite-begin
 /name
+public
 fn/
 sig/
 Handle
@@ -30,6 +30,7 @@ def/
 name/
 sqlite-commit
 /name
+public
 fn/
 sig/
 Handle
@@ -52,6 +53,7 @@ def/
 name/
 sqlite-rollback
 /name
+public
 fn/
 sig/
 Handle

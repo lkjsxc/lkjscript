@@ -11,7 +11,7 @@ use super::{
 pub(crate) enum ProtocolErrorCode {
     InvalidJson,
     InvalidSchema,
-    UnsupportedVersion,
+    ContractMismatch,
     ResourceLimit,
     SourceLoad,
     StaleRevision,
@@ -40,7 +40,6 @@ pub(crate) struct ProtocolError {
 pub(crate) struct SnapshotResult {
     pub repository_identity: String,
     pub tree_identity: String,
-    pub edition: u32,
     pub source_units: Vec<SourceUnitRecord>,
     pub declarations: Vec<DeclarationRecord>,
     pub nodes: Vec<NodeRecord>,
@@ -99,9 +98,12 @@ pub(crate) enum ResponseResult {
 #[serde(deny_unknown_fields)]
 pub(crate) struct ResourceProfileIdentityRecord {
     pub schema: String,
-    pub version: u32,
-    pub implementation_maxima_version: u32,
+    pub contract: String,
+    pub name: String,
+    pub resource_categories: String,
+    pub implementation_maxima_sha256: String,
     pub ceilings_sha256: String,
+    pub host_lowered_ceilings_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -128,7 +130,7 @@ pub(crate) struct ProtocolLimitsRecord {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Response {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub compiler_build: String,
     pub profile: ResourceProfile,
     pub profile_identity: ResourceProfileIdentityRecord,

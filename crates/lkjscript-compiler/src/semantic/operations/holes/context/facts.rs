@@ -7,7 +7,7 @@ use super::super::site::HoleSite;
 pub(super) fn identity(site: &HoleSite<'_>) -> TypedHoleIdentity {
     TypedHoleIdentity {
         schema: "lkjscript.typed-hole".into(),
-        version: 1,
+        contract: crate::semantic::CONTRACT.to_hex(),
         source_revision: site.tree.revision().to_hex(),
         identity: format!("{}:{}", site.declaration_key, site.local_identity),
         declaration_key: site.declaration_key.clone(),

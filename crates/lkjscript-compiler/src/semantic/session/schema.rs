@@ -1,4 +1,6 @@
-use std::fmt;
+mod process;
+pub(super) use process::ProcessCode;
+pub use process::SessionProcessError;
 
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +14,7 @@ use super::limits::SessionLimits;
 #[serde(deny_unknown_fields)]
 pub(super) struct SessionRequest {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub request_id: String,
     pub revision: u64,
     pub request: SessionOperation,
@@ -30,7 +32,7 @@ pub(super) enum SessionOperation {
 #[serde(deny_unknown_fields)]
 pub(super) struct SessionResponse {
     pub schema: &'static str,
-    pub version: u32,
+    pub contract: String,
     pub request_id: String,
     pub revision: u64,
     pub response: SessionResult,
@@ -60,9 +62,9 @@ pub(super) struct SessionStateRecord {
     pub session_identity: String,
     pub compiler_build: String,
     pub semantic_schema: String,
-    pub semantic_version: u32,
+    pub semantic_contract: String,
     pub diagnostic_schema: String,
-    pub diagnostic_version: u32,
+    pub diagnostic_contract: String,
     pub profile: ResourceProfile,
     pub profile_identity: ResourceProfileIdentityRecord,
     pub canonical_root: String,
@@ -89,7 +91,9 @@ impl PinnedSession {
         let fixed = self.state.session_identity.len()
             + self.state.compiler_build.len()
             + self.state.semantic_schema.len()
+            + self.state.semantic_contract.len()
             + self.state.diagnostic_schema.len()
+            + self.state.diagnostic_contract.len()
             + self.state.canonical_root.len()
             + self.state.source_revision.len();
         self.fingerprints
@@ -141,60 +145,3 @@ impl SessionError {
         }
     }
 }
-#[derive(Debug, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SessionProcessError {
-    code: ProcessCode,
-    message: String,
-    #[serde(skip)]
-    budget: Option<Box<lkjscript_core::BudgetError>>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum ProcessCode {
-    PartialHeader,
-    PartialPayload,
-    FrameTooLarge,
-    LengthOverflow,
-    InvalidJson,
-    InputFailure,
-    OutputFailure,
-}
-
-impl SessionProcessError {
-    pub(super) fn new(code: ProcessCode, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            budget: None,
-        }
-    }
-
-    pub(super) fn budget(error: lkjscript_core::BudgetError) -> Self {
-        Self {
-            code: ProcessCode::FrameTooLarge,
-            message: error.to_string(),
-            budget: Some(Box::new(error)),
-        }
-    }
-
-    pub fn budget_error(&self) -> Option<&lkjscript_core::BudgetError> {
-        self.budget.as_deref()
-    }
-
-    pub(super) fn output(error: std::io::Error) -> Self {
-        Self::new(
-            ProcessCode::OutputFailure,
-            format!("session output: {error}"),
-        )
-    }
-}
-impl fmt::Display for SessionProcessError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        serde_json::to_string(self)
-            .map_err(|_| fmt::Error)
-            .and_then(|encoded| formatter.write_str(&encoded))
-    }
-}
-impl std::error::Error for SessionProcessError {}

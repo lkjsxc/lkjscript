@@ -1,8 +1,8 @@
 use super::*;
 use crate::hir::{EnumId, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH};
 
-pub(super) fn edition2(body: &str) -> String {
-    format!("edition/\n2\n/edition\n{body}")
+pub(super) fn canonical_source(body: &str) -> String {
+    body.to_string()
 }
 
 pub(super) fn maybe_declaration(name: &str) -> String {
@@ -17,7 +17,7 @@ fn unit_main_source() -> String {
 
 #[test]
 fn generic_enum_metadata_has_stable_nominal_member_identities_and_order() {
-    let source = edition2(&format!(
+    let source = canonical_source(&format!(
         "{}{}",
         maybe_declaration("Maybe"),
         unit_main_source()
@@ -46,7 +46,7 @@ fn same_shaped_enums_are_nominally_unequal_and_instantiation_is_invariant() {
         maybe_declaration("Left"),
         maybe_declaration("Right")
     );
-    let source = edition2(&format!("{declarations}{}", unit_main_source()));
+    let source = canonical_source(&format!("{declarations}{}", unit_main_source()));
     let program = analyze_one(&source).expect("same-shaped nominal declarations");
     assert_ne!(program.enums[0].id, program.enums[1].id);
     let left_i64 = Type::Enum {
@@ -71,7 +71,7 @@ fn explicit_instantiation_resolves_in_signatures_and_missing_arguments_reject() 
         "value\nMaybe/\nI64\n/Maybe",
         "value",
     );
-    let valid = edition2(&format!(
+    let valid = canonical_source(&format!(
         "{}{}{}",
         maybe_declaration("Maybe"),
         valid_function,
@@ -97,7 +97,7 @@ fn explicit_instantiation_resolves_in_signatures_and_missing_arguments_reject() 
         "value\nMaybe/\n/Maybe",
         "unit",
     );
-    let invalid = edition2(&format!(
+    let invalid = canonical_source(&format!(
         "{}{}{}",
         maybe_declaration("Maybe"),
         invalid_function,
@@ -108,7 +108,7 @@ fn explicit_instantiation_resolves_in_signatures_and_missing_arguments_reject() 
 
 #[test]
 fn duplicates_empty_variants_and_nested_ownership_reject_exactly() {
-    let duplicate_declaration = edition2(&format!(
+    let duplicate_declaration = canonical_source(&format!(
         "{}{}{}",
         maybe_declaration("Maybe"),
         maybe_declaration("Maybe"),
@@ -118,23 +118,23 @@ fn duplicates_empty_variants_and_nested_ownership_reject_exactly() {
 
     let duplicate_parameter =
         maybe_declaration("Maybe").replace("forall/\nT\n/forall", "forall/\nT\nT\n/forall");
-    let source = edition2(&format!("{duplicate_parameter}{}", unit_main_source()));
+    let source = canonical_source(&format!("{duplicate_parameter}{}", unit_main_source()));
     assert!(analysis_error(&source).contains("duplicate forall parameter T"));
 
     let duplicate_variant = maybe_declaration("Maybe").replace("\nNone\n/name", "\nSome\n/name");
-    let source = edition2(&format!("{duplicate_variant}{}", unit_main_source()));
+    let source = canonical_source(&format!("{duplicate_variant}{}", unit_main_source()));
     assert!(analysis_error(&source).contains("duplicate variant Some"));
 
     let duplicate_field = maybe_declaration("Maybe").replace(
         "/variant-field\n/fields", "/variant-field\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields");
-    let source = edition2(&format!("{duplicate_field}{}", unit_main_source()));
+    let source = canonical_source(&format!("{duplicate_field}{}", unit_main_source()));
     assert!(analysis_error(&source).contains("duplicate field value"));
 
     let ownership = maybe_declaration("Maybe").replace(
         "type/\nT\n/type",
         "type/\nList/\nOwned/\nBuf\n/Owned\n/List\n/type",
     );
-    let source = edition2(&format!("{ownership}{}", unit_main_source()));
+    let source = canonical_source(&format!("{ownership}{}", unit_main_source()));
     assert!(analysis_error(&source).contains("ownership/reference types cannot be stored"));
 }
 
@@ -163,15 +163,18 @@ fn recursion_depth_exact_bound_succeeds_and_plus_one_rejects() {
         "fields/\n/fields",
         "fields/\nvariant-field/\nname/\nnext\n/name\ntype/\nE0/\n/E0\n/type\n/variant-field\n/fields",
     );
-    analyze_one(&edition2(&format!("{self_cycle}{}", unit_main_source())))
-        .expect("bounded self recursion");
-    let exact = edition2(&format!(
+    analyze_one(&canonical_source(&format!(
+        "{self_cycle}{}",
+        unit_main_source()
+    )))
+    .expect("bounded self recursion");
+    let exact = canonical_source(&format!(
         "{}{}",
         recursive_chain(ENUM_RECURSION_MAX_DEPTH),
         unit_main_source()
     ));
     analyze_one(&exact).expect("exact recursion depth");
-    let plus_one = edition2(&format!(
+    let plus_one = canonical_source(&format!(
         "{}{}",
         recursive_chain(ENUM_RECURSION_MAX_DEPTH + 1),
         unit_main_source()

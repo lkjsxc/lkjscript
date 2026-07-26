@@ -60,7 +60,7 @@ impl Operation {
         Self::StrFromF64,
         Self::StdinHandle,
         Self::SysIsatty,
-        Self::SysClose,
+        Self::DropResource,
         Self::SysReadByte,
         Self::SysWriteByte,
         Self::SysReadInto,

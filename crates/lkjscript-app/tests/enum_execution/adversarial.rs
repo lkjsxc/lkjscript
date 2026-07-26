@@ -6,7 +6,7 @@ use lkjscript_ir::{
 
 fn two_payload_variants() -> String {
     concat!(
-        "edition/\n2\n/edition\n",
+        "",
         "enum/\nname/\nChoice\n/name\nvariants/\n",
         "variant/\nname/\nLeft\n/name\nfields/\n",
         "variant-field/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/variant-field\n",

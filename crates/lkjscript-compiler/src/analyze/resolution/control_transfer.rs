@@ -1,16 +1,7 @@
 use crate::analyze::*;
 
 impl Resolver<'_> {
-    fn require_edition2(&self, form: &str) -> Result<()> {
-        if self.analyzer.edition2 {
-            Ok(())
-        } else {
-            Err(self.error(format!("{form} requires Edition 2")))
-        }
-    }
-
     pub(in crate::analyze) fn resolve_return(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        self.require_edition2("return")?;
         let [value] = args else {
             return Err(self.error("return expects exactly one value"));
         };
@@ -33,7 +24,6 @@ impl Resolver<'_> {
     }
 
     pub(in crate::analyze) fn resolve_break(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        self.require_edition2("break")?;
         let target = self
             .loops
             .last()
@@ -65,7 +55,6 @@ impl Resolver<'_> {
     }
 
     pub(in crate::analyze) fn resolve_continue(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        self.require_edition2("continue")?;
         if !args.is_empty() {
             return Err(self.error("continue expects no values"));
         }
@@ -77,7 +66,6 @@ impl Resolver<'_> {
     }
 
     pub(in crate::analyze) fn resolve_trap(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        self.require_edition2("trap")?;
         let [value] = args else {
             return Err(self.error("trap expects exactly one Str value"));
         };
@@ -94,7 +82,6 @@ impl Resolver<'_> {
     }
 
     pub(in crate::analyze) fn resolve_exit(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        self.require_edition2("exit")?;
         let [code] = args else {
             return Err(self.error("exit expects exactly one I64 code"));
         };
@@ -111,7 +98,6 @@ impl Resolver<'_> {
     }
 
     pub(in crate::analyze) fn resolve_loop(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        self.require_edition2("loop")?;
         let Some((type_form, body)) = args.split_first() else {
             return Err(self.error("loop expects type/ result and a body"));
         };

@@ -89,7 +89,7 @@ fn malformed_marker_declarations_bounds_and_namespace_collisions_are_rejected() 
         function_source("Marked", &[], "->\nUnit", "", "unit"),
         main
     );
-    assert!(analysis_error(&function_collision).contains("duplicate global"));
+    assert!(analysis_error(&function_collision).contains("duplicate module"));
     for reserved in ["Copy", "Clone", "Drop", "Send", "Sync", "I64"] {
         let source = format!("{}{main}", marker_trait(reserved));
         assert!(

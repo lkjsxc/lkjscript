@@ -1,3 +1,4 @@
+use super::enum_source_variants::{nested_source, nullary_source};
 use super::*;
 use lkjscript_ir::{
     verify, EffectSet, FailureBehavior, Instruction, InstructionKind, Safepoint, SsaType,
@@ -95,30 +96,6 @@ fn variant_test_and_active_projection_execute_in_both_generated_tiers() {
     }
 }
 
-fn nested_source() -> String {
-    source()
-        .replace(
-            "->\nMaybe/\nI64\n/Maybe\n/sig",
-            "->\nMaybe/\nMaybe/\nI64\n/Maybe\n/Maybe\n/sig",
-        )
-        .replacen(
-            "variant-value/\ntype/\nMaybe/\nI64\n/Maybe\n/type",
-            "variant-value/\ntype/\nMaybe/\nMaybe/\nI64\n/Maybe\n/Maybe\n/type",
-            1,
-        )
-        .replace(
-            "variant-field/\nname/\nvalue\n/name\n42\n/variant-field",
-            "variant-field/\nname/\nvalue\n/name\nvariant-value/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nSome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n7\n/variant-field\n/fields\n/variant-value\n/variant-field",
-        )
-}
-
-fn nullary_source() -> String {
-    source().replace(
-        "variant/\nSome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields",
-        "variant/\nNone\n/variant\nfields/\n/fields",
-    )
-}
-
 #[test]
 fn nullary_enum_is_differential_and_enters_generated_tiers() {
     let compiled = compile_source(
@@ -169,6 +146,11 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
         &Limits::default(),
     )
     .expect("compile nested generic enum");
+    let EvalOutcome::Returned(EvalValue::Enum { physical_tag, .. }) =
+        evaluate(compiled.ssa(), &EvalConfig::default())
+    else {
+        panic!("evaluator returns nested enum")
+    };
     let config = JitConfig {
         force_gc_before_allocation: true,
         ..JitConfig::default()
@@ -182,7 +164,7 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
         let ExecutionOutcome::Returned(value) = execution.outcome else {
             panic!("generated tier must return nested enum")
         };
-        assert_eq!(value.enum_physical_tag(), Some(1));
+        assert_eq!(value.enum_physical_tag(), Some(physical_tag));
         assert!(value.snapshot_object_count() >= 2);
         assert!(execution.stats.collections >= 2);
         assert!(execution.stats.maximum_roots > 0);
@@ -190,7 +172,7 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
             !object.exact_scalar_stack_maps
                 && object
                     .runtime_calls
-                    .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatchV1)
+                    .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
         }));
         assert_eq!(execution.stats.vm_fallbacks, 0);
     }

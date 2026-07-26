@@ -1,5 +1,23 @@
 use crate::*;
 
+fn source_name(name: &str) -> &str {
+    let Some(encoded) = name.strip_prefix("__module_") else {
+        return name;
+    };
+    let Some((digest, source)) = encoded.split_once(':') else {
+        return name;
+    };
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        source
+    } else {
+        name
+    }
+}
+
 impl JitSession {
     pub fn new_auto(
         program: &VerifiedProgram,
@@ -52,7 +70,7 @@ impl JitSession {
             .iter()
             .map(|function| FunctionTierRecord {
                 function: function.id,
-                name: function.name.clone(),
+                name: source_name(&function.name).to_string(),
                 state: initial_state,
                 call_count: 0,
                 attempts: 0,
@@ -80,7 +98,7 @@ impl JitSession {
             optimization_time,
             native_entries: 0,
             direct_native_calls: 0,
-            poll_v1_calls: 0,
+            poll_calls: 0,
             vm_fallbacks: 0,
             compile_failures: 0,
             native_invocations: 0,

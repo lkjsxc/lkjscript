@@ -79,7 +79,7 @@ pub struct ContextCard {
 #[serde(deny_unknown_fields)]
 pub struct Capsule {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub id: String,
     pub root: String,
     pub kind: CapsuleKind,

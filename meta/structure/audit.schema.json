@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.repository-audit.v1",
+  "$id": "lkjscript.repository-audit",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema",
-    "version",
+    "contract",
     "revision",
-    "policy_version",
+    "policy_identity",
     "files",
     "directories",
     "classifications",
@@ -20,15 +20,17 @@
     "schema": {
       "const": "lkjscript.repository-audit"
     },
-    "version": {
-      "const": 1
+    "contract": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "revision": {
       "type": "string",
       "pattern": "^[0-9a-f]{40}$"
     },
-    "policy_version": {
-      "type": "string"
+    "policy_identity": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "files": {
       "type": "array",

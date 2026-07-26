@@ -26,8 +26,10 @@ pub(crate) fn process_ownership_block(
         for operand in instruction.kind.operands() {
             if is_affine(value_type(types, operand)?) && !state.affine.contains_key(&operand) {
                 return fail(format!(
-                    "SSA reuses unavailable affine ValueId {} after move or transfer",
-                    operand.raw()
+                    "SSA reuses unavailable affine ValueId {} in instruction {} {:?} after move or transfer",
+                    operand.raw(),
+                    instruction.id.raw(),
+                    instruction.kind
                 ));
             }
         }
@@ -77,7 +79,7 @@ pub(crate) fn process_ownership_block(
                     .affine
                     .get(value)
                     .ok_or_else(|| IrError::new("SSA Return reuses an unavailable affine value"))?;
-                if is_owned_buf(value_type(types, *value)?) {
+                if is_owned_value(value_type(types, *value)?) {
                     if state.owners.values().any(|owner| owner == value) {
                         return fail(
                             "SSA cannot return an Owned place value without explicit Move",

@@ -17,8 +17,8 @@ pub(super) fn node(
     let source = node.map_or(tree.root_origin(), |node| node.origin());
     let span = node.map_or(crate::source::SourceSpan::zero(), |node| node.span());
     DiagnosticRecord {
-        schema: "lkjscript.diagnostic".to_string(),
-        version: 1,
+        schema: lkjscript_contracts::DIAGNOSTICS.to_string(),
+        contract: lkjscript_contracts::DIAGNOSTICS_DIGEST.to_hex(),
         code,
         severity: Severity::Error,
         category,
@@ -89,8 +89,8 @@ fn standalone(
     message: &str,
 ) -> DiagnosticRecord {
     DiagnosticRecord {
-        schema: "lkjscript.diagnostic".to_string(),
-        version: 1,
+        schema: lkjscript_contracts::DIAGNOSTICS.to_string(),
+        contract: lkjscript_contracts::DIAGNOSTICS_DIGEST.to_hex(),
         code,
         severity: Severity::Error,
         category: DiagnosticCategory::Edit,

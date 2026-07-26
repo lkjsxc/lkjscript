@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use lkjscript_native::{
-    AbiVersions, FunctionId, HeapRuntimeSite, ImageIntegrityError, InstallableImage,
+    FunctionId, HeapRuntimeSite, ImageContracts, ImageIntegrityError, InstallableImage,
     NativeReference, NativeValue, ReferenceType, RelocationTarget, RuntimeCallSlot, Signature,
     StoreClass, TrapCode, ValueType,
 };

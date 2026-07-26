@@ -173,7 +173,7 @@ The earlier `063668e` run remains retained and **Rejected**. Its local optimizer
 result was 2.930761x, but scalar native measured 8,182,742 versus 7,647,935 ns,
 a failing 1.069928 ratio; scalar process wall passed at 9,340,049 versus
 9,372,036 ns, ratio 0.996587. The later performance recovery followed folding
-the mandatory generated-function entry poll into ABI-2 frame registration,
+the mandatory generated-function entry poll into canonical native contract frame registration,
 removing a separate runtime transition without weakening polling or optimizer
 proofs. Neither cross-commit scalar comparison attributes performance to the
 optimizer, and adoption does not erase the first run's negative evidence.

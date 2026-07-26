@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/mandel/draw/row.lkjscript
+src/examples/mandel/draw/row.lkjscript#row
 /import
+/imports
 def/
 name/
 grid
 /name
+public
 fn/
 sig/
 I64

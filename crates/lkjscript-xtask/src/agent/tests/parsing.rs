@@ -102,12 +102,12 @@ fn enforces_history_reference_output_and_work_boundaries() {
 }
 
 #[test]
-fn semantic_context_is_closed_versioned_and_bounded() {
+fn semantic_context_is_closed_current_and_bounded() {
     let repo = support::repository("semantic-context");
     let mut state = support::state(&repo, "semantic-context-task");
     state.semantic_context.session = Some(SemanticSessionReference {
         schema: "lkjscript.semantic-session".into(),
-        version: 1,
+        contract: lkjscript_contracts::AGENT_PROTOCOL_DIGEST.to_hex(),
         identity: "1".repeat(64),
         source_revision: "2".repeat(64),
     });
@@ -116,7 +116,7 @@ fn semantic_context_is_closed_versioned_and_bounded() {
         .target_entities
         .push(SemanticReference {
             schema: "lkjscript.semantic-source".into(),
-            version: 1,
+            contract: lkjscript_contracts::SEMANTIC_SOURCE_DIGEST.to_hex(),
             source_revision: "2".repeat(64),
             identity: "declaration:main".into(),
         });
@@ -129,7 +129,7 @@ fn semantic_context_is_closed_versioned_and_bounded() {
     state.semantic_context.target_entities = (0..=bounds::REFERENCE_ITEMS)
         .map(|index| SemanticReference {
             schema: "lkjscript.semantic-source".into(),
-            version: 1,
+            contract: lkjscript_contracts::SEMANTIC_SOURCE_DIGEST.to_hex(),
             source_revision: "2".repeat(64),
             identity: format!("entity:{index}"),
         })
@@ -138,9 +138,9 @@ fn semantic_context_is_closed_versioned_and_bounded() {
         .unwrap_err()
         .contains("combined semantic references"));
 
-    let mut old = support::request(support::state(&repo, "old-version-task"), 0);
-    old.version = 1;
-    assert!(validate::checkpoint(&repo.root, &old, None).is_err());
+    let mut stale = support::request(support::state(&repo, "stale-contract-task"), 0);
+    stale.contract = "0".repeat(64);
+    assert!(validate::checkpoint(&repo.root, &stale, None).is_err());
 }
 
 #[test]

@@ -2,8 +2,8 @@ use super::*;
 use lkjscript_ir::{evaluate as evaluate_ssa, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 
-pub(super) fn edition2(return_type: &str, expression: &str) -> String {
-    format!("edition/\n2\n/edition\nmain/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n")
+pub(super) fn program(return_type: &str, expression: &str) -> String {
+    format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n")
 }
 
 pub(super) fn assert_scalar(source: &str, expected: Expected) {
@@ -44,7 +44,7 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
             exact_sites == 1
                 && object
                     .runtime_calls
-                    .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatchV1)
+                    .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
         }));
     }
 }

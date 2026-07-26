@@ -70,16 +70,6 @@ fn install(
     id: &str,
     records: &[super::journal::JournalFile],
 ) -> Result<(), ProtocolError> {
-    install_with_failure(transaction, workspace, id, records, None)
-}
-
-pub(super) fn install_with_failure(
-    transaction: &StagedTransaction,
-    workspace: &Path,
-    id: &str,
-    records: &[super::journal::JournalFile],
-    fail_after: Option<usize>,
-) -> Result<(), ProtocolError> {
     for (index, (source, record)) in transaction.sources.iter().zip(records).enumerate() {
         let paths = super::journal::paths(workspace, record, id, index)?;
         fs::rename(&paths.host, &paths.backup)
@@ -91,11 +81,6 @@ pub(super) fn install_with_failure(
             .map_err(|cause| publication("remove installed source temporary", cause))?;
         verify_installed(&paths.host, source)?;
         super::journal::sync_parent(&paths.host)?;
-        if fail_after == Some(index + 1) {
-            return Err(failure(
-                "injected publication failure after partial installation",
-            ));
-        }
     }
     for (index, (source, record)) in transaction.sources.iter().zip(records).enumerate() {
         let paths = super::journal::paths(workspace, record, id, index)?;

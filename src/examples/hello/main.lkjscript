@@ -1,9 +1,8 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/hello/fact.lkjscript
+src/examples/hello/fact.lkjscript#fact
 /import
+/imports
 main/
 sig/
 ->

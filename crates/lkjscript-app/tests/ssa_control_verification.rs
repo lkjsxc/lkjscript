@@ -4,9 +4,10 @@ use lkjscript_compiler::compile_source;
 use lkjscript_core::Limits;
 use lkjscript_ir::{verify, BlockId, Terminator, ValueId};
 
-const SIMPLE: &str = "edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\n1\n/main\n";
-const LOOP: &str = "edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\nloop/\ntype/\nI64\n/type\nbreak/\n3\n/break\n/loop\n/main\n";
-const TWO_TRAPS: &str = "edition/\n2\n/edition\ndef/\nname/\nf\n/name\nfn/\nsig/\nBool\n->\nI64\n/sig\nparams/\nx\nBool\n/params\nif/\nx\ntrap/\nstr/\na\n/str\n/trap\ntrap/\nstr/\nb\n/str\n/trap\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nf/\ntrue\n/f\n/main\n";
+const SIMPLE: &str = "main/\nsig/\n->\nI64\n/sig\n1\n/main\n";
+const LOOP: &str =
+    "main/\nsig/\n->\nI64\n/sig\nloop/\ntype/\nI64\n/type\nbreak/\n3\n/break\n/loop\n/main\n";
+const TWO_TRAPS: &str = "def/\nname/\nf\n/name\nfn/\nsig/\nBool\n->\nI64\n/sig\nparams/\nx\nBool\n/params\nif/\nx\ntrap/\nstr/\na\n/str\n/trap\ntrap/\nstr/\nb\n/str\n/trap\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nf/\ntrue\n/f\n/main\n";
 
 #[test]
 fn forged_trap_operand_type_fails_closed() {

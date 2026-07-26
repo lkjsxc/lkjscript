@@ -8,6 +8,7 @@ mod effects;
 mod hir;
 mod operation;
 mod ownership;
+pub mod package;
 mod pipeline;
 pub mod semantic;
 pub mod source;
@@ -25,9 +26,8 @@ pub use lkjscript_core::{
     BudgetPrefix, BudgetRejectedEvent, BudgetScope, InvalidCeiling, Reservation, ReservationId,
     ReservationJournalRecord, ReservationState, ResourceCategory, ResourceCeilings,
     ResourceDiagnostic, ResourceProfile, ResourceProfileIdentity, ResourceProfileName,
-    ResourceUsage, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,
-    MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH, RESOURCE_PROFILE_SCHEMA,
-    RESOURCE_PROFILE_VERSION,
+    ResourceUsage, UnknownResourceProfile, MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH,
+    RESOURCE_PROFILE_SCHEMA,
 };
 pub use pipeline::{
     compile_path, compile_path_with_ledger, compile_path_with_metrics,

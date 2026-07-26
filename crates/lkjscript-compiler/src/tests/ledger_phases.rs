@@ -83,7 +83,7 @@ fn budget_rejection_prefix_survives_diagnostic_exhaustion() {
 
 #[test]
 fn public_compile_and_validate_apis_accumulate_one_outer_ledger() {
-    let source = edition2(&unit_main(""));
+    let source = canonical_source(&unit_main(""));
     let profile = ResourceProfile::default()
         .lowered(ResourceCategory::SourceUnits, 2)
         .unwrap();

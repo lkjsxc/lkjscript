@@ -1,10 +1,8 @@
-edition/
-2
-/edition
 product/
 name/
 TerminalState
 /name
+public
 fields/
 field/
 name/
@@ -29,6 +27,7 @@ def/
 name/
 new-terminal-state
 /name
+public
 fn/
 sig/
 ->
@@ -58,6 +57,7 @@ def/
 name/
 terminal-with-cooked
 /name
+public
 fn/
 sig/
 Product

@@ -7,7 +7,7 @@ allocate or carry heap references across a collecting safepoint.
 ## Status
 
 The closed machine-plan boundary and host-independent source allocation slice
-are **Current** on Linux x86-64. Native ABI 2 carries typed stable reference
+are **Current** on Linux x86-64. Native canonical native contract carries typed stable reference
 words, derives exact typed maps, registers generated frames, and reaches
 `GcHeap` through safe copied-root/typed-operation callbacks. Reference-capable
 SSA/JIT lowering, initialization/scalar-store classification, and direct/mutual

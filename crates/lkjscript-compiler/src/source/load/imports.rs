@@ -106,48 +106,24 @@ fn resolve_import_with_root(
             format!("import climb banned ({spec}); use a package-root path"),
         ));
     }
-    if let Some(rest) = spec.strip_prefix("./") {
-        return Ok(parent.join(rest));
-    }
     if spec.starts_with('.') {
         return Err(SourceDiagnostic::loading(
             origin.clone(),
-            format!("import path must be package-root or ./relative ({spec})"),
+            format!("import path must be an exact package-root module ID ({spec})"),
         ));
     }
-    if let Some(rest) = spec.strip_prefix("std/") {
-        return Ok(library_path(package_root, installed_root, "std", rest));
-    }
-    if let Some(rest) = spec.strip_prefix("lib/") {
-        return Ok(library_path(package_root, installed_root, "lib", rest));
-    }
-    if let Some(rest) = spec.strip_prefix("examples/") {
-        return Ok(library_path(package_root, installed_root, "examples", rest));
-    }
+    let _ = parent;
+    let _ = installed_root;
     Ok(package_root.join(spec))
-}
-
-fn library_path(
-    package_root: &Path,
-    installed_root: Option<&Path>,
-    library: &str,
-    rest: &str,
-) -> PathBuf {
-    let local = package_root.join("src").join(library);
-    if local.is_dir() || installed_root.is_none() {
-        return local.join(rest);
-    }
-    installed_root
-        .unwrap_or(package_root)
-        .join("src")
-        .join(library)
-        .join(rest)
 }
 
 pub(super) fn import_path(args: &[Expr]) -> std::result::Result<&str, &'static str> {
     match args {
-        [Expr::LitStr(path)] | [Expr::Symbol(path)] => Ok(path.as_str()),
-        _ => Err("import expects one path string"),
+        [Expr::LitStr(spec)] => spec
+            .split_once('#')
+            .map(|(path, _)| path)
+            .ok_or("import expects exact path#name-list encoding"),
+        _ => Err("import expects exact path#name-list encoding"),
     }
 }
 

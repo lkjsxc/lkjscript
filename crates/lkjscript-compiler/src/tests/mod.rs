@@ -6,14 +6,8 @@ use lkjscript_core::{Constant, Limits};
 
 use super::{ensure_source_path, validate_source};
 
-const EDITION2: &str = "edition/\n2\n/edition\n";
-
-fn edition2(source: &str) -> String {
-    if source.starts_with(EDITION2) {
-        source.to_string()
-    } else {
-        format!("{EDITION2}{source}")
-    }
+fn canonical_source(source: &str) -> String {
+    source.to_string()
 }
 
 fn compile_source(
@@ -21,7 +15,7 @@ fn compile_source(
     path: &str,
     limits: &Limits,
 ) -> lkjscript_core::Result<crate::ExecutableProgram> {
-    super::compile_source(&edition2(source), path, limits)
+    super::compile_source(&canonical_source(source), path, limits)
 }
 
 fn compile_source_with_profile(
@@ -30,7 +24,7 @@ fn compile_source_with_profile(
     limits: &Limits,
     profile: crate::ResourceProfile,
 ) -> lkjscript_core::Result<crate::ExecutableProgram> {
-    super::compile_source_with_profile(&edition2(source), path, limits, profile)
+    super::compile_source_with_profile(&canonical_source(source), path, limits, profile)
 }
 
 fn unit_main(body: &str) -> String {
@@ -42,6 +36,7 @@ fn ownership_source(body: &str, result: &str) -> String {
     format!("main/\nsig/\n->\n{result}\n/sig\n{body}\n/main\n")
 }
 
+mod affine_handles;
 mod constants;
 mod ledger_hir;
 mod ledger_phases;

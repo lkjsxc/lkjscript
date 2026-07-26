@@ -5,7 +5,7 @@ use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, Op, Owned
 use lkjscript_vm::{run_chunk, run_chunk_with_args};
 
 fn compile(source: &str) -> lkjscript_core::Result<ExecutableProgram> {
-    let source = format!("edition/\n2\n/edition\n{source}");
+    let source = source.to_string();
     compile_source(&source, "hir-behavior.lkjscript", &Limits::default())
 }
 

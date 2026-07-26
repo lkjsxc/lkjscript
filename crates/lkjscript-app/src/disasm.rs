@@ -8,7 +8,9 @@ use lkjscript_core::{
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let (profile, file) = request(args)?;
-    let program = compile_path_with_profile(&PathBuf::from(file), &Limits::default(), profile)
+    let source = PathBuf::from(file);
+    lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
+    let program = compile_path_with_profile(&source, &Limits::default(), profile)
         .map_err(|error| error.to_string())?;
     disassemble(program.bytecode())?;
     Ok(ExitCode::SUCCESS)

@@ -25,7 +25,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 Implemented control and binding forms include `main`, `def`, `fn`, `if`,
 `while`, `let`, `bind`, `var`, `set`, `do`, `quote`, `product-value`, `field`,
-and `with-field`. Edition 2 additionally implements typed `loop`, early
+and `with-field`. the canonical source contract additionally implements typed `loop`, early
 `return`, nearest-loop `break`/`continue`, value-bearing `trap`, and `exit`.
 `product`, `trait`, `impl`, `fields`, `sig`, `params`,
 `forall`, `bounds`, `bound`, `type`, `name`, and `import` are contextual
@@ -37,7 +37,7 @@ bounded declaration-only markers described below. There is no `Any`,
 Hindley-Milner inference, or implemented user-defined type alias.
 
 `if` requires exactly three operands: a Bool condition and two reachable
-branches with exactly the same type. In Edition 2, a divergent `Never` arm
+branches with exactly the same type. In the canonical source contract, a divergent `Never` arm
 joins only with the surviving arm type and creates no value. There is no
 omitted branch or nil-based type join. Empty `do`, `while`, `set`, and
 side-effecting operations return Unit.
@@ -161,14 +161,14 @@ marker traits with bounded generic witnesses are Current.
 See [AI-First Semantic Core](../../decisions/semantics/semantic-core.md). Resolved typed HIR
 is now the current boundary through which these forms will migrate, so typing
 and lowering cannot interpret them differently.
-## Edition 2 Current Slice And Accepted Target
+## the canonical source contract Current Slice And Accepted Target
 
-Edition 2 generic enum declarations, exact `variant-value` construction,
+the canonical source contract generic enum declarations, exact `variant-value` construction,
 closed named-field patterns, `match`, `Never`, early return, typed loop control,
 and value-bearing trap/exit are Current on the SSA evaluator, reference VM, and
 forced Linux x86-64 baseline/proof JIT. Automatic/host-native enum transitions
 and four explicit I64/F64 conversions remain
-[Accepted Targets](../../decisions/semantics/edition-2.md). Product
+[Accepted Targets](../../decisions/semantics/semantic-core.md). Product
 remains its separate nominal product concept. Option and Result migrate to
 compiler-recognized prelude enum identities only after generic ADT differential
 coverage; names never confer that identity. Backends consume verified HIR/SSA

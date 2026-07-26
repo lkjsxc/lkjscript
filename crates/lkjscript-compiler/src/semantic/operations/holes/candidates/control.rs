@@ -7,9 +7,6 @@ pub(super) fn expressions(
     site: &HoleSite<'_>,
     expected: &Type,
 ) -> Vec<(CandidateCategory, Expression)> {
-    if site.tree.edition() != crate::source::SourceEdition::Edition2 {
-        return Vec::new();
-    }
     let mut result = Vec::new();
     if let (Some(result_type), Some(value)) = (
         super::super::validate::type_expression(expected),

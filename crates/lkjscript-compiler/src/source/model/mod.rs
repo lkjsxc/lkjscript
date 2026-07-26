@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::source::{SourceEdition, SourceIdentity, SourceOrigin, SourceSpan};
+use crate::source::{SourceIdentity, SourceOrigin, SourceSpan};
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
@@ -36,7 +36,6 @@ pub(crate) enum SyntaxKind {
     Str { value: String },
     Symbol { name: String },
     Call { name: String },
-    EditionMarker,
 }
 
 #[derive(Clone, Debug)]
@@ -59,10 +58,6 @@ impl SourceNode {
             SyntaxKind::Symbol { name } => Expr::Symbol(name.clone()),
             SyntaxKind::Call { name } => Expr::Call {
                 name: name.clone(),
-                args: self.children.iter().map(Self::project).collect(),
-            },
-            SyntaxKind::EditionMarker => Expr::Call {
-                name: "edition".into(),
                 args: self.children.iter().map(Self::project).collect(),
             },
         }
@@ -88,9 +83,7 @@ pub(crate) struct Token {
 pub(crate) struct SourceFile {
     pub(crate) path: PathBuf,
     pub(crate) origin: SourceOrigin,
-    pub(crate) edition: SourceEdition,
     pub(crate) identity: SourceIdentity,
-    pub(crate) exact_source: String,
     pub(crate) exact_source_len: u64,
     pub(crate) exact_source_sha256: [u8; 32],
     pub(crate) forms: Vec<Expr>,

@@ -2,18 +2,17 @@ use std::path::{Path, PathBuf};
 
 use crate::source::{
     format, validate::validate_logical_source_path, DeclarationKey, DeclarationSummary, NodeId,
-    NodeSummary, RevisionId, SourceEdition, SourceFile, SourceIdentity, SourceOrigin,
-    SourceTreeIdentity, StaleNodeId,
+    NodeSummary, RevisionId, SourceFile, SourceIdentity, SourceOrigin, SourceTreeIdentity,
+    StaleNodeId,
 };
 
-/// Opaque, immutable validated source authority for one explicit edition.
+/// Opaque, immutable authority for the one canonical source language.
 ///
 /// Source origins, declarations, and nodes are exposed in deterministic
 /// canonical logical-path and stable-key order. Raw forms and the mutable
 /// builder remain private. This type does not claim the complete Semantic
 /// Source schema, transaction protocol, JSON transport, or typed holes.
 pub(crate) struct ValidatedSourceParts {
-    pub(crate) edition: SourceEdition,
     pub(crate) identity: SourceTreeIdentity,
     pub(crate) revision: RevisionId,
     pub(crate) root: PathBuf,
@@ -26,7 +25,6 @@ pub(crate) struct ValidatedSourceParts {
 
 #[derive(Clone, Debug)]
 pub struct ValidatedSourceTree {
-    edition: SourceEdition,
     identity: SourceTreeIdentity,
     revision: RevisionId,
     root: PathBuf,
@@ -40,7 +38,6 @@ pub struct ValidatedSourceTree {
 impl ValidatedSourceTree {
     pub(crate) fn from_authority(parts: ValidatedSourceParts) -> Self {
         Self {
-            edition: parts.edition,
             identity: parts.identity,
             revision: parts.revision,
             root: parts.root,
@@ -50,10 +47,6 @@ impl ValidatedSourceTree {
             declarations: parts.declarations,
             nodes: parts.nodes,
         }
-    }
-
-    pub const fn edition(&self) -> SourceEdition {
-        self.edition
     }
 
     pub const fn identity(&self) -> SourceTreeIdentity {
@@ -122,6 +115,12 @@ impl ValidatedSourceTree {
             return None;
         }
         self.files.first().map(format::format_file)
+    }
+
+    pub(crate) fn module_scoped_projection(&self) -> crate::source::SourceResult<Self> {
+        let mut projection = self.clone();
+        crate::source::modules::scope(&mut projection.files, &mut projection.declarations)?;
+        Ok(projection)
     }
 
     pub(crate) fn files(&self) -> &[SourceFile] {

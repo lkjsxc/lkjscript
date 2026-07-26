@@ -5,12 +5,12 @@
 ## Purpose
 
 Define one request-owned checked ledger, lower-only child grants,
-pre-allocation accounting, failed prefixes, and closed Profile V2 categories.
+pre-allocation accounting, failed prefixes, and closed resource profile categories.
 
 ## Status
 
 **Current core foundation and deterministic journal; whole-pipeline migration
-incomplete.** Profile V2's closed categories, named ceilings, bounded authority
+incomplete.** resource profile's closed categories, named ceilings, bounded authority
 paths, lower-only child grants, move-only pre-allocation reservations, and fixed
 nonallocating deterministic ledger journal are Current in `lkjscript-core`.
 Compiler enum shape and match pattern/arm/matrix/plan/witness categories reserve
@@ -19,11 +19,11 @@ exact charged input shape before SSA construction, and immutable normalized SSA
 reserves its exact charged input shape before bytecode construction. Public compiler and Semantic Source
 `_with_ledger` entry points share one
 outer-owned ledger through strict protocol decode, typed request execution,
-hole exploration, legal actions, transaction staging, Edition 2 migration
+hole exploration, legal actions, transaction staging, the canonical source contract migration
 staging, and exact response preflight. Local sessions invoke the typed one-shot
 engine directly rather than serializing and decoding an inner request/response;
 an explicitly supplied session ledger is retained across frames. Source loading
-still allocates behind the bounded Foundation V1 reader before its exact loaded
+still allocates behind the bounded Foundation legacy contract reader before its exact loaded
 shape is reserved, and complete cross-authority pre-allocation remains an
 Accepted Target.
 
@@ -69,7 +69,7 @@ reused. ID exhaustion, journal exhaustion, consume overrun, invalid child grant,
 and path overflow reject without mutation.
 
 Every precheck rejection owns an immutable deterministic prefix containing the
-Profile V2 identity, aggregate committed totals in closed category order, every
+resource profile identity, aggregate committed totals in closed category order, every
 prior reservation in ID order, and the exact rejected event. Each reservation
 record contains identity, owner path, category, semantic cause, amount,
 consumed amount, explicitly returned amount, and whether Drop conservatively
@@ -94,14 +94,14 @@ bytecode construction. Diagnostics, hole candidates, legal actions, protocol req
 session frame bytes, enum metadata, and staged publication bytes reserve at
 their documented Current boundaries. Protocol response size is first measured
 with a nonallocating writer until the self-reported exact byte charge stabilizes;
-that exact size is reserved before `Vec` capacity. Schema V2 cannot add a
+that exact size is reserved before `Vec` capacity. Schema cannot add a
 structured budget-prefix field: the `_with_ledger` typed result retains the
-exact `BudgetError`, while V2 wire errors retain its deterministic textual
-rendering only. A typed prefix field requires Schema V3.
+exact `BudgetError`, while canonical contract wire errors retain its deterministic textual
+rendering only. Adding a typed prefix field requires a new exact schema contract digest.
 
-## Closed Profile V2 Categories
+## Closed resource profile Categories
 
-Profile V2 has identity `lkjscript.resource-profile/2`. It retains all 25 V1
+resource profile has identity `lkjscript.resource-profile`. It retains all 25 legacy contract
 categories and appends these distinct closed categories:
 
 ```text
@@ -118,7 +118,7 @@ staged_publication_bytes staged_publication_nodes
 logical_aggregate_constructions
 ```
 
-Unknown categories require Profile V3. Names cannot alias or overload V1.
+Unknown categories require a different exact profile contract. Names cannot alias or overload adopted categories.
 `*_bytes` use exact bytes; `*_work` and lifetime fuel use deterministic work
 units; logical constructions use semantic events; all others use records.
 The appended ceilings are exact inclusive sandbox ceilings below.
@@ -158,9 +158,9 @@ The appended ceilings are exact inclusive sandbox ceilings below.
 These ceilings establish the core contract; they do not claim that existing
 pipelines reserve every allocation or share one ledger.
 
-## Edition 1 Boundary
+## the removed legacy source contract Boundary
 
-All Edition 1 per-file, form, product-field, and source-directory limits remain
+All the removed legacy source contract per-file, form, product-field, and source-directory limits remain
 Current until these replacement charges are pre-allocation Current across the
 complete amplification path. Profile selection cannot weaken implementation
 maxima or those limits.

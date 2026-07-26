@@ -2,23 +2,23 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RuntimeCallSlot {
-    IdentityI64V1,
+    IdentityI64,
     /// Cooperative deadline and native fuel poll. The execution context is the
     /// implicit first ABI argument; no language value is boxed for this call.
-    PollV1,
+    Poll,
     /// Records entry to a source function for exact native-tier accounting.
-    EnterFunctionV1,
-    /// Collecting reference round trip used by the closed ABI-2 plan slice.
-    CollectReferenceV1,
+    EnterFunction,
+    /// Collecting reference round trip used by the closed runtime contract.
+    CollectReference,
     /// Generic verified-frame-home heap dispatch. Plans create it only through
     /// `FunctionBuilder::heap_call`; ordinary runtime-call construction cannot
     /// forge its site metadata.
-    HeapDispatchV1,
+    HeapDispatch,
     /// Encoder-owned frame-chain operations. Plans cannot name these slots.
-    ReserveFrameV1,
-    RegisterFrameV1,
-    PublishSafepointV1,
-    UnregisterFrameV1,
+    ReserveFrame,
+    RegisterFrame,
+    PublishSafepoint,
+    UnregisterFrame,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,27 +61,27 @@ impl RuntimeCallSlot {
     #[must_use]
     pub fn plan_signature(self) -> Option<Signature> {
         match self {
-            Self::IdentityI64V1 => Some(Signature {
+            Self::IdentityI64 => Some(Signature {
                 parameters: vec![ValueType::I64],
                 result: ValueType::I64,
             }),
-            Self::PollV1 => Some(Signature {
+            Self::Poll => Some(Signature {
                 parameters: Vec::new(),
                 result: ValueType::Unit,
             }),
-            Self::EnterFunctionV1 => Some(Signature {
+            Self::EnterFunction => Some(Signature {
                 parameters: vec![ValueType::I64],
                 result: ValueType::Unit,
             }),
-            Self::CollectReferenceV1 => Some(Signature {
+            Self::CollectReference => Some(Signature {
                 parameters: vec![ValueType::Reference(ReferenceType::Buf)],
                 result: ValueType::Reference(ReferenceType::Buf),
             }),
-            Self::HeapDispatchV1
-            | Self::ReserveFrameV1
-            | Self::RegisterFrameV1
-            | Self::PublishSafepointV1
-            | Self::UnregisterFrameV1 => None,
+            Self::HeapDispatch
+            | Self::ReserveFrame
+            | Self::RegisterFrame
+            | Self::PublishSafepoint
+            | Self::UnregisterFrame => None,
         }
     }
 
@@ -93,7 +93,7 @@ impl RuntimeCallSlot {
             InternalMachineArgument::FramePointer,
         ];
         match self {
-            Self::ReserveFrameV1 => Some(InternalRuntimeSignature {
+            Self::ReserveFrame => Some(InternalRuntimeSignature {
                 parameters: &[
                     InternalMachineArgument::InvocationContext,
                     InternalMachineArgument::FunctionOrdinal,
@@ -102,45 +102,37 @@ impl RuntimeCallSlot {
                 ],
                 result: InternalMachineResult::InvocationContext,
             }),
-            Self::RegisterFrameV1 | Self::UnregisterFrameV1 => Some(InternalRuntimeSignature {
+            Self::RegisterFrame | Self::UnregisterFrame => Some(InternalRuntimeSignature {
                 parameters: FRAME_PARAMETERS,
                 result: InternalMachineResult::Unit,
             }),
-            Self::PublishSafepointV1 => Some(InternalRuntimeSignature {
+            Self::PublishSafepoint => Some(InternalRuntimeSignature {
                 parameters: &[
                     InternalMachineArgument::InvocationContext,
                     InternalMachineArgument::SafepointId,
                 ],
                 result: InternalMachineResult::Unit,
             }),
-            Self::HeapDispatchV1 => Some(InternalRuntimeSignature {
+            Self::HeapDispatch => Some(InternalRuntimeSignature {
                 parameters: &[
                     InternalMachineArgument::InvocationContext,
                     InternalMachineArgument::HeapSiteId,
                 ],
                 result: InternalMachineResult::Unit,
             }),
-            Self::IdentityI64V1
-            | Self::PollV1
-            | Self::EnterFunctionV1
-            | Self::CollectReferenceV1 => None,
+            Self::IdentityI64 | Self::Poll | Self::EnterFunction | Self::CollectReference => None,
         }
     }
 
     #[must_use]
-    pub const fn version(self) -> u16 {
-        1
-    }
-
-    #[must_use]
     pub const fn may_collect(self) -> bool {
-        matches!(self, Self::CollectReferenceV1 | Self::HeapDispatchV1)
+        matches!(self, Self::CollectReference | Self::HeapDispatch)
     }
 
     pub(crate) const fn plan_callable(self) -> bool {
         matches!(
             self,
-            Self::IdentityI64V1 | Self::PollV1 | Self::EnterFunctionV1 | Self::CollectReferenceV1
+            Self::IdentityI64 | Self::Poll | Self::EnterFunction | Self::CollectReference
         )
     }
 }

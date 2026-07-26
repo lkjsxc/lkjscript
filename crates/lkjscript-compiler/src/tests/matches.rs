@@ -4,7 +4,7 @@ use lkjscript_ir::{evaluate, verify, EvalConfig, EvalOutcome, EvalValue, Instruc
 fn bool_match(scrutinee: &str, arms: &str) -> String {
     format!(
         concat!(
-            "edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\n",
+            "main/\nsig/\n->\nI64\n/sig\n",
             "match/\n{}\narms/\n{}\n/arms\n/match\n/main\n",
         ),
         scrutinee, arms,
@@ -71,7 +71,7 @@ fn rejects_nonexhaustive_and_source_order_useless_arms() {
 
 fn enum_match_source() -> String {
     concat!(
-        "edition/\n2\n/edition\n",
+        "",
         "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
         "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
         "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",

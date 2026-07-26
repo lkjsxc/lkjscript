@@ -25,7 +25,7 @@ Live state is generated at `target/lkjscript/agent-state/<validated-id>.json` an
 input remains generated below the adjacent `quarantine/` directory under a task ID and SHA-256 content identity.
 No generated task state is tracked.
 
-## Closed V2 Snapshot
+## Closed canonical contract Snapshot
 
 The persisted [work-state schema](../../../meta/agent-state/work-state.schema.json) has identity
 `lkjscript.agent-work-state`, version `2`; the strict
@@ -85,16 +85,18 @@ quarantine; a later explicit revision-zero checkpoint is the deterministic recov
 It reports current revision mismatch, stale references, unsupported facts, omitted scopes, and every truncation. Weak
 and strong profiles change only work, byte, and output limits; they do not change authority or validation rules.
 
-`validate-state` rechecks schema, all aggregate bounds, legal sequences, repository revision relations, commits,
-capsules, paths, hashes, and evidence references. `compact-state` atomically removes only successful action detail
-explicitly superseded by a retained action. It retains final facts, failed outcomes, tested and not-tested outcomes,
-command results, commits, and all artifact/evidence references. A second compaction is byte-idempotent.
+`validate-state` rechecks schema, aggregate bounds, legal sequences, repository revision
+relations, commits, capsules, paths, hashes, and evidence references. `compact-state`
+atomically removes only successful action detail explicitly superseded by a retained action.
+It retains final facts, failed outcomes, tested and not-tested outcomes, command results,
+commits, and all artifact/evidence references. A second compaction is byte-idempotent.
 
 ## Bounds And Failure Policy
 
-V2 constants bound request and generated output bytes, quarantine bytes, each string, each collection, combined
-history, combined artifact/evidence references, aggregate validation work, capsule enumeration, retained Git output,
-and referenced artifact reads. Git pipes are drained while retaining at most the configured bound. Arithmetic overflow
+Current constants bound request and generated output bytes, quarantine bytes, each string,
+each collection, combined history, combined artifact/evidence references, aggregate
+validation work, capsule enumeration, retained Git output, and referenced artifact reads.
+Git pipes are drained while retaining at most the configured bound. Arithmetic overflow
 is an error before repository work or publication. Repository traversal uses bounded Git and the bounded repository
 graph; it never recursively walks untrusted state input.
 

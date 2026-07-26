@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.capsule",
-  "version": 1,
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
   "id": "semantic-protocol",
   "root": "crates/lkjscript-compiler/src/semantic",
   "kind": "source",
@@ -12,11 +12,21 @@
     "atomic transaction",
     "bounded local session",
     "typed holes and legal actions",
-    "Edition 2 identity projection"
+    "content-addressed identity projection"
   ],
-  "facade": ["crates/lkjscript-compiler/src/semantic/mod.rs"],
-  "allowed_dependencies": ["core", "semantic-source"],
-  "forbidden_dependencies": ["app", "jit", "vm"],
+  "facade": [
+    "crates/lkjscript-compiler/src/semantic/mod.rs"
+  ],
+  "allowed_dependencies": [
+    "contracts",
+    "core",
+    "semantic-source"
+  ],
+  "forbidden_dependencies": [
+    "app",
+    "jit",
+    "vm"
+  ],
   "tests": [
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/semantic/tests/corpus.rs",
@@ -26,15 +36,24 @@
     "crates/lkjscript-app/tests/semantic_cli.rs"
   ],
   "decisions": [
+    "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-    "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
+    "docs/decisions/platform/semantic-source-and-agent-protocol/semantic-schema.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
-    "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md",
-    "docs/decisions/semantics/edition-2/identity-and-migration.md"
+    "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
   ],
-  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
-  "capability": { "status": "none", "names": [] },
-  "provenance": { "class": "authored", "source": "Complete Semantic Source Schema V2 and typed-hole implementation" },
+  "unsafe_boundary": {
+    "status": "forbidden",
+    "boundaries": []
+  },
+  "capability": {
+    "status": "none",
+    "names": []
+  },
+  "provenance": {
+    "class": "authored",
+    "source": "Canonical Semantic Source schema and typed-hole implementation"
+  },
   "verification": [
     "cargo test --locked -p lkjscript-compiler semantic",
     "cargo test --locked -p lkjscript-app --test semantic_cli"

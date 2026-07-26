@@ -123,23 +123,29 @@ pub(super) fn load_frame(
         .metrics
         .parsing
         .saturating_add(parsing_started.elapsed());
-    let imports = parsed
-        .forms
-        .iter()
-        .zip(&parsed.syntax)
-        .filter_map(|(form, syntax)| match form {
-            Expr::Call { name, args } if name == "import" => Some((args, syntax.span)),
-            _ => None,
-        })
-        .map(|(args, span)| {
-            super::imports::import_path(args)
-                .map(|spec| PendingImport {
-                    spec: spec.to_string(),
-                    span,
-                })
-                .map_err(|message| SourceDiagnostic::generic(parsed.origin.clone(), message))
-        })
-        .collect::<SourceResult<Vec<_>>>()?;
+    let mut imports = Vec::new();
+    for (form, syntax) in parsed.forms.iter().zip(&parsed.syntax) {
+        let Expr::Call { name, args } = form else {
+            continue;
+        };
+        if name != "imports" {
+            continue;
+        }
+        for (import, import_syntax) in args.iter().zip(&syntax.children) {
+            let Expr::Call { name, args } = import else {
+                continue;
+            };
+            if name != "import" {
+                continue;
+            }
+            let spec = super::imports::import_path(args)
+                .map_err(|message| SourceDiagnostic::generic(parsed.origin.clone(), message))?;
+            imports.push(PendingImport {
+                spec: spec.to_string(),
+                span: import_syntax.span,
+            });
+        }
+    }
 
     state.loading.insert(canonical.clone());
     Ok(Some(LoadFrame {

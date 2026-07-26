@@ -9,8 +9,8 @@ reorganization, repository graph generation, or multi-agent work publication.
 
 **Current.** `lkjscript-xtask structure` implements the bounded topology checker,
 strict capsule validation, generated audit, graph, and query foundations.
-Existing Edition 1 source limits remain Current and unchanged. The implemented slice is the checker and its
-focused fixtures; it must not rewrite the repository.
+Existing source limits remain Current and unchanged. The implemented slice is the checker
+and its focused fixtures; it must not rewrite the repository.
 
 ## Provenance Classes
 
@@ -64,7 +64,7 @@ or capability boundary. Top-level semantic items warn above 16 while supported
 counting matures. Capsule dependencies and principal public concepts warn above
 12 and fail above 16. Cross-capsule dependency cycles fail.
 
-These repository limits do not change Edition 1 language semantics. In
+These repository limits do not change the removed legacy source contract language semantics. In
 particular, source depth 8, form children 16, 384 tokens per file, 8 top-level
 forms, 15 product fields, and 16 combined immediate source-directory entries
 remain Current until their separate aggregate-budget migration gate passes.

@@ -19,8 +19,8 @@ pub fn root() -> PathBuf {
 
 pub fn policy(nodes: u64, edges: u64, work: u64, bytes: u64) -> Policy {
     Policy {
-        schema: "lkjscript.structure.policy.v1".into(),
-        version: "test".into(),
+        schema: "lkjscript.structure.policy".into(),
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         limits: Limits {
             authored_lines: 200,
             authored_bytes: 32_768,
@@ -42,7 +42,7 @@ pub fn policy(nodes: u64, edges: u64, work: u64, bytes: u64) -> Policy {
 fn capsule() -> Capsule {
     Capsule {
         schema: "lkjscript.capsule".into(),
-        version: 1,
+        contract: lkjscript_contracts::CAPSULE_MANIFEST_DIGEST.to_hex(),
         id: "x".into(),
         root: "crates/x".into(),
         kind: CapsuleKind::Crate,
@@ -91,11 +91,11 @@ pub fn fixture(root: &Path, revision: &str) -> Audit {
         ("docs/decision.md", "[source](../src/main.lkjscript)\n"),
         (
             "src/main.lkjscript",
-            "import/\n./part.lkjscript\n/import\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+            "imports/\nimport/\nsrc/part.lkjscript#part\n/import\n/imports\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
         ),
         (
             "src/part.lkjscript",
-            "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+            "def/\nname/\npart\n/name\npublic\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n",
         ),
     ];
     let mut files = Vec::new();
@@ -121,9 +121,9 @@ pub fn fixture(root: &Path, revision: &str) -> Audit {
     core.allowed_dependencies.clear();
     Audit {
         schema: "lkjscript.repository-audit".into(),
-        version: 1,
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         revision: revision.into(),
-        policy_version: "test".into(),
+        policy_identity: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         files,
         directories: vec![],
         classifications: vec![],

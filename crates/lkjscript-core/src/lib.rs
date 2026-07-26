@@ -44,8 +44,7 @@ pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Tr
 pub use prelude::*;
 pub use profile::{
     InvalidCeiling, ResourceCeilings, ResourceProfile, ResourceProfileIdentity,
-    ResourceProfileName, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,
-    RESOURCE_PROFILE_SCHEMA, RESOURCE_PROFILE_VERSION,
+    ResourceProfileName, UnknownResourceProfile, RESOURCE_PROFILE_SCHEMA,
 };
 pub use sha256::sha256;
 pub use validation::{validate_chunk, ValidatedChunk};

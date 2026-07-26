@@ -107,7 +107,6 @@ pub(crate) struct OmittedCategory {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum BlockerCode {
-    UnsupportedEditionOneForm,
     ExpectedTypeUnavailable,
     CandidateBudgetExhausted,
     SearchBudgetExhausted,

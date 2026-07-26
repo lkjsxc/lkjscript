@@ -57,10 +57,12 @@ pub fn compile_path_with_metrics_and_ledger(
     let result = (|| {
         crate::ensure_source_path(path)?;
         let (program, loading) = load_with_metrics_and_budget(path, limits, ledger)?;
-        crate::source::require_edition2_for_compiler(&program)?;
         let source_files = program.files().len();
+        let projection = program
+            .module_scoped_projection()
+            .map_err(crate::source::SourceDiagnostic::into_core)?;
         let hir_started = Instant::now();
-        let mut analyzed = analyze_program_without_effects_with_budget(&program, ledger)?;
+        let mut analyzed = analyze_program_without_effects_with_budget(&projection, ledger)?;
         let hir_analysis = hir_started.elapsed();
         let effects_started = Instant::now();
         crate::effects::infer(&mut analyzed);
@@ -125,13 +127,15 @@ pub fn compile_path_with_sources_and_ledger(
     let result = (|| {
         crate::ensure_source_path(path)?;
         let program = load_for_compiler_with_budget(path, limits, ledger)?;
-        crate::source::require_edition2_for_compiler(&program)?;
         let sources = program
             .files()
             .iter()
             .map(|source| source.path.clone())
             .collect();
-        let analyzed = analyze_program_with_budget(&program, ledger)?;
+        let projection = program
+            .module_scoped_projection()
+            .map_err(crate::source::SourceDiagnostic::into_core)?;
+        let analyzed = analyze_program_with_budget(&projection, ledger)?;
         let executable = compile_analyzed(&analyzed, limits, ledger)?;
         Ok((executable, sources))
     })();

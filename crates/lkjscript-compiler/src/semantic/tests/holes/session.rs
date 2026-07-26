@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn bounded_local_session_serves_schema_v2_hole_context() {
+fn bounded_local_session_serves_current_contract_hole_context() {
     let directory = case_dir("hole-session");
     let root = directory.join("main.lkjscript");
     std::fs::write(&root, function_source(&hole("body", None))).expect("write source");
@@ -13,7 +13,7 @@ fn bounded_local_session_serves_schema_v2_hole_context() {
         .expect("hole node");
     let semantic = serde_json::json!({
         "schema": crate::semantic::SCHEMA,
-        "version": 2,
+        "contract": crate::semantic::CONTRACT.to_hex(),
         "profile": "sandbox",
         "root": root.to_string_lossy(),
         "operation": {
@@ -24,7 +24,7 @@ fn bounded_local_session_serves_schema_v2_hole_context() {
     });
     let envelope = serde_json::to_vec(&serde_json::json!({
         "schema": "lkjscript.semantic-session",
-        "version": 1,
+        "contract": crate::semantic::session::CONTRACT.to_hex(),
         "request_id": "hole",
         "revision": 0,
         "request": { "kind": "execute", "request": semantic },
@@ -41,7 +41,10 @@ fn bounded_local_session_serves_schema_v2_hole_context() {
     let response: serde_json::Value =
         serde_json::from_slice(&output[8..]).expect("decode session response");
     assert_eq!(response["response"]["kind"], "execute");
-    assert_eq!(response["response"]["session"]["semantic_version"], 2);
+    assert_eq!(
+        response["response"]["session"]["semantic_contract"],
+        crate::semantic::CONTRACT.to_hex()
+    );
     assert_eq!(
         response["response"]["response"]["result"]["kind"],
         "hole_context"

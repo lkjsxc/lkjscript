@@ -170,7 +170,7 @@ impl BudgetLedger {
         increment: u64,
     ) -> ResourceDiagnostic {
         ResourceDiagnostic {
-            profile: self.profile.identity(),
+            profile: Box::new(self.profile.identity()),
             category,
             limit,
             before,

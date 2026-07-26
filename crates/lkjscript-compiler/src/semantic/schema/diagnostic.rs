@@ -63,7 +63,7 @@ pub(crate) enum RepairRecord {
 #[serde(deny_unknown_fields)]
 pub(crate) struct DiagnosticRecord {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub code: DiagnosticCode,
     pub severity: Severity,
     pub category: DiagnosticCategory,

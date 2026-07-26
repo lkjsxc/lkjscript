@@ -28,16 +28,19 @@ pub fn repository(name: &str) -> Repository {
     fs::create_dir_all(root.join("crates/sample")).unwrap();
     fs::write(
         root.join("capsule.json"),
-        r#"{
-  "schema":"lkjscript.capsule","version":1,"id":"workspace","root":".","kind":"workspace",
+        format!(
+            r#"{{
+  "schema":"lkjscript.capsule","contract":"{}","id":"workspace","root":".","kind":"workspace",
   "purpose":"test","layer":"test","concepts":[],"facade":[],"allowed_dependencies":[],
   "forbidden_dependencies":[],"tests":[],"decisions":[],
-  "unsafe_boundary":{"status":"forbidden","boundaries":[]},
-  "capability":{"status":"none","names":[]},
-  "provenance":{"class":"authored","source":"test"},
-  "verification":[],"context_card":{"goal":"test","interfaces":[],"invariants":[]}
-}
+  "unsafe_boundary":{{"status":"forbidden","boundaries":[]}},
+  "capability":{{"status":"none","names":[]}},
+  "provenance":{{"class":"authored","source":"test"}},
+  "verification":[],"context_card":{{"goal":"test","interfaces":[],"invariants":[]}}
+}}
 "#,
+            lkjscript_contracts::CAPSULE_MANIFEST_DIGEST.to_hex()
+        ),
     )
     .unwrap();
     fs::write(root.join("evidence.txt"), "evidence\n").unwrap();
@@ -61,7 +64,7 @@ pub fn repository(name: &str) -> Repository {
 pub fn state(repo: &Repository, task: &str) -> WorkState {
     WorkState {
         schema: "lkjscript.agent-work-state".into(),
-        version: 2,
+        contract: lkjscript_contracts::AGENT_WORK_STATE_DIGEST.to_hex(),
         task_id: task.into(),
         state_revision: 1,
         base_repository_revision: repo.revision.clone(),
@@ -93,7 +96,7 @@ pub fn state(repo: &Repository, task: &str) -> WorkState {
 pub fn request(state: WorkState, expected: u64) -> CheckpointRequest {
     CheckpointRequest {
         schema: "lkjscript.agent-work-state-checkpoint".into(),
-        version: 2,
+        contract: lkjscript_contracts::AGENT_WORK_STATE_DIGEST.to_hex(),
         expected_state_revision: expected,
         state,
     }

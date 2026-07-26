@@ -26,7 +26,7 @@ impl<'a> NativeCallState<'a> {
             .map_err(|_| InvocationError::RootCapacityExceeded)?;
         if image
             .runtime_calls()
-            .contains(&RuntimeCallSlot::CollectReferenceV1)
+            .contains(&RuntimeCallSlot::CollectReference)
             || !image.heap_runtime_sites().is_empty()
         {
             exact_root_counts

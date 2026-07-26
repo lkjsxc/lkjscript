@@ -40,7 +40,7 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
 
     let mut initial = OwnershipState::default();
     for parameter in &entry.parameters {
-        if is_owned_buf(&parameter.ty) {
+        if is_owned_value(&parameter.ty) {
             let place = parameter.owner_place.ok_or_else(|| {
                 IrError::new("SSA Owned entry parameter is missing place provenance")
             })?;

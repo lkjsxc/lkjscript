@@ -16,7 +16,6 @@ pub(super) fn expression(node: &SourceNode, scope: &BTreeMap<String, ScopeEntity
             .find(|entry| entry.name == *name)
             .and_then(|entry| super::parse_canonical(&entry.instantiated_type)),
         SyntaxKind::Call { name } => call_type(name, scope),
-        SyntaxKind::EditionMarker => None,
     }
 }
 

@@ -46,7 +46,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bounded proof optimization/certificate verification, bytecode link metadata | <!-- LKJ-EXACT-DATA -->
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter | <!-- LKJ-EXACT-DATA -->
-| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, ABI-2 reservation/encoding, opaque installable image | <!-- LKJ-EXACT-DATA -->
+| Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, canonical native contract reservation/encoding, opaque installable image | <!-- LKJ-EXACT-DATA -->
 | Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, `GcHeap` runtime services, code objects, tier state, forced/auto execution | <!-- LKJ-EXACT-DATA -->
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run/` | `Vm::run`, dispatch and calls |
@@ -65,7 +65,7 @@ CLI path
   -> package-root and import resolution through an explicit dependency-first stack
   -> checked source-unit/file/closure implementation maxima
   -> lex/parse each source with exact spans and trivia
-  -> enforce unchanged Edition 1 per-file/tree limits
+  -> enforce unchanged the removed legacy source contract per-file/tree limits
   -> build opaque ValidatedSourceTree with exact revision, stable keys, and nodes
   -> enforce one root main and declaration-only imports
   -> collect immutable function and product headers
@@ -83,7 +83,7 @@ CLI path
   -> validate_chunk -> opaque immutable ValidatedChunk
   -> ExecutableProgram { verified SSA, link metadata, ValidatedChunk }
       +-> vm: run_chunk_with_args(program.bytecode(), ExecutionConfig)
-      +-> baseline-jit: VerifiedProgram scalar/reference SCC group -> ABI-2 baseline object
+      +-> baseline-jit: VerifiedProgram scalar/reference SCC group -> canonical native contract baseline object
           -> typed frame-home HeapDispatchV1 -> session GcHeap -> native main
       +-> optimizing-jit: bounded stable-ID proof edits -> private reconstruction
           -> VerifiedOptimizedProgram -> shared lowering -> optimizing-only object/main entry
@@ -99,7 +99,7 @@ are rejected.
 Opaque validated Semantic Source Foundation tree -> resolved typed HIR ->
 verified typed SSA -> verified baseline normalization -> reference bytecode is
 **Current**. HIR consumes the private mechanically checked exact-edition form
-projection from the validated tree; ordinary compilation requires Edition 2,
+projection from the validated tree; ordinary compilation requires the canonical source contract,
 and no sibling parser or raw public AST can enter analysis. HIR owns an explicit Main
 and Functions, resolved binding IDs and local slot references, immutable
 declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs and field
@@ -121,7 +121,7 @@ bounded code objects, callable function-entry baseline tier, host-independent
 reference/allocation SCC groups in forced mode, and the forced first proof-based
 optimizing pipeline are **Current**. Forced and auto baseline engines plus forced
 optimizing execution enter real generated code. The initial `Owned Buf`
-ownership safe island, marker traits, and closed-plan ABI-2 typed-reference
+ownership safe island, marker traits, and closed-plan canonical native contract typed-reference
 frames/maps are Current;
 general ownership, Handle/host native allocation, native/VM reference
 transitions, broader optimization passes, loop OSR, minimal AOT file emission,

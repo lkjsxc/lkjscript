@@ -11,12 +11,12 @@ impl Resolver<'_> {
             "if" => self.resolve_if(args),
             "match" => self.resolve_match(args),
             "while" => self.resolve_while(args),
-            "loop" if self.analyzer.edition2 => self.resolve_loop(args),
-            "return" if self.analyzer.edition2 => self.resolve_return(args),
-            "break" if self.analyzer.edition2 => self.resolve_break(args),
-            "continue" if self.analyzer.edition2 => self.resolve_continue(args),
-            "trap" if self.analyzer.edition2 => self.resolve_trap(args),
-            "exit" if self.analyzer.edition2 => self.resolve_exit(args),
+            "loop" => self.resolve_loop(args),
+            "return" => self.resolve_return(args),
+            "break" => self.resolve_break(args),
+            "continue" => self.resolve_continue(args),
+            "trap" => self.resolve_trap(args),
+            "exit" => self.resolve_exit(args),
             "do" => self.resolve_do(args),
             "let" => self.resolve_let(args),
             "var" => self.resolve_var(args),
@@ -75,22 +75,20 @@ impl Resolver<'_> {
                 .iter()
                 .map(|argument| argument.ty.clone())
                 .collect();
-            if self.analyzer.edition2
-                && matches!(
-                    operation,
-                    Operation::Add
-                        | Operation::Subtract
-                        | Operation::Multiply
-                        | Operation::Divide
-                        | Operation::Less
-                        | Operation::LessEqual
-                        | Operation::Greater
-                        | Operation::GreaterEqual
-                )
-                && argument_types[0] != argument_types[1]
+            if matches!(
+                operation,
+                Operation::Add
+                    | Operation::Subtract
+                    | Operation::Multiply
+                    | Operation::Divide
+                    | Operation::Less
+                    | Operation::LessEqual
+                    | Operation::Greater
+                    | Operation::GreaterEqual
+            ) && argument_types[0] != argument_types[1]
             {
                 return Err(self.error(format!(
-                    "{}: Edition 2 numeric operands must have one exact type",
+                    "{}: numeric operands must have one exact type",
                     operation.name()
                 )));
             }

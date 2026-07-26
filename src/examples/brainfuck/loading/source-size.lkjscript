@@ -1,12 +1,8 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/brainfuck/state.lkjscript
+src/examples/brainfuck/error.lkjscript#bf-close,bf-fail,bf-open,bf-read-byte
 /import
-import/
-examples/brainfuck/error.lkjscript
-/import
+/imports
 def/
 name/
 bf-count-loop
@@ -66,6 +62,7 @@ def/
 name/
 bf-source-size
 /name
+public
 fn/
 sig/
 Str
@@ -93,7 +90,9 @@ handle
 /bind
 do/
 bf-close/
+move/
 handle
+/move
 /bf-close
 size
 /do

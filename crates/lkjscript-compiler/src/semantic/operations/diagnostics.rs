@@ -8,7 +8,11 @@ pub(crate) use super::diagnostic_records::{source_failure, stale};
 const STRUCTURAL_CALLS: &[&str] = &[
     "def",
     "main",
+    "imports",
     "import",
+    "path",
+    "names",
+    "exports",
     "product",
     "trait",
     "impl",
@@ -46,7 +50,7 @@ const STRUCTURAL_CALLS: &[&str] = &[
 ];
 
 pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<DiagnosticRecord> {
-    if !include_hir || crate::analyze::analyze_program(tree).is_ok() {
+    if !include_hir || crate::analyze::analyze_module_program(tree).is_ok() {
         return Vec::new();
     }
     let mut globals = HashSet::new();

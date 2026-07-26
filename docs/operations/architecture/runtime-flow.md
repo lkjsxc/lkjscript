@@ -39,7 +39,7 @@ The current native flow is:
 forced main or hot scalar VM function entry
   -> verified scalar or host-independent reference eligibility and reachable SCC group
   -> synchronous typed-SSA lowering at a safepoint
-  -> bounded W^X callable ABI-2 baseline code object
+  -> bounded W^X callable canonical native contract baseline code object
   -> one invocation-time pthread stack-bounds query
   -> cached descriptor/budget/bounds frame reservation before each stack subtraction
   -> initialized registered frame and verifier-certified exact scalar or typed-reference call map
@@ -88,7 +88,7 @@ may call and allocate internally. There is no OSR, background compile,
 deoptimization, guard, or speculation.
 ## Source Layout Rule
 
-The current Edition 1 language rule limits each lkjscript source directory to
+The current the removed legacy source contract language rule limits each lkjscript source directory to
 16 immediate entries, counting files and subdirectories together. Rust crates,
 documentation, metadata, `.git`, and build output are not language source and
 are outside this rule.
@@ -99,10 +99,10 @@ an external project receives the same contract. The accepted destination is an
 AI-maintainability lint, but this check is not weakened until aggregate source
 closure/import/byte/node safety bounds are Current. See [Resource Budget
 Profiles](../../decisions/platform/resource-budget-profiles.md).
-## Edition 2 Accepted Flow
+## the canonical source contract Accepted Flow
 
-Edition 2 is an [Accepted Target, not
-Current](../../decisions/semantics/edition-2.md). Its exact path remains the one
+the canonical source contract is an [Accepted Target, not
+Current](../../decisions/semantics/semantic-core.md). Its exact path remains the one
 validated Semantic Source tree through resolved HIR and verified SSA. Match is
 verified then lowered to SSA CFG; evaluators and backends implement only ADT,
 numeric, layout, charge, and terminator primitives. Acceptance requires actual
@@ -153,7 +153,7 @@ goal/specification
 
 [Semantic Source And Agent
 Protocol](../../decisions/platform/semantic-source-and-agent-protocol.md) now
-has Current Schema V2: one validated source-tree authority, exact 125-file
+has Current Schema: one validated source-tree authority, exact 124-file
 tracked source roundtrip (121 under `src/`), exact revision and stable hole/
 declaration identities, dense nodes, structural diagnostics, checker-derived
 hole context, bounded legal actions, and atomic transactions. Existing

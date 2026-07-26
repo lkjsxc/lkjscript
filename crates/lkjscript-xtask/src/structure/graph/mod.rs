@@ -57,7 +57,7 @@ pub fn build(root: &Path, audit: &Audit, policy: &Policy) -> Graph {
     output::canonicalize(&mut nodes, &mut edges, audit, policy, &mut budget);
     Graph {
         schema: "lkjscript.repository-graph".into(),
-        version: 1,
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         revision: audit.revision.clone(),
         nodes,
         edges,
@@ -68,8 +68,7 @@ pub fn build(root: &Path, audit: &Audit, policy: &Policy) -> Graph {
             "macro-expanded Rust symbols, imports, implementations, and tests are unsupported"
                 .into(),
             "validated lkjscript implementation edges emit only when declarations exist".into(),
-            "lkjscript imports use an exact bounded Edition 1 structural parser and are inferred"
-                .into(),
+            "lkjscript imports use an exact bounded structural parser and are inferred".into(),
             "compiler source facts expose declarations but not import edges".into(),
             "artifact consumption beyond exact provenance and command contracts is unsupported"
                 .into(),

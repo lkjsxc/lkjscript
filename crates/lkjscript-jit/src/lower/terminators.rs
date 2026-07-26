@@ -118,7 +118,7 @@ pub(super) fn lower_edge(
     }
     if target_block.metadata.loop_header {
         builder
-            .runtime_call(edge, RuntimeCallSlot::PollV1, Vec::new())
+            .runtime_call(edge, RuntimeCallSlot::Poll, Vec::new())
             .map_err(LoweringError::backend)?;
     }
     builder

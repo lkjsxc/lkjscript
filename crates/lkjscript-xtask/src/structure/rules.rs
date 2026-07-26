@@ -91,9 +91,9 @@ pub fn audit(
         .collect();
     Audit {
         schema: "lkjscript.repository-audit".into(),
-        version: 1,
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         revision: snapshot.revision,
-        policy_version: policy.version.clone(),
+        policy_identity: policy.contract.clone(),
         files: snapshot.files,
         directories: snapshot.directories,
         classifications,

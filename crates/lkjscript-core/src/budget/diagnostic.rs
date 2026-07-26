@@ -76,13 +76,13 @@ impl fmt::Display for BudgetError {
         write!(
             formatter,
             concat!(
-                "budget rejection: profile={}/{}:{}; category={}; unit={}; ",
+                "budget rejection: profile={}:{}; contract={}; category={}; unit={}; ",
                 "authority={}; path={}; kind={:?}; cause={:?}; limit={}; reserved={}; ",
                 "attempted={}; observed={}; allocated-before-rejection={}"
             ),
             self.profile.schema,
-            self.profile.version,
             self.profile.name.as_str(),
+            self.profile.contract,
             self.category.as_str(),
             self.category.unit(),
             authority,

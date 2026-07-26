@@ -58,7 +58,7 @@ fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
     );
     assert!(image
         .runtime_calls()
-        .contains(&RuntimeCallSlot::HeapDispatchV1));
+        .contains(&RuntimeCallSlot::HeapDispatch));
     assert_eq!(image.safepoints()[0].stack_map().roots().len(), 1);
     Ok(())
 }

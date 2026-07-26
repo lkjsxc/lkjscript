@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 
 use lkjscript_compiler::source;
 use lkjscript_core::Limits;
@@ -108,8 +108,9 @@ fn imports(path: &str, text: &str, unit: &str, tracked: &BTreeSet<&str>, edges: 
     let mut index = 0;
     while index + 2 < lines.len() {
         if lines[index].trim() == "import/" && lines[index + 2].trim() == "/import" {
-            let spec = lines[index + 1].trim().trim_matches('"');
-            if let Some(target) = resolve_import(path, spec) {
+            let encoded = lines[index + 1].trim();
+            let spec = encoded.split_once('#').map(|(path, _)| path).unwrap_or("");
+            if let Some(target) = resolve_import(spec) {
                 if tracked.contains(target.as_str()) {
                     edge(
                         edges,
@@ -128,42 +129,29 @@ fn imports(path: &str, text: &str, unit: &str, tracked: &BTreeSet<&str>, edges: 
     }
 }
 
-fn resolve_import(source: &str, spec: &str) -> Option<String> {
-    let combined = if let Some(relative) = spec.strip_prefix("./") {
-        Path::new(source).parent()?.join(relative)
-    } else if spec.starts_with("std/") || spec.starts_with("lib/") || spec.starts_with("examples/")
+fn resolve_import(spec: &str) -> Option<String> {
+    let path = Path::new(spec);
+    if path.is_absolute()
+        || spec.starts_with('.')
+        || !spec.ends_with(".lkjscript")
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
     {
-        PathBuf::from("src").join(spec)
-    } else {
-        PathBuf::from(spec)
-    };
-    let mut result = PathBuf::new();
-    for component in combined.components() {
-        match component {
-            Component::Normal(value) => result.push(value),
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !result.pop() {
-                    return None;
-                }
-            }
-            _ => return None,
-        }
+        return None;
     }
-    result.to_str().map(str::to_owned)
+    Some(spec.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn exact_import_resolution_matches_source_loader_roots() {
+    fn exact_import_resolution_matches_package_module_ids() {
         assert_eq!(
-            super::resolve_import("src/examples/a.lkjscript", "std/io.lkjscript").as_deref(),
+            super::resolve_import("src/std/io.lkjscript").as_deref(),
             Some("src/std/io.lkjscript")
         );
-        assert_eq!(
-            super::resolve_import("src/lib/a/main.lkjscript", "./part.lkjscript").as_deref(),
-            Some("src/lib/a/part.lkjscript")
-        );
+        assert!(super::resolve_import("./part.lkjscript").is_none());
+        assert!(super::resolve_import("../part.lkjscript").is_none());
     }
 }

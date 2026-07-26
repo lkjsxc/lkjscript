@@ -3,6 +3,8 @@ use std::path::Path;
 
 use crate::util::walk;
 
+mod generations;
+
 pub fn check(root: &Path) -> i32 {
     let required = [
         "AGENTS.md",
@@ -29,7 +31,7 @@ pub fn check(root: &Path) -> i32 {
         "docs/decisions/execution/compiler-pipeline.md",
         "docs/decisions/execution/execution-portfolio.md",
         "docs/decisions/execution/linux-x86-64-native-backend.md",
-        "docs/decisions/semantics/edition-2.md",
+        "docs/history/semantics/edition.md",
         "docs/decisions/semantics/equality-families.md",
         "docs/decisions/semantics/immutable-nominal-products.md",
         "docs/decisions/semantics/numeric-semantics.md",
@@ -56,6 +58,7 @@ pub fn check(root: &Path) -> i32 {
     failures += markdown(root);
     failures += crate::documentation_status::check(root);
     failures += inert_markers(root);
+    failures += generations::check(root);
     i32::from(failures > 0)
 }
 

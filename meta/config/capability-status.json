@@ -1,200 +1,129 @@
 {
   "schema": "lkjscript.capability-status",
-  "version": 1,
+  "contract": "69d72b81dcab539574b6890e69ac15e5a2ed6db85e03e611e25eb0e756802341",
   "capabilities": [
     {
-      "id": "agent-foundation/1",
-      "status": "historical",
-      "interface": "lkjscript.agent-foundation/1",
-      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-      "evidence": "docs/current-state/semantic-source-foundation-evidence.md",
-      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
+      "id": "affine-resource-handles", "status": "current",
+      "interface": "affine Handle move and deterministic drop through verified SSA",
+      "authority": "docs/decisions/capabilities/resource-handles.md",
+      "evidence": "docs/decisions/semantics/ownership-and-borrowing.md",
+      "claimants": ["docs/current-state.md"]
     },
     {
-      "id": "agent-work-state/1",
-      "status": "historical",
-      "interface": "lkjscript.agent-work-state/1",
+      "id": "agent-work-state", "status": "current",
+      "interface": "lkjscript.agent-work-state",
       "authority": "docs/decisions/platform/agent-work-state.md",
       "evidence": "docs/decisions/platform/agent-work-state.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "agent-work-state/2",
-      "status": "current",
-      "interface": "lkjscript.agent-work-state/2",
-      "authority": "docs/decisions/platform/agent-work-state.md",
-      "evidence": "docs/decisions/platform/agent-work-state.md",
-      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
-    },
-    {
-      "id": "edition-2-enum-declarations/1",
-      "status": "current", "interface": "Edition 2 generic enums and exhaustive source match through all four engines",
-      "authority": "docs/decisions/semantics/edition-2/algebraic-data-types.md",
+      "id": "enum-declarations", "status": "current",
+      "interface": "generic enums and exhaustive source match through all four engines",
+      "authority": "docs/decisions/semantics/algebraic-data-types.md",
       "evidence": "docs/operations/verification.md",
-      "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
-        "docs/decisions/semantics/edition-2/algebraic-data-types.md",
-        "docs/decisions/semantics/edition-2/patterns-and-match.md"]
+      "claimants": [
+        "docs/current-state.md",
+        "docs/decisions/semantics/algebraic-data-types.md",
+        "docs/decisions/semantics/patterns-and-match.md"
+      ]
     },
     {
-      "id": "edition-2-identity-migration/1",
-      "status": "current",
-      "interface": "Edition 2 identity, atomic migration publication, and corpus cutover",
-      "authority": "docs/decisions/semantics/edition-2/identity-and-migration.md",
-      "evidence": "docs/current-state/edition-2-identity-migration-evidence.md",
-      "claimants": ["docs/current-state.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-        "docs/decisions/semantics/edition-2.md", "docs/decisions/semantics/edition-2/identity-and-migration.md",
-        "docs/language/source-format.md", "docs/operations/agent-handoff.md"]
-    },
-    { "id": "edition-2-never-control/1", "status": "current",
-      "interface": "Edition 2 Never and structured control through all four engines",
-      "authority": "docs/decisions/semantics/edition-2/never-and-control.md",
-      "evidence": "docs/decisions/semantics/edition-2/execution-and-acceptance.md",
-      "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
-        "docs/decisions/semantics/edition-2/never-and-control.md"] },
-    { "id": "edition-2-numeric-conversions/1", "status": "current",
-      "interface": "Edition 2 explicit I64/F64 conversions through all four engines",
-      "authority": "docs/decisions/semantics/edition-2/numeric-conversions.md",
-      "evidence": "docs/operations/verification.md",
-      "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
-        "docs/decisions/semantics/edition-2/numeric-conversions.md"] },
-    { "id": "edition-2-semantic-core/2",
-      "status": "accepted-target",
-      "interface": "lkjscript.edition/2",
-      "authority": "docs/decisions/semantics/edition-2.md",
-      "evidence": "docs/decisions/semantics/edition-2/execution-and-acceptance.md",
-      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
-    },
-    {
-      "id": "jit-auto-promotion/1",
-      "status": "accepted-selection",
+      "id": "jit-auto-promotion", "status": "accepted-selection",
       "interface": "auto --auto-jit-threshold",
       "authority": "docs/current-state/accepted-target-automatic-baseline-to-proof-promotion.md",
       "evidence": "docs/operations/verification/accepted-automatic-promotion-gate.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "jit-proof-forced/1",
-      "status": "current",
+      "id": "jit-proof-forced", "status": "current",
       "interface": "run --engine optimizing-jit",
       "authority": "docs/decisions/jit/proof-based-optimizing-jit.md",
       "evidence": "docs/current-state/optimizer-and-allocation-evidence.md",
-      "claimants": [
-        "README.md",
-        "docs/current-state.md"
-      ]
+      "claimants": ["README.md", "docs/current-state.md"]
     },
     {
-      "id": "repository-graph-context/1",
-      "status": "current",
+      "id": "modules-and-packages", "status": "current",
+      "interface": "exact modules and content-addressed local package lock",
+      "authority": "docs/decisions/platform/modules-and-packages.md",
+      "evidence": "docs/operations/verification.md",
+      "claimants": ["docs/current-state.md"]
+    },
+    {
+      "id": "never-control", "status": "current",
+      "interface": "Never and structured control through all four engines",
+      "authority": "docs/decisions/semantics/never-and-control.md",
+      "evidence": "docs/history/semantics/edition/execution-and-acceptance.md",
+      "claimants": ["docs/current-state.md", "docs/decisions/semantics/never-and-control.md"]
+    },
+    {
+      "id": "numeric-conversions", "status": "current",
+      "interface": "explicit I64/F64 conversions through all four engines",
+      "authority": "docs/decisions/semantics/numeric-conversions.md",
+      "evidence": "docs/operations/verification.md",
+      "claimants": ["docs/current-state.md", "docs/decisions/semantics/numeric-conversions.md"]
+    },
+    {
+      "id": "repository-graph-context", "status": "current",
       "interface": "lkjscript-xtask structure context",
       "authority": "docs/decisions/platform/repository-intelligence-graph.md",
       "evidence": "docs/decisions/platform/repository-intelligence-graph.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "repository-topology/1",
-      "status": "current",
+      "id": "repository-topology", "status": "current",
       "interface": "lkjscript-xtask structure check",
       "authority": "docs/decisions/platform/bounded-repository-topology.md",
       "evidence": "docs/decisions/platform/bounded-repository-topology.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "resource-profile-compiler/2",
-      "status": "current",
-      "interface": "lkjscript.resource-profile/2 legacy compiler wrapper",
+      "id": "resource-profile-compiler", "status": "current",
+      "interface": "content-addressed compiler resource profile",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "resource-profile-preallocation/2",
-      "status": "current",
-      "interface": "lkjscript.resource-profile/2 core hierarchical reservations",
+      "id": "resource-profile-preallocation", "status": "current",
+      "interface": "content-addressed hierarchical reservations",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles/hierarchical-preallocation.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "resource-profile-shared-ledger/1",
-      "status": "accepted-target",
+      "id": "resource-profile-shared-ledger", "status": "accepted-target",
       "interface": "request-owned hierarchical ledger",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "semantic-session/1",
-      "status": "current",
+      "id": "semantic-core-target", "status": "accepted-target",
+      "interface": "canonical semantic core target",
+      "authority": "docs/history/semantics/edition.md",
+      "evidence": "docs/history/semantics/edition/execution-and-acceptance.md",
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
+    },
+    {
+      "id": "semantic-session", "status": "current",
       "interface": "lkjscript semantic serve --stdio",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "semantic-source-foundation/1",
-      "status": "current",
-      "interface": "Semantic Source Foundation V1",
-      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-      "evidence": "docs/current-state/semantic-source-foundation-evidence.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
-    },
-    {
-      "id": "semantic-source-schema/1",
-      "status": "historical",
-      "interface": "lkjscript.semantic-source/1",
-      "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
-    },
-    {
-      "id": "semantic-source-schema/2",
-      "status": "current",
-      "interface": "lkjscript.semantic-source/2",
+      "id": "semantic-source", "status": "current",
+      "interface": "lkjscript.semantic-source",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "typed-holes/1",
-      "status": "current",
+      "id": "typed-holes", "status": "current",
       "interface": "hole_context",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     }
   ]
 }

@@ -4,7 +4,7 @@ use super::*;
 fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let missing = |message| std::io::Error::other(message);
-    let reserve = RuntimeCallSlot::ReserveFrameV1
+    let reserve = RuntimeCallSlot::ReserveFrame
         .internal_abi_signature()
         .ok_or_else(|| missing("missing reserve ABI"))?;
     assert_eq!(
@@ -17,9 +17,9 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         ]
     );
     assert_eq!(reserve.result(), InternalMachineResult::InvocationContext);
-    assert!(RuntimeCallSlot::ReserveFrameV1.plan_signature().is_none());
+    assert!(RuntimeCallSlot::ReserveFrame.plan_signature().is_none());
     assert_eq!(
-        RuntimeCallSlot::RegisterFrameV1
+        RuntimeCallSlot::RegisterFrame
             .internal_abi_signature()
             .ok_or_else(|| missing("missing register ABI"))?
             .parameters(),
@@ -30,7 +30,7 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         ]
     );
     assert_eq!(
-        RuntimeCallSlot::PublishSafepointV1
+        RuntimeCallSlot::PublishSafepoint
             .internal_abi_signature()
             .ok_or_else(|| missing("missing publish ABI"))?
             .parameters(),
@@ -40,7 +40,7 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         ]
     );
     assert_eq!(
-        RuntimeCallSlot::HeapDispatchV1
+        RuntimeCallSlot::HeapDispatch
             .internal_abi_signature()
             .ok_or_else(|| missing("missing heap dispatch ABI"))?
             .parameters(),
@@ -50,11 +50,11 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         ]
     );
     assert_eq!(
-        RuntimeCallSlot::UnregisterFrameV1
+        RuntimeCallSlot::UnregisterFrame
             .internal_abi_signature()
             .ok_or_else(|| missing("missing unregister ABI"))?
             .parameters(),
-        RuntimeCallSlot::RegisterFrameV1
+        RuntimeCallSlot::RegisterFrame
             .internal_abi_signature()
             .ok_or_else(|| missing("missing register ABI"))?
             .parameters()
@@ -69,7 +69,7 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
     assert_eq!(
-        builder.runtime_call(entry, RuntimeCallSlot::RegisterFrameV1, Vec::new()),
+        builder.runtime_call(entry, RuntimeCallSlot::RegisterFrame, Vec::new()),
         Err(PlanError::EncoderOwnedRuntimeCall)
     );
     Ok(())

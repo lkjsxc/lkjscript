@@ -1,7 +1,7 @@
 use crate::semantic::schema::Expression;
 
 #[test]
-fn semantic_source_v2_match_and_enum_types_are_closed_and_exact() {
+fn semantic_source_match_and_enum_types_are_closed_and_exact() {
     let encoded = concat!(
         "{\"kind\":\"match\",\"scrutinee\":{\"kind\":\"i64\",\"value\":7},",
         "\"arms\":[{\"pattern\":{\"kind\":\"binding\",\"name\":\"x\"},",
@@ -35,7 +35,7 @@ fn semantic_source_v2_match_and_enum_types_are_closed_and_exact() {
 #[test]
 fn semantic_match_nodes_roundtrip_closed_pattern_kinds() {
     let source = concat!(
-        "edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\n",
+        "main/\nsig/\n->\nI64\n/sig\n",
         "match/\ntrue\narms/\n",
         "arm/\nbool-pattern/\nfalse\n/bool-pattern\n0\n/arm\n",
         "arm/\nwildcard/\n/wildcard\n1\n/arm\n",

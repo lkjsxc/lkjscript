@@ -10,13 +10,13 @@ gates without claiming unimplemented checks.
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
-Schema V2 with its exact V1 base, typed holes/legal actions and transactions,
-Edition 2 enum construction, exhaustive match, Never/control, and explicit
+Schema with its exact legacy contract base, typed holes/legal actions and transactions,
+the canonical source contract enum construction, exhaustive match, Never/control, and explicit
 numeric conversion through evaluator, VM, forced baseline, and forced proof,
 its one-shot protocol, bounded local stdio sessions,
-Profile V2 core reservation tests, and compiler resource checks are described
-in the capsules. Edition 2 cross-engine/JIT acceptance, exact atomic migration, the canonical
-corpus cutover, and ordinary Edition 1 rejection are Current. Nonzero query
+resource profile core reservation tests, and compiler resource checks are described
+in the capsules. the canonical source contract cross-engine/JIT acceptance, exact atomic migration, the canonical
+corpus cutover, and ordinary the removed legacy source contract rejection are Current. Nonzero query
 caching, whole-pipeline pre-allocation, and logical metering beyond enum
 construction remain **Accepted Targets**, not Current commands.
 
@@ -80,7 +80,7 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Current Semantic Operation And Resource-Profile Gates
 
-The Semantic Source V2 gate covers all 125 tracked files with the unchanged V1
+The Semantic Source contract gate covers all 124 tracked files with the unchanged legacy contract
 base representation, closed node/value/type/built-in/declaration/trivia/
 expression/correlation records, enum/match/pattern nodes and expressions,
 typed holes including match expected/scope facts, schema/source roundtrip,
@@ -93,7 +93,7 @@ references; expression type/effect/ownership constraints; bounded response
 encoding before publish; publication failure; byte-identical rollback; and
 prepared-journal crash recovery before the next read; descriptor-anchored
 ancestor-swap rejection; and preservation of an externally created leaf at the
-no-replace install boundary. Focused hole tests cover strict V1 rejection;
+no-replace install boundary. Focused hole tests cover strict legacy contract rejection;
 malformed and duplicate identity; expected type and scope ambiguity;
 deterministic ranking; snippets and blockers; ownership/effect validation;
 roundtrip; legal actions; exact/+1 pre-allocation; stale preconditions; all four
@@ -104,7 +104,7 @@ stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
 
-Focused enum tests cover exact Schema V2 declaration nodes and roundtrip,
+Focused enum tests cover exact Schema declaration nodes and roundtrip,
 stable nominal/member/layout identities, source order, generic substitutions,
 invariance, duplicate/empty/malformed rejection, nested ownership rejection,
 recursion exact/+1 bounds, exact constructor field order/arity/type rejection,
@@ -118,9 +118,9 @@ four-engine differentials, exact generated heap-runtime calls, and zero
 fallback. Match tests add
 nested usefulness/witness, stale plan, active projection, resource, source-order,
 single-evaluation, and four-engine zero-fallback coverage. Automatic/host-native
-enum transitions remain part of the Accepted Edition 2 gate.
+enum transitions remain part of the Accepted the canonical source contract gate.
 
-Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
+Core resource profile tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child
 oversubscription, consume/return/Drop reservation behavior, authority depth,
 missing authority, deterministic prefix equality and nested order, exact
@@ -133,15 +133,15 @@ staging boundaries, direct typed session execution, and all 128 bounded request
 segments. Parser-wide pre-allocation, exact bytecode-output sizing, and a
 whole-platform cross-authority ledger remain Accepted.
 
-## Current Edition 2 Gate
+## Current the canonical source contract Gate
 
-The [Edition 2 acceptance contract](../decisions/semantics/edition-2/execution-and-acceptance.md)
-is Current for all 125 tracked sources (121 under `src/`), exact old/new
+The [the canonical source contract acceptance contract](../history/semantics/edition/execution-and-acceptance.md)
+is Current for all 124 tracked sources (120 under `src/`), exact old/new
 identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
 rejection, atomic all-file rollback and crash recovery, compiler-resolved
 conversion, ordinary markerless rejection, evaluator/VM/forced-JIT
 value/outcome/charge differentials, actual generated calls without fallback,
-malformed-metadata rejection, exact roots, and Profile V2 boundaries. Runtime
+malformed-metadata rejection, exact roots, and resource profile boundaries. Runtime
 smokes and Docker remain separately recorded gates.
 
 ## Evidence Rule

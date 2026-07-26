@@ -12,7 +12,7 @@ pub struct CodeObject {
     pub(crate) identity: u64,
     pub(crate) functions: Vec<FunctionId>,
     pub(crate) tier: Tier,
-    pub(crate) versions: AbiVersions,
+    pub(crate) contracts: ImageContracts,
     pub(crate) entries: Vec<EntryMetadata>,
     pub(crate) accounting: CodeAccounting,
     pub(crate) accounted_allocation_bytes: u64,
@@ -47,8 +47,8 @@ impl CodeObject {
         self.tier
     }
 
-    pub const fn versions(&self) -> AbiVersions {
-        self.versions
+    pub const fn contracts(&self) -> ImageContracts {
+        self.contracts
     }
 
     pub fn entries(&self) -> &[EntryMetadata] {
@@ -125,7 +125,7 @@ pub struct CodeObjectRecord {
     pub identity: u64,
     pub functions: Vec<FunctionId>,
     pub tier: Tier,
-    pub versions: AbiVersions,
+    pub contracts: ImageContracts,
     pub code_bytes: u64,
     pub metadata_bytes: u64,
     pub accounted_allocation_bytes: u64,

@@ -60,7 +60,9 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
                 function.id.raw()
             ));
         }
-        verify_function(program, function)?;
+        verify_function(program, function).map_err(|failure| {
+            crate::IrError::new(format!("SSA function {}: {failure}", function.name))
+        })?;
         for instruction in function.blocks.iter().flat_map(|block| &block.instructions) {
             if let InstructionKind::Borrow { loan, .. } = instruction.kind {
                 if !global_loan_ids.insert(loan) {

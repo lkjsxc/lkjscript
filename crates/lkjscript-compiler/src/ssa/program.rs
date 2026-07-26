@@ -82,7 +82,7 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
             .enumerate()
         {
             builder.register_place(place, binding_id, ty.clone())?;
-            let owner_place = is_owned_buf(&ty).then_some(SsaPlaceId::new(place.raw()));
+            let owner_place = is_owned_value(&ty).then_some(SsaPlaceId::new(place.raw()));
             let parameter = builder.add_block_parameter(
                 entry,
                 ty,

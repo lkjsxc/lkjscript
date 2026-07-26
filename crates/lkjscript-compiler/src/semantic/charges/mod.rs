@@ -162,9 +162,14 @@ pub(crate) fn identity_core(
     let identity = profile.identity();
     ResourceProfileIdentityRecord {
         schema: identity.schema.to_string(),
-        version: identity.version,
-        implementation_maxima_version: identity.implementation_maxima_version,
+        contract: identity.contract.to_hex(),
+        name: identity.name.as_str().to_string(),
+        resource_categories: identity.resource_categories.to_hex(),
+        implementation_maxima_sha256: hex(&identity.implementation_maxima_sha256),
         ceilings_sha256: hex(&identity.ceilings_sha256),
+        host_lowered_ceilings_sha256: identity
+            .host_lowered_ceilings_sha256
+            .map(|value| hex(&value)),
     }
 }
 

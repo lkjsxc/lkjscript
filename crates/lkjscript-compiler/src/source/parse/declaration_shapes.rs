@@ -48,6 +48,17 @@ pub(super) fn valid_enum(children: &[SourceNode]) -> bool {
     if !named_form(name) {
         return false;
     }
+    let tail = match tail {
+        [SourceNode {
+            kind: SyntaxKind::Symbol { name },
+            ..
+        }, rest @ ..]
+            if name == "public" =>
+        {
+            rest
+        }
+        rest => rest,
+    };
     let variants = match tail {
         [SourceNode {
             kind: SyntaxKind::Call { name },

@@ -82,7 +82,7 @@ fn resume_context_reports_deterministic_output_truncation() {
     let repo = support::repository("context-limit");
     let mut response = ResumeContext {
         schema: "lkjscript.agent-resume-context",
-        version: 2,
+        contract: lkjscript_contracts::AGENT_WORK_STATE_DIGEST.to_hex(),
         state: support::state(&repo, "context-task"),
         repository_context: Vec::new(),
         revision_mismatch: None,
@@ -91,7 +91,7 @@ fn resume_context_reports_deterministic_output_truncation() {
     };
     let context_result = crate::model::QueryResult {
         schema: "lkjscript.repository-query".into(),
-        version: 1,
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         command: "context".into(),
         target: "workspace".into(),
         profile: Some("weak".into()),

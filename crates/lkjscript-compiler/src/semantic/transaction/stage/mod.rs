@@ -77,7 +77,7 @@ pub(crate) fn stage_with_ledger(
     ) {
         crate::semantic::operations::holes::validate::validate_incomplete(&rebuilt)
     } else {
-        crate::analyze::analyze_program(&rebuilt)
+        crate::analyze::analyze_module_program(&rebuilt)
             .map(|_| ())
             .map_err(|failure| failure.to_string())
     };

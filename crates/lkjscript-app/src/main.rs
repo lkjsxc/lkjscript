@@ -1,6 +1,7 @@
 //! CLI entry for the lkjscript language runtime.
 
 mod args;
+mod describe;
 mod disasm;
 mod engine;
 mod errors;
@@ -10,6 +11,7 @@ mod metrics;
 mod metrics_jit;
 mod metrics_json;
 mod output;
+mod package;
 mod semantic;
 
 use std::env;
@@ -33,8 +35,10 @@ fn real_main() -> Result<ExitCode, String> {
             help::print();
             Ok(ExitCode::SUCCESS)
         }
+        Some("describe") => describe::command(&args),
         Some("run") => execution_command::command(&args),
         Some("disasm") => disasm::command(&args),
+        Some("package") => package::command(&args),
         Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),
     }

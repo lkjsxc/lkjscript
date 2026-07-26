@@ -113,7 +113,7 @@ fn function_effects(site: &HoleSite<'_>, name: &str) -> EffectSet {
     let Ok(tree) = super::validate::completed_tree(site.tree, Some((site.node, witness))) else {
         return EffectSet::CONSERVATIVE_CALL;
     };
-    let Ok(program) = crate::analyze::analyze_program(&tree) else {
+    let Ok(program) = crate::analyze::analyze_module_program(&tree) else {
         return EffectSet::CONSERVATIVE_CALL;
     };
     program

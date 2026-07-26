@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use lkjscript_core::Limits;
 
 #[test]
-fn all_125_sources_project_to_closed_schema_without_byte_changes() -> std::io::Result<()> {
+fn all_124_sources_project_to_closed_schema_without_byte_changes() -> std::io::Result<()> {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files = Vec::new();
     collect_sources(&workspace.join("src"), &mut files)?;
@@ -17,7 +17,7 @@ fn all_125_sources_project_to_closed_schema_without_byte_changes() -> std::io::R
         &mut files,
     )?;
     files.sort();
-    assert_eq!(files.len(), 125, "tracked source corpus changed");
+    assert_eq!(files.len(), 124, "tracked source corpus changed");
     for path in files {
         project_source(&workspace, &path)?;
     }
@@ -63,12 +63,12 @@ fn project_source(workspace: &Path, path: &Path) -> std::io::Result<()> {
     let snapshot = crate::semantic::schema::SnapshotResult {
         repository_identity: "corpus-fixture".to_string(),
         tree_identity: tree.identity().to_hex(),
-        edition: tree.edition().number(),
         source_units: units,
         declarations,
         nodes,
     };
     let first = serde_json::to_vec(&snapshot).expect("encode closed snapshot");
+    assert!(!String::from_utf8_lossy(&first).contains("edition"));
     let second = serde_json::to_vec(&snapshot).expect("re-encode closed snapshot");
     assert_eq!(first, second, "{}", path.display());
     Ok(())

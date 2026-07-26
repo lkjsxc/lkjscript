@@ -120,5 +120,4 @@ impl ResourceCategory {
     }
 }
 
-pub(crate) const V1_RESOURCE_CATEGORY_COUNT: usize = 25;
 pub(crate) const RESOURCE_CATEGORY_COUNT: usize = ResourceCategory::ALL.len();

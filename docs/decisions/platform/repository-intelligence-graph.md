@@ -27,7 +27,7 @@ edge kinds, provenance values, and fields fail closed.
 
 ## Nodes
 
-V1 has closed node kinds for repository, directory, file, document authority,
+legacy contract has closed node kinds for repository, directory, file, document authority,
 semantic capsule, heading, decision, source unit, declaration/entity, test,
 command evidence, retained artifact, rule, diagnostic, task, and generated
 artifact. Every node contains:
@@ -45,7 +45,7 @@ Content digests are stale checks, not authorization or semantic identity.
 
 ## Edges
 
-V1 has closed directed edge kinds: `contains`, `declares`, `links-to`,
+legacy contract has closed directed edge kinds: `contains`, `declares`, `links-to`,
 `imports`, `depends-on`, `implements`, `verified-by`, `evidenced-by`,
 `generated-from`, `supersedes`, `accepted-after`, `blocks`, `owns-task`, and
 `relates`. Each edge records provenance, source authority, exact origin, and a
@@ -116,7 +116,7 @@ makes dependent graph nodes stale until a complete rebuild.
 
 ## Acceptance Gates
 
-V1 becomes Current only after deterministic rebuild, malformed-version,
+legacy contract becomes Current only after deterministic rebuild, malformed-version,
 provenance-conflict, stale-input, aggregate-boundary, traversal-cycle,
 truncation, and authority-spoofing tests pass. Repository-local links and exact
 compiler facts must agree with their authorities. Two clean builds from the same

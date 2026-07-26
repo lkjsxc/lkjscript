@@ -27,7 +27,7 @@ pub(super) fn find_package_root(entry: &Path) -> PathBuf {
     let entry_parent = entry.parent().unwrap_or_else(|| Path::new("."));
     let mut current = entry_parent.to_path_buf();
     loop {
-        if current.join("src").join("std").is_dir() {
+        if current.join("lkjscript.package.json").is_file() {
             return current;
         }
         if !current.pop() {

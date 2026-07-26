@@ -33,14 +33,8 @@ pub fn run(root: &Path, args: &[String]) -> i32 {
         Ok(value) => value,
         Err(error) => return fail(command, &error),
     };
-    if policy.schema != "lkjscript.structure.policy.v1"
-        || provenance.schema != "lkjscript.structure.provenance.v1"
-        || provenance.version != 1
-    {
-        return fail(
-            command,
-            "unsupported structure policy or provenance version",
-        );
+    if !current_structure_contract(&policy, &provenance) {
+        return fail(command, "structure policy or provenance contract mismatch");
     }
     let audit = match repository::capture(root, &provenance.entries) {
         Ok(snapshot) => rules::audit(root, &policy, provenance.entries, snapshot),
@@ -68,11 +62,8 @@ pub(crate) fn agent_context(
 ) -> Result<Vec<crate::model::QueryResult>, String> {
     let policy: Policy = repository::load_json(&root.join(POLICY))?;
     let provenance: ProvenanceFile = repository::load_json(&root.join(PROVENANCE))?;
-    if policy.schema != "lkjscript.structure.policy.v1"
-        || provenance.schema != "lkjscript.structure.provenance.v1"
-        || provenance.version != 1
-    {
-        return Err("unsupported structure policy or provenance version".into());
+    if !current_structure_contract(&policy, &provenance) {
+        return Err("structure policy or provenance contract mismatch".into());
     }
     let snapshot = repository::capture(root, &provenance.entries)?;
     let audit = rules::audit(root, &policy, provenance.entries, snapshot);
@@ -81,6 +72,14 @@ pub(crate) fn agent_context(
         .iter()
         .map(|target| query::run("context", target, Some(profile), &graph, &policy))
         .collect())
+}
+
+fn current_structure_contract(policy: &Policy, provenance: &ProvenanceFile) -> bool {
+    let expected = Some(lkjscript_contracts::REPOSITORY_GRAPH_DIGEST);
+    policy.schema == "lkjscript.structure.policy"
+        && lkjscript_contracts::ContractDigest::from_hex(&policy.contract) == expected
+        && provenance.schema == "lkjscript.structure.provenance"
+        && lkjscript_contracts::ContractDigest::from_hex(&provenance.contract) == expected
 }
 
 fn audit_command(audit: &Audit, flag: Option<&str>) -> i32 {
@@ -129,7 +128,8 @@ fn explain(audit: &Audit, policy: &Policy, query: Option<&String>) -> i32 {
         return 2;
     };
     let result = ExplainResult {
-        schema: "lkjscript.structure.explain.v1".into(),
+        schema: "lkjscript.structure.explain".into(),
+        contract: lkjscript_contracts::REPOSITORY_GRAPH_DIGEST.to_hex(),
         query: query.clone(),
         rules: policy
             .rules

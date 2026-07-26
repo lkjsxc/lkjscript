@@ -14,7 +14,7 @@ backend foundation. A separate narrow `lkjscript-jit` adapter now consumes only
 verified typed SSA for baseline or opaque proof-verified optimized SSA for
 optimizing code and provides callable host-independent code objects, tier state,
 and `vm`/`auto`/`baseline-jit`/`optimizing-jit` engines. The closed
-machine-plan/sys boundary supports exact ABI-2 typed stable references, active
+machine-plan/sys boundary supports exact canonical native contract typed stable references, active
 frames, host-independent source allocation/recursion, and shared baseline or
 optimizing lowering. Synchronous automatic optimizing promotion is an
 **Accepted Implementation Selection** but remains outside current coverage.

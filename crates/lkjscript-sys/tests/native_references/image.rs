@@ -73,7 +73,7 @@ pub(super) fn reference_image(
         let local = builder.create_local(buf)?;
         let _write = builder.write_local(entry, local, live)?;
         let _collected =
-            builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![live])?;
+            builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![live])?;
         let returned = builder.read_local(entry, local)?;
         builder.return_value(entry, returned)?;
         plan.define_function(builder.finish())?;
@@ -84,7 +84,7 @@ pub(super) fn reference_image(
         builder.set_entry(entry)?;
         let input = builder.parameter(0)?;
         let collected =
-            builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![input])?;
+            builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![input])?;
         builder.return_value(entry, collected)?;
         plan.define_function(builder.finish())?;
     }
@@ -140,7 +140,7 @@ pub(super) fn reference_image(
 
     let image = encode(
         plan.verify(BackendLimits::default())?,
-        EncodingConfig::new(AbiVersions::current()),
+        EncodingConfig::new(ImageContracts::current()),
     )?;
     Ok((
         image,

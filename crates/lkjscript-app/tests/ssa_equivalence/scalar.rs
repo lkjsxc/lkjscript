@@ -60,7 +60,7 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
     );
 
     let tail_recursion = "def/\nname/\ncount-down\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\nif/\nlte/\nn\n0\n/lte\nn\ncount-down/\n-/\nn\n1\n/-\n/count-down\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\ncount-down/\n100\n/count-down\n/main\n";
-    let tail_recursion = format!("edition/\n2\n/edition\n{tail_recursion}");
+    let tail_recursion = tail_recursion.to_string();
     let tail_program = compile_source(
         &tail_recursion,
         "tail-recursion.lkjscript",

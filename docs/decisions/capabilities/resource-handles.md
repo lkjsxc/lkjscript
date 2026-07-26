@@ -7,9 +7,10 @@ state before multi-process or untrusted execution work begins.
 
 ## Status
 
-**Current.** Bounded terminal operations and monotonic stale-safe handles are
-implemented. Generation-based reusable slots and per-process terminal leases
-remain deferred.
+**Current.** Bounded terminal operations, monotonic stale-safe handles, affine
+local ownership, explicit `move/` transfer, and deterministic `drop` cleanup
+are implemented. Reusable slots and per-process terminal leases remain
+deferred.
 
 ## Handle Decision
 
@@ -17,8 +18,9 @@ remain deferred.
 - Handle payloads are opaque tokens, not raw operating-system descriptors.
 - Borrowed standard streams occupy reserved tokens disjoint from owned files
   and sockets.
-- Owned resource tokens are allocated monotonically in this cycle. Closing a
-  resource invalidates its token permanently; a later open receives a new token.
+- Owned resource tokens are allocated monotonically. `drop` consumes an owned
+  token, closes its resource, and invalidates it permanently; a later open
+  receives a new token.
 - Closing a borrowed, unknown, already closed, wrong-kind, or stale token is an
   explicit error.
 - Every operation resolves a token through one resource table before reaching
@@ -54,8 +56,9 @@ cycle.
 unwrap or propagate these values explicitly. Ordinary invalid/stale handle and
 OS failures are data at `sys-*` language boundaries, not VM termination.
 
-Descriptor close/read/write and handle `isatty` are now canonical `sys-*`
-primitives returning explicit Results.
+Descriptor read/write and handle `isatty` are canonical `sys-*` primitives.
+Generic resource cleanup is the source `drop` operation and returns an explicit
+`Result Unit SystemError`; no `sys-close` alias remains.
 
 ## Verification
 
@@ -64,7 +67,7 @@ Focused tests must prove:
 - integers cannot masquerade as handles;
 - stdin cannot collide with an owned slot;
 - close then open does not revive the stale token;
-- repeated close and close of a borrowed token fail;
+- leaks, repeated drop, use after drop, and drop of a borrowed token fail;
 - file/socket kind mismatches fail;
 - 59-byte and 61-byte terminal buffers fail before FFI, while the exact size
   reaches only the fixed request wrapper;

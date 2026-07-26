@@ -10,7 +10,7 @@ engine-dependent physical resource metrics.
 ## Status
 
 **Current for the category, authority, and enum evaluator/reference-VM
-integration.** Profile V2 defines a distinct positive
+integration.** resource profile defines a distinct positive
 `logical_aggregate_constructions` ceiling. Verified enum construction retains
 one charge and evaluator/VM precharge before allocation. Product migration,
 optimization preservation proofs, and JIT differential exhaustion remain

@@ -24,10 +24,20 @@ impl SemanticSession {
                 format!("unknown session schema {:?}", envelope.schema),
             ));
         }
-        if envelope.version != super::VERSION {
+        if lkjscript_contracts::ContractDigest::from_hex(&envelope.contract)
+            != Some(super::CONTRACT)
+        {
             return Err(SessionProcessError::new(
                 ProcessCode::InvalidJson,
-                format!("unsupported session version {}", envelope.version),
+                format!(
+                    concat!(
+                        "contract mismatch for {}: expected {}, actual {}; ",
+                        "producer=session request, consumer=lkjscript compiler; update the producer"
+                    ),
+                    super::SCHEMA,
+                    super::CONTRACT,
+                    envelope.contract,
+                ),
             ));
         }
         if let Some(ledger) = self.ledger.as_mut() {

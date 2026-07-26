@@ -1,6 +1,6 @@
 {
   "schema": "lkjscript.capsule",
-  "version": 1,
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
   "id": "ir",
   "root": "crates/lkjscript-ir",
   "kind": "crate",

@@ -1,10 +1,8 @@
-edition/
-2
-/edition
 def/
 name/
 get-byte
 /name
+public
 fn/
 sig/
 ->

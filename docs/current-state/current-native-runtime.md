@@ -19,7 +19,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   exact bounded text/blob copies, and online backup are Current through the
   Linux `libsqlite3.so.0` system library; schema and storage policy stay in
   language consumers
-- Canonical resource names: `stdin-handle`, `sys-close`, `sys-read-byte`,
+- Canonical resource names: `stdin-handle`, `drop`, `sys-read-byte`,
   `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
 - Send behavior: successful `sys-send` reports its byte count and uses Linux
   `MSG_NOSIGNAL` instead of risking process termination on a broken peer
@@ -36,9 +36,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   bounded owned non-Send code objects through
   `lkjscript-sys`, and actually invokes generated System V AMD64 entries;
   scalar/direct native behavior stays unboxed and unchanged
-- Native runtime ABI: semantic/runtime versions remain 1 and native ABI 2 is
+- Native runtime ABI: semantic/runtime versions remain 1 and native canonical native contract is
   required. Enum-identified `EnterFunctionV1` and `PollV1` calls record entries
-  and enforce cooperative fuel/deadlines; generated ABI-2 prologues call the
+  and enforce cooperative fuel/deadlines; generated canonical native contract prologues call the
   encoder-owned `ReserveFrameV1` after only minimal ABI setup and before frame
   subtraction/initialization. Sys validates descriptor bytes, configured
   aggregate/per-frame limits, active-frame capacity, the exact configured
@@ -112,7 +112,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   structured failures/outcomes, W^X, and repeated installation are tested
 - Native source limits: the callable SSA adapter rejects indirect calls,
   polymorphic/unsupported signatures and enum substitutions, Symbol,
-  Handle/host IO, and lexical Owned/Ref/RefMut. Scalar ABI-2 maps remain exactly empty; supported
+  Handle/host IO, and lexical Owned/Ref/RefMut. Scalar canonical native contract maps remain exactly empty; supported
   host-independent reference operations have exact non-empty maps. Native/VM
   reference transitions are absent, so per-function auto-entry eligibility
   prevents a compiled reference helper from ever labeling a direct VM call
@@ -123,7 +123,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   passes, loop OSR, background compilation, speculative tiers, deoptimization,
   Handle/host native allocation, native/VM reference transitions, persistent
   profiles, and persistent code caches remain absent
-## Semantic Source Foundation V1 Evidence
+## Semantic Source foundation Evidence
 
-The Foundation V1 implementation tree based on `e71c976` was checked on Ubuntu
+The Foundation legacy contract implementation tree based on `e71c976` was checked on Ubuntu
 24.04.4 LTS, Linux 7.0.0-27-generic x86-64, with Rust/Cargo 1.96.0. It changes

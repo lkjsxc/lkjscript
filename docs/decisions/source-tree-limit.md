@@ -7,7 +7,7 @@ the compiler implementation or repository infrastructure.
 
 ## Status
 
-**Current** for Edition 1. It supersedes the former repository-wide
+**Current** for the removed legacy source contract. It supersedes the former repository-wide
 eight-visible-child policy. Its permanent-language-rule status is
 **Superseded** by [Resource Budget Profiles](platform/resource-budget-profiles.md); the
 16-entry check remains enforced until aggregate source closure/import/byte/node

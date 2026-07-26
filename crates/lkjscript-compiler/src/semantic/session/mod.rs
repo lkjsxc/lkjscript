@@ -1,4 +1,4 @@
-//! Bounded local stdio session over the one-shot Semantic Source V2 engine.
+//! Bounded local stdio session over the current Semantic Source contract.
 
 mod encoding;
 mod engine;
@@ -24,7 +24,8 @@ pub use limits::{
 };
 
 pub const SCHEMA: &str = "lkjscript.semantic-session";
-pub const VERSION: u32 = 1;
+pub const CONTRACT: lkjscript_contracts::ContractDigest =
+    lkjscript_contracts::AGENT_PROTOCOL_DIGEST;
 
 /// Compiler-owned state for one local semantic session.
 pub struct SemanticSession {

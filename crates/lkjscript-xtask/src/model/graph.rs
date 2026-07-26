@@ -5,7 +5,7 @@ use super::{FileRecord, Finding, Rule};
 #[derive(Clone, Debug, Serialize)]
 pub struct Graph {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub revision: String,
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
@@ -45,7 +45,7 @@ pub struct ContextSection {
 #[derive(Clone, Debug, Serialize)]
 pub struct QueryResult {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub command: String,
     pub target: String,
     pub profile: Option<String>,
@@ -61,6 +61,7 @@ pub struct QueryResult {
 #[derive(Clone, Debug, Serialize)]
 pub struct ExplainResult {
     pub schema: String,
+    pub contract: String,
     pub query: String,
     pub rules: Vec<Rule>,
     pub files: Vec<FileRecord>,

@@ -40,8 +40,9 @@ fn case_dir(label: &str) -> PathBuf {
 
 fn request(root: &std::path::Path, operation: &str) -> Vec<u8> {
     format!(
-        "{{\"schema\":\"{}\",\"version\":2,\"profile\":\"default\",\"root\":{},\"operation\":{operation}}}",
+        "{{\"schema\":\"{}\",\"contract\":\"{}\",\"profile\":\"default\",\"root\":{},\"operation\":{operation}}}",
         crate::semantic::SCHEMA,
+        crate::semantic::CONTRACT,
         serde_json::to_string(&root.to_string_lossy()).expect("encode root")
     )
     .into_bytes()

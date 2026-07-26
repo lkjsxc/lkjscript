@@ -1,9 +1,8 @@
-edition/
-2
-/edition
+imports/
 import/
-std/term/redraw.lkjscript
+src/std/term/redraw.lkjscript#redraw
 /import
+/imports
 main/
 sig/
 ->

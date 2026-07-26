@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct Policy {
     pub schema: String,
-    pub version: String,
+    pub contract: String,
     pub limits: Limits,
     pub rules: Vec<Rule>,
 }
@@ -43,7 +43,7 @@ pub struct Rule {
 #[serde(deny_unknown_fields)]
 pub struct ProvenanceFile {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub entries: Vec<Provenance>,
 }
 
@@ -59,9 +59,9 @@ pub struct Provenance {
 #[derive(Clone, Debug, Serialize)]
 pub struct Audit {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub revision: String,
-    pub policy_version: String,
+    pub policy_identity: String,
     pub files: Vec<FileRecord>,
     pub directories: Vec<DirectoryRecord>,
     pub classifications: Vec<ClassCount>,

@@ -18,7 +18,7 @@ fn owned_buf_borrows_moves_and_mutation_match_evaluator_and_vm() {
         ScalarOutcome::I64(1)
     );
 
-    let marked = format!("edition/\n2\n/edition\n{source}");
+    let marked = source.to_string();
     let program = compile_source(&marked, "owned-buffer-limits.lkjscript", &Limits::default())
         .expect("compile owned buffer limits fixture");
     let eval_limits = EvalConfig {

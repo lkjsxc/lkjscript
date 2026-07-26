@@ -13,12 +13,13 @@ impl Resolver<'_> {
         let ty = self.analyzer.binding(binding)?.ty.clone();
         match ty {
             Type::Owned(ref inner) if inner.as_ref() == &Type::Buf => {}
+            Type::Handle => {}
             Type::RefMut(_) => {
                 return Err(
                     self.error("RefMut forwarding is unsupported in the initial ownership slice")
                 );
             }
-            _ => return Err(self.error("move requires an affine Owned Buf place")),
+            _ => return Err(self.error("move requires an affine Owned Buf or Handle place")),
         }
         let place = self.place(binding)?;
         let binding = self.binding_ref(binding)?;

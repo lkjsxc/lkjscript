@@ -6,11 +6,17 @@ Define the Rust-grade ownership direction and one canonical AI-authored syntax
 without claiming that the complete borrow conformance matrix is implemented.
 ## Status
 
-The **Initial Sound Slice** below is **Current**. It is one deliberately narrow
-safe island for fresh `Owned Buf` values, whole-local moves, and non-escaping
-`Ref Buf`/`RefMut Buf` loans. Legacy `Buf`, handles, products, and collections
-retain their previous semantics. The broader model remains an **Accepted
-Target**; “full Rust-style borrow checking” is still an invalid claim.
+The **Initial Sound Slice** below is **Current** for fresh `Owned Buf` values,
+whole-local moves, and non-escaping `Ref Buf`/`RefMut Buf` loans. `Handle` is
+also a Current affine resource: acquired locals must be explicitly returned,
+moved, or `drop`ped; double drop and use after move/drop are compile errors.
+Handle parameters are borrowed unless an explicit `move/` transfers ownership.
+Generic `drop` consumes owned handles through verified SSA and the existing
+resource-table close operation; SQLite close/finalize are consuming operations.
+Program teardown remains a deterministic safety net, not a substitute for
+static local cleanup. Products and collections containing affine resources,
+general regions, and full Rust-style borrow checking remain **Accepted
+Targets**.
 
 ## Authority And Status Vocabulary
 

@@ -2,14 +2,14 @@ use super::*;
 
 impl ResourceTable {
     pub fn close(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "sys-close")?;
+        let index = self.owned_index(handle, "drop")?;
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::SqliteConnection { .. })
             | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(
-                "sys-close: SQLite handles require their SQLite close operation",
+                "drop: SQLite handles require their SQLite close operation",
             )),
-            Some(_) => self.close_slot(index, "sys-close"),
-            None => Err(Error::msg("sys-close: stale or already closed handle")),
+            Some(_) => self.close_slot(index, "drop"),
+            None => Err(Error::msg("drop: stale or already closed handle")),
         }
     }
 

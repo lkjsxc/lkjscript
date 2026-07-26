@@ -1,9 +1,14 @@
-edition/
-2
-/edition
+imports/
 import/
-lib/lkjedit/extras/motions.lkjscript
+src/lib/lkjedit/buffer.lkjscript#editor-current-line
 /import
+import/
+src/lib/lkjedit/extras/motions.lkjscript#editor-space?
+/import
+import/
+src/lib/lkjedit/state.lkjscript#EditorState
+/import
+/imports
 def/
 name/
 editor-byte-before
@@ -147,6 +152,7 @@ def/
 name/
 editor-move-back
 /name
+public
 fn/
 sig/
 Product

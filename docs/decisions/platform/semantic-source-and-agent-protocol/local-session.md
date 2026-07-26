@@ -10,8 +10,8 @@ bounds, invalidation, and shutdown behavior.
 ## Status
 
 **Current.** `lkjscript semantic serve --stdio` implements this bounded local
-session envelope version 1 over the Current one-shot Semantic Source Schema V2
-engine. Semantic Source V1 requests are rejected.
+session envelope version 1 over the Current one-shot Semantic Source Schema
+engine. legacy Semantic Source contract requests are rejected.
 
 ## Command And Framing
 
@@ -44,7 +44,7 @@ queries pin one revision. Derived trees, facts, indexes, and caches are immutabl
 per snapshot and keyed by all semantic inputs.
 
 A stale request or externally changed file/root/dependency rejects with a typed
-reason. It never rebases silently. V1 retains one exact immutable fingerprint
+reason. It never rebases silently. legacy contract retains one exact immutable fingerprint
 set and reports zero query-cache entries; it does not claim incremental caching.
 A successful explicit refresh creates a new revision and replaces that bounded
 snapshot metadata. Future nonzero cache keys must include exact source units,
@@ -53,12 +53,12 @@ uses the same atomic journaled source transaction authority.
 
 ## Bounds And Shutdown
 
-Current Session Limits V1 intersect selected Resource Profile V2 protocol and
+Current Session Limits legacy contract intersect selected Resource resource profile protocol and
 `semantic_session_*` ceilings with stricter frame, cumulative-byte, request,
 fuel, metadata, and revision maxima. The session exposes the selected node,
 snapshot, retained-byte, input/output, lifetime-fuel, and zero-cache bounds in
 its pinned state. It meters each request and retains one revision. The typed session path owns
-one Profile V2 ledger across frame input, direct typed one-shot execution,
+one resource profile ledger across frame input, direct typed one-shot execution,
 snapshots, holes/actions/transactions, and exact outer response encoding; it
 never serializes and decodes an inner request or response. `serve_with_ledger`
 requires explicit ledger authority. The closed stdio command creates the ledger
@@ -69,7 +69,7 @@ nonzero caching remain non-Current gaps.
 
 Exhaustion returns a framed structured error when possible, publishes nothing
 partial, and may close the session if safe framing cannot be guaranteed. Schema
-V1 session and nested Semantic Source V2 wire errors have no typed budget-prefix
+legacy contract session and nested Semantic Source contract wire errors have no typed budget-prefix
 field; internal `_with_ledger` APIs retain `BudgetError`, and a wire field awaits
 the corresponding next schema version.
 

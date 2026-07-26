@@ -69,7 +69,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysClose as u8 => {
-            vm.ensure_host_deadline_support("sys-close", false)?;
+            vm.ensure_host_deadline_support("drop", false)?;
             let handle = vm.pop()?;
             let result = vm.resources.close(handle);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);

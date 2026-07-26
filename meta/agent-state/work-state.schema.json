@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "lkjscript.agent-work-state.v2",
+  "$id": "lkjscript.agent-work-state",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema", "version", "task_id", "state_revision", "base_repository_revision",
+    "schema", "contract", "task_id", "state_revision", "base_repository_revision",
     "current_repository_revision", "goal", "hard_constraints", "selected_capsule_scope",
     "semantic_context", "accepted_decisions", "completed_actions", "command_results",
     "produced_commits",
@@ -13,7 +13,7 @@
   ],
   "properties": {
     "schema": { "const": "lkjscript.agent-work-state" },
-    "version": { "const": 2 },
+    "contract": { "$ref": "#/$defs/sha256" },
     "task_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
     "state_revision": { "type": "integer", "minimum": 1 },
     "base_repository_revision": { "$ref": "#/$defs/revision" },
@@ -68,20 +68,20 @@
     },
     "semantic_session": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "version", "identity", "source_revision"],
+      "required": ["schema", "contract", "identity", "source_revision"],
       "properties": {
         "schema": { "const": "lkjscript.semantic-session" },
-        "version": { "const": 1 },
+        "contract": { "$ref": "#/$defs/sha256" },
         "identity": { "$ref": "#/$defs/sha256" },
         "source_revision": { "$ref": "#/$defs/sha256" }
       }
     },
     "semantic_reference": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "version", "source_revision", "identity"],
+      "required": ["schema", "contract", "source_revision", "identity"],
       "properties": {
         "schema": { "$ref": "#/$defs/text" },
-        "version": { "type": "integer", "minimum": 1 },
+        "contract": { "$ref": "#/$defs/sha256" },
         "source_revision": { "$ref": "#/$defs/sha256" },
         "identity": { "$ref": "#/$defs/text" }
       }

@@ -81,9 +81,9 @@ pub(super) fn lower_function(
             .write_local(entry, local, value)
             .map_err(LoweringError::backend)?;
     }
-    // ABI-2 frame registration records the exact source-function entry and
+    // Canonical frame registration records the exact source-function entry and
     // consumes its mandatory poll before generated body effects. Separate
-    // EnterFunctionV1 and PollV1 calls would duplicate transition overhead.
+    // EnterFunction and Poll calls would duplicate transition overhead.
 
     for (index, block) in function.blocks.iter().enumerate() {
         let native_block = blocks[index];

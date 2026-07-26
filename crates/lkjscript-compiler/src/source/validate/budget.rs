@@ -158,7 +158,7 @@ pub(crate) fn foundation_resource_error(
         "LKJ-SRC-LIMIT",
         DiagnosticCategory::ResourceLimit,
         format!(
-            "Semantic Source Foundation V1 resource limit: category={category}; attempted={attempted}; limit={limit}"
+            "Semantic Source resource limit: category={category}; attempted={attempted}; limit={limit}"
         ),
         origin,
         SourceSpan::zero(),

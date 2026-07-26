@@ -55,12 +55,6 @@ pub(crate) fn resolve(
             "target is not an expression position",
         ));
     }
-    if !replacement.supports_edition(tree.edition()) {
-        return Err(error(
-            ProtocolErrorCode::InvalidOperation,
-            "replacement expression requires Edition 2",
-        ));
-    }
     let _ = replacement
         .to_source(source.span)
         .map_err(|message| error(ProtocolErrorCode::InvalidOperation, message))?;

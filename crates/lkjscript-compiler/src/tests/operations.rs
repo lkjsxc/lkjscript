@@ -13,10 +13,12 @@ fn bounded_terminal_operations_replace_arbitrary_ioctl() {
 }
 
 #[test]
-fn descriptor_names_are_handle_and_result_explicit() {
-    let canonical =
-        unit_main("is-ok/\nsys-close/\nstdin-handle/\n/stdin-handle\n/sys-close\n/is-ok");
+fn descriptor_drop_requires_an_owned_handle() {
+    let canonical = unit_main("is-ok/\ndrop/\nstdin-handle/\n/stdin-handle\n/drop\n/is-ok");
     let obsolete = unit_main("close/\nstdin-handle/\n/stdin-handle\n/close");
-    assert!(compile_source(&canonical, "handles.lkjscript", &Limits::default()).is_ok());
+    let borrowed = compile_source(&canonical, "handles.lkjscript", &Limits::default())
+        .expect_err("borrowed stdin is not owned")
+        .to_string();
+    assert!(borrowed.contains("direct affine Handle local"));
     assert!(compile_source(&obsolete, "handles.lkjscript", &Limits::default()).is_err());
 }

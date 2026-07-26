@@ -8,7 +8,7 @@ Rejected semantics explicitly.
 ## Authorities
 
 - [semantic core](semantic-core.md)
-- [Edition 2 semantic core](edition-2.md) — Accepted Target, not Current
+- [the canonical source contract semantic core](semantic-core.md) — Accepted Target, not Current
 - [numeric semantics](numeric-semantics.md)
 - [equality families](equality-families.md)
 - [immutable nominal products](immutable-nominal-products.md)

@@ -12,7 +12,7 @@ mod scope;
 
 pub use authority::BudgetAuthority;
 pub use category::ResourceCategory;
-pub(crate) use category::{RESOURCE_CATEGORY_COUNT, V1_RESOURCE_CATEGORY_COUNT};
+pub(crate) use category::RESOURCE_CATEGORY_COUNT;
 pub use diagnostic::{BudgetCause, BudgetError, BudgetErrorKind};
 pub(crate) use journal::BudgetJournal;
 pub use journal::{

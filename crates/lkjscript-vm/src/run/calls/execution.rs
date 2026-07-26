@@ -69,7 +69,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                             }
                             ScalarInvocationOutcome::DeadlineExceeded => {
                                 return Err(Error::deadline(
-                                    "execution wall deadline exceeded in native PollV1",
+                                    "execution wall deadline exceeded in native Poll",
                                 ));
                             }
                             ScalarInvocationOutcome::ResourceLimitExceeded(kind) => {
@@ -79,7 +79,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                                 ));
                             }
                             ScalarInvocationOutcome::HostFailure => {
-                                return Err(Error::host("native PollV1 host clock failure"));
+                                return Err(Error::host("native Poll host clock failure"));
                             }
                         }
                     }

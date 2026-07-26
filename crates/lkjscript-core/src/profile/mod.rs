@@ -1,19 +1,17 @@
+mod ceiling_sets;
 mod ceilings;
-mod v1;
-mod v2;
+mod identity;
 
 use std::fmt;
 use std::str::FromStr;
 
-use crate::budget::{ResourceCategory, RESOURCE_CATEGORY_COUNT};
-use crate::sha256;
+use crate::budget::ResourceCategory;
 
+use ceiling_sets::{BUILD, DEFAULT, DETERMINISTIC, MAXIMA, SANDBOX};
 pub use ceilings::ResourceCeilings;
-use ceilings::{BUILD, DEFAULT, DETERMINISTIC, MAXIMA, SANDBOX};
+pub use identity::ResourceProfileIdentity;
 
 pub const RESOURCE_PROFILE_SCHEMA: &str = "lkjscript.resource-profile";
-pub const RESOURCE_PROFILE_VERSION: u32 = 2;
-pub const IMPLEMENTATION_MAXIMA_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ResourceProfileName {
@@ -77,15 +75,6 @@ impl FromStr for ResourceProfileName {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ResourceProfileIdentity {
-    pub schema: &'static str,
-    pub version: u32,
-    pub name: ResourceProfileName,
-    pub implementation_maxima_version: u32,
-    pub ceilings_sha256: [u8; 32],
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResourceProfile {
     name: ResourceProfileName,
     ceilings: ResourceCeilings,
@@ -119,17 +108,7 @@ impl ResourceProfile {
     }
 
     pub fn identity(self) -> ResourceProfileIdentity {
-        let mut encoded = [0u8; RESOURCE_CATEGORY_COUNT * 8];
-        for (slot, limit) in encoded.chunks_exact_mut(8).zip(self.ceilings.values) {
-            slot.copy_from_slice(&limit.to_be_bytes());
-        }
-        ResourceProfileIdentity {
-            schema: RESOURCE_PROFILE_SCHEMA,
-            version: RESOURCE_PROFILE_VERSION,
-            name: self.name,
-            implementation_maxima_version: IMPLEMENTATION_MAXIMA_VERSION,
-            ceilings_sha256: sha256(&encoded),
-        }
+        identity::identity(self)
     }
 
     pub fn lowered(self, category: ResourceCategory, limit: u64) -> Result<Self, InvalidCeiling> {

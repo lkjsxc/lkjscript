@@ -76,7 +76,7 @@ impl FunctionEncoder<'_> {
         self.emit(&[0xf2, 0x0f, 0x11, 0x47, SCRATCH_FLOAT_ARGUMENT_0])?;
         self.emit(&[0xf2, 0x0f, 0x11, 0x4f, SCRATCH_FLOAT_ARGUMENT_1])?;
         self.emit_reserve_frame()?;
-        // ReserveFrameV1 returns the invocation context in RAX.
+        // ReserveFrame returns the invocation context in RAX.
         self.emit(&[0x48, 0x85, 0xc0])?;
         self.emit_conditional_jump(0x84, FixupTarget::UnregisteredStatusReturn)?;
         self.emit(&[0x83, 0x38, 0x00])?;
@@ -92,12 +92,12 @@ impl FunctionEncoder<'_> {
     }
 
     pub(super) fn emit_reserve_frame(&mut self) -> Result<(), NativeError> {
-        self.runtime_calls.insert(RuntimeCallSlot::ReserveFrameV1);
+        self.runtime_calls.insert(RuntimeCallSlot::ReserveFrame);
         self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
         self.load_integer_register_immediate(2, u64::from(self.frame_bytes))?;
         // mov rcx, rbp. RDI still carries the invocation context.
         self.emit(&[0x48, 0x89, 0xe9])?;
-        self.emit_runtime_call_target(RuntimeCallSlot::ReserveFrameV1)
+        self.emit_runtime_call_target(RuntimeCallSlot::ReserveFrame)
     }
 
     pub(super) fn emit_parameters(&mut self) -> Result<(), NativeError> {
@@ -140,13 +140,13 @@ impl FunctionEncoder<'_> {
     }
 
     pub(super) fn emit_register_frame(&mut self) -> Result<(), NativeError> {
-        self.runtime_calls.insert(RuntimeCallSlot::RegisterFrameV1);
+        self.runtime_calls.insert(RuntimeCallSlot::RegisterFrame);
         self.load_integer_register(7, self.context_offset())?;
         self.load_integer_register_immediate(6, u64::from(self.function_ordinal))?;
         // mov rdx, rbp. The raw frame base is consumed only by the private sys
         // runtime trampoline and never appears in a safe API.
         self.emit(&[0x48, 0x89, 0xea])?;
-        self.emit_runtime_call_target(RuntimeCallSlot::RegisterFrameV1)?;
+        self.emit_runtime_call_target(RuntimeCallSlot::RegisterFrame)?;
         self.load_integer_register(1, self.context_offset())?;
         self.emit(&[0x83, 0x39, 0x00])?;
         self.emit_conditional_jump(0x85, FixupTarget::UnregisteredStatusReturn)

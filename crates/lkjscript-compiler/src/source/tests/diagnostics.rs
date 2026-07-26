@@ -24,19 +24,21 @@ fn exact_utf8_byte_line_column_spans_are_retained() {
 fn marker_diagnostics_have_stable_schema_spans_and_renderings() {
     let mismatched =
         validate("main/\n/wrong\n", "bad.lkjscript", &Limits::default()).expect_err("mismatch");
+    assert_eq!(mismatched.schema(), lkjscript_contracts::DIAGNOSTICS);
     assert_eq!(
-        mismatched.schema(),
-        "lkjscript.source-diagnostic-foundation"
+        mismatched.contract(),
+        lkjscript_contracts::DIAGNOSTICS_DIGEST
     );
-    assert_eq!(mismatched.schema_version(), 1);
     assert_eq!(mismatched.code(), "LKJ-SRC-UNMATCHED-MARKER");
     assert_eq!(mismatched.primary_span().start().line(), 2);
     assert_eq!(mismatched.related_spans().len(), 1);
     assert!(mismatched.render_human().contains("expected /main"));
     let compact = mismatched.render_compact_agent();
-    assert!(compact.starts_with(
-        "schema=lkjscript.source-diagnostic-foundation;version=1;code=LKJ-SRC-UNMATCHED-MARKER"
-    ));
+    assert!(compact.starts_with(&format!(
+        "schema={};contract={};code=LKJ-SRC-UNMATCHED-MARKER",
+        lkjscript_contracts::DIAGNOSTICS,
+        lkjscript_contracts::DIAGNOSTICS_DIGEST
+    )));
     assert!(compact.contains("related[0].label=opening marker main/"));
     assert!(compact.contains("related[0].origin=bad.lkjscript"));
     assert_eq!(compact, mismatched.render_compact_agent());
@@ -111,7 +113,7 @@ fn duplicate_same_unit_global_declarations_are_structured_errors() {
 }
 
 #[test]
-fn duplicate_global_names_across_source_units_are_structured_errors() {
+fn equal_names_in_distinct_modules_are_valid_source_identities() {
     let temp = TempDir::new("duplicate-global").expect("temp directory");
     let root = temp.0.join("main.lkjscript");
     fs::write(temp.0.join("a.lkjscript"), named_def("same")).expect("write a");
@@ -119,16 +121,17 @@ fn duplicate_global_names_across_source_units_are_structured_errors() {
     fs::write(
         &root,
         format!(
-            "import/\n./a.lkjscript\n/import\nimport/\n./b.lkjscript\n/import\n{}",
+            "imports/\nimport/\na.lkjscript#same\n/import\nimport/\nb.lkjscript#same\n/import\n/imports\n{}",
             unit_main("unit")
         ),
     )
     .expect("write root");
 
-    let error = load(&root, &Limits::default()).expect_err("duplicate global");
-    assert_eq!(error.code(), "LKJ-DECL-DUPLICATE");
-    assert_eq!(error.related_spans().len(), 1);
-    assert!(error
-        .render_human()
-        .contains("duplicate function declaration same"));
+    let tree = load(&root, &Limits::default()).expect("module-local names");
+    let same = tree
+        .declarations()
+        .iter()
+        .filter(|declaration| declaration.name() == "same")
+        .count();
+    assert_eq!(same, 2);
 }

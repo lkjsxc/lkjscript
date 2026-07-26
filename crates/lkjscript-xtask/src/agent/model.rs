@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct CheckpointRequest {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub expected_state_revision: u64,
     pub state: WorkState,
 }
@@ -13,7 +13,7 @@ pub struct CheckpointRequest {
 #[serde(deny_unknown_fields)]
 pub struct WorkState {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub task_id: String,
     pub state_revision: u64,
     pub base_repository_revision: String,
@@ -49,7 +49,7 @@ pub struct SemanticWorkContext {
 #[serde(deny_unknown_fields)]
 pub struct SemanticSessionReference {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub identity: String,
     pub source_revision: String,
 }
@@ -58,7 +58,7 @@ pub struct SemanticSessionReference {
 #[serde(deny_unknown_fields)]
 pub struct SemanticReference {
     pub schema: String,
-    pub version: u32,
+    pub contract: String,
     pub source_revision: String,
     pub identity: String,
 }
@@ -103,7 +103,7 @@ pub struct CommandResult {
 #[derive(Debug, Serialize)]
 pub struct ResumeContext {
     pub schema: &'static str,
-    pub version: u32,
+    pub contract: String,
     pub state: WorkState,
     pub repository_context: Vec<crate::model::QueryResult>,
     pub revision_mismatch: Option<String>,

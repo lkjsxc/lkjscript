@@ -1,7 +1,8 @@
 """Stable forced-tier protocol constants."""
 
 METRICS_PREFIX = b"LKJSCRIPT_METRICS "
-SCHEMA = "lkjscript.optimizing-jit-benchmark.v1"
+SCHEMA = "lkjscript.optimizing-jit-benchmark"
+CONTRACT = "11bbd59871b1a8164af16bba28eede6e9ae19c00db955ab789b0f7c542e3094e"
 DEFAULT_SEED = 0x4C4B4A534F505449
 CASE_NAMES = (
     "optimizing-workload-baseline",

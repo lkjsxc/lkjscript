@@ -92,6 +92,6 @@ pub(in crate::ssa) fn lower_type(
     })
 }
 
-pub(in crate::ssa) fn is_owned_buf(ty: &SsaType) -> bool {
-    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
+pub(in crate::ssa) fn is_owned_value(ty: &SsaType) -> bool {
+    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf) || ty == &SsaType::Handle
 }

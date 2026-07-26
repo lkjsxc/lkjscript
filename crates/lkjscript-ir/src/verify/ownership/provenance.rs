@@ -21,7 +21,7 @@ pub(crate) fn collect_ownership_provenance(
 
     for parameter in &entry.parameters {
         charge_ownership_work(&mut work, 1)?;
-        if is_owned_buf(&parameter.ty) {
+        if is_owned_value(&parameter.ty) {
             let place = parameter.owner_place.ok_or_else(|| {
                 IrError::new("SSA Owned entry parameter is missing exact place provenance")
             })?;
@@ -56,7 +56,7 @@ pub(crate) fn collect_ownership_provenance(
         }
     }
     for place in &function.places {
-        if is_owned_buf(&place.ty) && !proven_places.contains(&place.id) {
+        if is_owned_value(&place.ty) && !proven_places.contains(&place.id) {
             return fail("SSA Owned local place is missing exact initialization provenance");
         }
     }

@@ -114,9 +114,9 @@ pub(crate) enum FactRecord {
     Available {
         producer: ProducerRecord,
         fact_schema: FactSchema,
-        fact_version: u32,
+        fact_contract: String,
         source_revision: String,
-        derived_artifact_revision: String,
+        derived_artifact_identity: String,
         certainty: FactCertainty,
         cardinality: RelationCardinality,
         values: Vec<FactValue>,
@@ -125,9 +125,9 @@ pub(crate) enum FactRecord {
     Unavailable {
         producer: ProducerRecord,
         fact_schema: FactSchema,
-        fact_version: u32,
+        fact_contract: String,
         source_revision: String,
-        derived_artifact_revision: Option<String>,
+        derived_artifact_identity: Option<String>,
         certainty: FactCertainty,
         cardinality: RelationCardinality,
         reason: UnavailableReason,

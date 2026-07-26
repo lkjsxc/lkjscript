@@ -57,7 +57,7 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
     let jit = report.stats.map_or_else(|| "null".to_string(), jit);
     let json = format!(
         concat!(
-            "{{\"schema\":\"lkjscript.metrics.v1\",\"engine\":{engine},",
+            "{{\"schema\":\"lkjscript.metrics\",\"contract\":\"{contract}\",\"engine\":{engine},",
             "\"configured_auto_threshold\":{configured_threshold},",
             "\"auto_enabled\":{auto_enabled},\"outcome\":{outcome},",
             "\"timings_ns\":{{\"compile_total\":{compile_total},",
@@ -75,6 +75,7 @@ pub fn emit(report: MetricReport<'_>) -> Result<(), String> {
             "\"vm_execution\":{vm_execution},\"engine_execution\":{engine_execution}}},",
             "\"source_files\":{source_files},\"jit\":{jit}}}"
         ),
+        contract = lkjscript_contracts::METRICS_DIGEST,
         engine = string(engine),
         configured_threshold = report.configured_threshold,
         auto_enabled = report.auto_enabled,

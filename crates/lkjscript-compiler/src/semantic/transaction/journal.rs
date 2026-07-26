@@ -14,7 +14,7 @@ pub(super) const MAX_JOURNAL_BYTES: u64 = 1_048_576;
 #[serde(deny_unknown_fields)]
 pub(super) struct Journal {
     schema: String,
-    version: u32,
+    contract: String,
     pub state: JournalState,
     pub files: Vec<JournalFile>,
 }
@@ -65,7 +65,7 @@ pub(super) fn build(
     }
     Ok(Journal {
         schema: "lkjscript.publication-journal".into(),
-        version: 1,
+        contract: crate::semantic::CONTRACT.to_hex(),
         state: JournalState::Prepared,
         files,
     })
@@ -134,10 +134,15 @@ pub(super) fn paths(
 }
 
 pub(super) fn validate_header(journal: &Journal) -> Result<(), ProtocolError> {
-    if journal.schema == "lkjscript.publication-journal" && journal.version == 1 {
+    if journal.schema == "lkjscript.publication-journal"
+        && lkjscript_contracts::ContractDigest::from_hex(&journal.contract)
+            == Some(crate::semantic::CONTRACT)
+    {
         Ok(())
     } else {
-        Err(failure("unsupported publication journal"))
+        Err(failure(
+            "publication journal contract mismatch; discard stale journal",
+        ))
     }
 }
 

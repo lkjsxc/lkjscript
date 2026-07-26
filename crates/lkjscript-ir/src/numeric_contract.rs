@@ -1,4 +1,4 @@
-//! Independent host-free oracle for Edition 2 numeric conversions.
+//! Independent host-free oracle for canonical numeric conversions.
 
 #[derive(Clone, Copy)]
 pub(super) enum NumericError {

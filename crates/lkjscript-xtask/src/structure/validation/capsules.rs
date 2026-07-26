@@ -36,12 +36,15 @@ fn validate<'a>(
     dependencies: &BTreeMap<&'a str, &'a [String]>,
     findings: &mut Vec<Finding>,
 ) {
-    if capsule.schema != "lkjscript.capsule" || capsule.version != 1 {
+    if capsule.schema != "lkjscript.capsule"
+        || lkjscript_contracts::ContractDigest::from_hex(&capsule.contract)
+            != Some(lkjscript_contracts::CAPSULE_MANIFEST_DIGEST)
+    {
         findings.push(simple(
             "error",
             "LKJ-REPO-CAPSULE-SCHEMA",
             &capsule.root,
-            "unsupported capsule schema or version",
+            "capsule contract mismatch; update the manifest",
         ));
     }
     let manifest = if capsule.root == "." {

@@ -6,7 +6,7 @@ Choose stable semantic budgets rather than misleading line-count rules.
 
 ## Status
 
-**Current** for Edition 1 nest, form-child, token, and top-level limits.
+**Current** for the removed legacy source contract nest, form-child, token, and top-level limits.
 The permanent-policy part of this record is **Superseded** by [Resource Budget
 Profiles](../platform/resource-budget-profiles.md). No Current limit is weakened until
 aggregate replacement bounds are Current.
@@ -22,7 +22,7 @@ aggregate replacement bounds are Current.
 
 ## Current Migration Consequences
 
-Edition 1 authors still split source to satisfy these exact limits. Changing a
+the removed legacy source contract authors still split source to satisfy these exact limits. Changing a
 Current limit requires docs, aggregate replacement boundaries, adversarial
 tests, and edition migration rather than an unbounded local override. The
 accepted destination reclassifies maintainability thresholds without making

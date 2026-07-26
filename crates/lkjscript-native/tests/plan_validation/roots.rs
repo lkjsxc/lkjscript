@@ -16,8 +16,7 @@ fn derives_non_empty_exact_reference_maps_without_dead_slots(
     let _dead = builder.parameter(1)?;
     let local = builder.create_local(buf)?;
     let _write = builder.write_local(entry, local, live)?;
-    let _collected =
-        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![live])?;
+    let _collected = builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![live])?;
     let returned = builder.read_local(entry, local)?;
     builder.return_value(entry, returned)?;
     plan.define_function(builder.finish())?;

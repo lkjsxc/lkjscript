@@ -1,13 +1,16 @@
-edition/
-2
-/edition
+imports/
 import/
-lib/lkjedit/buffer.lkjscript
+src/lib/lkjedit/buffer.lkjscript#editor-current-line
 /import
+import/
+src/lib/lkjedit/state.lkjscript#EditorState
+/import
+/imports
 def/
 name/
 editor-space?
 /name
+public
 fn/
 sig/
 I64
@@ -28,6 +31,7 @@ def/
 name/
 editor-move-bol
 /name
+public
 fn/
 sig/
 Product
@@ -53,6 +57,7 @@ def/
 name/
 editor-move-eol
 /name
+public
 fn/
 sig/
 Product

@@ -7,34 +7,29 @@ verification discipline without preserving obsolete implementation priorities.
 
 ## Status
 
-<!-- LKJ-STATUS id=agent-foundation/1 status=historical -->
-<!-- LKJ-STATUS id=agent-work-state/1 status=historical -->
-<!-- LKJ-STATUS id=agent-work-state/2 status=current -->
-<!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
-<!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
-<!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
-<!-- LKJ-STATUS id=repository-graph-context/1 status=current -->
-<!-- LKJ-STATUS id=repository-topology/1 status=current -->
-<!-- LKJ-STATUS id=resource-profile-compiler/2 status=current -->
-<!-- LKJ-STATUS id=resource-profile-preallocation/2 status=current -->
-<!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
-<!-- LKJ-STATUS id=semantic-session/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-schema/1 status=historical -->
-<!-- LKJ-STATUS id=semantic-source-schema/2 status=current -->
-<!-- LKJ-STATUS id=typed-holes/1 status=current -->
+<!-- LKJ-STATUS id=agent-work-state status=current -->
+<!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
+<!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
+<!-- LKJ-STATUS id=repository-graph-context status=current -->
+<!-- LKJ-STATUS id=repository-topology status=current -->
+<!-- LKJ-STATUS id=resource-profile-compiler status=current -->
+<!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
+<!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-session status=current -->
+<!-- LKJ-STATUS id=semantic-source status=current -->
+<!-- LKJ-STATUS id=typed-holes status=current -->
 
 **Current** for the engineering policy and implementation boundaries linked from
 [Current State](../current-state.md). Bounded Repository Topology, Repository
-Intelligence Graph/context, Agent Work State V2 semantic references, complete
-Semantic Source Schema V2 with its exact V1 base, typed holes/legal actions,
-closed hole transactions, one-shot protocol, compiler Resource Profile V2, and
+Intelligence Graph/context, Agent Work State canonical contract semantic references, complete
+Semantic Source Schema with its exact legacy contract base, typed holes/legal actions,
+closed hole transactions, one-shot protocol, compiler Resource resource profile, and
 the core hierarchical pre-allocation plus deterministic journal foundation are
 Current. Agent Foundation
-V1 and Semantic Source Schema V1 are historical rejected identities. Bounded
-local stdio sessions serve V2 and are Current. Edition 2 identity, homogeneous
+legacy contract and Semantic Source Schema are historical rejected identities. Bounded
+local stdio sessions serve canonical contract and are Current. the canonical source contract identity, homogeneous
 closures, marker projection, exact atomic migration publication, the canonical
-corpus, and ordinary-compilation cutover are Current. Other Edition 2 changed
+corpus, and ordinary-compilation cutover are Current. Other the canonical source contract changed
 execution, whole-pipeline pre-allocation, logical metering integration, and a shared ledger
 remain Accepted Targets.
 Automatic proof promotion remains
@@ -55,7 +50,7 @@ an Accepted Implementation Selection, not the immediate priority.
 
 ## Current Sharp Edges
 
-- Edition 1 still enforces depth 8, 16 form children, 384 tokens per file,
+- the removed legacy source contract still enforces depth 8, 16 form children, 384 tokens per file,
   8 top-level forms, 15 product fields, and 16 immediate source-directory
   entries. Repository topology contracts do not change those language limits.
 - Imports still merge declarations into one loaded-closure namespace; modules,
@@ -82,9 +77,9 @@ an Accepted Implementation Selection, not the immediate priority.
 
 1. Continue moving the [resource profile](../decisions/platform/resource-budget-profiles.md)
    to whole-pipeline pre-allocation hierarchical request charging.
-2. Implement Edition 2 from the accepted ADT, pattern, control-flow, numeric,
+2. Implement the canonical source contract from the accepted ADT, pattern, control-flow, numeric,
    value, layout, and typed-error contracts.
-3. Carry each Edition 2 slice through HIR, verified SSA, the evaluator, VM,
+3. Carry each the canonical source contract slice through HIR, verified SSA, the evaluator, VM,
    baseline native execution, and forced proof-optimized execution.
 
 This order is an accepted implementation contract, not a capability claim.

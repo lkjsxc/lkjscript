@@ -36,7 +36,11 @@ pub(in crate::ownership) fn check_expr(
         | ExprKind::SetLocal { .. }
         | ExprKind::ProductValue { .. }
         | ExprKind::ProductField { .. }
-        | ExprKind::WithProductField { .. } => {
+        | ExprKind::WithProductField { .. }
+        | ExprKind::EnumValue { .. }
+        | ExprKind::EnumIsVariant { .. }
+        | ExprKind::EnumField { .. }
+        | ExprKind::EnumUnwrap { .. } => {
             check_scopes_expr(program, expression, places, state, future, context)?;
         }
         _ => {}

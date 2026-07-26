@@ -8,14 +8,14 @@ to their authorities.
 ## Status
 
 The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
-Complete Semantic Source Schema V2 with its preserved V1 representation,
+Complete Semantic Source Schema with its preserved legacy contract representation,
 typed holes/legal actions, Bounded Repository Topology, Repository Intelligence
-Graph/context, externalized Agent Work State V2 with exact semantic references,
+Graph/context, externalized Agent Work State canonical contract with exact semantic references,
 the bounded one-shot semantic protocol, bounded local stdio sessions, and
-compiler Resource Profile V2 and the Edition 2 enum declaration/type-fact plus
-construction/evaluator/reference-VM slice are Current. Agent Foundation V1 and Semantic Source Schema V1 are
-historical rejected identities. Edition 2 exhaustive source match is Current;
-automatic/host-native enum transitions, the remaining semantic core, whole-pipeline Profile V2
+compiler Resource resource profile and the the canonical source contract enum declaration/type-fact plus
+construction/evaluator/reference-VM slice are Current. Agent Foundation legacy contract and Semantic Source Schema are
+historical rejected identities. the canonical source contract exhaustive source match is Current;
+automatic/host-native enum transitions, the remaining semantic core, whole-pipeline resource profile
 pre-allocation, nonzero
 incremental query caching, and logical metering beyond enum construction are
 **Accepted Targets**.
@@ -24,9 +24,9 @@ incremental query caching, and logical metering beyond enum construction are
 
 Validated Semantic Source Foundation tree -> resolved typed HIR -> verified
 typed SSA -> verified baseline normalization -> reference bytecode is Current.
-HIR consumes one private mechanically checked projection from the validated
-Edition 1 or Edition 2 tree; Edition 2 currently adds resolved generic enum
-declarations/type facts and exact `variant-value` construction. No sibling parser or raw public AST enters analysis. VM,
+HIR consumes one private mechanically checked projection from the validated source tree.
+That projection includes resolved generic enum declarations and exact `variant-value`
+construction. No sibling parser or raw public AST enters analysis. VM,
 baseline JIT, proof optimizer, future AOT tests, and Wasm must share verified
 semantic IR rather than reinterpret syntax.
 
@@ -81,11 +81,11 @@ work; immutable HIR reserves its charged input shape before SSA; immutable
 normalized SSA reserves its charged input shape before bytecode. Parser-wide
 preflight and exact bytecode-output categories are not Current, and protocol and
 compiler ledgers remain separate. Exhaustion cannot publish partial authority.
-Edition 1 source limits remain unchanged.
+the removed legacy source contract source limits remain unchanged.
 
-## Accepted Edition 2 Path
+## Accepted the canonical source contract Path
 
-[Edition 2](../decisions/semantics/edition-2.md) preserves the same architecture:
+[the canonical source contract](../decisions/semantics/semantic-core.md) preserves the same architecture:
 Semantic Source -> resolved typed HIR -> verified SSA -> evaluator/VM/native/
 proof consumers. Generic enum declarations, resolved type facts, exact construction, independent
 layout identities, enum SSA primitives, the SSA evaluator, validated bytecode,

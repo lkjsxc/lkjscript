@@ -29,15 +29,19 @@ fn all_existing_source_limits_remain_enforced_at_boundaries() {
             validate(&accepted, "limit.lkjscript", &limits).expect_err("source limit boundary");
         assert_eq!(error.category().as_str(), "resource-limit");
     }
-    let imports = "import/\na.lkjscript\n/import\nimport/\nb.lkjscript\n/import\n";
-    let error = validate(imports, "limit.lkjscript", &limits).expect_err("top-level form boundary");
+    let imports = format!(
+        "imports/\nimport/\na.lkjscript#a\n/import\nimport/\nb.lkjscript#b\n/import\n/imports\n{}",
+        named_def("extra")
+    );
+    let error =
+        validate(&imports, "limit.lkjscript", &limits).expect_err("top-level form boundary");
     assert_eq!(error.category().as_str(), "resource-limit");
 }
 
 #[test]
 fn match_structural_markers_have_a_separate_hard_depth_bound() {
     let nesting = 33;
-    let mut source = String::from("edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\nmatch/\n");
+    let mut source = String::from("main/\nsig/\n->\nI64\n/sig\nmatch/\n");
     source.push_str(&"fields/\n".repeat(nesting));
     source.push_str("x\n");
     source.push_str(&"/fields\n".repeat(nesting));

@@ -1,10 +1,8 @@
-edition/
-2
-/edition
 def/
 name/
 bf-fail
 /name
+public
 fn/
 sig/
 Str
@@ -42,6 +40,7 @@ def/
 name/
 bf-open
 /name
+public
 fn/
 sig/
 Str
@@ -84,6 +83,7 @@ def/
 name/
 bf-read-byte
 /name
+public
 fn/
 sig/
 Handle
@@ -124,6 +124,7 @@ def/
 name/
 bf-close
 /name
+public
 fn/
 sig/
 Handle
@@ -137,9 +138,9 @@ Handle
 let/
 bind/
 result
-sys-close/
+drop/
 handle
-/sys-close
+/drop
 /bind
 if/
 is-ok/
@@ -148,7 +149,7 @@ result
 unit
 bf-fail/
 str/
-sys-close
+drop
 /str
 /bf-fail
 /if

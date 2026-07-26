@@ -6,7 +6,9 @@ import platform
 import sys
 
 from jit_protocol.artifacts import artifact
-from jit_protocol.constants import CASE_NAMES, EXACT_I64_1, EXACT_I64_3333, SCALAR_ITERATIONS, SCHEMA
+from jit_protocol.constants import (
+    CASE_NAMES, CONTRACT, EXACT_I64_1, EXACT_I64_3333, SCALAR_ITERATIONS, SCHEMA,
+)
 from jit_protocol.environment import command_version, cpu_model, git_output, memory_kib
 
 def assemble(root, arguments, repository_before, build, binary, workloads, oracle_data, sample_data, analysis):
@@ -26,6 +28,7 @@ def assemble(root, arguments, repository_before, build, binary, workloads, oracl
     ]
     return {
         "schema": SCHEMA,
+        "contract": CONTRACT,
         "verdict": {
             "status": "Adopted" if all(criteria.values()) else "Rejected",
             "scope": "forced first optimizing-tier performance gate only",

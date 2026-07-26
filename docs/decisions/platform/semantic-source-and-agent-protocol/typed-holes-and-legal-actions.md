@@ -9,10 +9,10 @@ legal actions, and checked hole transactions.
 
 ## Status
 
-**Current.** Semantic Source Schema V2 implements typed expression holes,
+**Current.** Semantic Source Schema implements typed expression holes,
 `hole_context`, `legal_actions`, and the four closed hole transactions over the
-Current Edition 1 expression subset plus Current Edition 2 enum, match,
-Never, and structured-control forms. Schema V1 input is historical and rejected.
+Current the removed legacy source contract expression subset plus Current the canonical source contract enum, match,
+Never, and structured-control forms. Schema input is historical and rejected.
 
 ## Typed Holes
 
@@ -55,19 +55,16 @@ canonical source, and candidate identity tuple. Every emitted candidate carries
 one complete canonical snippet and an exact `replace_hole` semantic edit; a
 context commonly carries several complete alternatives.
 
-Exploration uses the request's outer-owned ledger and reserves Profile V2
+Exploration uses the request's outer-owned ledger and reserves resource profile
 `hole_search_work` and `hole_candidates` before candidate construction.
 `legal_actions` reuses that ledger and reserves its exact bounded amplification
 before action construction. Typed budget exhaustion propagates unchanged to the
-internal result and cannot be presented as an empty complete result. Unsupported contexts return explicit unsupported,
-then ordinary
-authoring may use bounded compiler validation. Edition 1 has exact import paths
-but no qualification syntax, so no import or qualification edit is invented;
-that absence is an explicit blocker. Match, return, break, continue, and Never forms remain explicit Edition 1
-blockers. In Edition 2, checker-valid loop/return/break/continue/trap/exit
-candidates and legal child kinds are emitted only at exact legal sites; context
-reports the function return, nearest-loop result/depth, available forms, and
-whether Never is admissible.
+internal result and cannot be presented as an empty complete result. Unsupported contexts
+return explicit unsupported, then ordinary authoring may use bounded compiler validation.
+Exact imports do not invent unsupported qualification edits. Match, return, break,
+continue, and Never forms remain explicit blockers. Checker-valid control candidates and
+legal child kinds are emitted only at exact legal sites; context reports the function
+return, nearest-loop result/depth, available forms, and whether Never is admissible.
 
 ## Transactions
 
@@ -79,7 +76,7 @@ ownership, control/divergence, incompleteness, and resource validation before
 staging publication. Stale identity/revision, mismatched expected type, added
 forbidden effect, invalid ownership transfer, or invalid control edge rejects
 the whole transaction. No failed operation mutates source or caches. Transaction staging reuses the same outer ledger
-and reserves Profile V2
+and reserves resource profile
 transaction, operation, impact-node, staged-node, and staged-byte categories
 through the typed `semantic_request/transaction` authority before cloning or
 rebuilding source state. Missing ledger authority fails closed; no transaction

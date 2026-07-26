@@ -50,17 +50,32 @@ fn lowered_profile_is_immutable_and_has_distinct_identity() {
     assert_eq!(profile.ceilings().limit(category), current);
     assert_eq!(lowered.ceilings().limit(category), current - 1);
     assert_ne!(lowered.identity(), profile.identity());
+    assert!(lowered.identity().host_lowered_ceilings_sha256.is_some());
+    assert_eq!(
+        lowered.identity().ceilings_sha256,
+        profile.identity().ceilings_sha256
+    );
     assert!(lowered.lowered(category, current).is_err());
 }
 
 #[test]
-fn profile_v2_identity_is_versioned_and_stable() {
+fn profile_identity_is_content_addressed_and_stable() {
     let first = ResourceProfile::new(ResourceProfileName::Deterministic).identity();
     let second = ResourceProfile::named("deterministic").unwrap().identity();
     assert_eq!(first, second);
     assert_eq!(first.schema, RESOURCE_PROFILE_SCHEMA);
-    assert_eq!(first.version, 2);
-    assert_eq!(first.implementation_maxima_version, 2);
+    assert_eq!(
+        first.contract,
+        lkjscript_contracts::RESOURCE_PROFILES_DIGEST
+    );
+    assert_eq!(
+        first.resource_categories,
+        lkjscript_contracts::RESOURCE_CATEGORIES_DIGEST
+    );
+    assert_eq!(first.name, ResourceProfileName::Deterministic);
+    assert_eq!(first.implementation_maxima_sha256.len(), 32);
+    assert_eq!(first.ceilings_sha256.len(), 32);
+    assert_eq!(first.host_lowered_ceilings_sha256, None);
     assert_eq!(ResourceCategory::ALL.len(), 54);
     assert_eq!(
         ResourceCategory::ALL[24].as_str(),

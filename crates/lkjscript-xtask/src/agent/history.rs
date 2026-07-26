@@ -90,7 +90,7 @@ fn semantic_append_only(old: &WorkState, new: &WorkState) -> Result<(), String> 
             return Err("semantic session reference cannot be removed".into());
         };
         if old_session.schema != new_session.schema
-            || old_session.version != new_session.version
+            || old_session.contract != new_session.contract
             || old_session.identity != new_session.identity
         {
             return Err("semantic session identity is immutable".into());

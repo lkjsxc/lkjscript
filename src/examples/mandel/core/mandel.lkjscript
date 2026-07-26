@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/mandel/core/iter.lkjscript
+src/examples/mandel/core/iter.lkjscript#iter
 /import
+/imports
 def/
 name/
 mandel
 /name
+public
 fn/
 sig/
 F64

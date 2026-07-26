@@ -8,14 +8,16 @@ pub fn print() {
     println!("                 [--disable-auto-jit] [--resource-profile NAME]");
     println!("                 <file.lkjscript> [--] [script-args...]");
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
+    println!("  lkjscript describe [--json]");
+    println!("  lkjscript package <lock|check> [package-path]");
     println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");
+    println!("  lkjscript semantic describe");
     println!("  lkjscript semantic [-] < request.json");
     println!("  lkjscript semantic serve --stdio");
     println!("  lkjscript --help");
     println!("  lkjscript --version");
     println!();
     println!("Environment:");
-    println!("  LKJSCRIPT_ROOT             installed root containing src/std and src/lib");
     println!(
         "  LKJSCRIPT_JIT_DIAGNOSTICS  emit SSA, bytes, relocations, metadata, counts to stderr"
     );

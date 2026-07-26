@@ -1,8 +1,8 @@
 #![allow(clippy::panic)]
 
 use lkjscript_native::{
-    encode, AbiVersions, AllocationClass, BackendLimits, EncodingConfig, FunctionId,
-    HeapCallDescriptor, HeapOperation, HeapRuntimeSite, InstallableImage, LayoutIdentity,
+    encode, AllocationClass, BackendLimits, EncodingConfig, FunctionId, HeapCallDescriptor,
+    HeapOperation, HeapRuntimeSite, ImageContracts, InstallableImage, LayoutIdentity,
     MachinePlanBuilder, NativeReference, NativeValue, ReferenceType, RuntimeCallSlot,
     RuntimeOutcome, Signature, SourceFunctionId, StoreClass, TrapCode, ValueType,
 };

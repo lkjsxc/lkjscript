@@ -9,9 +9,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 ## Native-Reference Boundary
 
-**Current through host-independent source lowering.** Native ABI 2
+**Current through host-independent source lowering.** Native canonical native contract
 provides typed stable handle words, exact non-empty maps, bounded registered
-generated frames, and enum-identified runtime-ABI-1 frame and collection calls.
+generated frames, and contract-identified runtime frame and collection calls.
 `CollectReferenceV1` remains valid for its closed Buf-reference certificate.
 `HeapDispatchV1` adds verified frame-home dispatch for source Str, legacy Buf,
 Product, List, Option, and Result operations. Session-owned stable handles use

@@ -42,7 +42,6 @@ pub(crate) struct SpanRecord {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SourceUnitRecord {
     pub path: String,
-    pub edition: u32,
     pub identity: String,
     pub bytes: u64,
     pub sha256: String,

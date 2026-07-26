@@ -1,9 +1,8 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/jit-scalar/kernel.lkjscript
+src/examples/jit-scalar/kernel.lkjscript#scalar-step
 /import
+/imports
 main/
 sig/
 ->

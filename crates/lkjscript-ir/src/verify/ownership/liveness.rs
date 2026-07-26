@@ -63,7 +63,7 @@ pub(crate) fn verify_frame_affine_available(
     };
     verify_terminator_affine_available(state, frame_values(frame), types)?;
     for local in &frame.locals {
-        if !is_owned_buf(value_type(types, local.value)?) {
+        if !is_owned_value(value_type(types, local.value)?) {
             continue;
         }
         let place = function

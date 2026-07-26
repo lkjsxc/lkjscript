@@ -57,7 +57,7 @@ impl InstallableImage {
     }
 
     #[must_use]
-    pub const fn versions(&self) -> AbiVersions {
-        self.versions
+    pub const fn contracts(&self) -> ImageContracts {
+        self.contracts
     }
 }

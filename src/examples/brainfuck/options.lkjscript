@@ -1,12 +1,11 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/brainfuck/error.lkjscript
+src/examples/brainfuck/error.lkjscript#bf-fail
 /import
 import/
-examples/brainfuck/state.lkjscript
+src/examples/brainfuck/state.lkjscript#BrainfuckState
 /import
+/imports
 def/
 name/
 bf-config-fail
@@ -39,6 +38,7 @@ def/
 name/
 bf-configure
 /name
+public
 fn/
 sig/
 Product

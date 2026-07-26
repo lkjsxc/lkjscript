@@ -95,8 +95,7 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
         ),
     ];
     for (name, expression) in cases {
-        let source =
-            format!("edition/\n2\n/edition\nmain/\nsig/\n->\nBool\n/sig\n{expression}\n/main\n");
+        let source = format!("main/\nsig/\n->\nBool\n/sig\n{expression}\n/main\n");
         let program = compile(&source, name);
         let expected = Scalar::Bool(true);
         assert_eq!(
@@ -121,7 +120,7 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
     }
 
     let invalid_utf8 = concat!(
-        "edition/\n2\n/edition\nmain/\nsig/\n->\nBool\n/sig\nvar/\nname/\nb\n/name\n",
+        "main/\nsig/\n->\nBool\n/sig\nvar/\nname/\nb\n/name\n",
         "type/\nBuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set/\nb\n0\n255\n/buf-set\n",
         "match/\nunwrap-err/\nbuf-to-str/\nb\n/buf-to-str\n/unwrap-err\narms/\narm/\n",
         "variant-pattern/\ntype/\nUtf8Error/\n/Utf8Error\n/type\nvariant/\n",

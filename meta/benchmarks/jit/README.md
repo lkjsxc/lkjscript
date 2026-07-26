@@ -66,7 +66,7 @@ rewrite counts, and code/metadata/cache bytes. Exact per-sample tier, function,
 object, proof, code-byte, and W^X invariants are checked before a result is
 written.
 
-The result schema is `lkjscript.optimizing-jit-benchmark.v1` and the retained
+The result schema is `lkjscript.optimizing-jit-benchmark` with the exact metrics contract; retained
 file is
 [`results/optimizing-jit-linux-x86_64.json`](results/optimizing-jit-linux-x86_64.json).
 The verdict is mechanically **Adopted** only when all of these predeclared gates
@@ -109,7 +109,7 @@ promotion remains disabled and unmeasured, and the forced non-speculative tier
 makes no OSR, deoptimization, or speculation claim.
 
 The performance recovery followed folding each generated function's mandatory
-entry poll into ABI-2 frame registration, removing a separate runtime
+entry poll into canonical frame registration, removing a separate runtime
 transition rather than weakening polling or changing optimizer proofs. The one
 allocation-graph check still returned I64 `1` with 3 optimizing entries, 7
 allocations, 6 collections, 14 attempted/14 successful heap calls, maximum 3

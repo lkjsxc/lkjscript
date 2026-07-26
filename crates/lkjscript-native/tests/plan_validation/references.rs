@@ -50,8 +50,7 @@ fn verifies_exact_reference_signatures_and_type_use() -> Result<(), Box<dyn std:
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
     let integer = builder.parameter(0)?;
-    let invalid =
-        builder.runtime_call(entry, RuntimeCallSlot::CollectReferenceV1, vec![integer])?;
+    let invalid = builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![integer])?;
     builder.return_value(entry, invalid)?;
     plan.define_function(builder.finish())?;
     assert!(matches!(

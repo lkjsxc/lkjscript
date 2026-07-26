@@ -32,9 +32,10 @@ fn case(label: &str) -> PathBuf {
 fn semantic_request(root: &std::path::Path, profile: &str, operation: &str) -> String {
     format!(
         concat!(
-            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":2,",
+            "{{\"schema\":\"lkjscript.semantic-source\",\"contract\":\"{}\",",
             "\"profile\":\"{profile}\",\"root\":{},\"operation\":{operation}}}"
         ),
+        crate::semantic::CONTRACT,
         serde_json::to_string(&root.to_string_lossy()).expect("encode root"),
         profile = profile,
         operation = operation,
@@ -44,9 +45,10 @@ fn semantic_request(root: &std::path::Path, profile: &str, operation: &str) -> S
 fn session_request(id: &str, revision: u64, operation: &str) -> Vec<u8> {
     format!(
         concat!(
-            "{{\"schema\":\"lkjscript.semantic-session\",\"version\":1,",
+            "{{\"schema\":\"lkjscript.semantic-session\",\"contract\":\"{}\",",
             "\"request_id\":{},\"revision\":{revision},\"request\":{operation}}}"
         ),
+        super::CONTRACT,
         serde_json::to_string(id).expect("encode request id"),
         revision = revision,
         operation = operation,

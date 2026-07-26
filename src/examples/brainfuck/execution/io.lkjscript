@@ -1,13 +1,13 @@
-edition/
-2
-/edition
+imports/
 import/
-examples/brainfuck/state.lkjscript
+src/examples/brainfuck/state.lkjscript#BrainfuckState
 /import
+/imports
 def/
 name/
 bf-input
 /name
+public
 fn/
 sig/
 Product
@@ -56,6 +56,7 @@ def/
 name/
 bf-output
 /name
+public
 fn/
 sig/
 Product

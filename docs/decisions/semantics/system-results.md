@@ -32,7 +32,7 @@ The descriptor-facing surface becomes:
 ```text
 stdin-handle                         -> Handle
 sys-isatty Handle                    -> Result Bool SystemError
-sys-close Handle                     -> Result Unit SystemError
+drop Handle                     -> Result Unit SystemError
 sys-read-byte Handle                 -> Result I64 SystemError
 sys-write-byte Handle I64            -> Result Unit SystemError
 sys-read-into Handle Buf I64 I64     -> Result I64 SystemError

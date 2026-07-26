@@ -22,7 +22,7 @@ fn hir_diagnostics(source: &str, label: &str) -> Vec<crate::semantic::schema::Di
 }
 
 #[test]
-fn six_foundation_diagnostic_codes_have_closed_complete_records() {
+fn structured_diagnostic_codes_have_closed_complete_records() {
     let unknown = hir_diagnostics(
         "main/\nsig/\n->\nUnit\n/sig\nmissing/\n/missing\n/main\n",
         "unknown",
@@ -43,8 +43,11 @@ fn six_foundation_diagnostic_codes_have_closed_complete_records() {
     assert_eq!(mismatch[0].expected.as_deref(), Some("I64"));
     assert_eq!(mismatch[0].actual.as_deref(), Some("Unit"));
     for diagnostic in unknown.iter().chain(&arity).chain(&mismatch) {
-        assert_eq!(diagnostic.schema, "lkjscript.diagnostic");
-        assert_eq!(diagnostic.version, 1);
+        assert_eq!(diagnostic.schema, lkjscript_contracts::DIAGNOSTICS);
+        assert_eq!(
+            diagnostic.contract,
+            lkjscript_contracts::DIAGNOSTICS_DIGEST.to_hex()
+        );
         assert!(!diagnostic.human_rendering.is_empty());
         assert!(!diagnostic.agent_rendering.is_empty());
         assert!(diagnostic.repairs.is_empty());
