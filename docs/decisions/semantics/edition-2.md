@@ -13,21 +13,22 @@ them become implementation claims.
 <!-- LKJ-STATUS id=edition-2-never-control/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-numeric-conversions/1 status=current -->
 
-**Accepted Target overall.** Explicit identity/non-publishing migration and the
-generic enum declaration/resolved-type-fact, construction, exhaustive match,
-Never/structured-control, and explicit numeric-conversion evaluator/reference-
-VM/forced Linux x86-64 baseline/proof JIT slices are Current. Automatic/host-native enum transitions,
-changed semantics beyond these slices, semantic publication, corpus migration,
-and cutover are not Current. Edition 1 remains
-accepted for ordinary compilation and as migration input.
+**Accepted Target overall.** Explicit identity, compiler-owned atomic
+migration, generic enum declaration/resolved-type-fact, construction,
+exhaustive match, Never/structured-control, explicit numeric conversion, the
+125-file corpus, and ordinary-compilation cutover are Current through the
+evaluator, reference VM, and forced Linux x86-64 baseline/proof JIT.
+Automatic/host-native enum transitions, changed semantics beyond these slices,
+and protocol-level semantic migration remain non-Current. Edition 1 is accepted
+only by explicit source-validation/migration APIs and immutable fixture data.
 
 ## Authority
 
 This page is the authority for Edition 2 and its strict capsule manifest.
 Capsules may refine this contract but cannot promote it. Edition 2 is explicit
 per source unit: the first semantic form is exactly `edition/`, atom `2`, and
-`/edition`. Every unit in a loaded closure must agree. A file without that form
-is Edition 1 until cutover. The Semantic Source identity is
+`/edition`. Every unit in a loaded closure must agree. Explicit validation treats a file
+without that form as Edition 1 migration input; ordinary compilation rejects it. The Semantic Source identity is
 `lkjscript.semantic-source/2`; the public ABI changes only where public Edition
 2 semantics require it.
 

@@ -7,8 +7,8 @@ native file-emission tests, and future Wasm so performance backends cannot
 reinterpret the language.
 ## Status
 
-**Current** for validated Semantic Source Foundation tree -> private checked
-Edition 1 projection -> resolved typed HIR -> mandatory initial `Owned Buf`
+**Current** for validated exact Edition 2 Semantic Source tree -> resolved
+typed HIR -> mandatory initial `Owned Buf`
 ownership analysis with fixed-point function effects -> verified typed SSA ->
 verified baseline normalization -> reference bytecode. The independent bounded SSA evaluator and
 bytecode link metadata are

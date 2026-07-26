@@ -1,3 +1,6 @@
+edition/
+2
+/edition
 import/
 examples/http/crlf.lkjscript
 /import

@@ -11,7 +11,7 @@ fn bytecode_constants_preserve_numeric_source_types() {
         .iter()
         .any(|constant| matches!(constant, Constant::I64(i64::MAX))));
 
-    let float = "main/\nsig/\n->\nF64\n/sig\n+/\n2.0\n1\n/+\n/main\n";
+    let float = "main/\nsig/\n->\nF64\n/sig\n+/\n2.0\nf64-from-i64-rounded/\n1\n/f64-from-i64-rounded\n/+\n/main\n";
     let float =
         compile_source(float, "float.lkjscript", &Limits::default()).expect("compile F64 source");
     assert!(float

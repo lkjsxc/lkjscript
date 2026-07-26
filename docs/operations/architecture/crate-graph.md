@@ -98,9 +98,9 @@ are rejected.
 
 Opaque validated Semantic Source Foundation tree -> resolved typed HIR ->
 verified typed SSA -> verified baseline normalization -> reference bytecode is
-**Current**. HIR currently consumes a private mechanically checked Edition 1
-form projection from the validated tree; no sibling parser or raw public AST can
-enter analysis. HIR owns an explicit Main
+**Current**. HIR consumes the private mechanically checked exact-edition form
+projection from the validated tree; ordinary compilation requires Edition 2,
+and no sibling parser or raw public AST can enter analysis. HIR owns an explicit Main
 and Functions, resolved binding IDs and local slot references, immutable
 declaration kinds, MutableLocal/SetLocal nodes, nominal product IDs and field
 indexes, exact static type facts, source origins, canonical operation identities

@@ -125,7 +125,7 @@ fn f64_bits_ieee_comparisons_and_mixed_conversion_are_exact() {
         (
             "mixed.lkjscript",
             "F64",
-            "+/\n9007199254740993\n0.5\n/+",
+            "+/\nf64-from-i64-rounded/\n9007199254740993\n/f64-from-i64-rounded\n0.5\n/+",
             Scalar::F64((9_007_199_254_740_993_i64 as f64 + 0.5).to_bits()),
         ),
     ];

@@ -1,3 +1,6 @@
+edition/
+2
+/edition
 def/
 name/
 cy-of
@@ -15,7 +18,9 @@ I64
 -/
 1.2
 */
+f64-from-i64-rounded/
 y
+/f64-from-i64-rounded
 0.1
 /*
 /-

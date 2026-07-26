@@ -1,5 +1,5 @@
 use super::*;
-use crate::{compile_source_with_profile, ResourceCategory, ResourceProfile};
+use crate::{ResourceCategory, ResourceProfile};
 
 #[test]
 fn match_matrix_categories_reserve_exactly_before_hir_allocation() {

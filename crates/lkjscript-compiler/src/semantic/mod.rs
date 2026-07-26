@@ -7,10 +7,10 @@ mod engine;
 mod operations;
 mod projection;
 mod response_codec;
-mod schema;
+pub(crate) mod schema;
 pub mod session;
-mod transaction;
-mod tree;
+pub(crate) mod transaction;
+pub(crate) mod tree;
 
 #[cfg(test)]
 mod tests;

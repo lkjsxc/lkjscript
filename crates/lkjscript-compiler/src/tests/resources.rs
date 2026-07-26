@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::{
-    compile_path_with_profile, compile_path_with_profile_and_metrics, compile_source_with_profile,
-    ResourceCategory, ResourceProfile, ResourceProfileName,
+    compile_path_with_profile, compile_path_with_profile_and_metrics, ResourceCategory,
+    ResourceProfile, ResourceProfileName,
 };
 
 fn workspace() -> PathBuf {
@@ -67,7 +67,7 @@ fn profile_identity_and_nested_phase_usage_reach_metrics_and_output() {
 
 #[test]
 fn exact_source_ceiling_succeeds_and_plus_one_is_structured() {
-    let source = unit_main("");
+    let source = edition2(&unit_main(""));
     let exact = u64::try_from(source.len()).unwrap();
     let profile = ResourceProfile::default()
         .lowered(ResourceCategory::SourceBytes, exact)

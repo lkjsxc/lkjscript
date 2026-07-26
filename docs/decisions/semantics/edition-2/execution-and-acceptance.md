@@ -10,11 +10,10 @@ become Current.
 ## Status
 
 **Current for source match, Never/structured control, the four numeric
-conversions, and the typed-error/generic-prelude cutover; Accepted Target for
-full Edition 2 source-corpus cutover.** Differentials cover
-the evaluator, reference VM, forced baseline, and forced proof execution with
-zero fallback for these slices. The
-complete cutover gate below is not claimed.
+conversions, the typed-error/generic-prelude cutover, exact atomic migration,
+and the full Edition 2 source-corpus cutover.** Differentials cover the
+evaluator, reference VM, forced baseline, and forced proof execution with zero
+fallback. Ordinary compilation accepts only exact Edition 2 source.
 
 ## Engine Contract
 
@@ -46,7 +45,7 @@ trace and forced-collection tests.
 
 ## Cutover Gate
 
-Before ordinary Edition 1 compilation is removed:
+The Current cutover satisfies these retained gates:
 
 1. all 125 tracked `.lkjscript` sources, including all 121 under `src/`, are
    atomically migrated;
@@ -58,4 +57,5 @@ Before ordinary Edition 1 compilation is removed:
 5. migration check/diff/publish, rejection, identity, rollback, immutable
    fixture, and no-hidden-mode tests pass.
 
-A failed or unrun gate remains explicit and cannot promote the target.
+Docker remains a separate packaging gate. A failed or unrun gate remains
+explicit and cannot promote a later capability.

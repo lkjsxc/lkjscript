@@ -1,3 +1,6 @@
+edition/
+2
+/edition
 import/
 std/fs/write-all.lkjscript
 /import

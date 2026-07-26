@@ -38,7 +38,7 @@
     {
       "id": "edition-2-identity-migration/1",
       "status": "current",
-      "interface": "Edition 2 identity and check_edition2_migration",
+      "interface": "Edition 2 identity, atomic migration publication, and corpus cutover",
       "authority": "docs/decisions/semantics/edition-2/identity-and-migration.md",
       "evidence": "docs/current-state/edition-2-identity-migration-evidence.md",
       "claimants": ["docs/current-state.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md",

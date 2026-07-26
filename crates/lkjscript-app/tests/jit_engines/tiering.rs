@@ -24,9 +24,12 @@ fn canonical_source_ssa_installs_and_calls_main_callee_poll_v1_without_fallback(
     assert!(native.stats.code_objects[0]
         .runtime_calls
         .contains(&lkjscript_native::RuntimeCallSlot::PollV1));
-    assert!(!native.stats.code_objects[0]
+    assert!(native.stats.code_objects[0]
         .runtime_calls
         .contains(&lkjscript_native::RuntimeCallSlot::PublishSafepointV1));
+    assert!(native.stats.code_objects[0]
+        .runtime_calls
+        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatchV1));
     assert!(!native.stats.code_objects[0]
         .runtime_calls
         .contains(&lkjscript_native::RuntimeCallSlot::EnterFunctionV1));

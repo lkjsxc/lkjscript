@@ -54,6 +54,13 @@ pub fn vm_outcome(outcome: ExecutionOutcome) -> ScalarOutcome {
 }
 
 pub fn compare_source(source: &str, name: &str) -> ScalarOutcome {
+    let marked;
+    let source = if source.starts_with("edition/\n2\n/edition\n") {
+        source
+    } else {
+        marked = format!("edition/\n2\n/edition\n{source}");
+        &marked
+    };
     let program = compile_source(source, name, &Limits::default()).expect("compile SSA fixture");
     let evaluated = evaluator_outcome(evaluate(program.ssa(), &EvalConfig::default()));
     let executed = vm_outcome(run_chunk(program.bytecode(), &ExecutionConfig::default()));
@@ -66,5 +73,5 @@ pub fn compare_source(source: &str, name: &str) -> ScalarOutcome {
 }
 
 pub fn main_source(return_type: &str, expression: &str) -> String {
-    format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n")
+    format!("edition/\n2\n/edition\nmain/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n")
 }

@@ -33,17 +33,18 @@ the manifest capsules. Bounded Repository Topology, Repository Intelligence
 Graph/context, externalized Agent Work State V2 with semantic references,
 complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
-local stdio sessions, the Edition 2 identity/non-publishing migration slice,
+local stdio sessions, exact atomic Edition 2 migration and corpus cutover,
 generic enum declarations/resolved type facts, exact `variant-value`
 construction, exhaustive source match, Never/structured control, the generic
 prelude `Option`/`Result` cutover with closed typed errors, and the four explicit
 numeric conversions through verified ordinary SSA, the evaluator, validated
 bytecode, reference VM, and forced Linux x86-64 baseline/proof execution,
 compiler Resource Profile V2, and the core hierarchical pre-allocation
-foundation are Current. Agent Foundation V1 and Semantic Source Schema V1
-identities are historical and rejected. Other Edition 2 changed semantics,
-execution cutover, migration publication, whole-pipeline
-pre-allocation, logical metering beyond enum construction, nonzero query
+foundation are Current. All 125 canonical sources are exact Edition 2 and
+ordinary compilation rejects Edition 1. Agent Foundation V1 and Semantic
+Source Schema V1 identities are historical and rejected. Other Edition 2
+changed semantics, whole-pipeline pre-allocation, logical metering beyond enum
+construction, nonzero query
 caching, and cross-authority ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
 
@@ -75,8 +76,10 @@ commands/APIs are Current on the containing implementation revision.
    compiler post-phase charging boundaries; whole-pipeline migration is not.
 
 6. Explicit Edition 2 markers, homogeneous closure identity, edition-separated
-   source/tree/revision/declaration identities, Schema V2 facts, and strict
-   non-publishing Edition 1-to-2 migration check/diff are Current.
+   source/tree/revision/declaration/node identities, Schema V2 facts, exact
+   checked migration diff, compiler-owned atomic publication, rollback/crash
+   recovery, the 125-file corpus migration, and ordinary-compilation cutover
+   are Current.
 7. Generic nominal enum declarations, stable enum/variant/field identities,
    invariant resolved HIR type facts, bounded recursion/ownership validation,
    exact Profile V2 enum-shape preallocation, exact enum value construction,
@@ -84,7 +87,7 @@ commands/APIs are Current on the containing implementation revision.
    validated bytecode, boxed active-payload GC representation, reference VM,
    exhaustive match planning/lowering, and forced Linux x86-64 baseline/proof
    JIT execution are Current. Typed prelude runtime boundaries are the Current
-   native-host exception; broader transitions, publish, and corpus cutover remain targets.
+   native-host exception; broader transitions remain targets.
 8. Edition 2 Never is Current as a join-only HIR type with no value/storage/ABI
    representation. Typed loop and while control lower to verified SSA block
    parameters and ordinary terminators consumed by evaluator, bytecode/VM,

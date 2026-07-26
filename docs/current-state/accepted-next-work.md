@@ -21,8 +21,9 @@ The immediate implementation sequence has progressed as follows:
    are Current, superseding and rejecting V1 input identities;
 5. compiler Resource Profile V2 and hole/transaction pre-allocation are Current
    without changing Edition 1 limits;
-6. Edition 2 identity, homogeneous closures, Schema V2 marker facts, and strict
-   non-publishing Edition 1-to-2 migration check/diff are Current;
+6. Edition 2 identity, homogeneous closures, Schema V2 marker facts, exact
+   compiler-owned check/diff/publish, atomic recovery, corpus migration, and
+   ordinary-compilation cutover are Current;
 7. generic enum declarations/type facts plus exact construction, independent
    layout/runtime identities, verified SSA/evaluator, validated bytecode, boxed
    active-payload GC values, reference VM execution, enum construction
@@ -34,8 +35,9 @@ The immediate implementation sequence has progressed as follows:
 9. the four explicit numeric conversions and the generic `Option`/`Result`
    prelude with closed `NumericError`, `Utf8Error`, and `SystemError` are Current
    through generic enum IR/runtime paths and zero-fallback typed-error differentials; and
-10. broader host-native enum transitions, migration publication, nonzero query
-   caching, whole-pipeline pre-allocation, and shared request ledgers remain next.
+10. broader host-native enum transitions, protocol-level semantic migration,
+   nonzero query caching, whole-pipeline pre-allocation, and shared request
+   ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

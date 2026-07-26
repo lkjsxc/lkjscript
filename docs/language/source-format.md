@@ -8,11 +8,10 @@ Define the canonical physical notation of lkjscript source files.
 
 <!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
 
-**Current** for Edition 1 and for the Edition 2 identity marker over existing
-declarations. Canonical files use `.lkjscript`. The former `.lkjml` extension
-and LKJML name are **Superseded** and are not accepted aliases. Edition 2 ADTs,
-patterns, and changed execution semantics remain [Accepted Targets, not
-Current](../decisions/semantics/edition-2.md).
+**Current** for the exact Edition 2 canonical corpus and for explicit Edition
+1 validation/migration input. Canonical files use `.lkjscript`. The former
+`.lkjml` extension and LKJML name are **Superseded** and are not accepted
+aliases. Ordinary compilation requires the Edition 2 marker.
 
 ## Invariants
 
@@ -68,7 +67,7 @@ fact/
 /do
 ```
 
-## Accepted Edition 2 Projection
+## Current Edition 2 Projection
 
 Edition 2 retains these physical invariants and the one parser/tree. Its first
 semantic form is exactly `edition/`, atom `2`, `/edition`; physical blank and
@@ -79,7 +78,7 @@ The marker does not consume the top-level declaration limit. Enum, constructor,
 match, and closed-pattern markers are
 defined exactly by the [Edition 2 ADT](../decisions/semantics/edition-2/algebraic-data-types.md)
 and [pattern](../decisions/semantics/edition-2/patterns-and-match.md) capsules.
-These forms are Accepted Target and are not accepted by the Current compiler.
+These forms are Current compiler input.
 
 ## Historical Experiments
 

@@ -10,7 +10,10 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
         ("unit.lkjscript", main_source("Unit", "unit")),
         (
             "f64.lkjscript",
-            main_source("F64", "+/\n1.5\n2\n/+"),
+            main_source(
+                "F64",
+                "+/\n1.5\nf64-from-i64-rounded/\n2\n/f64-from-i64-rounded\n/+",
+            ),
         ),
         (
             "loop.lkjscript",
@@ -57,8 +60,9 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
     );
 
     let tail_recursion = "def/\nname/\ncount-down\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\nif/\nlte/\nn\n0\n/lte\nn\ncount-down/\n-/\nn\n1\n/-\n/count-down\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\ncount-down/\n100\n/count-down\n/main\n";
+    let tail_recursion = format!("edition/\n2\n/edition\n{tail_recursion}");
     let tail_program = compile_source(
-        tail_recursion,
+        &tail_recursion,
         "tail-recursion.lkjscript",
         &Limits::default(),
     )

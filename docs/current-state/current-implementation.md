@@ -1,16 +1,15 @@
 # Current State: Current Implementation
 [Authority](../current-state.md)
 ## Status
-
 **Mixed.** Status follows explicit labels in this capsule and its authority; this capsule cannot promote a capability.
 ## Current Implementation
-
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
 - Corpus: all canonical language files under `src` have executable roots covering the exact corpus closure
-- Physical format: one column-one marker/atom per line. Edition 1 has no marker.
-  Edition 2 requires exact first form `edition/`, `2`, `/edition`; leading trivia is retained and loaded units agree.
-  The marker remains inside the token limit but does not consume the top-level declaration limit
+- Physical format: one column-one marker/atom per line; exact Edition 2 first
+  form `edition/`, `2`, `/edition`; retained leading trivia; homogeneous loaded
+  closures; marker inside the token but outside the declaration limit. All 125
+  canonical sources are Edition 2; Edition 1 is validation/migration input only
 - Semantic Source V2: public identity `lkjscript.semantic-source` version 2;
   version 1 input is historical and rejected. One opaque immutable
   `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition
@@ -34,11 +33,11 @@
   and closed loop/return/break/continue/trap/exit expressions. Edition 2 hole
   context and legal actions expose checker-valid available control forms,
   function/nearest-loop requirements, and exact Never admissibility
-- Migration: `check_edition2_migration` pins a homogeneous closure revision,
-  pre-reserves Profile V2 staging, inserts only the marker after leading trivia,
-  and reports exact old/new editions, bytes, identities, revisions, offsets, and
-  replacement sources. It is deterministic, stale-rejecting, Edition 2-idempotent,
-  and cannot write or publish. Semantic publish and corpus migration are absent
+- Migration: exact compiler-owned check/diff/publish pins closure revision,
+  source/tree/declaration/node identities and reports exact old/new identities
+  and bytes. Profile V2 reservation precedes staging. Migration inserts only the
+  marker and resolved required `f64-from-i64-rounded`. Locked whole-closure
+  no-replace publication provides rollback, recovery, and conflict rejection
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
   directory. Foundation implementation maxima additionally reject a source file
@@ -54,7 +53,8 @@
 - Imports: contained `std/`, `lib/`, `examples/`, and `./` paths with installed
   fallback through `LKJSCRIPT_ROOT`; absolute, parent, wrong-extension, cycle,
   non-regular source, non-UTF-8 host logical path, and containment failures
-  fail. On the Current Linux acceptance target, containment and identity use
+  fail. Ordinary compile/run require Edition 2 without inference. On Current
+  Linux, containment and identity use
   the canonical path resolved from the stable opened descriptor through
   `/proc/self/fd` before reading; changed/deleted/unresolvable descriptor paths
   fail closed. Non-Linux host-path loading is not accepted and has only a

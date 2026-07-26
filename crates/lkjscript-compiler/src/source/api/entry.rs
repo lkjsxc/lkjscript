@@ -4,8 +4,8 @@ use std::time::Duration;
 use lkjscript_core::{BudgetLedger, Limits, Result};
 
 use crate::source::{
-    load as loader, parse, validate as authority, SourceDiagnostic, SourceFoundationBudget,
-    SourceOrigin, SourceResult,
+    load as loader, parse, validate as authority, DiagnosticCategory, SourceDiagnostic,
+    SourceEdition, SourceFoundationBudget, SourceOrigin, SourceResult, SourceSpan,
 };
 
 use super::ValidatedSourceTree;
@@ -16,7 +16,7 @@ pub(crate) struct LoadMetrics {
     pub(crate) parsing: Duration,
 }
 
-/// Validate one canonical relative in-memory Edition 1 source unit.
+/// Explicitly validate one canonical relative in-memory source unit for migration or inspection.
 pub fn validate(
     source: &str,
     logical_path: &str,
@@ -117,6 +117,23 @@ pub(crate) fn load_for_compiler_with_budget(
 
 pub(crate) fn ensure_source_path_for_compiler(path: &Path) -> Result<()> {
     loader::ensure_source_path(path).map_err(SourceDiagnostic::into_core)
+}
+
+pub(crate) fn require_edition2_for_compiler(tree: &ValidatedSourceTree) -> Result<()> {
+    if tree.edition() == SourceEdition::Edition2 {
+        return Ok(());
+    }
+    Err(SourceDiagnostic::new(
+        "LKJ-SRC-EDITION-CUTOVER",
+        DiagnosticCategory::SourceSyntax,
+        concat!(
+            "ordinary compilation requires the exact Edition 2 marker; ",
+            "Edition 1 is accepted only by explicit source-validation and migration APIs",
+        ),
+        tree.root_origin().clone(),
+        SourceSpan::zero(),
+    )
+    .into_core())
 }
 
 pub(crate) fn rebuild_staged_sources(

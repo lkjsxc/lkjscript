@@ -4,13 +4,13 @@
   "id": "semantic-source",
   "root": "crates/lkjscript-compiler/src/source",
   "kind": "source",
-  "purpose": "Own validated source editions, loading, identity, migration diffs, diagnostics, and formatting.",
+  "purpose": "Own validated source editions, loading, identity, atomic migration publication, diagnostics, and formatting.",
   "layer": "semantic source",
   "concepts": [
     "validated source tree",
     "edition identity",
     "revision identity",
-    "non-publishing migration",
+    "atomic migration publication",
     "source diagnostics"
   ],
   "facade": ["crates/lkjscript-compiler/src/source/mod.rs"],
@@ -19,7 +19,10 @@
   "tests": [
     "crates/lkjscript-compiler/src/source/tests/mod.rs",
     "crates/lkjscript-compiler/src/source/tests/edition.rs",
-    "crates/lkjscript-compiler/src/source/tests/migration.rs"
+    "crates/lkjscript-compiler/src/source/tests/migration.rs",
+    "crates/lkjscript-compiler/src/source/tests/migration_conflict.rs",
+    "crates/lkjscript-compiler/src/source/tests/migration_publication.rs",
+    "crates/lkjscript-compiler/src/source/tests/cutover.rs"
   ],
   "decisions": [
     "docs/decisions/platform/semantic-source-and-agent-protocol/first-current-candidate.md",
@@ -33,12 +36,14 @@
     "goal": "Expose one opaque validated tree with exact revision-scoped identities.",
     "interfaces": [
       "lkjscript_compiler::source::ValidatedSourceTree",
-      "lkjscript_compiler::source::check_edition2_migration"
+      "lkjscript_compiler::source::check_edition2_migration",
+      "lkjscript_compiler::source::diff_edition2_migration",
+      "lkjscript_compiler::source::publish_edition2_migration"
     ],
     "invariants": [
       "explicit homogeneous editions",
       "edition-separated identities",
-      "non-publishing migration",
+      "atomic exact migration publication",
       "canonical structural formatting"
     ]
   }

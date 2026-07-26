@@ -42,6 +42,7 @@ pub fn compile_path_with_profile_and_metrics(
     let result = (|| {
         crate::ensure_source_path(path)?;
         let (program, loading) = load_with_metrics_and_budget(path, limits, &mut ledger)?;
+        crate::source::require_edition2_for_compiler(&program)?;
         let source_files = program.files().len();
 
         let hir_started = Instant::now();
@@ -103,6 +104,7 @@ pub fn compile_path_with_sources_and_profile(
     let result = (|| {
         crate::ensure_source_path(path)?;
         let program = load_for_compiler_with_budget(path, limits, &mut ledger)?;
+        crate::source::require_edition2_for_compiler(&program)?;
         let sources = program
             .files()
             .iter()
@@ -129,6 +131,7 @@ pub fn compile_source_with_profile(
     let result = (|| {
         crate::ensure_source_path(Path::new(path))?;
         let program = validate_for_compiler_with_budget(source, path, limits, &mut ledger)?;
+        crate::source::require_edition2_for_compiler(&program)?;
         let analyzed = analyze_program_with_budget(&program, &mut ledger)?;
         compile_analyzed(&analyzed, limits, profile, &mut ledger)
     })();

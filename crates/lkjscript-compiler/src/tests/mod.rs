@@ -4,7 +4,34 @@ use std::path::Path;
 
 use lkjscript_core::{Constant, Limits};
 
-use super::{compile_source, ensure_source_path, validate_source};
+use super::{ensure_source_path, validate_source};
+
+const EDITION2: &str = "edition/\n2\n/edition\n";
+
+fn edition2(source: &str) -> String {
+    if source.starts_with(EDITION2) {
+        source.to_string()
+    } else {
+        format!("{EDITION2}{source}")
+    }
+}
+
+fn compile_source(
+    source: &str,
+    path: &str,
+    limits: &Limits,
+) -> lkjscript_core::Result<crate::ExecutableProgram> {
+    super::compile_source(&edition2(source), path, limits)
+}
+
+fn compile_source_with_profile(
+    source: &str,
+    path: &str,
+    limits: &Limits,
+    profile: crate::ResourceProfile,
+) -> lkjscript_core::Result<crate::ExecutableProgram> {
+    super::compile_source_with_profile(&edition2(source), path, limits, profile)
+}
 
 fn unit_main(body: &str) -> String {
     format!("main/\nsig/\n->\nUnit\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")

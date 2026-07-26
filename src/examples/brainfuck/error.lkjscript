@@ -1,3 +1,6 @@
+edition/
+2
+/edition
 def/
 name/
 bf-fail
@@ -66,7 +69,7 @@ result
 do/
 bf-fail/
 str/
-system operation failed
+sys-open-read
 /str
 /bf-fail
 unwrap-ok/
@@ -108,7 +111,7 @@ result
 do/
 bf-fail/
 str/
-system operation failed
+sys-read-byte
 /str
 /bf-fail
 -1
@@ -145,7 +148,7 @@ result
 unit
 bf-fail/
 str/
-system operation failed
+sys-close
 /str
 /bf-fail
 /if

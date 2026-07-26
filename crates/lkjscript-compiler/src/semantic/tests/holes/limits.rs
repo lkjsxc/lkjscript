@@ -66,7 +66,10 @@ fn strict_v2_rejects_v1_unknown_hole_fields_and_duplicate_identities() {
 
 #[test]
 fn executable_compilation_rejects_every_reachable_hole() {
-    let source = function_source(&hole("body", None));
+    let source = format!(
+        "edition/\n2\n/edition\n{}",
+        function_source(&hole("body", None))
+    );
     let failure = crate::compile_source(
         &source,
         "hole-release.lkjscript",

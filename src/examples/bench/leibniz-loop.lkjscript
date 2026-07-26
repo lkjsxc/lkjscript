@@ -1,3 +1,6 @@
+edition/
+2
+/edition
 def/
 name/
 leibniz
@@ -172,7 +175,9 @@ I64
 +/
 */
 2.0
+f64-from-i64-rounded/
 i
+/f64-from-i64-rounded
 /*
 1.0
 /+

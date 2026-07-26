@@ -15,7 +15,8 @@ Edition 2 enum construction, exhaustive match, Never/control, and explicit
 numeric conversion through evaluator, VM, forced baseline, and forced proof,
 its one-shot protocol, bounded local stdio sessions,
 Profile V2 core reservation tests, and compiler resource checks are described
-in the capsules. Complete Edition 2 cross-engine/JIT acceptance, nonzero query
+in the capsules. Edition 2 cross-engine/JIT acceptance, exact atomic migration, the canonical
+corpus cutover, and ordinary Edition 1 rejection are Current. Nonzero query
 caching, whole-pipeline pre-allocation, and logical metering beyond enum
 construction remain **Accepted Targets**, not Current commands.
 
@@ -126,15 +127,16 @@ missing authority, deterministic diagnostics, and identity. Compiler tests
 retain corpus-root and legacy post-phase source/HIR/SSA publication coverage.
 Whole-pipeline pre-allocation and cross-authority ledger gates remain Accepted.
 
-## Accepted Edition 2 Gate
+## Current Edition 2 Gate
 
 The [Edition 2 acceptance contract](../decisions/semantics/edition-2/execution-and-acceptance.md)
-requires all 125 tracked sources (121 under `src/`) to migrate, exact
-old/new-identity and check/diff/publish tests, evaluator/VM/forced-JIT
+is Current for all 125 tracked sources (121 under `src/`), exact old/new
+identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
+rejection, atomic all-file rollback and crash recovery, compiler-resolved
+conversion, ordinary markerless rejection, evaluator/VM/forced-JIT
 value/outcome/charge differentials, actual generated calls without fallback,
-malformed-metadata rejection, exact roots, and Profile V2 boundaries. No Current
-command claims this complete gate yet, and this documentation change does not
-run full workspace tests.
+malformed-metadata rejection, exact roots, and Profile V2 boundaries. Runtime
+smokes and Docker remain separately recorded gates.
 
 ## Evidence Rule
 
