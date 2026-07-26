@@ -56,8 +56,7 @@ const fn operand_width(op: Op) -> usize {
         | Op::WithProductField
         | Op::MakeEnum
         | Op::IsEnumVariant
-        | Op::LoadEnumField
-        | Op::Trap => 2,
+        | Op::LoadEnumField => 2,
         Op::LoadLocal | Op::StoreLocal | Op::Call => 1,
         _ => 0,
     }

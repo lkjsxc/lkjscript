@@ -15,6 +15,9 @@ impl Resolver<'_> {
             .analyzer
             .resolve_enum_type(&unresolved, &parameters)
             .map_err(|message| self.error(message))?;
+        if ty.contains_never() {
+            return Err(self.error("Never is not an enum substitution or runtime value type"));
+        }
         let Type::Enum { id, arguments, .. } = &ty else {
             return Err(self.error("variant-value type/ must name a fully instantiated enum"));
         };

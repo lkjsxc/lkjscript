@@ -78,10 +78,22 @@ impl Resolver<'_> {
                 .effects
                 .union(then_branch.effects)
                 .union(else_branch.effects),
-            ExprKind::While { condition, body } => condition
+            ExprKind::While {
+                condition, body, ..
+            } => condition
                 .effects
                 .union(fold_effects(body))
                 .union(EffectSet::MAY_DIVERGE),
+            ExprKind::Loop { body, .. } => fold_effects(body).union(EffectSet::MAY_DIVERGE),
+            ExprKind::Return { value } | ExprKind::Break { value, .. } => {
+                value.effects.union(EffectSet::MAY_DIVERGE)
+            }
+            ExprKind::Continue { .. } => EffectSet::MAY_DIVERGE,
+            ExprKind::Trap { value } => value.effects.union(EffectSet::MAY_TRAP),
+            ExprKind::Exit { code } => code
+                .effects
+                .union(EffectSet::HOST_IO)
+                .union(EffectSet::MAY_EXIT),
             ExprKind::Let { bindings, body } => bindings
                 .iter()
                 .fold(EffectSet::PURE, |effects, binding| {

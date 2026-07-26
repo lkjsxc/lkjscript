@@ -107,9 +107,10 @@ fn product_witness(tree: &ValidatedSourceTree, name: &str, depth: u32) -> Option
     })
 }
 
-fn type_expression(ty: &Type) -> Option<TypeExpression> {
+pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Option<TypeExpression> {
     use TypeExpression as T;
     Some(match ty {
+        Type::Never => T::Never {},
         Type::Unit => T::Unit {},
         Type::Bool => T::Bool {},
         Type::I64 => T::I64 {},

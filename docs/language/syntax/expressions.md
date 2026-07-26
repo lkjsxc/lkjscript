@@ -25,7 +25,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 Implemented control and binding forms include `main`, `def`, `fn`, `if`,
 `while`, `let`, `bind`, `var`, `set`, `do`, `quote`, `product-value`, `field`,
-and `with-field`. `product`, `trait`, `impl`, `fields`, `sig`, `params`,
+and `with-field`. Edition 2 additionally implements typed `loop`, early
+`return`, nearest-loop `break`/`continue`, value-bearing `trap`, and `exit`.
+`product`, `trait`, `impl`, `fields`, `sig`, `params`,
 `forall`, `bounds`, `bound`, `type`, `name`, and `import` are contextual
 declaration/loading forms rather than freely evaluable runtime calls.
 
@@ -34,9 +36,19 @@ Every function definition has a mandatory signature and typed parameters.
 bounded declaration-only markers described below. There is no `Any`,
 Hindley-Milner inference, or implemented user-defined type alias.
 
-`if` requires exactly three operands: a Bool condition and two branches with
-exactly the same type. There is no omitted branch or nil-based type join.
-Empty `do`, `while`, `set`, and side-effecting operations return Unit.
+`if` requires exactly three operands: a Bool condition and two reachable
+branches with exactly the same type. In Edition 2, a divergent `Never` arm
+joins only with the surviving arm type and creates no value. There is no
+omitted branch or nil-based type join. Empty `do`, `while`, `set`, and
+side-effecting operations return Unit.
+
+The canonical typed loop is `loop/ type/ T /type body... /loop`.
+`break/ value /break` must exactly match `T`; `continue/ /continue` targets the
+nearest loop. `while` remains Unit and accepts only `break/ unit /break`.
+`return/ value /return` exactly matches the containing return type,
+`trap/ Str /trap` preserves that value as the trap message, and
+`exit/ I64 /exit` produces a structured exit outcome. Every transfer has type
+`Never`; unreachable sequence elements are rejected.
 
 `var/ name/ x /name type/ T /type initial body /var` introduces one typed
 mutable local. The initializer is resolved and evaluated before the binding
@@ -151,11 +163,11 @@ is now the current boundary through which these forms will migrate, so typing
 and lowering cannot interpret them differently.
 ## Edition 2 Current Slice And Accepted Target
 
-Edition 2 generic enum declarations and exact `variant-value` construction are
-Current on the SSA evaluator, reference VM, and forced Linux x86-64 baseline/
-proof JIT. Closed named-field patterns, `match`, automatic/host-native enum
-transitions, `Never`, early return, typed loop control, and four explicit
-I64/F64 conversions remain
+Edition 2 generic enum declarations, exact `variant-value` construction,
+closed named-field patterns, `match`, `Never`, early return, typed loop control,
+and value-bearing trap/exit are Current on the SSA evaluator, reference VM, and
+forced Linux x86-64 baseline/proof JIT. Automatic/host-native enum transitions
+and four explicit I64/F64 conversions remain
 [Accepted Targets](../../decisions/semantics/edition-2.md). Product
 remains its separate nominal product concept. Option and Result migrate to
 compiler-recognized prelude enum identities only after generic ADT differential

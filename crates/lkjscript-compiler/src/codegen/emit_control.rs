@@ -33,9 +33,9 @@ impl Emitter<'_> {
                 self.load(*value)?;
                 self.proto.emit(Op::Return);
             }
-            Terminator::Trap { message } => {
-                let diagnostic = add_constant(self.chunk, BytecodeConstant::Str(message.clone()))?;
-                self.proto.emit_op_u16(Op::Trap, diagnostic);
+            Terminator::Trap { value } => {
+                self.load(*value)?;
+                self.proto.emit(Op::Trap);
             }
             Terminator::Exit { code } => {
                 self.load(*code)?;

@@ -11,9 +11,10 @@ agent-facing transaction/query slice.
 
 **Current** for closed `lkjscript.semantic-source` version 2 over Edition 1 and
 the implemented Edition 2 identity, generic-enum, construction, closed-pattern,
-and source-match slice. Source-unit records expose exact edition and
-edition-framed identity; snapshots expose tree edition and identity; marker,
-enum, match, pattern, and edition-number nodes roundtrip strictly.
+source-match, and Never/structured-control slices. Source-unit records expose
+exact edition and edition-framed identity; snapshots expose tree edition and
+identity; marker, enum, match, pattern, Never, loop, return, break, continue,
+trap, exit, and edition-number nodes roundtrip strictly.
 Schema identity remains version 2 rather than introducing an edition-specific
 schema version.
 Schema V2 preserves the exact V1 node, value, declaration, type, built-in,
@@ -41,8 +42,9 @@ rollback, descriptor anchoring, and conflict preservation. The former
 `lkjscript.agent-foundation/1` and `lkjscript.semantic-source/1` identities are
 historical and rejected. `lkjscript.agent/1` is not emitted.
 
-Edition 2 authoring, wider agent operations, nonzero incremental query caching,
-full-language inhabitation or token masking, and a cross-authority shared ledger
+Wider Edition 2 authoring beyond the implemented enum/match/control slices,
+wider agent operations, nonzero incremental query caching, full-language
+inhabitation or token masking, and a cross-authority shared ledger
 remain **Accepted Targets**. Unavailable HIR/SSA/layout/proof/native
 correlations are explicit and revisioned rather than guessed. Unsupported
 operations do not exist as inert endpoints.

@@ -122,7 +122,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
         },
     ];
     duplicate_loan.functions[1].blocks[0].terminator = Terminator::Trap {
-        message: "duplicate loan".into(),
+        value: ValueId::new(0),
     };
     assert!(verify(duplicate_loan).is_err());
 

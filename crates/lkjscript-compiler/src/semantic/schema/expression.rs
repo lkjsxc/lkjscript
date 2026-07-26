@@ -1,3 +1,4 @@
+mod edition;
 mod matching;
 mod measure;
 
@@ -59,6 +60,23 @@ pub(crate) enum Expression {
     While {
         condition: Box<Expression>,
         body: Vec<Expression>,
+    },
+    Loop {
+        result_type: TypeExpression,
+        body: Vec<Expression>,
+    },
+    Return {
+        value: Box<Expression>,
+    },
+    Break {
+        value: Box<Expression>,
+    },
+    Continue {},
+    Trap {
+        value: Box<Expression>,
+    },
+    Exit {
+        code: Box<Expression>,
     },
     Do {
         expressions: Vec<Expression>,
@@ -122,6 +140,10 @@ pub(crate) struct ExpressionField {
 }
 
 impl Expression {
+    pub(crate) fn supports_edition(&self, edition: crate::source::SourceEdition) -> bool {
+        edition == crate::source::SourceEdition::Edition2 || !edition::requires_edition2(self)
+    }
+
     pub(crate) fn to_source(&self, span: SourceSpan) -> Result<SourceNode, String> {
         super::expression_source::to_source(self, span)
     }

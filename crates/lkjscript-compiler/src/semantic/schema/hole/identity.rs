@@ -121,5 +121,8 @@ pub(crate) enum ConstraintUnavailableReason {
 pub(crate) struct ControlConstraint {
     pub target: String,
     pub required_result: Option<String>,
+    pub function_return: String,
+    pub loop_result: Option<String>,
+    pub available_forms: Vec<String>,
     pub loop_depth: u32,
 }

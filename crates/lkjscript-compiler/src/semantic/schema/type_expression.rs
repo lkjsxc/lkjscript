@@ -5,6 +5,7 @@ use crate::source::{SourceNode, SourceSpan, SyntaxKind};
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum TypeExpression {
+    Never {},
     Unit {},
     Bool {},
     I64 {},
@@ -53,6 +54,7 @@ impl TypeExpression {
 
     fn collect_nodes(&self, span: SourceSpan, output: &mut Vec<SourceNode>) -> Result<(), String> {
         match self {
+            Self::Never {} => output.push(atom("Never".into(), span)),
             Self::Unit {} => output.push(atom("Unit".into(), span)),
             Self::Bool {} => output.push(atom("Bool".into(), span)),
             Self::I64 {} => output.push(atom("I64".into(), span)),

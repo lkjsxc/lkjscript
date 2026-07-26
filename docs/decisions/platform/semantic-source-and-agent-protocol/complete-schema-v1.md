@@ -75,4 +75,6 @@ Current source schema. `lkjscript.agent/1` is not emitted.
 
 Current Schema V2 reuses this closure discipline and has identity
 `lkjscript.semantic-source/2`. It preserves the V1 representation as its base
-rather than mutating or overloading the V1 identity.
+rather than mutating or overloading the V1 identity, and closes the Current
+Edition 2 enum, match, Never type-node, typed loop, return, break, continue,
+value-bearing trap, and exit variants.

@@ -1,6 +1,30 @@
 use super::*;
 
 impl FunctionBuilder {
+    pub fn set_instruction_source(
+        &mut self,
+        value: ValueId,
+        source: SourceOrigin,
+    ) -> Result<(), PlanError> {
+        self.check_value(value)?;
+        let block_id = match self
+            .values
+            .get(value.index as usize)
+            .map(|fact| &fact.definition)
+        {
+            Some(ValueDefinition::Instruction(block)) => *block,
+            _ => return Err(PlanError::UnknownValue),
+        };
+        let block = self.block_mut(block_id)?;
+        let instruction = block
+            .instructions
+            .iter_mut()
+            .find(|instruction| instruction.output == value)
+            .ok_or(PlanError::UnknownValue)?;
+        instruction.source = Some(source);
+        Ok(())
+    }
+
     pub(super) fn append(
         &mut self,
         block: BlockId,

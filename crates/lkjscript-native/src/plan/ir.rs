@@ -83,6 +83,7 @@ pub(crate) enum Terminator {
     Trap {
         trap: TrapCode,
         site: Option<u32>,
+        value: Option<ValueId>,
     },
     Exit(ValueId),
     Outcome(RuntimeOutcome),
@@ -91,7 +92,8 @@ pub(crate) enum Terminator {
 impl Terminator {
     pub(crate) fn operands(&self) -> Vec<ValueId> {
         match self {
-            Self::Branch(_) | Self::Trap { .. } | Self::Outcome(_) => Vec::new(),
+            Self::Branch(_) | Self::Outcome(_) => Vec::new(),
+            Self::Trap { value, .. } => value.iter().copied().collect(),
             Self::BranchIf { condition, .. } | Self::Return(condition) | Self::Exit(condition) => {
                 vec![*condition]
             }

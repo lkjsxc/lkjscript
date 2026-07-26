@@ -82,6 +82,7 @@ pub(super) fn collect_direct_callees(
         }
         ExprKind::Operation { args, .. }
         | ExprKind::Do(args)
+        | ExprKind::Loop { body: args, .. }
         | ExprKind::While { body: args, .. } => {
             collect_direct_callees_slice(args, binding_to_function, callees);
             if let ExprKind::While { condition, .. } = &expression.kind {
@@ -107,7 +108,11 @@ pub(super) fn collect_direct_callees(
             collect_direct_callees(initial, binding_to_function, callees);
             collect_direct_callees(body, binding_to_function, callees);
         }
-        ExprKind::SetLocal { value, .. }
+        ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value }
+        | ExprKind::SetLocal { value, .. }
         | ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
         | ExprKind::EnumField { value, .. } => {
@@ -116,6 +121,7 @@ pub(super) fn collect_direct_callees(
         ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
             collect_direct_callees_slice(fields, binding_to_function, callees);
         }
+        ExprKind::Continue { .. } => {}
         ExprKind::WithProductField {
             value, replacement, ..
         } => {

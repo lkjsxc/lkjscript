@@ -1,9 +1,7 @@
 use lkjscript_core::{BudgetLedger, Error, ResourceCategory, Result};
 
+use super::{charge, charge_usize, type_charge::charge_type};
 use crate::hir::{Expr, ExprKind, Program};
-use crate::types::Type;
-
-use super::{charge, charge_usize};
 
 /// Exact post-analysis accounting. The existing Edition 1 and ownership bounds
 /// protect HIR construction; this check completes before SSA construction.
@@ -121,10 +119,22 @@ fn push_expression_children<'a>(
             then_branch.as_ref(),
             else_branch.as_ref(),
         ]),
-        ExprKind::While { condition, body } => {
+        ExprKind::While {
+            condition, body, ..
+        } => {
             stack.push(condition);
             stack.extend(body);
         }
+        ExprKind::Loop {
+            result_type, body, ..
+        } => {
+            charge_type(result_type, ledger)?;
+            stack.extend(body);
+        }
+        ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value } => stack.push(value),
         ExprKind::Let { bindings, body } => {
             stack.extend(bindings.iter().map(|binding| &binding.value));
             stack.push(body);
@@ -140,52 +150,6 @@ fn push_expression_children<'a>(
             value, replacement, ..
         } => stack.extend([value.as_ref(), replacement.as_ref()]),
         _ => {}
-    }
-    Ok(())
-}
-
-fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> {
-    let mut stack = Vec::new();
-    stack
-        .try_reserve(1)
-        .map_err(|_| Error::msg("cannot reserve type accounting stack"))?;
-    stack.push(root);
-    while let Some(ty) = stack.pop() {
-        charge(ledger, ResourceCategory::TypeWork, 1)?;
-        let growth = match ty {
-            Type::Owned(_)
-            | Type::Ref(_)
-            | Type::RefMut(_)
-            | Type::List(_)
-            | Type::Option(_)
-            | Type::Forall { .. } => 1,
-            Type::Enum { arguments, .. } => arguments.len(),
-            Type::Result(_, _) => 2,
-            Type::Fn { params, .. } => params
-                .len()
-                .checked_add(1)
-                .ok_or_else(|| Error::msg("type accounting stack growth overflow"))?,
-            _ => 0,
-        };
-        stack
-            .try_reserve(growth)
-            .map_err(|_| Error::msg("cannot reserve type accounting stack"))?;
-        charge_usize(ledger, ResourceCategory::TypeNesting, growth)?;
-        match ty {
-            Type::Owned(child)
-            | Type::Ref(child)
-            | Type::RefMut(child)
-            | Type::List(child)
-            | Type::Option(child)
-            | Type::Forall { body: child, .. } => stack.push(child),
-            Type::Result(left, right) => stack.extend([left.as_ref(), right.as_ref()]),
-            Type::Enum { arguments, .. } => stack.extend(arguments),
-            Type::Fn { params, ret } => {
-                stack.extend(params);
-                stack.push(ret);
-            }
-            _ => {}
-        }
     }
     Ok(())
 }

@@ -9,8 +9,10 @@ typed loop control.
 
 ## Status
 
-**Accepted Target, not Current.** Existing Edition 1 control behavior remains
-Current.
+<!-- LKJ-STATUS id=edition-2-never-control/1 status=current -->
+
+**Current for Edition 2.** Edition 1 retains its existing control behavior and
+its existing `exit` operation; the new forms require the exact Edition 2 marker.
 
 ## Never
 
@@ -22,20 +24,30 @@ subtyping, coercion, or an arbitrary missing value.
 These exact control expressions have type `Never`:
 
 - `exit I64`;
-- `trap TrapValue`;
+- `trap TrapValue`, where the Current `TrapValue` is exact `Str`;
 - `return T`, where `T` exactly matches the function return type;
 - `break T`, where `T` exactly matches the targeted typed loop result; and
 - `continue`, targeting the nearest loop.
 
-Edition 2 adds early return and typed loop/break/continue. `while` remains Unit
-and its `break`, if accepted in a while body, must carry Unit. Labels and
-nonlocal control are outside this slice.
+Edition 2 adds early return and typed loop/break/continue. The canonical typed
+loop is `loop/ type/ T /type body... /loop`; natural body fallthrough and
+`continue` jump to its header, while `break/ value /break` jumps to its typed
+exit. `while` remains Unit and its `break` must carry exact Unit. `return`,
+`break`, `trap`, and `exit` each have exactly one child; `continue` has none.
+Labels and nonlocal control are outside this slice.
+
+`Never` may be written as a type node so Semantic Source can describe it, but
+source analysis rejects it from signatures, returns, parameters, locals,
+fields, enum substitutions, collections, constants, and every other storage or
+ABI position. It is admitted only as the derived type of a terminating control
+expression and at reachable expression joins.
 
 ## Exact HIR Terminators
 
 HIR uses `Return { value }`, `Break { loop_id, value }`,
-`Continue { loop_id }`, `Exit { code }`, and `Trap { value }`. Each ends its
-control path; no synthetic Never value is produced.
+`Continue { loop_id }`, `Exit { code }`, and `Trap { value }`, plus typed
+`Loop { loop_id, result_type, body }` and Unit `While { loop_id, ... }`. Each
+transfer ends its control path; no synthetic Never value is produced.
 
 ## Exact SSA Terminators
 

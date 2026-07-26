@@ -12,6 +12,7 @@ next work without mixing them with long-term vision.
 <!-- LKJ-STATUS id=agent-work-state/2 status=current -->
 <!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
+<!-- LKJ-STATUS id=edition-2-never-control/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
@@ -33,9 +34,9 @@ complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
 local stdio sessions, the Edition 2 identity/non-publishing migration slice,
 generic enum declarations/resolved type facts, exact `variant-value`
-construction and exhaustive source match through verified ordinary SSA, the
-evaluator, validated bytecode, reference VM, and forced Linux x86-64
-baseline/proof execution, compiler
+construction, exhaustive source match, and Never/structured control through
+verified ordinary SSA, the evaluator, validated bytecode, reference VM, and
+forced Linux x86-64 baseline/proof execution, compiler
 Resource Profile V2, and the core hierarchical pre-allocation foundation are
 Current. Agent Foundation V1 and Semantic Source Schema V1 identities are
 historical and rejected. Other Edition 2 ADTs,
@@ -51,8 +52,8 @@ reference bytecode/VM, callable host-independent Linux x86-64 baseline code,
 host-independent native allocation/collection, and forced proof-checked
 optimization are Current at baseline `dd8fb316`. Exact boundaries and retained
 historical command evidence are in the manifest below. Automatic proof
-promotion, wider future Agent operations, Edition 2 surfaces beyond identity,
-migration checking, and generic enum declaration/type facts, cross-authority
+promotion, wider future Agent operations, Edition 2 surfaces beyond the Current
+identity/migration, enums/match, and Never/control slices, cross-authority
 aggregate profiles, OSR, AOT/cache, and wider host-native transitions are not
 Current.
 Structure, graph/context, work-state, one-shot protocol, and compiler-profile
@@ -82,6 +83,11 @@ commands/APIs are Current on the containing implementation revision.
    exhaustive match planning/lowering, and forced Linux x86-64 baseline/proof
    JIT execution are Current. Automatic/native-host enum transitions, publish,
    and corpus cutover remain targets.
+8. Edition 2 Never is Current as a join-only HIR type with no value/storage/ABI
+   representation. Typed loop and while control lower to verified SSA block
+   parameters and ordinary terminators consumed by evaluator, bytecode/VM,
+   forced baseline, and proof JIT; Semantic Source V2 and typed-hole operations
+   expose the closed forms and exact control constraints.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

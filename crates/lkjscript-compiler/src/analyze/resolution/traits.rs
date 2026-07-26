@@ -93,7 +93,8 @@ impl Resolver<'_> {
             CoreTrait::Copy => match ty {
                 Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
                 Type::Ref(inner) if inner.as_ref() == &Type::Buf => true,
-                Type::Buf
+                Type::Never
+                | Type::Buf
                 | Type::Owned(_)
                 | Type::Ref(_)
                 | Type::RefMut(_)

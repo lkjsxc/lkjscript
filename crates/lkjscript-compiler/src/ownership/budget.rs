@@ -26,8 +26,15 @@ pub(in crate::ownership) fn charge_expression_nodes(
                 charge_expression_nodes(child, nodes)?;
             }
         }
-        ExprKind::While { condition, body } => {
+        ExprKind::While {
+            condition, body, ..
+        } => {
             charge_expression_nodes(condition, nodes)?;
+            for child in body {
+                charge_expression_nodes(child, nodes)?;
+            }
+        }
+        ExprKind::Loop { body, .. } => {
             for child in body {
                 charge_expression_nodes(child, nodes)?;
             }
@@ -51,7 +58,12 @@ pub(in crate::ownership) fn charge_expression_nodes(
             charge_expression_nodes(initial, nodes)?;
             charge_expression_nodes(body, nodes)?;
         }
-        ExprKind::SetLocal { value, .. } | ExprKind::ProductField { value, .. } => {
+        ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value }
+        | ExprKind::SetLocal { value, .. }
+        | ExprKind::ProductField { value, .. } => {
             charge_expression_nodes(value, nodes)?;
         }
         ExprKind::ProductValue { fields, .. } => {

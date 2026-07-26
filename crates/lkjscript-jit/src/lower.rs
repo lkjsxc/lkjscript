@@ -9,7 +9,7 @@ use lkjscript_native::{
     AllocationClass, BackendLimits, BoolComparison, F64Comparison, FunctionBuilder,
     HeapCallDescriptor, HeapOperation, I64Comparison, InstallableImage, LayoutIdentity, LocalId,
     MachinePlanBuilder, NativeError, ReferenceType, RuntimeCallSlot, RuntimeOutcome, Signature,
-    SourceFunctionId, SourceOrigin, StoreClass, TrapCode, ValueType,
+    SourceFunctionId, SourceOrigin, StoreClass, ValueType,
 };
 
 mod enum_lower;

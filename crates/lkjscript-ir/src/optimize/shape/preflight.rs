@@ -90,9 +90,6 @@ pub(crate) fn preflight_program(
                 ShapeField::Operands,
                 terminator_operand_count(&block.terminator)?,
             )?;
-            if let crate::Terminator::Trap { message } = &block.terminator {
-                counter.add_string(message)?;
-            }
         }
     }
     Ok(counter.shape)
@@ -141,8 +138,9 @@ pub(crate) fn terminator_operand_count(
             .checked_add(true_arguments.len())
             .and_then(|value| value.checked_add(false_arguments.len()))
             .ok_or_else(budget_error)?,
-        crate::Terminator::Return(_) | crate::Terminator::Exit { .. } => 1,
-        crate::Terminator::Trap { .. } => 0,
+        crate::Terminator::Return(_)
+        | crate::Terminator::Trap { .. }
+        | crate::Terminator::Exit { .. } => 1,
         crate::Terminator::Outcome { detail, .. } => usize::from(detail.is_some()),
     };
     u64::try_from(count).map_err(|_| budget_error())

@@ -117,7 +117,8 @@ pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
         Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
         Type::Option(value) => supports_value_equality(value),
         Type::Result(ok, err) => supports_value_equality(ok) && supports_value_equality(err),
-        Type::Buf
+        Type::Never
+        | Type::Buf
         | Type::Owned(_)
         | Type::Ref(_)
         | Type::RefMut(_)

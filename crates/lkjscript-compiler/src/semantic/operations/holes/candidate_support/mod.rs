@@ -66,6 +66,19 @@ fn expression_effects(site: &HoleSite<'_>, expression: &Expression) -> EffectSet
             EffectSet::MAY_DIVERGE.union(expression_effects(site, condition)),
             |effects, value| effects.union(expression_effects(site, value)),
         ),
+        Expression::Loop { body, .. } => {
+            body.iter().fold(EffectSet::MAY_DIVERGE, |effects, value| {
+                effects.union(expression_effects(site, value))
+            })
+        }
+        Expression::Return { value } | Expression::Break { value } => {
+            EffectSet::MAY_DIVERGE.union(expression_effects(site, value))
+        }
+        Expression::Continue {} => EffectSet::MAY_DIVERGE,
+        Expression::Trap { value } => EffectSet::MAY_TRAP.union(expression_effects(site, value)),
+        Expression::Exit { code } => EffectSet::HOST_IO
+            .union(EffectSet::MAY_EXIT)
+            .union(expression_effects(site, code)),
         Expression::Do { expressions } => {
             expressions.iter().fold(EffectSet::PURE, |effects, value| {
                 effects.union(expression_effects(site, value))

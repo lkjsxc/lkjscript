@@ -34,7 +34,10 @@ pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
         for (arm_index, arm) in plan.arms.iter().enumerate() {
             let arm_id =
                 u16::try_from(arm_index).map_err(|_| Error::msg("match arm index exceeds u16"))?;
-            if arm.id != arm_id || arm.body_type != plan.result_type {
+            if arm.id != arm_id
+                || Type::join_control(&arm.body_type, &plan.result_type)
+                    != Some(plan.result_type.clone())
+            {
                 return Err(Error::msg("match plan arm identity/order/join is stale"));
             }
             super::verify_pattern::pattern(

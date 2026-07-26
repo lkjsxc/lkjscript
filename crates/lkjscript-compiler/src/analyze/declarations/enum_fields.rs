@@ -80,6 +80,14 @@ impl Analyzer {
                     format!("enum {enum_name} variant {variant_name} field {name}: {message}"),
                 )
             })?;
+            if ty.contains_never() {
+                return Err(self.error(
+                    source,
+                    format!(
+                        "enum {enum_name} variant {variant_name} field {name}: Never is not a field type"
+                    ),
+                ));
+            }
             if contains_ownership_type(&ty) {
                 let message = format!(
                     "enum {enum_name} variant {variant_name} field {name}: \

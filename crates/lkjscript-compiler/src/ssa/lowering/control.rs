@@ -41,8 +41,13 @@ impl FunctionBuilder<'_> {
         let else_end = self.current;
         let else_env = self.env.clone();
 
+        let result_type = if expression.ty == Type::Never {
+            SsaType::Unit
+        } else {
+            lower_type(&expression.ty, self.product_ids)?
+        };
         self.merge_branches(
-            lower_type(&expression.ty, self.product_ids)?,
+            result_type,
             expression.origin,
             incoming_env,
             incoming_slots,

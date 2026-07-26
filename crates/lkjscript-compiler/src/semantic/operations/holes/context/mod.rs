@@ -1,4 +1,6 @@
+mod control;
 mod facts;
+mod support;
 
 use crate::semantic::schema::*;
 use crate::source::ValidatedSourceTree;
@@ -45,7 +47,7 @@ pub(crate) fn build(
         containing_return_type: super::types::canonical(&site.return_type),
         expected_type,
         scope_entities: scope,
-        constraints: constraints(&site, program.as_ref()),
+        constraints: constraints(&site, program.as_ref(), &candidates),
         candidates,
         exploration,
         blockers,

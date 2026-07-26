@@ -39,6 +39,7 @@ pub(super) fn classify(name: &str, parent: Option<&SourceNode>, index: usize) ->
         return Kind::ProductName;
     }
     match name {
+        "Never" => Kind::TypeNever,
         "Unit" => Kind::TypeUnit,
         "Bool" => Kind::TypeBool,
         "I64" => Kind::TypeI64,

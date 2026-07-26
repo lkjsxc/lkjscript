@@ -102,6 +102,7 @@ impl Analyzer {
         ty: &Type,
     ) -> std::result::Result<(), String> {
         match ty {
+            Type::Never => Err("Never is not a storage, field, or ABI type".into()),
             Type::Product(name) => {
                 if self.product_names.contains_key(name) {
                     Ok(())

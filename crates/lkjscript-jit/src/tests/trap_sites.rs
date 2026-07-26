@@ -58,18 +58,38 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                     Block {
                         id: BlockId::new(1),
                         parameters: Vec::new(),
-                        instructions: Vec::new(),
+                        instructions: vec![Instruction {
+                            id: ValueId::new(1),
+                            ty: SsaType::Str,
+                            kind: InstructionKind::Constant(Constant::Str("first trap".into())),
+                            metadata: metadata(
+                                EffectSet::PURE,
+                                IrSafepoint::None,
+                                FailureBehavior::None,
+                            ),
+                        }],
                         terminator: Terminator::Trap {
-                            message: "first trap".into(),
+                            value: ValueId::new(1),
                         },
                         metadata: block_metadata(),
                     },
                     Block {
                         id: BlockId::new(2),
                         parameters: Vec::new(),
-                        instructions: Vec::new(),
+                        instructions: vec![Instruction {
+                            id: ValueId::new(2),
+                            ty: SsaType::Str,
+                            kind: InstructionKind::Constant(Constant::Str(
+                                "selected callee trap".into(),
+                            )),
+                            metadata: metadata(
+                                EffectSet::PURE,
+                                IrSafepoint::None,
+                                FailureBehavior::None,
+                            ),
+                        }],
                         terminator: Terminator::Trap {
-                            message: "selected callee trap".into(),
+                            value: ValueId::new(2),
                         },
                         metadata: block_metadata(),
                     },

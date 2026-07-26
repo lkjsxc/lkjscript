@@ -1,6 +1,6 @@
 use crate::hir::{EffectSet, Type};
 use crate::semantic::schema::*;
-use crate::source::{SourceNode, SyntaxKind};
+use crate::source::SourceNode;
 
 use super::super::site::HoleSite;
 
@@ -26,7 +26,7 @@ pub(super) fn expected_fact(expected: &Result<Type, TypeUnavailableReason>) -> E
     match expected {
         Ok(ty) => ExpectedTypeFact::Available {
             canonical: super::super::types::canonical(ty),
-            instantiated: !contains_parameter(ty),
+            instantiated: !super::support::contains_parameter(ty),
         },
         Err(reason) => ExpectedTypeFact::Unavailable { reason: *reason },
     }
@@ -35,6 +35,7 @@ pub(super) fn expected_fact(expected: &Result<Type, TypeUnavailableReason>) -> E
 pub(super) fn constraints(
     site: &HoleSite<'_>,
     program: Option<&crate::hir::Program>,
+    candidates: &[HoleCandidate],
 ) -> HoleConstraints {
     let (generic_variables, trait_obligations) = generics(site.root);
     let required = program.map_or_else(Vec::new, |program| {
@@ -45,10 +46,33 @@ pub(super) fn constraints(
         .as_ref()
         .map_or(OwnershipAccess::Unavailable, super::super::types::ownership);
     let exact = program.is_some() && site.expected.is_ok();
+    let loop_result = super::control::nearest_loop_type(site)
+        .as_ref()
+        .map(super::super::types::canonical);
+    let available_forms = ["loop", "return", "break", "continue", "trap", "exit"]
+        .into_iter()
+        .filter(|form| {
+            candidates.iter().any(|candidate| {
+                matches!(
+                    (&candidate.expression, *form),
+                    (Expression::Loop { .. }, "loop")
+                        | (Expression::Return { .. }, "return")
+                        | (Expression::Break { .. }, "break")
+                        | (Expression::Continue {}, "continue")
+                        | (Expression::Trap { .. }, "trap")
+                        | (Expression::Exit { .. }, "exit")
+                )
+            })
+        })
+        .map(str::to_string)
+        .collect();
+    let never_admissible = candidates
+        .iter()
+        .any(|candidate| candidate.result_type == "Never");
     HoleConstraints {
         generic_variables,
         trait_obligations,
-        allowed_effects: all_effects(),
+        allowed_effects: super::support::all_effects(),
         already_required_effects: required,
         capabilities: ConstraintAvailability::Unavailable {
             reason: ConstraintUnavailableReason::NoCapabilityModel,
@@ -66,15 +90,22 @@ pub(super) fn constraints(
             region: "declaration_lexical_region".into(),
         },
         control: ControlConstraint {
-            target: "expression".into(),
+            target: if loop_result.is_some() {
+                "nearest_loop_or_function".into()
+            } else {
+                "function".into()
+            },
             required_result: site
                 .expected
                 .as_ref()
                 .ok()
                 .map(super::super::types::canonical),
-            loop_depth: loop_depth(site.root, &site.path),
+            function_return: super::super::types::canonical(&site.return_type),
+            loop_result,
+            available_forms,
+            loop_depth: super::control::loop_depth(site),
         },
-        never_admissible: false,
+        never_admissible,
         material_incomplete: true,
     }
 }
@@ -149,48 +180,4 @@ fn generics(root: &SourceNode) -> (Vec<String>, Vec<TraitObligation>) {
                 .collect()
         });
     (variables, obligations)
-}
-
-fn loop_depth(root: &SourceNode, path: &[usize]) -> u32 {
-    let mut node = root;
-    let mut depth = 0_u32;
-    for index in path {
-        if matches!(&node.kind, SyntaxKind::Call { name } if name == "while") {
-            depth = depth.saturating_add(1);
-        }
-        let Some(child) = node.children.get(*index) else {
-            break;
-        };
-        node = child;
-    }
-    depth
-}
-
-fn contains_parameter(ty: &Type) -> bool {
-    match ty {
-        Type::Param(_) | Type::Forall { .. } => true,
-        Type::Owned(inner)
-        | Type::Ref(inner)
-        | Type::RefMut(inner)
-        | Type::List(inner)
-        | Type::Option(inner) => contains_parameter(inner),
-        Type::Result(ok, error) => contains_parameter(ok) || contains_parameter(error),
-        Type::Fn { params, ret } => {
-            params.iter().any(contains_parameter) || contains_parameter(ret)
-        }
-        _ => false,
-    }
-}
-
-fn all_effects() -> Vec<SemanticEffect> {
-    vec![
-        SemanticEffect::Allocates,
-        SemanticEffect::ReadsMemory,
-        SemanticEffect::WritesMemory,
-        SemanticEffect::MutatesLocal,
-        SemanticEffect::HostIo,
-        SemanticEffect::MayTrap,
-        SemanticEffect::MayExit,
-        SemanticEffect::MayDiverge,
-    ]
 }

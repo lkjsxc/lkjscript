@@ -56,10 +56,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::Trap as u8 => {
-            let diagnostic = usize::from(vm.read_u16()?);
-            let message = match vm.chunk.constants().get(diagnostic) {
-                Some(lkjscript_core::Constant::Str(message)) => message.clone(),
-                _ => return Err(Error::msg("Trap diagnostic is not a Str constant")),
+            let value = vm.pop()?;
+            let message = match vm.arena.get(value) {
+                Ok(lkjscript_core::HeapObj::Str(message)) => message.clone(),
+                _ => return Err(Error::msg("Trap value is not Str")),
             };
             Err(Error::msg(message))
         }

@@ -14,7 +14,14 @@ pub(super) fn projections(tree: &ValidatedSourceTree) -> Vec<Projection> {
     files.sort_by(|a, b| a.origin.logical_path.cmp(&b.origin.logical_path));
     for file in files {
         for form in &file.syntax {
-            project_node(form, None, None, 0, &mut output);
+            project_node(
+                form,
+                None,
+                None,
+                0,
+                tree.edition() == crate::source::SourceEdition::Edition2,
+                &mut output,
+            );
         }
     }
     output
@@ -25,15 +32,17 @@ fn project_node(
     parent: Option<&SourceNode>,
     parent_kind: Option<SemanticNodeKind>,
     index: usize,
+    edition2: bool,
     output: &mut Vec<Projection>,
 ) {
-    let (kind, value) = crate::semantic::projection::classify(node, parent, parent_kind, index);
+    let (kind, value) =
+        crate::semantic::projection::classify(node, parent, parent_kind, index, edition2);
     output.push(Projection {
         kind,
         value,
         trivia: crate::semantic::projection::trivia(node),
     });
     for (child_index, child) in node.children.iter().enumerate() {
-        project_node(child, Some(node), Some(kind), child_index, output);
+        project_node(child, Some(node), Some(kind), child_index, edition2, output);
     }
 }

@@ -60,14 +60,21 @@ pub(in crate::ownership) fn check_control_expr(
             )?;
             expire_dead_loans(&mut left, future);
             expire_dead_loans(&mut right, future);
-            if left != right {
-                return Err(Error::msg(
-                    "ownership and loan state must match exactly at branch join",
-                ));
+            match (then_branch.ty == Type::Never, else_branch.ty == Type::Never) {
+                (true, false) => *state = right,
+                (false, true) => *state = left,
+                (true, true) => {}
+                (false, false) if left == right => *state = left,
+                (false, false) => {
+                    return Err(Error::msg(
+                        "ownership and loan state must match exactly at reachable branch join",
+                    ));
+                }
             }
-            *state = left;
         }
-        ExprKind::While { condition, body } => {
+        ExprKind::While {
+            condition, body, ..
+        } => {
             if contains_ownership_action(condition)
                 || body.iter().any(contains_ownership_action)
                 || uses_reference_binding(program, condition)?
@@ -96,6 +103,26 @@ pub(in crate::ownership) fn check_control_expr(
                 ));
             }
         }
+        ExprKind::Loop { body, .. } => {
+            if body.iter().any(contains_ownership_action)
+                || body.iter().try_fold(false, |found, item| {
+                    Ok::<bool, Error>(found || uses_reference_binding(program, item)?)
+                })?
+                || !state.loans.is_empty()
+            {
+                return Err(Error::msg(
+                    "loop-carried moves or loans are unsupported in the initial ownership slice",
+                ));
+            }
+            check_sequence(program, body, places, state, future)?;
+        }
+        ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value } => {
+            check_expr(program, value, places, state, future, UseContext::Ordinary)?;
+        }
+        ExprKind::Continue { .. } => {}
         _ => unreachable!("ownership expression category mismatch"),
     }
     Ok(())

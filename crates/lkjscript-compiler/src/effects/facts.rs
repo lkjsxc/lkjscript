@@ -39,9 +39,22 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         } => recompute_expr(condition, summaries)
             .union(recompute_expr(then_branch, summaries))
             .union(recompute_expr(else_branch, summaries)),
-        ExprKind::While { condition, body } => recompute_expr(condition, summaries)
+        ExprKind::While {
+            condition, body, ..
+        } => recompute_expr(condition, summaries)
             .union(recompute_slice(body, summaries))
             .union(EffectSet::MAY_DIVERGE),
+        ExprKind::Loop { body, .. } => {
+            recompute_slice(body, summaries).union(EffectSet::MAY_DIVERGE)
+        }
+        ExprKind::Return { value } | ExprKind::Break { value, .. } => {
+            recompute_expr(value, summaries).union(EffectSet::MAY_DIVERGE)
+        }
+        ExprKind::Continue { .. } => EffectSet::MAY_DIVERGE,
+        ExprKind::Trap { value } => recompute_expr(value, summaries).union(EffectSet::MAY_TRAP),
+        ExprKind::Exit { code } => recompute_expr(code, summaries)
+            .union(EffectSet::HOST_IO)
+            .union(EffectSet::MAY_EXIT),
         ExprKind::Let { bindings, body } => bindings
             .iter_mut()
             .fold(EffectSet::PURE, |effects, binding| {

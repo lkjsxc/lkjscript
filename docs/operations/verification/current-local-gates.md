@@ -98,6 +98,17 @@ wrong-operand/non-dominating/effectful/over-budget certificates, plus 64
 bounded randomized type-correct scalar evaluator differentials. The public
 optimizing authority has no raw `Program` constructor.
 
+Edition 2 control tests cover early return, divergent `Never` joins, nearest
+nested continue, typed value-loop break, Unit-only while break, dynamic Str
+trap values, and structured exit across the independent SSA evaluator,
+validated reference bytecode/VM, forced baseline, and forced proof JIT. They
+require generated entry and zero fallback. Malformed tests reject Never in
+public return, parameter, local, collection, product/enum field, and enum
+substitution positions; unreachable sequence fallthrough, non-loop control,
+wrong while breaks, stale block targets/arguments, and forged non-Str SSA trap
+operands fail closed. Semantic Source tests cover closed Never/control nodes,
+exact hole control requirements, and checker-valid legal actions.
+
 Source-native tests additionally prove canonical source -> HIR -> verified
 normalized SSA -> scalar/reference machine plan -> encoded image -> RW/RX
 install -> actual native entry and typed heap runtime sites. They assert installed code/W^X metadata, nonzero native

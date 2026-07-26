@@ -33,20 +33,24 @@ impl FunctionEncoder<'_> {
                 }
                 self.emit_epilogue()
             }
-            Terminator::Trap { trap, site } => {
-                if let Some(site) = site {
-                    let offset = self.bytes.len();
-                    self.trap_map.push(trap_map_entry(
-                        self.function.id,
-                        to_u32(offset)?,
-                        *trap,
-                        Some(*site),
-                    ));
-                    self.outcome_map.push(outcome_map_entry(
-                        self.function.id,
-                        to_u32(offset)?,
-                        OutcomeKind::Trap(*trap),
-                    ));
+            Terminator::Trap { trap, site, value } => {
+                let offset = self.bytes.len();
+                self.trap_map.push(trap_map_entry(
+                    self.function.id,
+                    to_u32(offset)?,
+                    *trap,
+                    *site,
+                ));
+                self.outcome_map.push(outcome_map_entry(
+                    self.function.id,
+                    to_u32(offset)?,
+                    OutcomeKind::Trap(*trap),
+                ));
+                if let Some(value) = value {
+                    self.load_rax(self.value_offset(*value)?)?;
+                    self.load_integer_register(1, self.context_offset())?;
+                    self.emit(&[0x48, 0x89, 0x41, 0x08])?;
+                } else if let Some(site) = site {
                     self.load_rax_immediate(u64::from(*site))?;
                     self.load_integer_register(1, self.context_offset())?;
                     self.emit(&[0x48, 0x89, 0x41, 0x08])?;

@@ -18,7 +18,13 @@ pub(in crate::ownership) fn check_expr(
         | ExprKind::Operation { .. }
         | ExprKind::Do(_)
         | ExprKind::If { .. }
-        | ExprKind::While { .. } => {
+        | ExprKind::While { .. }
+        | ExprKind::Loop { .. }
+        | ExprKind::Return { .. }
+        | ExprKind::Break { .. }
+        | ExprKind::Continue { .. }
+        | ExprKind::Trap { .. }
+        | ExprKind::Exit { .. } => {
             check_control_expr(program, expression, places, state, future, context)?;
         }
         ExprKind::Let { .. }

@@ -4,7 +4,7 @@ use super::*;
 fn verified_ssa_trap_and_structured_outcome_reach_native_status() {
     let trap = terminal_program(
         Terminator::Trap {
-            message: "exact native trap".into(),
+            value: ValueId::new(0),
         },
         EffectSet::MAY_TRAP,
     );

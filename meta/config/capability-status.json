@@ -24,10 +24,7 @@
       "interface": "lkjscript.agent-work-state/2",
       "authority": "docs/decisions/platform/agent-work-state.md",
       "evidence": "docs/decisions/platform/agent-work-state.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
       "id": "edition-2-enum-declarations/1",
@@ -44,14 +41,18 @@
       "interface": "Edition 2 identity and check_edition2_migration",
       "authority": "docs/decisions/semantics/edition-2/identity-and-migration.md",
       "evidence": "docs/current-state/edition-2-identity-migration-evidence.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-        "docs/decisions/semantics/edition-2.md",
-        "docs/decisions/semantics/edition-2/identity-and-migration.md",
-        "docs/language/source-format.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+        "docs/decisions/semantics/edition-2.md", "docs/decisions/semantics/edition-2/identity-and-migration.md",
+        "docs/language/source-format.md", "docs/operations/agent-handoff.md"]
+    },
+    {
+      "id": "edition-2-never-control/1",
+      "status": "current",
+      "interface": "Edition 2 Never and structured control through all four engines",
+      "authority": "docs/decisions/semantics/edition-2/never-and-control.md",
+      "evidence": "docs/decisions/semantics/edition-2/execution-and-acceptance.md",
+      "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
+        "docs/decisions/semantics/edition-2/never-and-control.md"]
     },
     {
       "id": "edition-2-semantic-core/2",
@@ -59,10 +60,7 @@
       "interface": "lkjscript.edition/2",
       "authority": "docs/decisions/semantics/edition-2.md",
       "evidence": "docs/decisions/semantics/edition-2/execution-and-acceptance.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
       "id": "jit-auto-promotion/1",

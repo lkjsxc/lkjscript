@@ -34,9 +34,9 @@ pub(crate) fn verify_terminator(
                 ));
             }
         }
-        Terminator::Trap { message } => {
-            if message.is_empty() {
-                return fail("SSA trap terminator has an empty diagnostic");
+        Terminator::Trap { value } => {
+            if value_type(types, *value)? != &SsaType::Str {
+                return fail("SSA trap terminator value is not Str");
             }
         }
         Terminator::Exit { code } => {

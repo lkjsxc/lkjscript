@@ -39,6 +39,14 @@ impl Expression {
                 condition.measure(next, counts);
                 measure_many(body, next, counts);
             }
+            Self::Loop { result_type, body } => {
+                result_type.measure(next, counts);
+                measure_many(body, next, counts);
+            }
+            Self::Return { value }
+            | Self::Break { value }
+            | Self::Trap { value }
+            | Self::Exit { code: value } => value.measure(next, counts),
             Self::Do { expressions } => measure_many(expressions, next, counts),
             Self::ProductValue { fields, .. } | Self::VariantValue { fields, .. } => {
                 for field in fields {

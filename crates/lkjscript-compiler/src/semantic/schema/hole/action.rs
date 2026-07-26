@@ -42,6 +42,12 @@ pub(crate) enum LegalChildKind {
     BuiltinCall,
     UserCall,
     OwnershipOperation,
+    Loop,
+    Return,
+    Break,
+    Continue,
+    Trap,
+    Exit,
     TypedHole,
 }
 

@@ -30,6 +30,7 @@ impl<'a> FunctionBuilder<'a> {
             places: Vec::new(),
             env: BTreeMap::new(),
             slots: BTreeMap::new(),
+            loops: Vec::new(),
         }
     }
 

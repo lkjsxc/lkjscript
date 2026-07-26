@@ -2,6 +2,7 @@ mod hir;
 mod source;
 mod source_match;
 mod ssa;
+mod type_charge;
 
 use lkjscript_core::{BudgetLedger, Error, ResourceCategory, Result};
 

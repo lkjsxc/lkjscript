@@ -24,9 +24,9 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
                 .get(index)
                 .filter(|item| item.id == *plan)
                 .ok_or_else(|| Error::msg("match unreachable edge has stale plan identity"))?;
-            if value.ty != planned.result_type || value.origin != planned.origin {
+            if value.ty != Type::Never || value.origin != planned.origin {
                 return Err(Error::msg(
-                    "match unreachable edge has stale type or origin",
+                    "match unreachable edge has stale Never type or origin",
                 ));
             }
             counts[index] = counts[index]
@@ -51,8 +51,15 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
             expression(then_branch, program, counts)?;
             expression(else_branch, program, counts)?;
         }
-        ExprKind::While { condition, body } => {
+        ExprKind::While {
+            condition, body, ..
+        } => {
             expression(condition, program, counts)?;
+            for child in body {
+                expression(child, program, counts)?;
+            }
+        }
+        ExprKind::Loop { body, .. } => {
             for child in body {
                 expression(child, program, counts)?;
             }
@@ -67,7 +74,11 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
             expression(initial, program, counts)?;
             expression(body, program, counts)?;
         }
-        ExprKind::SetLocal { value, .. }
+        ExprKind::Return { value }
+        | ExprKind::Break { value, .. }
+        | ExprKind::Trap { value }
+        | ExprKind::Exit { code: value }
+        | ExprKind::SetLocal { value, .. }
         | ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
         | ExprKind::EnumField { value, .. } => expression(value, program, counts)?,
@@ -87,6 +98,7 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
+        | ExprKind::Continue { .. }
         | ExprKind::QuoteSymbol(_) => {}
     }
     Ok(())

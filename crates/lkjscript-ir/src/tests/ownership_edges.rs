@@ -95,7 +95,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 ],
                 instructions: Vec::new(),
                 terminator: Terminator::Trap {
-                    message: "duplicate edge".into(),
+                    value: ValueId::new(2),
                 },
                 metadata: block_metadata(),
             },

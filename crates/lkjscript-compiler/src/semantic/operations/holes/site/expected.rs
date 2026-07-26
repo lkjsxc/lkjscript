@@ -77,6 +77,16 @@ fn child_expectation(
         "set" if index == 1 => None,
         "do" if index + 1 == parent.children.len() => inherited,
         "while" if index == 0 => Some(Type::Bool),
+        "while" => Some(Type::Unit),
+        "loop" if index == 0 => None,
+        "loop" => parent
+            .children
+            .first()
+            .and_then(super::super::types::type_form),
+        "return" if index == 0 => inherited,
+        "break" if index == 0 => inherited,
+        "trap" if index == 0 => Some(Type::Str),
+        "exit" if index == 0 => Some(Type::I64),
         "let" if index + 1 == parent.children.len() => inherited,
         "bind" if index == 1 && target => None,
         other => {

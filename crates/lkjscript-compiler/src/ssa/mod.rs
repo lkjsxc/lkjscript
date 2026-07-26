@@ -91,6 +91,14 @@ pub(in crate::ssa) struct PendingBlock {
     pub(in crate::ssa) metadata: BlockMetadata,
 }
 
+#[derive(Clone)]
+pub(in crate::ssa) struct LoopTarget {
+    pub(in crate::ssa) id: hir::LoopId,
+    pub(in crate::ssa) header: BlockId,
+    pub(in crate::ssa) exit: BlockId,
+    pub(in crate::ssa) bindings: Vec<BindingId>,
+}
+
 pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) product_ids: &'a HashMap<String, ProductId>,
     pub(in crate::ssa) function_ids: &'a HashMap<BindingId, FunctionId>,
@@ -109,4 +117,5 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) env: BTreeMap<BindingId, ValueId>,
     pub(in crate::ssa) slots: BTreeMap<BindingId, u16>,
+    pub(in crate::ssa) loops: Vec<LoopTarget>,
 }

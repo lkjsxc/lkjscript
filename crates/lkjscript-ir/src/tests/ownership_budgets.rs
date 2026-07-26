@@ -58,7 +58,7 @@ fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() 
                 parameters: Vec::new(),
                 instructions: Vec::new(),
                 terminator: Terminator::Trap {
-                    message: "bounded".into(),
+                    value: ValueId::new(0),
                 },
                 metadata: block_metadata(),
             })

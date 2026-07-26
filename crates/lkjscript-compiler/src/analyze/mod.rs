@@ -8,18 +8,18 @@ use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
     EffectSet, EnumDefinition, EnumId, EnumLayoutFacts, EnumVariant, EnumVariantField, Expr,
     ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId, LocalDefinition,
-    Main, MatchBindingAssignment, MatchEdgeTarget, MatchFieldPattern, MatchLocal, MatchPattern,
-    MatchPlan, MatchPlanCharges, MatchPlanId, MatchProjection, MatchTest, MatchTestKind, Operation,
-    Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField, RuntimeLayoutId, Source,
-    SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
-    TypeSubstitution, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH, ENUM_RECURSION_MAX_WORK,
-    MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
+    LoopId, Main, MatchBindingAssignment, MatchEdgeTarget, MatchFieldPattern, MatchLocal,
+    MatchPattern, MatchPlan, MatchPlanCharges, MatchPlanId, MatchProjection, MatchTest,
+    MatchTestKind, Operation, Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField,
+    RuntimeLayoutId, Source, SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness,
+    TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH,
+    ENUM_RECURSION_MAX_WORK, MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
 };
 use crate::source::Expr as AstExpr;
 
 pub const TRAIT_SOLVER_MAX_DEPTH: usize = 32;
 pub const TRAIT_SOLVER_MAX_WORK: usize = 256;
-use crate::source::ValidatedSourceTree;
+use crate::source::{SourceEdition, ValidatedSourceTree};
 use crate::types::parse_one;
 
 pub(crate) fn analyze_program(program: &ValidatedSourceTree) -> Result<hir::Program> {
@@ -104,6 +104,7 @@ struct Analyzer {
     function_bounds: HashMap<BindingId, Vec<TraitBound>>,
     match_plans: Vec<MatchPlan>,
     next_loan: u32,
+    edition2: bool,
 }
 
 mod declarations;
@@ -128,6 +129,16 @@ struct Resolver<'a> {
     next_slot: usize,
     max_slots: usize,
     next_place: u32,
+    return_type: Type,
+    loops: Vec<LoopContext>,
+    next_loop: u32,
+}
+
+#[derive(Clone)]
+struct LoopContext {
+    id: LoopId,
+    result_type: Type,
+    is_while: bool,
 }
 
 struct PendingFunction<'a> {

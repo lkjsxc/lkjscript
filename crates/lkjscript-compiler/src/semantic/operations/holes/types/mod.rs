@@ -7,6 +7,7 @@ use crate::source::{SourceNode, SyntaxKind};
 
 pub(crate) fn canonical(ty: &Type) -> String {
     match ty {
+        Type::Never => "Never".into(),
         Type::Unit => "Unit".into(),
         Type::Bool => "Bool".into(),
         Type::I64 => "I64".into(),
@@ -147,6 +148,7 @@ pub(super) fn source_name(node: &SourceNode) -> Option<&str> {
 pub(super) fn ownership(ty: &Type) -> crate::semantic::schema::OwnershipAccess {
     use crate::semantic::schema::OwnershipAccess;
     match ty {
+        Type::Never => OwnershipAccess::Unavailable,
         Type::Owned(_) => OwnershipAccess::Move,
         Type::Ref(_) => OwnershipAccess::SharedBorrow,
         Type::RefMut(_) => OwnershipAccess::MutableBorrow,

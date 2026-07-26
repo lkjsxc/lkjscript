@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::plan::{
     BlockId, FunctionDeclaration, FunctionId, FunctionPlan, LocalId, Operation, ReferenceType,
-    RuntimeCallSlot, Signature, Terminator, ValueDefinition, ValueId, ValueType,
+    RuntimeCallSlot, Signature, Terminator, TrapCode, ValueDefinition, ValueId, ValueType,
 };
 use crate::BackendLimits;
 

@@ -2,6 +2,8 @@ use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
+    /// Uninhabited, join-only control type. It is never lowered as a value.
+    Never,
     Unit,
     Bool,
     I64,
@@ -40,6 +42,32 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn contains_never(&self) -> bool {
+        match self {
+            Self::Never => true,
+            Self::Owned(inner)
+            | Self::Ref(inner)
+            | Self::RefMut(inner)
+            | Self::List(inner)
+            | Self::Option(inner) => inner.contains_never(),
+            Self::Enum { arguments, .. } => arguments.iter().any(Self::contains_never),
+            Self::Result(ok, error) => ok.contains_never() || error.contains_never(),
+            Self::Fn { params, ret } => {
+                params.iter().any(Self::contains_never) || ret.contains_never()
+            }
+            Self::Forall { body, .. } => body.contains_never(),
+            _ => false,
+        }
+    }
+
+    pub fn join_control(left: &Type, right: &Type) -> Option<Type> {
+        match (left, right) {
+            (Self::Never, other) | (other, Self::Never) => Some(other.clone()),
+            (left, right) if left == right => Some(left.clone()),
+            _ => None,
+        }
+    }
+
     pub fn parse_atoms(atoms: &[String]) -> Result<(Vec<Type>, Type), String> {
         let arrow = atoms
             .iter()

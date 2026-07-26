@@ -39,3 +39,25 @@ fn rejects_missing_terminator_and_uninitialized_local() -> Result<(), Box<dyn st
     ));
     Ok(())
 }
+
+#[test]
+fn rejects_non_string_explicit_trap_value() -> Result<(), Box<dyn std::error::Error>> {
+    let mut plan = MachinePlanBuilder::new();
+    let function = plan.declare_function(
+        SourceFunctionId::new(3),
+        Signature::new(vec![], ValueType::I64)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let value = builder.i64_const(entry, 7)?;
+    builder.trap_value(entry, value)?;
+    plan.define_function(builder.finish())?;
+    assert!(matches!(
+        plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            "explicit trap value"
+        )))
+    ));
+    Ok(())
+}

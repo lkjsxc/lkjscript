@@ -2,10 +2,7 @@ use crate::analyze::*;
 
 impl Resolver<'_> {
     pub(in crate::analyze) fn resolve_do(&mut self, args: &[AstExpr]) -> Result<Expr> {
-        let mut expressions = Vec::with_capacity(args.len());
-        for argument in args {
-            expressions.push(self.resolve_expr(argument)?);
-        }
+        let expressions = self.resolve_control_body(args)?;
         let ty = expressions
             .last()
             .map_or(Type::Unit, |expression| expression.ty.clone());
@@ -22,13 +19,12 @@ impl Resolver<'_> {
         }
         let then_branch = self.resolve_expr(then_branch)?;
         let else_branch = self.resolve_expr(else_branch)?;
-        if then_branch.ty != else_branch.ty {
-            return Err(self.error(format!(
-                "if branches must have the same type: {:?} vs {:?}",
+        let ty = Type::join_control(&then_branch.ty, &else_branch.ty).ok_or_else(|| {
+            self.error(format!(
+                "if reachable branches must have the same type: {:?} vs {:?}",
                 then_branch.ty, else_branch.ty
-            )));
-        }
-        let ty = then_branch.ty.clone();
+            ))
+        })?;
         Ok(self.expression(
             ty,
             ExprKind::If {
@@ -47,13 +43,22 @@ impl Resolver<'_> {
         if !Type::unify_assignable(&condition.ty, &Type::Bool) {
             return Err(self.error("while condition must be Bool"));
         }
-        let mut resolved_body = Vec::with_capacity(body.len());
-        for expression in body {
-            resolved_body.push(self.resolve_expr(expression)?);
-        }
+        let loop_id = LoopId::new(self.next_loop);
+        self.next_loop = self
+            .next_loop
+            .checked_add(1)
+            .ok_or_else(|| self.error("loop identity space exhausted"))?;
+        self.loops.push(LoopContext {
+            id: loop_id,
+            result_type: Type::Unit,
+            is_while: true,
+        });
+        let resolved_body = self.resolve_control_body(body)?;
+        let _target = self.loops.pop();
         Ok(self.expression(
             Type::Unit,
             ExprKind::While {
+                loop_id,
                 condition: Box::new(condition),
                 body: resolved_body,
             },
@@ -79,6 +84,9 @@ impl Resolver<'_> {
                 _ => return Err(self.error("let bindings must be bind/…/bind")),
             };
             let value = self.resolve_expr(value)?;
+            if value.ty == Type::Never {
+                return Err(self.error("divergent expression cannot initialize a let storage slot"));
+            }
             let slot = u8::try_from(self.next_slot)
                 .map_err(|_| self.error("let needs more than 255 bytecode local slots"))?;
             self.next_slot = self

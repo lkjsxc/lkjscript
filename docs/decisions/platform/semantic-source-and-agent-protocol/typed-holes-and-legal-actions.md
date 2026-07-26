@@ -11,7 +11,8 @@ legal actions, and checked hole transactions.
 
 **Current.** Semantic Source Schema V2 implements typed expression holes,
 `hole_context`, `legal_actions`, and the four closed hole transactions over the
-Current Edition 1 expression subset. Schema V1 input is historical and rejected.
+Current Edition 1 expression subset plus Current Edition 2 enum, match,
+Never, and structured-control forms. Schema V1 input is historical and rejected.
 
 ## Typed Holes
 
@@ -60,8 +61,11 @@ construction. Budget exhaustion cannot be presented as an empty complete
 result. Unsupported contexts return explicit unsupported, then ordinary
 authoring may use bounded compiler validation. Edition 1 has exact import paths
 but no qualification syntax, so no import or qualification edit is invented;
-that absence is an explicit blocker. Match, return, break, continue, and Never
-forms are likewise explicit Edition 1 blockers rather than suggestions.
+that absence is an explicit blocker. Match, return, break, continue, and Never forms remain explicit Edition 1
+blockers. In Edition 2, checker-valid loop/return/break/continue/trap/exit
+candidates and legal child kinds are emitted only at exact legal sites; context
+reports the function return, nearest-loop result/depth, available forms, and
+whether Never is admissible.
 
 ## Transactions
 

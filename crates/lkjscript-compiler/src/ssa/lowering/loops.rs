@@ -1,134 +1,184 @@
 use crate::ssa::*;
 
+struct OpenLoop {
+    target: LoopTarget,
+    header_env: BTreeMap<BindingId, ValueId>,
+    exit_env: BTreeMap<BindingId, ValueId>,
+}
+
 impl FunctionBuilder<'_> {
+    fn open_loop(
+        &mut self,
+        loop_id: hir::LoopId,
+        result_type: SsaType,
+        expression: &Expr,
+    ) -> Result<OpenLoop> {
+        let preheader = self
+            .current
+            .ok_or_else(|| Error::msg("loop has no live SSA preheader"))?;
+        let incoming = self.env.clone();
+        let bindings: Vec<_> = incoming.keys().copied().collect();
+        let block_origin = origin(expression.origin.raw(), self.next_position);
+        let header = self.new_block(block_origin, true)?;
+        let exit = self.new_block(block_origin, false)?;
+        let header_env = self.add_environment_parameters(header, &incoming, block_origin)?;
+        let _result = self.add_block_parameter(exit, result_type, None, block_origin)?;
+        let exit_env = self.add_environment_parameters(exit, &incoming, block_origin)?;
+        self.current = Some(preheader);
+        self.terminate(Terminator::Branch {
+            target: header,
+            arguments: Self::environment_arguments(&incoming),
+        })?;
+        Ok(OpenLoop {
+            target: LoopTarget {
+                id: loop_id,
+                header,
+                exit,
+                bindings,
+            },
+            header_env,
+            exit_env,
+        })
+    }
+
+    fn close_loop(
+        &mut self,
+        target: LoopTarget,
+        exit_env: BTreeMap<BindingId, ValueId>,
+        incoming_slots: BTreeMap<BindingId, u16>,
+    ) -> Result<Option<ValueId>> {
+        let result = self
+            .block_mut(target.exit)?
+            .parameters
+            .first()
+            .map(|parameter| parameter.id)
+            .ok_or_else(|| Error::msg("typed loop exit lost result parameter"))?;
+        self.switch_to(target.exit)?;
+        self.env = exit_env;
+        self.slots = incoming_slots;
+        Ok(Some(result))
+    }
+
+    pub(in crate::ssa) fn lower_loop(
+        &mut self,
+        loop_id: hir::LoopId,
+        result_type: &Type,
+        body: &[Expr],
+        expression: &Expr,
+    ) -> Result<Option<ValueId>> {
+        let slots = self.slots.clone();
+        let result_type = lower_type(result_type, self.product_ids)?;
+        let OpenLoop {
+            target,
+            header_env,
+            exit_env,
+        } = self.open_loop(loop_id, result_type, expression)?;
+        self.switch_to(target.header)?;
+        self.env = header_env;
+        self.block_mut(target.header)?.metadata.frame_state = Some(self.frame_state());
+        self.loops.push(target.clone());
+        let body_result = self.lower_sequence(body, expression.origin)?;
+        let _active = self.loops.pop();
+        if body_result.is_some() {
+            let arguments = self.loop_environment_for(&target)?;
+            self.terminate(Terminator::Branch {
+                target: target.header,
+                arguments,
+            })?;
+        }
+        self.clear_noncyclic_header(&target)?;
+        self.close_loop(target, exit_env, slots)
+    }
+
     pub(in crate::ssa) fn lower_while(
         &mut self,
+        loop_id: hir::LoopId,
         condition: &Expr,
         body: &[Expr],
         expression: &Expr,
     ) -> Result<Option<ValueId>> {
-        let preheader = self
-            .current
-            .ok_or_else(|| Error::msg("while has no live SSA preheader"))?;
-        let incoming_env = self.env.clone();
-        let incoming_slots = self.slots.clone();
-        let bindings: Vec<BindingId> = incoming_env.keys().copied().collect();
-        let header = self.new_block(origin(expression.origin.raw(), self.next_position), true)?;
-        let mut header_env = BTreeMap::new();
-        for binding in &bindings {
-            let incoming = incoming_env
-                .get(binding)
-                .copied()
-                .ok_or_else(|| Error::msg("SSA loop lost incoming binding"))?;
-            let ty = self.value_type(incoming)?;
-            let owner_place = self.owned_place_for_binding(*binding)?;
-            let parameter = self.add_block_parameter(
-                header,
-                ty,
-                owner_place,
-                origin(expression.origin.raw(), self.next_position),
-            )?;
-            header_env.insert(*binding, parameter);
-        }
-        self.current = Some(preheader);
-        self.terminate(Terminator::Branch {
-            target: header,
-            arguments: bindings
-                .iter()
-                .map(|binding| {
-                    incoming_env
-                        .get(binding)
-                        .copied()
-                        .ok_or_else(|| Error::msg("SSA loop preheader lost binding"))
-                })
-                .collect::<Result<Vec<_>>>()?,
-        })?;
-        self.switch_to(header)?;
+        let slots = self.slots.clone();
+        let OpenLoop {
+            target,
+            header_env,
+            exit_env,
+        } = self.open_loop(loop_id, SsaType::Unit, expression)?;
+        self.switch_to(target.header)?;
         self.env = header_env;
-        self.slots = incoming_slots.clone();
-        let header_frame = self.frame_state();
-        self.block_mut(header)?.metadata.frame_state = Some(header_frame);
-
+        self.slots = slots.clone();
+        self.block_mut(target.header)?.metadata.frame_state = Some(self.frame_state());
+        self.loops.push(target.clone());
         let Some(condition_value) = self.lower_expr(condition)? else {
-            self.current = None;
-            return Ok(None);
+            let _active = self.loops.pop();
+            self.clear_noncyclic_header(&target)?;
+            return self.close_loop(target, exit_env, slots);
         };
         let condition_env = self.env.clone();
         let body_block =
             self.new_block(origin(expression.origin.raw(), self.next_position), false)?;
-        let exit_block =
-            self.new_block(origin(expression.origin.raw(), self.next_position), false)?;
-        let mut body_env = BTreeMap::new();
-        let mut exit_env = BTreeMap::new();
-        for binding in &bindings {
-            let value = condition_env
-                .get(binding)
-                .copied()
-                .ok_or_else(|| Error::msg("SSA loop condition lost binding"))?;
-            let ty = self.value_type(value)?;
-            let owner_place = self.owned_place_for_binding(*binding)?;
-            let body_parameter = self.add_block_parameter(
-                body_block,
-                ty.clone(),
-                owner_place,
-                origin(expression.origin.raw(), self.next_position),
-            )?;
-            body_env.insert(*binding, body_parameter);
-            let exit_parameter = self.add_block_parameter(
-                exit_block,
-                ty,
-                owner_place,
-                origin(expression.origin.raw(), self.next_position),
-            )?;
-            exit_env.insert(*binding, exit_parameter);
-        }
-        let condition_arguments: Vec<ValueId> = bindings
-            .iter()
-            .map(|binding| {
-                condition_env
-                    .get(binding)
-                    .copied()
-                    .ok_or_else(|| Error::msg("SSA loop edge lost binding"))
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let body_env = self.add_environment_parameters(
+            body_block,
+            &condition_env,
+            origin(expression.origin.raw(), self.next_position),
+        )?;
+        let unit = self.constant(SsaType::Unit, Constant::Unit, expression.origin)?;
+        let mut exit_arguments = vec![unit];
+        exit_arguments.extend(Self::environment_arguments(&condition_env));
         self.terminate(Terminator::ConditionalBranch {
             condition: condition_value,
             true_target: body_block,
-            true_arguments: condition_arguments.clone(),
-            false_target: exit_block,
-            false_arguments: condition_arguments,
+            true_arguments: Self::environment_arguments(&condition_env),
+            false_target: target.exit,
+            false_arguments: exit_arguments,
         })?;
-
         self.switch_to(body_block)?;
         self.env = body_env;
-        self.slots = incoming_slots.clone();
+        self.slots = slots.clone();
         let body_result = self.lower_sequence(body, expression.origin)?;
-        let mut has_backedge = false;
+        let _active = self.loops.pop();
         if body_result.is_some() {
-            let arguments = bindings
-                .iter()
-                .map(|binding| {
-                    self.env
-                        .get(binding)
-                        .copied()
-                        .ok_or_else(|| Error::msg("SSA loop body lost binding"))
-                })
-                .collect::<Result<Vec<_>>>()?;
+            let arguments = self.loop_environment_for(&target)?;
             self.terminate(Terminator::Branch {
-                target: header,
+                target: target.header,
                 arguments,
             })?;
-            has_backedge = true;
         }
-        if !has_backedge {
-            self.block_mut(header)?.metadata.loop_header = false;
-            self.block_mut(header)?.metadata.frame_state = None;
-        }
+        self.clear_noncyclic_header(&target)?;
+        self.close_loop(target, exit_env, slots)
+    }
 
-        self.switch_to(exit_block)?;
-        self.env = exit_env;
-        self.slots = incoming_slots;
-        self.constant(SsaType::Unit, Constant::Unit, expression.origin)
-            .map(Some)
+    fn clear_noncyclic_header(&mut self, target: &LoopTarget) -> Result<()> {
+        let incoming = self
+            .blocks
+            .iter()
+            .filter(|block| match block.terminator.as_ref() {
+                Some(Terminator::Branch { target: edge, .. }) => *edge == target.header,
+                Some(Terminator::ConditionalBranch {
+                    true_target,
+                    false_target,
+                    ..
+                }) => *true_target == target.header || *false_target == target.header,
+                _ => false,
+            })
+            .count();
+        if incoming <= 1 {
+            let header = self.block_mut(target.header)?;
+            header.metadata.loop_header = false;
+            header.metadata.frame_state = None;
+        }
+        Ok(())
+    }
+
+    fn loop_environment_for(&self, target: &LoopTarget) -> Result<Vec<ValueId>> {
+        target
+            .bindings
+            .iter()
+            .map(|binding| {
+                self.env
+                    .get(binding)
+                    .copied()
+                    .ok_or_else(|| Error::msg("SSA loop body lost environment binding"))
+            })
+            .collect()
     }
 }

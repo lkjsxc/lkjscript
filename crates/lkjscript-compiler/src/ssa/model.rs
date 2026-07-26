@@ -60,6 +60,7 @@ pub(in crate::ssa) fn lower_type(
     products: &HashMap<String, ProductId>,
 ) -> Result<SsaType> {
     Ok(match ty {
+        Type::Never => return Err(Error::msg("Never has no SSA value representation")),
         Type::Unit => SsaType::Unit,
         Type::Bool => SsaType::Bool,
         Type::I64 => SsaType::I64,

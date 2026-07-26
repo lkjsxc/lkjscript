@@ -20,6 +20,9 @@ impl Resolver<'_> {
         }
         let declared_type = parse_type_form(type_args)
             .map_err(|message| self.error(format!("var {name}: {message}")))?;
+        if declared_type.contains_never() {
+            return Err(self.error(format!("var {name}: Never is not a storage-slot type")));
+        }
         if matches!(declared_type, Type::Ref(_) | Type::RefMut(_)) {
             return Err(self.error(format!(
                 "var {name}: lexical references may only be inferred let bindings or parameters"
@@ -114,6 +117,11 @@ impl Resolver<'_> {
                 self.error(format!("set target {target_name} has no HIR local slot"))
             })?;
         let value = self.resolve_expr(value_ast)?;
+        if value.ty == Type::Never {
+            return Err(self.error(format!(
+                "set target {target_name}: divergent value cannot fill a storage slot"
+            )));
+        }
         if value.ty != target_type {
             return Err(self.error(format!(
                 "set target {target_name}: value type {:?} does not exactly equal {target_type:?}",

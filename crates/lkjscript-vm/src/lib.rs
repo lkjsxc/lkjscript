@@ -45,7 +45,8 @@ mod tests {
         chunk
             .constants
             .push(Constant::Str("explicit SSA trap".into()));
-        chunk.main.emit_op_u16(Op::Trap, 0);
+        chunk.main.emit_op_u16(Op::LoadConst, 0);
+        chunk.main.emit(Op::Trap);
         let chunk = validate_chunk(chunk, &ValidationLimits::default()).expect("validate trap");
         match run_chunk(&chunk, &lkjscript_core::ExecutionConfig::default()) {
             ExecutionOutcome::Trapped(trap) => assert_eq!(trap.as_str(), "explicit SSA trap"),

@@ -77,30 +77,6 @@ impl FunctionBuilder {
         )
     }
 
-    pub fn set_instruction_source(
-        &mut self,
-        value: ValueId,
-        source: SourceOrigin,
-    ) -> Result<(), PlanError> {
-        self.check_value(value)?;
-        let block_id = match self
-            .values
-            .get(value.index as usize)
-            .map(|fact| &fact.definition)
-        {
-            Some(ValueDefinition::Instruction(block)) => *block,
-            _ => return Err(PlanError::UnknownValue),
-        };
-        let block = self.block_mut(block_id)?;
-        let instruction = block
-            .instructions
-            .iter_mut()
-            .find(|instruction| instruction.output == value)
-            .ok_or(PlanError::UnknownValue)?;
-        instruction.source = Some(source);
-        Ok(())
-    }
-
     pub fn branch(&mut self, block: BlockId, target: BlockId) -> Result<(), PlanError> {
         self.check_block(target)?;
         self.terminate(block, Terminator::Branch(target))
@@ -132,7 +108,26 @@ impl FunctionBuilder {
     }
 
     pub fn trap(&mut self, block: BlockId, trap: TrapCode) -> Result<(), PlanError> {
-        self.terminate(block, Terminator::Trap { trap, site: None })
+        self.terminate(
+            block,
+            Terminator::Trap {
+                trap,
+                site: None,
+                value: None,
+            },
+        )
+    }
+
+    pub fn trap_value(&mut self, block: BlockId, value: ValueId) -> Result<(), PlanError> {
+        self.check_value(value)?;
+        self.terminate(
+            block,
+            Terminator::Trap {
+                trap: TrapCode::Explicit,
+                site: None,
+                value: Some(value),
+            },
+        )
     }
 
     pub fn trap_at(&mut self, block: BlockId, trap: TrapCode, site: u32) -> Result<(), PlanError> {
@@ -141,6 +136,7 @@ impl FunctionBuilder {
             Terminator::Trap {
                 trap,
                 site: Some(site),
+                value: None,
             },
         )
     }

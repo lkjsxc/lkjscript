@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    Chunk, Constant, DecodedInstruction, Error, FunctionProto, Op, Result, ValidationLimits,
+    Chunk, DecodedInstruction, Error, FunctionProto, Op, Result, ValidationLimits,
     MAX_FUNCTION_CODE_BYTES,
 };
 
@@ -85,12 +85,6 @@ pub(super) fn validate_instruction_operands(
                 let index = operand_index(operand, proto, op, at)?;
                 if index >= chunk.constants.len() {
                     return operand_error(proto, op, at, "constant index out of range");
-                }
-            }
-            Op::Trap => {
-                let index = operand_index(operand, proto, op, at)?;
-                if !matches!(chunk.constants.get(index), Some(Constant::Str(_))) {
-                    return operand_error(proto, op, at, "trap diagnostic must be a Str constant");
                 }
             }
             Op::LoadLocal | Op::StoreLocal => {

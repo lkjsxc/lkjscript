@@ -5,7 +5,7 @@ pub(super) fn lower_terminator(
     block: &Block,
     context: TerminatorContext<'_>,
     builder: &mut FunctionBuilder,
-    explicit_traps: &mut Vec<(u32, String)>,
+    _explicit_traps: &mut Vec<(u32, String)>,
 ) -> Result<(), LoweringError> {
     let native_block = context.native_block;
     let edges = context.edges;
@@ -57,17 +57,10 @@ pub(super) fn lower_terminator(
                 .return_value(native_block, value)
                 .map_err(LoweringError::backend)?;
         }
-        Terminator::Trap { message } => {
-            let site = u32::try_from(explicit_traps.len()).map_err(|_| {
-                LoweringError::new(
-                    LoweringFailureCode::Backend,
-                    Some(function.id),
-                    "explicit trap-site identity space exhausted",
-                )
-            })?;
-            explicit_traps.push((site, message.clone()));
+        Terminator::Trap { value } => {
+            let value = read_value(builder, native_block, locals, *value, function.id)?;
             builder
-                .trap_at(native_block, TrapCode::Explicit, site)
+                .trap_value(native_block, value)
                 .map_err(LoweringError::backend)?;
         }
         Terminator::Exit { code } => {

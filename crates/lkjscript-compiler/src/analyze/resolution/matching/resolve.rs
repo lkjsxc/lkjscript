@@ -27,11 +27,15 @@ impl Resolver<'_> {
         let scrutinee = self.allocate_hidden_match_local(scrutinee_value.ty.clone())?;
         let arm_slot = self.next_slot;
         let (planned, bodies) = self.resolve_match_arms(arm_forms, &scrutinee, arm_slot)?;
-        let result_type = bodies
-            .first()
-            .ok_or_else(|| self.error("match lost all arms"))?
-            .ty
-            .clone();
+        let mut result_type = Type::Never;
+        for body in &bodies {
+            result_type = Type::join_control(&result_type, &body.ty).ok_or_else(|| {
+                self.error(format!(
+                    "reachable match arm types must be exactly equal: {:?} vs {:?}",
+                    result_type, body.ty
+                ))
+            })?;
+        }
         let patterns: Vec<_> = planned.iter().map(|arm| arm.pattern.clone()).collect();
         let charges = super::charges::plan(&patterns, planned.len())?;
         self.check_usefulness(&planned, &scrutinee, &charges)?;
@@ -59,7 +63,7 @@ impl Resolver<'_> {
             charges,
         });
         let mut lowered =
-            self.expression(result_type, ExprKind::MatchUnreachable { plan: plan_id });
+            self.expression(Type::Never, ExprKind::MatchUnreachable { plan: plan_id });
         for (arm, body) in planned.iter().zip(bodies).rev() {
             let value = self.match_load(&scrutinee);
             let condition = self.match_condition(&arm.pattern, value.clone())?;
@@ -97,12 +101,6 @@ impl Resolver<'_> {
             let body = self.resolve_expr(body_form)?;
             self.scopes.pop();
             self.next_slot = arm_slot;
-            if bodies.first().is_some_and(|first| body.ty != first.ty) {
-                return Err(self.error(format!(
-                    "match arm types must be exactly equal: {:?} vs {:?}",
-                    bodies[0].ty, body.ty,
-                )));
-            }
             planned.push(PlannedMatchArm {
                 id,
                 pattern,

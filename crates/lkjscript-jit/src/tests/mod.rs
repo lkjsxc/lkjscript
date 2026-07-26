@@ -37,6 +37,22 @@ fn core_traits() -> Vec<TraitMetadata> {
 }
 
 fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir::VerifiedProgram {
+    let instructions = if matches!(terminator, Terminator::Trap { .. }) {
+        vec![Instruction {
+            id: ValueId::new(0),
+            ty: SsaType::Str,
+            kind: InstructionKind::Constant(Constant::Str("exact native trap".into())),
+            metadata: InstructionMetadata {
+                origin: Origin::SYNTHETIC,
+                effects: EffectSet::PURE,
+                safepoint: IrSafepoint::None,
+                failure: FailureBehavior::None,
+                frame_state: None,
+            },
+        }]
+    } else {
+        Vec::new()
+    };
     verify(Program {
         sources: vec![SourceMetadata {
             id: 0,
@@ -56,7 +72,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
             blocks: vec![Block {
                 id: BlockId::new(0),
                 parameters: Vec::new(),
-                instructions: Vec::new(),
+                instructions,
                 terminator,
                 metadata: BlockMetadata {
                     loop_header: false,

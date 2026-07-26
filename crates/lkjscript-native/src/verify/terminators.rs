@@ -41,7 +41,19 @@ pub(super) fn verify_terminator(
                 return Err(VerificationError::InvalidReturn(function.id));
             }
         }
-        Terminator::Trap { .. } | Terminator::Outcome(_) => {}
+        Terminator::Trap { trap, site, value } => {
+            if site.is_some() && value.is_some() {
+                return Err(VerificationError::TypeMismatch("trap payload identity"));
+            }
+            if let Some(value) = value {
+                if *trap != TrapCode::Explicit
+                    || value_type(function, *value)? != ValueType::Reference(ReferenceType::Str)
+                {
+                    return Err(VerificationError::TypeMismatch("explicit trap value"));
+                }
+            }
+        }
+        Terminator::Outcome(_) => {}
         Terminator::Exit(code) => {
             if value_type(function, *code)? != ValueType::I64 {
                 return Err(VerificationError::TypeMismatch("exit status"));

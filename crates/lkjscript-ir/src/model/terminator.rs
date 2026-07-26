@@ -29,7 +29,7 @@ pub enum Terminator {
     },
     Return(ValueId),
     Trap {
-        message: String,
+        value: ValueId,
     },
     Exit {
         code: ValueId,
@@ -60,8 +60,7 @@ impl Terminator {
                 values.extend(false_arguments);
                 values
             }
-            Self::Return(value) | Self::Exit { code: value } => vec![*value],
-            Self::Trap { .. } => Vec::new(),
+            Self::Return(value) | Self::Trap { value } | Self::Exit { code: value } => vec![*value],
             Self::Outcome { detail, .. } => detail.iter().copied().collect(),
         }
     }

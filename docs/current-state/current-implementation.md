@@ -10,9 +10,8 @@
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
 - Corpus: all canonical language files under `src` have executable roots covering the exact corpus closure
 - Physical format: one column-one marker/atom per line. Edition 1 has no marker.
-  Edition 2 requires exact first form `edition/`, `2`, `/edition`; leading trivia
-  is retained, loaded units must agree, and the marker consumes no body token or
-  top-level declaration budget
+  Edition 2 requires exact first form `edition/`, `2`, `/edition`; leading trivia is retained and loaded units agree.
+  The marker remains inside the token limit but does not consume the top-level declaration limit
 - Semantic Source V2: public identity `lkjscript.semantic-source` version 2;
   version 1 input is historical and rejected. One opaque immutable
   `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition
@@ -31,8 +30,11 @@
   through the same engine. Nonzero query caching, shared ledgers, and
   unavailable exact downstream correlations remain non-Current. Schema V2 also
   represents Edition 2 without another version: identities are edition-separated,
-  snapshots expose marker/number nodes, source/tree identity facts, and stable
-  generic enum declaration/variant/field/type identities
+  snapshots expose marker/number nodes, source/tree identity facts, stable
+  generic enum declaration/variant/field/type identities, Never type nodes,
+  and closed loop/return/break/continue/trap/exit expressions. Edition 2 hole
+  context and legal actions expose checker-valid available control forms,
+  function/nearest-loop requirements, and exact Never admissibility
 - Migration: `check_edition2_migration` pins a homogeneous closure revision,
   pre-reserves Profile V2 staging, inserts only the marker after leading trivia,
   and reports exact old/new editions, bytes, identities, revisions, offsets, and
@@ -65,8 +67,7 @@
   local-slot references, MutableLocal/SetLocal, ProductIds, stable EnumIds/VariantIds/
   VariantFieldIds, invariant enum substitutions, dense TraitIds/ImplIds, marker
   witnesses, source origins, exact type facts, and fixed-point function effects;
-  HIR lowers once into verified typed
-  SSA, deterministic baseline normalization, and then reference bytecode
+  HIR lowers once into verified typed SSA, deterministic baseline normalization, and then reference bytecode
 - Typed SSA: dependency-free `lkjscript-ir` owns dense function/block/value
   identities, exact types, nominal product metadata, dense trait/impl metadata,
   generic signature bounds, canonical substitutions and erased marker witness
@@ -126,12 +127,10 @@
   metadata, and validated bytecode through an explicit accessor
 - Outcomes: VM execution distinguishes returned, exited, trapped, deadline,
   resource-limit, and host-failure outcomes; the core does not terminate the
-  process, returned heap values own their reachable storage, and cleanup occurs
-  before CLI exit-status translation
+  process, returned heap values own their reachable storage, and cleanup occurs before CLI exit-status translation
 - Runtime budgets: explicit configuration bounds fuel, stack values, frames,
   estimated live heap, aggregate allocations, handles, output, and cooperative
-  wall time; hard-deadline mode rejects host wrappers that cannot guarantee
-  cancellation
+  wall time; hard-deadline mode rejects host wrappers that cannot guarantee cancellation
 - Semantics: executable roots have exactly one no-parameter typed main;
   imports contain declarations only; top-level `do` and runtime value defs are
   removed; `var` introduces one exactly typed mutable local and local-only
@@ -143,8 +142,12 @@
   exact construction, access, and immutable replacement. Edition 2 enum
   declarations/type facts and exact `variant-value` construction are Current
   through HIR, verified SSA, evaluator, bytecode/VM, boxed active-payload GC,
-  and forced Linux x86-64 baseline/proof JIT.
-  Exhaustive match is Current through bounded plans and all four engines; host-native enum transitions are absent
+  and forced Linux x86-64 baseline/proof JIT. Exhaustive match is Current through bounded plans and all four engines.
+  Edition 2 `Never` is a join-only HIR type with no SSA/runtime/storage/ABI
+  value; typed loop/while block parameters, early return, nearest break and
+  continue, dynamic Str trap values, and structured exit are Current through
+  evaluator, validated bytecode/reference VM, and forced baseline/proof JIT
+  with zero fallback. Host-native enum transitions are absent
 - Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
   fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
   aggregate ownership-analysis budget; lexical place initialization/end;
@@ -156,8 +159,7 @@
   same-block loan uses, and global LoanId uniqueness after every pass. General
   SSA CFG validation requires dense block order, at most 4,096 blocks per
   function, bitset dominators, and at most 4,194,304 charged word operations.
-  Affine cross-block values require explicit typed block arguments. `Owned Buf` is
-  affine, shared references are
+  Affine cross-block values require explicit typed block arguments. `Owned Buf` is affine, shared references are
   Copy, exclusive references are affine, and all three are
   worker-local/non-Send/non-Sync. Legacy `Buf` semantics are unchanged.
   Borrow is accepted only as an exact direct reference argument or direct let
@@ -165,8 +167,7 @@
   Ownership/reference generic instantiation and direct/nested product or
   collection storage are rejected. References cannot escape, Borrow results
   cannot cross SSA blocks, loop cycles reject Move/Borrow and cannot carry
-  changed owner/loan state, `RefMut` user-call forwarding is rejected, and
-  cleanup is not deterministic user `Drop`
+  changed owner/loan state, `RefMut` user-call forwarding is rejected, and cleanup is not deterministic user `Drop`
 - Marker traits: declaration-only top-level traits and exact nominal-product
   impls are Current across imports; generic `bounds/` are solved at concrete
   calls with exact explicit ImplId or structural auto-trait witnesses. Core
@@ -180,13 +181,11 @@
   source closure is the temporary coherence domain. Bounded generics require a
   concrete direct call; generic-context forwarding and first-class bounded
   function values are explicitly rejected in this slice. Methods,
-  associated items, generic/blanket impls, specialization, dynamic dispatch,
-  and package orphan rules are not Current
+  associated items, generic/blanket impls, specialization, dynamic dispatch, and package orphan rules are not Current
 - Numerics: canonical I64/F64 only; complete I64 uses signed 61-bit immediates
   plus boxed wide values, F64 remains distinct, arithmetic/comparison is
   checked or IEEE as declared, and narrower host domains reject truncation
-- CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub
-  was removed
+- CLI: `run`, real bytecode `disasm`, help, and version; the unlabeled REPL stub was removed
 - Workloads: hello, native lkjscript Mandelbrot, Brainfuck interpreted by
   lkjscript, lkjedit, one-shot HTTP, and Leibniz comparison; Brainfuck,
   terminal, and editor state is passed explicitly in immutable nominal products

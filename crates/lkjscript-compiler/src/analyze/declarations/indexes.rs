@@ -27,6 +27,7 @@ impl Analyzer {
             function_bounds: HashMap::new(),
             match_plans: Vec::new(),
             next_loan: 0,
+            edition2: program.edition() == SourceEdition::Edition2,
         })
     }
 

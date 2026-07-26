@@ -12,6 +12,7 @@ pub(crate) fn classify(
     parent: Option<&SourceNode>,
     parent_kind: Option<Kind>,
     index: usize,
+    edition2: bool,
 ) -> (Kind, Option<Value>) {
     match &node.kind {
         SyntaxKind::EditionMarker => (
@@ -41,7 +42,7 @@ pub(crate) fn classify(
         SyntaxKind::Str { value } => classify_text(value, parent),
         SyntaxKind::Symbol { name } => classify_symbol(name, parent, parent_kind, index),
         SyntaxKind::Call { name } if name == "hole" => (Kind::TypedHole, hole::value(node)),
-        SyntaxKind::Call { name } => classify_call(node, name, parent),
+        SyntaxKind::Call { name } => classify_call(node, name, parent, edition2),
     }
 }
 
@@ -120,6 +121,7 @@ fn classify_call(
     node: &SourceNode,
     name: &str,
     parent: Option<&SourceNode>,
+    edition2: bool,
 ) -> (Kind, Option<Value>) {
     if let Some(kind) = matches::call(node, name) {
         return (kind, None);
@@ -156,6 +158,12 @@ fn classify_call(
         "set" => Kind::Set,
         "if" => Kind::If,
         "while" => Kind::While,
+        "loop" if edition2 => Kind::Loop,
+        "return" if edition2 => Kind::Return,
+        "break" if edition2 => Kind::Break,
+        "continue" if edition2 => Kind::Continue,
+        "trap" if edition2 => Kind::Trap,
+        "exit" if edition2 => Kind::Exit,
         "do" => Kind::Do,
         "quote" => Kind::Quote,
         "product-value" => Kind::ProductValue,

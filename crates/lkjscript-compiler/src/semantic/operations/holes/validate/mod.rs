@@ -1,7 +1,7 @@
 mod witness;
 
 use witness::scoped_witness;
-pub(super) use witness::witness;
+pub(super) use witness::{type_expression, witness};
 
 use std::collections::BTreeSet;
 
@@ -83,6 +83,9 @@ pub(super) fn completed_tree(
     }
     replacements.sort_by_key(|(index, _)| std::cmp::Reverse(*index));
     for (index, expression) in replacements {
+        if !expression.supports_edition(tree.edition()) {
+            return Err("hole expression requires Edition 2".into());
+        }
         let target = crate::semantic::transaction::node_mut(&mut files, index)
             .ok_or("hole node disappeared during validation")?;
         *target = expression.to_source(target.span)?;

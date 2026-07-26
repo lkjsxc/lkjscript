@@ -10,12 +10,13 @@ them become implementation claims.
 
 <!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
+<!-- LKJ-STATUS id=edition-2-never-control/1 status=current -->
 
 **Accepted Target overall.** Explicit identity/non-publishing migration and the
-generic enum declaration/resolved-type-fact, construction/evaluator/reference-
-VM, and forced Linux x86-64 baseline/proof JIT slice are Current. Patterns,
-source match, automatic/host-native enum transitions, changed semantics beyond
-this slice, semantic publication, corpus migration,
+generic enum declaration/resolved-type-fact, construction, exhaustive match,
+and Never/structured-control evaluator/reference-VM/forced Linux x86-64
+baseline/proof JIT slices are Current. Automatic/host-native enum transitions,
+changed semantics beyond these slices, semantic publication, corpus migration,
 and cutover are not Current. Edition 1 remains
 accepted for ordinary compilation and as migration input.
 

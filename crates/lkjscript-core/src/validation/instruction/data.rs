@@ -9,7 +9,8 @@ pub(super) fn apply(
 ) -> Result<()> {
     let op = instruction.op();
     match op {
-        Op::Nop | Op::Jump | Op::Trap => {}
+        Op::Nop | Op::Jump => {}
+        Op::Trap => expect_pop(state, Kind::Str, proto, instruction)?,
         Op::LoadConst => {
             let constant = instruction
                 .operand()

@@ -46,18 +46,20 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
 }
 
 #[test]
-fn explicit_trap_requires_a_string_diagnostic_and_terminates_control_flow() {
+fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
     let mut valid = Chunk::new();
     valid.constants.push(Constant::Str("explicit trap".into()));
-    valid.main.emit_op_u16(Op::Trap, 0);
+    valid.main.emit_op_u16(Op::LoadConst, 0);
+    valid.main.emit(Op::Trap);
     let validated =
         validate_chunk(valid, &ValidationLimits::default()).expect("explicit trap validates");
-    assert_eq!(validated.main_instructions()[0].op(), Op::Trap);
+    assert_eq!(validated.main_instructions()[1].op(), Op::Trap);
 
     let mut wrong = Chunk::new();
     wrong.constants.push(Constant::I64(7));
-    wrong.main.emit_op_u16(Op::Trap, 0);
-    assert!(error(wrong).contains("trap diagnostic"));
+    wrong.main.emit_op_u16(Op::LoadConst, 0);
+    wrong.main.emit(Op::Trap);
+    assert!(error(wrong).contains("expected Str"));
 }
 
 #[test]

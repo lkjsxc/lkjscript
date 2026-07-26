@@ -6,6 +6,7 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
     };
     match a.as_str() {
         "Any" => Err("Any is not a permitted type".into()),
+        "Never" => Ok((Type::Never, i + 1)),
         "Unit" => Ok((Type::Unit, i + 1)),
         "Nil" => Err("Nil was removed; use Unit, Option T, or List T".into()),
         "Bool" => Ok((Type::Bool, i + 1)),
@@ -78,7 +79,8 @@ fn is_type_param_name(s: &str) -> bool {
         && s.chars().all(|c| c.is_ascii_alphanumeric())
         && !matches!(
             s,
-            "Unit"
+            "Never"
+                | "Unit"
                 | "Bool"
                 | "I64"
                 | "F64"

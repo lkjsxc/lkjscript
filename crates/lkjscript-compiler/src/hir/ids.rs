@@ -70,6 +70,15 @@ impl LoanId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LoopId(u32);
+
+impl LoopId {
+    pub(crate) const fn new(raw: u32) -> Self {
+        Self(raw)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(u32);
 

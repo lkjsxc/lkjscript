@@ -8,7 +8,10 @@ impl Analyzer {
         kind: BindingKind,
         ty: Type,
     ) -> Result<BindingId> {
-        if Operation::from_name(&name).is_some() || is_contextual_name(&name) {
+        if Operation::from_name(&name).is_some()
+            || is_contextual_name(&name)
+            || self.edition2 && is_edition2_control_name(&name)
+        {
             return Err(self.error(
                 origin,
                 format!("global declaration {name} collides with a reserved operation or form"),

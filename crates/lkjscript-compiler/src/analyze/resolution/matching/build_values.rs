@@ -83,8 +83,10 @@ impl Resolver<'_> {
     }
 
     pub(super) fn match_if(&self, condition: Expr, then_branch: Expr, else_branch: Expr) -> Expr {
+        let ty = Type::join_control(&then_branch.ty, &else_branch.ty)
+            .unwrap_or_else(|| then_branch.ty.clone());
         self.expression(
-            then_branch.ty.clone(),
+            ty,
             ExprKind::If {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),

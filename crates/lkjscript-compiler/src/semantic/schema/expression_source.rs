@@ -77,6 +77,16 @@ pub(super) fn to_source(expression: &Expression, span: SourceSpan) -> Result<Sou
             children.extend(convert_many(body, span)?);
             call("while", children, span)
         }
+        Expression::Loop { result_type, body } => {
+            let mut children = vec![call("type", result_type.to_atoms(span)?, span)];
+            children.extend(convert_many(body, span)?);
+            call("loop", children, span)
+        }
+        Expression::Return { value } => call("return", vec![to_source(value, span)?], span),
+        Expression::Break { value } => call("break", vec![to_source(value, span)?], span),
+        Expression::Continue {} => call("continue", Vec::new(), span),
+        Expression::Trap { value } => call("trap", vec![to_source(value, span)?], span),
+        Expression::Exit { code } => call("exit", vec![to_source(code, span)?], span),
         Expression::Do { expressions } => call("do", convert_many(expressions, span)?, span),
         Expression::Quote { name } => call("quote", vec![symbol(name, span)?], span),
         Expression::ProductValue { product, fields } => product_value(product, fields, span)?,

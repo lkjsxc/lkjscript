@@ -114,14 +114,15 @@ pub(crate) fn rewrite_function_values(
                     *argument = rewrite(*argument);
                 }
             }
-            Terminator::Return(value) => *value = rewrite(*value),
+            Terminator::Return(value) | Terminator::Trap { value } => {
+                *value = rewrite(*value);
+            }
             Terminator::Exit { code } => *code = rewrite(*code),
             Terminator::Outcome { detail, .. } => {
                 if let Some(detail) = detail {
                     *detail = rewrite(*detail);
                 }
             }
-            Terminator::Trap { .. } => {}
         }
     }
 }

@@ -53,8 +53,30 @@ pub enum ExprKind {
         else_branch: Box<Expr>,
     },
     While {
+        loop_id: LoopId,
         condition: Box<Expr>,
         body: Vec<Expr>,
+    },
+    Loop {
+        loop_id: LoopId,
+        result_type: Type,
+        body: Vec<Expr>,
+    },
+    Return {
+        value: Box<Expr>,
+    },
+    Break {
+        loop_id: LoopId,
+        value: Box<Expr>,
+    },
+    Continue {
+        loop_id: LoopId,
+    },
+    Trap {
+        value: Box<Expr>,
+    },
+    Exit {
+        code: Box<Expr>,
     },
     Let {
         bindings: Vec<LocalDefinition>,

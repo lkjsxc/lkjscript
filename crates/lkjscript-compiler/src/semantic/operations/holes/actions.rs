@@ -80,9 +80,18 @@ fn child_kinds(candidates: &[HoleCandidate]) -> Vec<LegalChildKind> {
             CandidateCategory::DirectBuiltin | CandidateCategory::ExactConversion => {
                 LegalChildKind::BuiltinCall
             }
-            CandidateCategory::MatchSkeleton
-            | CandidateCategory::ControlForm
-            | CandidateCategory::NeverForm => continue,
+            CandidateCategory::MatchSkeleton => continue,
+            CandidateCategory::ControlForm | CandidateCategory::NeverForm => {
+                match &candidate.expression {
+                    Expression::Loop { .. } => LegalChildKind::Loop,
+                    Expression::Return { .. } => LegalChildKind::Return,
+                    Expression::Break { .. } => LegalChildKind::Break,
+                    Expression::Continue {} => LegalChildKind::Continue,
+                    Expression::Trap { .. } => LegalChildKind::Trap,
+                    Expression::Exit { .. } => LegalChildKind::Exit,
+                    _ => continue,
+                }
+            }
         };
         if !output.contains(&kind) {
             output.push(kind);

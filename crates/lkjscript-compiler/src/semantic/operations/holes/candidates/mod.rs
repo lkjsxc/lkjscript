@@ -1,8 +1,11 @@
 mod build;
+mod control;
+mod ranking;
 
 use crate::semantic::schema::*;
-use build::{binding_expression, builtin_category, candidate, literal_expressions, rank_key};
+use build::{binding_expression, candidate, literal_expressions};
 use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
+use ranking::{builtin_category, rank_key};
 
 use super::site::HoleSite;
 
@@ -68,6 +71,7 @@ pub(super) fn enumerate(
         Err(failure) => return bounded_failure(failure.to_string()),
     };
     let mut expressions = literal_expressions(site.tree, expected);
+    expressions.extend(control::expressions(site, expected));
     for entity in scope {
         if let Some(expression) = binding_expression(entity, expected) {
             expressions.push((CandidateCategory::VisibleBinding, expression));
@@ -128,7 +132,8 @@ pub(super) fn enumerate(
     }
     reservation.return_unused();
     candidates.sort_by(|a, b| rank_key(a).cmp(&rank_key(b)));
-    let omitted = omitted_categories(rejected);
+    let edition2 = site.tree.edition() == crate::source::SourceEdition::Edition2;
+    let omitted = omitted_categories(rejected, edition2);
     let exploration = ExplorationRecord {
         supported: true,
         truncated: false,
@@ -138,7 +143,7 @@ pub(super) fn enumerate(
         omitted,
         reason: None,
     };
-    let blockers = unsupported_blockers();
+    let blockers = unsupported_blockers(edition2);
     (candidates, exploration, blockers)
 }
 
@@ -154,10 +159,11 @@ fn bounded_failure(message: String) -> (Vec<HoleCandidate>, ExplorationRecord, V
 
 fn omitted_categories(
     rejected: std::collections::BTreeMap<CandidateCategory, u64>,
+    edition2: bool,
 ) -> Vec<OmittedCategory> {
-    super::candidate_support::omitted_categories(rejected)
+    super::candidate_support::omitted_categories(rejected, edition2)
 }
 
-fn unsupported_blockers() -> Vec<ActionBlocker> {
-    super::candidate_support::unsupported_blockers()
+fn unsupported_blockers(edition2: bool) -> Vec<ActionBlocker> {
+    super::candidate_support::unsupported_blockers(edition2)
 }

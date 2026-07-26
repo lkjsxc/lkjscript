@@ -2,6 +2,9 @@ use crate::analyze::*;
 
 impl Analyzer {
     pub(in crate::analyze) fn resolve_main(&mut self, pending: PendingMain<'_>) -> Result<Main> {
+        if pending.return_type.contains_never() {
+            return Err(self.error(pending.origin, "Never is not a public main return payload"));
+        }
         let (body, local_count) = {
             let mut resolver = Resolver::new(
                 self,
@@ -10,12 +13,13 @@ impl Analyzer {
                 HashMap::new(),
                 HashSet::new(),
                 0,
+                pending.return_type.clone(),
             );
             let body = resolver.resolve_expr(pending.body)?;
             let local_count = resolver.local_count()?;
             (body, local_count)
         };
-        if body.ty != pending.return_type {
+        if body.ty != Type::Never && body.ty != pending.return_type {
             return Err(self.error(
                 pending.origin,
                 format!(
@@ -39,6 +43,14 @@ impl Analyzer {
         parsed: ParsedFunction<'_>,
         bounds: Vec<TraitBound>,
     ) -> Result<Function> {
+        if parsed.signature_params.iter().any(Type::contains_never)
+            || parsed.signature_return.contains_never()
+        {
+            return Err(self.error(
+                origin,
+                "Never is not permitted in parameters or public return payloads",
+            ));
+        }
         let arity = u8::try_from(parsed.param_names.len()).map_err(|_| {
             self.error(
                 origin,
@@ -81,6 +93,7 @@ impl Analyzer {
                 local_slots,
                 type_variables,
                 params.len(),
+                parsed.signature_return.clone(),
             );
             let param_places = params
                 .iter()
@@ -90,7 +103,7 @@ impl Analyzer {
             let local_count = resolver.local_count()?;
             (body, local_count, param_places)
         };
-        if !Type::unify_assignable(&body.ty, &parsed.signature_return) {
+        if body.ty != Type::Never && !Type::unify_assignable(&body.ty, &parsed.signature_return) {
             let name = self.binding(binding)?.name.clone();
             return Err(self.error(
                 origin,

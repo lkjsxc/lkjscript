@@ -8,6 +8,7 @@ impl<'a> Resolver<'a> {
         local_slots: HashMap<BindingId, u8>,
         type_variables: HashSet<String>,
         parameter_count: usize,
+        return_type: Type,
     ) -> Self {
         let local_places = local_slots
             .iter()
@@ -23,6 +24,9 @@ impl<'a> Resolver<'a> {
             next_slot: parameter_count,
             max_slots: parameter_count,
             next_place: u32::try_from(parameter_count).unwrap_or(u32::MAX),
+            return_type,
+            loops: Vec::new(),
+            next_loop: 0,
         }
     }
 

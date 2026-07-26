@@ -10,9 +10,10 @@ conversions, runtime facts, and logical charges.
 ## Status
 
 **Current for resolved enum metadata, construction/test/projection HIR and SSA,
-the independently verified source-match plan and ordinary-CFG lowering, the
-SSA evaluator, validated bytecode, reference VM, and forced baseline/proof JIT.**
-Wider Edition 2 control and representation plans remain Accepted Targets.
+the independently verified source-match plan and ordinary-CFG lowering,
+Never/structured control, the SSA evaluator, validated bytecode, reference VM,
+and forced baseline/proof JIT.** Wider Edition 2 representation plans remain
+Accepted Targets.
 
 ## Resolved HIR
 

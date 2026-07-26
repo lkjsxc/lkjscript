@@ -27,8 +27,11 @@ The immediate implementation sequence has progressed as follows:
    layout/runtime identities, verified SSA/evaluator, validated bytecode, boxed
    active-payload GC values, reference VM execution, enum construction
    precharging, exhaustive source match, and forced Linux x86-64 baseline/proof
-   JIT are Current; and
-8. automatic/host-native enum transitions, migration publication,
+   JIT are Current;
+8. Edition 2 Never/structured control, typed loop/while SSA block parameters,
+   dynamic trap values, all-four-engine differentials, and precise Semantic
+   Source/hole control facts and actions are Current; and
+9. automatic/host-native enum transitions, migration publication,
    nonzero query caching, whole-pipeline pre-allocation, and shared request
    ledgers remain next.
 

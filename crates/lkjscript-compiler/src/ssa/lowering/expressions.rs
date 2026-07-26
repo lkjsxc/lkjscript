@@ -2,7 +2,12 @@ use crate::ssa::*;
 
 impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_expr(&mut self, expression: &Expr) -> Result<Option<ValueId>> {
-        let ty = lower_type(&expression.ty, self.product_ids)?;
+        // Never controls paths; this local branch never emits an SSA value.
+        let ty = if expression.ty == Type::Never {
+            SsaType::Unit
+        } else {
+            lower_type(&expression.ty, self.product_ids)?
+        };
         let value = match &expression.kind {
             ExprKind::LitI64(value) => {
                 self.constant(SsaType::I64, Constant::I64(*value), expression.origin)?
@@ -65,9 +70,21 @@ impl FunctionBuilder<'_> {
                 then_branch,
                 else_branch,
             } => return self.lower_if(condition, then_branch, else_branch, expression),
-            ExprKind::While { condition, body } => {
-                return self.lower_while(condition, body, expression);
-            }
+            ExprKind::While {
+                loop_id,
+                condition,
+                body,
+            } => return self.lower_while(*loop_id, condition, body, expression),
+            ExprKind::Loop {
+                loop_id,
+                result_type,
+                body,
+            } => return self.lower_loop(*loop_id, result_type, body, expression),
+            ExprKind::Return { value } => return self.lower_return(value),
+            ExprKind::Break { loop_id, value } => return self.lower_break(*loop_id, value),
+            ExprKind::Continue { loop_id } => return self.lower_continue(*loop_id),
+            ExprKind::Trap { value } => return self.lower_trap(value),
+            ExprKind::Exit { code } => return self.lower_exit(code),
             ExprKind::Let { bindings, body } => return self.lower_let(bindings, body),
             ExprKind::MutableLocal {
                 binding,
@@ -163,12 +180,15 @@ impl FunctionBuilder<'_> {
                 );
             }
             ExprKind::MatchUnreachable { plan } => {
-                self.terminate(Terminator::Trap {
-                    message: format!(
+                let value = self.constant(
+                    SsaType::Str,
+                    Constant::Str(format!(
                         "verified exhaustive match plan {} reached unreachable edge",
                         plan.raw()
-                    ),
-                })?;
+                    )),
+                    expression.origin,
+                )?;
+                self.terminate(Terminator::Trap { value })?;
                 return Ok(None);
             }
         };

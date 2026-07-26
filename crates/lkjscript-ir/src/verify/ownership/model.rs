@@ -73,8 +73,8 @@ pub(crate) fn terminator_operand_count(terminator: &Terminator) -> usize {
             .saturating_add(true_arguments.len())
             .saturating_add(false_arguments.len()),
         Terminator::Return(_) | Terminator::Exit { .. } => 1,
+        Terminator::Trap { .. } => 1,
         Terminator::Outcome { detail, .. } => usize::from(detail.is_some()),
-        Terminator::Trap { .. } => 0,
     }
 }
 

@@ -91,7 +91,9 @@ impl Evaluator<'_> {
                     current = target;
                 }
                 Terminator::Return(result) => return value(&values, result).cloned(),
-                Terminator::Trap { message } => return Err(Flow::Trap(message)),
+                Terminator::Trap { value: trap } => {
+                    return Err(Flow::Trap(as_str(value(&values, trap)?)?.to_owned()))
+                }
                 Terminator::Exit { code } => {
                     return Err(Flow::Exit(as_i64(value(&values, code)?)?))
                 }
