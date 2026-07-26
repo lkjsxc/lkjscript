@@ -83,7 +83,7 @@ Borrow expression is legal only as an exact direct reference argument or as a
 direct `let` initializer. A temporary direct-argument loan ends after the
 complete call/runtime-operation expression, not after evaluation of that one
 argument. Same-basic-block last-use analysis ends local loans non-lexically;
-Borrow results do not cross SSA blocks. Legacy `Buf` operations and semantics
+Borrow results do not cross SSA blocks. Shared `Buf` operations and semantics
 are unchanged.
 
 Only Owned function parameters are initialized at entry. A local place becomes
@@ -94,7 +94,7 @@ reinitialization is accepted only after a move, from a fresh or explicitly moved
 
 Every generic instantiation involving a direct or nested `Owned`, `Ref`, or
 `RefMut` signature/substitution is unavailable. Arbitrary or nested borrow
-expressions, legacy-Buf conversion, fields/indexes, reborrowing, partial moves,
+expressions, shared-Buf conversion, fields/indexes, reborrowing, partial moves,
 reference return/storage, closures/capture, cross-block Borrow results,
 loop-carried ownership state or loans, and `RefMut` user-call forwarding are
 rejected. Runtime/frame cleanup is not user-visible deterministic `Drop`.

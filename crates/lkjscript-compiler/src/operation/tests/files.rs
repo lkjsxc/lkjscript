@@ -15,19 +15,25 @@ fn durable_file_operations_have_exact_signatures_and_effects() {
     assert_eq!(
         Operation::SysOpenCreateNew.resolve_types(&[
             Type::Capability(lkjscript_core::CapabilityKind::FileSystem),
-            Type::Str,
+            Type::Path,
         ]),
         Ok((
             function(
                 vec![
                     Type::Capability(lkjscript_core::CapabilityKind::FileSystem),
-                    Type::Str,
+                    Type::Path,
                 ],
                 result_handle.clone(),
             ),
             result_handle
         ))
     );
+    assert!(Operation::SysOpenCreateNew
+        .resolve_types(&[
+            Type::Capability(lkjscript_core::CapabilityKind::FileSystem),
+            Type::Str,
+        ])
+        .is_err());
     assert_eq!(
         Operation::SysTruncate.resolve_types(&[Type::Handle, Type::I64]),
         Ok((

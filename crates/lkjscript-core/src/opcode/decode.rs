@@ -171,6 +171,10 @@ impl Op {
         Self::F64FromI64Rounded,
         Self::I64FromF64Exact,
         Self::I64FromF64Trunc,
+        Self::PathFromStr,
+        Self::PathFromBuf,
+        Self::PathToBuf,
+        Self::PathToStr,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {

@@ -6,7 +6,13 @@ impl Operation {
 
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
-            Self::BufFromStr | Self::BufToStr | Self::BufSlice => EffectSet::ALLOCATES
+            Self::BufFromStr
+            | Self::BufToStr
+            | Self::BufSlice
+            | Self::PathFromStr
+            | Self::PathFromBuf
+            | Self::PathToBuf
+            | Self::PathToStr => EffectSet::ALLOCATES
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::MAY_TRAP),
             Self::F64FromI64Exact

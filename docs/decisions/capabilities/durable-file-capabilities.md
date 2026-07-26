@@ -16,13 +16,13 @@ and Docker verification are implemented and verified.
 Add Result-valued primitives:
 
 ```text
-sys-open-append Str -> Result Handle SystemError
-sys-open-create-new Str -> Result Handle SystemError
-sys-open-dir Str -> Result Handle SystemError
+sys-open-append Capability FileSystem Path -> Result Handle SystemError
+sys-open-create-new Capability FileSystem Path -> Result Handle SystemError
+sys-open-dir Capability FileSystem Path -> Result Handle SystemError
 sys-fsync Handle -> Result Unit SystemError
 sys-truncate Handle I64 -> Result Unit SystemError
-sys-rename Str Str -> Result Unit SystemError
-sys-random-fill Buf I64 I64 -> Result Unit SystemError
+sys-rename Capability FileSystem Path Path -> Result Unit SystemError
+sys-random-fill Capability Entropy Buf I64 I64 -> Result Unit SystemError
 ```
 
 Append uses `O_APPEND`; it is not a multi-process transaction. Create-new is
@@ -33,7 +33,7 @@ Offset/length range validation follows the lossless bulk-byte contract.
 
 ## Safety
 
-The sys crate owns FFI and validates strings before C calls. Directory is a
+The sys crate owns FFI and validates exact absolute Path bytes before C calls. Directory is a
 distinct owned handle kind. All errors, wrong/stale handles, overflow, short
 random fill, and ordinary errno become qualified language Result errors. No
 script controls flags, permissions, or random source selection.

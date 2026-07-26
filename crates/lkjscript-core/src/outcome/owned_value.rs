@@ -83,6 +83,13 @@ impl OwnedValue {
         }
     }
 
+    pub fn as_path_bytes(&self) -> Option<&[u8]> {
+        match self.object()? {
+            HeapObj::Path(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
     pub fn as_handle(&self) -> Option<u32> {
         self.root.as_handle()
     }
@@ -170,6 +177,7 @@ impl fmt::Debug for OwnedValue {
             Some(HeapObj::Closure { proto, .. }) => write!(formatter, "#<owned-fn:{proto}>"),
             Some(HeapObj::Builtin(id)) => write!(formatter, "#<owned-builtin:{id}>"),
             Some(HeapObj::Buf(bytes)) => write!(formatter, "#<owned-buf:{}>", bytes.len()),
+            Some(HeapObj::Path(bytes)) => write!(formatter, "#<owned-path:{}>", bytes.len()),
             Some(HeapObj::Product { product, .. }) => {
                 write!(formatter, "#<owned-product:{}>", product.raw())
             }

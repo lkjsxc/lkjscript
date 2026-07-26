@@ -11,7 +11,7 @@ pub(super) fn apply(
     match op {
         Op::SysSqliteOpen => {
             expect_pop(state, Kind::I64, proto, instruction)?;
-            expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Path, proto, instruction)?;
             expect_pop(
                 state,
                 Kind::Capability(crate::CapabilityKind::Sqlite),
@@ -78,7 +78,7 @@ pub(super) fn apply(
         }
         Op::SysSqliteBackup => {
             expect_pop(state, Kind::I64, proto, instruction)?;
-            expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Path, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
             expect_pop(
                 state,

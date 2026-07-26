@@ -181,7 +181,7 @@ pub(super) fn estimated_object_bytes(object: &HeapObj) -> usize {
         HeapObj::Closure { captures, .. } => captures
             .capacity()
             .saturating_mul(std::mem::size_of::<Value>()),
-        HeapObj::Buf(bytes) => bytes.capacity(),
+        HeapObj::Buf(bytes) | HeapObj::Path(bytes) => bytes.capacity(),
         HeapObj::Product { fields, .. } => fields
             .capacity()
             .saturating_mul(std::mem::size_of::<Value>()),

@@ -125,6 +125,31 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
 }
 
 #[test]
+fn forced_native_tiers_reject_path_entries_without_fallback() {
+    let path = compile(
+        concat!(
+            "main/\nsig/\n->\nPath\n/sig\nunwrap-ok/\npath-from-str/\n",
+            "str/\n/tmp/native-path\n/str\n/path-from-str\n/unwrap-ok\n/main\n",
+        ),
+        "native-path.lkjscript",
+    );
+    let baseline = execute_forced(
+        path.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect_err("forced baseline Path entry must not fall back");
+    assert_eq!(baseline.code(), FailureCode::UnsupportedType);
+    let optimizing = execute_optimizing(
+        path.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect_err("forced optimizing Path entry must not fall back");
+    assert_eq!(optimizing.code(), FailureCode::UnsupportedType);
+}
+
+#[test]
 fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() {
     let unsupported = compile(
         concat!(

@@ -52,6 +52,8 @@ fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Res
             (HeapObj::Str(_), HeapObj::Str(_)) => return Ok(false),
             (HeapObj::Symbol(left), HeapObj::Symbol(right)) if left == right => {}
             (HeapObj::Symbol(_), HeapObj::Symbol(_)) => return Ok(false),
+            (HeapObj::Path(left), HeapObj::Path(right)) if left == right => {}
+            (HeapObj::Path(_), HeapObj::Path(_)) => return Ok(false),
             (
                 HeapObj::Enum {
                     layout: left_layout,

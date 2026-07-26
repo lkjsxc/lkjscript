@@ -36,6 +36,7 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
         HeapObj::Closure { proto, .. } => Ok(format!("#<fn:{proto}>")),
         HeapObj::Builtin(id) => Ok(format!("#<builtin:{id}>")),
         HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
+        HeapObj::Path(path) => Ok(format!("#<path:{}>", path.len())),
         HeapObj::Product { product, .. } => Ok(format!("#<product:{}>", product.raw())),
         HeapObj::Enum {
             layout,

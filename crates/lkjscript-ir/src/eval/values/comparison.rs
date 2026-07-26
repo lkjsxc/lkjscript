@@ -28,6 +28,7 @@ pub(crate) fn value_equal(left: &EvalValue, right: &EvalValue) -> std::result::R
         (EvalValue::F64(left), EvalValue::F64(right)) => Ok(left == right),
         (EvalValue::Str(left), EvalValue::Str(right))
         | (EvalValue::Symbol(left), EvalValue::Symbol(right)) => Ok(left == right),
+        (EvalValue::Path(left), EvalValue::Path(right)) => Ok(left == right),
         (
             EvalValue::Enum {
                 enum_id: left_enum,

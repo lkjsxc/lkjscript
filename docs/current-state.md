@@ -10,6 +10,7 @@
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->
+<!-- LKJ-STATUS id=opaque-paths status=current -->
 <!-- LKJ-STATUS id=repository-graph-context status=current -->
 <!-- LKJ-STATUS id=repository-topology status=current -->
 <!-- LKJ-STATUS id=resource-profile-compiler status=current -->
@@ -46,6 +47,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Packages declare a sorted capability union. Each target receives only its
   exact typed main requirements, validated before any source effect. Capability
   values are unforgeable, copyable, process-local, and never serialized.
+- Linux runtime pathnames use immutable byte-preserving `Path` values. Explicit
+  constructors reject empty, relative, NUL-containing, and oversized paths;
+  observation is either exact bytes or strict UTF-8. Filesystem and SQLite
+  operations reject `Str` pathname operands.
 
 ## Modules and local packages
 
@@ -111,7 +116,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 - complete region/borrow/drop semantics for resources nested in products and
   collections;
-- an opaque byte-preserving path type and portable path policy;
+- a portable path policy beyond the Current Linux absolute-byte contract;
 - persistent verified compilation/artifact caching and measured cache adoption;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
 - automatic baseline-to-proof promotion acceptance beyond its selected

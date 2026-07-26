@@ -41,6 +41,7 @@ pub enum SsaType {
     Str,
     Symbol,
     Buf,
+    Path,
     Capability(lkjscript_contracts::CapabilityKind),
     Owned(Box<SsaType>),
     Ref(Box<SsaType>),

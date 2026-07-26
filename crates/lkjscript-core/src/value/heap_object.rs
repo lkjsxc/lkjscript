@@ -17,6 +17,7 @@ pub enum HeapObj {
     },
     Builtin(u16),
     Buf(Vec<u8>),
+    Path(Vec<u8>),
     Product {
         product: ProductId,
         fields: Vec<Value>,

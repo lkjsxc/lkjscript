@@ -97,6 +97,7 @@ impl Resolver<'_> {
                 | Type::F64
                 | Type::Capability(_)
                 | Type::Str
+                | Type::Path
                 | Type::Symbol => true,
                 Type::Ref(inner) if inner.as_ref() == &Type::Buf => true,
                 Type::Never

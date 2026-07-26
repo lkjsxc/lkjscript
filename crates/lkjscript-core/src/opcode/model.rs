@@ -132,4 +132,8 @@ pub enum Op {
     F64FromI64Rounded = 196,
     I64FromF64Exact = 197,
     I64FromF64Trunc = 198,
+    PathFromStr = 199,
+    PathFromBuf = 200,
+    PathToBuf = 201,
+    PathToStr = 202,
 }

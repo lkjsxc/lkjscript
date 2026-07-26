@@ -153,10 +153,21 @@ fn is_traced_type(ty: &Type) -> bool {
         Type::Str
             | Type::Symbol
             | Type::Buf
+            | Type::Path
             | Type::Product(_)
             | Type::Enum { .. }
             | Type::List(_)
             | Type::Fn { .. }
             | Type::Forall { .. }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_enum_fields_are_traced_heap_references() {
+        assert!(is_traced_type(&Type::Path));
+    }
 }

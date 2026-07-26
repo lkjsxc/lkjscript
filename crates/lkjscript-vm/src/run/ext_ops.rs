@@ -49,6 +49,7 @@ fn wait_readable<J: RuntimeTier>(
 
 mod buffers;
 mod files;
+mod paths;
 mod process;
 mod sockets;
 mod sqlite_read;
@@ -61,6 +62,9 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         return Ok(true);
     }
     if files::dispatch(vm, op)? {
+        return Ok(true);
+    }
+    if paths::dispatch(vm, op)? {
         return Ok(true);
     }
     if process::dispatch(vm, op)? {

@@ -61,7 +61,7 @@ FileSystem
 Capability/
 Stdio
 /Capability
-Str
+Path
 ->
 Handle
 /sig
@@ -75,7 +75,7 @@ Capability/
 Stdio
 /Capability
 path
-Str
+Path
 /params
 let/
 bind/

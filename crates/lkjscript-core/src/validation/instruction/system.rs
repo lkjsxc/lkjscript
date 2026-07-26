@@ -46,7 +46,7 @@ pub(super) fn apply(
         | Op::SysOpenCreateNew
         | Op::SysOpenDir
         | Op::SysPathExists => {
-            expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Path, proto, instruction)?;
             expect_capability(state, crate::CapabilityKind::FileSystem, proto, instruction)?;
             state.stack.push(result_kind());
         }
@@ -90,8 +90,8 @@ pub(super) fn apply(
             state.stack.push(result_kind());
         }
         Op::SysRename => {
-            expect_pop(state, Kind::Str, proto, instruction)?;
-            expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(state, Kind::Path, proto, instruction)?;
+            expect_pop(state, Kind::Path, proto, instruction)?;
             expect_capability(state, crate::CapabilityKind::FileSystem, proto, instruction)?;
             state.stack.push(result_kind());
         }

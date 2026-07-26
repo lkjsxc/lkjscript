@@ -1,3 +1,5 @@
+use std::os::unix::ffi::OsStrExt;
+
 use super::*;
 
 #[test]
@@ -19,7 +21,7 @@ fn bulk_file_io_is_bounded_exact_and_reports_progress() -> std::io::Result<()> {
     let mut handles = ResourceTable::default();
     let buffer = buf_new(&mut arena, 8).expect("bulk buffer");
     let input_handle = handles
-        .sys_open_read(&input.0.to_string_lossy())
+        .sys_open_read(input.0.as_os_str().as_bytes())
         .expect("open input");
     assert_eq!(
         sys_read_into(&mut arena, &handles, input_handle, buffer, 1, 7).ok(),
@@ -57,7 +59,7 @@ fn bulk_file_io_is_bounded_exact_and_reports_progress() -> std::io::Result<()> {
     assert!(sys_read_into(&mut arena, &handles, input_handle, buffer, 0, 0).is_err());
 
     let output_handle = handles
-        .sys_open_write(&output.0.to_string_lossy())
+        .sys_open_write(output.0.as_os_str().as_bytes())
         .expect("open output");
     assert_eq!(
         sys_write_from(&arena, &handles, output_handle, buffer, 1, 5).ok(),

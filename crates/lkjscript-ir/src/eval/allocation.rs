@@ -54,6 +54,26 @@ impl Evaluator<'_> {
         }))
     }
 
+    pub(crate) fn allocate_path(&mut self, bytes: &[u8]) -> std::result::Result<EvalValue, Flow> {
+        let mut copy = Vec::new();
+        copy.try_reserve_exact(bytes.len())
+            .map_err(|_| Flow::Resource("heap bytes".into()))?;
+        copy.extend_from_slice(bytes);
+        self.allocate_dynamic(copy.capacity())?;
+        Ok(EvalValue::Path(copy))
+    }
+
+    pub(crate) fn allocate_buffer_copy(
+        &mut self,
+        bytes: &[u8],
+    ) -> std::result::Result<EvalValue, Flow> {
+        let mut copy = Vec::new();
+        copy.try_reserve_exact(bytes.len())
+            .map_err(|_| Flow::Resource("heap bytes".into()))?;
+        copy.extend_from_slice(bytes);
+        self.allocate_buffer(copy)
+    }
+
     pub(crate) fn allocate_string(&mut self, text: String) -> std::result::Result<EvalValue, Flow> {
         self.allocate_dynamic(text.capacity())?;
         Ok(EvalValue::Str(text))
@@ -122,12 +142,20 @@ impl Evaluator<'_> {
         &mut self,
         message: &str,
     ) -> std::result::Result<EvalValue, Flow> {
+        self.allocate_system_error(crate::prelude_contract::SYSTEM_UNSUPPORTED_ID, message)
+    }
+
+    pub(crate) fn allocate_system_error(
+        &mut self,
+        variant: [u8; 32],
+        message: &str,
+    ) -> std::result::Result<EvalValue, Flow> {
         let code = self.allocate_option(None)?;
         let detail = self.allocate_string(message.to_owned())?;
         let detail = self.allocate_option(Some(detail))?;
         let error = self.allocate_enum(
             crate::prelude_contract::SYSTEM_ERROR_ID,
-            crate::prelude_contract::SYSTEM_UNSUPPORTED_ID,
+            variant,
             vec![code, detail],
         )?;
         self.allocate_result(error, false)

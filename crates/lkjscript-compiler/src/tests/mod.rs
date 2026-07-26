@@ -1,10 +1,6 @@
 #![allow(clippy::panic, clippy::unwrap_used)]
 
-use std::path::Path;
-
 use lkjscript_core::{Constant, Limits};
-
-use super::{ensure_source_path, validate_source};
 
 fn canonical_source(source: &str) -> String {
     source.to_string()

@@ -26,6 +26,13 @@ pub(in crate::operation) fn memory_signature(operation: Operation) -> Type {
             vec![Type::Buf],
             crate::types::result_type(Type::Str, crate::types::utf8_error_type()),
         ),
+        Operation::PathFromStr => function(vec![Type::Str], system_result(Type::Path)),
+        Operation::PathFromBuf => function(vec![Type::Buf], system_result(Type::Path)),
+        Operation::PathToBuf => function(vec![Type::Path], Type::Buf),
+        Operation::PathToStr => function(
+            vec![Type::Path],
+            crate::types::result_type(Type::Str, crate::types::utf8_error_type()),
+        ),
         Operation::BufSlice => function(
             vec![Type::Buf, Type::I64, Type::I64],
             system_result(Type::Buf),

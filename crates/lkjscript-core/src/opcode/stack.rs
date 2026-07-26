@@ -112,6 +112,10 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::LoadEnumField
         | Op::BufFromStr
         | Op::BufToStr
+        | Op::PathFromStr
+        | Op::PathFromBuf
+        | Op::PathToBuf
+        | Op::PathToStr
         | Op::F64FromI64Exact
         | Op::F64FromI64Rounded
         | Op::I64FromF64Exact

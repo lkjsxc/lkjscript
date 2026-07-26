@@ -39,7 +39,7 @@ pub(super) fn host_signature(
         | RuntimeOp::SysOpenAppend
         | RuntimeOp::SysOpenCreateNew
         | RuntimeOp::SysOpenDir => exact(
-            &[SsaType::Capability(FileSystem), SsaType::Str],
+            &[SsaType::Capability(FileSystem), SsaType::Path],
             &system_result(SsaType::Handle),
         ),
         RuntimeOp::SysFsync => exact(&[SsaType::Handle], &system_result(SsaType::Unit)),
@@ -48,7 +48,11 @@ pub(super) fn host_signature(
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysRename => exact(
-            &[SsaType::Capability(FileSystem), SsaType::Str, SsaType::Str],
+            &[
+                SsaType::Capability(FileSystem),
+                SsaType::Path,
+                SsaType::Path,
+            ],
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysRandomFill => exact(
@@ -65,7 +69,7 @@ pub(super) fn host_signature(
             &system_result(SsaType::Buf),
         ),
         RuntimeOp::SysSqliteOpen => exact(
-            &[SsaType::Capability(Sqlite), SsaType::Str, SsaType::I64],
+            &[SsaType::Capability(Sqlite), SsaType::Path, SsaType::I64],
             &system_result(SsaType::Handle),
         ),
         RuntimeOp::SysSqliteClose
@@ -133,13 +137,13 @@ pub(super) fn host_signature(
             &[
                 SsaType::Capability(Sqlite),
                 SsaType::Handle,
-                SsaType::Str,
+                SsaType::Path,
                 SsaType::I64,
             ],
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysPathExists => exact(
-            &[SsaType::Capability(FileSystem), SsaType::Str],
+            &[SsaType::Capability(FileSystem), SsaType::Path],
             &system_result(SsaType::Bool),
         ),
         RuntimeOp::SysWaitMs => exact(
@@ -172,4 +176,32 @@ pub(super) fn host_signature(
         _ => return None,
     };
     Some(valid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rename_requires_two_path_operands() {
+        use lkjscript_contracts::CapabilityKind::FileSystem;
+        let result = system_result(SsaType::Unit);
+        let prefix = SsaType::Capability(FileSystem);
+        assert_eq!(
+            host_signature(
+                RuntimeOp::SysRename,
+                &[prefix.clone(), SsaType::Path, SsaType::Path],
+                &result,
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            host_signature(
+                RuntimeOp::SysRename,
+                &[prefix, SsaType::Path, SsaType::Str],
+                &result
+            ),
+            Some(false)
+        );
+    }
 }

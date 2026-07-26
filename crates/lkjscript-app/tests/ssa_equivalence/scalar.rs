@@ -88,6 +88,31 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
 }
 
 #[test]
+fn explicit_path_construction_is_evaluator_vm_equivalent() {
+    let source = main_source(
+        "Path",
+        "unwrap-ok/\npath-from-str/\nstr/\n/tmp/exact-path\n/str\n/path-from-str\n/unwrap-ok",
+    );
+    assert_eq!(
+        compare_source(&source, "path-equivalence.lkjscript"),
+        ScalarOutcome::Path(b"/tmp/exact-path".to_vec())
+    );
+}
+
+#[test]
+fn invalid_path_construction_traps_equally() {
+    for (name, text) in [
+        ("empty-path.lkjscript", ""),
+        ("relative-path.lkjscript", "relative"),
+    ] {
+        let expression =
+            format!("unwrap-ok/\npath-from-str/\nstr/\n{text}\n/str\n/path-from-str\n/unwrap-ok");
+        let source = main_source("Path", &expression);
+        assert_eq!(compare_source(&source, name), ScalarOutcome::Trapped);
+    }
+}
+
+#[test]
 fn bounded_marker_generic_is_erased_after_ssa_verification_with_vm_equivalence() {
     let source = "trait/\nname/\nMarked\n/name\n/trait\nproduct/\nname/\nBoxed\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\nimpl/\ntrait/\nMarked\n/trait\nfor/\nProduct\nBoxed\n/for\n/impl\ndef/\nname/\nkeep-marked\n/name\nfn/\nforall/\nT\n/forall\nbounds/\nbound/\nT\nMarked\n/bound\n/bounds\nsig/\nT\n->\nT\n/sig\nparams/\nvalue\nT\n/params\nvalue\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nfield/\nkeep-marked/\nproduct-value/\nBoxed\nfield/\nvalue\n42\n/field\n/product-value\n/keep-marked\nvalue\n/field\n/main\n";
     assert_eq!(

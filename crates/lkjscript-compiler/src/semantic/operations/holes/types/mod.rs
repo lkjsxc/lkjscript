@@ -14,6 +14,7 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::F64 => "F64".into(),
         Type::Str => "Str".into(),
         Type::Buf => "Buf".into(),
+        Type::Path => "Path".into(),
         Type::Capability(kind) => format!("Capability {}", kind.as_str()),
         Type::Symbol => "Symbol".into(),
         Type::Handle => "Handle".into(),

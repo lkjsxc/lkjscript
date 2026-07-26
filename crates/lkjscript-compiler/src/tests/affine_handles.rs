@@ -6,7 +6,8 @@ fn handle_main(body: &str) -> String {
             "main/\nsig/\nCapability/\nFileSystem\n/Capability\n->\nUnit\n/sig\n",
             "params/\nfile-system\nCapability/\nFileSystem\n/Capability\n/params\n",
             "let/\nbind/\nhandle\nunwrap-ok/\nsys-open-read/\nfile-system\n",
-            "str/\n/tmp/lkjscript-affine-test\n/str\n/sys-open-read\n/unwrap-ok\n",
+            "unwrap-ok/\npath-from-str/\nstr/\n/tmp/lkjscript-affine-test\n/str\n",
+            "/path-from-str\n/unwrap-ok\n/sys-open-read\n/unwrap-ok\n",
             "/bind\n{body}\n/let\n/main\n"
         ),
         body = body

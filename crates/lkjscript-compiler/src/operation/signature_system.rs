@@ -32,7 +32,7 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
         | Operation::SysOpenAppend
         | Operation::SysOpenCreateNew
         | Operation::SysOpenDir => function(
-            vec![Type::Capability(FileSystem), Type::Str],
+            vec![Type::Capability(FileSystem), Type::Path],
             system_result(Type::Handle),
         ),
         Operation::SysFsync => function(vec![Type::Handle], system_result(Type::Unit)),
@@ -40,7 +40,7 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
             function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
         }
         Operation::SysRename => function(
-            vec![Type::Capability(FileSystem), Type::Str, Type::Str],
+            vec![Type::Capability(FileSystem), Type::Path, Type::Path],
             system_result(Type::Unit),
         ),
         Operation::SysRandomFill => function(
@@ -52,7 +52,7 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
             system_result(Type::Buf),
         ),
         Operation::SysSqliteOpen => function(
-            vec![Type::Capability(Sqlite), Type::Str, Type::I64],
+            vec![Type::Capability(Sqlite), Type::Path, Type::I64],
             system_result(Type::Handle),
         ),
         Operation::SysSqliteClose
@@ -115,11 +115,16 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
             system_result(crate::types::option_type(Type::Buf)),
         ),
         Operation::SysSqliteBackup => function(
-            vec![Type::Capability(Sqlite), Type::Handle, Type::Str, Type::I64],
+            vec![
+                Type::Capability(Sqlite),
+                Type::Handle,
+                Type::Path,
+                Type::I64,
+            ],
             system_result(Type::Unit),
         ),
         Operation::SysPathExists => function(
-            vec![Type::Capability(FileSystem), Type::Str],
+            vec![Type::Capability(FileSystem), Type::Path],
             system_result(Type::Bool),
         ),
         Operation::SysWaitMs => function(

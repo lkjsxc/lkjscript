@@ -109,7 +109,9 @@ pub(in crate::operation) fn callable_arity(ty: &Type) -> Option<usize> {
 
 pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
     match ty {
-        Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
+        Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Path | Type::Symbol => {
+            true
+        }
         Type::Enum { id, arguments, .. }
             if matches!(
                 id.bytes(),

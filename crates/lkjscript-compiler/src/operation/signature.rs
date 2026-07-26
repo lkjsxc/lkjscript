@@ -53,6 +53,10 @@ impl Operation {
             | Self::BufClone
             | Self::BufFromStr
             | Self::BufToStr
+            | Self::PathFromStr
+            | Self::PathFromBuf
+            | Self::PathToBuf
+            | Self::PathToStr
             | Self::BufSlice
             | Self::BufGetU32
             | Self::BufSetU32

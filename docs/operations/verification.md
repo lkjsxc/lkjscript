@@ -80,8 +80,8 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Current Semantic Operation And Resource-Profile Gates
 
-The Semantic Source contract gate covers all 132 tracked files with the unchanged legacy contract
-base representation, closed node/value/type/built-in/declaration/trivia/
+The Semantic Source contract gate covers all 133 tracked files with the current
+canonical base representation, closed node/value/type/built-in/declaration/trivia/
 expression/correlation records, enum/match/pattern nodes and expressions,
 typed holes including match expected/scope facts, schema/source roundtrip,
 `snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic
@@ -93,7 +93,8 @@ references; expression type/effect/ownership constraints; bounded response
 encoding before publish; publication failure; byte-identical rollback; and
 prepared-journal crash recovery before the next read; descriptor-anchored
 ancestor-swap rejection; and preservation of an externally created leaf at the
-no-replace install boundary. Focused hole tests cover strict legacy contract rejection;
+no-replace install boundary. Focused hole tests cover strict stale and
+mismatched contract rejection;
 malformed and duplicate identity; expected type and scope ambiguity;
 deterministic ranking; snippets and blockers; ownership/effect validation;
 roundtrip; legal actions; exact/+1 pre-allocation; stale preconditions; all four
@@ -117,8 +118,8 @@ identity/cases, exact bit/exponent boundaries, F64-bit outcomes, malformed SSA,
 four-engine differentials, exact generated heap-runtime calls, and zero
 fallback. Match tests add
 nested usefulness/witness, stale plan, active projection, resource, source-order,
-single-evaluation, and four-engine zero-fallback coverage. Automatic/host-native
-enum transitions remain part of the Accepted the canonical source contract gate.
+single-evaluation, and four-engine zero-fallback coverage. Automatic and
+host-native enum transitions remain outside Current acceptance.
 
 Core resource profile tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child
@@ -128,18 +129,19 @@ journal capacity plus one, no-mutation rejection, and identity. Compiler tests
 retain corpus-root coverage and add exact/+1 deterministic-prefix boundaries
 for HIR, match planning, SSA construction, bytecode input, diagnostics, and
 outer-ledger accumulation. Semantic tests add deterministic typed prefixes,
-exact/+1 no-publication transaction response/staging boundaries, migration
+exact/+1 no-publication transaction response/staging boundaries, transaction
 staging boundaries, direct typed session execution, and all 128 bounded request
 segments. Parser-wide pre-allocation, exact bytecode-output sizing, and a
 whole-platform cross-authority ledger remain Accepted.
 
-## Current the canonical source contract Gate
+## Current Canonical Source Contract Gate
 
-The [the canonical source contract acceptance contract](../history/semantics/edition/execution-and-acceptance.md)
-is Current for all 132 tracked sources (128 under `src/`), exact old/new
-identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
+The canonical source contract gate is Current for all 133 tracked sources
+(129 under `src/`). Retained
+[execution acceptance evidence](../history/semantics/edition/execution-and-acceptance.md)
+records exact source and semantic identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
 rejection, atomic all-file rollback and crash recovery, compiler-resolved
-conversion, ordinary markerless rejection, evaluator/VM/forced-JIT
+conversion, rejection of removed marker forms, evaluator/VM/forced-JIT
 value/outcome/charge differentials, actual generated calls without fallback,
 malformed-metadata rejection, exact roots, and resource profile boundaries. Runtime
 smokes and Docker remain separately recorded gates.

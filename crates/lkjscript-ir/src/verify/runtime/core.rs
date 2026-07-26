@@ -98,16 +98,11 @@ pub(super) fn core_signature(
             RuntimeOp::BufFromStr => exact(&[SsaType::Str], &SsaType::Buf),
             _ => false,
         },
-        RuntimeOp::BufToStr => exact(
-            &[SsaType::Buf],
-            &crate::prelude_contract::result(
-                SsaType::Str,
-                SsaType::Enum {
-                    id: crate::EnumId::new(crate::prelude_contract::UTF8_ERROR_ID),
-                    arguments: Vec::new(),
-                },
-            ),
-        ),
+        RuntimeOp::BufToStr => exact(&[SsaType::Buf], &utf8_result(SsaType::Str)),
+        RuntimeOp::PathFromStr => exact(&[SsaType::Str], &system_result(SsaType::Path)),
+        RuntimeOp::PathFromBuf => exact(&[SsaType::Buf], &system_result(SsaType::Path)),
+        RuntimeOp::PathToBuf => exact(&[SsaType::Path], &SsaType::Buf),
+        RuntimeOp::PathToStr => exact(&[SsaType::Path], &utf8_result(SsaType::Str)),
         RuntimeOp::BufSlice => exact(
             &[SsaType::Buf, SsaType::I64, SsaType::I64],
             &system_result(SsaType::Buf),
@@ -121,4 +116,14 @@ pub(super) fn core_signature(
         _ => return None,
     };
     Some(valid)
+}
+
+fn utf8_result(success: SsaType) -> SsaType {
+    crate::prelude_contract::result(
+        success,
+        SsaType::Enum {
+            id: crate::EnumId::new(crate::prelude_contract::UTF8_ERROR_ID),
+            arguments: Vec::new(),
+        },
+    )
 }

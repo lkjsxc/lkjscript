@@ -86,6 +86,7 @@ pub(super) enum Kind {
     Closure(u32),
     List,
     Buf,
+    Path,
     Capability(crate::CapabilityKind),
     Handle,
     Product(ProductId),

@@ -1,3 +1,8 @@
+imports/
+import/
+src/std/fs/absolute-path.lkjscript#absolute-path
+/import
+/imports
 def/
 name/
 append-record
@@ -22,9 +27,11 @@ writer
 unwrap-ok/
 sys-open-append/
 file-system
+absolute-path/
 str/
 /tmp/lkjscript-durable-files-smoke.txt
 /str
+/absolute-path
 /sys-open-append
 /unwrap-ok
 /bind
@@ -77,9 +84,11 @@ reader
 unwrap-ok/
 sys-open-read/
 file-system
+absolute-path/
 str/
 /tmp/lkjscript-durable-files-smoke.txt
 /str
+/absolute-path
 /sys-open-read
 /unwrap-ok
 /bind

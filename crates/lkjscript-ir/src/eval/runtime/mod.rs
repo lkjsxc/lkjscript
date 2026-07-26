@@ -1,6 +1,7 @@
 use super::*;
 
 mod buffers;
+mod paths;
 mod scalars;
 mod sequences;
 mod strings;
@@ -51,6 +52,9 @@ impl Evaluator<'_> {
             | Op::BufSlice
             | Op::BufGetU32
             | Op::BufSetU32 => self.runtime_buffers(operation, arguments),
+            Op::PathFromStr | Op::PathFromBuf | Op::PathToBuf | Op::PathToStr => {
+                self.runtime_paths(operation, arguments)
+            }
             Op::StrLen
             | Op::StrRef
             | Op::StrAppend

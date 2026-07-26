@@ -10,6 +10,7 @@ pub enum Type {
     F64,
     Str,
     Buf,
+    Path,
     Capability(CapabilityKind),
     /// Initial ownership slice: only `Owned Buf` is well formed.
     Owned(Box<Type>),

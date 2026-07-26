@@ -3,6 +3,9 @@ import/
 src/examples/sqlite/read-number.lkjscript#read-number
 /import
 import/
+src/std/fs/absolute-path.lkjscript#absolute-path
+/import
+import/
 src/std/sqlite/backup.lkjscript#sqlite-backup
 /import
 import/
@@ -71,9 +74,11 @@ bind/
 database
 sqlite-open/
 sqlite
+absolute-path/
 str/
-:memory:
+/tmp/lkjscript-sqlite-example.db
 /str
+/absolute-path
 /sqlite-open
 /bind
 let/

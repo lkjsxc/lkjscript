@@ -1,35 +1,35 @@
 use super::*;
 
 impl ResourceTable {
-    pub fn sys_open_read(&mut self, path: &str) -> Result<Value> {
+    pub fn sys_open_read(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_read(path)
             .map_err(|error| Error::msg(format!("sys-open-read: {error}")))?;
         self.push(OwnedResource::File(file))
     }
 
-    pub fn sys_open_write(&mut self, path: &str) -> Result<Value> {
+    pub fn sys_open_write(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_write(path)
             .map_err(|error| Error::msg(format!("sys-open-write: {error}")))?;
         self.push(OwnedResource::File(file))
     }
 
-    pub fn sys_open_append(&mut self, path: &str) -> Result<Value> {
+    pub fn sys_open_append(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_append(path)
             .map_err(|error| Error::msg(format!("sys-open-append: {error}")))?;
         self.push(OwnedResource::File(file))
     }
 
-    pub fn sys_open_create_new(&mut self, path: &str) -> Result<Value> {
+    pub fn sys_open_create_new(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_create_new(path)
             .map_err(|error| Error::msg(format!("sys-open-create-new: {error}")))?;
         self.push(OwnedResource::File(file))
     }
 
-    pub fn sys_open_dir(&mut self, path: &str) -> Result<Value> {
+    pub fn sys_open_dir(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let directory = lkjscript_sys::open_dir(path)
             .map_err(|error| Error::msg(format!("sys-open-dir: {error}")))?;
@@ -56,13 +56,13 @@ impl ResourceTable {
         Ok(Value::UNIT)
     }
 
-    pub fn sys_rename(from: &str, to: &str) -> Result<Value> {
+    pub fn sys_rename(from: &[u8], to: &[u8]) -> Result<Value> {
         lkjscript_sys::rename_path(from, to)
             .map_err(|error| Error::msg(format!("sys-rename: {error}")))?;
         Ok(Value::UNIT)
     }
 
-    pub fn sys_path_exists(path: &str) -> Result<Value> {
+    pub fn sys_path_exists(path: &[u8]) -> Result<Value> {
         let exists = lkjscript_sys::path_exists(path)
             .map_err(|error| Error::msg(format!("sys-path-exists: {error}")))?;
         Ok(Value::from_bool(exists))

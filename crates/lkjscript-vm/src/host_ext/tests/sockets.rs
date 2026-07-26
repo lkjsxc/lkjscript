@@ -1,12 +1,14 @@
+use std::os::unix::ffi::OsStrExt;
+
 use super::*;
 
 #[test]
 fn file_handles_cannot_be_used_as_sockets() -> std::io::Result<()> {
     let file = TempFile::new()?;
-    let path = file.0.to_string_lossy();
+    let path = file.0.as_os_str().as_bytes();
     let mut table = ResourceTable::default();
     let handle = table
-        .sys_open_read(&path)
+        .sys_open_read(path)
         .expect("open temporary file as handle");
     assert!(table.sys_listen(handle, 1).is_err());
     Ok(())

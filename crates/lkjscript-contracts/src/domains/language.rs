@@ -43,6 +43,11 @@ pub(super) fn language() -> ContractDescriptor {
                 "capabilities",
                 "capabilities",
                 "eight closed explicit unforgeable provider values",
+            ))
+            .fact(fact(
+                "paths",
+                "Path",
+                "opaque absolute byte-preserving Linux pathname value",
             )),
     )
 }

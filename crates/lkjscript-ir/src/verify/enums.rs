@@ -165,9 +165,20 @@ fn is_traced(ty: &SsaType) -> bool {
         SsaType::Str
             | SsaType::Symbol
             | SsaType::Buf
+            | SsaType::Path
             | SsaType::Product(_)
             | SsaType::Enum { .. }
             | SsaType::List(_)
             | SsaType::Function(_)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_enum_fields_require_traced_metadata() {
+        assert!(is_traced(&SsaType::Path));
+    }
 }

@@ -15,12 +15,15 @@ impl GcHeap {
         let index = value
             .as_heap()
             .ok_or_else(|| Error::msg("expected heap value"))? as usize;
-        let old = self
+        let source = self
             .objs
             .get(index)
             .and_then(Option::as_ref)
-            .map(clone_object_for_transaction)
             .ok_or_else(|| Error::msg("bad heap index"))?;
+        if matches!(source, HeapObj::Path(_)) {
+            return Err(Error::msg("Path is immutable"));
+        }
+        let old = clone_object_for_transaction(source);
         let old_bytes = estimated_object_bytes(&old);
         let result = {
             let object = self
@@ -140,10 +143,14 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
             captures: clone_values(captures, captures.capacity()),
         },
         HeapObj::Builtin(value) => HeapObj::Builtin(*value),
-        HeapObj::Buf(bytes) => {
+        HeapObj::Buf(bytes) | HeapObj::Path(bytes) => {
             let mut clone = Vec::with_capacity(bytes.capacity());
             clone.extend_from_slice(bytes);
-            HeapObj::Buf(clone)
+            if matches!(object, HeapObj::Buf(_)) {
+                HeapObj::Buf(clone)
+            } else {
+                HeapObj::Path(clone)
+            }
         }
         HeapObj::Product { product, fields } => HeapObj::Product {
             product: *product,
@@ -158,5 +165,26 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
             physical_tag: *physical_tag,
             active_payload: clone_values(active_payload, active_payload.capacity()),
         },
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_objects_reject_mutation_before_invoking_the_closure() {
+        let mut heap = GcHeap::default();
+        let path = heap
+            .alloc(HeapObj::Path(b"/tmp/immutable".to_vec()))
+            .expect("Path");
+        let mut invoked = false;
+        let result = heap.mutate(path, |_| {
+            invoked = true;
+            Ok(())
+        });
+        assert!(result.is_err());
+        assert!(!invoked);
     }
 }

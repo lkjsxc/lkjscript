@@ -39,6 +39,7 @@ pub enum EvalValue {
     Str(String),
     Symbol(String),
     Buf(EvalBuffer),
+    Path(Vec<u8>),
     Capability(lkjscript_contracts::CapabilityKind),
     Handle(u64),
     Product(ProductId, Vec<Self>),
@@ -64,6 +65,7 @@ impl PartialEq for EvalValue {
                 left == right
             }
             (Self::Buf(left), Self::Buf(right)) => left == right,
+            (Self::Path(left), Self::Path(right)) => left == right,
             (Self::Capability(left), Self::Capability(right)) => left == right,
             (Self::Handle(left), Self::Handle(right)) => left == right,
             (Self::Product(left_id, left), Self::Product(right_id, right)) => {

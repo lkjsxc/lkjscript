@@ -8,6 +8,7 @@
 pub mod executable;
 mod fd;
 mod file;
+mod native_path;
 mod poll;
 mod random;
 mod socket;

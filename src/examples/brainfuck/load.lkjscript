@@ -30,7 +30,7 @@ Stdio
 /Capability
 Product
 BrainfuckState
-Str
+Path
 ->
 Product
 BrainfuckState
@@ -49,7 +49,7 @@ Product/
 BrainfuckState
 /Product
 path
-Str
+Path
 /params
 let/
 bind/

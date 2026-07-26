@@ -32,6 +32,38 @@ fn auto_group_reference_helper_remains_vm_entry_ineligible() {
 }
 
 #[test]
+fn auto_path_helper_remains_vm_only() {
+    let source = concat!(
+        "def/\nname/\npath\n/name\nfn/\nsig/\n->\nPath\n/sig\nparams/\n/params\n",
+        "unwrap-ok/\npath-from-str/\nstr/\n/tmp/auto-path\n/str\n/path-from-str\n",
+        "/unwrap-ok\n/fn\n/def\nmain/\nsig/\n->\nPath\n/sig\npath/\n/path\n/main\n",
+    );
+    let program = compile(source, "auto-path.lkjscript");
+    let mut config = JitConfig::default();
+    config.auto_threshold = 1;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert!(matches!(
+        outcome,
+        ExecutionOutcome::Returned(value) if value.as_path_bytes() == Some(b"/tmp/auto-path")
+    ));
+    let path = stats
+        .functions
+        .iter()
+        .find(|function| function.name() == "path")
+        .expect("Path helper tier record");
+    assert_eq!(path.state(), TierState::VmOnly);
+    assert!(!path.auto_entry_eligible());
+    assert_eq!(path.attempts(), 0);
+    assert_eq!(stats.compile_failures, 0);
+}
+
+#[test]
 fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
     let program = compile(&f64_loop(), "auto.lkjscript");
     let mut config = JitConfig::default();

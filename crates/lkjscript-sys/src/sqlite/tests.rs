@@ -1,12 +1,29 @@
 #![allow(clippy::expect_used)]
 
+use std::os::unix::ffi::OsStrExt;
+
 use super::{Connection, Step};
 
 const OPEN_RW_CREATE_FULLMUTEX: i64 = 0x0001_0006;
 
 #[test]
-fn memory_database_prepares_binds_and_reads_exact_values() {
-    let connection = Connection::open(":memory:", OPEN_RW_CREATE_FULLMUTEX).expect("open");
+fn sqlite_path_api_rejects_relative_nul_and_oversized_bytes() {
+    assert!(Connection::open(b":memory:", OPEN_RW_CREATE_FULLMUTEX).is_err());
+    assert!(Connection::open(b"/nul\0byte", OPEN_RW_CREATE_FULLMUTEX).is_err());
+    let oversized = vec![b'/'; crate::native_path::MAX_PATH_BYTES + 1];
+    assert!(Connection::open(&oversized, OPEN_RW_CREATE_FULLMUTEX).is_err());
+}
+
+#[test]
+fn database_prepares_binds_and_reads_exact_values() -> std::io::Result<()> {
+    let path = std::env::temp_dir().join(format!(
+        "lkjscript-sqlite-values-{}-{}.sqlite",
+        std::process::id(),
+        line!()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let connection =
+        Connection::open(path.as_os_str().as_bytes(), OPEN_RW_CREATE_FULLMUTEX).expect("open");
     connection
         .exec("CREATE TABLE sample (number INTEGER, text TEXT, bytes BLOB)")
         .expect("schema");
@@ -31,6 +48,11 @@ fn memory_database_prepares_binds_and_reads_exact_values() {
         Some(vec![0, 255])
     );
     assert_eq!(query.step().expect("done"), Step::Done);
+    drop(query);
+    drop(insert);
+    drop(connection);
+    std::fs::remove_file(path)?;
+    Ok(())
 }
 
 #[test]
@@ -42,27 +64,18 @@ fn file_database_backup_restores_durable_rows() {
     ));
     let source_path = root.with_extension("source.sqlite");
     let backup_path = root.with_extension("backup.sqlite");
-    let source = Connection::open(
-        source_path.to_str().expect("UTF-8 source path"),
-        OPEN_RW_CREATE_FULLMUTEX,
-    )
-    .expect("open source");
+    let source = Connection::open(source_path.as_os_str().as_bytes(), OPEN_RW_CREATE_FULLMUTEX)
+        .expect("open source");
     source.busy_timeout(100).expect("busy timeout");
     source
         .exec("CREATE TABLE sample (number INTEGER); INSERT INTO sample VALUES (9)")
         .expect("write source");
     source
-        .backup_to(
-            backup_path.to_str().expect("UTF-8 backup path"),
-            OPEN_RW_CREATE_FULLMUTEX,
-        )
+        .backup_to(backup_path.as_os_str().as_bytes(), OPEN_RW_CREATE_FULLMUTEX)
         .expect("backup");
     drop(source);
-    let restored = Connection::open(
-        backup_path.to_str().expect("UTF-8 backup path"),
-        OPEN_RW_CREATE_FULLMUTEX,
-    )
-    .expect("open backup");
+    let restored = Connection::open(backup_path.as_os_str().as_bytes(), OPEN_RW_CREATE_FULLMUTEX)
+        .expect("open backup");
     let query = restored
         .prepare("SELECT number FROM sample")
         .expect("prepare restored query");

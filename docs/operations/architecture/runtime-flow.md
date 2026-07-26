@@ -153,8 +153,8 @@ goal/specification
 
 [Semantic Source And Agent
 Protocol](../../decisions/platform/semantic-source-and-agent-protocol.md) now
-has Current Schema: one validated source-tree authority, exact 132-file
-tracked source roundtrip (121 under `src/`), exact revision and stable hole/
+has Current Schema: one validated source-tree authority, exact 133-file
+tracked source roundtrip (129 under `src/`), exact revision and stable hole/
 declaration identities, dense nodes, structural diagnostics, checker-derived
 hole context, bounded legal actions, and atomic transactions. Existing
 HIR/SSA/VM/JIT behavior remains unchanged through that cutover, and no sibling

@@ -30,7 +30,7 @@ different from the VM silently converting an OS error into process failure.
 The descriptor-facing surface becomes:
 
 ```text
-stdin-handle                         -> Handle
+stdin-handle Capability Stdio        -> Handle
 sys-isatty Handle                    -> Result Bool SystemError
 drop Handle                     -> Result Unit SystemError
 sys-read-byte Handle                 -> Result I64 SystemError
@@ -39,15 +39,22 @@ sys-read-into Handle Buf I64 I64     -> Result I64 SystemError
 sys-write-from Handle Buf I64 I64    -> Result I64 SystemError
 buf-from-str Str                      -> Buf
 buf-to-str Buf                        -> Result Str Utf8Error
-sys-open-append Str                  -> Result Handle SystemError
-sys-open-create-new Str              -> Result Handle SystemError
-sys-open-dir Str                     -> Result Handle SystemError
+sys-open-append Capability FileSystem Path
+                                     -> Result Handle SystemError
+sys-open-create-new Capability FileSystem Path
+                                     -> Result Handle SystemError
+sys-open-dir Capability FileSystem Path
+                                     -> Result Handle SystemError
 sys-fsync Handle                     -> Result Unit SystemError
 sys-truncate Handle I64              -> Result Unit SystemError
-sys-rename Str Str                   -> Result Unit SystemError
-sys-random-fill Buf I64 I64          -> Result Unit SystemError
-sys-tty-guard-save Buf               -> Result Unit SystemError
-sys-tty-guard-clear                  -> Result Unit SystemError
+sys-rename Capability FileSystem Path Path
+                                     -> Result Unit SystemError
+sys-random-fill Capability Entropy Buf I64 I64
+                                     -> Result Unit SystemError
+sys-tty-guard-save Capability Terminal Buf
+                                     -> Result Unit SystemError
+sys-tty-guard-clear Capability Terminal
+                                     -> Result Unit SystemError
 ```
 
 The old `stdin-fd`, `isatty`, `close`, `read-byte-fd`, `write-byte-fd`,

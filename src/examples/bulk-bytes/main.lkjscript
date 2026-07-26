@@ -2,6 +2,9 @@ imports/
 import/
 src/examples/bulk-bytes/support.lkjscript#print-buffer
 /import
+import/
+src/std/fs/absolute-path.lkjscript#absolute-path
+/import
 /imports
 def/
 name/
@@ -52,9 +55,11 @@ writer
 unwrap-ok/
 sys-open-write/
 file-system
+absolute-path/
 str/
 /tmp/lkjscript-bulk-bytes-smoke.txt
 /str
+/absolute-path
 /sys-open-write
 /unwrap-ok
 /bind
@@ -101,9 +106,11 @@ reader
 unwrap-ok/
 sys-open-read/
 file-system
+absolute-path/
 str/
 /tmp/lkjscript-bulk-bytes-smoke.txt
 /str
+/absolute-path
 /sys-open-read
 /unwrap-ok
 /bind

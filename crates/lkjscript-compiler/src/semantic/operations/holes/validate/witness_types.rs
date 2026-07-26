@@ -11,6 +11,7 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         Type::F64 => T::F64 {},
         Type::Str => T::String {},
         Type::Buf => T::Buffer {},
+        Type::Path => T::Path {},
         Type::Capability(kind) => T::Capability {
             capability: kind.as_str().into(),
         },

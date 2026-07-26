@@ -9,7 +9,7 @@ Capability/
 Sqlite
 /Capability
 Handle
-Str
+Path
 ->
 Unit
 /sig
@@ -21,7 +21,7 @@ Sqlite
 database
 Handle
 path
-Str
+Path
 /params
 unwrap-ok/
 sys-sqlite-backup/

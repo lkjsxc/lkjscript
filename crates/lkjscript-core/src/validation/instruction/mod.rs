@@ -73,6 +73,10 @@ pub(super) fn apply_instruction(
         Op::BufNew
         | Op::BufFromStr
         | Op::BufToStr
+        | Op::PathFromStr
+        | Op::PathFromBuf
+        | Op::PathToBuf
+        | Op::PathToStr
         | Op::BufSlice
         | Op::BufLen
         | Op::BufClone

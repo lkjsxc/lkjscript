@@ -56,6 +56,7 @@ impl ResourceTable {
 }
 
 mod files;
+mod paths;
 mod resources;
 mod results;
 mod sockets;
@@ -68,6 +69,7 @@ mod strings;
 #[allow(clippy::expect_used)]
 mod tests;
 
+pub use paths::*;
 pub use results::*;
 pub use sockets::SocketReceiveError;
 pub use strings::*;

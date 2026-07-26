@@ -16,7 +16,7 @@ sig/
 Capability/
 FileSystem
 /Capability
-Str
+Path
 Str
 ->
 Unit
@@ -27,7 +27,7 @@ Capability/
 FileSystem
 /Capability
 path
-Str
+Path
 s
 Str
 /params

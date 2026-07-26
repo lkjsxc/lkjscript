@@ -10,6 +10,7 @@ pub enum ScalarOutcome {
     I64(i64),
     F64(u64),
     Str(String),
+    Path(Vec<u8>),
     Exited(i64),
     Trapped,
     Other(String),
@@ -22,6 +23,7 @@ pub fn evaluator_outcome(outcome: EvalOutcome) -> ScalarOutcome {
         EvalOutcome::Returned(EvalValue::I64(value)) => ScalarOutcome::I64(value),
         EvalOutcome::Returned(EvalValue::F64(value)) => ScalarOutcome::F64(value.to_bits()),
         EvalOutcome::Returned(EvalValue::Str(value)) => ScalarOutcome::Str(value),
+        EvalOutcome::Returned(EvalValue::Path(value)) => ScalarOutcome::Path(value),
         EvalOutcome::Exited(code) => ScalarOutcome::Exited(code),
         EvalOutcome::Trapped(_) => ScalarOutcome::Trapped,
         other => ScalarOutcome::Other(format!("{other:?}")),
@@ -39,6 +41,8 @@ fn vm_value(value: &OwnedValue) -> ScalarOutcome {
         ScalarOutcome::F64(value.to_bits())
     } else if let Some(value) = value.as_str() {
         ScalarOutcome::Str(value.to_owned())
+    } else if let Some(value) = value.as_path_bytes() {
+        ScalarOutcome::Path(value.to_vec())
     } else {
         ScalarOutcome::Other(format!("{value:?}"))
     }

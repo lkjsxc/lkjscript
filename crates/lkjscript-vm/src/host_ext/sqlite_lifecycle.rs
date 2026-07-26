@@ -13,7 +13,7 @@ impl ResourceTable {
         }
     }
 
-    pub fn sqlite_open(&mut self, path: &str, flags: i64) -> Result<Value> {
+    pub fn sqlite_open(&mut self, path: &[u8], flags: i64) -> Result<Value> {
         self.ensure_capacity()?;
         let connection = lkjscript_sys::SqliteConnection::open(path, flags)
             .map_err(|error| Error::msg(format!("sys-sqlite-open: {error}")))?;

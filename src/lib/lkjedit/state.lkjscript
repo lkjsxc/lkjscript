@@ -63,7 +63,8 @@ name/
 path
 /name
 type/
-Str
+Option
+Path
 /type
 /field
 field/

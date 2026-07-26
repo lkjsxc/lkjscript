@@ -16,7 +16,7 @@ sig/
 Capability/
 FileSystem
 /Capability
-Str
+Path
 ->
 Str
 /sig
@@ -26,7 +26,7 @@ Capability/
 FileSystem
 /Capability
 path
-Str
+Path
 /params
 let/
 bind/

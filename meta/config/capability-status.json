@@ -71,6 +71,14 @@
       "claimants": ["docs/current-state.md", "docs/decisions/semantics/numeric-conversions.md"]
     },
     {
+      "id": "opaque-paths",
+      "status": "current",
+      "interface": "opaque absolute byte-preserving Linux Path values",
+      "authority": "docs/decisions/capabilities/opaque-paths.md",
+      "evidence": "docs/current-state.md",
+      "claimants": ["docs/current-state.md"]
+    },
+    {
       "id": "repository-graph-context",
       "status": "current",
       "interface": "lkjscript-xtask structure context",

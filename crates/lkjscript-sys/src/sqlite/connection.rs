@@ -1,8 +1,11 @@
 use super::*;
 
 impl Connection {
-    pub fn open(path: &str, flags: i64) -> Result<Self, SqliteError> {
+    pub fn open(path: &[u8], flags: i64) -> Result<Self, SqliteError> {
         let flags = checked_open_flags(flags)?;
+        if !crate::native_path::validate(path) {
+            return Err(SqliteError::new("open path", -1));
+        }
         let path = CString::new(path).map_err(|_| SqliteError::new("open path", -1))?;
         let mut raw = ptr::null_mut();
         let code = unsafe { sqlite3_open_v2(path.as_ptr(), &mut raw, flags, ptr::null()) };
@@ -81,7 +84,7 @@ impl Connection {
         i64::from(unsafe { sqlite3_extended_errcode(self.raw.as_ptr()) })
     }
 
-    pub fn backup_to(&self, destination: &str, flags: i64) -> Result<(), SqliteError> {
+    pub fn backup_to(&self, destination: &[u8], flags: i64) -> Result<(), SqliteError> {
         let destination = Self::open(destination, flags)?;
         let main = c"main";
         let backup = unsafe {

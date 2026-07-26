@@ -10,6 +10,7 @@ pub(crate) fn supports_value_equality(ty: &SsaType) -> bool {
         | SsaType::I64
         | SsaType::F64
         | SsaType::Str
+        | SsaType::Path
         | SsaType::Symbol => true,
         SsaType::Enum { arguments, .. } => arguments.iter().all(supports_value_equality),
         _ => false,

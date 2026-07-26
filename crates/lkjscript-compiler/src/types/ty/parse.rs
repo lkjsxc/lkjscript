@@ -21,6 +21,7 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         )),
         "Str" => Ok((Type::Str, i + 1)),
         "Buf" => Ok((Type::Buf, i + 1)),
+        "Path" => Ok((Type::Path, i + 1)),
         "Capability" => {
             let kind = atoms
                 .get(i + 1)
@@ -99,6 +100,7 @@ fn is_type_param_name(s: &str) -> bool {
                 | "SystemError"
                 | "Str"
                 | "Buf"
+                | "Path"
                 | "Capability"
                 | "Arguments"
                 | "Clock"

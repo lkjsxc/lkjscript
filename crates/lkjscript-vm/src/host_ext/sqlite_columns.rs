@@ -74,7 +74,7 @@ impl ResourceTable {
             .extended_result_code())
     }
 
-    pub fn sqlite_backup(&self, handle: Value, path: &str, flags: i64) -> Result<Value> {
+    pub fn sqlite_backup(&self, handle: Value, path: &[u8], flags: i64) -> Result<Value> {
         self.sqlite_connection(handle, "sys-sqlite-backup")?
             .backup_to(path, flags)
             .map_err(|error| Error::msg(format!("sys-sqlite-backup: {error}")))?;

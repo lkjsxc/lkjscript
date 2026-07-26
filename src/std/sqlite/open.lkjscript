@@ -8,7 +8,7 @@ sig/
 Capability/
 Sqlite
 /Capability
-Str
+Path
 ->
 Handle
 /sig
@@ -18,7 +18,7 @@ Capability/
 Sqlite
 /Capability
 path
-Str
+Path
 /params
 unwrap-ok/
 sys-sqlite-open/

@@ -12,6 +12,7 @@ pub(crate) enum TypeExpression {
     F64 {},
     String {},
     Buffer {},
+    Path {},
     Capability {
         capability: String,
     },
@@ -64,6 +65,7 @@ impl TypeExpression {
             Self::F64 {} => output.push(atom("F64".into(), span)),
             Self::String {} => output.push(atom("Str".into(), span)),
             Self::Buffer {} => output.push(atom("Buf".into(), span)),
+            Self::Path {} => output.push(atom("Path".into(), span)),
             Self::Capability { capability } => {
                 if lkjscript_core::CapabilityKind::parse(capability).is_none() {
                     return Err(format!("unknown capability kind {capability}"));

@@ -112,6 +112,7 @@ pub(in crate::analyze) fn is_builtin_type_name(name: &str) -> bool {
             | "SystemError"
             | "Str"
             | "Buf"
+            | "Path"
             | "Capability"
             | "Symbol"
             | "Handle"

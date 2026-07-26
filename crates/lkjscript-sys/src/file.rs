@@ -28,11 +28,14 @@ extern "C" {
     fn rename(oldpath: *const i8, newpath: *const i8) -> i32;
 }
 
-fn c_path(path: &str) -> Result<CString, FdError> {
+fn c_path(path: &[u8]) -> Result<CString, FdError> {
+    if !crate::native_path::validate(path) {
+        return Err(FdError(-1));
+    }
     CString::new(path).map_err(|_| FdError(-1))
 }
 
-pub fn open_read(path: &str) -> Result<OwnedFd, FdError> {
+pub fn open_read(path: &[u8]) -> Result<OwnedFd, FdError> {
     let c = c_path(path)?;
     let fd = unsafe { open(c.as_ptr(), O_RDONLY, 0) };
     if fd < 0 {
@@ -41,23 +44,23 @@ pub fn open_read(path: &str) -> Result<OwnedFd, FdError> {
     Ok(OwnedFd::from_raw(fd))
 }
 
-pub fn open_write(path: &str) -> Result<OwnedFd, FdError> {
+pub fn open_write(path: &[u8]) -> Result<OwnedFd, FdError> {
     open_with_mode(path, O_WRONLY | O_CREAT | O_TRUNC)
 }
 
-pub fn open_append(path: &str) -> Result<OwnedFd, FdError> {
+pub fn open_append(path: &[u8]) -> Result<OwnedFd, FdError> {
     open_with_mode(path, O_WRONLY | O_CREAT | O_APPEND)
 }
 
-pub fn open_create_new(path: &str) -> Result<OwnedFd, FdError> {
+pub fn open_create_new(path: &[u8]) -> Result<OwnedFd, FdError> {
     open_with_mode(path, O_WRONLY | O_CREAT | O_EXCL)
 }
 
-pub fn open_dir(path: &str) -> Result<OwnedFd, FdError> {
+pub fn open_dir(path: &[u8]) -> Result<OwnedFd, FdError> {
     open_with_mode(path, O_RDONLY | O_DIRECTORY)
 }
 
-fn open_with_mode(path: &str, flags: i32) -> Result<OwnedFd, FdError> {
+fn open_with_mode(path: &[u8], flags: i32) -> Result<OwnedFd, FdError> {
     let c = c_path(path)?;
     let fd = unsafe { open(c.as_ptr(), flags, MODE_0666) };
     if fd < 0 {
@@ -83,7 +86,7 @@ pub fn truncate_fd(fd: RawFd, length: i64) -> Result<(), FdError> {
     Ok(())
 }
 
-pub fn rename_path(from: &str, to: &str) -> Result<(), FdError> {
+pub fn rename_path(from: &[u8], to: &[u8]) -> Result<(), FdError> {
     let from = c_path(from)?;
     let to = c_path(to)?;
     if unsafe { rename(from.as_ptr(), to.as_ptr()) } < 0 {
@@ -118,7 +121,7 @@ pub fn write_fd(fd: RawFd, buf: &[u8]) -> Result<usize, FdError> {
     }
 }
 
-pub fn path_exists(path: &str) -> Result<bool, FdError> {
+pub fn path_exists(path: &[u8]) -> Result<bool, FdError> {
     let c = c_path(path)?;
     let rc = unsafe { access(c.as_ptr(), F_OK) };
     if rc == 0 {
@@ -134,12 +137,26 @@ pub fn path_exists(path: &str) -> Result<bool, FdError> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
     use super::path_exists;
 
     #[test]
     fn missing_paths_are_false_but_malformed_paths_are_errors() {
         let missing = format!("/tmp/lkjscript-missing-{}-{}", std::process::id(), line!());
-        assert_eq!(path_exists(&missing).ok(), Some(false));
-        assert!(path_exists("embedded\0nul").is_err());
+        assert_eq!(path_exists(missing.as_bytes()).ok(), Some(false));
+        assert!(path_exists(b"embedded\0nul").is_err());
+    }
+
+    #[test]
+    fn non_utf8_path_bytes_reach_linux_without_loss() -> std::io::Result<()> {
+        let mut bytes = format!("/tmp/lkjscript-non-utf8-{}-", std::process::id()).into_bytes();
+        bytes.push(0xff);
+        let path = std::path::PathBuf::from(std::ffi::OsString::from_vec(bytes.clone()));
+        std::fs::write(&path, b"exact")?;
+        assert_eq!(path.as_os_str().as_bytes(), bytes);
+        assert_eq!(path_exists(&bytes).ok(), Some(true));
+        std::fs::remove_file(path)?;
+        Ok(())
     }
 }

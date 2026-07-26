@@ -21,6 +21,22 @@ pub(super) fn apply(
             expect_pop(state, Kind::Buf, proto, instruction)?;
             state.stack.push(result_kind());
         }
+        Op::PathFromStr => {
+            expect_pop(state, Kind::Str, proto, instruction)?;
+            state.stack.push(result_kind());
+        }
+        Op::PathFromBuf => {
+            expect_pop(state, Kind::Buf, proto, instruction)?;
+            state.stack.push(result_kind());
+        }
+        Op::PathToBuf => {
+            expect_pop(state, Kind::Path, proto, instruction)?;
+            state.stack.push(Kind::Buf);
+        }
+        Op::PathToStr => {
+            expect_pop(state, Kind::Path, proto, instruction)?;
+            state.stack.push(result_kind());
+        }
         Op::BufSlice => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;

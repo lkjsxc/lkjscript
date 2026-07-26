@@ -4,39 +4,48 @@
 
 ## Status
 
-**Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
-explicit labels in this capsule and its authority; this capsule cannot promote a capability.
+**Current.** Module and runtime pathname rules are implemented for the Current
+Linux x86-64 platform.
 
-## Files And Imports
+## Files And Modules
 
-Imported files contain only `import`, immutable function `def`, `product`,
-marker `trait`, and exact marker `impl` declarations. An executable root
-contains those declarations plus exactly one
-`main/ sig/ -> T /sig body-expression /main`. Main has no parameters, its body
-has exactly `T`, and `arg` remains the script-argument operation. A main in an
-import, no root main, a duplicate root main, top-level `do`, and non-function
-`def` are compile errors. All source files remain bounded by
-`MAX_TOPLEVEL_FORMS`.
+Every source file ends in `.lkjscript` and is one module identified by its
+exact package-root-relative UTF-8 path. `.lkjml`, extensionless source, absolute
+module names, dot-relative names, parent components, malformed separators, and
+path or symlink escape are rejected before publication.
 
-Current path resolution supports:
+Imported modules contain explicit declarations. An executable target resolves
+one root with exactly one `main`; its signature carries the exact sorted typed
+capability parameters required by its closed call graph. No imported module may
+provide another root entry.
 
-- `std/...`, `lib/...`, and `examples/...` from package `src` trees;
-- `./...` relative to the importing file;
-- installed fallback through `LKJSCRIPT_ROOT` when a local category directory
-  is absent.
+One bounded `imports/` envelope contains sorted `import/` records of the form:
 
-Parent path components and absolute imports are rejected. Canonicalized paths
-must remain inside the project or installed root, so symlink escapes fail.
-Cycles are rejected and repeated canonical files are deduplicated. Definitions
-are not namespaced modules yet.
+```text
+import/
+src/std/fs/read-file.lkjscript#read-file
+/import
+```
 
-Every entry and import must end in `.lkjscript`. `.lkjml`, extensionless source,
-and unrelated extensions are rejected before parsing.
-## Strings And Bytes
+Each record names an exact module and sorted declaration set. Wildcards,
+ambient roots, environment lookup, installed fallback, private names,
+collisions, transitive visibility, cycles, and unresolved imports fail closed.
+Declarations are private unless they contain the explicit `public` field.
 
-Strings are UTF-8 host strings and many string operations index bytes. `Buf`
-is the Current lossless bounded byte-storage path for file, socket, entropy,
-SHA-256, and SQLite blob operations. Offset/length checks and partial-progress
-counts are exact. `buf-slice` allocates and copies its selected range; it is not
-the future borrowed `Slice T`. String APIs continue to reject invalid UTF-8
-boundaries rather than imply character indexing.
+## Strings, Bytes, And Runtime Paths
+
+`Str`, `Buf`, and `Path` are disjoint. `Str` stores valid UTF-8. `Buf` is the
+Current bounded mutable byte value for file contents, sockets, entropy,
+SHA-256, and SQLite blobs. Runtime Linux `Path` stores immutable exact absolute
+pathname bytes; it is unrelated to UTF-8 module identity.
+
+`path-from-str` and `path-from-buf` are the only constructors. They reject
+empty, relative, NUL-containing, and longer-than-4095-byte values.
+`path-to-buf` returns an exact independent copy; `path-to-str` performs strict
+UTF-8 validation. Filesystem and SQLite pathname operations accept only
+`Path`. No conversion normalizes, searches, consults ambient state, or decodes
+with replacement.
+
+String operations continue to reject invalid UTF-8 boundaries rather than
+imply character indexing. Buffer offset/length checks and partial-progress
+counts remain exact.
