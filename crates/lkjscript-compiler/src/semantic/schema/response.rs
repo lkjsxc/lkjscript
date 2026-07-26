@@ -31,6 +31,8 @@ pub(crate) struct ProtocolError {
     pub message: String,
     #[serde(skip)]
     pub diagnostic: Option<Box<DiagnosticRecord>>,
+    #[serde(skip)]
+    pub budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

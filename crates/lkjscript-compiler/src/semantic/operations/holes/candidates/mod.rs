@@ -9,32 +9,32 @@ use ranking::{builtin_category, rank_key};
 
 use super::site::HoleSite;
 
-pub(super) fn enumerate(
+pub(super) fn enumerate_with_ledger(
     site: &HoleSite<'_>,
     scope: &[ScopeEntity],
-    profile: ResourceProfile,
-) -> (Vec<HoleCandidate>, ExplorationRecord, Vec<ActionBlocker>) {
+    ledger: &mut BudgetLedger,
+) -> Result<(Vec<HoleCandidate>, ExplorationRecord, Vec<ActionBlocker>), ProtocolError> {
     let expected = match &site.expected {
         Ok(ty) => ty,
-        Err(reason) => return unsupported(*reason),
+        Err(reason) => return Ok(unsupported(*reason)),
     };
     let scope_count = match u64::try_from(scope.len()) {
         Ok(value) => value,
-        Err(_) => return bounded_failure("hole candidate count overflow".into()),
+        Err(_) => return Ok(bounded_failure("hole candidate count overflow".into())),
     };
     let builtin_count = match u64::try_from(crate::hir::Operation::ALL.len()) {
         Ok(value) => value,
-        Err(_) => return bounded_failure("built-in candidate count overflow".into()),
+        Err(_) => return Ok(bounded_failure("built-in candidate count overflow".into())),
     };
     let Some(maximum) = scope_count
         .checked_add(builtin_count)
         .and_then(|value| value.checked_add(16))
     else {
-        return bounded_failure("hole candidate count overflow".into());
+        return Ok(bounded_failure("hole candidate count overflow".into()));
     };
     let node_count = match u64::try_from(site.tree.nodes().len()) {
         Ok(value) => value,
-        Err(_) => return bounded_failure("hole search work overflow".into()),
+        Err(_) => return Ok(bounded_failure("hole search work overflow".into())),
     };
     let Some(work) = node_count
         .checked_mul(4)
@@ -42,34 +42,30 @@ pub(super) fn enumerate(
         .and_then(|per_candidate| per_candidate.checked_mul(maximum))
         .and_then(|value| value.checked_add(1))
     else {
-        return bounded_failure("hole search work overflow".into());
+        return Ok(bounded_failure("hole search work overflow".into()));
     };
-    let mut ledger = BudgetLedger::new(profile.core());
     let mut request = ledger.scope(BudgetAuthority::SemanticRequest);
-    let mut holes = match request.child(BudgetAuthority::Holes) {
-        Ok(scope) => scope,
-        Err(failure) => return bounded_failure(failure.to_string()),
-    };
-    let mut work_reservation = match holes.reserve(
-        ResourceCategory::HoleSearchWork,
-        work,
-        BudgetCause::SemanticNode(u64::from(site.node)),
-    ) {
-        Ok(value) => value,
-        Err(failure) => return bounded_failure(failure.to_string()),
-    };
-    if work_reservation.consume(work).is_err() {
-        return bounded_failure("hole search reservation failed".into());
-    }
+    let mut holes = request
+        .child(BudgetAuthority::Holes)
+        .map_err(crate::semantic::codec::budget_error)?;
+    let mut work_reservation = holes
+        .reserve(
+            ResourceCategory::HoleSearchWork,
+            work,
+            BudgetCause::SemanticNode(u64::from(site.node)),
+        )
+        .map_err(crate::semantic::codec::budget_error)?;
+    work_reservation
+        .consume(work)
+        .map_err(crate::semantic::codec::budget_error)?;
     work_reservation.return_unused();
-    let mut reservation = match holes.reserve(
-        ResourceCategory::HoleCandidates,
-        maximum,
-        BudgetCause::SemanticNode(u64::from(site.node)),
-    ) {
-        Ok(value) => value,
-        Err(failure) => return bounded_failure(failure.to_string()),
-    };
+    let mut reservation = holes
+        .reserve(
+            ResourceCategory::HoleCandidates,
+            maximum,
+            BudgetCause::SemanticNode(u64::from(site.node)),
+        )
+        .map_err(crate::semantic::codec::budget_error)?;
     let mut expressions = literal_expressions(site.tree, expected);
     expressions.extend(control::expressions(site, expected));
     for entity in scope {
@@ -149,7 +145,7 @@ pub(super) fn enumerate(
         reason: None,
     };
     let blockers = unsupported_blockers(edition2);
-    (candidates, exploration, blockers)
+    Ok((candidates, exploration, blockers))
 }
 
 fn unsupported(

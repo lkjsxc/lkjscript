@@ -17,10 +17,22 @@ mod stage;
 pub(crate) use model::{ResolvedOperation, StagedSource, StagedTransaction};
 pub(crate) use nodes::node_mut;
 pub(crate) use positions::{is_expression_path, path_from_owner};
+pub(crate) use publication_lock::PublicationGuard;
 pub(crate) use publish::publish;
 #[cfg(test)]
 pub(crate) use recovery::publish_with_install_failure;
-pub(crate) use stage::stage;
+pub(crate) use stage::stage_with_ledger;
+
+#[cfg(test)]
+pub(crate) fn stage(
+    tree: &crate::source::ValidatedSourceTree,
+    requests: &[crate::semantic::schema::TransactionOperation],
+    preconditions: &[crate::semantic::schema::FilePrecondition],
+    profile: crate::semantic::schema::ResourceProfile,
+) -> Result<StagedTransaction, crate::semantic::schema::ProtocolError> {
+    let mut ledger = lkjscript_core::BudgetLedger::new(profile.core());
+    stage_with_ledger(tree, requests, preconditions, &mut ledger)
+}
 
 pub(crate) fn begin(
     root: &std::path::Path,

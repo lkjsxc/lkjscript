@@ -1,4 +1,4 @@
-use lkjscript_core::ResourceProfile;
+use lkjscript_core::BudgetLedger;
 
 use crate::source::{SourceEdition, SourceResult, ValidatedSourceTree};
 
@@ -28,7 +28,7 @@ pub(super) fn validate_complete_semantics(
     old: &ValidatedSourceTree,
     migrated: &ValidatedSourceTree,
     limits: &lkjscript_core::Limits,
-    profile: ResourceProfile,
+    ledger: &mut BudgetLedger,
 ) -> SourceResult<()> {
     if migrated.edition() != SourceEdition::Edition2 {
         return Err(diagnostic(
@@ -39,8 +39,7 @@ pub(super) fn validate_complete_semantics(
     }
     let analyzed = crate::analyze::analyze_program(migrated)
         .map_err(|error| diagnostic(old, "LKJ-SRC-MIGRATION-SEMANTICS", error.to_string()))?;
-    let mut ledger = lkjscript_core::BudgetLedger::new(profile);
-    let ssa = crate::ssa::lower_program_with_budget(&analyzed, &mut ledger)
+    let ssa = crate::ssa::lower_program_with_budget(&analyzed, ledger)
         .map_err(|error| diagnostic(old, "LKJ-SRC-MIGRATION-SEMANTICS", error.to_string()))?;
     let (chunk, _) = crate::codegen::compile_program(&ssa)
         .map_err(|error| diagnostic(old, "LKJ-SRC-MIGRATION-SEMANTICS", error.to_string()))?;

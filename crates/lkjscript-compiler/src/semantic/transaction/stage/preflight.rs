@@ -1,15 +1,14 @@
 use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
 
 use crate::semantic::schema::{
-    ExpressionCounts, ProtocolError, ProtocolErrorCode, ResourceProfile, TransactionOperation,
+    ExpressionCounts, ProtocolError, ProtocolErrorCode, TransactionOperation,
 };
 
 pub(super) fn reserve(
     tree: &crate::source::ValidatedSourceTree,
     operations: &[TransactionOperation],
-    profile: ResourceProfile,
-) -> Result<BudgetLedger, ProtocolError> {
-    let mut ledger = BudgetLedger::new(profile.core());
+    ledger: &mut BudgetLedger,
+) -> Result<(), ProtocolError> {
     let mut request = ledger.scope(BudgetAuthority::SemanticRequest);
     let mut transaction = request
         .child(BudgetAuthority::Transaction)
@@ -64,9 +63,7 @@ pub(super) fn reserve(
         )
         .map_err(failure)?
         .commit();
-    drop(transaction);
-    drop(request);
-    Ok(ledger)
+    Ok(())
 }
 
 fn additions(
@@ -117,7 +114,7 @@ fn additions(
 }
 
 fn failure(error: lkjscript_core::BudgetError) -> ProtocolError {
-    crate::semantic::codec::error(ProtocolErrorCode::ResourceLimit, error.to_string())
+    crate::semantic::codec::budget_error(error)
 }
 
 fn overflow() -> ProtocolError {

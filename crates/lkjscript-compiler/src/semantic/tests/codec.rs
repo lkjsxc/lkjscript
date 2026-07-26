@@ -132,11 +132,13 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
                 code: crate::semantic::schema::ProtocolErrorCode::OutputLimit,
                 message: "bounded".to_string(),
                 diagnostic: None,
+                budget: None,
             }),
             diagnostic: None,
         },
     };
-    assert!(crate::semantic::codec::encode_response(response).is_err());
+    let mut ledger = lkjscript_core::BudgetLedger::default();
+    assert!(crate::semantic::codec::prepare_response(response, &mut ledger).is_err());
 }
 
 #[test]

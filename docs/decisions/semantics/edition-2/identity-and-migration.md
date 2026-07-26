@@ -51,8 +51,13 @@ The executable migration surface is exact `check`, `diff`, then `publish` at
 the compiler-owned source host boundary. It accepts one homogeneous validated
 closure, an exact pinned revision, and a Profile V2 selection. It pins old
 source, tree, declaration, and node identities and reports their exact new
-identities plus per-file and aggregate old/new bytes. It reserves transaction,
-operation, impact, staged-node, and staged-byte categories before staging.
+identities plus per-file and aggregate old/new bytes. Its `_with_ledger` APIs require and reuse one caller-owned
+Profile V2 ledger
+through check/diff/publish, semantic validation, transaction amplification, and
+staging. They reserve transaction, operation, impact, staged-node, and
+staged-byte categories before staging; no migration phase creates a nested
+ledger. Existing profile-taking APIs create one outer operation ledger. Typed
+migration diagnostics retain any `BudgetError` and deterministic prefix.
 
 Edition 1 migration inserts the exact marker after leading physical trivia in
 every closure unit. The compiler first resolves operand types and inserts only

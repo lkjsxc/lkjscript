@@ -78,6 +78,7 @@ pub(super) struct SourceFingerprint {
     pub sha256: String,
 }
 
+#[derive(Clone)]
 pub(super) struct PinnedSession {
     pub state: SessionStateRecord,
     pub fingerprints: Vec<SourceFingerprint>,
@@ -103,7 +104,6 @@ impl PinnedSession {
             })
     }
 }
-
 impl From<&SourceUnitRecord> for SourceFingerprint {
     fn from(unit: &SourceUnitRecord) -> Self {
         Self {
@@ -141,12 +141,13 @@ impl SessionError {
         }
     }
 }
-
 #[derive(Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionProcessError {
     code: ProcessCode,
     message: String,
+    #[serde(skip)]
+    budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -166,7 +167,20 @@ impl SessionProcessError {
         Self {
             code,
             message: message.into(),
+            budget: None,
         }
+    }
+
+    pub(super) fn budget(error: lkjscript_core::BudgetError) -> Self {
+        Self {
+            code: ProcessCode::FrameTooLarge,
+            message: error.to_string(),
+            budget: Some(Box::new(error)),
+        }
+    }
+
+    pub fn budget_error(&self) -> Option<&lkjscript_core::BudgetError> {
+        self.budget.as_deref()
     }
 
     pub(super) fn output(error: std::io::Error) -> Self {
@@ -176,7 +190,6 @@ impl SessionProcessError {
         )
     }
 }
-
 impl fmt::Display for SessionProcessError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         serde_json::to_string(self)
@@ -184,5 +197,4 @@ impl fmt::Display for SessionProcessError {
             .and_then(|encoded| formatter.write_str(&encoded))
     }
 }
-
 impl std::error::Error for SessionProcessError {}

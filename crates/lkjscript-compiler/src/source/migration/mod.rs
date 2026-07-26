@@ -8,7 +8,10 @@ pub use model::{
     EditionMigrationChange, EditionMigrationDeclarationIdentity, EditionMigrationNodeIdentity,
     EditionMigrationPlan,
 };
-pub use publication::{diff_edition2_migration, publish_edition2_migration};
+pub use publication::{
+    diff_edition2_migration, diff_edition2_migration_with_ledger, publish_edition2_migration,
+    publish_edition2_migration_with_ledger,
+};
 #[cfg(test)]
 pub(crate) use publication::{simulate_checked_crash, simulate_checked_rollback};
 
@@ -25,6 +28,16 @@ pub fn check_edition2_migration(
     limits: &lkjscript_core::Limits,
     profile: ResourceProfile,
 ) -> SourceResult<EditionMigrationPlan> {
+    let mut ledger = lkjscript_core::BudgetLedger::new(profile);
+    check_edition2_migration_with_ledger(tree, expected_revision, limits, &mut ledger)
+}
+
+pub fn check_edition2_migration_with_ledger(
+    tree: &ValidatedSourceTree,
+    expected_revision: RevisionId,
+    limits: &lkjscript_core::Limits,
+    ledger: &mut lkjscript_core::BudgetLedger,
+) -> SourceResult<EditionMigrationPlan> {
     if tree.revision() != expected_revision {
         return Err(diagnostic(
             tree,
@@ -40,7 +53,7 @@ pub fn check_edition2_migration(
         return Ok(plan::idempotent(tree, old_bytes));
     }
     let conversions = staging::resolved_conversions(tree)?;
-    staging::reserve(tree, &conversions, profile)?;
+    staging::reserve(tree, &conversions, ledger)?;
     let staged = plan::stage_sources(tree, &conversions);
     let migrated = crate::source::rebuild_staged_sources(
         &staged,
@@ -48,7 +61,7 @@ pub fn check_edition2_migration(
         tree.root_origin().clone(),
         limits,
     )?;
-    plan::validate_complete_semantics(tree, &migrated, limits, profile)?;
+    plan::validate_complete_semantics(tree, &migrated, limits, ledger)?;
     Ok(EditionMigrationPlan {
         old_edition: SourceEdition::Edition1,
         new_edition: SourceEdition::Edition2,

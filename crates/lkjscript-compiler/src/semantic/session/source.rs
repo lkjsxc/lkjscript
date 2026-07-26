@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use lkjscript_core::BudgetLedger;
+
 use crate::semantic::schema::{
     OperationRequest, Request, ResourceProfile, Response, ResponseResult,
 };
@@ -31,6 +33,7 @@ pub(super) fn snapshot(
     profile: ResourceProfile,
     root: &str,
     expected: Option<&str>,
+    ledger: &mut BudgetLedger,
 ) -> Result<SourceSnapshot, SessionError> {
     let request = Request {
         schema: crate::semantic::SCHEMA.to_string(),
@@ -41,24 +44,25 @@ pub(super) fn snapshot(
             expected_repository_identity: expected.map(str::to_string),
         },
     };
-    let encoded = serde_json::to_vec(&request).map_err(|error| {
+    let request_bytes = crate::semantic::codec::measure_json(&request)
+        .map_err(|error| SessionError::new(SessionErrorCode::ResourceLimit, error.message))?;
+    let request_charge = u64::try_from(request_bytes).map_err(|_| {
         SessionError::new(
             SessionErrorCode::ResourceLimit,
-            format!("encode source revision probe: {error}"),
+            "source probe byte count overflow",
         )
     })?;
-    let output = crate::semantic::execute(&encoded).map_err(|error| {
-        SessionError::new(
-            SessionErrorCode::ExternalSourceChange,
-            format!("source revision probe failed: {error}"),
-        )
-    })?;
-    let response: Response = serde_json::from_slice(&output).map_err(|error| {
-        SessionError::new(
-            SessionErrorCode::ExternalSourceChange,
-            format!("decode source revision probe: {error}"),
-        )
-    })?;
+    crate::semantic::codec::reserve_request_bytes(ledger, request_charge)
+        .map_err(|error| SessionError::new(SessionErrorCode::ResourceLimit, error.message))?;
+    let outcome =
+        crate::semantic::engine::execute_request_with_ledger(request, request_bytes, ledger)
+            .map_err(|error| {
+                SessionError::new(
+                    SessionErrorCode::ExternalSourceChange,
+                    format!("source revision probe failed: {}", error.message),
+                )
+            })?;
+    let response = outcome.prepared.response;
     let revision = response.revision.clone().ok_or_else(|| {
         SessionError::new(
             SessionErrorCode::ExternalSourceChange,

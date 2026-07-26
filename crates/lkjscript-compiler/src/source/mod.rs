@@ -35,9 +35,10 @@ pub use identity::{
 };
 pub use load::validate_source_directory_tree;
 pub use migration::{
-    check_edition2_migration, diff_edition2_migration, publish_edition2_migration,
-    EditionMigrationChange, EditionMigrationDeclarationIdentity, EditionMigrationNodeIdentity,
-    EditionMigrationPlan,
+    check_edition2_migration, check_edition2_migration_with_ledger, diff_edition2_migration,
+    diff_edition2_migration_with_ledger, publish_edition2_migration,
+    publish_edition2_migration_with_ledger, EditionMigrationChange,
+    EditionMigrationDeclarationIdentity, EditionMigrationNodeIdentity, EditionMigrationPlan,
 };
 pub(crate) use model::{Expr, SourceFile, SourceNode, SyntaxKind, Token, TokenKind};
 pub(crate) use parse::is_source_identifier;

@@ -31,21 +31,31 @@ The bounded one-shot `snapshot`, `read_entity`, `query_node`, `diagnostics`,
 operations emit V2. Hole context comes from the pinned parsed tree and a bounded
 checker-valid completion; unavailable expected, capability, ownership-correlation,
 qualification, and Edition 1 control facts are explicit rather than invented.
-Profile V2 hole, legal-action, transaction, impact, and staged-publication
-categories reserve before candidate or transaction staging allocation.
+One outer-owned Profile V2 ledger now spans strict request decode, exact loaded
+shape/query work reservation, snapshot/query/hole/action construction,
+transaction staging, and exact response encoding. Hole, legal-action,
+transaction, impact, and staged-publication categories reserve before candidate
+or transaction staging allocation. The public `_with_ledger` result preserves
+a typed `BudgetError` and deterministic prefix. Schema V2's closed error record
+cannot carry that new typed prefix without Schema V3, so V2 wire failures retain
+the deterministic budget rendering in `message`; this wire gap is explicit.
 
-The Current local `semantic serve --stdio` session uses the same V2 engine with
-exact framing, revision pinning, external-change rejection, refresh, shutdown,
-and Profile V2 lifetime/input/output/node/snapshot/retention ceilings. Responses
-are bounded before publication; journaled publication retains exclusion,
-rollback, descriptor anchoring, and conflict preservation. The former
+The Current local `semantic serve --stdio` session uses the same typed V2
+engine with no serialized inner one-shot request/response round trip, exact
+framing, revision pinning, external-change rejection, refresh, shutdown, and
+Profile V2 lifetime/input/output/node/snapshot/retention ceilings. An explicit
+`serve_with_ledger` caller owns the ledger across frames; the closed command
+selects it from the first bounded request and then retains it. Responses are
+exactly preflighted before allocation and publication; journaled publication
+retains exclusion, rollback, descriptor anchoring, and conflict preservation. The former
 `lkjscript.agent-foundation/1` and `lkjscript.semantic-source/1` identities are
 historical and rejected. `lkjscript.agent/1` is not emitted.
 
 Wider Edition 2 authoring beyond the implemented enum/match/control slices,
 wider agent operations, nonzero incremental query caching, full-language
-inhabitation or token masking, and a cross-authority shared ledger
-remain **Accepted Targets**. Unavailable HIR/SSA/layout/proof/native
+inhabitation or token masking, parser-preallocation before bounded source reads,
+and a ledger shared onward into proof/artifact/runtime authorities remain
+**Accepted Targets**. Unavailable HIR/SSA/layout/proof/native
 correlations are explicit and revisioned rather than guessed. Unsupported
 operations do not exist as inert endpoints.
 

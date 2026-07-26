@@ -55,10 +55,12 @@ canonical source, and candidate identity tuple. Every emitted candidate carries
 one complete canonical snippet and an exact `replace_hole` semantic edit; a
 context commonly carries several complete alternatives.
 
-Exploration reserves Profile V2 `hole_search_work` and `hole_candidates` before
-candidate construction. `legal_actions` reserves its category before action
-construction. Budget exhaustion cannot be presented as an empty complete
-result. Unsupported contexts return explicit unsupported, then ordinary
+Exploration uses the request's outer-owned ledger and reserves Profile V2
+`hole_search_work` and `hole_candidates` before candidate construction.
+`legal_actions` reuses that ledger and reserves its exact bounded amplification
+before action construction. Typed budget exhaustion propagates unchanged to the
+internal result and cannot be presented as an empty complete result. Unsupported contexts return explicit unsupported,
+then ordinary
 authoring may use bounded compiler validation. Edition 1 has exact import paths
 but no qualification syntax, so no import or qualification edit is invented;
 that absence is an explicit blocker. Match, return, break, continue, and Never forms remain explicit Edition 1
@@ -76,10 +78,12 @@ checks node and semantic preconditions, then reruns exact type, effect,
 ownership, control/divergence, incompleteness, and resource validation before
 staging publication. Stale identity/revision, mismatched expected type, added
 forbidden effect, invalid ownership transfer, or invalid control edge rejects
-the whole transaction. No failed operation mutates source or caches. Transaction
-staging reserves Profile V2 transaction, operation, impact-node, staged-node,
-and staged-byte categories through the typed `transaction` authority before
-cloning or rebuilding source state.
+the whole transaction. No failed operation mutates source or caches. Transaction staging reuses the same outer ledger
+and reserves Profile V2
+transaction, operation, impact-node, staged-node, and staged-byte categories
+through the typed `semantic_request/transaction` authority before cloning or
+rebuilding source state. Missing ledger authority fails closed; no transaction
+helper creates a nested fallback ledger.
 
 Insertion and refinement may retain an incomplete tree only when every hole has
 an exact expected type and one bounded checker-valid completion for surrounding

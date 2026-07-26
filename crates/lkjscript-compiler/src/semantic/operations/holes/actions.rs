@@ -3,29 +3,28 @@ use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategor
 use crate::semantic::schema::*;
 use crate::source::ValidatedSourceTree;
 
-pub(crate) fn build(
+pub(crate) fn build_with_ledger(
     tree: &ValidatedSourceTree,
     node: u32,
-    profile: ResourceProfile,
+    ledger: &mut BudgetLedger,
 ) -> Result<LegalActionsResult, ProtocolError> {
-    let context = super::context::build(tree, node, profile)?;
+    let context = super::context::build_with_ledger(tree, node, ledger)?;
     let site = super::site::find(tree, node)?;
     let maximum = u64::try_from(context.candidates.len())
         .unwrap_or(u64::MAX)
         .saturating_mul(2)
         .saturating_add(32);
-    let mut ledger = BudgetLedger::new(profile.core());
     let mut request = ledger.scope(BudgetAuthority::SemanticRequest);
     let mut holes = request
         .child(BudgetAuthority::Holes)
-        .map_err(budget_error)?;
+        .map_err(crate::semantic::codec::budget_error)?;
     let mut reservation = holes
         .reserve(
             ResourceCategory::LegalActions,
             maximum,
             BudgetCause::SemanticNode(u64::from(node)),
         )
-        .map_err(budget_error)?;
+        .map_err(crate::semantic::codec::budget_error)?;
     let child_kinds = child_kinds(&context.candidates);
     let constructors = constructors(&context.candidates);
     let required_fields = required_fields(&site);
@@ -49,7 +48,9 @@ pub(crate) fn build(
         .saturating_add(applicable_bindings.len())
         .saturating_add(transactions.len());
     let charged = u64::try_from(charged).unwrap_or(u64::MAX);
-    reservation.consume(charged).map_err(budget_error)?;
+    reservation
+        .consume(charged)
+        .map_err(crate::semantic::codec::budget_error)?;
     reservation.return_unused();
     let mut coverage = context.exploration;
     coverage.charged_category = "legal_actions".into();
@@ -152,8 +153,4 @@ fn required_fields(site: &super::site::HoleSite<'_>) -> Vec<RequiredField> {
             })
         })
         .collect()
-}
-
-fn budget_error(failure: lkjscript_core::BudgetError) -> ProtocolError {
-    crate::semantic::codec::error(ProtocolErrorCode::ResourceLimit, failure.to_string())
 }

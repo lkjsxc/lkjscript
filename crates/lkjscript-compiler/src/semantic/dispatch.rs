@@ -5,6 +5,7 @@ use crate::semantic::schema::{
 };
 use crate::semantic::{operations, transaction};
 use crate::source::ValidatedSourceTree;
+use lkjscript_core::BudgetLedger;
 
 pub(crate) struct DispatchResult {
     pub result: ResponseResult,
@@ -16,7 +17,7 @@ pub(crate) fn dispatch(
     operation: OperationRequest,
     charges: &mut Charges,
     limits: super::charges::ProtocolLimits,
-    profile: crate::semantic::schema::ResourceProfile,
+    ledger: &mut BudgetLedger,
 ) -> Result<DispatchResult, ProtocolError> {
     let mut publication = None;
     let result = match operation {
@@ -57,7 +58,7 @@ pub(crate) fn dispatch(
         }
         OperationRequest::HoleContext { revision, node } => {
             check_revision(tree, &revision)?;
-            let context = operations::holes::context::build(tree, node, profile)?;
+            let context = operations::holes::context::build_with_ledger(tree, node, ledger)?;
             charges.hole_candidates = context.exploration.charged_count;
             charges.hole_search_work = context.exploration.search_work;
             ResponseResult::HoleContext {
@@ -66,7 +67,7 @@ pub(crate) fn dispatch(
         }
         OperationRequest::LegalActions { revision, node } => {
             check_revision(tree, &revision)?;
-            let actions = operations::holes::actions::build(tree, node, profile)?;
+            let actions = operations::holes::actions::build_with_ledger(tree, node, ledger)?;
             charges.legal_actions = actions.coverage.charged_count;
             charges.hole_search_work = actions.coverage.search_work;
             ResponseResult::LegalActions {
@@ -92,7 +93,8 @@ pub(crate) fn dispatch(
             operations,
         } => {
             check_revision(tree, &base_revision)?;
-            let staged = transaction::stage(tree, &operations, &file_preconditions, profile)?;
+            let staged =
+                transaction::stage_with_ledger(tree, &operations, &file_preconditions, ledger)?;
             add_staged_source(charges, &staged.tree)?;
             charges.transaction_impact_nodes =
                 u64::try_from(staged.tree.nodes().len()).map_err(|_| work_overflow())?;

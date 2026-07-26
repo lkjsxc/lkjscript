@@ -1,16 +1,20 @@
 //! Bounded local stdio session over the one-shot Semantic Source V2 engine.
 
+mod encoding;
 mod engine;
 mod execute;
 mod framing;
 mod lifecycle;
 mod limits;
+mod pending;
+mod publication;
 mod reservation;
 mod schema;
 mod source;
 
 use std::io::{Read, Write};
 
+use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetError, BudgetLedger, ResourceCategory};
 use schema::{PinnedSession, SessionProcessError};
 
 pub use limits::{
@@ -31,6 +35,8 @@ pub struct SemanticSession {
     output_bytes: u64,
     lifetime_fuel: u64,
     last_response_bytes: u64,
+    ledger: Option<BudgetLedger>,
+    pending: Option<pending::PendingExecution>,
     closed: bool,
 }
 
@@ -45,6 +51,24 @@ impl SemanticSession {
             output_bytes: 0,
             lifetime_fuel: 0,
             last_response_bytes: 0,
+            ledger: None,
+            pending: None,
+            closed: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_ledger(ledger: BudgetLedger) -> Self {
+        Self {
+            pinned: None,
+            revision: 0,
+            requests: 0,
+            input_bytes: 0,
+            output_bytes: 0,
+            lifetime_fuel: 0,
+            last_response_bytes: 0,
+            ledger: Some(ledger),
+            pending: None,
             closed: false,
         }
     }
@@ -81,6 +105,25 @@ impl SemanticSession {
     }
 }
 
+#[allow(
+    clippy::result_large_err,
+    reason = "session preflight preserves the fixed nonallocating budget prefix"
+)]
+pub(super) fn reserve_session(
+    ledger: &mut BudgetLedger,
+    category: ResourceCategory,
+    amount: u64,
+    cause: BudgetCause,
+) -> Result<(), BudgetError> {
+    super::budget::reserve(
+        ledger,
+        BudgetAuthority::SessionCaching,
+        category,
+        amount,
+        cause,
+    )
+}
+
 impl Default for SemanticSession {
     fn default() -> Self {
         Self::new()
@@ -90,6 +133,14 @@ impl Default for SemanticSession {
 /// Serve framed requests until clean EOF or a shutdown acknowledgement.
 pub fn serve<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> Result<(), SessionProcessError> {
     SemanticSession::new().serve(reader, writer)
+}
+
+pub fn serve_with_ledger<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    ledger: BudgetLedger,
+) -> Result<(), SessionProcessError> {
+    SemanticSession::with_ledger(ledger).serve(reader, writer)
 }
 
 #[cfg(test)]

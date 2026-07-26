@@ -1,0 +1,122 @@
+use std::io::Write;
+
+use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
+
+use crate::semantic::codec::{budget_error, error};
+use crate::semantic::schema::{ProtocolError, ProtocolErrorCode, Response};
+
+pub(crate) struct PreparedResponse {
+    pub response: Response,
+    pub bytes: usize,
+}
+
+pub(crate) fn prepare_response(
+    mut response: Response,
+    ledger: &mut BudgetLedger,
+) -> Result<PreparedResponse, ProtocolError> {
+    let limit = crate::semantic::charges::ProtocolLimits::for_core(ledger.profile()).response_bytes;
+    for _ in 0..4 {
+        let measured = count(&response, limit)?;
+        let measured_u64 = u64::try_from(measured).map_err(|_| {
+            error(
+                ProtocolErrorCode::OutputLimit,
+                "response byte count overflow",
+            )
+        })?;
+        if response.charges.output_bytes == measured_u64 {
+            crate::semantic::budget::reserve(
+                ledger,
+                BudgetAuthority::ProtocolEncode,
+                ResourceCategory::ProtocolResponseBytes,
+                measured_u64,
+                BudgetCause::ProtocolFrame(measured_u64),
+            )
+            .map_err(budget_error)?;
+            return Ok(PreparedResponse {
+                response,
+                bytes: measured,
+            });
+        }
+        response.charges.output_bytes = measured_u64;
+    }
+    Err(error(
+        ProtocolErrorCode::OutputLimit,
+        "response charge did not stabilize",
+    ))
+}
+
+pub(crate) fn encode_prepared(prepared: &PreparedResponse) -> Result<Vec<u8>, ProtocolError> {
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(prepared.bytes).map_err(|cause| {
+        error(
+            ProtocolErrorCode::OutputLimit,
+            format!("reserve exact response bytes: {cause}"),
+        )
+    })?;
+    serde_json::to_writer(&mut bytes, &prepared.response).map_err(|cause| {
+        error(
+            ProtocolErrorCode::OutputLimit,
+            format!("serialize reserved response: {cause}"),
+        )
+    })?;
+    bytes.write_all(b"\n").map_err(|cause| {
+        error(
+            ProtocolErrorCode::OutputLimit,
+            format!("terminate reserved response: {cause}"),
+        )
+    })?;
+    if bytes.len() != prepared.bytes {
+        return Err(error(
+            ProtocolErrorCode::OutputLimit,
+            "reserved response size changed during encoding",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn count(response: &Response, limit: usize) -> Result<usize, ProtocolError> {
+    let mut output = CountingOutput { bytes: 0, limit };
+    serde_json::to_writer(&mut output, response).map_err(|cause| {
+        error(
+            ProtocolErrorCode::OutputLimit,
+            format!("measure bounded response: {cause}"),
+        )
+    })?;
+    output.write_all(b"\n").map_err(|cause| {
+        error(
+            ProtocolErrorCode::OutputLimit,
+            format!("measure response terminator: {cause}"),
+        )
+    })?;
+    Ok(output.bytes)
+}
+
+struct CountingOutput {
+    bytes: usize,
+    limit: usize,
+}
+
+impl Write for CountingOutput {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        let attempted = self
+            .bytes
+            .checked_add(input.len())
+            .ok_or_else(limit_error)?;
+        if attempted > self.limit {
+            return Err(limit_error());
+        }
+        self.bytes = attempted;
+        Ok(input.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+fn limit_error() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::FileTooLarge,
+        "response exceeds output byte limit",
+    )
+}

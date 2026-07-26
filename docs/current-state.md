@@ -39,8 +39,9 @@ construction, exhaustive source match, Never/structured control, the generic
 prelude `Option`/`Result` cutover with closed typed errors, and the four explicit
 numeric conversions through verified ordinary SSA, the evaluator, validated
 bytecode, reference VM, and forced Linux x86-64 baseline/proof execution,
-compiler Resource Profile V2, and the core hierarchical pre-allocation and
-deterministic journal foundation are Current. All 125 canonical sources are exact Edition 2 and
+compiler Resource Profile V2, core hierarchical pre-allocation and deterministic
+journaling, and outer-owned one-shot/session semantic ledgers are Current. All
+125 canonical sources are exact Edition 2 and
 ordinary compilation rejects Edition 1. Agent Foundation V1 and Semantic
 Source Schema V1 identities are historical and rejected. Other Edition 2
 changed semantics, parser-wide and whole-platform pre-allocation, exact
@@ -73,11 +74,12 @@ commands/APIs are Current on the containing implementation revision.
    bounded one-shot/session protocol; its exact V1 base remains documented.
 5. The [Profile V2 resource foundation](decisions/platform/resource-budget-profiles-candidate.md)
    is Current for core hierarchical reservation, its deterministic journal,
-   public outer-owned compiler-ledger APIs, and typed preflight from validated
-   source to enum/match HIR allocations, immutable HIR to SSA construction, and
-   immutable normalized SSA to bytecode construction. Source parsing and exact
-   bytecode-output sizing are not profile-preflight Current; cross-authority
-   shared-ledger migration is not Current.
+   public outer-owned compiler and Semantic Source ledger APIs, direct typed
+   session requests, and typed preflight through semantic transactions and
+   migration plus validated source to enum/match HIR allocations, immutable HIR
+   to SSA construction, and immutable normalized SSA to bytecode construction.
+   Source parsing and exact bytecode-output sizing are not profile-preflight
+   Current; whole-platform shared-ledger migration is not Current.
 
 6. Explicit Edition 2 markers, homogeneous closure identity, edition-separated
    source/tree/revision/declaration/node identities, Schema V2 facts, exact

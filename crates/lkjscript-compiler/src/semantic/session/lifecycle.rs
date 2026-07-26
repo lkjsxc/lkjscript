@@ -5,11 +5,16 @@ use super::schema::{
     PinnedSession, SessionError, SessionErrorCode, SessionResult, SessionStateRecord,
 };
 use super::SemanticSession;
-
 impl SemanticSession {
     pub(super) fn initialize(&mut self, request: &Request) -> Result<(), SessionError> {
         let root = super::source::canonical_root(&request.root)?;
-        let snapshot = super::source::snapshot(request.profile, &root, None)?;
+        let ledger = self.ledger.as_mut().ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::ResourceLimit,
+                "session ledger authority is missing",
+            )
+        })?;
+        let snapshot = super::source::snapshot(request.profile, &root, None, ledger)?;
         let limits = SessionLimits::for_profile(request.profile);
         if snapshot.response.charges.work_units > limits.lifetime_fuel {
             return Err(SessionError::new(
@@ -37,19 +42,59 @@ impl SemanticSession {
             limits,
             cache_entries: 0,
         };
-        self.pinned = Some(PinnedSession {
+        let pinned = PinnedSession {
             state,
             fingerprints: snapshot.fingerprints,
-        });
-        self.lifetime_fuel = snapshot.response.charges.work_units;
-        if let Err(error) = self.check_metadata().and_then(|()| self.advance_revision()) {
+        };
+        let retained = pinned.metadata_bytes().ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::ResourceLimit,
+                "session metadata byte overflow",
+            )
+        })?;
+        let ledger = self.ledger.as_mut().ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::ResourceLimit,
+                "session ledger authority is missing",
+            )
+        })?;
+        for (category, amount) in [
+            (
+                lkjscript_core::ResourceCategory::SemanticSessionSnapshots,
+                1,
+            ),
+            (
+                lkjscript_core::ResourceCategory::SemanticSessionNodes,
+                snapshot.response.charges.source_nodes,
+            ),
+            (
+                lkjscript_core::ResourceCategory::SemanticSessionRetainedBytes,
+                retained,
+            ),
+        ] {
+            super::reserve_session(
+                ledger,
+                category,
+                amount,
+                lkjscript_core::BudgetCause::Request,
+            )
+            .map_err(|error| {
+                SessionError::new(SessionErrorCode::ResourceLimit, error.to_string())
+            })?;
+        }
+        self.pinned = Some(pinned);
+        self.lifetime_fuel = 0;
+        if let Err(error) = self
+            .charge_fuel(snapshot.response.charges.work_units)
+            .and_then(|()| self.check_metadata())
+            .and_then(|()| self.advance_revision())
+        {
             self.pinned = None;
             self.lifetime_fuel = 0;
             return Err(error);
         }
         Ok(())
     }
-
     pub(super) fn refresh(&mut self) -> SessionResult {
         if let Err(error) = self.reserve_revision_response() {
             return SessionResult::Error { error };
@@ -64,7 +109,15 @@ impl SemanticSession {
         };
         let profile = pinned.state.profile;
         let root = pinned.state.canonical_root.clone();
-        let snapshot = match super::source::snapshot(profile, &root, None) {
+        let Some(ledger) = self.ledger.as_mut() else {
+            return SessionResult::Error {
+                error: SessionError::new(
+                    SessionErrorCode::ResourceLimit,
+                    "session ledger authority is missing",
+                ),
+            };
+        };
+        let snapshot = match super::source::snapshot(profile, &root, None, ledger) {
             Ok(snapshot) => snapshot,
             Err(error) => return SessionResult::Error { error },
         };
@@ -90,7 +143,6 @@ impl SemanticSession {
             session: pinned.state.clone(),
         }
     }
-
     pub(super) fn charge_fuel(&mut self, increment: u64) -> Result<(), SessionError> {
         let limit = self
             .pinned
@@ -110,10 +162,22 @@ impl SemanticSession {
                 format!("session lifetime fuel {next} exceeds {limit}"),
             ));
         }
+        let ledger = self.ledger.as_mut().ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::ResourceLimit,
+                "session ledger authority is missing",
+            )
+        })?;
+        super::reserve_session(
+            ledger,
+            lkjscript_core::ResourceCategory::SemanticSessionLifetimeFuel,
+            increment,
+            lkjscript_core::BudgetCause::Request,
+        )
+        .map_err(|error| SessionError::new(SessionErrorCode::ResourceLimit, error.to_string()))?;
         self.lifetime_fuel = next;
         Ok(())
     }
-
     pub(super) fn advance_revision(&mut self) -> Result<(), SessionError> {
         let maximum = self.pinned.as_ref().map_or(MAX_SESSION_REVISION, |pinned| {
             pinned.state.limits.maximum_revision

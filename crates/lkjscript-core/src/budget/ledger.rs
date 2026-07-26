@@ -34,7 +34,7 @@ impl Default for ResourceUsage {
 pub struct BudgetLedger {
     profile: ResourceProfile,
     pub(crate) used: [u64; RESOURCE_CATEGORY_COUNT],
-    legacy_used: [u64; RESOURCE_CATEGORY_COUNT],
+    committed_base: [u64; RESOURCE_CATEGORY_COUNT],
     pub(crate) next_reservation: u64,
     journal: BudgetJournal,
 }
@@ -44,7 +44,7 @@ impl BudgetLedger {
         Self {
             profile,
             used: [0; RESOURCE_CATEGORY_COUNT],
-            legacy_used: [0; RESOURCE_CATEGORY_COUNT],
+            committed_base: [0; RESOURCE_CATEGORY_COUNT],
             next_reservation: 0,
             journal: BudgetJournal::new(),
         }
@@ -67,7 +67,16 @@ impl BudgetLedger {
 
     pub fn prefix(&self) -> BudgetPrefix {
         self.journal
-            .prefix(self.profile.identity(), &self.legacy_used, None)
+            .prefix(self.profile.identity(), &self.committed_base, None)
+    }
+
+    /// Retain cumulative committed totals while beginning a fresh journal segment.
+    ///
+    /// Callers must use this only between typed requests. The mutable borrow proves
+    /// that no budget scope or reservation from the prior segment remains live.
+    pub fn rollover_request_segment(&mut self) {
+        self.committed_base = self.journal.committed(&self.committed_base);
+        self.journal.clear();
     }
 
     pub fn scope(&mut self, authority: BudgetAuthority) -> BudgetScope<'_> {
@@ -89,7 +98,7 @@ impl BudgetLedger {
             sink: &mut self.used,
             next_reservation: &mut self.next_reservation,
             journal: &mut self.journal,
-            prefix_base: self.legacy_used,
+            prefix_base: self.committed_base,
         }
     }
 
@@ -121,7 +130,7 @@ impl BudgetLedger {
                 self.profile.identity(),
                 event,
                 &self.journal,
-                &self.legacy_used,
+                &self.committed_base,
             ));
         };
         self.scope(authority)
@@ -142,14 +151,14 @@ impl BudgetLedger {
         let Some(after) = before.checked_add(increment) else {
             return Err(self.legacy_diagnostic(category, limit, before, increment));
         };
-        let Some(legacy_after) = self.legacy_used[category.index()].checked_add(increment) else {
+        let Some(base_after) = self.committed_base[category.index()].checked_add(increment) else {
             return Err(self.legacy_diagnostic(category, limit, before, increment));
         };
         if after > limit {
             return Err(self.legacy_diagnostic(category, limit, before, increment));
         }
         self.used[category.index()] = after;
-        self.legacy_used[category.index()] = legacy_after;
+        self.committed_base[category.index()] = base_after;
         Ok(())
     }
 

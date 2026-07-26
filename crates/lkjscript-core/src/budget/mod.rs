@@ -31,4 +31,6 @@ mod hierarchy_tests;
 #[cfg(test)]
 mod journal_tests;
 #[cfg(test)]
+mod segment_tests;
+#[cfg(test)]
 mod tests;

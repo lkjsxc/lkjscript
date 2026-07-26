@@ -10,28 +10,22 @@
   form `edition/`, `2`, `/edition`; retained leading trivia; homogeneous loaded
   closures; marker inside the token but outside the declaration limit. All 125
   canonical sources are Edition 2; Edition 1 is validation/migration input only
-- Semantic Source V2: public identity `lkjscript.semantic-source` version 2;
-  version 1 input is historical and rejected. One opaque immutable
-  `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition
-  1 node/value/type/built-in/declaration/trivia/transaction-expression/
-  diagnostic/correlation record, typed-hole facts, and generic enum declaration
-  nodes. Subtrees roundtrip with exact spans/origins/revisions, stable keys,
-  dense nodes, and canonical formatting. Unknown schema kinds,
-  fields, operations, versions, duplicates, and trailing input fail. The
-  bounded one-shot endpoint provides snapshot/entity/node/diagnostic/hole/legal
-  action queries plus atomic rename, expression replacement, and all four hole
-  transactions. Profile V2 categories reserve candidate, action, transaction,
-  impact, and staged publication work before allocation. Agent Foundation V1
-  is historical. The local `semantic serve --stdio` session uses exact 8-byte
-  framing, pins one profile/root/revision, rejects stale/external changes,
-  refreshes explicitly, intersects Profile V2 session ceilings, and publishes
-  through the same engine. Nonzero query caching, shared ledgers, and
-  unavailable exact downstream correlations remain non-Current. Schema V2 also
-  represents Edition 2 without another version: identities are edition-separated,
-  snapshots expose marker/number nodes, source/tree identity facts, stable
-  generic enum declaration/variant/field/type identities, Never type nodes,
-  and closed loop/return/break/continue/trap/exit expressions. Edition 2 hole
-  context and legal actions expose checker-valid available control forms,
+- Semantic Source V2: public identity `lkjscript.semantic-source` version 2; version 1 input is historical and
+  rejected. One opaque immutable `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition 1
+  node/value/type/built-in/declaration/trivia/transaction-expression/diagnostic/correlation record, typed-hole facts,
+  and generic enum declaration nodes. Subtrees roundtrip with exact spans/origins/revisions, stable keys, dense nodes,
+  and canonical formatting. Unknown schema kinds, fields, operations, versions, duplicates, and trailing input fail.
+  The bounded one-shot endpoint provides snapshot/entity/node/diagnostic/hole/legal action queries plus atomic rename,
+  expression replacement, and all four hole transactions. Profile V2 categories reserve candidate, action,
+  transaction, impact, and staged publication work before allocation. Agent Foundation V1 is historical. The local
+  `semantic serve --stdio` session uses exact 8-byte framing, pins one profile/root/revision, rejects stale/external
+  changes, refreshes explicitly, intersects Profile V2 session ceilings, and publishes through the same typed engine
+  without an inner codec roundtrip. One outer ledger spans each one-shot request and the full session lifetime, with
+  bounded journal segments between requests. Nonzero query caching, a whole-platform ledger, and unavailable exact
+  downstream correlations remain non-Current. Schema V2 also represents Edition 2 without another version: identities
+  are edition-separated, snapshots expose marker/number nodes, source/tree identity facts, stable generic enum
+  declaration/variant/field/type identities, Never type nodes, and closed loop/return/break/continue/trap/exit
+  expressions. Edition 2 hole context and legal actions expose checker-valid available control forms,
   function/nearest-loop requirements, and exact Never admissibility
 - Migration: exact compiler-owned check/diff/publish pins closure revision,
   source/tree/declaration/node identities and reports exact old/new identities
@@ -89,12 +83,13 @@
 - Resource profiles: `lkjscript.resource-profile` V2 preserves the first 25 category names/order and appends 29 closed
   categories across five positive monotonic bounded profiles. Core provides closed authorities, fixed 16-entry paths,
   lower-only grants, move-only reservations, and a fixed nonallocating 256-record journal; Drop commits unused units
-  unless returned. Public compiler `_with_ledger` APIs borrow one outer-owned ledger. Validated source shape reserves
-  enum/match HIR work, immutable HIR reserves exact charged input shape before SSA, and immutable normalized SSA
-  reserves exact charged input shape before bytecode; failures preserve typed authority/path and the deterministic
-  prefix. Aggregate source accounting still follows parser allocation, and Profile V2 has no exact bytecode-output
-  categories. Protocol/compiler ledgers remain separate; fixed limits defend parser, HIR construction, normalization,
-  and bytecode-output gaps
+  unless returned. Public compiler and Semantic Source `_with_ledger` APIs borrow an outer-owned ledger. Semantic
+  requests reuse it through protocol bytes, tree/query/hole/action work, transaction/migration staging, and response
+  preflight; local sessions retain it across direct typed requests. Validated source shape reserves enum/match HIR work,
+  immutable HIR reserves exact charged input shape before SSA, and immutable normalized SSA reserves exact charged
+  input shape before bytecode. Failures preserve the typed deterministic prefix. Parser/source allocation and exact
+  bytecode-output categories remain gaps; compiler, semantic, proof, artifact, and runtime are not yet joined by one
+  application request ledger
 - Host implementation: nine Rust workspace crates. Exact locked `serde` and
   `serde_json` dependencies are confined to strict JSON protocol/tooling
   boundaries; unsafe Rust is confined to `lkjscript-sys`

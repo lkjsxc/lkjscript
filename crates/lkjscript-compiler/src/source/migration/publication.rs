@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use lkjscript_core::ResourceProfile;
+use lkjscript_core::{BudgetLedger, ResourceProfile};
 
 use crate::source::{
     DiagnosticCategory, RevisionId, SourceDiagnostic, SourceEdition, SourceResult, SourceSpan,
     ValidatedSourceTree,
 };
 
-use super::{check_edition2_migration, diagnostic, EditionMigrationPlan};
+use super::{check_edition2_migration_with_ledger, diagnostic, EditionMigrationPlan};
 
 pub fn diff_edition2_migration(
     root: &Path,
@@ -15,8 +15,18 @@ pub fn diff_edition2_migration(
     limits: &lkjscript_core::Limits,
     profile: ResourceProfile,
 ) -> SourceResult<EditionMigrationPlan> {
+    let mut ledger = BudgetLedger::new(profile);
+    diff_edition2_migration_with_ledger(root, expected_revision, limits, &mut ledger)
+}
+
+pub fn diff_edition2_migration_with_ledger(
+    root: &Path,
+    expected_revision: RevisionId,
+    limits: &lkjscript_core::Limits,
+    ledger: &mut BudgetLedger,
+) -> SourceResult<EditionMigrationPlan> {
     let tree = crate::source::load(root, limits)?;
-    check_edition2_migration(&tree, expected_revision, limits, profile)
+    check_edition2_migration_with_ledger(&tree, expected_revision, limits, ledger)
 }
 
 pub fn publish_edition2_migration(
@@ -24,6 +34,16 @@ pub fn publish_edition2_migration(
     checked: &EditionMigrationPlan,
     limits: &lkjscript_core::Limits,
     profile: ResourceProfile,
+) -> SourceResult<EditionMigrationPlan> {
+    let mut ledger = BudgetLedger::new(profile);
+    publish_edition2_migration_with_ledger(root, checked, limits, &mut ledger)
+}
+
+pub fn publish_edition2_migration_with_ledger(
+    root: &Path,
+    checked: &EditionMigrationPlan,
+    limits: &lkjscript_core::Limits,
+    ledger: &mut BudgetLedger,
 ) -> SourceResult<EditionMigrationPlan> {
     let guard = crate::semantic::transaction::begin(root)
         .map_err(|error| protocol_diagnostic(root, error))?;
@@ -35,7 +55,8 @@ pub fn publish_edition2_migration(
         ));
     }
     let tree = crate::source::load(root, limits)?;
-    let exact = check_edition2_migration(&tree, checked.old_revision(), limits, profile)?;
+    let exact =
+        check_edition2_migration_with_ledger(&tree, checked.old_revision(), limits, ledger)?;
     if &exact != checked {
         return Err(diagnostic(
             &tree,

@@ -21,6 +21,7 @@ pub struct SourceDiagnostic {
     origin: Box<SourceOrigin>,
     primary_span: SourceSpan,
     related: Vec<RelatedSourceSpan>,
+    budget: Option<Box<lkjscript_core::BudgetError>>,
 }
 
 impl SourceDiagnostic {
@@ -30,37 +31,33 @@ impl SourceDiagnostic {
     pub const fn schema_version(&self) -> u32 {
         SOURCE_DIAGNOSTIC_FOUNDATION_SCHEMA_VERSION
     }
-
     pub const fn code(&self) -> &'static str {
         self.code
     }
     pub const fn severity(&self) -> DiagnosticSeverity {
         self.severity
     }
-
     pub const fn category(&self) -> DiagnosticCategory {
         self.category
     }
     pub const fn certainty(&self) -> DiagnosticCertainty {
         self.certainty
     }
-
     pub fn message(&self) -> &str {
         &self.message
     }
-
     pub fn origin(&self) -> &SourceOrigin {
         self.origin.as_ref()
     }
-
     pub const fn primary_span(&self) -> SourceSpan {
         self.primary_span
     }
-
     pub fn related_spans(&self) -> &[RelatedSourceSpan] {
         &self.related
     }
-
+    pub fn budget_error(&self) -> Option<&lkjscript_core::BudgetError> {
+        self.budget.as_deref()
+    }
     pub fn render_human(&self) -> String {
         let start = self.primary_span.start();
         let mut rendered = format!(
@@ -84,7 +81,6 @@ impl SourceDiagnostic {
         }
         rendered
     }
-
     pub fn render_compact_agent(&self) -> String {
         let start = self.primary_span.start();
         let end = self.primary_span.end();
@@ -130,7 +126,6 @@ impl SourceDiagnostic {
         }
         rendered
     }
-
     pub(crate) fn new(
         code: &'static str,
         category: DiagnosticCategory,
@@ -147,9 +142,13 @@ impl SourceDiagnostic {
             origin: Box::new(origin),
             primary_span,
             related: Vec::new(),
+            budget: None,
         }
     }
-
+    pub(crate) fn with_budget(mut self, failure: lkjscript_core::BudgetError) -> Self {
+        self.budget = Some(Box::new(failure));
+        self
+    }
     pub(crate) fn with_related(
         mut self,
         label: impl Into<String>,
@@ -163,7 +162,6 @@ impl SourceDiagnostic {
         });
         self
     }
-
     pub(crate) fn generic(origin: SourceOrigin, message: impl Into<String>) -> Self {
         Self::new(
             "LKJ-SRC-INVALID",
@@ -173,7 +171,6 @@ impl SourceDiagnostic {
             SourceSpan::zero(),
         )
     }
-
     pub(crate) fn loading(origin: SourceOrigin, message: impl Into<String>) -> Self {
         Self::new(
             "LKJ-SRC-LOAD",
@@ -185,7 +182,10 @@ impl SourceDiagnostic {
     }
 
     pub(crate) fn into_core(self) -> Error {
-        Error::msg(self.render_human())
+        self.budget
+            .as_deref()
+            .copied()
+            .map_or_else(|| Error::msg(self.render_human()), Error::budget)
     }
 }
 

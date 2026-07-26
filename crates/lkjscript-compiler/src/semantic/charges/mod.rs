@@ -33,7 +33,11 @@ pub(crate) struct ProtocolLimits {
 
 impl ProtocolLimits {
     pub(crate) fn for_profile(profile: ResourceProfile) -> Self {
-        let ceilings = profile.core().ceilings();
+        Self::for_core(profile.core())
+    }
+
+    pub(crate) fn for_core(profile: lkjscript_core::ResourceProfile) -> Self {
+        let ceilings = profile.ceilings();
         let response = ceilings.limit(ResourceCategory::ProtocolResponseBytes);
         Self {
             source_bytes: ceilings
@@ -147,8 +151,15 @@ fn overflow() -> ProtocolError {
     )
 }
 
+#[cfg(test)]
 pub(crate) fn identity(profile: ResourceProfile) -> ResourceProfileIdentityRecord {
-    let identity = profile.core().identity();
+    identity_core(profile.core())
+}
+
+pub(crate) fn identity_core(
+    profile: lkjscript_core::ResourceProfile,
+) -> ResourceProfileIdentityRecord {
+    let identity = profile.identity();
     ResourceProfileIdentityRecord {
         schema: identity.schema.to_string(),
         version: identity.version,

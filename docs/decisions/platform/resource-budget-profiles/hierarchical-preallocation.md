@@ -16,10 +16,16 @@ nonallocating deterministic ledger journal are Current in `lkjscript-core`.
 Compiler enum shape and match pattern/arm/matrix/plan/witness categories reserve
 from validated source shape before HIR allocation. Immutable HIR reserves its
 exact charged input shape before SSA construction, and immutable normalized SSA
-reserves its exact charged input shape before bytecode construction. Public
-compiler `_with_ledger` entry points share one outer-owned compiler ledger;
-protocol and compiler still use separate ledgers. Parser-wide and complete
-cross-authority pre-allocation remain Accepted Targets.
+reserves its exact charged input shape before bytecode construction. Public compiler and Semantic Source
+`_with_ledger` entry points share one
+outer-owned ledger through strict protocol decode, typed request execution,
+hole exploration, legal actions, transaction staging, Edition 2 migration
+staging, and exact response preflight. Local sessions invoke the typed one-shot
+engine directly rather than serializing and decoding an inner request/response;
+an explicitly supplied session ledger is retained across frames. Source loading
+still allocates behind the bounded Foundation V1 reader before its exact loaded
+shape is reserved, and complete cross-authority pre-allocation remains an
+Accepted Target.
 
 ## One Ledger
 
@@ -84,9 +90,14 @@ before lexing; that source-parser reservation is not Current. Current compiler
 source bytes/tokens/nodes are measured after the fixed-limit parser and before
 HIR. Pattern rows/columns reserve usefulness work, immutable HIR shape reserves
 before SSA construction, and immutable normalized SSA shape reserves before
-bytecode construction. Diagnostics, hole candidates, response bytes, enum
-metadata, and staged publication bytes reserve at their documented Current
-boundaries.
+bytecode construction. Diagnostics, hole candidates, legal actions, protocol request/response bytes,
+session frame bytes, enum metadata, and staged publication bytes reserve at
+their documented Current boundaries. Protocol response size is first measured
+with a nonallocating writer until the self-reported exact byte charge stabilizes;
+that exact size is reserved before `Vec` capacity. Schema V2 cannot add a
+structured budget-prefix field: the `_with_ledger` typed result retains the
+exact `BudgetError`, while V2 wire errors retain its deterministic textual
+rendering only. A typed prefix field requires Schema V3.
 
 ## Closed Profile V2 Categories
 

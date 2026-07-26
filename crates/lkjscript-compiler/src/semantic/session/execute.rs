@@ -1,5 +1,6 @@
 use crate::semantic::schema::{ApplyMode, OperationRequest, Request, Response, ResponseResult};
 
+use super::pending::PendingExecution;
 use super::schema::{SessionError, SessionErrorCode, SessionResult};
 use super::SemanticSession;
 
@@ -43,7 +44,15 @@ impl SemanticSession {
                 pinned.state.canonical_root.clone(),
                 pinned.state.source_revision.clone(),
             );
-            let snapshot = match super::source::snapshot(profile, &root, Some(&expected)) {
+            let Some(ledger) = self.ledger.as_mut() else {
+                return SessionResult::Error {
+                    error: SessionError::new(
+                        SessionErrorCode::ResourceLimit,
+                        "session ledger authority is missing",
+                    ),
+                };
+            };
+            let snapshot = match super::source::snapshot(profile, &root, Some(&expected), ledger) {
                 Ok(snapshot) => snapshot,
                 Err(error) => return SessionResult::Error { error },
             };
@@ -63,39 +72,51 @@ impl SemanticSession {
                 return SessionResult::Error { error };
             }
         }
-        let encoded = match serde_json::to_vec(&request) {
-            Ok(encoded) => encoded,
+        let request_bytes = match crate::semantic::codec::measure_json(&request) {
+            Ok(bytes) => bytes,
             Err(error) => {
+                return SessionResult::Error {
+                    error: SessionError::new(SessionErrorCode::ResourceLimit, error.message),
+                }
+            }
+        };
+        let Some(ledger) = self.ledger.as_mut() else {
+            return SessionResult::Error {
+                error: SessionError::new(
+                    SessionErrorCode::ResourceLimit,
+                    "session ledger authority is missing",
+                ),
+            };
+        };
+        let request_charge = match u64::try_from(request_bytes) {
+            Ok(bytes) => bytes,
+            Err(_) => {
                 return SessionResult::Error {
                     error: SessionError::new(
                         SessionErrorCode::ResourceLimit,
-                        format!("encode semantic request: {error}"),
+                        "typed request byte count overflow",
                     ),
                 }
             }
         };
-        let output = match crate::semantic::execute(&encoded) {
-            Ok(output) => output,
+        if let Err(error) = crate::semantic::codec::reserve_request_bytes(ledger, request_charge) {
+            return SessionResult::Error {
+                error: SessionError::new(SessionErrorCode::ResourceLimit, error.message),
+            };
+        }
+        let outcome = match crate::semantic::engine::execute_request_with_ledger(
+            request,
+            request_bytes,
+            ledger,
+        ) {
+            Ok(outcome) => outcome,
             Err(error) => {
                 return SessionResult::Error {
-                    error: SessionError::new(
-                        SessionErrorCode::ResourceLimit,
-                        format!("one-shot semantic engine rejected typed request: {error}"),
-                    ),
+                    error: SessionError::new(SessionErrorCode::ResourceLimit, error.message),
                 }
             }
         };
-        let response: Response = match serde_json::from_slice(&output) {
-            Ok(response) => response,
-            Err(error) => {
-                return SessionResult::Error {
-                    error: SessionError::new(
-                        SessionErrorCode::ResourceLimit,
-                        format!("decode one-shot semantic response: {error}"),
-                    ),
-                }
-            }
-        };
+        let response = outcome.prepared.response.clone();
         let fuel = response_fuel(&response);
         let fuel = match fuel {
             Ok(fuel) => fuel,
@@ -104,11 +125,24 @@ impl SemanticSession {
         if let Err(error) = self.charge_fuel(fuel) {
             return SessionResult::Error { error };
         }
-        if publishes && matches!(&response.result, ResponseResult::ApplyTransaction { .. }) {
-            if let Err(error) = self.accept_publication(&response) {
-                return SessionResult::Error { error };
-            }
-        }
+        let rollback =
+            if publishes && matches!(&response.result, ResponseResult::ApplyTransaction { .. }) {
+                let Some(pinned) = self.pinned.clone() else {
+                    return SessionResult::Error {
+                        error: SessionError::new(
+                            SessionErrorCode::NotInitialized,
+                            "session lost its initialized pin",
+                        ),
+                    };
+                };
+                let rollback = (pinned, self.revision);
+                if let Err(error) = self.accept_publication(&response) {
+                    return SessionResult::Error { error };
+                }
+                Some(rollback)
+            } else {
+                None
+            };
         let Some(pinned) = self.pinned.as_ref() else {
             return SessionResult::Error {
                 error: SessionError::new(
@@ -118,6 +152,7 @@ impl SemanticSession {
             };
         };
         let session = pinned.state.clone();
+        self.pending = Some(PendingExecution::new(outcome, rollback));
         SessionResult::Execute {
             response: Box::new(response),
             session,
@@ -145,40 +180,5 @@ impl SemanticSession {
             )),
             Err(error) => Err(error),
         }
-    }
-
-    fn accept_publication(&mut self, response: &Response) -> Result<(), SessionError> {
-        let revision = response.revision.clone().ok_or_else(|| {
-            SessionError::new(
-                SessionErrorCode::ExternalSourceChange,
-                "published transaction returned no source revision",
-            )
-        })?;
-        let Some(pinned) = self.pinned.as_mut() else {
-            return Err(SessionError::new(
-                SessionErrorCode::NotInitialized,
-                "published session lost its initialized pin",
-            ));
-        };
-        let ResponseResult::ApplyTransaction { transaction } = &response.result else {
-            return Ok(());
-        };
-        for change in &transaction.changed_sources {
-            let fingerprint = pinned
-                .fingerprints
-                .iter_mut()
-                .find(|fingerprint| fingerprint.path == change.path)
-                .ok_or_else(|| {
-                    SessionError::new(
-                        SessionErrorCode::ExternalSourceChange,
-                        "published source was outside the pinned fingerprint set",
-                    )
-                })?;
-            fingerprint.bytes = change.bytes;
-            fingerprint.sha256.clone_from(&change.new_sha256);
-        }
-        pinned.state.source_revision = revision;
-        self.check_metadata()?;
-        self.advance_revision()
     }
 }

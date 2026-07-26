@@ -127,8 +127,11 @@ missing authority, deterministic prefix equality and nested order, exact
 journal capacity plus one, no-mutation rejection, and identity. Compiler tests
 retain corpus-root coverage and add exact/+1 deterministic-prefix boundaries
 for HIR, match planning, SSA construction, bytecode input, diagnostics, and
-outer-ledger accumulation. Parser-wide pre-allocation, exact bytecode-output
-sizing, and shared cross-authority ledger gates remain Accepted.
+outer-ledger accumulation. Semantic tests add deterministic typed prefixes,
+exact/+1 no-publication transaction response/staging boundaries, migration
+staging boundaries, direct typed session execution, and all 128 bounded request
+segments. Parser-wide pre-allocation, exact bytecode-output sizing, and a
+whole-platform cross-authority ledger remain Accepted.
 
 ## Current Edition 2 Gate
 

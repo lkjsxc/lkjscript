@@ -63,6 +63,15 @@ pub(super) fn read_frame<R: Read>(
             format!("session cumulative input {next} exceeds {cumulative_limit}"),
         ));
     }
+    if let Some(ledger) = session.ledger.as_mut() {
+        super::reserve_session(
+            ledger,
+            lkjscript_core::ResourceCategory::SemanticSessionInputBytes,
+            total,
+            lkjscript_core::BudgetCause::ProtocolFrame(total),
+        )
+        .map_err(SessionProcessError::budget)?;
+    }
     let mut payload = Vec::new();
     payload.try_reserve_exact(length).map_err(|error| {
         SessionProcessError::new(
@@ -137,23 +146,9 @@ pub(super) fn write_frame<W: Write>(
             "session cumulative output limit exceeded",
         ));
     }
-    let total = usize::try_from(total).map_err(|_| {
-        SessionProcessError::new(
-            ProcessCode::LengthOverflow,
-            "session frame does not fit usize",
-        )
-    })?;
-    let mut frame = Vec::new();
-    frame.try_reserve_exact(total).map_err(|error| {
-        SessionProcessError::new(
-            ProcessCode::FrameTooLarge,
-            format!("reserve output: {error}"),
-        )
-    })?;
-    frame.extend_from_slice(&length.to_be_bytes());
-    frame.extend_from_slice(payload);
     writer
-        .write_all(&frame)
+        .write_all(&length.to_be_bytes())
+        .and_then(|()| writer.write_all(payload))
         .map_err(SessionProcessError::output)?;
     session.output_bytes = next;
     session.last_response_bytes = length;

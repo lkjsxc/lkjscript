@@ -1,6 +1,4 @@
-use lkjscript_core::{
-    BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory, ResourceProfile,
-};
+use lkjscript_core::{BudgetAuthority, BudgetCause, BudgetLedger, ResourceCategory};
 
 use crate::source::{
     DiagnosticCategory, SourceDiagnostic, SourceResult, SourceSpan, ValidatedSourceTree,
@@ -12,11 +10,10 @@ use super::ConversionInsertion;
 pub(in crate::source::migration) fn reserve(
     tree: &ValidatedSourceTree,
     conversions: &[ConversionInsertion],
-    profile: ResourceProfile,
+    ledger: &mut BudgetLedger,
 ) -> SourceResult<()> {
     let (bytes, nodes) = measure(tree, conversions)?;
     let operation_count = u64::try_from(tree.files().len()).map_err(|_| overflow(tree))?;
-    let mut ledger = BudgetLedger::new(profile);
     let mut request = ledger.scope(BudgetAuthority::SemanticRequest);
     let mut transaction = request
         .child(BudgetAuthority::Transaction)
@@ -67,7 +64,7 @@ fn measure(
 }
 
 fn budget(tree: &ValidatedSourceTree, error: lkjscript_core::BudgetError) -> SourceDiagnostic {
-    diagnostic(tree, "LKJ-SRC-MIGRATION-LIMIT", error.to_string())
+    diagnostic(tree, "LKJ-SRC-MIGRATION-LIMIT", error.to_string()).with_budget(error)
 }
 
 fn overflow(tree: &ValidatedSourceTree) -> SourceDiagnostic {

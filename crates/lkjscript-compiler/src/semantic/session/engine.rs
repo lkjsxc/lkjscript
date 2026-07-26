@@ -1,8 +1,9 @@
 use crate::semantic::session::limits::{MAX_REQUEST_ID_BYTES, MAX_SESSION_REQUESTS};
+use lkjscript_core::BudgetLedger;
 
 use super::schema::{
     ProcessCode, SessionError, SessionErrorCode, SessionOperation, SessionProcessError,
-    SessionRequest, SessionResponse, SessionResult,
+    SessionRequest, SessionResult,
 };
 use super::SemanticSession;
 
@@ -28,6 +29,9 @@ impl SemanticSession {
                 ProcessCode::InvalidJson,
                 format!("unsupported session version {}", envelope.version),
             ));
+        }
+        if let Some(ledger) = self.ledger.as_mut() {
+            ledger.rollover_request_segment();
         }
         if envelope.request_id.len() > MAX_REQUEST_ID_BYTES {
             return self.encode_result(
@@ -70,6 +74,11 @@ impl SemanticSession {
                 },
             );
         }
+        if let SessionOperation::Execute { request } = &envelope.request {
+            if let Err(error) = self.ensure_ledger(request.profile) {
+                return self.encode_result(envelope.request_id, SessionResult::Error { error });
+            }
+        }
         let result = match envelope.request {
             SessionOperation::Execute { request } => self.execute(request),
             SessionOperation::Refresh => self.refresh(),
@@ -78,71 +87,39 @@ impl SemanticSession {
                 SessionResult::Shutdown { acknowledged: true }
             }
         };
-        self.encode_result(envelope.request_id, result)
+        let request_id = envelope.request_id;
+        let encoded = match self.encode_result(request_id.clone(), result) {
+            Ok(encoded) => encoded,
+            Err(error) => {
+                self.discard_pending();
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.publish_pending() {
+            return self.encode_result(
+                request_id,
+                SessionResult::Error {
+                    error: SessionError::new(SessionErrorCode::ResourceLimit, error.message),
+                },
+            );
+        }
+        Ok(encoded)
     }
 
-    fn encode_result(
-        &self,
-        request_id: String,
-        result: SessionResult,
-    ) -> Result<Vec<u8>, SessionProcessError> {
-        let envelope = SessionResponse {
-            schema: super::SCHEMA,
-            version: super::VERSION,
-            request_id: request_id.clone(),
-            revision: self.revision,
-            response: result,
-        };
-        let encoded = serde_json::to_vec(&envelope).map_err(|error| {
-            SessionProcessError::new(
-                ProcessCode::OutputFailure,
-                format!("encode session response: {error}"),
-            )
-        })?;
-        if self.output_fits(encoded.len()) {
-            return Ok(encoded);
+    fn ensure_ledger(
+        &mut self,
+        profile: crate::semantic::schema::ResourceProfile,
+    ) -> Result<(), SessionError> {
+        match &self.ledger {
+            Some(ledger) if crate::semantic::budget::profile_matches(profile, ledger) => Ok(()),
+            Some(_) => Err(SessionError::new(
+                SessionErrorCode::PinnedProfileMismatch,
+                "session request profile does not match outer-owned ledger",
+            )),
+            None => {
+                self.ledger = Some(BudgetLedger::new(profile.core()));
+                Ok(())
+            }
         }
-        let fallback = SessionResponse {
-            schema: super::SCHEMA,
-            version: super::VERSION,
-            request_id,
-            revision: self.revision,
-            response: SessionResult::Error {
-                error: SessionError::new(
-                    SessionErrorCode::ResourceLimit,
-                    "session output limit exceeded",
-                ),
-            },
-        };
-        let encoded = serde_json::to_vec(&fallback).map_err(|error| {
-            SessionProcessError::new(ProcessCode::OutputFailure, error.to_string())
-        })?;
-        if self.output_fits(encoded.len()) {
-            Ok(encoded)
-        } else {
-            Err(SessionProcessError::new(
-                ProcessCode::FrameTooLarge,
-                "session cannot frame a bounded error response",
-            ))
-        }
-    }
-
-    fn output_fits(&self, payload: usize) -> bool {
-        let Ok(payload) = u64::try_from(payload) else {
-            return false;
-        };
-        let Some(total) = payload.checked_add(8) else {
-            return false;
-        };
-        if payload > self.frame_output_limit() {
-            return false;
-        }
-        let limit = self.pinned.as_ref().map_or(
-            super::limits::MAX_SESSION_CUMULATIVE_OUTPUT_BYTES,
-            |pinned| pinned.state.limits.cumulative_output_bytes,
-        );
-        self.output_bytes
-            .checked_add(total)
-            .is_some_and(|next| next <= limit)
     }
 }

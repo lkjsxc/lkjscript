@@ -1,6 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 mod framing;
+mod ledger;
 mod lifecycle;
 mod transaction;
 

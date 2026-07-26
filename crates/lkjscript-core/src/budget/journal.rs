@@ -94,6 +94,23 @@ impl BudgetJournal {
         (self.len as usize) < MAX_BUDGET_JOURNAL_ENTRIES
     }
 
+    pub(crate) fn committed(
+        &self,
+        base: &[u64; RESOURCE_CATEGORY_COUNT],
+    ) -> [u64; RESOURCE_CATEGORY_COUNT] {
+        let mut committed = *base;
+        for record in &self.records[..self.len as usize] {
+            committed[record.category.index()] =
+                committed[record.category.index()].saturating_add(record.consumed);
+        }
+        committed
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.records[..self.len as usize].fill(ReservationJournalRecord::EMPTY);
+        self.len = 0;
+    }
+
     pub(crate) fn push(
         &mut self,
         id: ReservationId,
@@ -147,11 +164,7 @@ impl BudgetJournal {
         base: &[u64; RESOURCE_CATEGORY_COUNT],
         rejected: Option<BudgetRejectedEvent>,
     ) -> BudgetPrefix {
-        let mut committed = *base;
-        for record in &self.records[..self.len as usize] {
-            committed[record.category.index()] =
-                committed[record.category.index()].saturating_add(record.consumed);
-        }
+        let committed = self.committed(base);
         BudgetPrefix {
             profile,
             committed,
