@@ -31,8 +31,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   operations return explicit unsupported-evaluator outcomes
 - Callable baseline JIT: `lkjscript-jit` consumes only `VerifiedProgram`,
   lowers scalar Unit/Bool/I64/F64 plus host-independent Str, legacy Buf,
-  Product, List, Option, and Result semantics and direct recursive SCC groups to
-  `lkjscript-native`, installs bounded owned non-Send code objects through
+  Product, List, Option, Result, and monomorphic host-independent enum
+  semantics and direct recursive SCC groups to `lkjscript-native`, installs
+  bounded owned non-Send code objects through
   `lkjscript-sys`, and actually invokes generated System V AMD64 entries;
   scalar/direct native behavior stays unboxed and unchanged
 - Native runtime ABI: semantic/runtime versions remain 1 and native ABI 2 is
@@ -86,8 +87,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   performance. Automatic optimizing promotion remains disabled and unmeasured;
   no OSR, deoptimization, or speculation claim is made
 - Native references and heap sites: typed opaque stable-handle words use exact
-  Buf/Str/List/Option/Result/product layout identities and verified frame homes,
-  not raw object pointers; zero is accepted only for EmptyList/None; the Copy runtime-adapter token
+  Buf/Str/List/Option/Result/product/concrete-enum layout identities and verified
+  frame homes, not raw object pointers; zero is accepted only for EmptyList/None;
+  the Copy runtime-adapter token
   is non-Send/non-Sync.
   Bounded verifier-owned backward-CFG liveness charges every retained root
   before allocation and certificates sorted/deduplicated typed requirements for
@@ -100,16 +102,17 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   services, writes back handles, and reports exact stack/frame/root outcomes.
   Runtime-service limits are distinct from materialization limits. Generic
   `HeapDispatchV1` sites retain canonical operation-specific
-  input/result/layout/allocation/store facts, including nominal product field
-  and List/Option/Result payload identities, plus arbitrary bounded typed
-  arguments/result homes, source identity, and safepoint; sys copies
+  input/result/layout/allocation/store facts, including nominal product field,
+  List/Option/Result payload, and enum/variant/field/layout/tag/substitution
+  identities, plus arbitrary bounded typed arguments/result homes, source
+  identity, and safepoint; sys copies
   values/roots into safe `GcHeap` services, writes roots back, re-materializes
   moved arguments, and writes exact results. Caller/callee chains, dead-root
   exclusion, bounds,
   structured failures/outcomes, W^X, and repeated installation are tested
 - Native source limits: the callable SSA adapter rejects indirect calls,
-  polymorphic/unsupported signatures, Symbol, Handle/host IO, and lexical
-  Owned/Ref/RefMut. Scalar ABI-2 maps remain exactly empty; supported
+  polymorphic/unsupported signatures and enum substitutions, Symbol,
+  Handle/host IO, and lexical Owned/Ref/RefMut. Scalar ABI-2 maps remain exactly empty; supported
   host-independent reference operations have exact non-empty maps. Native/VM
   reference transitions are absent, so per-function auto-entry eligibility
   prevents a compiled reference helper from ever labeling a direct VM call

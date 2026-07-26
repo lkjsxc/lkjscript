@@ -3,6 +3,7 @@ mod budget;
 mod checker;
 mod discovery;
 mod equality;
+mod equality_enums;
 mod model;
 mod passes;
 mod reconstruct;

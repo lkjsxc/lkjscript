@@ -8,6 +8,7 @@ use lkjscript_native::{
 };
 
 mod control;
+mod enum_heap;
 mod heap_facts;
 mod heap_sites;
 mod layouts;

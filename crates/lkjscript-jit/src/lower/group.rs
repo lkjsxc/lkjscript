@@ -21,18 +21,11 @@ pub(super) fn lower_group(
     root: FunctionId,
     limits: BackendLimits,
 ) -> Result<LoweredGroup, LoweringError> {
-    if !program.enums.is_empty() {
-        return Err(LoweringError::new(
-            LoweringFailureCode::UnsupportedType,
-            Some(root),
-            "Edition 2 enum-containing requests are rejected by native tiers; no fallback was claimed",
-        ));
-    }
     let functions = reachable_group(program, root)?;
     let layouts = LayoutInterner::build(program, &functions)?;
     for function in &functions {
         let item = source_function(program, *function)?;
-        preflight_function(item, &layouts)?;
+        preflight_function(program, item, &layouts)?;
     }
 
     let mut plan = MachinePlanBuilder::new();
@@ -54,6 +47,7 @@ pub(super) fn lower_group(
             .function_builder(native)
             .map_err(LoweringError::backend)?;
         lower_function(
+            program,
             item,
             &native_functions,
             &layouts,

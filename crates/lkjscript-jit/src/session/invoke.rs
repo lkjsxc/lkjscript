@@ -72,7 +72,13 @@ impl JitSession {
             self.vm_to_native_transitions = self.vm_to_native_transitions.saturating_add(1);
         }
         let force_collection = self.config.force_gc_before_allocation;
-        let mut services = JitHeapServices::new(&mut self.heap, force_collection);
+        let enums = &self.program.program().enums;
+        let mut services = JitHeapServices::new(
+            &mut self.heap,
+            enums,
+            force_collection,
+            execution.max_logical_aggregate_constructions,
+        );
         let report = self.objects[object_index].installed.invoke_with_services(
             native,
             arguments,

@@ -1,6 +1,5 @@
 # Current State: Current Implementation
 [Authority](../current-state.md)
-
 ## Status
 
 **Mixed.** Status follows explicit labels in this capsule and its authority; this capsule cannot promote a capability.
@@ -144,7 +143,8 @@
   exact construction, access, and immutable replacement. Edition 2 enum
   declarations/type facts and exact `variant-value` construction are Current
   through HIR, verified SSA, evaluator, validated bytecode, boxed active-payload
-  GC values, and the reference VM. Source match and enum JIT execution are absent
+  GC values, the reference VM, and forced Linux x86-64 baseline/proof JIT.
+  Source match and automatic/host-native enum transitions are absent
 - Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
   fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
   aggregate ownership-analysis budget; lexical place initialization/end;

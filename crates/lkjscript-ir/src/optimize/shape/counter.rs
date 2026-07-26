@@ -91,6 +91,9 @@ impl<'a> ShapeCounter<'a> {
                     pending.push(ok);
                     pending.push(error);
                 }
+                SsaType::Enum { arguments, .. } => {
+                    pending.extend(arguments);
+                }
                 SsaType::Function(signature) => {
                     self.add_metadata()?;
                     self.add_bounded(

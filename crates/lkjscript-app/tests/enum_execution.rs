@@ -3,8 +3,13 @@
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig};
+use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
+
+#[path = "enum_execution/adversarial.rs"]
+mod adversarial;
+#[path = "enum_execution/native_ssa.rs"]
+mod native_ssa;
 
 fn source() -> String {
     concat!(
@@ -111,24 +116,59 @@ fn logical_construction_exhausts_before_allocation_on_both_engines() {
 }
 
 #[test]
-fn forced_native_tiers_reject_enum_program_without_fallback_claim() {
+fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
     let program = compile_source(&source(), "enum-jit.lkjscript", &Limits::default())
         .expect("compile enum construction");
-    for error in [
+    let evaluator = evaluate(program.ssa(), &EvalConfig::default());
+    let EvalOutcome::Returned(EvalValue::Enum { physical_tag, .. }) = evaluator else {
+        panic!("evaluator must return enum")
+    };
+    for execution in [
         execute_forced(
             program.ssa(),
             &ExecutionConfig::default(),
             JitConfig::default(),
         )
-        .expect_err("baseline rejects enum"),
+        .expect("baseline executes enum"),
         execute_optimizing(
             program.ssa(),
             &ExecutionConfig::default(),
             JitConfig::default(),
         )
-        .expect_err("proof tier rejects enum"),
+        .expect("proof tier executes enum"),
     ] {
-        assert_eq!(error.code(), FailureCode::UnsupportedType);
-        assert!(error.detail().contains("no fallback was claimed"));
+        let ExecutionOutcome::Returned(value) = execution.outcome else {
+            panic!("native tier must return enum")
+        };
+        assert_eq!(value.enum_physical_tag(), Some(physical_tag));
+        assert_eq!(value.enum_field_i64(0), Some(42));
+        assert!(execution.stats.native_entries > 0);
+        assert!(execution.stats.runtime_heap_successes > 0);
+        assert_eq!(execution.stats.vm_fallbacks, 0);
+    }
+}
+
+#[test]
+fn forced_native_enum_reserves_logical_construction_before_allocation() {
+    let program = compile_source(&source(), "enum-jit-limit.lkjscript", &Limits::default())
+        .expect("compile enum construction");
+    let execution = ExecutionConfig {
+        max_logical_aggregate_constructions: 0,
+        ..ExecutionConfig::default()
+    };
+    for outcome in [
+        execute_forced(program.ssa(), &execution, JitConfig::default())
+            .expect("baseline reports resource outcome")
+            .outcome,
+        execute_optimizing(program.ssa(), &execution, JitConfig::default())
+            .expect("proof reports resource outcome")
+            .outcome,
+    ] {
+        assert!(matches!(
+            outcome,
+            ExecutionOutcome::ResourceLimitExceeded(
+                ResourceLimitKind::LogicalAggregateConstructions
+            )
+        ));
     }
 }

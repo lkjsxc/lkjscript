@@ -131,7 +131,10 @@ impl fmt::Debug for JitSession {
 
 struct JitHeapServices<'a> {
     heap: &'a mut GcHeap,
+    enums: &'a [lkjscript_ir::EnumMetadata],
     force_collection: bool,
+    logical_aggregate_constructions: u64,
+    max_logical_aggregate_constructions: u64,
     last_trap: Option<String>,
     last_resource: Option<ResourceLimitKind>,
 }

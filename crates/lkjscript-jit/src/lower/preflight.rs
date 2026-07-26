@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) fn preflight_function(
+    program: &lkjscript_ir::Program,
     function: &Function,
     layouts: &LayoutInterner,
 ) -> Result<(), LoweringError> {
@@ -74,7 +75,7 @@ pub(super) fn preflight_function(
                 InstructionKind::EnumValue { .. }
                 | InstructionKind::EnumIsVariant { .. }
                 | InstructionKind::EnumField { .. } => {
-                    return unsupported_operation(function.id, "Edition 2 enum operation")
+                    preflight_enum_instruction(program, function, instruction, layouts)?;
                 }
             }
         }

@@ -55,6 +55,14 @@ pub(super) fn lower_type(
             exact_layout_identity(function, layouts, ok)?,
             exact_layout_identity(function, layouts, error)?,
         ))),
+        SsaType::Enum { arguments, .. } => {
+            for argument in arguments {
+                lower_type(function, argument, layouts)?;
+            }
+            Ok(ValueType::Reference(ReferenceType::Enum(
+                exact_layout_identity(function, layouts, ty)?,
+            )))
+        }
         SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
             Some(function),

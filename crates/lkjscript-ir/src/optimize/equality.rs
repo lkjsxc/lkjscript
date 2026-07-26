@@ -1,8 +1,10 @@
+use super::equality_enums::exact_enum_instruction_kind_equal;
 use crate::{Constant, Function, Instruction, InstructionKind, Program};
 
 pub(crate) fn exact_program_equal(left: &Program, right: &Program) -> bool {
     left.sources == right.sources
         && left.products == right.products
+        && left.enums == right.enums
         && left.traits == right.traits
         && left.implementations == right.implementations
         && left.main == right.main
@@ -174,7 +176,7 @@ pub(crate) fn exact_instruction_kind_equal(
                 && left_value == right_value
                 && left_replacement == right_replacement
         }
-        _ => false,
+        _ => exact_enum_instruction_kind_equal(left, right),
     }
 }
 

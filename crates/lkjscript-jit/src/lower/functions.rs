@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) fn lower_function(
+    program: &lkjscript_ir::Program,
     function: &Function,
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
     layouts: &LayoutInterner,
@@ -88,12 +89,14 @@ pub(super) fn lower_function(
         let native_block = blocks[index];
         for instruction in &block.instructions {
             lower_instruction(
+                program,
                 function,
                 instruction,
                 native_block,
                 &locals,
                 &value_types,
                 native_functions,
+                layouts,
                 builder,
             )?;
         }

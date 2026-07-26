@@ -14,8 +14,9 @@ Graph/context, externalized Agent Work State V2 with exact semantic references,
 the bounded one-shot semantic protocol, bounded local stdio sessions, and
 compiler Resource Profile V2 and the Edition 2 enum declaration/type-fact plus
 construction/evaluator/reference-VM slice are Current. Agent Foundation V1 and Semantic Source Schema V1 are
-historical rejected identities. Edition 2 source match and enum JIT execution,
-the remaining semantic core, whole-pipeline Profile V2 pre-allocation, nonzero
+historical rejected identities. Edition 2 source match, automatic/host-native
+enum transitions, the remaining semantic core, whole-pipeline Profile V2
+pre-allocation, nonzero
 incremental query caching, and logical metering beyond enum construction are
 **Accepted Targets**.
 
@@ -87,9 +88,10 @@ unchanged.
 Semantic Source -> resolved typed HIR -> verified SSA -> evaluator/VM/native/
 proof consumers. Generic enum declarations, resolved type facts, exact construction, independent
 layout identities, enum SSA primitives, the SSA evaluator, validated bytecode,
-and reference VM execution are Current. Match will lower to SSA CFG only after
-plan verification. Native and proof JITs reject enum-containing forced requests
-without fallback claims; their enum support remains an Accepted Target.
+reference VM execution, and forced Linux x86-64 baseline/proof generated enum
+operations are Current. Match will lower to SSA CFG only after plan
+verification. Polymorphic entries, host enum operations, and automatic native/
+VM reference transitions remain Accepted Targets.
 
 ## Authority Links
 

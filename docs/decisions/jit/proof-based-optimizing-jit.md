@@ -7,7 +7,8 @@ proved by verified typed-SSA facts and whose generated code is actually called.
 ## Status
 
 Deterministic baseline SSA normalization and the forced first proof-based
-pipeline described in Selected First Delivery are **Current** on Linux x86-64.
+pipeline, including unchanged proof-preserved monomorphic enum operations,
+described in Selected First Delivery are **Current** on Linux x86-64.
 The exact automatic baseline-to-proof-optimizing slice below is an **Accepted
 Implementation Selection**, not yet Current. Every broader optimization listed
 below remains an **Accepted Target**. No baseline code is labeled optimizing,

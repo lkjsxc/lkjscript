@@ -107,9 +107,11 @@ invariance, duplicate/empty/malformed rejection, nested ownership rejection,
 recursion exact/+1 bounds, exact constructor field order/arity/type rejection,
 SSA metadata/provenance/layout/substitution rejection, inactive projection
 rejection, stable physical tags, boxed active-payload tracing, validated
-bytecode descriptors, evaluator/VM differential values and logical exhaustion,
-and deterministic forced-JIT rejection without fallback claims. Source match
-and enum JIT execution remain part of the Accepted Edition 2 gate.
+bytecode descriptors, evaluator/VM/native/proof differential values and logical
+exhaustion, exact generated entries/runtime calls/roots, malformed native
+metadata/tag/projection rejection, and zero forced fallback. Source match and
+automatic/host-native enum transitions remain part of the Accepted Edition 2
+gate.
 
 Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child

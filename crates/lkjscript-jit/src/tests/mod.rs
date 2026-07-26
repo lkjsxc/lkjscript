@@ -1,3 +1,4 @@
+mod enum_metadata;
 mod heap_identity;
 mod list_limits;
 mod outcomes;

@@ -20,9 +20,9 @@ The implementation proceeds through separately honest boundaries:
 1. **Current:** native ABI 2 typed references, exact non-empty stack maps,
    bounded active generated frames, and a safe collection-dispatch boundary;
 2. **Current:** source-to-generated host-independent allocation for Str, legacy
-   Buf, products, List, Option, and Result, including field/tag/read/write
-   operations, direct and mutual recursion, forced collection, and
-   VM/evaluator/native equality;
+   Buf, products, List, Option, Result, and monomorphic Edition 2 enums,
+   including construction, field/tag/read/write operations, direct and mutual
+   recursion, forced collection, and VM/evaluator/native equality;
 3. **Accepted Target:** versioned Handle and host-capability calls, native/VM
    reference continuation, and same-commit allocation workload measurement.
 
@@ -77,9 +77,9 @@ re-materializes arguments after any moving root writeback, and propagates
 structured status. Empty List and None use only the exact zero niche; other references
 reject zero and every nonzero handle is category/layout checked.
 
-Forced lowering covers Str, legacy Buf, Product, List, Option, Result, their
-listed constructors/accessors/mutations/conversions/equality families, and
-recursive SCCs. Runtime ABI calls are generated execution, not fallback.
+Forced lowering covers Str, legacy Buf, Product, List, Option, Result, and
+monomorphic host-independent enums, their listed constructors/accessors/
+mutations/conversions/equality families, and recursive SCCs. Runtime ABI calls are generated execution, not fallback.
 Automatic mode deliberately keeps reference-signature entries in the VM
 because native/VM reference transfer is not Current. Such a helper may still
 be installed inside a supported generated direct-call group, but its per-

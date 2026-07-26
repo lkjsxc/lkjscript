@@ -12,7 +12,7 @@ words, derives exact typed maps, registers generated frames, and reaches
 `GcHeap` through safe copied-root/typed-operation callbacks. Reference-capable
 SSA/JIT lowering, initialization/scalar-store classification, and direct/mutual
 recursive source groups are Current for Str, legacy Buf, Product, List, Option,
-and Result. Handle/host-capability allocation, lexical ownership references,
+Result, and monomorphic host-independent enums. Handle/host-capability allocation, lexical ownership references,
 and native/VM reference transitions remain **Accepted Targets**.
 
 ## Authority And Status Vocabulary

@@ -56,6 +56,7 @@ impl HeapCallDescriptor {
                 | HeapOperation::EmptyStr
                 | HeapOperation::ProductValue { .. }
                 | HeapOperation::WithProductField { .. }
+                | HeapOperation::EnumValue { .. }
                 | HeapOperation::Cons
                 | HeapOperation::Some
                 | HeapOperation::Ok

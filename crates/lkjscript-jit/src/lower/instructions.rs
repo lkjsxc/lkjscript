@@ -1,12 +1,15 @@
 use super::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
+    program: &lkjscript_ir::Program,
     function: &Function,
     instruction: &Instruction,
     block: lkjscript_native::BlockId,
     locals: &[LocalId],
     value_types: &[ValueType],
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
+    layouts: &LayoutInterner,
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
     let output = match &instruction.kind {
@@ -151,6 +154,18 @@ pub(super) fn lower_instruction(
                 arguments,
             )
         }
+        InstructionKind::EnumValue { .. }
+        | InstructionKind::EnumIsVariant { .. }
+        | InstructionKind::EnumField { .. } => lower_enum_instruction(
+            program,
+            function,
+            instruction,
+            block,
+            locals,
+            value_types,
+            layouts,
+            builder,
+        ),
         _ => return unsupported_operation(function.id, "ownership/reference operation"),
     }
     .map_err(LoweringError::backend)?;

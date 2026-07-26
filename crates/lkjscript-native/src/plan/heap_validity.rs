@@ -42,6 +42,13 @@ impl HeapCallDescriptor {
                         if *layout == LayoutIdentity::product(*product) && replacement == field_type)
                     && result == Ty::Reference(Ref::Product(LayoutIdentity::product(*product)))
             }
+            Op::EnumValue { .. } | Op::EnumIsVariant { .. } | Op::EnumField { .. } => {
+                super::enum_heap_validity::enum_operation_types_are_valid(
+                    &self.operation,
+                    inputs,
+                    result,
+                )
+            }
             Op::Cons => matches!(inputs, [payload, list]
                 if *list == result
                     && matches!(result, Ty::Reference(Ref::List(_, element))

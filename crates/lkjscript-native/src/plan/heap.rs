@@ -38,6 +38,29 @@ pub enum HeapOperation {
         field: u8,
         field_type: ValueType,
     },
+    EnumValue {
+        enum_id: [u8; 32],
+        variant: [u8; 32],
+        layout: [u8; 32],
+        physical_tag: u16,
+        substitutions: Vec<LayoutIdentity>,
+        fields: u8,
+    },
+    EnumIsVariant {
+        enum_id: [u8; 32],
+        variant: [u8; 32],
+        layout: [u8; 32],
+        physical_tag: u16,
+    },
+    EnumField {
+        enum_id: [u8; 32],
+        variant: [u8; 32],
+        field: [u8; 32],
+        layout: [u8; 32],
+        physical_tag: u16,
+        field_index: u8,
+        field_type: ValueType,
+    },
     Cons,
     Car,
     Cdr,
@@ -76,9 +99,13 @@ impl HeapOperation {
     pub(crate) fn expected_arity(&self) -> usize {
         match self {
             Self::EmptyStr | Self::EmptyList | Self::None | Self::ConstantStr(_) => 0,
-            Self::ProductValue { fields, .. } => usize::from(*fields),
+            Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
+                usize::from(*fields)
+            }
             Self::BufSet | Self::BufSlice | Self::BufSetU32 | Self::StrSlice => 3,
             Self::ProductField { .. }
+            | Self::EnumIsVariant { .. }
+            | Self::EnumField { .. }
             | Self::Car
             | Self::Cdr
             | Self::IsEmptyList

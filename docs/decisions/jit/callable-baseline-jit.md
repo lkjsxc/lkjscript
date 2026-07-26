@@ -6,10 +6,10 @@ Fix the completion boundary and prerequisite contracts for the first native
 runtime tier without describing planned work as current behavior.
 ## Status
 
-**Current** for the Linux x86-64 allocation-free scalar MVP: machine code
-lowered from verified typed SSA for canonical lkjscript programs is installed in
-W^X memory and actually called. Exact current coverage and unsupported native
-semantics are recorded in [Current State](../../current-state.md) and
+**Current** for Linux x86-64 scalar and the separately accepted host-independent
+allocation slices: machine code lowered from verified typed SSA, including
+monomorphic enum operations, is installed in W^X memory and actually called.
+Exact current coverage and unsupported native semantics are recorded in [Current State](../../current-state.md) and
 [Callable Baseline JIT](../../runtime/baseline-jit.md). Native references,
 allocation, host IO, recursion, OSR, background work, and optimizing tiers are
 not made Current by this completion.

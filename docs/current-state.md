@@ -34,10 +34,10 @@ legal actions, closed hole transactions, one-shot query/edit protocol, bounded
 local stdio sessions, the Edition 2 identity/non-publishing migration slice,
 generic enum declarations/resolved type facts, exact `variant-value`
 construction through verified SSA, the SSA evaluator, validated bytecode, and
-the reference VM, compiler Resource Profile V2, and the core hierarchical
-pre-allocation foundation are Current. Agent
-Foundation V1 and Semantic Source Schema V1 identities are historical and
-rejected. Source match and patterns, enum JIT execution, other Edition 2 ADTs,
+the reference VM, forced Linux x86-64 baseline/proof enum execution, compiler
+Resource Profile V2, and the core hierarchical pre-allocation foundation are
+Current. Agent Foundation V1 and Semantic Source Schema V1 identities are
+historical and rejected. Source match and patterns, other Edition 2 ADTs,
 changed semantics, execution cutover, migration publication, whole-pipeline
 pre-allocation, logical metering beyond enum construction, nonzero query
 caching, and cross-authority ledgers remain Accepted Targets, not Current.
@@ -77,9 +77,10 @@ commands/APIs are Current on the containing implementation revision.
    invariant resolved HIR type facts, bounded recursion/ownership validation,
    exact Profile V2 enum-shape preallocation, exact enum value construction,
    target-independent layout facts, verified SSA primitives/evaluator,
-   validated bytecode, boxed active-payload GC representation, and reference VM
-   execution are Current. Match, native/proof JIT enum execution, changed
-   execution beyond this slice, publish, and corpus cutover remain targets.
+   validated bytecode, boxed active-payload GC representation, reference VM,
+   and forced Linux x86-64 baseline/proof JIT execution are Current. Match,
+   automatic/native-host enum transitions, publish, and corpus cutover remain
+   targets.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation
@@ -92,6 +93,7 @@ Selection after these repository-intelligence foundations; it is not enabled.
 - [resolved AI-native redesign baseline](current-state/resolved-ai-native-redesign-baseline.md)
 - [compiler, semantic, and runtime implementation](current-state/current-implementation.md)
 - [host capabilities and native runtime](current-state/current-native-runtime.md)
+- [forced enum JIT evidence](current-state/forced-enum-jit-evidence.md)
 - [accepted platform direction](current-state/accepted-platform-direction.md)
 - [automatic proof-promotion selection](current-state/accepted-target-automatic-baseline-to-proof-promotion.md)
 

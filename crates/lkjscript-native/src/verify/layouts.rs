@@ -12,6 +12,7 @@ pub(super) enum LayoutShape {
     List(crate::LayoutIdentity),
     Option(crate::LayoutIdentity),
     Result(crate::LayoutIdentity, crate::LayoutIdentity),
+    Enum,
 }
 
 pub(super) fn verify_layout_identities(
@@ -79,6 +80,7 @@ pub(super) fn verify_layout_identities(
                 ReferenceType::Result(identity, ok, error) => {
                     (identity, LayoutShape::Result(ok, error))
                 }
+                ReferenceType::Enum(identity) => (identity, LayoutShape::Enum),
             };
             if identities
                 .insert(identity, shape)

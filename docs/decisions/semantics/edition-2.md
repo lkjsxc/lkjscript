@@ -12,9 +12,10 @@ them become implementation claims.
 <!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
 
 **Accepted Target overall.** Explicit identity/non-publishing migration and the
-generic enum declaration/resolved-type-fact and construction/evaluator/
-reference-VM slice are Current. Patterns, source match, enum JIT execution,
-changed semantics beyond this slice, semantic publication, corpus migration,
+generic enum declaration/resolved-type-fact, construction/evaluator/reference-
+VM, and forced Linux x86-64 baseline/proof JIT slice are Current. Patterns,
+source match, automatic/host-native enum transitions, changed semantics beyond
+this slice, semantic publication, corpus migration,
 and cutover are not Current. Edition 1 remains
 accepted for ordinary compilation and as migration input.
 
@@ -33,8 +34,9 @@ parser and validated tree plus deterministic edition projections; a second
 parser/tree is forbidden. The current line projection remains canonical during
 this target. Edition 2 now accepts the complete generic `enum` declaration, resolved type
 facts, and exact `variant-value` construction under exactly those names, with
-no aliases. Construction executes only through verified SSA, its evaluator,
-and validated reference bytecode/VM; enum JIT execution is rejected.
+no aliases. Construction executes only through verified SSA consumers: its evaluator,
+validated reference bytecode/VM, and forced Linux x86-64 baseline/proof JIT.
+Polymorphic entries, host operations, and automatic reference transfer reject.
 
 ## Strict Capsule Manifest
 

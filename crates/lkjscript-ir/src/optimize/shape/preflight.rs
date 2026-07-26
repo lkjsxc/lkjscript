@@ -14,6 +14,7 @@ pub(crate) fn preflight_program(
         .sources
         .len()
         .checked_add(program.products.len())
+        .and_then(|value| value.checked_add(program.enums.len()))
         .and_then(|value| value.checked_add(program.traits.len()))
         .and_then(|value| value.checked_add(program.implementations.len()))
         .ok_or_else(budget_error)?;
@@ -36,6 +37,23 @@ pub(crate) fn preflight_program(
             counter.add_metadata()?;
             counter.add_string(&field.name)?;
             counter.add_type(&field.ty)?;
+        }
+    }
+    for definition in &program.enums {
+        counter.add_string(&definition.name)?;
+        counter.add_metadata()?;
+        for parameter in &definition.type_parameters {
+            counter.add_string(parameter)?;
+            counter.add_metadata()?;
+        }
+        for variant in &definition.variants {
+            counter.add_string(&variant.name)?;
+            counter.add_metadata()?;
+            for field in &variant.fields {
+                counter.add_string(&field.name)?;
+                counter.add_metadata()?;
+                counter.add_type(&field.ty)?;
+            }
         }
     }
     for trait_metadata in &program.traits {

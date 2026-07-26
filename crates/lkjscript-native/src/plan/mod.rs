@@ -9,6 +9,7 @@ mod builder;
 mod builder_core;
 mod calls_control;
 mod comparisons;
+mod enum_heap_validity;
 mod error;
 mod heap;
 mod heap_descriptor;

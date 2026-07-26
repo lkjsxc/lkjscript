@@ -152,9 +152,10 @@ and lowering cannot interpret them differently.
 ## Edition 2 Current Slice And Accepted Target
 
 Edition 2 generic enum declarations and exact `variant-value` construction are
-Current on the SSA evaluator and reference VM. Closed named-field patterns,
-`match`, enum JIT execution, `Never`, early return, typed loop control, and four
-explicit I64/F64 conversions remain
+Current on the SSA evaluator, reference VM, and forced Linux x86-64 baseline/
+proof JIT. Closed named-field patterns, `match`, automatic/host-native enum
+transitions, `Never`, early return, typed loop control, and four explicit
+I64/F64 conversions remain
 [Accepted Targets](../../decisions/semantics/edition-2.md). Product
 remains its separate nominal product concept. Option and Result migrate to
 compiler-recognized prelude enum identities only after generic ADT differential

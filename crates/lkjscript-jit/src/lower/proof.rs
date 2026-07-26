@@ -49,6 +49,7 @@ pub(super) fn heap_descriptor(
             | HeapOperation::EmptyStr
             | HeapOperation::ProductValue { .. }
             | HeapOperation::WithProductField { .. }
+            | HeapOperation::EnumValue { .. }
             | HeapOperation::Cons
             | HeapOperation::Some
             | HeapOperation::Ok

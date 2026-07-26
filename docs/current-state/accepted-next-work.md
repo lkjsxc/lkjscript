@@ -25,10 +25,11 @@ The immediate implementation sequence has progressed as follows:
    non-publishing Edition 1-to-2 migration check/diff are Current;
 7. generic enum declarations/type facts plus exact construction, independent
    layout/runtime identities, verified SSA/evaluator, validated bytecode, boxed
-   active-payload GC values, reference VM execution, and enum construction
-   precharging are Current; and
-8. source match, enum JIT execution, migration publication, nonzero query
-   caching, whole-pipeline pre-allocation, and shared request ledgers remain next.
+   active-payload GC values, reference VM execution, enum construction
+   precharging, and forced Linux x86-64 baseline/proof JIT are Current; and
+8. source match, automatic/host-native enum transitions, migration publication,
+   nonzero query caching, whole-pipeline pre-allocation, and shared request
+   ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

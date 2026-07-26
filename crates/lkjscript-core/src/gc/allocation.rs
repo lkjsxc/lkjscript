@@ -29,6 +29,55 @@ impl GcHeap {
         self.publish_with_layout(object, None)
     }
 
+    /// Check the complete generated enum publication before any scalar box or
+    /// enum object is published. The caller executes synchronously after this
+    /// check, so the exact aggregate reservation cannot be consumed elsewhere.
+    #[doc(hidden)]
+    pub fn preflight_enum_allocations(
+        &self,
+        scalar_boxes: usize,
+        active_fields: usize,
+    ) -> std::result::Result<(), GcLimit> {
+        let allocation_count = scalar_boxes.checked_add(1).ok_or(GcLimit::Allocations)?;
+        let allocation_count_u64 =
+            u64::try_from(allocation_count).map_err(|_| GcLimit::Allocations)?;
+        if self
+            .stats
+            .allocations
+            .checked_add(allocation_count_u64)
+            .is_none_or(|total| total > self.config.max_allocations)
+        {
+            return Err(GcLimit::Allocations);
+        }
+        let final_index = self
+            .objs
+            .len()
+            .checked_add(allocation_count)
+            .and_then(|length| length.checked_sub(1))
+            .ok_or(GcLimit::Allocations)?;
+        if !stable_index_available(final_index) {
+            return Err(GcLimit::Allocations);
+        }
+        let base_bytes = std::mem::size_of::<HeapObj>()
+            .checked_mul(allocation_count)
+            .ok_or(GcLimit::HeapBytes)?;
+        let payload_bytes = std::mem::size_of::<Value>()
+            .checked_mul(active_fields)
+            .ok_or(GcLimit::HeapBytes)?;
+        let added = base_bytes
+            .checked_add(payload_bytes)
+            .ok_or(GcLimit::HeapBytes)?;
+        if self
+            .stats
+            .live_heap_bytes
+            .checked_add(added)
+            .is_none_or(|total| total > self.config.max_heap_bytes)
+        {
+            return Err(GcLimit::HeapBytes);
+        }
+        Ok(())
+    }
+
     /// Publish a boxed enum only after validating layout, physical tag, and
     /// exact active initialized payload against immutable metadata.
     pub fn alloc_validated_enum(

@@ -24,8 +24,14 @@ pub(super) fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
     for site in parts.heap_runtime_sites {
         bytes = add_records(bytes, site.arguments.len(), 16)?;
         bytes = add_records(bytes, site.descriptor.input_types().len(), 1)?;
-        if let crate::HeapOperation::ConstantStr(text) = site.descriptor.operation() {
-            bytes = add_records(bytes, text.len(), 1)?;
+        match site.descriptor.operation() {
+            crate::HeapOperation::ConstantStr(text) => {
+                bytes = add_records(bytes, text.len(), 1)?;
+            }
+            crate::HeapOperation::EnumValue { substitutions, .. } => {
+                bytes = add_records(bytes, substitutions.len(), 4)?;
+            }
+            _ => {}
         }
     }
     bytes = add_records(bytes, parts.source_map.len(), 24)?;

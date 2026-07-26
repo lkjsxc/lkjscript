@@ -38,6 +38,8 @@ pub enum ReferenceType {
     /// Complete interned result identity followed by its Ok and Err identities.
     Result(LayoutIdentity, LayoutIdentity, LayoutIdentity),
     Product(LayoutIdentity),
+    /// Complete concrete enum substitution/layout identity.
+    Enum(LayoutIdentity),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -72,7 +74,8 @@ impl ValueType {
             Self::Reference(ReferenceType::Product(layout))
             | Self::Reference(ReferenceType::List(layout, _))
             | Self::Reference(ReferenceType::Option(layout, _))
-            | Self::Reference(ReferenceType::Result(layout, _, _)) => layout,
+            | Self::Reference(ReferenceType::Result(layout, _, _))
+            | Self::Reference(ReferenceType::Enum(layout)) => layout,
         }
     }
 }

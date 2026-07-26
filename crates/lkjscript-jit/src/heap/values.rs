@@ -14,6 +14,7 @@ pub(crate) fn reference_layout_key(reference_type: ReferenceType) -> u64 {
         ReferenceType::Option(layout, _) => (4_u64 << 56) | u64::from(layout.get()),
         ReferenceType::Result(layout, _, _) => (5_u64 << 56) | u64::from(layout.get()),
         ReferenceType::Product(layout) => (6_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Enum(layout) => (7_u64 << 56) | u64::from(layout.get()),
     }
 }
 
@@ -46,6 +47,7 @@ pub(crate) fn native_reference_value(
         (ReferenceType::Product(layout), Ok(HeapObj::Product { product, .. })) => {
             layout == lkjscript_native::LayoutIdentity::product(u32::from(product.raw()))
         }
+        (ReferenceType::Enum(_), Ok(HeapObj::Enum { .. })) => true,
         _ => false,
     };
     if !category_matches {

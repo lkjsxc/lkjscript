@@ -12,6 +12,9 @@ use lkjscript_native::{
     SourceFunctionId, SourceOrigin, StoreClass, TrapCode, ValueType,
 };
 
+mod enum_lower;
+mod enum_types;
+mod enums;
 mod functions;
 mod group;
 mod instructions;
@@ -27,6 +30,9 @@ mod tests;
 mod types;
 mod values;
 
+use enum_lower::*;
+use enum_types::*;
+use enums::*;
 use functions::*;
 pub(crate) use group::{lower_baseline_group, lower_optimizing_group};
 use instructions::*;

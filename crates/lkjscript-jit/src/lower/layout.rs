@@ -39,6 +39,11 @@ impl LayoutInterner {
                 self.intern(ok)?;
                 self.intern(error)?;
             }
+            SsaType::Enum { arguments, .. } => {
+                for argument in arguments {
+                    self.intern(argument)?;
+                }
+            }
             _ => return Ok(()),
         }
         if !self.identities.contains_key(ty) {
@@ -64,9 +69,10 @@ impl LayoutInterner {
             SsaType::Str => Some(ValueType::Reference(ReferenceType::Str).layout_identity()),
             SsaType::Buf => Some(ValueType::Reference(ReferenceType::Buf).layout_identity()),
             SsaType::Product(product) => Some(LayoutIdentity::product(u32::from(product.raw()))),
-            SsaType::List(_) | SsaType::Option(_) | SsaType::Result(_, _) => {
-                self.identities.get(ty).copied()
-            }
+            SsaType::List(_)
+            | SsaType::Option(_)
+            | SsaType::Result(_, _)
+            | SsaType::Enum { .. } => self.identities.get(ty).copied(),
             _ => None,
         }
     }
