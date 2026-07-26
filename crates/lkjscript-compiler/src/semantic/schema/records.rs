@@ -11,6 +11,15 @@ pub(crate) struct Charges {
     pub source_nodes: u64,
     pub operations: u64,
     pub work_units: u64,
+    pub hole_count: u64,
+    pub hole_candidates: u64,
+    pub hole_search_work: u64,
+    pub legal_actions: u64,
+    pub transactions: u64,
+    pub transaction_operations: u64,
+    pub transaction_impact_nodes: u64,
+    pub staged_publication_bytes: u64,
+    pub staged_publication_nodes: u64,
     pub output_bytes: u64,
 }
 
@@ -86,6 +95,10 @@ pub(crate) struct NodeQueryRecord {
 pub(crate) enum IdentityRelationKind {
     RenamedDeclaration,
     ReplacedExpression,
+    InsertedHole,
+    FilledHole,
+    RefinedHole,
+    DeletedHole,
     ChangedReferenceOwner,
 }
 

@@ -10,7 +10,8 @@
     "closed Semantic Source schema",
     "semantic query",
     "atomic transaction",
-    "bounded local session"
+    "bounded local session",
+    "typed holes and legal actions"
   ],
   "facade": ["crates/lkjscript-compiler/src/semantic/mod.rs"],
   "allowed_dependencies": ["core", "semantic-source"],
@@ -18,17 +19,19 @@
   "tests": [
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/semantic/tests/corpus.rs",
+    "crates/lkjscript-compiler/src/semantic/tests/holes/mod.rs",
     "crates/lkjscript-compiler/src/semantic/session/tests/mod.rs",
     "crates/lkjscript-app/tests/semantic_cli.rs"
   ],
   "decisions": [
     "docs/decisions/platform/semantic-source-and-agent-protocol.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
+    "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
   ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
-  "provenance": { "class": "authored", "source": "Complete Semantic Source Schema V1 implementation" },
+  "provenance": { "class": "authored", "source": "Complete Semantic Source Schema V2 and typed-hole implementation" },
   "verification": [
     "cargo test --locked -p lkjscript-compiler semantic",
     "cargo test --locked -p lkjscript-app --test semantic_cli"
@@ -40,6 +43,11 @@
       "lkjscript_compiler::semantic::session::serve",
       "lkjscript semantic"
     ],
-    "invariants": ["closed JSON schemas", "stale identity rejection", "no partial publish"]
+    "invariants": [
+      "closed JSON schemas",
+      "checker-derived hole facts",
+      "stale identity rejection",
+      "no partial publish"
+    ]
   }
 }

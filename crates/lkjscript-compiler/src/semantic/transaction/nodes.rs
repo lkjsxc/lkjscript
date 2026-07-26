@@ -1,6 +1,6 @@
 use crate::source::{SourceFile, SourceNode};
 
-pub(super) fn node_mut(files: &mut [SourceFile], index: u32) -> Option<&mut SourceNode> {
+pub(crate) fn node_mut(files: &mut [SourceFile], index: u32) -> Option<&mut SourceNode> {
     let mut ordered: Vec<_> = (0..files.len()).collect();
     ordered.sort_by(|a, b| {
         files[*a]

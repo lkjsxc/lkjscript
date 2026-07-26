@@ -29,6 +29,9 @@ pub(crate) enum SemanticNodeKind {
     F64Literal,
     StringLiteral,
     NameReference,
+    TypedHole,
+    HoleIdentity,
+    HoleGoal,
     ParameterName,
     BindingName,
     MutableName,
@@ -78,14 +81,34 @@ pub(crate) enum SemanticNodeKind {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SemanticNodeValue {
-    Bool { value: bool },
-    I64 { value: i64 },
-    F64 { canonical: String },
-    Text { value: String },
-    SourceName { name: String },
-    ImportPath { path: String },
-    BuiltinOperation { operation: ClosedBuiltinOperation },
-    UserFunction { name: String },
+    Bool {
+        value: bool,
+    },
+    I64 {
+        value: i64,
+    },
+    F64 {
+        canonical: String,
+    },
+    Text {
+        value: String,
+    },
+    SourceName {
+        name: String,
+    },
+    ImportPath {
+        path: String,
+    },
+    BuiltinOperation {
+        operation: ClosedBuiltinOperation,
+    },
+    UserFunction {
+        name: String,
+    },
+    TypedHole {
+        identity: String,
+        goal: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

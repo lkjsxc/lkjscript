@@ -61,6 +61,9 @@ impl Expression {
     fn measure_strings(&self, counts: &mut ExpressionCounts) {
         let bytes = match self {
             Self::F64 { value } | Self::String { value } => value.len(),
+            Self::TypedHole { identity, goal } => {
+                identity.len() + goal.as_ref().map_or(0, String::len)
+            }
             Self::NameReference { name }
             | Self::Quote { name }
             | Self::Move { name }

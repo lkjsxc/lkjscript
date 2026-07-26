@@ -15,6 +15,13 @@ pub(crate) enum ResolvedOperation {
         node: u32,
         path: Vec<usize>,
         replacement: crate::semantic::schema::Expression,
+        relation: crate::semantic::schema::IdentityRelationKind,
+    },
+    DeleteHole {
+        key: String,
+        node: u32,
+        owner: u32,
+        path: Vec<usize>,
     },
 }
 

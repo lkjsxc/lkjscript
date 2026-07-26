@@ -9,9 +9,9 @@ Implementation Contracts, Accepted Targets, Deferred work, and Rejected paths.
 
 - [AI-native platform](ai-native-platform.md)
 - [Semantic Source and agent protocol](semantic-source-and-agent-protocol.md),
-  including Accepted Target Schema 2, typed holes, and local sessions
+  including Current Schema 2, typed holes/legal actions, and local sessions
 - [resource budget profiles](resource-budget-profiles.md), including Accepted
-  Target hierarchical pre-allocation and logical metering
+  Current core hierarchical pre-allocation and Accepted logical metering
 - [bounded repository topology](bounded-repository-topology.md)
 - [repository intelligence graph and context](repository-intelligence-graph.md)
 - [agent work state](agent-work-state.md)

@@ -21,14 +21,18 @@ The first slice is Current only when:
 - insert/replace/delete/rename and expression replacement have positive,
   malformed, adversarial, and resource-boundary tests;
 - the six diagnostic codes have schema golden tests and human projections;
-- supported holes expose exact contexts and release compilation rejects them;
+- supported holes expose exact parsed/checker-derived contexts, deterministic
+  ambiguity-preserving ranking, complete snippets, blockers, and legal actions;
+- stale/type/effect/ownership-invalid hole transactions reject atomically,
+  exact/+1 hole/action/transaction reservations reject before allocation, and
+  release compilation rejects every reachable hole;
 - unchanged Edition 1 compile/evaluator/VM/JIT semantics pass the canonical and
   runtime gates; and
 - an initial retained harness compares raw text, entity edits, and hole filling
   without making a general superiority claim.
 ## Not Current And Deferred
 
-Schema V1 does not itself provide Edition 2, modules/packages, semantic merge,
+Schema V2 does not itself provide Edition 2, modules/packages, semantic merge,
 multi-agent task ownership, general proof holes, complete type inhabitation,
-constrained decoding, a network daemon, or a selected replacement text syntax.
-Those remain later measured slices.
+full-language constrained decoding, a network daemon, nonzero query caching, or
+a selected replacement text syntax. Those remain later measured slices.

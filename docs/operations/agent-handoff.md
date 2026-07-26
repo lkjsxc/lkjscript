@@ -19,17 +19,18 @@ verification discipline without preserving obsolete implementation priorities.
 <!-- LKJ-STATUS id=resource-profile-shared-ledger/1 status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-session/1 status=current -->
 <!-- LKJ-STATUS id=semantic-source-foundation/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-schema/1 status=current -->
-<!-- LKJ-STATUS id=semantic-source-schema/2 status=accepted-target -->
-<!-- LKJ-STATUS id=typed-holes/1 status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-source-schema/1 status=historical -->
+<!-- LKJ-STATUS id=semantic-source-schema/2 status=current -->
+<!-- LKJ-STATUS id=typed-holes/1 status=current -->
 
 **Current** for the engineering policy and implementation boundaries linked from
 [Current State](../current-state.md). Bounded Repository Topology, Repository
 Intelligence Graph/context, Agent Work State V2 semantic references, complete
-Semantic Source Schema V1 and its one-shot protocol, compiler Resource Profile
-V2, and the core hierarchical pre-allocation foundation are Current. Agent
-Foundation V1 is a superseded historical identity. Bounded local stdio sessions
-are Current. Semantic Source Schema V2, typed holes, all [Edition
+Semantic Source Schema V2 with its exact V1 base, typed holes/legal actions,
+closed hole transactions, one-shot protocol, compiler Resource Profile V2, and
+the core hierarchical pre-allocation foundation are Current. Agent Foundation
+V1 and Semantic Source Schema V1 are historical rejected identities. Bounded
+local stdio sessions serve V2 and are Current. All [Edition
 2](../decisions/semantics/edition-2.md) surfaces, whole-pipeline pre-allocation,
 logical metering integration, and a shared ledger remain Accepted Targets.
 Automatic proof promotion remains
@@ -75,13 +76,11 @@ an Accepted Implementation Selection, not the immediate priority.
 
 ## Accepted Next Sequence
 
-1. Add meaningful typed holes and bounded legal actions to Current [Semantic
-   Source V1](../decisions/platform/semantic-source-and-agent-protocol.md).
-2. Move the [resource profile](../decisions/platform/resource-budget-profiles.md)
-   to pre-allocation hierarchical request charging.
-3. Implement Edition 2 from the accepted ADT, pattern, control-flow, numeric,
+1. Continue moving the [resource profile](../decisions/platform/resource-budget-profiles.md)
+   to whole-pipeline pre-allocation hierarchical request charging.
+2. Implement Edition 2 from the accepted ADT, pattern, control-flow, numeric,
    value, layout, and typed-error contracts.
-4. Carry each Edition 2 slice through HIR, verified SSA, the evaluator, VM,
+3. Carry each Edition 2 slice through HIR, verified SSA, the evaluator, VM,
    baseline native execution, and forced proof-optimized execution.
 
 This order is an accepted implementation contract, not a capability claim.

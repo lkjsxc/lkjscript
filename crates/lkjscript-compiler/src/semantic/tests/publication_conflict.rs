@@ -35,8 +35,13 @@ fn external_leaf_created_after_backup_is_preserved() {
     };
     let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
         .expect("load publication tree");
-    let staged = crate::semantic::transaction::stage(&tree, &[operation], &[precondition])
-        .expect("stage publication");
+    let staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &[precondition],
+        crate::semantic::schema::ResourceProfile::Default,
+    )
+    .expect("stage publication");
     let external = b"external concurrent bytes\n";
     crate::semantic::transaction::simulate_external_leaf_conflict(&staged, &root, external)
         .expect("preserve external conflict");

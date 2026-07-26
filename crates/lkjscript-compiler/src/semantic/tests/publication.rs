@@ -41,8 +41,13 @@ fn publication_failure_restores_every_original_byte() {
     };
     let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
         .expect("load publication tree");
-    let mut staged = crate::semantic::transaction::stage(&tree, &[operation], &[precondition])
-        .expect("stage publication");
+    let mut staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &[precondition],
+        crate::semantic::schema::ResourceProfile::Default,
+    )
+    .expect("stage publication");
     staged.sources[0].host_path = directory.join("missing/main.lkjscript");
     let before = std::fs::read(&root).expect("bytes before publication failure");
     assert!(crate::semantic::transaction::publish(&staged, &root).is_err());
@@ -90,8 +95,13 @@ fn publication_rejects_changed_ancestor_without_touching_alias() {
     };
     let tree = crate::source::load(&root, &lkjscript_core::Limits::default())
         .expect("load publication tree");
-    let staged = crate::semantic::transaction::stage(&tree, &[operation], &[precondition])
-        .expect("stage publication");
+    let staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &[precondition],
+        crate::semantic::schema::ResourceProfile::Default,
+    )
+    .expect("stage publication");
     let moved = directory.join("moved");
     std::fs::rename(&sources, &moved).expect("move validated parent");
     symlink(&alias, &sources).expect("replace parent with alias");
@@ -145,8 +155,13 @@ fn prepared_journal_is_rolled_back_before_the_next_read() {
         .collect();
     let tree =
         crate::source::load(&root, &lkjscript_core::Limits::default()).expect("load recovery tree");
-    let staged = crate::semantic::transaction::stage(&tree, &[operation], &preconditions)
-        .expect("stage recovery transaction");
+    let staged = crate::semantic::transaction::stage(
+        &tree,
+        &[operation],
+        &preconditions,
+        crate::semantic::schema::ResourceProfile::Default,
+    )
+    .expect("stage recovery transaction");
     let journal_path = crate::semantic::transaction::simulate_prepared_crash(&staged, &root)
         .expect("simulate interrupted publication");
     let recovered = crate::semantic::execute(&request(&root, "{\"kind\":\"snapshot\"}"))

@@ -44,6 +44,7 @@ fn session_pins_selection_detects_external_change_and_refreshes() {
         first["response"]["session"]["semantic_schema"],
         "lkjscript.semantic-source"
     );
+    assert_eq!(first["response"]["session"]["semantic_version"], 2);
 
     let read = session_request("read", 1, &operation);
     let (encoded, second) = handle(&mut session, &read);

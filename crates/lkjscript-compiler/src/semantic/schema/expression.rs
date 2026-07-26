@@ -24,6 +24,10 @@ pub(crate) enum Expression {
     NameReference {
         name: String,
     },
+    TypedHole {
+        identity: String,
+        goal: Option<String>,
+    },
     EmptyList {
         element: TypeExpression,
     },

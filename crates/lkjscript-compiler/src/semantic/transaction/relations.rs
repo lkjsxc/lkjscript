@@ -40,7 +40,11 @@ pub(super) fn identity_relations(
                 });
             }
             ResolvedOperation::Replace {
-                key, node, path, ..
+                key,
+                node,
+                path,
+                relation,
+                ..
             } => {
                 let old = crate::semantic::operations::entity::find(base, key)?;
                 let new_name = operations
@@ -70,11 +74,35 @@ pub(super) fn identity_relations(
                     })?;
                 let new_node = follow_path(next, new.node().index(), path)?;
                 output.push(IdentityRelation {
-                    relation: IdentityRelationKind::ReplacedExpression,
+                    relation: *relation,
                     old_key: Some(key.clone()),
                     new_key: Some(new.key().to_hex()),
                     old_node: Some(*node),
                     new_node: Some(new_node),
+                });
+            }
+            ResolvedOperation::DeleteHole { key, node, .. } => {
+                let old = crate::semantic::operations::entity::find(base, key)?;
+                let new = next
+                    .declarations()
+                    .iter()
+                    .find(|candidate| {
+                        candidate.kind() == old.kind()
+                            && candidate.name() == old.name()
+                            && candidate.origin().logical_path() == old.origin().logical_path()
+                    })
+                    .ok_or_else(|| {
+                        error(
+                            ProtocolErrorCode::ValidationFailed,
+                            "deleted-hole owner identity was not rebuilt",
+                        )
+                    })?;
+                output.push(IdentityRelation {
+                    relation: IdentityRelationKind::DeletedHole,
+                    old_key: Some(key.clone()),
+                    new_key: Some(new.key().to_hex()),
+                    old_node: Some(*node),
+                    new_node: None,
                 });
             }
         }

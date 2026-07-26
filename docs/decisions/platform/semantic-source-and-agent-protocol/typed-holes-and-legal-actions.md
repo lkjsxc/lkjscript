@@ -9,8 +9,9 @@ legal actions, and checked hole transactions.
 
 ## Status
 
-**Accepted Target, not Current.** Holes and legal actions are unavailable until
-this complete bounded contract is implemented.
+**Current.** Semantic Source Schema V2 implements typed expression holes,
+`hole_context`, `legal_actions`, and the four closed hole transactions over the
+Current Edition 1 expression subset. Schema V1 input is historical and rejected.
 
 ## Typed Holes
 
@@ -47,10 +48,20 @@ subset. Incomplete Edition/construct coverage is explicit. Neither service
 claims full synthesis or full-language token masking.
 
 Both responses include `supported`, `truncated`, charged category/count, omitted
-category counts when known, and a typed unsupported/truncation reason. Budget
-exhaustion cannot be presented as an empty complete result. Unsupported contexts
-return explicit unsupported, then ordinary authoring may use bounded compiler
-validation.
+category counts when known, and a typed unsupported/truncation reason. Candidate
+rank is the closed category, effect cost, ownership cost, construction cost,
+canonical source, and candidate identity tuple. Every emitted candidate carries
+one complete canonical snippet and an exact `replace_hole` semantic edit; a
+context commonly carries several complete alternatives.
+
+Exploration reserves Profile V2 `hole_search_work` and `hole_candidates` before
+candidate construction. `legal_actions` reserves its category before action
+construction. Budget exhaustion cannot be presented as an empty complete
+result. Unsupported contexts return explicit unsupported, then ordinary
+authoring may use bounded compiler validation. Edition 1 has exact import paths
+but no qualification syntax, so no import or qualification edit is invented;
+that absence is an explicit blocker. Match, return, break, continue, and Never
+forms are likewise explicit Edition 1 blockers rather than suggestions.
 
 ## Transactions
 
@@ -61,4 +72,14 @@ checks node and semantic preconditions, then reruns exact type, effect,
 ownership, control/divergence, incompleteness, and resource validation before
 staging publication. Stale identity/revision, mismatched expected type, added
 forbidden effect, invalid ownership transfer, or invalid control edge rejects
-the whole transaction. No failed operation mutates source or caches.
+the whole transaction. No failed operation mutates source or caches. Transaction
+staging reserves Profile V2 transaction, operation, impact-node, staged-node,
+and staged-byte categories through the typed `transaction` authority before
+cloning or rebuilding source state.
+
+Insertion and refinement may retain an incomplete tree only when every hole has
+an exact expected type and one bounded checker-valid completion for surrounding
+type, effect, ownership, and control validation. Filling rejects another hole as
+a concrete value. Deletion is Current only for hole children of `do` and `while`
+where removal leaves a structural expression collection; rebuilt analysis still
+must pass before publication.

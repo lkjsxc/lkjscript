@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use lkjscript_core::ResourceCategory;
+
 use crate::semantic::charges::ProtocolLimits;
 use crate::semantic::schema::ResourceProfile;
 
@@ -23,6 +25,8 @@ pub(super) struct SessionLimits {
     pub lifetime_fuel: u64,
     pub retained_metadata_bytes: u64,
     pub retained_revisions: u64,
+    pub session_nodes: u64,
+    pub snapshots: u64,
     pub cache_entries: u64,
     pub maximum_revision: u64,
 }
@@ -30,28 +34,39 @@ pub(super) struct SessionLimits {
 impl SessionLimits {
     pub fn for_profile(profile: ResourceProfile) -> Self {
         let protocol = ProtocolLimits::for_profile(profile);
+        let ceilings = profile.core().ceilings();
+        let session_input = ceilings.limit(ResourceCategory::SemanticSessionInputBytes);
+        let session_output = ceilings.limit(ResourceCategory::SemanticSessionOutputBytes);
         Self {
-            frame_input_bytes: protocol.request_bytes.min(MAX_SESSION_FRAME_BYTES),
+            frame_input_bytes: protocol
+                .request_bytes
+                .min(session_input)
+                .min(MAX_SESSION_FRAME_BYTES),
             frame_output_bytes: u64::try_from(protocol.response_bytes)
                 .unwrap_or(u64::MAX)
+                .min(session_output)
                 .min(MAX_SESSION_FRAME_BYTES),
             cumulative_input_bytes: protocol
                 .request_bytes
                 .saturating_mul(MAX_SESSION_REQUESTS)
+                .min(session_input)
                 .min(MAX_SESSION_CUMULATIVE_INPUT_BYTES),
             cumulative_output_bytes: u64::try_from(protocol.response_bytes)
                 .unwrap_or(u64::MAX)
                 .saturating_mul(MAX_SESSION_REQUESTS)
+                .min(session_output)
                 .min(MAX_SESSION_CUMULATIVE_OUTPUT_BYTES),
             request_count: MAX_SESSION_REQUESTS,
-            lifetime_fuel: protocol
-                .work_units
-                .saturating_mul(MAX_SESSION_REQUESTS)
+            lifetime_fuel: ceilings
+                .limit(ResourceCategory::SemanticSessionLifetimeFuel)
                 .min(MAX_SESSION_LIFETIME_FUEL),
             retained_metadata_bytes: u64::try_from(protocol.response_bytes)
                 .unwrap_or(u64::MAX)
+                .min(ceilings.limit(ResourceCategory::SemanticSessionRetainedBytes))
                 .min(MAX_SESSION_RETAINED_METADATA_BYTES),
             retained_revisions: 1,
+            session_nodes: ceilings.limit(ResourceCategory::SemanticSessionNodes),
+            snapshots: ceilings.limit(ResourceCategory::SemanticSessionSnapshots),
             cache_entries: 0,
             maximum_revision: MAX_SESSION_REVISION,
         }

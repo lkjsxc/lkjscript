@@ -10,7 +10,8 @@ bounds, invalidation, and shutdown behavior.
 ## Status
 
 **Current.** `lkjscript semantic serve --stdio` implements this bounded local
-session over the same Current one-shot Semantic Source engine.
+session envelope version 1 over the Current one-shot Semantic Source Schema V2
+engine. Semantic Source V1 requests are rejected.
 
 ## Command And Framing
 
@@ -52,10 +53,12 @@ uses the same atomic journaled source transaction authority.
 
 ## Bounds And Shutdown
 
-Current Session Limits V1 intersect selected Resource Profile V1 protocol
-ceilings with stricter frame, cumulative-byte, request, fuel, metadata, and
-revision maxima. The session meters each request and retains one revision; it
-does not claim the Accepted shared hierarchical ledger or nonzero cache.
+Current Session Limits V1 intersect selected Resource Profile V2 protocol and
+`semantic_session_*` ceilings with stricter frame, cumulative-byte, request,
+fuel, metadata, and revision maxima. The session exposes the selected node,
+snapshot, retained-byte, input/output, lifetime-fuel, and zero-cache bounds in
+its pinned state. It meters each request and retains one revision; it does not
+claim the Accepted cross-authority shared ledger or nonzero cache.
 Exhaustion returns a framed structured error when possible,
 publishes nothing partial, and may close the session if safe framing cannot be
 guaranteed.

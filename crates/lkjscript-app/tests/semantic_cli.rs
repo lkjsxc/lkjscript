@@ -72,7 +72,7 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write CLI fixture");
     let request = format!(
         concat!(
-            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":1,",
+            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":2,",
             "\"profile\":\"default\",\"root\":{},",
             "\"operation\":{{\"kind\":\"snapshot\"}}}}",
         ),

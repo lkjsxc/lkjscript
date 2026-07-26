@@ -19,6 +19,22 @@ pub(super) fn to_source(expression: &Expression, span: SourceSpan) -> Result<Sou
             span,
         ),
         Expression::NameReference { name } => symbol(name, span)?,
+        Expression::TypedHole { identity, goal } => {
+            let mut children = vec![name_form(identity, span)?];
+            if let Some(goal) = goal {
+                children.push(call(
+                    "goal",
+                    vec![build::leaf(
+                        SyntaxKind::Str {
+                            value: goal.clone(),
+                        },
+                        span,
+                    )],
+                    span,
+                ));
+            }
+            call("hole", children, span)
+        }
         Expression::EmptyList { element } => call("empty-list", element.to_atoms(span)?, span),
         Expression::None { value_type } => call("none", value_type.to_atoms(span)?, span),
         Expression::Let { bindings, body } => let_source(bindings, body, span)?,

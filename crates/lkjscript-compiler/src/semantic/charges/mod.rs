@@ -1,10 +1,13 @@
-use lkjscript_core::ResourceCategory;
+mod measure;
+
+pub(crate) use measure::measure;
 
 use crate::semantic::codec::{error, MAX_SCHEMA_NODES, MAX_WORK_UNITS};
 use crate::semantic::schema::{
-    Charges, OperationRequest, ProtocolError, ProtocolErrorCode, ProtocolLimitsRecord,
-    ResourceProfile, ResourceProfileIdentityRecord,
+    Charges, ProtocolError, ProtocolErrorCode, ProtocolLimitsRecord, ResourceProfile,
+    ResourceProfileIdentityRecord,
 };
+use lkjscript_core::ResourceCategory;
 
 pub(crate) const MAX_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
 pub(crate) const MAX_SOURCE_UNITS: u64 = 4_096;
@@ -17,6 +20,15 @@ pub(crate) struct ProtocolLimits {
     pub(crate) work_units: u64,
     pub(crate) request_bytes: u64,
     pub response_bytes: usize,
+    hole_count: u64,
+    hole_candidates: u64,
+    hole_search_work: u64,
+    legal_actions: u64,
+    transactions: u64,
+    transaction_operations: u64,
+    transaction_impact_nodes: u64,
+    staged_publication_bytes: u64,
+    staged_publication_nodes: u64,
 }
 
 impl ProtocolLimits {
@@ -40,6 +52,15 @@ impl ProtocolLimits {
             response_bytes: usize::try_from(response)
                 .unwrap_or(usize::MAX)
                 .min(crate::semantic::codec::MAX_OUTPUT_BYTES),
+            hole_count: ceilings.limit(ResourceCategory::HoleCount),
+            hole_candidates: ceilings.limit(ResourceCategory::HoleCandidates),
+            hole_search_work: ceilings.limit(ResourceCategory::HoleSearchWork),
+            legal_actions: ceilings.limit(ResourceCategory::LegalActions),
+            transactions: ceilings.limit(ResourceCategory::Transactions),
+            transaction_operations: ceilings.limit(ResourceCategory::TransactionOperations),
+            transaction_impact_nodes: ceilings.limit(ResourceCategory::TransactionImpactNodes),
+            staged_publication_bytes: ceilings.limit(ResourceCategory::StagedPublicationBytes),
+            staged_publication_nodes: ceilings.limit(ResourceCategory::StagedPublicationNodes),
         }
     }
 
@@ -51,6 +72,15 @@ impl ProtocolLimits {
             source_units: self.source_units,
             source_nodes: self.source_nodes,
             work_units: self.work_units,
+            hole_count: self.hole_count,
+            hole_candidates: self.hole_candidates,
+            hole_search_work: self.hole_search_work,
+            legal_actions: self.legal_actions,
+            transactions: self.transactions,
+            transaction_operations: self.transaction_operations,
+            transaction_impact_nodes: self.transaction_impact_nodes,
+            staged_publication_bytes: self.staged_publication_bytes,
+            staged_publication_nodes: self.staged_publication_nodes,
         }
     }
 
@@ -63,7 +93,40 @@ impl ProtocolLimits {
         self.check("source_bytes", charges.source_bytes, self.source_bytes)?;
         self.check("source_units", charges.source_units, self.source_units)?;
         self.check("schema_nodes", charges.source_nodes, self.source_nodes)?;
-        self.check("validation_work", charges.work_units, self.work_units)
+        self.check("validation_work", charges.work_units, self.work_units)?;
+        self.check("hole_count", charges.hole_count, self.hole_count)?;
+        self.check(
+            "hole_candidates",
+            charges.hole_candidates,
+            self.hole_candidates,
+        )?;
+        self.check(
+            "hole_search_work",
+            charges.hole_search_work,
+            self.hole_search_work,
+        )?;
+        self.check("legal_actions", charges.legal_actions, self.legal_actions)?;
+        self.check("transactions", charges.transactions, self.transactions)?;
+        self.check(
+            "transaction_operations",
+            charges.transaction_operations,
+            self.transaction_operations,
+        )?;
+        self.check(
+            "transaction_impact_nodes",
+            charges.transaction_impact_nodes,
+            self.transaction_impact_nodes,
+        )?;
+        self.check(
+            "staged_publication_bytes",
+            charges.staged_publication_bytes,
+            self.staged_publication_bytes,
+        )?;
+        self.check(
+            "staged_publication_nodes",
+            charges.staged_publication_nodes,
+            self.staged_publication_nodes,
+        )
     }
 
     fn check(self, category: &str, observed: u64, limit: u64) -> Result<(), ProtocolError> {
@@ -75,6 +138,13 @@ impl ProtocolLimits {
             format!("protocol {category} charge {observed} exceeds profile limit {limit}"),
         ))
     }
+}
+
+fn overflow() -> ProtocolError {
+    error(
+        ProtocolErrorCode::ResourceLimit,
+        "protocol aggregate charge overflow",
+    )
 }
 
 pub(crate) fn identity(profile: ResourceProfile) -> ResourceProfileIdentityRecord {
@@ -95,58 +165,4 @@ fn hex(bytes: &[u8]) -> String {
         output.push(char::from(DIGITS[usize::from(*byte & 0x0f)]));
     }
     output
-}
-
-pub(crate) fn measure(
-    tree: &crate::source::ValidatedSourceTree,
-    bytes: usize,
-    operation: &OperationRequest,
-) -> Result<Charges, ProtocolError> {
-    let source_bytes = tree
-        .files()
-        .iter()
-        .try_fold(0u64, |total, file| total.checked_add(file.exact_source_len));
-    let source_bytes = source_bytes.ok_or_else(overflow)?;
-    let operations = match operation {
-        OperationRequest::ApplyTransaction { operations, .. } => {
-            u64::try_from(operations.len()).map_err(|_| overflow())?
-        }
-        _ => 0,
-    };
-    let request_bytes = u64::try_from(bytes).map_err(|_| overflow())?;
-    let source_units = u64::try_from(tree.files().len()).map_err(|_| overflow())?;
-    let source_nodes = u64::try_from(tree.nodes().len()).map_err(|_| overflow())?;
-    let traversal_multiplier = match operation {
-        OperationRequest::ApplyTransaction { .. } => {
-            operations.checked_add(4).ok_or_else(overflow)?
-        }
-        OperationRequest::Diagnostics {
-            analysis: crate::semantic::schema::AnalysisLevel::Hir,
-            ..
-        } => 3,
-        _ => 1,
-    };
-    let traversal_work = source_nodes
-        .checked_mul(traversal_multiplier)
-        .ok_or_else(overflow)?;
-    let operation_work = operations.checked_mul(16).ok_or_else(overflow)?;
-    let work_units = traversal_work
-        .checked_add(operation_work)
-        .ok_or_else(overflow)?;
-    Ok(Charges {
-        request_bytes,
-        source_bytes,
-        source_units,
-        source_nodes,
-        operations,
-        work_units,
-        output_bytes: 0,
-    })
-}
-
-fn overflow() -> ProtocolError {
-    error(
-        ProtocolErrorCode::ResourceLimit,
-        "protocol aggregate charge overflow",
-    )
 }

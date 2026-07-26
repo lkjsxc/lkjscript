@@ -50,6 +50,15 @@ pub(crate) fn execute_request(
             });
         }
     };
+    if let Err(message) = operations::holes::validate::source_holes(&tree) {
+        return encode_error(
+            profile,
+            Some(tree.revision().to_hex()),
+            request_charge,
+            error(ProtocolErrorCode::ValidationFailed, message),
+            None,
+        );
+    }
     let mut charges = match super::charges::measure(&tree, request_bytes, &request.operation) {
         Ok(charges) => charges,
         Err(failure) => {
@@ -72,7 +81,13 @@ pub(crate) fn execute_request(
         );
     }
     let revision = tree.revision().to_hex();
-    match super::dispatch::dispatch(&tree, request.operation, &mut charges, protocol_limits) {
+    match super::dispatch::dispatch(
+        &tree,
+        request.operation,
+        &mut charges,
+        protocol_limits,
+        profile,
+    ) {
         Ok(dispatched) => {
             let response_revision = match &dispatched.result {
                 ResponseResult::ApplyTransaction { transaction } => {

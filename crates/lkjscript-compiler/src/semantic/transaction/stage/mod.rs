@@ -1,3 +1,5 @@
+mod preflight;
+
 use std::collections::HashSet;
 
 use lkjscript_core::Limits;
@@ -13,6 +15,7 @@ pub(crate) fn stage(
     tree: &ValidatedSourceTree,
     requests: &[TransactionOperation],
     preconditions: &[FilePrecondition],
+    profile: crate::semantic::schema::ResourceProfile,
 ) -> Result<StagedTransaction, ProtocolError> {
     if requests.is_empty() {
         return Err(error(
@@ -20,6 +23,7 @@ pub(crate) fn stage(
             "transaction has no operations",
         ));
     }
+    let _reservation_ledger = preflight::reserve(tree, requests, profile)?;
     let resolved = resolve_all(tree, requests)?;
     reject_overlaps(&resolved)?;
     let mut files = tree.files().to_vec();
@@ -29,16 +33,29 @@ pub(crate) fn stage(
             super::rename::apply(&mut files, operation, kind)?;
         }
     }
-    let mut replacements: Vec<_> = resolved
+    let mut mutations: Vec<_> = resolved
         .iter()
-        .filter(|operation| matches!(operation, ResolvedOperation::Replace { .. }))
+        .filter(|operation| {
+            matches!(
+                operation,
+                ResolvedOperation::Replace { .. } | ResolvedOperation::DeleteHole { .. }
+            )
+        })
         .collect();
-    replacements.sort_by_key(|operation| match operation {
-        ResolvedOperation::Replace { node, .. } => std::cmp::Reverse(*node),
+    mutations.sort_by_key(|operation| match operation {
+        ResolvedOperation::Replace { node, .. } | ResolvedOperation::DeleteHole { node, .. } => {
+            std::cmp::Reverse(*node)
+        }
         ResolvedOperation::Rename { .. } => std::cmp::Reverse(0),
     });
-    for operation in replacements {
-        super::replace::apply(&mut files, operation)?;
+    for operation in mutations {
+        match operation {
+            ResolvedOperation::Replace { .. } => super::replace::apply(&mut files, operation)?,
+            ResolvedOperation::DeleteHole { .. } => {
+                super::holes::apply_delete(&mut files, operation)?
+            }
+            ResolvedOperation::Rename { .. } => {}
+        }
     }
     let mut rebuilt_sources = Vec::with_capacity(files.len());
     for file in &files {
@@ -55,8 +72,17 @@ pub(crate) fn stage(
         &Limits::default(),
     )
     .map_err(|failure| error(ProtocolErrorCode::ValidationFailed, failure.render_human()))?;
-    if let Err(failure) = crate::analyze::analyze_program(&rebuilt) {
-        let mut protocol = error(ProtocolErrorCode::ValidationFailed, failure.to_string());
+    let validation = if crate::semantic::tree::source_nodes(&rebuilt).iter().any(
+        |node| matches!(&node.kind, crate::source::SyntaxKind::Call { name } if name == "hole"),
+    ) {
+        crate::semantic::operations::holes::validate::validate_incomplete(&rebuilt)
+    } else {
+        crate::analyze::analyze_program(&rebuilt)
+            .map(|_| ())
+            .map_err(|failure| failure.to_string())
+    };
+    if let Err(message) = validation {
+        let mut protocol = error(ProtocolErrorCode::ValidationFailed, message);
         protocol.diagnostic = crate::semantic::operations::diagnostics::collect(&rebuilt, true)
             .into_iter()
             .next()
@@ -100,6 +126,10 @@ fn resolve_all(
                 node_fingerprint,
                 expression,
             ),
+            TransactionOperation::InsertHole { .. }
+            | TransactionOperation::FillHole { .. }
+            | TransactionOperation::RefineHole { .. }
+            | TransactionOperation::DeleteHole { .. } => super::holes::resolve(tree, request),
         })
         .collect()
 }
@@ -115,7 +145,8 @@ fn reject_overlaps(operations: &[ResolvedOperation]) -> Result<(), ProtocolError
                     "declaration renamed more than once",
                 ));
             }
-            ResolvedOperation::Replace { path, .. } => {
+            ResolvedOperation::Replace { path, .. }
+            | ResolvedOperation::DeleteHole { path, .. } => {
                 if replacements
                     .iter()
                     .any(|prior| path.starts_with(prior) || prior.starts_with(path.as_slice()))

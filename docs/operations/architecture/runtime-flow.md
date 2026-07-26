@@ -152,16 +152,16 @@ goal/specification
 ```
 
 [Semantic Source And Agent
-Protocol](../../decisions/platform/semantic-source-and-agent-protocol.md) now has a Current
-Foundation V1: one validated source-tree authority, exact 125-file tracked
-source roundtrip (121 under `src/`), exact revision identity, stable declaration
-keys, dense nodes,
-and structural source diagnostics. Existing HIR/SSA/VM/JIT behavior remains
-unchanged through that cutover, and no sibling parser/tree path independently
-feeds a backend. Bounded topology, repository graph/context, agent work state,
-atomic semantic edits, resolved-reference facts, remaining structured compiler
-diagnostics, typed holes, and bounded protocol transport form the accepted
-implementation sequence and are not Current.
+Protocol](../../decisions/platform/semantic-source-and-agent-protocol.md) now
+has Current Schema V2: one validated source-tree authority, exact 125-file
+tracked source roundtrip (121 under `src/`), exact revision and stable hole/
+declaration identities, dense nodes, structural diagnostics, checker-derived
+hole context, bounded legal actions, and atomic transactions. Existing
+HIR/SSA/VM/JIT behavior remains unchanged through that cutover, and no sibling
+parser/tree path independently feeds a backend. Bounded topology, repository
+graph/context, agent work state, atomic semantic edits, resolved-reference
+facts, structured compiler diagnostics, typed holes, and bounded one-shot and
+session transport are Current bounded slices.
 
 [AI-Native Language And Platform](../../decisions/platform/ai-native-platform.md) owns the
 long-term dependency order. [Resource Budget

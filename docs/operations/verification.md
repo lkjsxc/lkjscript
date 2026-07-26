@@ -10,11 +10,12 @@ gates without claiming unimplemented checks.
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
-Schema V1, its one-shot protocol, bounded local stdio sessions, Profile V2 core
-reservation tests, and compiler resource-profile checks are described in the
-capsules. Edition 2 cross-engine acceptance, typed holes, nonzero query caching,
-whole-pipeline pre-allocation, and logical metering integration remain
-**Accepted Targets**, not Current commands.
+Schema V2 with its exact V1 base, typed holes/legal actions and transactions,
+its one-shot protocol, bounded local stdio sessions, Profile V2 core reservation
+tests, and compiler resource-profile checks are described in the capsules.
+Edition 2 cross-engine acceptance, nonzero query caching, whole-pipeline
+pre-allocation, and logical metering integration remain **Accepted Targets**,
+not Current commands.
 
 ## Current Documentation Gate
 
@@ -76,8 +77,9 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Current Semantic Operation And Resource-Profile Gates
 
-The Semantic Source V1 gate covers all 125 tracked files, closed node/value/type/
-built-in/declaration/trivia/expression/correlation records, schema/source
+The Semantic Source V2 gate covers all 125 tracked files with the unchanged V1
+base representation, closed node/value/type/built-in/declaration/trivia/
+expression/correlation records, typed holes, schema/source
 roundtrip, `snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic
 `rename`, and atomic `replace_expression`. It includes strict
 schema/version/field/variant rejection; exact pinned serde boundary;
@@ -87,7 +89,12 @@ references; expression type/effect/ownership constraints; bounded response
 encoding before publish; publication failure; byte-identical rollback; and
 prepared-journal crash recovery before the next read; descriptor-anchored
 ancestor-swap rejection; and preservation of an externally created leaf at the
-no-replace install boundary. Session tests cover 8-byte framing, clean EOF,
+no-replace install boundary. Focused hole tests cover strict V1 rejection;
+malformed and duplicate identity; expected type and scope ambiguity;
+deterministic ranking; snippets and blockers; ownership/effect validation;
+roundtrip; legal actions; exact/+1 pre-allocation; stale preconditions; all four
+hole transactions; release rejection; and local sessions. Session tests cover
+8-byte framing, clean EOF,
 partial/oversized/cumulative boundaries, strict envelopes, pinned profile/root,
 stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI

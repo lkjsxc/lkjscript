@@ -8,19 +8,19 @@ runtime.
 
 ## Status
 
-**Accepted Target.** Semantic Source Foundation V1, typed HIR, verified SSA,
-reference bytecode VM, callable Linux x86-64 baseline JIT, exact native roots,
-and forced proof-checked optimizing JIT remain **Current**. This record changes
-the accepted destination and dependency order; it does not make complete
-Semantic Source/Agent Protocol V1, Edition 2, packages, general ownership, AOT,
-Wasm, concurrency, or self-hosting Current.
+**Accepted Target.** Semantic Source Schema V2 with typed holes/legal actions,
+typed HIR, verified SSA, reference bytecode VM, callable Linux x86-64 baseline
+JIT, exact native roots, and forced proof-checked optimizing JIT remain
+**Current**. This record changes the accepted destination and dependency order;
+it does not make wider Agent operations, Edition 2, packages, general
+ownership, AOT, Wasm, concurrency, or self-hosting Current.
 
 The selected foundation sequence is now Current for bounded repository
 topology, repository graph/context, agent work state, complete Semantic Source
-Schema V1 with bounded one-shot operations, and compiler Resource Profile V1
-post-phase accounting. These slices are indexed in [Platform
-Decisions](README.md); they do not make sessions, wider Agent operations, shared
-ledgers, or Edition 2 Current. Automatic
+Schema V2 with bounded one-shot/session operations and typed holes, and
+compiler Resource Profile V2 core/pre-allocation foundations. These slices are
+indexed in [Platform Decisions](README.md); they do not make wider Agent
+operations, shared ledgers, or Edition 2 Current. Automatic
 optimizing promotion remains a valid later measured experiment.
 
 ## Problem
@@ -107,8 +107,8 @@ superseded; their descriptions of Current behavior and measured results are not.
 
 | Layer | Current at the adoption baseline | Accepted target | First acceptance evidence |
 | --- | --- | --- | --- |
-| Source | Edition 1 line syntax parsed to internal forms | Versioned Semantic Source, deterministic projections, typed holes | Exact corpus parse/format/parse and byte-canonical roundtrip | <!-- LKJ-EXACT-DATA -->
-| Agent interface | Files, human diagnostics, CLI compilation | Revisioned semantic queries and atomic edits with structured diagnostics | Stale/precondition rejection and no partial writes | <!-- LKJ-EXACT-DATA -->
+| Source | Semantic Source V2 over Edition 1 with deterministic projection and typed holes | Edition 2 Semantic Source | Exact corpus parse/format/parse and byte-canonical roundtrip | <!-- LKJ-EXACT-DATA -->
+| Agent interface | Revisioned queries, legal actions, structured diagnostics, and atomic semantic edits | Wider Agent operations and constrained decoding | Stale/precondition rejection and no partial writes | <!-- LKJ-EXACT-DATA -->
 | Semantics | Products, marker traits, I64/F64, partial ownership island | Edition 2 ADTs/match/Never, exact widths, typed errors, general safe ownership | Cross-evaluator/VM differential and malformed-boundary gates per slice | <!-- LKJ-EXACT-DATA -->
 | Authority | Operation/effect summaries plus transitional ambient host services | Explicit capabilities and typed provider resources | Capability-confinement and fake-provider tests | <!-- LKJ-EXACT-DATA -->
 | Packages | Contained import roots and environment fallback | Manifest, lock, content identity, explicit modules/components | Clean locked hermetic rebuild and fingerprint tests | <!-- LKJ-EXACT-DATA -->

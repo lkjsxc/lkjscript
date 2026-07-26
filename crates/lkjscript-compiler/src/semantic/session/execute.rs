@@ -3,6 +3,21 @@ use crate::semantic::schema::{ApplyMode, OperationRequest, Request, Response, Re
 use super::schema::{SessionError, SessionErrorCode, SessionResult};
 use super::SemanticSession;
 
+fn response_fuel(response: &Response) -> Result<u64, SessionError> {
+    response
+        .charges
+        .work_units
+        .checked_add(response.charges.hole_search_work)
+        .and_then(|value| value.checked_add(response.charges.legal_actions))
+        .and_then(|value| value.checked_add(response.charges.transaction_impact_nodes))
+        .ok_or_else(|| {
+            SessionError::new(
+                SessionErrorCode::ResourceLimit,
+                "semantic session lifetime fuel charge overflow",
+            )
+        })
+}
+
 impl SemanticSession {
     pub(super) fn execute(&mut self, request: Request) -> SessionResult {
         let initialized = self.pinned.is_some();
@@ -81,7 +96,12 @@ impl SemanticSession {
                 }
             }
         };
-        if let Err(error) = self.charge_fuel(response.charges.work_units) {
+        let fuel = response_fuel(&response);
+        let fuel = match fuel {
+            Ok(fuel) => fuel,
+            Err(error) => return SessionResult::Error { error },
+        };
+        if let Err(error) = self.charge_fuel(fuel) {
             return SessionResult::Error { error };
         }
         if publishes && matches!(&response.result, ResponseResult::ApplyTransaction { .. }) {

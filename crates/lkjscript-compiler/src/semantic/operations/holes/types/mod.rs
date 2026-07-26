@@ -1,0 +1,114 @@
+mod call;
+
+pub(super) use call::parameter_type as call_parameter_type;
+
+use crate::hir::Type;
+use crate::source::{SourceNode, SyntaxKind};
+
+pub(crate) fn canonical(ty: &Type) -> String {
+    match ty {
+        Type::Unit => "Unit".into(),
+        Type::Bool => "Bool".into(),
+        Type::I64 => "I64".into(),
+        Type::F64 => "F64".into(),
+        Type::Str => "Str".into(),
+        Type::Buf => "Buf".into(),
+        Type::Symbol => "Symbol".into(),
+        Type::Handle => "Handle".into(),
+        Type::Product(name) => format!("Product {name}"),
+        Type::Param(name) => name.clone(),
+        Type::Owned(inner) => format!("Owned {}", canonical(inner)),
+        Type::Ref(inner) => format!("Ref {}", canonical(inner)),
+        Type::RefMut(inner) => format!("RefMut {}", canonical(inner)),
+        Type::List(inner) => format!("List {}", canonical(inner)),
+        Type::Option(inner) => format!("Option {}", canonical(inner)),
+        Type::Result(ok, error) => format!("Result {} {}", canonical(ok), canonical(error)),
+        Type::Fn { params, ret } => {
+            let mut parts: Vec<_> = params.iter().map(canonical).collect();
+            parts.push("->".into());
+            parts.push(canonical(ret));
+            parts.join(" ")
+        }
+        Type::Forall { vars, body } => format!("forall {} . {}", vars.join(" "), canonical(body)),
+    }
+}
+
+pub(super) fn parse_type_nodes(nodes: &[SourceNode]) -> Option<(Type, usize)> {
+    let mut atoms = Vec::new();
+    let mut boundaries = Vec::new();
+    for node in nodes {
+        collect_type_atoms(node, &mut atoms)?;
+        boundaries.push(atoms.len());
+    }
+    let (ty, atom_end) = crate::types::parse_one(&atoms, 0).ok()?;
+    let used = boundaries
+        .iter()
+        .position(|boundary| *boundary == atom_end)?
+        + 1;
+    Some((ty, used))
+}
+
+fn collect_type_atoms(node: &SourceNode, output: &mut Vec<String>) -> Option<()> {
+    match &node.kind {
+        SyntaxKind::Symbol { name } => output.push(name.clone()),
+        SyntaxKind::Call { name }
+            if matches!(
+                name.as_str(),
+                "Owned" | "Ref" | "RefMut" | "List" | "Option" | "Result" | "Product"
+            ) =>
+        {
+            output.push(name.clone());
+            for child in &node.children {
+                collect_type_atoms(child, output)?;
+            }
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+pub(super) fn signature(node: &SourceNode) -> Option<(Vec<Type>, Type)> {
+    if !call_is(node, "sig") {
+        return None;
+    }
+    let atoms: Vec<_> = node.children.iter().map(type_atom).collect::<Option<_>>()?;
+    Type::parse_atoms(&atoms).ok()
+}
+
+pub(super) fn type_form(node: &SourceNode) -> Option<Type> {
+    if !call_is(node, "type") {
+        return None;
+    }
+    let (ty, used) = parse_type_nodes(&node.children)?;
+    (used == node.children.len()).then_some(ty)
+}
+
+pub(super) fn type_atom(node: &SourceNode) -> Option<String> {
+    match &node.kind {
+        SyntaxKind::Symbol { name } => Some(name.clone()),
+        _ => None,
+    }
+}
+
+pub(super) fn call_is(node: &SourceNode, expected: &str) -> bool {
+    matches!(&node.kind, SyntaxKind::Call { name } if name == expected)
+}
+
+pub(super) fn source_name(node: &SourceNode) -> Option<&str> {
+    match &node.kind {
+        SyntaxKind::Symbol { name } | SyntaxKind::Str { value: name } => Some(name),
+        SyntaxKind::Call { name } if name == "name" => node.children.first().and_then(source_name),
+        _ => None,
+    }
+}
+
+pub(super) fn ownership(ty: &Type) -> crate::semantic::schema::OwnershipAccess {
+    use crate::semantic::schema::OwnershipAccess;
+    match ty {
+        Type::Owned(_) => OwnershipAccess::Move,
+        Type::Ref(_) => OwnershipAccess::SharedBorrow,
+        Type::RefMut(_) => OwnershipAccess::MutableBorrow,
+        Type::Buf | Type::Handle => OwnershipAccess::Unavailable,
+        _ => OwnershipAccess::Copy,
+    }
+}

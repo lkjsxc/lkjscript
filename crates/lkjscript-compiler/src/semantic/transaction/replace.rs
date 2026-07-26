@@ -64,6 +64,7 @@ pub(crate) fn resolve(
         node: node_index,
         path,
         replacement: replacement.clone(),
+        relation: crate::semantic::schema::IdentityRelationKind::ReplacedExpression,
     })
 }
 

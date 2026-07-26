@@ -1,4 +1,6 @@
+mod hole;
 mod trivia;
+mod type_nodes;
 
 use crate::semantic::schema::{
     ClosedBuiltinOperation, SemanticNodeKind as Kind, SemanticNodeValue as Value, TriviaRecord,
@@ -23,6 +25,7 @@ pub(crate) fn classify(
         ),
         SyntaxKind::Str { value } => classify_text(value, parent),
         SyntaxKind::Symbol { name } => classify_symbol(name, parent, parent_kind, index),
+        SyntaxKind::Call { name } if name == "hole" => (Kind::TypedHole, hole::value(node)),
         SyntaxKind::Call { name } => classify_call(name, parent),
     }
 }
@@ -61,8 +64,10 @@ fn classify_symbol(
     index: usize,
 ) -> (Kind, Option<Value>) {
     let kind = match (parent_kind, index) {
+        (Some(Kind::TypedHole), 0) => Kind::HoleIdentity,
+        (Some(Kind::TypedHole), _) => Kind::HoleGoal,
         (Some(Kind::Parameters), index) if index.is_multiple_of(2) => Kind::ParameterName,
-        (Some(Kind::Parameters), _) => type_atom(name, parent, index),
+        (Some(Kind::Parameters), _) => type_nodes::classify(name, parent, index),
         (Some(Kind::TypeVariables), _) => Kind::TypeVariable,
         (Some(Kind::Bound), 0) => Kind::TypeVariable,
         (Some(Kind::Bound), _) => Kind::TraitName,
@@ -83,7 +88,7 @@ fn classify_symbol(
                 | Kind::None,
             ),
             _,
-        ) => type_atom(name, parent, index),
+        ) => type_nodes::classify(name, parent, index),
         _ => Kind::NameReference,
     };
     (
@@ -92,37 +97,6 @@ fn classify_symbol(
             name: name.to_string(),
         }),
     )
-}
-
-fn type_atom(name: &str, parent: Option<&SourceNode>, index: usize) -> Kind {
-    if index > 0
-        && parent
-            .and_then(|node| node.children.get(index - 1))
-            .is_some_and(
-                |node| matches!(&node.kind, SyntaxKind::Symbol { name } if name == "Product"),
-            )
-    {
-        return Kind::ProductName;
-    }
-    match name {
-        "Unit" => Kind::TypeUnit,
-        "Bool" => Kind::TypeBool,
-        "I64" => Kind::TypeI64,
-        "F64" => Kind::TypeF64,
-        "Str" => Kind::TypeString,
-        "Buf" => Kind::TypeBuffer,
-        "Symbol" => Kind::TypeSymbol,
-        "Handle" => Kind::TypeHandle,
-        "Owned" => Kind::TypeOwned,
-        "Ref" => Kind::TypeRef,
-        "RefMut" => Kind::TypeRefMut,
-        "Product" => Kind::TypeProduct,
-        "List" => Kind::TypeList,
-        "Option" => Kind::TypeOption,
-        "Result" => Kind::TypeResult,
-        "->" => Kind::ReturnArrow,
-        _ => Kind::TypeVariable,
-    }
 }
 
 fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value>) {
@@ -159,6 +133,7 @@ fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value
         "with-field" => Kind::WithField,
         "empty-list" => Kind::EmptyList,
         "none" => Kind::None,
+        "goal" => Kind::HoleGoal,
         "move" => Kind::Move,
         "borrow" => Kind::Borrow,
         "borrow-mut" => Kind::BorrowMut,

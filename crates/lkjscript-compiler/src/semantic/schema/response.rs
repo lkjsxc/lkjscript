@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ChangedSource, Charges, DeclarationRecord, DiagnosticRecord, EntityRecord, IdentityRelation,
-    NodeQueryRecord, NodeRecord, ResourceProfile, SourceUnitRecord,
+    ChangedSource, Charges, DeclarationRecord, DiagnosticRecord, EntityRecord, HoleContextResult,
+    IdentityRelation, LegalActionsResult, NodeQueryRecord, NodeRecord, ResourceProfile,
+    SourceUnitRecord,
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -72,6 +73,12 @@ pub(crate) enum ResponseResult {
     QueryNode {
         query: Box<NodeQueryRecord>,
     },
+    HoleContext {
+        context: Box<HoleContextResult>,
+    },
+    LegalActions {
+        actions: Box<LegalActionsResult>,
+    },
     Diagnostics {
         result: Box<DiagnosticsResult>,
     },
@@ -102,6 +109,15 @@ pub(crate) struct ProtocolLimitsRecord {
     pub source_units: u64,
     pub source_nodes: u64,
     pub work_units: u64,
+    pub hole_count: u64,
+    pub hole_candidates: u64,
+    pub hole_search_work: u64,
+    pub legal_actions: u64,
+    pub transactions: u64,
+    pub transaction_operations: u64,
+    pub transaction_impact_nodes: u64,
+    pub staged_publication_bytes: u64,
+    pub staged_publication_nodes: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

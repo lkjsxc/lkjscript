@@ -15,21 +15,23 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   cover the exact corpus closure
 - Physical format: one column-one marker/atom per line with matched markers and
   raw `str/`, `name/`, and `import/` blocks
-- Semantic Source V1: public identity `lkjscript.semantic-source` version 1;
-  one opaque immutable `ValidatedSourceTree` is parser/load authority. Closed
-  typed schema records cover every Edition 1 node/value/type/built-in,
-  declaration, trivia attachment, transaction expression, diagnostic, and
-  correlation category across all 125 tracked files. Schema/source subtrees
+- Semantic Source V2: public identity `lkjscript.semantic-source` version 2;
+  version 1 input is historical and rejected. One opaque immutable
+  `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition
+  1 node/value/type/built-in/declaration/trivia/transaction-expression/
+  diagnostic/correlation record and adds typed-hole nodes and facts. Subtrees
   roundtrip deterministically; exact spans/origins/revisions, stable keys, dense
   nodes, and canonical formatting remain authoritative. Unknown schema kinds,
   fields, operations, versions, duplicates, and trailing input fail. The
-  bounded one-shot endpoint provides snapshot/entity/node/diagnostic queries
-  plus atomic rename/expression replacement. Agent Foundation V1 is historical.
-  The local `semantic serve --stdio` session uses exact 8-byte framing, pins one
-  profile/root/revision, rejects stale/external changes, refreshes explicitly,
-  bounds cumulative frames/requests/fuel/metadata, and publishes through the
-  same engine. Typed holes, Semantic Source V2, nonzero query caching, shared
-  ledgers, and unavailable exact downstream correlations remain non-Current
+  bounded one-shot endpoint provides snapshot/entity/node/diagnostic/hole/legal
+  action queries plus atomic rename, expression replacement, and all four hole
+  transactions. Profile V2 categories reserve candidate, action, transaction,
+  impact, and staged publication work before allocation. Agent Foundation V1
+  is historical. The local `semantic serve --stdio` session uses exact 8-byte
+  framing, pins one profile/root/revision, rejects stale/external changes,
+  refreshes explicitly, intersects Profile V2 session ceilings, and publishes
+  through the same engine. Nonzero query caching, shared ledgers, and
+  unavailable exact downstream correlations remain non-Current
 - Source limits: depth 8, form children 16, tokens 384, top-level forms 8,
   product fields 15, and 16 combined immediate files/directories per source
   directory. Foundation implementation maxima additionally reject a source file
@@ -99,8 +101,8 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   correct branch but failed the benchmark because it transiently violated
   requested worktree isolation after two failed mutations and two repair loops;
   the available Qwen 3.5 9B request timed out before any tool call. This is
-  narrow raw-text evidence, not a general model/interface claim; semantic and
-  hole variants are not Current
+  narrow raw-text evidence, not a general model/interface claim; comparative
+  semantic-versus-hole benchmark variants are not Current
 - Runtime: dense bytecode lowered only from normalized SSA, contiguous stacks,
   pure session-owned stable-index `GcHeap` in `lkjscript-core`, precise
   non-moving mark-sweep shared as the VM/JIT heap implementation, monotonic

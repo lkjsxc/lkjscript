@@ -16,6 +16,7 @@ pub(crate) fn dispatch(
     operation: OperationRequest,
     charges: &mut Charges,
     limits: super::charges::ProtocolLimits,
+    profile: crate::semantic::schema::ResourceProfile,
 ) -> Result<DispatchResult, ProtocolError> {
     let mut publication = None;
     let result = match operation {
@@ -54,6 +55,24 @@ pub(crate) fn dispatch(
                 query: Box::new(operations::query::query(tree, node)?),
             }
         }
+        OperationRequest::HoleContext { revision, node } => {
+            check_revision(tree, &revision)?;
+            let context = operations::holes::context::build(tree, node, profile)?;
+            charges.hole_candidates = context.exploration.charged_count;
+            charges.hole_search_work = context.exploration.search_work;
+            ResponseResult::HoleContext {
+                context: Box::new(context),
+            }
+        }
+        OperationRequest::LegalActions { revision, node } => {
+            check_revision(tree, &revision)?;
+            let actions = operations::holes::actions::build(tree, node, profile)?;
+            charges.legal_actions = actions.coverage.charged_count;
+            charges.hole_search_work = actions.coverage.search_work;
+            ResponseResult::LegalActions {
+                actions: Box::new(actions),
+            }
+        }
         OperationRequest::Diagnostics { revision, analysis } => {
             check_revision(tree, &revision)?;
             let diagnostics =
@@ -73,8 +92,11 @@ pub(crate) fn dispatch(
             operations,
         } => {
             check_revision(tree, &base_revision)?;
-            let staged = transaction::stage(tree, &operations, &file_preconditions)?;
+            let staged = transaction::stage(tree, &operations, &file_preconditions, profile)?;
             add_staged_source(charges, &staged.tree)?;
+            charges.transaction_impact_nodes =
+                u64::try_from(staged.tree.nodes().len()).map_err(|_| work_overflow())?;
+            charges.staged_publication_nodes = charges.transaction_impact_nodes;
             add_work(charges, staged.tree.nodes().len())?;
             add_work(charges, staged.sources.len())?;
             let result = ResponseResult::ApplyTransaction {
@@ -117,18 +139,9 @@ fn add_staged_source(
     let bytes = bytes.ok_or_else(work_overflow)?;
     let units = u64::try_from(tree.files().len()).map_err(|_| work_overflow())?;
     let nodes = u64::try_from(tree.nodes().len()).map_err(|_| work_overflow())?;
-    charges.source_bytes = charges
-        .source_bytes
-        .checked_add(bytes)
-        .ok_or_else(work_overflow)?;
-    charges.source_units = charges
-        .source_units
-        .checked_add(units)
-        .ok_or_else(work_overflow)?;
-    charges.source_nodes = charges
-        .source_nodes
-        .checked_add(nodes)
-        .ok_or_else(work_overflow)?;
+    let _ = units;
+    charges.staged_publication_bytes = bytes;
+    charges.staged_publication_nodes = nodes;
     Ok(())
 }
 

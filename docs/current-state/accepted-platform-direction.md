@@ -20,11 +20,12 @@ Topology](../decisions/platform/bounded-repository-topology.md), [Repository
 Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md),
 and bounded [Agent Work State](../decisions/platform/agent-work-state.md) Current.
 Complete [Semantic Source Schema
-V1](../decisions/platform/semantic-source-and-agent-protocol.md) with bounded
-one-shot operations and compiler [Resource Profile
-V1](../decisions/platform/resource-budget-profiles.md) are Current. The former
-Agent Foundation identity is historical. Schema V2, local sessions, typed holes,
-pre-allocation charging, and a shared request ledger remain Accepted Targets.
+V2](../decisions/platform/semantic-source-and-agent-protocol.md), bounded
+one-shot/session operations, typed holes/legal actions, and compiler [Resource
+Profile V2](../decisions/platform/resource-budget-profiles.md) are Current. The
+former Agent Foundation and Semantic Source V1 identities are historical.
+Whole-pipeline pre-allocation and a shared request ledger remain Accepted
+Targets.
 All Current source limits remain enforced until aggregate replacements are
 Current. The
 [Measured Execution Portfolio](../decisions/execution/execution-portfolio.md) reclassifies

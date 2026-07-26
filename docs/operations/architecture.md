@@ -8,14 +8,14 @@ to their authorities.
 ## Status
 
 The compiler/runtime map in the capsules is **Current** at baseline `dd8fb316`.
-Complete Semantic Source Schema V1, Bounded Repository Topology, Repository
-Intelligence Graph/context, externalized Agent Work State V2 with exact semantic
-references, its bounded one-shot
-semantic protocol, bounded local stdio sessions, and compiler Resource Profile
-V1 are Current. Agent Foundation V1 is historical.
-`lkjscript.semantic-source/2`, typed holes, Edition 2, Profile V2 pre-allocation,
-nonzero incremental query caching, and logical metering are **Accepted Targets**,
-not Current code.
+Complete Semantic Source Schema V2 with its preserved V1 representation,
+typed holes/legal actions, Bounded Repository Topology, Repository Intelligence
+Graph/context, externalized Agent Work State V2 with exact semantic references,
+the bounded one-shot semantic protocol, bounded local stdio sessions, and
+compiler Resource Profile V2 are Current. Agent Foundation V1 and Semantic
+Source Schema V1 are historical rejected identities. Edition 2, whole-pipeline
+Profile V2 pre-allocation, nonzero incremental query caching, and logical
+metering are **Accepted Targets**, not Current code.
 
 ## Current Compiler/Runtime Boundary
 
@@ -51,8 +51,8 @@ The accepted ownership boundaries are:
 
 - `lkjscript-xtask`: topology policy, strict manifests, rule IDs, link checks,
   canonical audit/graph construction, and repository fixtures;
-- Semantic Source/compiler boundary: source/entity/node identity, derived facts,
-  diagnostics, and atomic semantic edits;
+- Semantic Source/compiler boundary: source/entity/node/hole identity, derived
+  checker facts, bounded legal actions, diagnostics, and atomic semantic edits;
 - agent-state boundary: immutable task/base/scope preconditions, action and
   command history, blockers/risks, exact references, compaction, and atomic
   state publication;
@@ -70,8 +70,9 @@ retain independent request-local ledgers. Topology, graph/context, and task
 state use versioned bounded contracts without pretending to share that ledger.
 Topology and graph bound traversal; task state bounds decode, retained Git
 output, references, context, and publication; the protocol pre-bounds request,
-source bytes/units, work, and serialized output; compiler profile charges are
-exact post-phase guards before each downstream phase and artifact publication.
+source bytes/units, work, hole candidates, legal actions, transactions, staged
+publication, and serialized output; compiler profile charges remain exact
+post-phase guards before downstream phases not yet migrated.
 Exhaustion cannot publish partial authority. Edition 1 source limits remain
 unchanged.
 

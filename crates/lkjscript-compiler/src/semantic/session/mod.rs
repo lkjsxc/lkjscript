@@ -1,4 +1,4 @@
-//! Bounded local stdio session over the one-shot Semantic Source V1 engine.
+//! Bounded local stdio session over the one-shot Semantic Source V2 engine.
 
 mod engine;
 mod execute;

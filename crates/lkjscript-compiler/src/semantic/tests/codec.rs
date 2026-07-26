@@ -11,11 +11,11 @@ fn strict_codec_rejects_every_json_boundary() {
         &format!("{{\"schema\":\"{}\",", crate::semantic::SCHEMA),
         1,
     );
-    let unknown_field = valid.replacen("\"version\":1", "\"version\":1,\"unknown\":false", 1);
+    let unknown_field = valid.replacen("\"version\":2", "\"version\":2,\"unknown\":false", 1);
     let invalid = [
         duplicate,
         unknown_field,
-        valid.replace("\"version\":1", "\"version\":2"),
+        valid.replace("\"version\":2", "\"version\":1"),
         valid.replace(crate::semantic::SCHEMA, "lkjscript.agent-foundation"),
         valid.replace("\"kind\":\"snapshot\"", "\"kind\":\"invented\""),
         format!("{valid} false"),

@@ -46,6 +46,7 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
         | (Kind::StringLiteral, Some(Value::ImportPath { path: value })) => Ok(SyntaxKind::Str {
             value: value.clone(),
         }),
+        (Kind::TypedHole, Some(Value::TypedHole { .. })) => Ok(call("hole")),
         (Kind::BuiltinCall, Some(Value::BuiltinOperation { operation })) => {
             Ok(call(operation.0.name()))
         }
@@ -96,6 +97,7 @@ fn marker(kind: Kind) -> Option<&'static str> {
         Kind::WithField => "with-field",
         Kind::EmptyList => "empty-list",
         Kind::None => "none",
+        Kind::HoleGoal => "goal",
         Kind::Move => "move",
         Kind::Borrow => "borrow",
         Kind::BorrowMut => "borrow-mut",
@@ -107,6 +109,7 @@ fn symbol_kind(kind: Kind) -> bool {
     matches!(
         kind,
         Kind::NameReference
+            | Kind::HoleIdentity
             | Kind::ParameterName
             | Kind::BindingName
             | Kind::MutableName

@@ -122,4 +122,6 @@ const RESERVED_FORMS: &[&str] = &[
     "with-field",
     "empty-list",
     "none",
+    "hole",
+    "goal",
 ];

@@ -9,13 +9,15 @@ compiler and execution facts before Schema 2 extends it for Edition 2.
 
 ## Status
 
-**Current.** `lkjscript.semantic-source/1` is the closed Edition 1 schema used
-by the bounded one-shot protocol. Agent Foundation V1 is historical.
+**Historical identity; Current preserved base.** The exact closed Edition 1
+node/value/type representation defined here is the unchanged base of Current
+`lkjscript.semantic-source/2`. Input version 1 is rejected without an alias.
+Agent Foundation V1 is also historical.
 
 ## Closed Source Schema
 
-Complete Schema V1 represents every Current Edition 1 concept with closed typed
-nodes and no generic fallback object:
+The preserved Complete Schema V1 base represents every Current Edition 1
+concept with closed typed nodes and no generic fallback object:
 
 - source unit and edition identity, import, main, function, signature,
   parameters, type variables, bounds, and exact type forms;
@@ -26,8 +28,10 @@ nodes and no generic fallback object:
 - product construction, field access, and immutable replacement;
 - list, Option, Result, and every Current built-in call form;
 - ownership move, borrow, and borrow-mut;
-- comment, blank line, source origin, exact span, and trivia attachment; and
-- development typed holes once their separate contract is implemented.
+- comment, blank line, source origin, exact span, and trivia attachment.
+
+Schema V2 appends the Current development typed-hole node/value and response
+records without changing any base variant or field.
 
 Kinds are closed enums. The schema preserves one canonical tree and
 deterministic Edition 1 projection. Its complete kind/field table is tested
@@ -63,11 +67,12 @@ Optimization deletion or fusion is represented, not reverse-engineered.
 
 ## Registration
 
-`lkjscript.semantic-source/1` is emitted after complete vocabulary, schema/source
-roundtrip, malformed-boundary, correlation, diagnostic, and transaction gates.
-The older `lkjscript.agent-foundation/1` is historical evidence, not a competing
-Current source schema. `lkjscript.agent/1` is emitted only when its selected
-complete operation contract passes; identities are never relabeled.
+`lkjscript.semantic-source/1` was emitted after complete vocabulary,
+schema/source roundtrip, malformed-boundary, correlation, diagnostic, and
+transaction gates. It is now historical and rejected. The older
+`lkjscript.agent-foundation/1` is also historical evidence, not a competing
+Current source schema. `lkjscript.agent/1` is not emitted.
 
-Schema 2 reuses this closure discipline and has identity
-`lkjscript.semantic-source/2`; it does not mutate or overload Schema V1.
+Current Schema V2 reuses this closure discipline and has identity
+`lkjscript.semantic-source/2`. It preserves the V1 representation as its base
+rather than mutating or overloading the V1 identity.

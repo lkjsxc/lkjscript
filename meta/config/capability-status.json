@@ -147,7 +147,7 @@
     },
     {
       "id": "semantic-source-schema/1",
-      "status": "current",
+      "status": "historical",
       "interface": "lkjscript.semantic-source/1",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
@@ -158,10 +158,10 @@
     },
     {
       "id": "semantic-source-schema/2",
-      "status": "accepted-target",
+      "status": "current",
       "interface": "lkjscript.semantic-source/2",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/complete-schema-v1.md",
+      "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
       "claimants": [
         "docs/current-state.md",
         "docs/operations/agent-handoff.md"
@@ -169,7 +169,7 @@
     },
     {
       "id": "typed-holes/1",
-      "status": "accepted-target",
+      "status": "current",
       "interface": "hole_context",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",

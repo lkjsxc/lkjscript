@@ -1,4 +1,4 @@
-//! Strict one-shot Edition 1 Semantic Source Schema V1 protocol.
+//! Strict one-shot Edition 1 Semantic Source Schema V2 protocol.
 
 mod charges;
 mod codec;
@@ -20,7 +20,7 @@ use std::fmt;
 use schema::ProtocolError;
 
 pub const SCHEMA: &str = "lkjscript.semantic-source";
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub use codec::MAX_REQUEST_BYTES;
 
 #[derive(Debug)]

@@ -31,7 +31,7 @@ fn case(label: &str) -> PathBuf {
 fn semantic_request(root: &std::path::Path, profile: &str, operation: &str) -> String {
     format!(
         concat!(
-            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":1,",
+            "{{\"schema\":\"lkjscript.semantic-source\",\"version\":2,",
             "\"profile\":\"{profile}\",\"root\":{},\"operation\":{operation}}}"
         ),
         serde_json::to_string(&root.to_string_lossy()).expect("encode root"),

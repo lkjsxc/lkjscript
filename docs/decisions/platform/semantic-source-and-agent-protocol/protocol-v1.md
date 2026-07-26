@@ -4,8 +4,10 @@
 
 ## Status
 
-**Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
-explicit labels in this capsule and its authority; this capsule cannot promote a capability.
+**Current preserved one-shot contract in Schema V2.** The request/response
+shape selected here is emitted only as `lkjscript.semantic-source/2`; version 1
+input is historical and rejected. Deferred and Rejected labels below remain
+non-current.
 
 ## Protocol V1
 
@@ -27,7 +29,9 @@ Required requests in the first complete slice are:
 - `apply_transaction`: atomic operations and validation policy;
 - `diagnostics`: structured diagnostics for the loaded revision; and
 - `hole_context`: expected type, visible bindings, allowed effects, source
-  origin, and bounded candidates for one hole.
+  origin, and bounded candidates for one hole; and
+- `legal_actions`: the exact supported Edition 1 child/action/transaction subset
+  plus explicit coverage blockers.
 
 Responses are deterministic for the same source closure, compiler build,
 request, and profile. Lists define their sort keys. Requests and responses have
@@ -65,8 +69,8 @@ compatible during migration, but string parsing is never the agent API.
 ## Typed Expression Holes
 
 A typed expression hole is a development semantic node, not an `Any`, `nil`, or
-unchecked runtime value. V1 permits holes in let initializers, function/main
-body positions, call arguments, and conditional branch positions.
+unchecked runtime value. Schema V2 permits holes in let initializers, function/main body positions, call
+arguments, and conditional branch positions.
 
 A hole records:
 
@@ -115,12 +119,13 @@ them. A parser that discards source bytes it cannot reproduce does not satisfy
 the roundtrip gate.
 ## Constrained Generation Boundary
 
-Legal-next-action or token-mask generation is **Deferred** until Schema V1,
-typed holes, and query contexts are Current. A future constrainer states the
-exact supported subset and soundness/completeness evidence. Unsupported states
-fail open to ordinary generation followed by compiler validation, or return an
-explicit unsupported result. They never silently exclude valid full-language
-programs while claiming complete coverage.
+Full-language legal-next-token masking and constrained decoding remain
+**Deferred**. Current `legal_actions` claims only its closed Edition 1 semantic
+child/action subset and reports every unsupported context or form. A future
+constrainer must state its exact supported subset and soundness/completeness
+evidence. Unsupported states fail open to ordinary generation followed by
+compiler validation, or return an explicit unsupported result. They never
+silently exclude valid full-language programs while claiming complete coverage.
 ## Dependency Selection For The Protocol
 
 A general JSON parser will not be hand-written merely to preserve a

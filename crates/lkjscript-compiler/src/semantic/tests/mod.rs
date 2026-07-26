@@ -3,6 +3,7 @@
 mod codec;
 mod corpus;
 mod diagnostics;
+mod holes;
 mod publication;
 mod publication_conflict;
 mod query;
@@ -35,7 +36,7 @@ fn case_dir(label: &str) -> PathBuf {
 
 fn request(root: &std::path::Path, operation: &str) -> Vec<u8> {
     format!(
-        "{{\"schema\":\"{}\",\"version\":1,\"profile\":\"default\",\"root\":{},\"operation\":{operation}}}",
+        "{{\"schema\":\"{}\",\"version\":2,\"profile\":\"default\",\"root\":{},\"operation\":{operation}}}",
         crate::semantic::SCHEMA,
         serde_json::to_string(&root.to_string_lossy()).expect("encode root")
     )
