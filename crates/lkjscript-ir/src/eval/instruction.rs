@@ -24,6 +24,12 @@ impl Evaluator<'_> {
                 let arguments = values_for(values, arguments)?;
                 self.runtime(*operation, arguments)
             }
+            kind @ (InstructionKind::F64FromI64Exact { value: input }
+            | InstructionKind::F64FromI64Rounded { value: input }
+            | InstructionKind::I64FromF64Exact { value: input }
+            | InstructionKind::I64FromF64Trunc { value: input }) => {
+                self.numeric_conversion(kind, value(values, *input)?)
+            }
             InstructionKind::Call {
                 target, arguments, ..
             } => {

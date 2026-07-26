@@ -62,7 +62,11 @@ pub(super) fn apply_instruction(
         | Op::EqualValue
         | Op::Not
         | Op::JumpIfFalse
-        | Op::F64BitsEqual => numeric::apply(chunk, proto, instruction, state),
+        | Op::F64BitsEqual
+        | Op::F64FromI64Exact
+        | Op::F64FromI64Rounded
+        | Op::I64FromF64Exact
+        | Op::I64FromF64Trunc => numeric::apply(chunk, proto, instruction, state),
         Op::Call | Op::Return | Op::MakeClosure => calls::apply(chunk, proto, instruction, state),
         Op::Cons | Op::Car | Op::Cdr | Op::IsEmptyList | Op::SameObject | Op::ListEqual => {
             collections::apply(chunk, proto, instruction, state)

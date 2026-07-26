@@ -104,6 +104,36 @@ fn exact_conversion_candidates_are_complete_and_checker_validated() {
 }
 
 #[test]
+fn edition2_numeric_conversion_candidates_use_canonical_operations() {
+    for (name, ty, operation) in [
+        ("rounded", "F64", "f64-from-i64-rounded"),
+        (
+            "exact",
+            "Result/\nF64\nNumericError\n/Result",
+            "f64-from-i64-exact",
+        ),
+    ] {
+        let directory = case_dir(&format!("hole-numeric-conversion-{name}"));
+        let root = directory.join("main.lkjscript");
+        let source = format!(
+            "edition/\n2\n/edition\nmain/\nsig/\n->\n{ty}\n/sig\n{}/main\n",
+            hole("numeric", None),
+        );
+        std::fs::write(&root, source).expect("write numeric conversion hole");
+        let context = context(&root);
+        assert!(
+            context.candidates.iter().any(|candidate| {
+                candidate.category == crate::semantic::schema::CandidateCategory::ExactConversion
+                    && candidate.snippets[0]
+                        .source
+                        .starts_with(&format!("{operation}/\n"))
+            }),
+            "missing {name} numeric conversion candidate"
+        );
+    }
+}
+
+#[test]
 fn typed_hole_entity_roundtrips_and_legal_actions_are_closed() {
     let directory = case_dir("hole-roundtrip");
     let root = directory.join("main.lkjscript");

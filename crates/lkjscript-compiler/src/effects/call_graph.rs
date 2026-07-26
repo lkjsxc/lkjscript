@@ -89,6 +89,12 @@ pub(super) fn collect_direct_callees(
                 collect_direct_callees(condition, binding_to_function, callees);
             }
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => {
+            collect_direct_callees(value, binding_to_function, callees);
+        }
         ExprKind::If {
             condition,
             then_branch,

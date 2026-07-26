@@ -137,6 +137,8 @@ pub(super) fn is_value_comparable(kind: Kind) -> bool {
             | Kind::Str
             | Kind::Symbol
             | Kind::Result
+            | Kind::NumericResultF64
+            | Kind::NumericResultI64
             | Kind::Option
     )
 }

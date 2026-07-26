@@ -46,6 +46,10 @@ impl JitHeapServices<'_> {
             | HeapOperation::StrFromByte
             | HeapOperation::StrFromI64
             | HeapOperation::StrFromF64 => self.execute_strings(site, arguments),
+            HeapOperation::F64FromI64Exact
+            | HeapOperation::F64FromI64Rounded
+            | HeapOperation::I64FromF64Exact
+            | HeapOperation::I64FromF64Trunc => self.execute_numeric_conversion(site, arguments),
             HeapOperation::EqualValue | HeapOperation::SameObject | HeapOperation::ListEqual => {
                 self.execute_equality(site, arguments)
             }

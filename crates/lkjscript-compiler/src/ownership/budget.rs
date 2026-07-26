@@ -26,6 +26,10 @@ pub(in crate::ownership) fn charge_expression_nodes(
                 charge_expression_nodes(child, nodes)?;
             }
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => charge_expression_nodes(value, nodes)?,
         ExprKind::While {
             condition, body, ..
         } => {

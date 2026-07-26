@@ -1,4 +1,11 @@
-#![allow(clippy::expect_used)]
+#![allow(clippy::expect_used, clippy::panic)]
+
+#[path = "numeric_contract/boundaries.rs"]
+mod boundaries;
+#[path = "numeric_contract/malformed.rs"]
+mod malformed;
+#[path = "numeric_contract/support.rs"]
+mod support;
 
 use lkjscript_compiler::compile_source;
 use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, OwnedValue};

@@ -71,6 +71,20 @@ pub(crate) fn witness(tree: &ValidatedSourceTree, ty: &Type, depth: u32) -> Opti
             value_type: type_expression(inner)?,
         },
         Type::Product(name) => product_witness(tree, name, depth + 1)?,
+        Type::Result(ok, error) if is_numeric_error(error) => Expression::BuiltinCall {
+            operation: crate::semantic::schema::ClosedBuiltinOperation(match ok.as_ref() {
+                Type::F64 => crate::hir::Operation::F64FromI64Exact,
+                Type::I64 => crate::hir::Operation::I64FromF64Exact,
+                _ => return None,
+            }),
+            arguments: vec![match ok.as_ref() {
+                Type::F64 => Expression::I64 { value: 0 },
+                Type::I64 => Expression::F64 {
+                    value: "0.0".into(),
+                },
+                _ => return None,
+            }],
+        },
         _ => return None,
     })
 }
@@ -120,6 +134,17 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         Type::Symbol => T::Symbol {},
         Type::Handle => T::Handle {},
         Type::Product(name) => T::Product { name: name.clone() },
+        Type::Enum {
+            id,
+            name,
+            arguments,
+        } if id.bytes() == lkjscript_core::NUMERIC_ERROR_ID => T::Enum {
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(type_expression)
+                .collect::<Option<Vec<_>>>()?,
+        },
         Type::Enum { .. } => return None,
         Type::Param(name) => T::Variable { name: name.clone() },
         Type::Owned(inner) => T::Owned {
@@ -143,4 +168,9 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         },
         Type::Fn { .. } | Type::Forall { .. } => return None,
     })
+}
+
+fn is_numeric_error(ty: &Type) -> bool {
+    matches!(ty, Type::Enum { id, arguments, .. }
+        if id.bytes() == lkjscript_core::NUMERIC_ERROR_ID && arguments.is_empty())
 }

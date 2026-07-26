@@ -121,7 +121,11 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::IsEnumVariant
         | Op::LoadEnumField
         | Op::BufFromStr
-        | Op::BufToStr => fixed(1, 1, 1),
+        | Op::BufToStr
+        | Op::F64FromI64Exact
+        | Op::F64FromI64Rounded
+        | Op::I64FromF64Exact
+        | Op::I64FromF64Trunc => fixed(1, 1, 1),
         Op::Jump => fixed(0, 0, 0),
         Op::JumpIfFalse | Op::Exit | Op::Trap | Op::Pop | Op::Return => fixed(1, 1, 0),
         Op::MakeClosure => fixed(1, 1, 1),

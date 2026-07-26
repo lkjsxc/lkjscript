@@ -1,3 +1,5 @@
+pub(super) mod conversion;
+
 fn bin_bits<J: RuntimeTier>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;

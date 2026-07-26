@@ -64,6 +64,9 @@ pub(super) fn heap_descriptor(
             | HeapOperation::StrFromByte
             | HeapOperation::StrFromI64
             | HeapOperation::StrFromF64
+            | HeapOperation::F64FromI64Exact
+            | HeapOperation::I64FromF64Exact
+            | HeapOperation::I64FromF64Trunc
     ) {
         AllocationClass::Bounded
     } else {

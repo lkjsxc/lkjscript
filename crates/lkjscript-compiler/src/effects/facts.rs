@@ -31,6 +31,12 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         ExprKind::Operation {
             operation, args, ..
         } => recompute_slice(args, summaries).union(operation.effects()),
+        ExprKind::F64FromI64Rounded(value) => recompute_expr(value, summaries),
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => {
+            recompute_expr(value, summaries).union(EffectSet::ALLOCATES)
+        }
         ExprKind::Do(expressions) => recompute_slice(expressions, summaries),
         ExprKind::If {
             condition,

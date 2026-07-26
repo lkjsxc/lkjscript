@@ -11,8 +11,9 @@ Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
 Schema V2 with its exact V1 base, typed holes/legal actions and transactions,
-Edition 2 enum construction and exhaustive match through evaluator, VM, forced
-baseline, and forced proof, its one-shot protocol, bounded local stdio sessions,
+Edition 2 enum construction, exhaustive match, Never/control, and explicit
+numeric conversion through evaluator, VM, forced baseline, and forced proof,
+its one-shot protocol, bounded local stdio sessions,
 Profile V2 core reservation tests, and compiler resource checks are described
 in the capsules. Complete Edition 2 cross-engine/JIT acceptance, nonzero query
 caching, whole-pipeline pre-allocation, and logical metering beyond enum
@@ -110,7 +111,10 @@ SSA metadata/provenance/layout/substitution rejection, inactive projection
 rejection, stable physical tags, boxed active-payload tracing, validated
 bytecode descriptors, evaluator/VM/native/proof differential values and logical
 exhaustion, exact generated entries/runtime calls/roots, malformed native
-metadata/tag/projection rejection, and zero forced fallback. Match tests add
+metadata/tag/projection rejection, and zero forced fallback. Numeric conversion tests add stable `NumericError`
+identity/cases, exact bit/exponent boundaries, F64-bit outcomes, malformed SSA,
+four-engine differentials, exact generated heap-runtime calls, and zero
+fallback. Match tests add
 nested usefulness/witness, stale plan, active projection, resource, source-order,
 single-evaluation, and four-engine zero-fallback coverage. Automatic/host-native
 enum transitions remain part of the Accepted Edition 2 gate.

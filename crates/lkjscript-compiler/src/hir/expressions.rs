@@ -46,6 +46,10 @@ pub enum ExprKind {
         resolved_signature: Type,
         args: Vec<Expr>,
     },
+    F64FromI64Exact(Box<Expr>),
+    F64FromI64Rounded(Box<Expr>),
+    I64FromF64Exact(Box<Expr>),
+    I64FromF64Trunc(Box<Expr>),
     Do(Vec<Expr>),
     If {
         condition: Box<Expr>,

@@ -71,6 +71,9 @@ impl HeapCallDescriptor {
                 | HeapOperation::StrFromByte
                 | HeapOperation::StrFromI64
                 | HeapOperation::StrFromF64
+                | HeapOperation::F64FromI64Exact
+                | HeapOperation::I64FromF64Exact
+                | HeapOperation::I64FromF64Trunc
         );
         let expected_allocation = if allocates {
             AllocationClass::Bounded

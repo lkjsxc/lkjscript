@@ -12,6 +12,7 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         "Bool" => Ok((Type::Bool, i + 1)),
         "I64" => Ok((Type::I64, i + 1)),
         "F64" => Ok((Type::F64, i + 1)),
+        "NumericError" => Ok((crate::types::numeric_error_type(), i + 1)),
         "I32" | "U32" | "U64" | "F32" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "Int"
         | "Float" => Err(format!(
             "unsupported numeric type {a}; use canonical I64 or F64"
@@ -84,6 +85,7 @@ fn is_type_param_name(s: &str) -> bool {
                 | "Bool"
                 | "I64"
                 | "F64"
+                | "NumericError"
                 | "Str"
                 | "Buf"
                 | "Owned"

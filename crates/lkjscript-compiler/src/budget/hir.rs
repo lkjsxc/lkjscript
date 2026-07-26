@@ -109,6 +109,10 @@ fn push_expression_children<'a>(
             charge_type(resolved_signature, ledger)?;
             stack.extend(args);
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => stack.push(value),
         ExprKind::Do(children) => stack.extend(children),
         ExprKind::If {
             condition,

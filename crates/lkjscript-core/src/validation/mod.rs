@@ -82,6 +82,8 @@ pub(super) enum Kind {
     Buf,
     Handle,
     Result,
+    NumericResultF64,
+    NumericResultI64,
     Option,
     Product(ProductId),
     Enum(EnumId, Option<VariantId>),

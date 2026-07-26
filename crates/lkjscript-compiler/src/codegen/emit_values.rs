@@ -58,6 +58,19 @@ impl Emitter<'_> {
                 }
                 self.proto.emit(runtime_opcode(*operation));
             }
+            InstructionKind::F64FromI64Exact { value }
+            | InstructionKind::F64FromI64Rounded { value }
+            | InstructionKind::I64FromF64Exact { value }
+            | InstructionKind::I64FromF64Trunc { value } => {
+                self.load(*value)?;
+                self.proto.emit(match &instruction.kind {
+                    InstructionKind::F64FromI64Exact { .. } => Op::F64FromI64Exact,
+                    InstructionKind::F64FromI64Rounded { .. } => Op::F64FromI64Rounded,
+                    InstructionKind::I64FromF64Exact { .. } => Op::I64FromF64Exact,
+                    InstructionKind::I64FromF64Trunc { .. } => Op::I64FromF64Trunc,
+                    _ => return Err(Error::msg("numeric opcode lowering mismatch")),
+                });
+            }
             InstructionKind::Call {
                 target, arguments, ..
             } => {

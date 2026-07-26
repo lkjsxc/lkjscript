@@ -125,6 +125,7 @@ impl JitSession {
                     accounted_allocation_bytes: object.accounted_allocation_bytes,
                     relocation_count: object.relocations.len(),
                     runtime_calls: object.runtime_calls.clone(),
+                    numeric_conversion_sites: object.numeric_conversion_sites,
                     safepoint_count: object.safepoints.len(),
                     exact_scalar_stack_maps: object
                         .safepoints

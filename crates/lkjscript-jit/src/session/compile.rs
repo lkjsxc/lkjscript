@@ -71,6 +71,7 @@ impl JitSession {
         let entries = lowered.image.entries().to_vec();
         let relocations = lowered.image.relocations().to_vec();
         let runtime_calls = lowered.image.runtime_calls().to_vec();
+        let numeric_conversion_sites = numeric_conversion_sites(&lowered.image);
         let frames = lowered.image.frames().to_vec();
         let safepoints = lowered.image.safepoints().to_vec();
         let source_map = lowered.image.source_map().to_vec();
@@ -112,6 +113,7 @@ impl JitSession {
             accounted_allocation_bytes,
             relocations,
             runtime_calls,
+            numeric_conversion_sites,
             frames,
             safepoints,
             source_map,
@@ -167,4 +169,20 @@ impl JitSession {
         }
         Ok(identity)
     }
+}
+
+fn numeric_conversion_sites(
+    image: &lkjscript_native::InstallableImage,
+) -> NumericConversionSiteCounts {
+    let mut counts = NumericConversionSiteCounts::default();
+    for site in image.heap_runtime_sites() {
+        match site.descriptor().operation() {
+            HeapOperation::F64FromI64Exact => counts.f64_from_i64_exact += 1,
+            HeapOperation::F64FromI64Rounded => counts.f64_from_i64_rounded += 1,
+            HeapOperation::I64FromF64Exact => counts.i64_from_f64_exact += 1,
+            HeapOperation::I64FromF64Trunc => counts.i64_from_f64_trunc += 1,
+            _ => {}
+        }
+    }
+    counts
 }

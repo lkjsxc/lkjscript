@@ -22,6 +22,12 @@ pub(in crate::ownership) fn check_control_expr(
         ExprKind::Operation { args, .. } => {
             check_arguments(program, args, places, state, future)?;
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => {
+            check_expr(program, value, places, state, future, UseContext::Ordinary)?;
+        }
         ExprKind::Do(expressions) => check_sequence(program, expressions, places, state, future)?,
         ExprKind::If {
             condition,

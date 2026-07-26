@@ -6,6 +6,7 @@ mod enum_metadata;
 mod error;
 mod gc;
 mod limits;
+mod numeric_conversion;
 mod opcode;
 mod outcome;
 mod profile;
@@ -32,6 +33,10 @@ pub use limits::{
     MAX_BYTECODE_METADATA_BYTES, MAX_BYTECODE_TABLE_ENTRIES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES,
     MAX_CONSTANT_DATA_BYTES, MAX_DIR_CHILDREN, MAX_FUNCTION_CODE_BYTES, MAX_LIST_EQUAL_STEPS,
     MAX_NEST_DEPTH, MAX_PRODUCT_FIELDS, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
+};
+pub use numeric_conversion::{
+    f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
+    NUMERIC_ERROR_ID, NUMERIC_ERROR_LAYOUT,
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap};

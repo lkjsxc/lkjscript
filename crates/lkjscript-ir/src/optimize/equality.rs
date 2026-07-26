@@ -1,4 +1,5 @@
 use super::equality_enums::exact_enum_instruction_kind_equal;
+use super::equality_numeric::exact_numeric_instruction_kind_equal;
 use crate::{Constant, Function, Instruction, InstructionKind, Program};
 
 pub(crate) fn exact_program_equal(left: &Program, right: &Program) -> bool {
@@ -176,7 +177,10 @@ pub(crate) fn exact_instruction_kind_equal(
                 && left_value == right_value
                 && left_replacement == right_replacement
         }
-        _ => exact_enum_instruction_kind_equal(left, right),
+        _ => {
+            exact_numeric_instruction_kind_equal(left, right)
+                || exact_enum_instruction_kind_equal(left, right)
+        }
     }
 }
 

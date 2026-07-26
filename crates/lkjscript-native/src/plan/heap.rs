@@ -90,6 +90,10 @@ pub enum HeapOperation {
     StrFromByte,
     StrFromI64,
     StrFromF64,
+    F64FromI64Exact,
+    F64FromI64Rounded,
+    I64FromF64Exact,
+    I64FromF64Trunc,
     EqualValue,
     SameObject,
     ListEqual,
@@ -125,7 +129,11 @@ impl HeapOperation {
             | Self::StrLen
             | Self::StrFromByte
             | Self::StrFromI64
-            | Self::StrFromF64 => 1,
+            | Self::StrFromF64
+            | Self::F64FromI64Exact
+            | Self::F64FromI64Rounded
+            | Self::I64FromF64Exact
+            | Self::I64FromF64Trunc => 1,
             Self::WithProductField { .. }
             | Self::Cons
             | Self::BufRef

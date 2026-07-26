@@ -9,8 +9,10 @@ becoming control flow.
 
 ## Status
 
-**Accepted Target, not Current.** Existing Current Result and structured outcome
-surfaces retain their documented boundaries.
+**Current only for the stable compiler-recognized `NumericError` enum used by
+the four Edition 2 numeric conversions.** The wider typed-error hierarchy in
+this record remains an Accepted Target. Existing Current Result and structured
+outcome surfaces retain their documented boundaries.
 
 ## Failure Domains
 

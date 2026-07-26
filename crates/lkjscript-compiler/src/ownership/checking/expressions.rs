@@ -16,6 +16,10 @@ pub(in crate::ownership) fn check_expr(
         }
         ExprKind::Call { .. }
         | ExprKind::Operation { .. }
+        | ExprKind::F64FromI64Exact(_)
+        | ExprKind::F64FromI64Rounded(_)
+        | ExprKind::I64FromF64Exact(_)
+        | ExprKind::I64FromF64Trunc(_)
         | ExprKind::Do(_)
         | ExprKind::If { .. }
         | ExprKind::While { .. }

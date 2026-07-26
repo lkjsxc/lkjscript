@@ -137,4 +137,8 @@ pub enum Op {
     MakeEnum = 192,
     IsEnumVariant = 193,
     LoadEnumField = 194,
+    F64FromI64Exact = 195,
+    F64FromI64Rounded = 196,
+    I64FromF64Exact = 197,
+    I64FromF64Trunc = 198,
 }

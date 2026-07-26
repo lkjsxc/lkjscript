@@ -3,7 +3,6 @@
 ## Status
 
 **Mixed.** Status follows explicit labels in this capsule and its authority; this capsule cannot promote a capability.
-
 ## Current Implementation
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
@@ -147,7 +146,9 @@
   value; typed loop/while block parameters, early return, nearest break and
   continue, dynamic Str trap values, and structured exit are Current through
   evaluator, validated bytecode/reference VM, and forced baseline/proof JIT
-  with zero fallback. Host-native enum transitions are absent
+  with zero fallback. The four explicit Edition 2 numeric conversions, stable
+  `NumericError`, bit-exact evaluator/VM behavior, and generated baseline/proof
+  runtime sites are Current; mixed numeric operations are rejected. Host-native enum transitions are absent
 - Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
   fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
   aggregate ownership-analysis budget; lexical place initialization/end;

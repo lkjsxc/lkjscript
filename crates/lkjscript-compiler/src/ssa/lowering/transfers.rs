@@ -71,6 +71,20 @@ impl FunctionBuilder<'_> {
         Ok(None)
     }
 
+    pub(in crate::ssa) fn lower_match_unreachable(
+        &mut self,
+        plan: hir::MatchPlanId,
+        origin: hir::SourceId,
+    ) -> Result<Option<ValueId>> {
+        let message = format!(
+            "verified exhaustive match plan {} reached unreachable edge",
+            plan.raw()
+        );
+        let value = self.constant(SsaType::Str, Constant::Str(message), origin)?;
+        self.terminate(Terminator::Trap { value })?;
+        Ok(None)
+    }
+
     pub(in crate::ssa) fn lower_exit(&mut self, code: &Expr) -> Result<Option<ValueId>> {
         let Some(code) = self.lower_expr(code)? else {
             return Err(Error::msg("HIR exit code is already divergent"));

@@ -33,6 +33,9 @@ impl Analyzer {
 
     pub(in crate::analyze) fn install_operations(&mut self) -> Result<()> {
         for operation in Operation::ALL {
+            if operation.edition2_only() && !self.edition2 {
+                continue;
+            }
             let id = self.add_binding(
                 operation.name().to_string(),
                 BindingKind::BuiltinOperation(*operation),

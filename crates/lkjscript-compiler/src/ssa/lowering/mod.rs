@@ -6,6 +6,7 @@ mod expressions;
 mod loads;
 mod locals;
 mod loops;
+mod numeric;
 mod ownership;
 mod products;
 mod sequence;

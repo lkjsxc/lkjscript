@@ -75,18 +75,42 @@ impl Resolver<'_> {
                 .iter()
                 .map(|argument| argument.ty.clone())
                 .collect();
+            if self.analyzer.edition2
+                && matches!(
+                    operation,
+                    Operation::Add
+                        | Operation::Subtract
+                        | Operation::Multiply
+                        | Operation::Divide
+                        | Operation::Less
+                        | Operation::LessEqual
+                        | Operation::Greater
+                        | Operation::GreaterEqual
+                )
+                && argument_types[0] != argument_types[1]
+            {
+                return Err(self.error(format!(
+                    "{}: Edition 2 numeric operands must have one exact type",
+                    operation.name()
+                )));
+            }
             let (resolved_signature, ty) = operation
                 .resolve_types(&argument_types)
                 .map_err(|message| self.error(message))?;
-            Ok(self.expression(
-                ty,
-                ExprKind::Operation {
+            let conversion = resolved_args.first().cloned().map(Box::new);
+            let kind = match (operation, conversion) {
+                (Operation::F64FromI64Exact, Some(value)) => ExprKind::F64FromI64Exact(value),
+                (Operation::F64FromI64Rounded, Some(value)) => ExprKind::F64FromI64Rounded(value),
+                (Operation::I64FromF64Exact, Some(value)) => ExprKind::I64FromF64Exact(value),
+                (Operation::I64FromF64Trunc, Some(value)) => ExprKind::I64FromF64Trunc(value),
+                _ => ExprKind::Operation {
                     binding: callee,
                     operation,
                     resolved_signature,
                     args: resolved_args,
                 },
-            ))
+            };
+            Ok(self.expression(ty, kind))
         } else {
             if resolved_args
                 .iter()

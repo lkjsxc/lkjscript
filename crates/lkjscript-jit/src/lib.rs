@@ -54,7 +54,7 @@ use execute::optimization_metadata_bytes_estimate;
 use heap::*;
 use scalar::scalar_to_execution;
 
-pub use code::{CodeObject, CodeObjectRecord};
+pub use code::{CodeObject, CodeObjectRecord, NumericConversionSiteCounts};
 pub use config::{JitConfig, Tier, TierState};
 pub use error::{EngineError, FailureCode};
 pub use execute::{execute_forced, execute_optimizing};

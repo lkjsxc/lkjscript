@@ -38,6 +38,21 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
             forall(&["T"], function(vec![list.clone(), list], Type::Bool))
         }
         Operation::F64BitsEqual => function(vec![Type::F64, Type::F64], Type::Bool),
+        Operation::F64FromI64Exact => function(
+            vec![Type::I64],
+            Type::Result(
+                Box::new(Type::F64),
+                Box::new(crate::types::numeric_error_type()),
+            ),
+        ),
+        Operation::F64FromI64Rounded => function(vec![Type::I64], Type::F64),
+        Operation::I64FromF64Exact | Operation::I64FromF64Trunc => function(
+            vec![Type::F64],
+            Type::Result(
+                Box::new(Type::I64),
+                Box::new(crate::types::numeric_error_type()),
+            ),
+        ),
         Operation::Less | Operation::LessEqual | Operation::Greater | Operation::GreaterEqual => {
             numeric_comparison()
         }

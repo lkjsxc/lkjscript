@@ -107,6 +107,7 @@ pub(in crate::analyze) fn is_builtin_type_name(name: &str) -> bool {
             | "Bool"
             | "I64"
             | "F64"
+            | "NumericError"
             | "Str"
             | "Buf"
             | "Symbol"

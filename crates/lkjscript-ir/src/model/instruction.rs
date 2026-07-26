@@ -81,6 +81,18 @@ pub enum InstructionKind {
         arguments: Vec<ValueId>,
         signature: Signature,
     },
+    F64FromI64Exact {
+        value: ValueId,
+    },
+    F64FromI64Rounded {
+        value: ValueId,
+    },
+    I64FromF64Exact {
+        value: ValueId,
+    },
+    I64FromF64Trunc {
+        value: ValueId,
+    },
     Call {
         target: CallTarget,
         arguments: Vec<ValueId>,
@@ -130,7 +142,11 @@ impl InstructionKind {
             Self::Copy(value)
             | Self::PlaceInit { value, .. }
             | Self::Move { value, .. }
-            | Self::Borrow { value, .. } => vec![*value],
+            | Self::Borrow { value, .. }
+            | Self::F64FromI64Exact { value }
+            | Self::F64FromI64Rounded { value }
+            | Self::I64FromF64Exact { value }
+            | Self::I64FromF64Trunc { value } => vec![*value],
             Self::Runtime { arguments, .. }
             | Self::Call {
                 target: CallTarget::Direct(_),

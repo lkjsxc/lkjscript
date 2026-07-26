@@ -9,9 +9,10 @@ become Current.
 
 ## Status
 
-**Current for source match and Never/structured control; Accepted Target for
-full Edition 2 cutover.** Differentials cover evaluator, reference VM, forced
-baseline, and forced proof execution with zero fallback for both slices. The
+**Current for source match, Never/structured control, and the four numeric
+conversions; Accepted Target for full Edition 2 cutover.** Differentials cover
+the evaluator, reference VM, forced baseline, and forced proof execution with
+zero fallback for these slices. The
 complete cutover gate below is not claimed.
 
 ## Engine Contract

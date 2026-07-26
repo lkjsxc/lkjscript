@@ -45,17 +45,19 @@
         "docs/decisions/semantics/edition-2.md", "docs/decisions/semantics/edition-2/identity-and-migration.md",
         "docs/language/source-format.md", "docs/operations/agent-handoff.md"]
     },
-    {
-      "id": "edition-2-never-control/1",
-      "status": "current",
+    { "id": "edition-2-never-control/1", "status": "current",
       "interface": "Edition 2 Never and structured control through all four engines",
       "authority": "docs/decisions/semantics/edition-2/never-and-control.md",
       "evidence": "docs/decisions/semantics/edition-2/execution-and-acceptance.md",
       "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
-        "docs/decisions/semantics/edition-2/never-and-control.md"]
-    },
-    {
-      "id": "edition-2-semantic-core/2",
+        "docs/decisions/semantics/edition-2/never-and-control.md"] },
+    { "id": "edition-2-numeric-conversions/1", "status": "current",
+      "interface": "Edition 2 explicit I64/F64 conversions through all four engines",
+      "authority": "docs/decisions/semantics/edition-2/numeric-conversions.md",
+      "evidence": "docs/operations/verification.md",
+      "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
+        "docs/decisions/semantics/edition-2/numeric-conversions.md"] },
+    { "id": "edition-2-semantic-core/2",
       "status": "accepted-target",
       "interface": "lkjscript.edition/2",
       "authority": "docs/decisions/semantics/edition-2.md",

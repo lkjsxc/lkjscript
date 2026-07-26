@@ -189,6 +189,7 @@ mod allocation;
 mod boundary_tests;
 mod control;
 mod instruction;
+mod numeric_conversion;
 mod runtime;
 mod values;
 

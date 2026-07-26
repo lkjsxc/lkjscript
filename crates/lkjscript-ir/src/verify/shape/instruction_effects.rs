@@ -1,7 +1,6 @@
 use super::enum_instruction;
 use crate::verify::*;
 use crate::{EffectSet, Function, Instruction, InstructionKind, Program, SsaType};
-
 pub(crate) fn expected_instruction_effects(
     program: &Program,
     function: &Function,
@@ -87,6 +86,12 @@ pub(crate) fn expected_instruction_effects(
             verify_resolved_signature(signature, arguments, &instruction.ty, types)?;
             verify_runtime_signature(*operation, signature)?;
             operation.effects()
+        }
+        InstructionKind::F64FromI64Exact { .. }
+        | InstructionKind::F64FromI64Rounded { .. }
+        | InstructionKind::I64FromF64Exact { .. }
+        | InstructionKind::I64FromF64Trunc { .. } => {
+            super::numeric_conversion::verify(program, instruction, types)?
         }
         InstructionKind::Call {
             target,

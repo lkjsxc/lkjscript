@@ -9,7 +9,10 @@ impl Operation {
             Self::BufFromStr | Self::BufToStr | Self::BufSlice => EffectSet::ALLOCATES
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::MAY_TRAP),
-            Self::Cons
+            Self::F64FromI64Exact
+            | Self::I64FromF64Exact
+            | Self::I64FromF64Trunc
+            | Self::Cons
             | Self::StrAppend
             | Self::StrFromByte
             | Self::StrFromI64
@@ -114,7 +117,8 @@ impl Operation {
             Self::Exit => EffectSet::HOST_IO
                 .union(EffectSet::MAY_EXIT)
                 .union(EffectSet::MAY_TRAP),
-            Self::Less
+            Self::F64FromI64Rounded
+            | Self::Less
             | Self::LessEqual
             | Self::Greater
             | Self::GreaterEqual

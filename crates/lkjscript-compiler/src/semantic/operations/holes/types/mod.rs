@@ -114,8 +114,19 @@ pub(super) fn signature(node: &SourceNode) -> Option<(Vec<Type>, Type)> {
     if !call_is(node, "sig") {
         return None;
     }
-    let atoms: Vec<_> = node.children.iter().map(type_atom).collect::<Option<_>>()?;
-    Type::parse_atoms(&atoms).ok()
+    let arrow = node
+        .children
+        .iter()
+        .position(|child| type_atom(child).as_deref() == Some("->"))?;
+    let mut parameters = Vec::new();
+    let mut index = 0;
+    while index < arrow {
+        let (parameter, used) = parse_type_nodes(&node.children[index..arrow])?;
+        parameters.push(parameter);
+        index = index.checked_add(used)?;
+    }
+    let (result, used) = parse_type_nodes(&node.children[arrow + 1..])?;
+    (arrow + 1 + used == node.children.len()).then_some((parameters, result))
 }
 
 pub(super) fn type_form(node: &SourceNode) -> Option<Type> {

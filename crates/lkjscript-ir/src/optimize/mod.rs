@@ -4,6 +4,7 @@ mod checker;
 mod discovery;
 mod equality;
 mod equality_enums;
+mod equality_numeric;
 mod model;
 mod passes;
 mod reconstruct;

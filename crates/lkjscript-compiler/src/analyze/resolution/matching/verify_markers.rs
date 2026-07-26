@@ -42,6 +42,10 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
                 expression(child, program, counts)?;
             }
         }
+        ExprKind::F64FromI64Exact(child)
+        | ExprKind::F64FromI64Rounded(child)
+        | ExprKind::I64FromF64Exact(child)
+        | ExprKind::I64FromF64Trunc(child) => expression(child, program, counts)?,
         ExprKind::If {
             condition,
             then_branch,

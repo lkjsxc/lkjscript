@@ -60,6 +60,18 @@ pub(super) fn apply(
             expect_pop(state, Kind::F64, proto, instruction)?;
             state.stack.push(Kind::Bool);
         }
+        Op::F64FromI64Exact => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            state.stack.push(Kind::NumericResultF64);
+        }
+        Op::F64FromI64Rounded => {
+            expect_pop(state, Kind::I64, proto, instruction)?;
+            state.stack.push(Kind::F64);
+        }
+        Op::I64FromF64Exact | Op::I64FromF64Trunc => {
+            expect_pop(state, Kind::F64, proto, instruction)?;
+            state.stack.push(Kind::NumericResultI64);
+        }
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }
     Ok(())

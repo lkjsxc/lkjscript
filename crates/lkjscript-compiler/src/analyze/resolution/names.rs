@@ -69,6 +69,10 @@ impl Resolver<'_> {
             ExprKind::Operation {
                 operation, args, ..
             } => fold_effects(args).union(operation.effects()),
+            ExprKind::F64FromI64Rounded(value) => value.effects,
+            ExprKind::F64FromI64Exact(value)
+            | ExprKind::I64FromF64Exact(value)
+            | ExprKind::I64FromF64Trunc(value) => value.effects.union(EffectSet::ALLOCATES),
             ExprKind::Do(expressions) => fold_effects(expressions),
             ExprKind::If {
                 condition,

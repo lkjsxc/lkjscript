@@ -126,6 +126,17 @@ impl HeapCallDescriptor {
                 inputs == [Ty::I64] && result == Ty::Reference(Ref::Str)
             }
             Op::StrFromF64 => inputs == [Ty::F64] && result == Ty::Reference(Ref::Str),
+            Op::F64FromI64Rounded => inputs == [Ty::I64] && result == Ty::F64,
+            Op::F64FromI64Exact => {
+                inputs == [Ty::I64]
+                    && matches!(result, Ty::Reference(Ref::Result(_, ok, _))
+                        if ok == Ty::F64.layout_identity())
+            }
+            Op::I64FromF64Exact | Op::I64FromF64Trunc => {
+                inputs == [Ty::F64]
+                    && matches!(result, Ty::Reference(Ref::Result(_, ok, _))
+                        if ok == Ty::I64.layout_identity())
+            }
             Op::EqualValue => {
                 matches!(
                     inputs,

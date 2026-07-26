@@ -109,6 +109,10 @@ pub(crate) fn process_ownership_instruction(
         InstructionKind::Constant(_)
         | InstructionKind::Copy(_)
         | InstructionKind::FunctionRef(_)
+        | InstructionKind::F64FromI64Exact { .. }
+        | InstructionKind::F64FromI64Rounded { .. }
+        | InstructionKind::I64FromF64Exact { .. }
+        | InstructionKind::I64FromF64Trunc { .. }
         | InstructionKind::ProductValue { .. }
         | InstructionKind::ProductField { .. }
         | InstructionKind::WithProductField { .. }

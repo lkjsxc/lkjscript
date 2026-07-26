@@ -40,9 +40,11 @@ pub(super) fn requires_edition2(expression: &Expression) -> bool {
         Expression::WithField {
             value, replacement, ..
         } => requires_edition2(value) || requires_edition2(replacement),
-        Expression::BuiltinCall { arguments, .. } | Expression::UserCall { arguments, .. } => {
-            arguments.iter().any(requires_edition2)
-        }
+        Expression::BuiltinCall {
+            operation,
+            arguments,
+        } => operation.0.edition2_only() || arguments.iter().any(requires_edition2),
+        Expression::UserCall { arguments, .. } => arguments.iter().any(requires_edition2),
         _ => false,
     }
 }

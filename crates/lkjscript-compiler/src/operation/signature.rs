@@ -15,6 +15,10 @@ impl Operation {
             | Self::SameObject
             | Self::ListEqual
             | Self::F64BitsEqual
+            | Self::F64FromI64Exact
+            | Self::F64FromI64Rounded
+            | Self::I64FromF64Exact
+            | Self::I64FromF64Trunc
             | Self::Less
             | Self::LessEqual
             | Self::Greater

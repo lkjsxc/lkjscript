@@ -34,6 +34,10 @@ pub(in crate::ownership) fn collect_places(
                 collect_places(condition, output);
             }
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => collect_places(value, output),
         ExprKind::If {
             condition,
             then_branch,

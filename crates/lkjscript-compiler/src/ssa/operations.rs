@@ -114,7 +114,13 @@ pub(in crate::ssa) fn runtime_operation(operation: Operation) -> Result<RuntimeO
         Operation::Some => RuntimeOp::Some,
         Operation::IsSome => RuntimeOp::IsSome,
         Operation::UnwrapSome => RuntimeOp::UnwrapSome,
-        Operation::Exit | Operation::And | Operation::Or => {
+        Operation::Exit
+        | Operation::And
+        | Operation::Or
+        | Operation::F64FromI64Exact
+        | Operation::F64FromI64Rounded
+        | Operation::I64FromF64Exact
+        | Operation::I64FromF64Trunc => {
             return Err(Error::msg(format!(
                 "control operation {operation:?} cannot lower as an SSA runtime operation"
             )));

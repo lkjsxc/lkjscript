@@ -4,6 +4,7 @@ mod enum_instruction;
 mod function;
 mod instruction;
 mod instruction_effects;
+mod numeric_conversion;
 mod program;
 mod terminator;
 mod values;

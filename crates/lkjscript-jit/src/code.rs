@@ -1,5 +1,13 @@
 use crate::*;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NumericConversionSiteCounts {
+    pub f64_from_i64_exact: usize,
+    pub f64_from_i64_rounded: usize,
+    pub i64_from_f64_exact: usize,
+    pub i64_from_f64_trunc: usize,
+}
+
 pub struct CodeObject {
     pub(crate) identity: u64,
     pub(crate) functions: Vec<FunctionId>,
@@ -10,6 +18,7 @@ pub struct CodeObject {
     pub(crate) accounted_allocation_bytes: u64,
     pub(crate) relocations: Vec<Relocation>,
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,
+    pub(crate) numeric_conversion_sites: NumericConversionSiteCounts,
     pub(crate) frames: Vec<FrameFacts>,
     pub(crate) safepoints: Vec<Safepoint>,
     pub(crate) source_map: Vec<SourceMapEntry>,
@@ -122,6 +131,7 @@ pub struct CodeObjectRecord {
     pub accounted_allocation_bytes: u64,
     pub relocation_count: usize,
     pub runtime_calls: Vec<RuntimeCallSlot>,
+    pub numeric_conversion_sites: NumericConversionSiteCounts,
     pub safepoint_count: usize,
     pub exact_scalar_stack_maps: bool,
     pub diagnostic_machine_code: Option<Vec<u8>>,

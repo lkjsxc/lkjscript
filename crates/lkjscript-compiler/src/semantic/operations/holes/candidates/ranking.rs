@@ -8,6 +8,10 @@ pub(super) fn builtin_category(operation: crate::hir::Operation) -> CandidateCat
             | crate::hir::Operation::StrFromF64
             | crate::hir::Operation::BufFromStr
             | crate::hir::Operation::BufToStr
+            | crate::hir::Operation::F64FromI64Exact
+            | crate::hir::Operation::F64FromI64Rounded
+            | crate::hir::Operation::I64FromF64Exact
+            | crate::hir::Operation::I64FromF64Trunc
     ) {
         CandidateCategory::ExactConversion
     } else {

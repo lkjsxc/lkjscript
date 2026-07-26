@@ -9,8 +9,14 @@ conversion operations.
 
 ## Status
 
-**Accepted Target, not Current.** Edition 1 mixed I64/F64 arithmetic and ordering
-remain Current until migration and cutover.
+<!-- LKJ-STATUS id=edition-2-numeric-conversions/1 status=current -->
+
+**Current for the four explicit Edition 2 conversions and Edition 2 rejection
+of mixed numeric arithmetic and ordering.** Stable `NumericError` identity and
+cases, Semantic Source and typed-hole candidates, resolved HIR, verified SSA,
+the evaluator, validated bytecode/reference VM, forced Linux x86-64 baseline,
+and forced proof-checked JIT are included. Edition 1 mixed I64/F64 arithmetic
+and ordering remain Current only for Edition 1 migration input.
 
 ## Mixed Operations
 
@@ -45,3 +51,13 @@ I64 is exactly `[-2^63, 2^63 - 1]`. Because `2^63 - 1` rounds to binary64
 not against an F64-cast maximum. Both F64 signed zeros convert to I64 zero;
 I64 zero converts to positive F64 zero. NaN payloads and either infinity never
 convert to I64. No operation depends on host casts or undefined behavior.
+
+## Current Evidence Boundary
+
+Focused tables cover signed zero, subnormals, fractional signs, infinities,
+multiple positive and negative NaN payloads, values around `2^53`, the exact
+`-2^63` result, the rounded `+2^63` boundary, and the largest representable F64
+below `2^63`. Four-engine tests retain F64 bit evidence and require generated
+baseline/proof entries, the exact conversion heap-runtime sites, and zero VM
+fallback. Malformed operand/result types and stale or malformed `NumericError`
+identity, layout, and cases fail SSA verification.

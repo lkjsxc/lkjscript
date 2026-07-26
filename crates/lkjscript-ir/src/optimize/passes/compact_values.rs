@@ -61,7 +61,11 @@ pub(crate) fn rewrite_function_values(
                 InstructionKind::Copy(value)
                 | InstructionKind::PlaceInit { value, .. }
                 | InstructionKind::Move { value, .. }
-                | InstructionKind::Borrow { value, .. } => {
+                | InstructionKind::Borrow { value, .. }
+                | InstructionKind::F64FromI64Exact { value }
+                | InstructionKind::F64FromI64Rounded { value }
+                | InstructionKind::I64FromF64Exact { value }
+                | InstructionKind::I64FromF64Trunc { value } => {
                     *value = rewrite(*value);
                 }
                 InstructionKind::Runtime { arguments, .. }

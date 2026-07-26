@@ -78,6 +78,11 @@ pub(super) fn enumerate(
         }
     }
     for operation in crate::hir::Operation::ALL {
+        if operation.edition2_only()
+            && site.tree.edition() != crate::source::SourceEdition::Edition2
+        {
+            continue;
+        }
         let crate::hir::Type::Fn { params, ret } = operation.signature() else {
             continue;
         };

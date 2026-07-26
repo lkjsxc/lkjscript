@@ -28,6 +28,10 @@ pub(in crate::ownership) fn collect_uses(expression: &Expr, output: &mut BTreeSe
                 collect_uses(condition, output);
             }
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => collect_uses(value, output),
         ExprKind::If {
             condition,
             then_branch,
@@ -105,6 +109,10 @@ pub(in crate::ownership) fn walk_children(expression: &Expr, action: &mut impl F
                 action(condition);
             }
         }
+        ExprKind::F64FromI64Exact(value)
+        | ExprKind::F64FromI64Rounded(value)
+        | ExprKind::I64FromF64Exact(value)
+        | ExprKind::I64FromF64Trunc(value) => action(value),
         ExprKind::If {
             condition,
             then_branch,

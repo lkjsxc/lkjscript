@@ -62,6 +62,12 @@ impl FunctionBuilder<'_> {
             } => {
                 return self.lower_operation(*operation, resolved_signature, args, ty, expression);
             }
+            kind @ (ExprKind::F64FromI64Exact(_)
+            | ExprKind::F64FromI64Rounded(_)
+            | ExprKind::I64FromF64Exact(_)
+            | ExprKind::I64FromF64Trunc(_)) => {
+                return self.lower_numeric_conversion(kind, ty, expression.origin);
+            }
             ExprKind::Do(expressions) => {
                 return self.lower_sequence(expressions, expression.origin);
             }
@@ -180,16 +186,7 @@ impl FunctionBuilder<'_> {
                 );
             }
             ExprKind::MatchUnreachable { plan } => {
-                let value = self.constant(
-                    SsaType::Str,
-                    Constant::Str(format!(
-                        "verified exhaustive match plan {} reached unreachable edge",
-                        plan.raw()
-                    )),
-                    expression.origin,
-                )?;
-                self.terminate(Terminator::Trap { value })?;
-                return Ok(None);
+                return self.lower_match_unreachable(*plan, expression.origin);
             }
         };
         Ok(Some(value))

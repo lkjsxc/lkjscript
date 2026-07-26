@@ -3,6 +3,7 @@
 
 mod eval;
 mod model;
+mod numeric_contract;
 mod optimize;
 mod verify;
 

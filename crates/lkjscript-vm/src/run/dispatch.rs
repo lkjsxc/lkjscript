@@ -5,6 +5,9 @@ use lkjscript_core::{Error, Result};
 use super::{RuntimeTier, Vm};
 
 pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+    if super::numeric::conversion::handles(op) {
+        return super::numeric::conversion::dispatch(vm, op);
+    }
     if super::numeric::handles(op) {
         return super::numeric::dispatch(vm, op);
     }

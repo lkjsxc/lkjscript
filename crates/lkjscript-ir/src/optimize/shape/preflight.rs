@@ -104,6 +104,10 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
         | InstructionKind::PlaceInit { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
+        | InstructionKind::F64FromI64Exact { .. }
+        | InstructionKind::F64FromI64Rounded { .. }
+        | InstructionKind::I64FromF64Exact { .. }
+        | InstructionKind::I64FromF64Trunc { .. }
         | InstructionKind::ProductField { .. }
         | InstructionKind::EnumIsVariant { .. }
         | InstructionKind::EnumField { .. } => 1,
