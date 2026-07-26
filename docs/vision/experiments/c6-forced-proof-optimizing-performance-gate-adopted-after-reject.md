@@ -128,5 +128,24 @@ Only compact retained JSON is committed; reproducible build and Python cache
 artifacts are not evidence and are removed or remain in the shared ignored
 target tree.
 
+### Post-Canonical-Cutover Run At `ed36559`
+
+The exact protocol was rerun after canonical modules/packages, typed
+capabilities, opaque paths, and direct rounded I64-to-F64 native lowering.
+Same-commit optimizing native execution was 1.246007x faster than baseline and
+passed the speedup, noise, proof, outcome, W^X, tier, fallback, and allocation
+gates. The overall result is **Rejected** because scalar native and process
+medians were 1.077158x and 1.889862x the historical sentinels, above the 1.05x
+ceilings. Mandatory canonical package/source verification differs from the
+retained callable-baseline environment, but the predeclared criterion is not
+rewritten after measurement.
+
+The complete [post-cutover rejected result][post-cutover-result] has SHA-256
+`2dfaec3798ecec964044ced2e09a8cb9594496fa2e3fec0ab51789c207a82847`.
+It preserves the rejection without demoting the historical forced-tier adoption
+at `cc967ff`; it makes no automatic-promotion claim. Automatic promotion remains
+disabled and requires a newly accepted, semantically comparable protocol.
+
 [adopted-result]: ../../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64.json
 [rejected-result]: ../../../meta/benchmarks/jit/results/optimizing-jit-linux-x86_64-rejected-scalar-regression.json
+[post-cutover-result]: ../../../meta/benchmarks/jit/results/jit-ed36559-rejected.json

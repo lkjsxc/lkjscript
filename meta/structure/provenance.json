@@ -93,6 +93,12 @@
       "generator": null
     },
     {
+      "path": "meta/benchmarks/jit/results/jit-ed36559-rejected.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "2dfaec3798ecec964044ced2e09a8cb9594496fa2e3fec0ab51789c207a82847",
+      "generator": null
+    },
+    {
       "path": "meta/benchmarks/jit/results/native-image-cache-selection.json",
       "class": "immutable-benchmark-result",
       "sha256": "a499c2ab01609dd162a888d822f7e515dcf7bbae2a83c528cc87a3bdf7bb907b",

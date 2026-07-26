@@ -105,6 +105,23 @@ entry; Brainfuck improved wall p50 by only 0.12%, regressed first-native time by
 31.67%, and required 137 executions to break even. The candidate is **Rejected**
 and retained only in Git and benchmark history.
 
+## Rejected Post-Canonical-Cutover Result At `ed36559`
+
+A clean locked run after canonical modules/packages, explicit capabilities,
+opaque paths, and direct rounded I64-to-F64 lowering retained 31 samples per
+case in
+[`jit-ed36559-rejected.json`](results/jit-ed36559-rejected.json).
+Same-commit optimizing native execution was 1.246007x faster than baseline and
+passed every proof, outcome, W^X, entry, fallback, and allocation criterion.
+
+The overall verdict is **Rejected** because the historical scalar sentinels
+failed: native median was 1.077158x and process median 1.889862x their retained
+values, above the 1.05x ceilings. Mandatory package/source verification and the
+canonical source/runtime contracts differ from the retained callable-baseline
+commit, but the predeclared gate remains authoritative. Automatic optimizing
+promotion therefore remains disabled; this result makes no Current performance
+promotion claim.
+
 ## Adopted Result At `cc967ff`
 
 The clean locked release run on the recorded AMD Ryzen 9 9955HX host retained
