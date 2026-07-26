@@ -76,6 +76,11 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                     "bounded runtime-call relocations",
                 ))
                 .fact(fact("frames", "frames", "exact native frame layout"))
+                .fact(fact(
+                    "heap-sites",
+                    "heap-sites",
+                    "closed bounded fallible heap operation descriptors",
+                ))
                 .fact(fact("roots", "roots", "exact stack-map and root layout"))
                 .fact(fact(
                     "integrity",

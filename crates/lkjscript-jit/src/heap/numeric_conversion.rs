@@ -12,9 +12,6 @@ impl JitHeapServices<'_> {
             .copied()
             .ok_or(NativeServiceError::HostFailure)?;
         match (site.descriptor().operation(), input) {
-            (HeapOperation::F64FromI64Rounded, NativeValue::I64(value)) => Ok(
-                NativeValue::F64Bits(lkjscript_core::f64_from_i64_rounded(value).to_bits()),
-            ),
             (HeapOperation::F64FromI64Exact { error_type }, NativeValue::I64(value)) => {
                 let result = lkjscript_core::f64_from_i64_exact(value)
                     .map(|value| NativeValue::F64Bits(value.to_bits()));

@@ -3,7 +3,6 @@ use crate::*;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NumericConversionSiteCounts {
     pub f64_from_i64_exact: usize,
-    pub f64_from_i64_rounded: usize,
     pub i64_from_f64_exact: usize,
     pub i64_from_f64_trunc: usize,
 }

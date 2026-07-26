@@ -178,7 +178,6 @@ fn numeric_conversion_sites(
     for site in image.heap_runtime_sites() {
         match site.descriptor().operation() {
             HeapOperation::F64FromI64Exact { .. } => counts.f64_from_i64_exact += 1,
-            HeapOperation::F64FromI64Rounded => counts.f64_from_i64_rounded += 1,
             HeapOperation::I64FromF64Exact { .. } => counts.i64_from_f64_exact += 1,
             HeapOperation::I64FromF64Trunc { .. } => counts.i64_from_f64_trunc += 1,
             _ => {}

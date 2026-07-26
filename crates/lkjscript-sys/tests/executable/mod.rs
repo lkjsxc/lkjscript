@@ -20,6 +20,7 @@ struct Entries {
     checked_mul: FunctionId,
     checked_div: FunctionId,
     f64_arithmetic: FunctionId,
+    i64_to_f64: FunctionId,
     f64_branch: FunctionId,
     f64_comparisons: [FunctionId; 6],
     bool_not: FunctionId,

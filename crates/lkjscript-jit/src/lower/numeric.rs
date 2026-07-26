@@ -22,7 +22,10 @@ pub(super) fn lower_numeric_conversion(
             (*value, HeapOperation::F64FromI64Exact { error_type })
         }
         (InstructionKind::F64FromI64Rounded { value }, None) => {
-            (*value, HeapOperation::F64FromI64Rounded)
+            let argument = read_value(builder, block, locals, *value, function.id)?;
+            return builder
+                .i64_to_f64(block, argument)
+                .map_err(LoweringError::backend);
         }
         (InstructionKind::I64FromF64Exact { value }, Some(error_type)) => {
             (*value, HeapOperation::I64FromF64Exact { error_type })

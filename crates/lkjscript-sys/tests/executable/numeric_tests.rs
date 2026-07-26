@@ -56,6 +56,20 @@ fn exact_integer_traps_and_f64_bits_and_ordered_branches() -> Result<(), Box<dyn
         )?,
         InvocationOutcome::Returned(NativeValue::f64(1.5))
     );
+    let conversion_cases = [
+        (0, 0x0000_0000_0000_0000),
+        (1, 0x3ff0_0000_0000_0000),
+        (9_007_199_254_740_993, 0x4340_0000_0000_0000),
+        (-9_007_199_254_740_993, 0xc340_0000_0000_0000),
+        (i64::MAX, 0x43e0_0000_0000_0000),
+        (i64::MIN, 0xc3e0_0000_0000_0000),
+    ];
+    for (value, bits) in conversion_cases {
+        assert_eq!(
+            installed.invoke(entries.i64_to_f64, &[NativeValue::I64(value)])?,
+            InvocationOutcome::Returned(NativeValue::F64Bits(bits))
+        );
+    }
     let ordered_cases = [
         (1.0, 1.0, true),
         (1.0, 2.0, true),

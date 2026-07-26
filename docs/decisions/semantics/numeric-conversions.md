@@ -58,7 +58,10 @@ convert to I64. No operation depends on host casts or undefined behavior.
 Focused tables cover signed zero, subnormals, fractional signs, infinities,
 multiple positive and negative NaN payloads, values around `2^53`, the exact
 `-2^63` result, the rounded `+2^63` boundary, and the largest representable F64
-below `2^63`. Four-engine tests retain F64 bit evidence and require generated
-baseline/proof entries, the exact conversion heap-runtime sites, and zero VM
-fallback. Malformed operand/result types and stale or malformed `NumericError`
+below `2^63`. Four-engine tests retain F64 bit evidence and require generated baseline/proof
+entries and zero VM fallback. Rounded I64-to-F64 uses the verified native
+scalar `cvtsi2sd` plan directly and has no heap-runtime site; its boundary table
+checks exact result bits. The three fallible conversions retain exact generated
+heap-runtime sites because they construct `Result` and `NumericError` values.
+Malformed operand/result types and stale or malformed `NumericError`
 identity, layout, and cases fail SSA verification.

@@ -19,6 +19,16 @@ pub(super) fn define(
     }
 
     {
+        let mut builder = plan.function_builder(entries.i64_to_f64)?;
+        let entry = builder.create_block()?;
+        builder.set_entry(entry)?;
+        let value = builder.parameter(0)?;
+        let converted = builder.i64_to_f64(entry, value)?;
+        builder.return_value(entry, converted)?;
+        plan.define_function(builder.finish())?;
+    }
+
+    {
         let mut builder = plan.function_builder(entries.f64_branch)?;
         let entry = builder.create_block()?;
         let less = builder.create_block()?;

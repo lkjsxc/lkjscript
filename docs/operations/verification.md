@@ -115,8 +115,9 @@ bytecode descriptors, evaluator/VM/native/proof differential values and logical
 exhaustion, exact generated entries/runtime calls/roots, malformed native
 metadata/tag/projection rejection, and zero forced fallback. Numeric conversion tests add stable `NumericError`
 identity/cases, exact bit/exponent boundaries, F64-bit outcomes, malformed SSA,
-four-engine differentials, exact generated heap-runtime calls, and zero
-fallback. Match tests add
+four-engine differentials, direct rounded I64-to-F64 native conversion with
+exact result bits and no heap call, exact generated heap-runtime calls for the
+three fallible conversions, and zero fallback. Match tests add
 nested usefulness/witness, stale plan, active projection, resource, source-order,
 single-evaluation, and four-engine zero-fallback coverage. Automatic and
 host-native enum transitions remain outside Current acceptance.

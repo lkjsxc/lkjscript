@@ -31,6 +31,10 @@ pub(super) fn declare(
         SourceFunctionId::new(5),
         Signature::new(vec![ValueType::F64, ValueType::F64], ValueType::F64)?,
     )?;
+    let i64_to_f64 = plan.declare_function(
+        SourceFunctionId::new(21),
+        Signature::new(vec![ValueType::I64], ValueType::F64)?,
+    )?;
     let f64_branch = plan.declare_function(
         SourceFunctionId::new(6),
         Signature::new(vec![ValueType::F64, ValueType::F64], ValueType::F64)?,
@@ -94,6 +98,7 @@ pub(super) fn declare(
         checked_mul,
         checked_div,
         f64_arithmetic,
+        i64_to_f64,
         f64_branch,
         f64_comparisons: f64_comparison_functions,
         bool_not,

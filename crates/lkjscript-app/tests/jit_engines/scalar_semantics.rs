@@ -145,7 +145,14 @@ fn f64_bits_ieee_comparisons_and_mixed_conversion_are_exact() {
             &lkjscript_vm::ExecutionInputs::default(),
             &ExecutionConfig::default(),
         ));
-        let native = execution(forced(&source, name).outcome);
+        let forced = forced(&source, name);
+        if name == "mixed.lkjscript" {
+            assert_eq!(forced.stats.runtime_heap_attempts, 0);
+            assert!(forced.stats.code_objects.iter().all(|object| !object
+                .runtime_calls
+                .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)));
+        }
+        let native = execution(forced.outcome);
         assert_eq!(vm, expected, "VM oracle for {name}");
         assert_eq!(native, vm, "native result for {name}");
     }

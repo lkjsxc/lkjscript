@@ -90,7 +90,6 @@ pub enum HeapOperation {
     F64FromI64Exact {
         error_type: ValueType,
     },
-    F64FromI64Rounded,
     I64FromF64Exact {
         error_type: ValueType,
     },
@@ -126,7 +125,6 @@ impl HeapOperation {
             | Self::StrFromI64
             | Self::StrFromF64
             | Self::F64FromI64Exact { .. }
-            | Self::F64FromI64Rounded
             | Self::I64FromF64Exact { .. }
             | Self::I64FromF64Trunc { .. } => 1,
             Self::WithProductField { .. }

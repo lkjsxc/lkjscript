@@ -7,6 +7,7 @@ pub(super) fn program(return_type: &str, expression: &str) -> String {
 }
 
 pub(super) fn assert_scalar(source: &str, expected: Expected) {
+    let rounded_i64 = source.contains("f64-from-i64-rounded/");
     let program = compile_source(source, "conversion.lkjscript", &Limits::default())
         .expect("compile conversion");
     assert_eval(
@@ -38,18 +39,26 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
         assert_owned(execution.outcome, expected);
         assert!(execution.stats.native_entries > 0);
         assert_eq!(execution.stats.vm_fallbacks, 0);
-        assert!(execution.stats.runtime_heap_attempts > 0);
-        assert!(execution.stats.code_objects.iter().any(|object| {
-            let sites = object.numeric_conversion_sites;
-            let exact_sites = sites.f64_from_i64_exact
-                + sites.f64_from_i64_rounded
-                + sites.i64_from_f64_exact
-                + sites.i64_from_f64_trunc;
-            exact_sites == 1
-                && object
-                    .runtime_calls
-                    .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
-        }));
+        if rounded_i64 {
+            assert_eq!(execution.stats.runtime_heap_attempts, 0);
+            assert!(execution.stats.code_objects.iter().any(|object| {
+                object.numeric_conversion_sites == Default::default()
+                    && !object
+                        .runtime_calls
+                        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
+            }));
+        } else {
+            assert!(execution.stats.runtime_heap_attempts > 0);
+            assert!(execution.stats.code_objects.iter().any(|object| {
+                let sites = object.numeric_conversion_sites;
+                let exact_sites =
+                    sites.f64_from_i64_exact + sites.i64_from_f64_exact + sites.i64_from_f64_trunc;
+                exact_sites == 1
+                    && object
+                        .runtime_calls
+                        .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
+            }));
+        }
     }
 }
 

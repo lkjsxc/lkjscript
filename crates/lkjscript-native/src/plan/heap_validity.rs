@@ -122,7 +122,6 @@ impl HeapCallDescriptor {
                 inputs == [Ty::I64] && result == Ty::Reference(Ref::Str)
             }
             Op::StrFromF64 => inputs == [Ty::F64] && result == Ty::Reference(Ref::Str),
-            Op::F64FromI64Rounded => inputs == [Ty::I64] && result == Ty::F64,
             Op::F64FromI64Exact { error_type } => {
                 inputs == [Ty::I64]
                     && matches!(result, Ty::Reference(Ref::Enum(_, _)))
