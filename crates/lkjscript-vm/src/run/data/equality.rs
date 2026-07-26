@@ -13,59 +13,83 @@ fn maybe_i64(arena: &lkjscript_core::GcHeap, value: Value) -> Result<Option<i64>
     }
 }
 
-fn value_equal(arena: &lkjscript_core::GcHeap, mut left: Value, mut right: Value) -> Result<bool> {
-    loop {
-        if left.is_unit() || right.is_unit() {
-            return if left.is_unit() && right.is_unit() {
-                Ok(true)
-            } else {
-                Err(Error::msg("equal-value runtime type mismatch"))
-            };
+fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Result<bool> {
+    let mut pending = vec![(left, right)];
+    let mut steps = 0_usize;
+    while let Some((left, right)) = pending.pop() {
+        if steps == MAX_LIST_EQUAL_STEPS {
+            return Err(Error::msg("equal-value step limit exceeded"));
         }
-
+        steps += 1;
+        if left.is_unit() || right.is_unit() {
+            if left.is_unit() && right.is_unit() {
+                continue;
+            }
+            return Err(Error::msg("equal-value runtime type mismatch"));
+        }
         let left_bool = left.as_bool();
         let right_bool = right.as_bool();
         if left_bool.is_some() || right_bool.is_some() {
-            return match (left_bool, right_bool) {
-                (Some(left), Some(right)) => Ok(left == right),
-                _ => Err(Error::msg("equal-value runtime type mismatch")),
-            };
+            match (left_bool, right_bool) {
+                (Some(left), Some(right)) if left == right => continue,
+                (Some(_), Some(_)) => return Ok(false),
+                _ => return Err(Error::msg("equal-value runtime type mismatch")),
+            }
         }
-
         let left_i64 = maybe_i64(arena, left)?;
         let right_i64 = maybe_i64(arena, right)?;
         if left_i64.is_some() || right_i64.is_some() {
-            return match (left_i64, right_i64) {
-                (Some(left), Some(right)) => Ok(left == right),
-                _ => Err(Error::msg("equal-value runtime type mismatch")),
-            };
-        }
-
-        if left.is_none() || right.is_none() {
-            if left.is_none() && right.is_none() {
-                return Ok(true);
+            match (left_i64, right_i64) {
+                (Some(left), Some(right)) if left == right => continue,
+                (Some(_), Some(_)) => return Ok(false),
+                _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
-            let other = if left.is_none() { right } else { left };
-            return match arena.get(other)? {
-                HeapObj::OptionSome(_) => Ok(false),
-                _ => Err(Error::msg("equal-value runtime type mismatch")),
-            };
         }
-
-        let (next_left, next_right) = match (arena.get(left)?, arena.get(right)?) {
-            (HeapObj::Float(left), HeapObj::Float(right)) => return Ok(left == right),
-            (HeapObj::Str(left), HeapObj::Str(right)) => return Ok(left == right),
-            (HeapObj::Symbol(left), HeapObj::Symbol(right)) => return Ok(left == right),
-            (HeapObj::OptionSome(left), HeapObj::OptionSome(right))
-            | (HeapObj::ResultOk(left), HeapObj::ResultOk(right))
-            | (HeapObj::ResultErr(left), HeapObj::ResultErr(right)) => (*left, *right),
-            (HeapObj::ResultOk(_), HeapObj::ResultErr(_))
-            | (HeapObj::ResultErr(_), HeapObj::ResultOk(_)) => return Ok(false),
+        match (arena.get(left)?, arena.get(right)?) {
+            (HeapObj::Float(left), HeapObj::Float(right)) if left == right => {}
+            (HeapObj::Float(_), HeapObj::Float(_)) => return Ok(false),
+            (HeapObj::Str(left), HeapObj::Str(right)) if left == right => {}
+            (HeapObj::Str(_), HeapObj::Str(_)) => return Ok(false),
+            (HeapObj::Symbol(left), HeapObj::Symbol(right)) if left == right => {}
+            (HeapObj::Symbol(_), HeapObj::Symbol(_)) => return Ok(false),
+            (
+                HeapObj::Enum {
+                    layout: left_layout,
+                    physical_tag: left_tag,
+                    ..
+                },
+                HeapObj::Enum {
+                    layout: right_layout,
+                    physical_tag: right_tag,
+                    ..
+                },
+            ) if left_layout == right_layout && left_tag != right_tag => return Ok(false),
+            (
+                HeapObj::Enum {
+                    layout: left_layout,
+                    physical_tag: left_tag,
+                    active_payload: left_payload,
+                },
+                HeapObj::Enum {
+                    layout: right_layout,
+                    physical_tag: right_tag,
+                    active_payload: right_payload,
+                },
+            ) if left_layout == right_layout
+                && left_tag == right_tag
+                && left_payload.len() == right_payload.len() =>
+            {
+                pending.extend(
+                    left_payload
+                        .iter()
+                        .copied()
+                        .zip(right_payload.iter().copied()),
+                );
+            }
             _ => return Err(Error::msg("equal-value runtime type mismatch")),
-        };
-        left = next_left;
-        right = next_right;
+        }
     }
+    Ok(true)
 }
 
 pub(crate) fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {

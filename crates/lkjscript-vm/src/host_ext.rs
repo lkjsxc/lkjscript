@@ -69,4 +69,5 @@ mod strings;
 mod tests;
 
 pub use results::*;
+pub use sockets::SocketReceiveError;
 pub use strings::*;

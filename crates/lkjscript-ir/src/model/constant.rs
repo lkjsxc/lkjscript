@@ -9,7 +9,6 @@ pub enum Constant {
     Str(String),
     Symbol(String),
     EmptyList,
-    None,
 }
 
 impl Constant {
@@ -23,7 +22,6 @@ impl Constant {
                 | (Self::Str(_), SsaType::Str)
                 | (Self::Symbol(_), SsaType::Symbol)
                 | (Self::EmptyList, SsaType::List(_))
-                | (Self::None, SsaType::Option(_))
         )
     }
 }

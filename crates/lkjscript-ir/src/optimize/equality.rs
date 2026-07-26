@@ -187,9 +187,7 @@ pub(crate) fn exact_instruction_kind_equal(
 pub(crate) fn exact_constant_equal(left: &Constant, right: &Constant) -> bool {
     match (left, right) {
         (Constant::F64(left), Constant::F64(right)) => left.to_bits() == right.to_bits(),
-        (Constant::Unit, Constant::Unit)
-        | (Constant::EmptyList, Constant::EmptyList)
-        | (Constant::None, Constant::None) => true,
+        (Constant::Unit, Constant::Unit) | (Constant::EmptyList, Constant::EmptyList) => true,
         (Constant::Bool(left), Constant::Bool(right)) => left == right,
         (Constant::I64(left), Constant::I64(right)) => left == right,
         (Constant::Str(left), Constant::Str(right))

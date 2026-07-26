@@ -15,10 +15,8 @@ pub(super) fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> 
             | Type::Ref(_)
             | Type::RefMut(_)
             | Type::List(_)
-            | Type::Option(_)
             | Type::Forall { .. } => 1,
             Type::Enum { arguments, .. } => arguments.len(),
-            Type::Result(_, _) => 2,
             Type::Fn { params, .. } => params
                 .len()
                 .checked_add(1)
@@ -34,9 +32,7 @@ pub(super) fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> 
             | Type::Ref(child)
             | Type::RefMut(child)
             | Type::List(child)
-            | Type::Option(child)
             | Type::Forall { body: child, .. } => stack.push(child),
-            Type::Result(left, right) => stack.extend([left.as_ref(), right.as_ref()]),
             Type::Enum { arguments, .. } => stack.extend(arguments),
             Type::Fn { params, ret } => {
                 stack.extend(params);

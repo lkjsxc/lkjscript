@@ -9,19 +9,13 @@ pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut Has
         Type::Param(parameter) => {
             output.insert(parameter);
         }
-        Type::Owned(inner)
-        | Type::Ref(inner)
-        | Type::RefMut(inner)
-        | Type::List(inner)
-        | Type::Option(inner) => collect_type_params(inner, output),
+        Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
+            collect_type_params(inner, output)
+        }
         Type::Enum { arguments, .. } => {
             for argument in arguments {
                 collect_type_params(argument, output);
             }
-        }
-        Type::Result(ok, error) => {
-            collect_type_params(ok, output);
-            collect_type_params(error, output);
         }
         Type::Fn { params, ret } => {
             for parameter in params {
@@ -37,9 +31,8 @@ pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut Has
 pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
     match ty {
         Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => true,
-        Type::List(inner) | Type::Option(inner) => contains_ownership_type(inner),
+        Type::List(inner) => contains_ownership_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
-        Type::Result(ok, error) => contains_ownership_type(ok) || contains_ownership_type(error),
         Type::Fn { params, ret } => {
             params.iter().any(contains_ownership_type) || contains_ownership_type(ret)
         }
@@ -51,11 +44,8 @@ pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
 pub(in crate::analyze) fn contains_reference_type(ty: &Type) -> bool {
     match ty {
         Type::Ref(_) | Type::RefMut(_) => true,
-        Type::Owned(inner) | Type::List(inner) | Type::Option(inner) => {
-            contains_reference_type(inner)
-        }
+        Type::Owned(inner) | Type::List(inner) => contains_reference_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_reference_type),
-        Type::Result(ok, error) => contains_reference_type(ok) || contains_reference_type(error),
         Type::Fn { params, ret } => {
             params.iter().any(contains_reference_type) || contains_reference_type(ret)
         }

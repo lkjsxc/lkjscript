@@ -45,7 +45,6 @@ pub(super) fn apply_instruction(
         | Op::True
         | Op::Unit
         | Op::EmptyList
-        | Op::OptionNone
         | Op::Argc
         | Op::EmptyStr => data::apply(chunk, proto, instruction, state),
         Op::Add
@@ -149,15 +148,7 @@ pub(super) fn apply_instruction(
         | Op::SysSqliteColumnText
         | Op::SysSqliteColumnBytes
         | Op::SysSqliteBackup => sqlite::apply(chunk, proto, instruction, state),
-        Op::OkWrap
-        | Op::ErrWrap
-        | Op::IsOk
-        | Op::UnwrapOk
-        | Op::UnwrapErr
-        | Op::SomeWrap
-        | Op::IsSome
-        | Op::UnwrapSome
-        | Op::MakeProduct
+        Op::MakeProduct
         | Op::LoadProductField
         | Op::WithProductField
         | Op::MakeEnum

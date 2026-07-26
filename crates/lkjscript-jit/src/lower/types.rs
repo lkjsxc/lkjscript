@@ -46,21 +46,19 @@ pub(super) fn lower_type(
             exact_layout_identity(function, layouts, ty)?,
             exact_layout_identity(function, layouts, element)?,
         ))),
-        SsaType::Option(element) => Ok(ValueType::Reference(ReferenceType::Option(
-            exact_layout_identity(function, layouts, ty)?,
-            exact_layout_identity(function, layouts, element)?,
-        ))),
-        SsaType::Result(ok, error) => Ok(ValueType::Reference(ReferenceType::Result(
-            exact_layout_identity(function, layouts, ty)?,
-            exact_layout_identity(function, layouts, ok)?,
-            exact_layout_identity(function, layouts, error)?,
-        ))),
         SsaType::Enum { arguments, .. } => {
             for argument in arguments {
                 lower_type(function, argument, layouts)?;
             }
             Ok(ValueType::Reference(ReferenceType::Enum(
                 exact_layout_identity(function, layouts, ty)?,
+                layouts.enum_layout(ty).ok_or_else(|| {
+                    LoweringError::new(
+                        LoweringFailureCode::UnsupportedType,
+                        Some(function),
+                        "enum type is missing its runtime layout identity",
+                    )
+                })?,
             )))
         }
         SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => Err(LoweringError::new(

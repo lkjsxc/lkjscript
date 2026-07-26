@@ -51,13 +51,12 @@ pub(crate) fn analyze_program_without_effects(
 ) -> Result<hir::Program> {
     let mut analyzer = Analyzer::new(program)?;
     analyzer.install_operations()?;
-    analyzer.install_numeric_error()?;
+    analyzer.install_prelude_enums()?;
     analyzer.install_core_traits()?;
     analyzer.collect_trait_names(program)?;
     analyzer.collect_product_names(program)?;
     analyzer.collect_enum_names(program)?;
     analyzer.collect_enums(program)?;
-    analyzer.finish_numeric_error();
     analyzer.collect_products(program)?;
     analyzer.collect_implementations(program)?;
     let (pending_functions, pending_main) = analyzer.collect_headers(program)?;

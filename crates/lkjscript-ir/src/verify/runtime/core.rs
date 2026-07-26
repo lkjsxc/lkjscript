@@ -63,7 +63,10 @@ pub(super) fn core_signature(
         RuntimeOp::WriteByte => exact(&[SsaType::I64], &SsaType::Unit),
         RuntimeOp::EmptyStr => exact(&[], &SsaType::Str),
         RuntimeOp::ArgCount => exact(&[], &SsaType::I64),
-        RuntimeOp::Arg => exact(&[SsaType::I64], &SsaType::Option(Box::new(SsaType::Str))),
+        RuntimeOp::Arg => exact(
+            &[SsaType::I64],
+            &crate::prelude_contract::option(SsaType::Str),
+        ),
         RuntimeOp::BufNew => exact(&[SsaType::I64], &SsaType::Buf),
         RuntimeOp::OwnedBufNew => exact(&[SsaType::I64], &SsaType::Owned(Box::new(SsaType::Buf))),
         RuntimeOp::OwnedBufLen => exact(&[SsaType::Ref(Box::new(SsaType::Buf))], &SsaType::I64),
@@ -91,7 +94,16 @@ pub(super) fn core_signature(
             RuntimeOp::BufFromStr => exact(&[SsaType::Str], &SsaType::Buf),
             _ => false,
         },
-        RuntimeOp::BufToStr => exact(&[SsaType::Buf], &system_result(SsaType::Str)),
+        RuntimeOp::BufToStr => exact(
+            &[SsaType::Buf],
+            &crate::prelude_contract::result(
+                SsaType::Str,
+                SsaType::Enum {
+                    id: crate::EnumId::new(crate::prelude_contract::UTF8_ERROR_ID),
+                    arguments: Vec::new(),
+                },
+            ),
+        ),
         RuntimeOp::BufSlice => exact(
             &[SsaType::Buf, SsaType::I64, SsaType::I64],
             &system_result(SsaType::Buf),

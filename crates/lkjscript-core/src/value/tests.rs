@@ -10,11 +10,7 @@ fn semantic_singletons_are_distinct_from_invalid() {
     assert!(Value::EMPTY_LIST.is_empty_list());
     assert!(!Value::EMPTY_LIST.is_unit());
     assert!(!Value::EMPTY_LIST.is_invalid());
-    assert!(Value::NONE.is_none());
-    assert!(!Value::NONE.is_invalid());
     assert_ne!(Value::UNIT, Value::EMPTY_LIST);
-    assert_ne!(Value::UNIT, Value::NONE);
-    assert_ne!(Value::EMPTY_LIST, Value::NONE);
 }
 
 #[test]

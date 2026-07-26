@@ -14,9 +14,6 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if v.is_empty_list() {
         return Ok("empty-list".into());
     }
-    if v.is_none() {
-        return Ok("none".into());
-    }
     if let Some(b) = v.as_bool() {
         return Ok(b.to_string());
     }
@@ -39,12 +36,77 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
         HeapObj::Closure { proto, .. } => Ok(format!("#<fn:{proto}>")),
         HeapObj::Builtin(id) => Ok(format!("#<builtin:{id}>")),
         HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
-        HeapObj::ResultOk(x) => Ok(format!("Ok({})", display_value(arena, *x)?)),
-        HeapObj::ResultErr(x) => Ok(format!("Err({})", display_value(arena, *x)?)),
-        HeapObj::OptionSome(x) => Ok(format!("some({})", display_value(arena, *x)?)),
         HeapObj::Product { product, .. } => Ok(format!("#<product:{}>", product.raw())),
-        HeapObj::Enum { physical_tag, .. } => Ok(format!("#<enum:{physical_tag}>")),
+        HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        } => display_enum(arena, layout.bytes(), *physical_tag, active_payload),
     }
+}
+
+fn display_enum(arena: &Arena, layout: [u8; 32], tag: u16, payload: &[Value]) -> Result<String> {
+    if layout == lkjscript_core::OPTION_LAYOUT {
+        return match (tag, payload) {
+            (0, [value]) => Ok(format!("some({})", display_value(arena, *value)?)),
+            (1, []) => Ok("none".into()),
+            _ => Err(Error::msg("malformed Option value")),
+        };
+    }
+    if layout == lkjscript_core::RESULT_LAYOUT {
+        return match (tag, payload) {
+            (0, [value]) => Ok(format!("Ok({})", display_value(arena, *value)?)),
+            (1, [value]) => Ok(format!("Err({})", display_value(arena, *value)?)),
+            _ => Err(Error::msg("malformed Result value")),
+        };
+    }
+    if layout == lkjscript_core::NUMERIC_ERROR_LAYOUT && payload.is_empty() {
+        let name = match tag {
+            0 => "Fractional",
+            1 => "NonFinite",
+            2 => "Inexact",
+            3 => "OutOfRange",
+            _ => return Err(Error::msg("malformed NumericError value")),
+        };
+        return Ok(format!("NumericError.{name}"));
+    }
+    if layout == lkjscript_core::UTF8_ERROR_LAYOUT {
+        let name = match tag {
+            0 => "InvalidLeadingByte",
+            1 => "UnexpectedContinuation",
+            2 => "Surrogate",
+            3 => "OutOfRange",
+            4 => "MissingContinuation",
+            5 => "OverlongEncoding",
+            _ => return Err(Error::msg("malformed Utf8Error value")),
+        };
+        return match payload {
+            [offset] => Ok(format!(
+                "Utf8Error.{name}({})",
+                display_value(arena, *offset)?
+            )),
+            _ => Err(Error::msg("malformed Utf8Error payload")),
+        };
+    }
+    if layout == lkjscript_core::SYSTEM_ERROR_LAYOUT {
+        let name = match tag {
+            0 => "Io",
+            1 => "Terminal",
+            2 => "Sqlite",
+            3 => "Time",
+            4 => "Network",
+            5 => "Utf8",
+            6 => "Unsupported",
+            7 => "Random",
+            _ => return Err(Error::msg("malformed SystemError value")),
+        };
+        let mut fields = Vec::with_capacity(payload.len());
+        for value in payload {
+            fields.push(display_value(arena, *value)?);
+        }
+        return Ok(format!("SystemError.{name}({})", fields.join(", ")));
+    }
+    Ok(format!("#<enum:{tag}>"))
 }
 
 pub fn write_output(bytes: &[u8], operation: &str) -> Result<()> {

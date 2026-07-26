@@ -23,13 +23,23 @@ pub(crate) fn bind_type<'a>(
         (SsaType::Owned(left), SsaType::Owned(right))
         | (SsaType::Ref(left), SsaType::Ref(right))
         | (SsaType::RefMut(left), SsaType::RefMut(right))
-        | (SsaType::List(left), SsaType::List(right))
-        | (SsaType::Option(left), SsaType::Option(right)) => {
+        | (SsaType::List(left), SsaType::List(right)) => {
             bind_type(left, right, permitted, substitutions)
         }
-        (SsaType::Result(left_ok, left_err), SsaType::Result(right_ok, right_err)) => {
-            bind_type(left_ok, right_ok, permitted, substitutions)?;
-            bind_type(left_err, right_err, permitted, substitutions)
+        (
+            SsaType::Enum {
+                id: left_id,
+                arguments: left,
+            },
+            SsaType::Enum {
+                id: right_id,
+                arguments: right,
+            },
+        ) if left_id == right_id && left.len() == right.len() => {
+            for (left, right) in left.iter().zip(right) {
+                bind_type(left, right, permitted, substitutions)?;
+            }
+            Ok(())
         }
         (SsaType::Function(left), SsaType::Function(right)) => {
             if left.type_parameters != right.type_parameters
@@ -68,11 +78,13 @@ pub(crate) fn substitute_type(ty: &SsaType, substitutions: &HashMap<&str, SsaTyp
         SsaType::Ref(item) => SsaType::Ref(Box::new(substitute_type(item, substitutions))),
         SsaType::RefMut(item) => SsaType::RefMut(Box::new(substitute_type(item, substitutions))),
         SsaType::List(item) => SsaType::List(Box::new(substitute_type(item, substitutions))),
-        SsaType::Option(item) => SsaType::Option(Box::new(substitute_type(item, substitutions))),
-        SsaType::Result(ok, err) => SsaType::Result(
-            Box::new(substitute_type(ok, substitutions)),
-            Box::new(substitute_type(err, substitutions)),
-        ),
+        SsaType::Enum { id, arguments } => SsaType::Enum {
+            id: *id,
+            arguments: arguments
+                .iter()
+                .map(|item| substitute_type(item, substitutions))
+                .collect(),
+        },
         SsaType::Function(signature) => {
             let nested_substitutions: HashMap<&str, SsaType> = substitutions
                 .iter()

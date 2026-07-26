@@ -2,7 +2,8 @@ use crate::operation::instantiation::function;
 use crate::operation::*;
 
 pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
-    let system_result = |success| Type::Result(Box::new(success), Box::new(Type::Str));
+    let system_result =
+        |success| crate::types::result_type(success, crate::types::system_error_type());
     match operation {
         Operation::StdinHandle => function(Vec::new(), Type::Handle),
         Operation::SysIsatty => function(vec![Type::Handle], system_result(Type::Bool)),
@@ -83,19 +84,19 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
         }
         Operation::SysSqliteColumnI64 => function(
             vec![Type::Handle, Type::I64],
-            system_result(Type::Option(Box::new(Type::I64))),
+            system_result(crate::types::option_type(Type::I64)),
         ),
         Operation::SysSqliteColumnF64 => function(
             vec![Type::Handle, Type::I64],
-            system_result(Type::Option(Box::new(Type::F64))),
+            system_result(crate::types::option_type(Type::F64)),
         ),
         Operation::SysSqliteColumnText => function(
             vec![Type::Handle, Type::I64],
-            system_result(Type::Option(Box::new(Type::Str))),
+            system_result(crate::types::option_type(Type::Str)),
         ),
         Operation::SysSqliteColumnBytes => function(
             vec![Type::Handle, Type::I64],
-            system_result(Type::Option(Box::new(Type::Buf))),
+            system_result(crate::types::option_type(Type::Buf)),
         ),
         Operation::SysSqliteBackup => function(
             vec![Type::Handle, Type::Str, Type::I64],

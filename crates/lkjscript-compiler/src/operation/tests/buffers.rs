@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn lossless_bulk_byte_operations_have_exact_signatures_and_effects() {
-    let result_i64 = Type::Result(Box::new(Type::I64), Box::new(Type::Str));
-    let result_str = Type::Result(Box::new(Type::Str), Box::new(Type::Str));
+    let result_i64 = crate::types::result_type(Type::I64, crate::types::system_error_type());
+    let result_str = crate::types::result_type(Type::Str, crate::types::utf8_error_type());
     assert_eq!(
         Operation::from_name("buf-from-str"),
         Some(Operation::BufFromStr)

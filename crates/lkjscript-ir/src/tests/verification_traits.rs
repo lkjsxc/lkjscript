@@ -41,7 +41,7 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
     let mut deeply_nested_type = bounded_call_program();
     let mut nested = SsaType::I64;
     for _ in 0..70 {
-        nested = SsaType::Option(Box::new(nested));
+        nested = SsaType::List(Box::new(nested));
     }
     deeply_nested_type.products.push(ProductMetadata {
         id: crate::ProductId::new(0),

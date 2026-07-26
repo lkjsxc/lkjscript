@@ -10,8 +10,9 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         x if x == Op::BufToStr as u8 => {
             let value = vm.pop()?;
-            let result = crate::host_buf::buf_to_str(&mut vm.arena, value);
-            push_language_result(vm, result);
+            let result = crate::host_buf::buf_to_str(&mut vm.arena, value)?;
+            let result = crate::host_ext::utf8_result(&mut vm.arena, result)?;
+            vm.push(result);
             Ok(true)
         }
         x if x == Op::BufSlice as u8 => {
@@ -21,7 +22,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let offset = vm.as_i64(offset)?;
             let buffer = vm.pop()?;
             let result = crate::host_buf::buf_slice(&mut vm.arena, buffer, offset, length);
-            push_language_result(vm, result);
+            push_language_result(vm, lkjscript_core::SystemErrorKind::Unsupported, result);
             Ok(true)
         }
         x if x == Op::SysReadInto as u8 => {
@@ -40,7 +41,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                 offset,
                 requested,
             );
-            push_i64_result(vm, result);
+            push_i64_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         x if x == Op::SysRandomFill as u8 => {
@@ -51,7 +52,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let offset = vm.as_i64(offset)?;
             let buffer = vm.pop()?;
             let result = crate::host_buf::sys_random_fill(&mut vm.arena, buffer, offset, requested);
-            push_language_result(vm, result);
+            push_language_result(vm, lkjscript_core::SystemErrorKind::Random, result);
             Ok(true)
         }
         x if x == Op::SysSha256 as u8 => {
@@ -61,7 +62,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let offset = vm.as_i64(offset)?;
             let buffer = vm.pop()?;
             let result = crate::host_buf::sys_sha256(&mut vm.arena, buffer, offset, requested);
-            push_language_result(vm, result);
+            push_language_result(vm, lkjscript_core::SystemErrorKind::Unsupported, result);
             Ok(true)
         }
         x if x == Op::SysWriteFrom as u8 => {
@@ -80,7 +81,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                 offset,
                 requested,
             );
-            push_i64_result(vm, result);
+            push_i64_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         x if x == Op::BufNew as u8 => {

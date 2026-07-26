@@ -9,6 +9,7 @@ impl LayoutInterner {
     ) -> Result<Self, LoweringError> {
         let mut interner = Self {
             identities: HashMap::new(),
+            enum_layouts: HashMap::new(),
             next: Self::FIRST_NESTED_IDENTITY,
         };
         for function in functions {
@@ -29,16 +30,53 @@ impl LayoutInterner {
                 interner.intern(ty)?;
             }
         }
+        let needs_system_options = functions.iter().try_fold(false, |needed, function| {
+            let item = source_function(program, *function)?;
+            Ok::<_, LoweringError>(
+                needed
+                    || item
+                        .blocks
+                        .iter()
+                        .flat_map(|block| &block.instructions)
+                        .any(|instruction| {
+                            matches!(
+                                instruction.kind,
+                                InstructionKind::Runtime {
+                                    operation: RuntimeOp::BufSlice,
+                                    ..
+                                }
+                            )
+                        }),
+            )
+        })?;
+        if needs_system_options {
+            interner.intern(&lkjscript_ir::prelude_contract::option(SsaType::I64))?;
+            interner.intern(&lkjscript_ir::prelude_contract::option(SsaType::Str))?;
+        }
+        let enum_types: Vec<_> = interner.identities.keys().cloned().collect();
+        for ty in enum_types {
+            if let SsaType::Enum { id, .. } = &ty {
+                let layout = program
+                    .enums
+                    .iter()
+                    .find(|item| item.id == *id)
+                    .map(|item| item.layout.identity.bytes())
+                    .ok_or_else(|| {
+                        LoweringError::new(
+                            LoweringFailureCode::UnsupportedType,
+                            None,
+                            "enum type has no stable runtime layout identity",
+                        )
+                    })?;
+                interner.enum_layouts.insert(ty, layout);
+            }
+        }
         Ok(interner)
     }
 
     pub(super) fn intern(&mut self, ty: &SsaType) -> Result<(), LoweringError> {
         match ty {
-            SsaType::List(inner) | SsaType::Option(inner) => self.intern(inner)?,
-            SsaType::Result(ok, error) => {
-                self.intern(ok)?;
-                self.intern(error)?;
-            }
+            SsaType::List(inner) => self.intern(inner)?,
             SsaType::Enum { arguments, .. } => {
                 for argument in arguments {
                     self.intern(argument)?;
@@ -60,6 +98,10 @@ impl LayoutInterner {
         Ok(())
     }
 
+    pub(super) fn enum_layout(&self, ty: &SsaType) -> Option<[u8; 32]> {
+        self.enum_layouts.get(ty).copied()
+    }
+
     pub(super) fn identity(&self, ty: &SsaType) -> Option<LayoutIdentity> {
         match ty {
             SsaType::Unit => Some(ValueType::Unit.layout_identity()),
@@ -69,10 +111,7 @@ impl LayoutInterner {
             SsaType::Str => Some(ValueType::Reference(ReferenceType::Str).layout_identity()),
             SsaType::Buf => Some(ValueType::Reference(ReferenceType::Buf).layout_identity()),
             SsaType::Product(product) => Some(LayoutIdentity::product(u32::from(product.raw()))),
-            SsaType::List(_)
-            | SsaType::Option(_)
-            | SsaType::Result(_, _)
-            | SsaType::Enum { .. } => self.identities.get(ty).copied(),
+            SsaType::List(_) | SsaType::Enum { .. } => self.identities.get(ty).copied(),
             _ => None,
         }
     }

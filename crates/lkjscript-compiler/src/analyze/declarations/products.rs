@@ -133,20 +133,11 @@ impl Analyzer {
                     Err("ownership types accept only exact Buf in this slice".into())
                 }
             }
-            Type::List(inner) | Type::Option(inner) => {
+            Type::List(inner) => {
                 if contains_ownership_type(inner) {
-                    return Err(
-                        "ownership/reference types cannot be stored in List or Option".into(),
-                    );
+                    return Err("ownership/reference types cannot be stored in List".into());
                 }
                 self.validate_product_type(inner)
-            }
-            Type::Result(ok, error) => {
-                if contains_ownership_type(ok) || contains_ownership_type(error) {
-                    return Err("ownership/reference types cannot be stored in Result".into());
-                }
-                self.validate_product_type(ok)?;
-                self.validate_product_type(error)
             }
             Type::Fn { params, ret } => {
                 for parameter in params {

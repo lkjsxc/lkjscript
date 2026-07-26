@@ -85,12 +85,7 @@ impl<'a> ShapeCounter<'a> {
                 SsaType::Owned(inner)
                 | SsaType::Ref(inner)
                 | SsaType::RefMut(inner)
-                | SsaType::List(inner)
-                | SsaType::Option(inner) => pending.push(inner),
-                SsaType::Result(ok, error) => {
-                    pending.push(ok);
-                    pending.push(error);
-                }
+                | SsaType::List(inner) => pending.push(inner),
                 SsaType::Enum { arguments, .. } => {
                     pending.extend(arguments);
                 }

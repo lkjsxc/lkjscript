@@ -1,5 +1,7 @@
+mod boolean;
 mod equivalence;
 mod graph;
+mod universal;
 
 use crate::verify::*;
 use crate::{Block, BlockId, Function, InstructionKind, RuntimeLayoutId, ValueId, VariantId};
@@ -8,7 +10,7 @@ use graph::{charge, edge_argument, find_instruction, incoming};
 use std::collections::HashSet;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct ActiveVariant {
+pub(super) struct ActiveVariant {
     enum_id: crate::EnumId,
     variant: VariantId,
     layout: RuntimeLayoutId,
@@ -38,17 +40,23 @@ pub(super) fn projection(
     if matches!(
         find_instruction(function, value).map(|item| &item.kind),
         Some(InstructionKind::EnumValue { .. })
-    ) && !universal_value(function, value, active, &mut HashSet::new(), &mut work)?
+    ) && !universal::value(function, value, active, &mut HashSet::new(), &mut work)?
     {
         return fail("SSA inactive enum projection rejected before access");
     }
     let mut visited = HashSet::new();
     if active_at_entry(function, block.id, value, active, &mut visited, &mut work)?
-        || universal_value(function, value, active, &mut HashSet::new(), &mut work)?
+        || universal::value(function, value, active, &mut HashSet::new(), &mut work)?
     {
         Ok(())
     } else {
-        fail("SSA enum projection lacks verified active-variant provenance")
+        fail(format!(
+            concat!(
+                "SSA enum projection lacks verified active-variant provenance: ",
+                "block {:?}, value {:?}, enum {:?}, variant {:?}"
+            ),
+            block.id, value, active.enum_id, active.variant
+        ))
     }
 }
 
@@ -90,7 +98,7 @@ fn active_at_entry(
         }
         return Ok(true);
     }
-    if universal_value(function, value, active, &mut HashSet::new(), work)? {
+    if universal::value(function, value, active, &mut HashSet::new(), work)? {
         return Ok(true);
     }
     let predecessors = incoming(function, block);
@@ -141,39 +149,28 @@ fn active_on_edge(
                     }
                 }
             }
+            if let Some(possible) =
+                boolean::true_predecessors(function, predecessor, condition, value, work)?
+            {
+                if possible.is_empty() {
+                    return Ok(false);
+                }
+                for (source, argument) in possible {
+                    if !active_on_edge(
+                        function,
+                        source,
+                        predecessor.id,
+                        argument,
+                        active,
+                        visited,
+                        work,
+                    )? {
+                        return Ok(false);
+                    }
+                }
+                return Ok(true);
+            }
         }
     }
     active_at_entry(function, predecessor.id, value, active, visited, work)
-}
-
-fn universal_value(
-    function: &Function,
-    value: ValueId,
-    active: ActiveVariant,
-    visited: &mut HashSet<ValueId>,
-    work: &mut usize,
-) -> crate::Result<bool> {
-    charge(work)?;
-    if !visited.insert(value) {
-        return Ok(false);
-    }
-    let Some(definition) = find_instruction(function, value) else {
-        return Ok(false);
-    };
-    Ok(match definition.kind {
-        InstructionKind::EnumValue {
-            enum_id,
-            variant,
-            layout,
-            ..
-        } => {
-            ActiveVariant {
-                enum_id,
-                variant,
-                layout,
-            } == active
-        }
-        InstructionKind::Copy(source) => universal_value(function, source, active, visited, work)?,
-        _ => false,
-    })
 }

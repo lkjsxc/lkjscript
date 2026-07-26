@@ -27,7 +27,7 @@ impl Analyzer {
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                 if arguments.iter().any(contains_ownership_type) {
                     return Err(format!(
-                        "enum type {name} cannot be instantiated with an ownership-bearing type"
+                        "enum type {name} cannot be instantiated with an ownership/reference-bearing type"
                     ));
                 }
                 Type::Enum {
@@ -45,13 +45,6 @@ impl Analyzer {
                 Type::RefMut(Box::new(self.resolve_enum_type(inner, parameters)?))
             }
             Type::List(inner) => Type::List(Box::new(self.resolve_enum_type(inner, parameters)?)),
-            Type::Option(inner) => {
-                Type::Option(Box::new(self.resolve_enum_type(inner, parameters)?))
-            }
-            Type::Result(ok, error) => Type::Result(
-                Box::new(self.resolve_enum_type(ok, parameters)?),
-                Box::new(self.resolve_enum_type(error, parameters)?),
-            ),
             Type::Fn { params, ret } => Type::Fn {
                 params: params
                     .iter()
@@ -154,16 +147,8 @@ impl Analyzer {
                     self.walk_type(argument, depth, path, work)?;
                 }
             }
-            Type::Owned(inner)
-            | Type::Ref(inner)
-            | Type::RefMut(inner)
-            | Type::List(inner)
-            | Type::Option(inner) => {
+            Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
                 self.walk_type(inner, depth, path, work)?;
-            }
-            Type::Result(ok, error) => {
-                self.walk_type(ok, depth, path, work)?;
-                self.walk_type(error, depth, path, work)?;
             }
             Type::Fn { params, ret } => {
                 for parameter in params {

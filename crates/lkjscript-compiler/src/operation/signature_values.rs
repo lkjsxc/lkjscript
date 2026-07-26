@@ -40,18 +40,12 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
         Operation::F64BitsEqual => function(vec![Type::F64, Type::F64], Type::Bool),
         Operation::F64FromI64Exact => function(
             vec![Type::I64],
-            Type::Result(
-                Box::new(Type::F64),
-                Box::new(crate::types::numeric_error_type()),
-            ),
+            crate::types::result_type(Type::F64, crate::types::numeric_error_type()),
         ),
         Operation::F64FromI64Rounded => function(vec![Type::I64], Type::F64),
         Operation::I64FromF64Exact | Operation::I64FromF64Trunc => function(
             vec![Type::F64],
-            Type::Result(
-                Box::new(Type::I64),
-                Box::new(crate::types::numeric_error_type()),
-            ),
+            crate::types::result_type(Type::I64, crate::types::numeric_error_type()),
         ),
         Operation::Less | Operation::LessEqual | Operation::Greater | Operation::GreaterEqual => {
             numeric_comparison()
@@ -100,7 +94,7 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
         Operation::Exit => function(vec![Type::I64], Type::Unit),
         Operation::EmptyStr => function(Vec::new(), Type::Str),
         Operation::ArgCount => function(Vec::new(), Type::I64),
-        Operation::Arg => function(vec![Type::I64], Type::Option(Box::new(Type::Str))),
+        Operation::Arg => function(vec![Type::I64], crate::types::option_type(Type::Str)),
         _ => unreachable!("operation signature family mismatch"),
     }
 }

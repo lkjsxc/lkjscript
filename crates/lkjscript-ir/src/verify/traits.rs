@@ -77,17 +77,22 @@ pub(crate) fn auto_trait_holds(
             | SsaType::RefMut(_)
             | SsaType::Handle
             | SsaType::Function(_)
-            | SsaType::TypeParameter(_)
-            | SsaType::Enum { .. } => Ok(false),
-            SsaType::List(inner) | SsaType::Option(inner) => {
-                auto_trait_holds(program, role, inner, depth + 1, work, active)
+            | SsaType::TypeParameter(_) => Ok(false),
+            SsaType::List(inner) => auto_trait_holds(program, role, inner, depth + 1, work, active),
+            SsaType::Enum { id, arguments }
+                if matches!(
+                    id.bytes(),
+                    crate::prelude_contract::OPTION_ID | crate::prelude_contract::RESULT_ID
+                ) =>
+            {
+                for argument in arguments {
+                    if !auto_trait_holds(program, role, argument, depth + 1, work, active)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
             }
-            SsaType::Result(ok, error) => {
-                Ok(
-                    auto_trait_holds(program, role, ok, depth + 1, work, active)?
-                        && auto_trait_holds(program, role, error, depth + 1, work, active)?,
-                )
-            }
+            SsaType::Enum { .. } => Ok(false),
             SsaType::Product(product) => {
                 if !active.insert(*product) {
                     return fail(format!(

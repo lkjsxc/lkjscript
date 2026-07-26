@@ -23,6 +23,13 @@ impl Resolver<'_> {
     pub(in crate::analyze) fn resolve_none(&mut self, args: &[AstExpr]) -> Result<Expr> {
         let value_type =
             parse_type_form(args).map_err(|message| self.error(format!("none: {message}")))?;
+        let value_type = self
+            .analyzer
+            .resolve_enum_type(
+                &value_type,
+                &self.type_variables.iter().cloned().collect::<Vec<_>>(),
+            )
+            .map_err(|message| self.error(format!("none: {message}")))?;
         self.analyzer
             .validate_product_type(&value_type)
             .map_err(|message| self.error(format!("none: {message}")))?;
@@ -36,7 +43,15 @@ impl Resolver<'_> {
                 "none: type parameter {parameter} is not declared by forall"
             )));
         }
-        Ok(self.expression(Type::Option(Box::new(value_type)), ExprKind::LitNone))
+        Ok(self.expression(
+            crate::types::option_type(value_type),
+            ExprKind::EnumValue {
+                enum_id: EnumId::new(lkjscript_core::OPTION_ID),
+                variant: VariantId::new(lkjscript_core::OPTION_NONE_ID),
+                layout: crate::types::prelude_layout(lkjscript_core::PreludeEnum::Option),
+                fields: Vec::new(),
+            },
+        ))
     }
 
     pub(in crate::analyze) fn resolve_quote(&mut self, args: &[AstExpr]) -> Result<Expr> {

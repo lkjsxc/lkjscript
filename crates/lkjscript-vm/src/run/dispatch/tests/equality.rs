@@ -1,5 +1,13 @@
 use super::*;
 
+fn generic_enum(layout: [u8; 32], tag: u16, payload: Vec<Value>) -> HeapObj {
+    HeapObj::Enum {
+        layout: lkjscript_core::RuntimeLayoutId::new(layout),
+        physical_tag: tag,
+        active_payload: payload,
+    }
+}
+
 #[test]
 fn value_equality_is_exact_and_category_checked() {
     let mut vm = test_vm();
@@ -33,38 +41,59 @@ fn value_equality_is_exact_and_category_checked() {
     assert!(dispatch(&mut vm, Op::EqualValue as u8).is_err());
 }
 #[test]
-fn option_and_result_value_equality_is_structural() {
+fn generic_option_and_result_value_equality_is_structural() {
     let mut vm = test_vm();
-    assert!(compare(&mut vm, Op::EqualValue, Value::NONE, Value::NONE));
+    let none_left = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::OPTION_LAYOUT, 1, Vec::new()),
+    );
+    let none_right = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::OPTION_LAYOUT, 1, Vec::new()),
+    );
+    assert!(compare(&mut vm, Op::EqualValue, none_left, none_right));
 
     let one_left = test_i64(&mut vm, 1);
     let one_right = test_i64(&mut vm, 1);
-    let some_left = test_alloc(&mut vm, HeapObj::OptionSome(one_left));
-    let some_right = test_alloc(&mut vm, HeapObj::OptionSome(one_right));
+    let some_left = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::OPTION_LAYOUT, 0, vec![one_left]),
+    );
+    let some_right = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::OPTION_LAYOUT, 0, vec![one_right]),
+    );
     assert!(compare(&mut vm, Op::EqualValue, some_left, some_right));
-    assert!(!compare(&mut vm, Op::EqualValue, Value::NONE, some_left));
+    assert!(!compare(&mut vm, Op::EqualValue, none_left, some_left));
 
-    let ok_left = test_alloc(&mut vm, HeapObj::ResultOk(one_left));
-    let ok_right = test_alloc(&mut vm, HeapObj::ResultOk(one_right));
-    let err = test_alloc(&mut vm, HeapObj::ResultErr(one_right));
+    let ok_left = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::RESULT_LAYOUT, 0, vec![one_left]),
+    );
+    let ok_right = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::RESULT_LAYOUT, 0, vec![one_right]),
+    );
+    let err = test_alloc(
+        &mut vm,
+        generic_enum(lkjscript_core::RESULT_LAYOUT, 1, vec![one_right]),
+    );
     assert!(compare(&mut vm, Op::EqualValue, ok_left, ok_right));
     assert!(!compare(&mut vm, Op::EqualValue, ok_left, err));
 
     let mut deep_left = one_left;
     let mut deep_right = one_right;
     for _ in 0..10_000 {
-        deep_left = test_alloc(&mut vm, HeapObj::OptionSome(deep_left));
-        deep_right = test_alloc(&mut vm, HeapObj::OptionSome(deep_right));
+        deep_left = test_alloc(
+            &mut vm,
+            generic_enum(lkjscript_core::OPTION_LAYOUT, 0, vec![deep_left]),
+        );
+        deep_right = test_alloc(
+            &mut vm,
+            generic_enum(lkjscript_core::OPTION_LAYOUT, 0, vec![deep_right]),
+        );
     }
     assert!(compare(&mut vm, Op::EqualValue, deep_left, deep_right));
-
-    let mut result_left = one_left;
-    let mut result_right = one_right;
-    for _ in 0..10_000 {
-        result_left = test_alloc(&mut vm, HeapObj::ResultOk(result_left));
-        result_right = test_alloc(&mut vm, HeapObj::ResultOk(result_right));
-    }
-    assert!(compare(&mut vm, Op::EqualValue, result_left, result_right));
 }
 #[test]
 fn f64_bit_equality_distinguishes_signed_zero_and_accepts_equal_nan_bits() {

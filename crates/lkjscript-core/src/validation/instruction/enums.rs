@@ -93,7 +93,7 @@ fn variant_test(
         ));
     }
     let actual = pop(state, proto, instruction)?;
-    if !matches!(actual, Kind::Enum(id, _) if id == definition.id) {
+    if actual != Kind::Any && !matches!(actual, Kind::Enum(id, _) if id == definition.id) {
         return Err(instruction_error(
             proto,
             instruction.op(),
@@ -147,7 +147,13 @@ fn projection(
         ));
     }
     let actual = pop(state, proto, instruction)?;
-    if actual != Kind::Enum(definition.id, Some(variant.id)) {
+    let active = match actual {
+        Kind::Any => true,
+        Kind::Enum(id, None) => id == definition.id,
+        Kind::Enum(id, Some(active)) => id == definition.id && active == variant.id,
+        _ => false,
+    };
+    if !active {
         return Err(instruction_error(
             proto,
             instruction.op(),

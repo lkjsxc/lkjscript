@@ -85,7 +85,8 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
         | ExprKind::SetLocal { value, .. }
         | ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
-        | ExprKind::EnumField { value, .. } => expression(value, program, counts)?,
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => expression(value, program, counts)?,
         ExprKind::WithProductField {
             value, replacement, ..
         } => {
@@ -97,7 +98,6 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
         | ExprKind::LitBool(_)
         | ExprKind::LitUnit
         | ExprKind::EmptyList
-        | ExprKind::LitNone
         | ExprKind::LitStr(_)
         | ExprKind::Load(_)
         | ExprKind::Move { .. }

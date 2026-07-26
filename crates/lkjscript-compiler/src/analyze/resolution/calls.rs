@@ -98,11 +98,15 @@ impl Resolver<'_> {
                 .resolve_types(&argument_types)
                 .map_err(|message| self.error(message))?;
             let conversion = resolved_args.first().cloned().map(Box::new);
-            let kind = match (operation, conversion) {
-                (Operation::F64FromI64Exact, Some(value)) => ExprKind::F64FromI64Exact(value),
-                (Operation::F64FromI64Rounded, Some(value)) => ExprKind::F64FromI64Rounded(value),
-                (Operation::I64FromF64Exact, Some(value)) => ExprKind::I64FromF64Exact(value),
-                (Operation::I64FromF64Trunc, Some(value)) => ExprKind::I64FromF64Trunc(value),
+            let prelude = self.prelude_operation(operation, resolved_args.clone());
+            let kind = match (operation, conversion, prelude) {
+                (Operation::F64FromI64Exact, Some(value), _) => ExprKind::F64FromI64Exact(value),
+                (Operation::F64FromI64Rounded, Some(value), _) => {
+                    ExprKind::F64FromI64Rounded(value)
+                }
+                (Operation::I64FromF64Exact, Some(value), _) => ExprKind::I64FromF64Exact(value),
+                (Operation::I64FromF64Trunc, Some(value), _) => ExprKind::I64FromF64Trunc(value),
+                (_, _, Some(kind)) => kind,
                 _ => ExprKind::Operation {
                     binding: callee,
                     operation,

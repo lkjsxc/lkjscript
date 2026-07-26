@@ -6,6 +6,7 @@ mod cfg;
 mod enums;
 mod lookup;
 mod ownership;
+mod prelude_enums;
 mod runtime;
 mod shape;
 mod substitution;

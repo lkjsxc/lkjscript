@@ -11,8 +11,7 @@ pub(crate) fn supports_value_equality(ty: &SsaType) -> bool {
         | SsaType::F64
         | SsaType::Str
         | SsaType::Symbol => true,
-        SsaType::Option(item) => supports_value_equality(item),
-        SsaType::Result(ok, err) => supports_value_equality(ok) && supports_value_equality(err),
+        SsaType::Enum { arguments, .. } => arguments.iter().all(supports_value_equality),
         _ => false,
     }
 }
@@ -25,9 +24,8 @@ pub(crate) fn signature_contains_ownership(signature: &Signature) -> bool {
 pub(crate) fn contains_ownership_type(ty: &SsaType) -> bool {
     match ty {
         SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => true,
-        SsaType::List(inner) | SsaType::Option(inner) => contains_ownership_type(inner),
+        SsaType::List(inner) => contains_ownership_type(inner),
         SsaType::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
-        SsaType::Result(ok, error) => contains_ownership_type(ok) || contains_ownership_type(error),
         SsaType::Function(signature) => {
             signature.parameters.iter().any(contains_ownership_type)
                 || contains_ownership_type(&signature.result)
@@ -100,12 +98,8 @@ pub(crate) fn verify_type_at(
             }
             Ok(())
         }
-        SsaType::List(item) | SsaType::Option(item) => {
+        SsaType::List(item) => {
             verify_type_at(program, item, type_parameters, depth + 1, work, false)
-        }
-        SsaType::Result(ok, err) => {
-            verify_type_at(program, ok, type_parameters, depth + 1, work, false)?;
-            verify_type_at(program, err, type_parameters, depth + 1, work, false)
         }
         SsaType::Function(signature) => {
             let mut names = HashSet::new();

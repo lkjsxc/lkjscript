@@ -1,7 +1,6 @@
 use crate::verify::fail;
 use crate::{RuntimeOp, Signature, SsaType};
 
-mod containers;
 mod core;
 mod host;
 
@@ -13,7 +12,6 @@ pub(crate) fn verify_runtime_signature(
     let result = signature.result.as_ref();
     let valid = core::core_signature(operation, parameters, result)
         .or_else(|| host::host_signature(operation, parameters, result))
-        .or_else(|| containers::container_signature(operation, parameters, result))
         .unwrap_or(false);
     if valid {
         Ok(())
@@ -25,5 +23,5 @@ pub(crate) fn verify_runtime_signature(
 }
 
 pub(crate) fn system_result(success: SsaType) -> SsaType {
-    SsaType::Result(Box::new(success), Box::new(SsaType::Str))
+    crate::prelude_contract::system_result(success)
 }

@@ -72,13 +72,8 @@ pub(in crate::operation) fn bind_type_params(
         (Type::Owned(pattern), Type::Owned(argument))
         | (Type::Ref(pattern), Type::Ref(argument))
         | (Type::RefMut(pattern), Type::RefMut(argument))
-        | (Type::List(pattern), Type::List(argument))
-        | (Type::Option(pattern), Type::Option(argument)) => {
+        | (Type::List(pattern), Type::List(argument)) => {
             bind_type_params(name, pattern, argument, variables, substitutions)
-        }
-        (Type::Result(ok_pattern, err_pattern), Type::Result(ok_argument, err_argument)) => {
-            bind_type_params(name, ok_pattern, ok_argument, variables, substitutions)?;
-            bind_type_params(name, err_pattern, err_argument, variables, substitutions)
         }
         (
             Type::Enum {
@@ -115,8 +110,14 @@ pub(in crate::operation) fn callable_arity(ty: &Type) -> Option<usize> {
 pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
     match ty {
         Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
-        Type::Option(value) => supports_value_equality(value),
-        Type::Result(ok, err) => supports_value_equality(ok) && supports_value_equality(err),
+        Type::Enum { id, arguments, .. }
+            if matches!(
+                id.bytes(),
+                lkjscript_core::OPTION_ID | lkjscript_core::RESULT_ID
+            ) =>
+        {
+            arguments.iter().all(supports_value_equality)
+        }
         Type::Never
         | Type::Buf
         | Type::Owned(_)
@@ -151,8 +152,5 @@ pub(in crate::operation) fn forall(vars: &[&str], body: Type) -> Type {
 }
 
 pub(in crate::operation) fn generic_result() -> Type {
-    Type::Result(
-        Box::new(Type::Param("T".into())),
-        Box::new(Type::Param("E".into())),
-    )
+    crate::types::result_type(Type::Param("T".into()), Type::Param("E".into()))
 }

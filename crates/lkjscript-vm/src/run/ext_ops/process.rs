@@ -7,7 +7,8 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let index = vm.as_i64(value)?;
             let index = usize::try_from(index).ok();
             if index.is_none_or(|index| index >= vm.args.len()) {
-                vm.push(Value::NONE);
+                let value = crate::host_ext::option_none(&mut vm.arena)?;
+                vm.push(value);
             } else if let Some(index) = index {
                 let string = vm.arena.alloc(HeapObj::Str(vm.args[index].clone()))?;
                 let value = crate::host_ext::option_some(&mut vm.arena, string)?;
@@ -25,7 +26,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         x if x == Op::SysNowMs as u8 => {
             let result = lkjscript_sys::now_ms_monotonic()
                 .map_err(|error| lkjscript_core::Error::msg(format!("sys-now-ms: {error}")));
-            push_i64_result(vm, result);
+            push_i64_result(vm, lkjscript_core::SystemErrorKind::Time, result);
             Ok(true)
         }
         x if x == Op::SysWaitMs as u8 => {
@@ -62,7 +63,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                 }
                 Err(error) => Err(error),
             };
-            push_language_result(vm, result);
+            push_language_result(vm, lkjscript_core::SystemErrorKind::Time, result);
             Ok(true)
         }
         _ => Ok(false),

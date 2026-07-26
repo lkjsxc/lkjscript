@@ -9,22 +9,22 @@ fn evaluator_vm_and_native_buffer_results_share_tiny_resource_boundaries() {
     let cases = [
         (
             "buf-to-str-success-limits.lkjscript",
-            "Result\nStr\nStr",
+            "Result\nStr\nUtf8Error",
             "buf-to-str/\nbuf-new/\n0\n/buf-new\n/buf-to-str",
         ),
         (
             "buf-to-str-error-limits.lkjscript",
-            "Result\nStr\nStr",
+            "Result\nStr\nUtf8Error",
             "var/\nname/\nb\n/name\ntype/\nBuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set/\nb\n0\n255\n/buf-set\nbuf-to-str/\nb\n/buf-to-str\n/do\n/var",
         ),
         (
             "buf-slice-success-limits.lkjscript",
-            "Result\nBuf\nStr",
+            "Result\nBuf\nSystemError",
             "buf-slice/\nbuf-new/\n1\n/buf-new\n0\n1\n/buf-slice",
         ),
         (
             "buf-slice-error-limits.lkjscript",
-            "Result\nBuf\nStr",
+            "Result\nBuf\nSystemError",
             "buf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n/buf-slice",
         ),
     ];

@@ -134,10 +134,7 @@ pub(super) fn type_contains_enum(ty: &Type, expected: EnumId) -> bool {
         Type::Enum { id, arguments, .. } => {
             *id == expected || arguments.iter().any(|ty| type_contains_enum(ty, expected))
         }
-        Type::List(inner) | Type::Option(inner) => type_contains_enum(inner, expected),
-        Type::Result(ok, error) => {
-            type_contains_enum(ok, expected) || type_contains_enum(error, expected)
-        }
+        Type::List(inner) => type_contains_enum(inner, expected),
         _ => false,
     }
 }
@@ -145,8 +142,7 @@ pub(super) fn type_contains_enum(ty: &Type, expected: EnumId) -> bool {
 fn contains_enum_type(ty: &Type) -> bool {
     match ty {
         Type::Enum { .. } => true,
-        Type::List(inner) | Type::Option(inner) => contains_enum_type(inner),
-        Type::Result(ok, error) => contains_enum_type(ok) || contains_enum_type(error),
+        Type::List(inner) => contains_enum_type(inner),
         _ => false,
     }
 }
@@ -160,8 +156,6 @@ fn is_traced_type(ty: &Type) -> bool {
             | Type::Product(_)
             | Type::Enum { .. }
             | Type::List(_)
-            | Type::Option(_)
-            | Type::Result(_, _)
             | Type::Fn { .. }
             | Type::Forall { .. }
     )

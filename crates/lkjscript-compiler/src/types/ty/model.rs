@@ -29,8 +29,6 @@ pub enum Type {
     /// Type parameter (annotation-driven polymorphism).
     Param(String),
     List(Box<Type>),
-    Option(Box<Type>),
-    Result(Box<Type>, Box<Type>),
     Fn {
         params: Vec<Type>,
         ret: Box<Type>,
@@ -45,13 +43,10 @@ impl Type {
     pub fn contains_never(&self) -> bool {
         match self {
             Self::Never => true,
-            Self::Owned(inner)
-            | Self::Ref(inner)
-            | Self::RefMut(inner)
-            | Self::List(inner)
-            | Self::Option(inner) => inner.contains_never(),
+            Self::Owned(inner) | Self::Ref(inner) | Self::RefMut(inner) | Self::List(inner) => {
+                inner.contains_never()
+            }
             Self::Enum { arguments, .. } => arguments.iter().any(Self::contains_never),
-            Self::Result(ok, error) => ok.contains_never() || error.contains_never(),
             Self::Fn { params, ret } => {
                 params.iter().any(Self::contains_never) || ret.contains_never()
             }
@@ -110,10 +105,6 @@ impl Type {
                 },
             ) => got_id == expected_id && got_arguments == expected_arguments,
             (Type::List(g), Type::List(e)) => g == e,
-            (Type::Option(g), Type::Option(e)) => Self::unify_assignable(g, e),
-            (Type::Result(a, b), Type::Result(c, d)) => {
-                Self::unify_assignable(a, c) && Self::unify_assignable(b, d)
-            }
             (
                 Type::Fn {
                     params: gp,
@@ -150,8 +141,6 @@ impl Type {
                     .collect(),
             },
             Type::List(t) => Type::List(Box::new(t.subst(map))),
-            Type::Option(t) => Type::Option(Box::new(t.subst(map))),
-            Type::Result(a, b) => Type::Result(Box::new(a.subst(map)), Box::new(b.subst(map))),
             Type::Fn { params, ret } => Type::Fn {
                 params: params.iter().map(|p| p.subst(map)).collect(),
                 ret: Box::new(ret.subst(map)),

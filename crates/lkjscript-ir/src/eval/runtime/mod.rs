@@ -1,7 +1,6 @@
 use super::*;
 
 mod buffers;
-mod containers;
 mod scalars;
 mod sequences;
 mod strings;
@@ -59,14 +58,6 @@ impl Evaluator<'_> {
             | Op::StrFromByte
             | Op::StrFromI64
             | Op::StrFromF64 => self.runtime_strings(operation, arguments),
-            Op::Ok
-            | Op::Err
-            | Op::IsOk
-            | Op::UnwrapOk
-            | Op::UnwrapErr
-            | Op::Some
-            | Op::IsSome
-            | Op::UnwrapSome => self.runtime_containers(operation, arguments),
             _ => self.runtime_unsupported(operation, arguments),
         }
     }

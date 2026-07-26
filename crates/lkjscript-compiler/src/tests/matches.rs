@@ -96,21 +96,63 @@ fn enum_variant_binding_has_instantiated_field_type() {
     );
 
     let mut forged = compiled.ssa().program().clone();
-    let wrong_variant = forged.enums[0].variants[0].id;
-    let test = forged
+    let projected = forged
+        .functions
+        .iter()
+        .flat_map(|function| &function.blocks)
+        .flat_map(|block| &block.instructions)
+        .find_map(|instruction| match instruction.kind {
+            InstructionKind::EnumField {
+                enum_id, variant, ..
+            } => Some((enum_id, variant)),
+            _ => None,
+        })
+        .expect("match emits guarded field projection");
+    let wrong_variant = forged
+        .enums
+        .iter()
+        .find(|definition| definition.id == projected.0)
+        .and_then(|definition| {
+            definition
+                .variants
+                .iter()
+                .find(|item| item.id != projected.1)
+        })
+        .map(|item| item.id)
+        .expect("matched enum has another variant");
+    let field = forged
         .functions
         .iter_mut()
         .flat_map(|function| &mut function.blocks)
         .flat_map(|block| &mut block.instructions)
-        .find(|instruction| matches!(instruction.kind, InstructionKind::EnumIsVariant { .. }))
-        .expect("match emits stable enum tag test");
-    let InstructionKind::EnumIsVariant { variant, .. } = &mut test.kind else {
+        .find(|instruction| matches!(instruction.kind, InstructionKind::EnumField { .. }))
+        .expect("match emits guarded field projection");
+    let InstructionKind::EnumField { variant, .. } = &mut field.kind else {
         unreachable!()
     };
     *variant = wrong_variant;
-    let error = verify(forged).expect_err("forged active tag must fail closed");
+    let error = verify(forged).expect_err("forged active field must fail closed");
+    assert!(error.to_string().contains("enum projection"), "{error}");
+}
+
+#[test]
+fn forged_prelude_layout_identity_is_rejected_by_ssa_verification() {
+    let compiled = compile_source(
+        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+        "forged-prelude.lkjscript",
+        &Limits::default(),
+    )
+    .expect("compile prelude-bearing program");
+    let mut forged = compiled.ssa().program().clone();
+    let option = forged
+        .enums
+        .iter_mut()
+        .find(|item| item.id.bytes() == lkjscript_core::OPTION_ID)
+        .expect("Option metadata");
+    option.layout.identity = lkjscript_ir::RuntimeLayoutId::new([9; 32]);
+    let error = verify(forged).expect_err("forged prelude layout must fail closed");
     assert!(
-        error.to_string().contains("active-variant provenance"),
+        error.to_string().contains("identity/name/layout"),
         "{error}"
     );
 }

@@ -70,7 +70,7 @@ fn initial_owned_buf_slice_rejects_affine_and_alias_failures() {
         ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nmove/\nb\n/move\nowned-buf-len/\nborrow/\nb\n/borrow\n/owned-buf-len\n/do\n/let", "I64", "after move"),
         ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\nlet/\nbind/\nm\nborrow-mut/\nb\n/borrow-mut\n/bind\ndo/\nowned-buf-len/\nr\n/owned-buf-len\nowned-buf-set/\nm\n0\n1\n/owned-buf-set\n/do\n/let\n/let\n/let", "Unit", "conflicting shared and exclusive"),
         ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nwhile/\nfalse\nmove/\nb\n/move\n/while\n/let", "Unit", "loop-carried"),
-        ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nsome/\nborrow/\nb\n/borrow\n/some\nunit\n/do\n/let", "Unit", "cannot be stored in List or Option"),
+        ("let/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\ndo/\nsome/\nborrow/\nb\n/borrow\n/some\nunit\n/do\n/let", "Unit", "cannot instantiate an enum"),
     ];
     for (body, result, diagnostic) in cases {
         let source = ownership_source(body, result);

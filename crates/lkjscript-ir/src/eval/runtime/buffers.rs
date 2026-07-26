@@ -54,12 +54,24 @@ impl Evaluator<'_> {
             }),
             Op::BufToStr => unary(&arguments, |buffer| {
                 let buffer = as_buffer(buffer)?;
-                match String::from_utf8(buffer.bytes.borrow().clone()) {
+                let bytes = buffer.bytes.borrow().clone();
+                match crate::utf8_contract::validate_utf8(&bytes) {
                     Ok(text) => {
-                        let payload = self.allocate_string(text)?;
+                        let payload = self.allocate_string(text.to_owned())?;
                         self.allocate_result(payload, true)
                     }
-                    Err(_) => self.allocate_result_error("buf-to-str: invalid UTF-8"),
+                    Err(failure) => {
+                        let offset = match i64::try_from(failure.offset) {
+                            Ok(offset) => offset,
+                            Err(_) => return Err(Flow::Trap("UTF-8 offset out of range".into())),
+                        };
+                        let error = self.allocate_enum(
+                            crate::prelude_contract::UTF8_ERROR_ID,
+                            failure.kind.variant_id(),
+                            vec![EvalValue::I64(offset)],
+                        )?;
+                        self.allocate_result(error, false)
+                    }
                 }
             }),
             Op::BufSlice => ternary(&arguments, |buffer, offset, length| {

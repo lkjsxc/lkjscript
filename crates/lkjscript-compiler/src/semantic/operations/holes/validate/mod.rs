@@ -1,7 +1,9 @@
 mod witness;
+mod witness_types;
 
 use witness::scoped_witness;
-pub(super) use witness::{type_expression, witness};
+pub(super) use witness::witness;
+pub(super) use witness_types::type_expression;
 
 use std::collections::BTreeSet;
 

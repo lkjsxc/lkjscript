@@ -32,10 +32,15 @@ pub fn buf_from_str(arena: &mut Arena, value: Value) -> Result<Value> {
     arena.alloc(HeapObj::Buf(bytes.to_vec()))
 }
 
-pub fn buf_to_str(arena: &mut Arena, value: Value) -> Result<Value> {
-    let text = std::str::from_utf8(as_buf(arena, value)?)
-        .map_err(|_| Error::msg("buf-to-str: invalid UTF-8"))?;
-    arena.alloc(HeapObj::Str(text.to_owned()))
+pub fn buf_to_str(
+    arena: &mut Arena,
+    value: Value,
+) -> Result<std::result::Result<Value, lkjscript_core::Utf8Failure>> {
+    let text = match lkjscript_core::validate_utf8(as_buf(arena, value)?) {
+        Ok(text) => text.to_owned(),
+        Err(error) => return Ok(Err(error)),
+    };
+    Ok(Ok(arena.alloc(HeapObj::Str(text))?))
 }
 
 pub fn buf_slice(arena: &mut Arena, value: Value, offset: i64, length: i64) -> Result<Value> {

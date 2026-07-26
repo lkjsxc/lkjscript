@@ -16,13 +16,13 @@ and Docker verification are implemented and verified.
 Add Result-valued primitives:
 
 ```text
-sys-open-append Str -> Result Handle Str
-sys-open-create-new Str -> Result Handle Str
-sys-open-dir Str -> Result Handle Str
-sys-fsync Handle -> Result Unit Str
-sys-truncate Handle I64 -> Result Unit Str
-sys-rename Str Str -> Result Unit Str
-sys-random-fill Buf I64 I64 -> Result Unit Str
+sys-open-append Str -> Result Handle SystemError
+sys-open-create-new Str -> Result Handle SystemError
+sys-open-dir Str -> Result Handle SystemError
+sys-fsync Handle -> Result Unit SystemError
+sys-truncate Handle I64 -> Result Unit SystemError
+sys-rename Str Str -> Result Unit SystemError
+sys-random-fill Buf I64 I64 -> Result Unit SystemError
 ```
 
 Append uses `O_APPEND`; it is not a multi-process transaction. Create-new is

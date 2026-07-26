@@ -62,7 +62,9 @@ pub(super) fn apply(
         }
         Op::F64FromI64Exact => {
             expect_pop(state, Kind::I64, proto, instruction)?;
-            state.stack.push(Kind::NumericResultF64);
+            state
+                .stack
+                .push(Kind::Enum(crate::EnumId::new(crate::RESULT_ID), None));
         }
         Op::F64FromI64Rounded => {
             expect_pop(state, Kind::I64, proto, instruction)?;
@@ -70,7 +72,9 @@ pub(super) fn apply(
         }
         Op::I64FromF64Exact | Op::I64FromF64Trunc => {
             expect_pop(state, Kind::F64, proto, instruction)?;
-            state.stack.push(Kind::NumericResultI64);
+            state
+                .stack
+                .push(Kind::Enum(crate::EnumId::new(crate::RESULT_ID), None));
         }
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }

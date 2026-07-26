@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn heap_operation(operation: RuntimeOp) -> Option<HeapOperation> {
+pub(super) fn heap_operation(
+    operation: RuntimeOp,
+    error_types: &[ReferenceType],
+) -> Option<HeapOperation> {
     Some(match operation {
         RuntimeOp::SameObject => HeapOperation::SameObject,
         RuntimeOp::ListEqual => HeapOperation::ListEqual,
@@ -15,8 +18,19 @@ pub(super) fn heap_operation(operation: RuntimeOp) -> Option<HeapOperation> {
         RuntimeOp::BufSet => HeapOperation::BufSet,
         RuntimeOp::BufClone => HeapOperation::BufClone,
         RuntimeOp::BufFromStr => HeapOperation::BufFromStr,
-        RuntimeOp::BufToStr => HeapOperation::BufToStr,
-        RuntimeOp::BufSlice => HeapOperation::BufSlice,
+        RuntimeOp::BufToStr => HeapOperation::BufToStr {
+            error_type: *error_types.first()?,
+        },
+        RuntimeOp::BufSlice => {
+            let [error_type, code_option_type, detail_option_type] = error_types else {
+                return None;
+            };
+            HeapOperation::BufSlice {
+                error_type: *error_type,
+                code_option_type: *code_option_type,
+                detail_option_type: *detail_option_type,
+            }
+        }
         RuntimeOp::BufGetU32 => HeapOperation::BufGetU32,
         RuntimeOp::BufSetU32 => HeapOperation::BufSetU32,
         RuntimeOp::StrLen => HeapOperation::StrLen,
@@ -26,14 +40,6 @@ pub(super) fn heap_operation(operation: RuntimeOp) -> Option<HeapOperation> {
         RuntimeOp::StrFromByte => HeapOperation::StrFromByte,
         RuntimeOp::StrFromI64 => HeapOperation::StrFromI64,
         RuntimeOp::StrFromF64 => HeapOperation::StrFromF64,
-        RuntimeOp::Ok => HeapOperation::Ok,
-        RuntimeOp::Err => HeapOperation::Err,
-        RuntimeOp::IsOk => HeapOperation::IsOk,
-        RuntimeOp::UnwrapOk => HeapOperation::UnwrapOk,
-        RuntimeOp::UnwrapErr => HeapOperation::UnwrapErr,
-        RuntimeOp::Some => HeapOperation::Some,
-        RuntimeOp::IsSome => HeapOperation::IsSome,
-        RuntimeOp::UnwrapSome => HeapOperation::UnwrapSome,
         _ => return None,
     })
 }
@@ -51,22 +57,19 @@ pub(super) fn heap_descriptor(
             | HeapOperation::WithProductField { .. }
             | HeapOperation::EnumValue { .. }
             | HeapOperation::Cons
-            | HeapOperation::Some
-            | HeapOperation::Ok
-            | HeapOperation::Err
             | HeapOperation::BufNew
             | HeapOperation::BufClone
             | HeapOperation::BufFromStr
-            | HeapOperation::BufToStr
-            | HeapOperation::BufSlice
+            | HeapOperation::BufToStr { .. }
+            | HeapOperation::BufSlice { .. }
             | HeapOperation::StrAppend
             | HeapOperation::StrSlice
             | HeapOperation::StrFromByte
             | HeapOperation::StrFromI64
             | HeapOperation::StrFromF64
-            | HeapOperation::F64FromI64Exact
-            | HeapOperation::I64FromF64Exact
-            | HeapOperation::I64FromF64Trunc
+            | HeapOperation::F64FromI64Exact { .. }
+            | HeapOperation::I64FromF64Exact { .. }
+            | HeapOperation::I64FromF64Trunc { .. }
     ) {
         AllocationClass::Bounded
     } else {

@@ -86,7 +86,7 @@ pub(crate) fn fold_runtime(operation: RuntimeOp, arguments: &[Constant]) -> Opti
 
 pub(crate) fn fold_equal(left: &Constant, right: &Constant) -> Option<bool> {
     match (left, right) {
-        (Constant::Unit, Constant::Unit) | (Constant::None, Constant::None) => Some(true),
+        (Constant::Unit, Constant::Unit) => Some(true),
         (Constant::Bool(left), Constant::Bool(right)) => Some(left == right),
         (Constant::I64(left), Constant::I64(right)) => Some(left == right),
         (Constant::Str(left), Constant::Str(right))

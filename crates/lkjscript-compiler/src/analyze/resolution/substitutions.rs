@@ -75,13 +75,25 @@ impl Resolver<'_> {
             (Type::Owned(pattern), Type::Owned(got))
             | (Type::Ref(pattern), Type::Ref(got))
             | (Type::RefMut(pattern), Type::RefMut(got))
-            | (Type::List(pattern), Type::List(got))
-            | (Type::Option(pattern), Type::Option(got)) => {
+            | (Type::List(pattern), Type::List(got)) => {
                 self.bind_type_params(function, pattern, got, variables, substitutions)
             }
-            (Type::Result(ok_pattern, err_pattern), Type::Result(ok_got, err_got)) => {
-                self.bind_type_params(function, ok_pattern, ok_got, variables, substitutions)?;
-                self.bind_type_params(function, err_pattern, err_got, variables, substitutions)
+            (
+                Type::Enum {
+                    id: pattern_id,
+                    arguments: patterns,
+                    ..
+                },
+                Type::Enum {
+                    id: got_id,
+                    arguments: got_arguments,
+                    ..
+                },
+            ) if pattern_id == got_id && patterns.len() == got_arguments.len() => {
+                for (pattern, got) in patterns.iter().zip(got_arguments) {
+                    self.bind_type_params(function, pattern, got, variables, substitutions)?;
+                }
+                Ok(())
             }
             (pattern, got) if Type::unify_assignable(got, pattern) => Ok(()),
             (pattern, got) => Err(self.error(format!(

@@ -2,7 +2,8 @@ use crate::operation::instantiation::function;
 use crate::operation::*;
 
 pub(in crate::operation) fn memory_signature(operation: Operation) -> Type {
-    let system_result = |success| Type::Result(Box::new(success), Box::new(Type::Str));
+    let system_result =
+        |success| crate::types::result_type(success, crate::types::system_error_type());
     match operation {
         Operation::BufNew => function(vec![Type::I64], Type::Buf),
         Operation::OwnedBufNew => function(vec![Type::I64], Type::Owned(Box::new(Type::Buf))),
@@ -21,7 +22,10 @@ pub(in crate::operation) fn memory_signature(operation: Operation) -> Type {
         }
         Operation::BufClone => function(vec![Type::Buf], Type::Buf),
         Operation::BufFromStr => function(vec![Type::Str], Type::Buf),
-        Operation::BufToStr => function(vec![Type::Buf], system_result(Type::Str)),
+        Operation::BufToStr => function(
+            vec![Type::Buf],
+            crate::types::result_type(Type::Str, crate::types::utf8_error_type()),
+        ),
         Operation::BufSlice => function(
             vec![Type::Buf, Type::I64, Type::I64],
             system_result(Type::Buf),

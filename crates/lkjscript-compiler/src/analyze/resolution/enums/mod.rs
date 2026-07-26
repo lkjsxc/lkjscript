@@ -1,3 +1,5 @@
+mod prelude;
+
 use crate::analyze::*;
 
 impl Resolver<'_> {

@@ -19,7 +19,7 @@ pub(super) fn enum_operation_types_are_valid(
                 && stable(*layout)
                 && substitutions.len() <= 16
                 && usize::from(*fields) == inputs.len()
-                && matches!(result, ValueType::Reference(ReferenceType::Enum(_)))
+                && matches!(result, ValueType::Reference(ReferenceType::Enum(_, _)))
         }
         HeapOperation::EnumIsVariant {
             enum_id,
@@ -30,7 +30,7 @@ pub(super) fn enum_operation_types_are_valid(
             stable(*enum_id)
                 && stable(*variant)
                 && stable(*layout)
-                && matches!(inputs, [ValueType::Reference(ReferenceType::Enum(_))])
+                && matches!(inputs, [ValueType::Reference(ReferenceType::Enum(_, _))])
                 && result == ValueType::Bool
         }
         HeapOperation::EnumField {
@@ -47,7 +47,7 @@ pub(super) fn enum_operation_types_are_valid(
                 && stable(*field)
                 && stable(*layout)
                 && *field_index < 16
-                && matches!(inputs, [ValueType::Reference(ReferenceType::Enum(_))])
+                && matches!(inputs, [ValueType::Reference(ReferenceType::Enum(_, _))])
                 && result == *field_type
         }
         _ => false,

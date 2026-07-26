@@ -1,5 +1,10 @@
 use super::*;
 
+pub enum SocketReceiveError {
+    Network(Error),
+    Utf8(lkjscript_core::Utf8Failure),
+}
+
 impl ResourceTable {
     pub fn sys_socket(&mut self) -> Result<Value> {
         self.ensure_capacity()?;
@@ -38,14 +43,23 @@ impl ResourceTable {
         self.push(OwnedResource::Socket(client))
     }
 
-    pub fn sys_recv(&self, arena: &mut Arena, handle: Value) -> Result<Value> {
-        let raw = self.socket_raw(handle, "sys-recv")?;
+    pub fn sys_recv(
+        &self,
+        arena: &mut Arena,
+        handle: Value,
+    ) -> std::result::Result<Value, SocketReceiveError> {
+        let raw = self
+            .socket_raw(handle, "sys-recv")
+            .map_err(SocketReceiveError::Network)?;
         let mut buffer = vec![0_u8; 4096];
-        let received = lkjscript_sys::recv_sock(raw, &mut buffer)
-            .map_err(|error| Error::msg(format!("sys-recv: {error}")))?;
+        let received = lkjscript_sys::recv_sock(raw, &mut buffer).map_err(|error| {
+            SocketReceiveError::Network(Error::msg(format!("sys-recv: {error}")))
+        })?;
         buffer.truncate(received);
-        let text = String::from_utf8_lossy(&buffer).into_owned();
-        arena.alloc(HeapObj::Str(text))
+        let text = lkjscript_core::validate_utf8(&buffer).map_err(SocketReceiveError::Utf8)?;
+        arena
+            .alloc(HeapObj::Str(text.to_owned()))
+            .map_err(SocketReceiveError::Network)
     }
 
     pub fn sys_send(&self, arena: &Arena, handle: Value, data: Value) -> Result<i64> {

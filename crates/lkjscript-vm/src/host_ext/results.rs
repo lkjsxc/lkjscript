@@ -1,73 +1,97 @@
 use super::*;
+use lkjscript_core::SystemErrorKind;
+
+fn enum_value(
+    arena: &mut Arena,
+    layout: [u8; 32],
+    physical_tag: u16,
+    payload: Vec<Value>,
+) -> Result<Value> {
+    arena.alloc(HeapObj::Enum {
+        layout: lkjscript_core::RuntimeLayoutId::new(layout),
+        physical_tag,
+        active_payload: payload,
+    })
+}
 
 pub fn result_ok(arena: &mut Arena, value: Value) -> Result<Value> {
-    arena.alloc(HeapObj::ResultOk(value))
+    enum_value(arena, lkjscript_core::RESULT_LAYOUT, 0, vec![value])
 }
 
 pub fn result_err(arena: &mut Arena, value: Value) -> Result<Value> {
-    arena.alloc(HeapObj::ResultErr(value))
+    enum_value(arena, lkjscript_core::RESULT_LAYOUT, 1, vec![value])
 }
 
-pub fn language_result(arena: &mut Arena, result: Result<Value>) -> Result<Value> {
+pub fn language_result(
+    arena: &mut Arena,
+    kind: SystemErrorKind,
+    result: Result<Value>,
+) -> Result<Value> {
+    if kind == SystemErrorKind::Utf8 {
+        return Err(Error::msg(
+            "SystemError.Utf8 requires a structured Utf8Error payload",
+        ));
+    }
     match result {
         Ok(value) => result_ok(arena, value),
         Err(error) => {
-            let message = arena.alloc(HeapObj::Str(error.to_string()))?;
-            result_err(arena, message)
+            let code = option_none(arena)?;
+            let detail = arena.alloc(HeapObj::Str(error.to_string()))?;
+            let detail = option_some(arena, detail)?;
+            let error = enum_value(
+                arena,
+                lkjscript_core::SYSTEM_ERROR_LAYOUT,
+                kind.physical_tag(),
+                vec![code, detail],
+            )?;
+            result_err(arena, error)
         }
     }
 }
 
-pub fn is_ok(arena: &Arena, value: Value) -> Result<Value> {
-    match arena.get(value)? {
-        HeapObj::ResultOk(_) => Ok(Value::TRUE),
-        HeapObj::ResultErr(_) => Ok(Value::FALSE),
-        _ => Err(Error::msg("is-ok: expected Result")),
-    }
-}
-
-pub fn unwrap_ok(arena: &Arena, value: Value) -> Result<Value> {
-    match arena.get(value)? {
-        HeapObj::ResultOk(inner) => Ok(*inner),
-        HeapObj::ResultErr(error) => {
-            let message = match arena.get(*error) {
-                Ok(HeapObj::Str(message)) => format!("unwrap-ok: {message}"),
-                _ => "unwrap-ok on Err".to_string(),
-            };
-            Err(Error::msg(message))
+pub fn utf8_result(
+    arena: &mut Arena,
+    result: std::result::Result<Value, lkjscript_core::Utf8Failure>,
+) -> Result<Value> {
+    match result {
+        Ok(value) => result_ok(arena, value),
+        Err(error) => {
+            let error = utf8_error(arena, error)?;
+            result_err(arena, error)
         }
-        _ => Err(Error::msg("unwrap-ok: expected Result")),
     }
 }
 
-pub fn unwrap_err(arena: &Arena, value: Value) -> Result<Value> {
-    match arena.get(value)? {
-        HeapObj::ResultErr(inner) => Ok(*inner),
-        HeapObj::ResultOk(_) => Err(Error::msg("unwrap-err on Ok")),
-        _ => Err(Error::msg("unwrap-err: expected Result")),
-    }
+pub fn system_utf8_error(arena: &mut Arena, error: lkjscript_core::Utf8Failure) -> Result<Value> {
+    let error = utf8_error(arena, error)?;
+    let system = enum_value(
+        arena,
+        lkjscript_core::SYSTEM_ERROR_LAYOUT,
+        SystemErrorKind::Utf8.physical_tag(),
+        vec![error],
+    )?;
+    result_err(arena, system)
+}
+
+fn utf8_error(arena: &mut Arena, error: lkjscript_core::Utf8Failure) -> Result<Value> {
+    let offset =
+        i64::try_from(error.offset).map_err(|_| Error::msg("UTF-8 error offset exceeds I64"))?;
+    let offset = match Value::from_small_i64(offset) {
+        Some(value) => value,
+        None => arena.alloc(HeapObj::Int(offset))?,
+    };
+    enum_value(
+        arena,
+        lkjscript_core::UTF8_ERROR_LAYOUT,
+        error.kind.physical_tag(),
+        vec![offset],
+    )
+}
+
+pub fn option_none(arena: &mut Arena) -> Result<Value> {
+    enum_value(arena, lkjscript_core::OPTION_LAYOUT, 1, Vec::new())
 }
 
 pub fn option_some(arena: &mut Arena, value: Value) -> Result<Value> {
-    arena.alloc(HeapObj::OptionSome(value))
-}
-
-pub fn is_some(arena: &Arena, value: Value) -> Result<Value> {
-    if value.is_none() {
-        return Ok(Value::FALSE);
-    }
-    match arena.get(value)? {
-        HeapObj::OptionSome(_) => Ok(Value::TRUE),
-        _ => Err(Error::msg("is-some: expected Option")),
-    }
-}
-
-pub fn unwrap_some(arena: &Arena, value: Value) -> Result<Value> {
-    if value.is_none() {
-        return Err(Error::msg("unwrap-some on none"));
-    }
-    match arena.get(value)? {
-        HeapObj::OptionSome(inner) => Ok(*inner),
-        _ => Err(Error::msg("unwrap-some: expected Option")),
-    }
+    enum_value(arena, lkjscript_core::OPTION_LAYOUT, 0, vec![value])
 }

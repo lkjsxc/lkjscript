@@ -52,7 +52,7 @@ impl FunctionBuilder {
         self.append(
             block,
             descriptor.result_type(),
-            Operation::HeapCall(descriptor, arguments),
+            Operation::HeapCall(Box::new(descriptor), arguments),
             None,
         )
     }

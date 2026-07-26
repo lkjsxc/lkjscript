@@ -29,7 +29,9 @@ impl JitHeapServices<'_> {
                     payload.push(self.value_from_native(*argument)?);
                 }
                 let reference_type = match site.descriptor().result_type() {
-                    ValueType::Reference(reference_type @ ReferenceType::Enum(_)) => reference_type,
+                    ValueType::Reference(reference_type @ ReferenceType::Enum(_, _)) => {
+                        reference_type
+                    }
                     _ => return self.trap("enum construction result layout mismatch"),
                 };
                 let value = self.allocate(

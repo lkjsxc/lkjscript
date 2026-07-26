@@ -127,6 +127,14 @@ pub(super) fn expect_two_numeric(
     expect_numeric(right, proto, instruction)
 }
 
+pub(super) const fn result_kind() -> Kind {
+    Kind::Enum(crate::EnumId::new(crate::RESULT_ID), None)
+}
+
+pub(super) const fn option_kind() -> Kind {
+    Kind::Enum(crate::EnumId::new(crate::OPTION_ID), None)
+}
+
 pub(super) fn is_value_comparable(kind: Kind) -> bool {
     matches!(
         kind,
@@ -136,9 +144,6 @@ pub(super) fn is_value_comparable(kind: Kind) -> bool {
             | Kind::F64
             | Kind::Str
             | Kind::Symbol
-            | Kind::Result
-            | Kind::NumericResultF64
-            | Kind::NumericResultI64
-            | Kind::Option
+            | Kind::Enum(_, _)
     )
 }

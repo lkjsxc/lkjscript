@@ -51,12 +51,8 @@ impl Evaluator<'_> {
             Op::Arg => unary(&arguments, |index| {
                 let index = usize::try_from(as_i64(index)?)
                     .map_err(|_| Flow::Trap("argument index out of range".into()))?;
-                if let Some(argument) = self.config.args.get(index) {
-                    self.allocate()?;
-                    Ok(EvalValue::Some(Box::new(EvalValue::Str(argument.clone()))))
-                } else {
-                    Ok(EvalValue::None)
-                }
+                let argument = self.config.args.get(index).cloned().map(EvalValue::Str);
+                self.allocate_option(argument)
             }),
             _ => unreachable!("runtime operation dispatched to the wrong family"),
         }

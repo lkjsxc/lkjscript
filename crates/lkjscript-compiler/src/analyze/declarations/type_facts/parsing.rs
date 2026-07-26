@@ -96,12 +96,11 @@ pub(in crate::analyze) fn parameter_type(
             Ok(Type::List(Box::new(parameter_type(&args[0])?)))
         }
         AstExpr::Call { name, args } if name == "Option" && args.len() == 1 => {
-            Ok(Type::Option(Box::new(parameter_type(&args[0])?)))
+            Ok(crate::types::option_type(parameter_type(&args[0])?))
         }
-        AstExpr::Call { name, args } if name == "Result" && args.len() == 2 => Ok(Type::Result(
-            Box::new(parameter_type(&args[0])?),
-            Box::new(parameter_type(&args[1])?),
-        )),
+        AstExpr::Call { name, args } if name == "Result" && args.len() == 2 => Ok(
+            crate::types::result_type(parameter_type(&args[0])?, parameter_type(&args[1])?),
+        ),
         AstExpr::Call { name, args } if name == "Product" && args.len() == 1 => {
             Ok(Type::Product(symbolic_name(&args[0])?))
         }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{Error, HeapObj, ProductId, Result, Value};
+use crate::{Error, HeapObj, ProductId, Result, RuntimeLayoutId, Value};
 
 /// A returned value plus a private snapshot of every reachable VM object.
 ///
@@ -55,10 +55,6 @@ impl OwnedValue {
         self.root.is_empty_list()
     }
 
-    pub fn is_none(&self) -> bool {
-        self.root.is_none()
-    }
-
     pub fn as_bool(&self) -> Option<bool> {
         self.root.as_bool()
     }
@@ -89,6 +85,17 @@ impl OwnedValue {
 
     pub fn as_handle(&self) -> Option<u32> {
         self.root.as_handle()
+    }
+
+    pub fn enum_identity(&self) -> Option<(RuntimeLayoutId, u16)> {
+        match self.object()? {
+            HeapObj::Enum {
+                layout,
+                physical_tag,
+                ..
+            } => Some((*layout, *physical_tag)),
+            _ => None,
+        }
     }
 
     pub fn product_id(&self) -> Option<ProductId> {
@@ -143,9 +150,6 @@ impl fmt::Debug for OwnedValue {
         if self.is_empty_list() {
             return formatter.write_str("empty-list");
         }
-        if self.is_none() {
-            return formatter.write_str("none");
-        }
         if let Some(value) = self.as_bool() {
             return value.fmt(formatter);
         }
@@ -166,9 +170,6 @@ impl fmt::Debug for OwnedValue {
             Some(HeapObj::Closure { proto, .. }) => write!(formatter, "#<owned-fn:{proto}>"),
             Some(HeapObj::Builtin(id)) => write!(formatter, "#<owned-builtin:{id}>"),
             Some(HeapObj::Buf(bytes)) => write!(formatter, "#<owned-buf:{}>", bytes.len()),
-            Some(HeapObj::ResultOk(_)) => formatter.write_str("#<owned-ok>"),
-            Some(HeapObj::ResultErr(_)) => formatter.write_str("#<owned-err>"),
-            Some(HeapObj::OptionSome(_)) => formatter.write_str("#<owned-some>"),
             Some(HeapObj::Product { product, .. }) => {
                 write!(formatter, "#<owned-product:{}>", product.raw())
             }

@@ -2,8 +2,8 @@ use super::*;
 
 #[test]
 fn durable_file_operations_have_exact_signatures_and_effects() {
-    let result_handle = Type::Result(Box::new(Type::Handle), Box::new(Type::Str));
-    let result_unit = Type::Result(Box::new(Type::Unit), Box::new(Type::Str));
+    let result_handle = crate::types::result_type(Type::Handle, crate::types::system_error_type());
+    let result_unit = crate::types::result_type(Type::Unit, crate::types::system_error_type());
     assert_eq!(
         Operation::from_name("sys-open-append"),
         Some(Operation::SysOpenAppend)
@@ -30,7 +30,7 @@ fn durable_file_operations_have_exact_signatures_and_effects() {
         Operation::SysRandomFill.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
         Ok((
             function(vec![Type::Buf, Type::I64, Type::I64], result_unit),
-            Type::Result(Box::new(Type::Unit), Box::new(Type::Str)),
+            crate::types::result_type(Type::Unit, crate::types::system_error_type()),
         ))
     );
     assert_eq!(

@@ -49,17 +49,13 @@ pub enum EvalValue {
         payload: Vec<Self>,
     },
     List(Vec<Self>),
-    None,
-    Some(Box<Self>),
-    Ok(Box<Self>),
-    Err(Box<Self>),
     Function(FunctionId),
 }
 
 impl PartialEq for EvalValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Unit, Self::Unit) | (Self::None, Self::None) => true,
+            (Self::Unit, Self::Unit) => true,
             (Self::Bool(left), Self::Bool(right)) => left == right,
             (Self::I64(left), Self::I64(right)) => left == right,
             (Self::F64(left), Self::F64(right)) => left.to_bits() == right.to_bits(),
@@ -88,9 +84,6 @@ impl PartialEq for EvalValue {
                 },
             ) => le == re && lv == rv && ll == rl && lt == rt && lp == rp,
             (Self::List(left), Self::List(right)) => left == right,
-            (Self::Some(left), Self::Some(right))
-            | (Self::Ok(left), Self::Ok(right))
-            | (Self::Err(left), Self::Err(right)) => left == right,
             (Self::Function(left), Self::Function(right)) => left == right,
             _ => false,
         }

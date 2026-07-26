@@ -16,7 +16,6 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::True
         | Op::Unit
         | Op::EmptyList
-        | Op::OptionNone
         | Op::Argc
         | Op::EmptyStr
         | Op::SysNowMs
@@ -107,16 +106,8 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SysAccept
         | Op::SysPathExists
         | Op::SysRecv
-        | Op::OkWrap
-        | Op::ErrWrap
-        | Op::IsOk
-        | Op::UnwrapOk
-        | Op::UnwrapErr
         | Op::StrFromI64
         | Op::StrFromF64
-        | Op::SomeWrap
-        | Op::IsSome
-        | Op::UnwrapSome
         | Op::LoadProductField
         | Op::IsEnumVariant
         | Op::LoadEnumField

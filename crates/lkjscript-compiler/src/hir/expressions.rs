@@ -22,7 +22,6 @@ pub enum ExprKind {
     LitBool(bool),
     LitUnit,
     EmptyList,
-    LitNone,
     LitStr(String),
     Load(BindingRef),
     Move {
@@ -131,6 +130,14 @@ pub enum ExprKind {
         field: VariantFieldId,
         layout: RuntimeLayoutId,
         value: Box<Expr>,
+    },
+    EnumUnwrap {
+        enum_id: EnumId,
+        variant: VariantId,
+        field: VariantFieldId,
+        layout: RuntimeLayoutId,
+        value: Box<Expr>,
+        trap: String,
     },
     MatchUnreachable {
         plan: MatchPlanId,

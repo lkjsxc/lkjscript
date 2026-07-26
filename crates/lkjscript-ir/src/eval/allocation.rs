@@ -59,24 +59,77 @@ impl Evaluator<'_> {
         Ok(EvalValue::Str(text))
     }
 
+    pub(crate) fn allocate_enum(
+        &mut self,
+        enum_id: [u8; 32],
+        variant_id: [u8; 32],
+        payload: Vec<EvalValue>,
+    ) -> std::result::Result<EvalValue, Flow> {
+        let enum_id = crate::EnumId::new(enum_id);
+        let variant = crate::VariantId::new(variant_id);
+        let definition = self
+            .program
+            .program()
+            .enums
+            .iter()
+            .find(|item| item.id == enum_id)
+            .ok_or_else(|| Flow::Trap("prelude enum metadata missing".into()))?;
+        let selected = definition
+            .variants
+            .iter()
+            .find(|item| item.id == variant)
+            .ok_or_else(|| Flow::Trap("prelude enum variant metadata missing".into()))?;
+        if selected.fields.len() != payload.len() {
+            return Err(Flow::Trap("prelude enum payload shape mismatch".into()));
+        }
+        let layout = definition.layout.identity;
+        let physical_tag = selected.physical_tag;
+        self.allocate()?;
+        Ok(EvalValue::Enum {
+            enum_id,
+            variant,
+            layout,
+            physical_tag,
+            payload,
+        })
+    }
+
     pub(crate) fn allocate_result(
         &mut self,
         payload: EvalValue,
         is_ok: bool,
     ) -> std::result::Result<EvalValue, Flow> {
-        self.allocate()?;
-        if is_ok {
-            Ok(EvalValue::Ok(Box::new(payload)))
+        let variant = if is_ok {
+            crate::prelude_contract::RESULT_OK_ID
         } else {
-            Ok(EvalValue::Err(Box::new(payload)))
-        }
+            crate::prelude_contract::RESULT_ERR_ID
+        };
+        self.allocate_enum(crate::prelude_contract::RESULT_ID, variant, vec![payload])
+    }
+
+    pub(crate) fn allocate_option(
+        &mut self,
+        payload: Option<EvalValue>,
+    ) -> std::result::Result<EvalValue, Flow> {
+        let (variant, payload) = match payload {
+            Some(value) => (crate::prelude_contract::OPTION_SOME_ID, vec![value]),
+            None => (crate::prelude_contract::OPTION_NONE_ID, Vec::new()),
+        };
+        self.allocate_enum(crate::prelude_contract::OPTION_ID, variant, payload)
     }
 
     pub(crate) fn allocate_result_error(
         &mut self,
         message: &str,
     ) -> std::result::Result<EvalValue, Flow> {
-        let payload = self.allocate_string(message.to_owned())?;
-        self.allocate_result(payload, false)
+        let code = self.allocate_option(None)?;
+        let detail = self.allocate_string(message.to_owned())?;
+        let detail = self.allocate_option(Some(detail))?;
+        let error = self.allocate_enum(
+            crate::prelude_contract::SYSTEM_ERROR_ID,
+            crate::prelude_contract::SYSTEM_UNSUPPORTED_ID,
+            vec![code, detail],
+        )?;
+        self.allocate_result(error, false)
     }
 }

@@ -91,7 +91,7 @@ The following are no longer permanent product decisions:
 | Tiny depth, token, form, field, and directory-width numbers are semantic forever | Implementation safety maxima, host-selected profiles, and AI-maintainability lints | No Current limit is weakened before aggregate replacement bounds are Current | <!-- LKJ-EXACT-DATA -->
 | One program-global imported declaration namespace is sufficient | Explicit package/module/declaration identities and qualified imports | Current resolution remains until package migration is complete | <!-- LKJ-EXACT-DATA -->
 | `I64` and `F64` are the final numeric surface | Edition 2 exact-width numeric slices with explicit conversions | Current numeric behavior remains exact and unchanged | <!-- LKJ-EXACT-DATA -->
-| `Result T Str` is a general system error model | Nominal typed provider/domain errors and distinct outcome channels | Current wrappers remain until mechanically migrated | <!-- LKJ-EXACT-DATA -->
+| Generic `Result T SystemError` is the closed system error model | Nominal typed provider/domain errors and distinct outcome channels | Current prelude and wrappers use generic enums; provider-specific domains remain targeted | <!-- LKJ-EXACT-DATA -->
 | One universal `Handle` is the public resource model | Typed affine resources and typestate | Current handles retain stale-safe behavior during migration | <!-- LKJ-EXACT-DATA -->
 | Host authority may be ambient | Explicit typed capabilities supplied through an application/component context | Existing ambient wrappers are transitional Current behavior | <!-- LKJ-EXACT-DATA -->
 | Ordinary aggregates are semantically heap objects | Value semantics with compiler-selected placement | Current representation is not a future semantic promise | <!-- LKJ-EXACT-DATA -->

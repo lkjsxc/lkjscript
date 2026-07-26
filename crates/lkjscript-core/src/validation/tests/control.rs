@@ -72,8 +72,6 @@ fn main_arity_global_initialization_and_static_operation_categories_are_checked(
     assert!(error(global).contains("global is not definitely initialized"));
 
     for (operation, category) in [
-        (Op::IsSome, "Option"),
-        (Op::IsOk, "Result"),
         (Op::Car, "List"),
         (Op::BufLen, "Buf"),
         (Op::SysClose, "Handle"),

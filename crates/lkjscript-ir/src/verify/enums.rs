@@ -19,6 +19,7 @@ pub(crate) fn verify_enum_metadata(program: &Program) -> crate::Result<()> {
             || !names.insert(definition.name.as_str())
             || !layouts.insert(definition.layout.identity)
             || definition.variants.is_empty()
+            || !super::prelude_enums::valid(definition)
         {
             return fail("SSA enum has invalid or duplicate identity/name/layout");
         }
@@ -125,13 +126,6 @@ pub(crate) fn substitute(ty: &SsaType, parameters: &[String], arguments: &[SsaTy
             .cloned()
             .unwrap_or_else(|| ty.clone()),
         SsaType::List(inner) => SsaType::List(Box::new(substitute(inner, parameters, arguments))),
-        SsaType::Option(inner) => {
-            SsaType::Option(Box::new(substitute(inner, parameters, arguments)))
-        }
-        SsaType::Result(ok, error) => SsaType::Result(
-            Box::new(substitute(ok, parameters, arguments)),
-            Box::new(substitute(error, parameters, arguments)),
-        ),
         SsaType::Enum {
             id,
             arguments: nested,
@@ -152,8 +146,7 @@ fn contains_enum(ty: &SsaType, id: crate::EnumId) -> bool {
             id: nested,
             arguments,
         } => *nested == id || arguments.iter().any(|t| contains_enum(t, id)),
-        SsaType::List(t) | SsaType::Option(t) => contains_enum(t, id),
-        SsaType::Result(a, b) => contains_enum(a, id) || contains_enum(b, id),
+        SsaType::List(t) => contains_enum(t, id),
         _ => false,
     }
 }
@@ -161,8 +154,7 @@ fn contains_enum(ty: &SsaType, id: crate::EnumId) -> bool {
 fn contains_any_enum(ty: &SsaType) -> bool {
     match ty {
         SsaType::Enum { .. } => true,
-        SsaType::List(t) | SsaType::Option(t) => contains_any_enum(t),
-        SsaType::Result(a, b) => contains_any_enum(a) || contains_any_enum(b),
+        SsaType::List(t) => contains_any_enum(t),
         _ => false,
     }
 }
@@ -176,8 +168,6 @@ fn is_traced(ty: &SsaType) -> bool {
             | SsaType::Product(_)
             | SsaType::Enum { .. }
             | SsaType::List(_)
-            | SsaType::Option(_)
-            | SsaType::Result(_, _)
             | SsaType::Function(_)
     )
 }

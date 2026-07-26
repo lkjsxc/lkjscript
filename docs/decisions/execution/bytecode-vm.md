@@ -59,7 +59,7 @@ owned heap snapshot rather than a live arena index. The execution core does not
 call `std::process::exit`; after VM stop it drops handles, restores terminal
 state, and flushes stdout before the CLI translates the outcome. Cleanup errors
 are `HostFailure` and retain a summary of the prior outcome. Ordinary `sys-*`
-failures remain language `ResultErr` values.
+failures remain ordinary language `Result.Err(SystemError)` enum values.
 
 `ExecutionConfig` bounds fuel, operand/local stack values, frames, estimated
 live heap bytes, aggregate allocations, monotonically allocated handle slots,

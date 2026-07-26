@@ -14,7 +14,6 @@ const TAG_HEAP: u64 = 3;
 const TAG_HANDLE: u64 = 4;
 const TAG_UNIT: u64 = 5;
 const TAG_EMPTY_LIST: u64 = 6;
-const TAG_NONE: u64 = 7;
 
 pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
 pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
@@ -23,7 +22,6 @@ impl Value {
     pub const INVALID: Self = Self(TAG_INVALID);
     pub const UNIT: Self = Self(TAG_UNIT);
     pub const EMPTY_LIST: Self = Self(TAG_EMPTY_LIST);
-    pub const NONE: Self = Self(TAG_NONE);
     pub const FALSE: Self = Self(TAG_BOOL);
     pub const TRUE: Self = Self((1 << 3) | TAG_BOOL);
 
@@ -60,10 +58,6 @@ impl Value {
 
     pub fn is_empty_list(self) -> bool {
         self.0 == TAG_EMPTY_LIST
-    }
-
-    pub fn is_none(self) -> bool {
-        self.0 == TAG_NONE
     }
 
     pub fn as_bool(self) -> Option<bool> {
@@ -109,9 +103,6 @@ impl fmt::Debug for Value {
         }
         if self.is_empty_list() {
             return write!(f, "empty-list");
-        }
-        if self.is_none() {
-            return write!(f, "none");
         }
         if let Some(b) = self.as_bool() {
             return write!(f, "{b}");

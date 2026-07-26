@@ -109,12 +109,4 @@ pub enum RuntimeOp {
     SysPoll,
     SysTtyGet,
     SysTtySet,
-    Ok,
-    Err,
-    IsOk,
-    UnwrapOk,
-    UnwrapErr,
-    Some,
-    IsSome,
-    UnwrapSome,
 }

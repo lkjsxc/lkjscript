@@ -9,11 +9,12 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts() {
         LayoutIdentity::new(100),
         ValueType::I64.layout_identity(),
     ));
-    let option_i64 = ValueType::Reference(ReferenceType::Option(
-        LayoutIdentity::new(101),
-        ValueType::I64.layout_identity(),
-    ));
-
+    let result_layout = [
+        0xad, 0x73, 0x35, 0x0f, 0xf0, 0x48, 0xd2, 0xf4, 0x87, 0xd7, 0xe6, 0x1e, 0x52, 0x6a, 0xb7,
+        0x3c, 0x50, 0x20, 0xf6, 0x48, 0x37, 0xb8, 0xfd, 0xdf, 0xd1, 0x0e, 0xbb, 0x35, 0x09, 0x84,
+        0xc9, 0xf0,
+    ];
+    let result = ValueType::Reference(ReferenceType::Enum(LayoutIdentity::new(200), result_layout));
     let malformed = [
         HeapCallDescriptor::new(
             HeapOperation::EmptyList,
@@ -70,13 +71,6 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts() {
             StoreClass::None,
         ),
         HeapCallDescriptor::new(
-            HeapOperation::Some,
-            vec![string],
-            option_i64,
-            AllocationClass::Bounded,
-            StoreClass::Initialization,
-        ),
-        HeapCallDescriptor::new(
             HeapOperation::EqualValue,
             vec![buf, buf],
             ValueType::Bool,
@@ -96,6 +90,15 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts() {
             ValueType::Unit,
             AllocationClass::None,
             StoreClass::Reference,
+        ),
+        HeapCallDescriptor::new(
+            HeapOperation::BufToStr {
+                error_type: ReferenceType::Enum(LayoutIdentity::new(201), [0; 32]),
+            },
+            vec![buf],
+            result,
+            AllocationClass::Bounded,
+            StoreClass::Initialization,
         ),
     ];
     assert!(malformed

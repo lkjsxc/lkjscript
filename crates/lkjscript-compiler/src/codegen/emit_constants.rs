@@ -23,7 +23,6 @@ impl Emitter<'_> {
                 self.proto.emit_op_u16(Op::LoadConst, constant);
             }
             Constant::EmptyList => self.proto.emit(Op::EmptyList),
-            Constant::None => self.proto.emit(Op::OptionNone),
         }
         Ok(())
     }

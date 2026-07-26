@@ -25,7 +25,6 @@ pub(super) fn handles(op: u8) -> bool {
         || op == Op::True as u8
         || op == Op::Unit as u8
         || op == Op::EmptyList as u8
-        || op == Op::OptionNone as u8
 }
 
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
@@ -135,10 +134,6 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         }
         x if x == Op::EmptyList as u8 => {
             vm.push(Value::EMPTY_LIST);
-            Ok(())
-        }
-        x if x == Op::OptionNone as u8 => {
-            vm.push(Value::NONE);
             Ok(())
         }
         _ => unreachable!("opcode family checked"),

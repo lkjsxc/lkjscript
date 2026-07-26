@@ -2,69 +2,47 @@ use super::fixtures::*;
 use crate::*;
 
 #[test]
-fn evaluator_executes_result_construction_and_projection_without_vm_helpers() {
-    let result_type = SsaType::Result(Box::new(SsaType::I64), Box::new(SsaType::Str));
-    let allocation_effects = EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP);
-    let program = Program {
-        sources: Vec::new(),
-        products: Vec::new(),
-        enums: Vec::new(),
-        traits: core_traits(),
-        implementations: Vec::new(),
-        functions: vec![Function {
-            id: FunctionId::new(0),
-            name: "main".into(),
-            signature: Signature::monomorphic(Vec::new(), SsaType::Bool),
-            places: Vec::new(),
-            effects: allocation_effects,
-            entry: BlockId::new(0),
-            blocks: vec![Block {
-                id: BlockId::new(0),
-                parameters: Vec::new(),
-                instructions: vec![
-                    constant(0, 7),
-                    Instruction {
-                        id: ValueId::new(1),
-                        ty: result_type.clone(),
-                        kind: InstructionKind::Runtime {
-                            operation: RuntimeOp::Ok,
-                            arguments: vec![ValueId::new(0)],
-                            signature: Signature::monomorphic(
-                                vec![SsaType::I64],
-                                result_type.clone(),
-                            ),
-                        },
-                        metadata: InstructionMetadata {
-                            origin: Origin::SYNTHETIC,
-                            effects: allocation_effects,
-                            safepoint: Safepoint::Required,
-                            failure: FailureBehavior::TrapOrOutcome,
-                            frame_state: Some(FrameState {
-                                bytecode_position: 1,
-                                locals: Vec::new(),
-                                operand_stack: Vec::new(),
-                            }),
-                        },
-                    },
-                    Instruction {
-                        id: ValueId::new(2),
-                        ty: SsaType::Bool,
-                        kind: InstructionKind::Runtime {
-                            operation: RuntimeOp::IsOk,
-                            arguments: vec![ValueId::new(1)],
-                            signature: Signature::monomorphic(vec![result_type], SsaType::Bool),
-                        },
-                        metadata: metadata(EffectSet::READS_MEMORY),
-                    },
-                ],
-                terminator: Terminator::Return(ValueId::new(2)),
-                metadata: block_metadata(),
-            }],
+fn evaluator_executes_generic_enum_construction_and_tag_test() {
+    let mut program = one_block_program();
+    program.enums.push(enum_metadata());
+    let function = &mut program.functions[0];
+    *function.signature.result = SsaType::Bool;
+    function.effects = EffectSet::ALLOCATES.union(EffectSet::READS_MEMORY);
+    let block = &mut function.blocks[0];
+    block.instructions.push(Instruction {
+        id: ValueId::new(1),
+        ty: enum_type(),
+        kind: InstructionKind::EnumValue {
+            enum_id: EnumId::new([1; 32]),
+            variant: VariantId::new([2; 32]),
+            layout: RuntimeLayoutId::new([6; 32]),
+            fields: vec![ValueId::new(0)],
+        },
+        metadata: InstructionMetadata {
             origin: Origin::SYNTHETIC,
-        }],
-        main: FunctionId::new(0),
-    };
-    let verified = verify(program).expect("verify Result evaluator program");
+            effects: EffectSet::ALLOCATES,
+            safepoint: Safepoint::Required,
+            failure: FailureBehavior::StructuredOutcome,
+            frame_state: Some(FrameState {
+                bytecode_position: 1,
+                locals: Vec::new(),
+                operand_stack: Vec::new(),
+            }),
+        },
+    });
+    block.instructions.push(Instruction {
+        id: ValueId::new(2),
+        ty: SsaType::Bool,
+        kind: InstructionKind::EnumIsVariant {
+            enum_id: EnumId::new([1; 32]),
+            variant: VariantId::new([2; 32]),
+            layout: RuntimeLayoutId::new([6; 32]),
+            value: ValueId::new(1),
+        },
+        metadata: metadata(EffectSet::READS_MEMORY),
+    });
+    block.terminator = Terminator::Return(ValueId::new(2));
+    let verified = verify(program).expect("verify generic enum evaluator program");
     assert_eq!(
         evaluate(&verified, &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::Bool(true))

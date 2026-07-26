@@ -12,7 +12,7 @@ pub(super) fn apply(
         Op::SysSqliteOpen => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Str, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteClose
         | Op::SysSqliteFinalize
@@ -25,41 +25,41 @@ pub(super) fn apply(
         | Op::SysSqliteLastInsertRowid
         | Op::SysSqliteExtendedResultCode => {
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteBusyTimeout => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteExec | Op::SysSqlitePrepare => {
             expect_pop(state, Kind::Str, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteBindI64 => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteBindF64 => {
             expect_pop(state, Kind::F64, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteBindText => {
             expect_pop(state, Kind::Str, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteBindBytes => {
             expect_pop(state, Kind::Buf, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteColumnType
         | Op::SysSqliteColumnI64
@@ -68,13 +68,13 @@ pub(super) fn apply(
         | Op::SysSqliteColumnBytes => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::SysSqliteBackup => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Str, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }

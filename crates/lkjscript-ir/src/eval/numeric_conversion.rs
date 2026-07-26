@@ -30,18 +30,12 @@ impl Evaluator<'_> {
         &mut self,
         result: std::result::Result<EvalValue, NumericError>,
     ) -> std::result::Result<EvalValue, Flow> {
-        self.allocate()?;
         match result {
-            Ok(value) => Ok(EvalValue::Ok(Box::new(value))),
+            Ok(value) => self.allocate_result(value, true),
             Err(error) => {
-                self.allocate()?;
-                Ok(EvalValue::Err(Box::new(EvalValue::Enum {
-                    enum_id: crate::EnumId::new(algorithm::ERROR_ID),
-                    variant: crate::VariantId::new(error.variant_id()),
-                    layout: crate::RuntimeLayoutId::new(algorithm::ERROR_LAYOUT),
-                    physical_tag: error.physical_tag(),
-                    payload: Vec::new(),
-                })))
+                let payload =
+                    self.allocate_enum(algorithm::ERROR_ID, error.variant_id(), Vec::new())?;
+                self.allocate_result(payload, false)
             }
         }
     }

@@ -1,10 +1,7 @@
 //! Host-independent Edition 2 I64/F64 conversions.
 
-mod identity;
 #[cfg(test)]
 mod tests;
-
-pub use identity::{NUMERIC_ERROR_ID, NUMERIC_ERROR_LAYOUT};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NumericError {
@@ -12,6 +9,39 @@ pub enum NumericError {
     OutOfRange,
     Fractional,
     Inexact,
+}
+
+impl NumericError {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::NonFinite => "NonFinite",
+            Self::OutOfRange => "OutOfRange",
+            Self::Fractional => "Fractional",
+            Self::Inexact => "Inexact",
+        }
+    }
+
+    pub const fn index(self) -> usize {
+        match self {
+            Self::NonFinite => 0,
+            Self::OutOfRange => 1,
+            Self::Fractional => 2,
+            Self::Inexact => 3,
+        }
+    }
+
+    pub const fn variant_id(self) -> [u8; 32] {
+        crate::numeric_variant(self.index())
+    }
+
+    pub const fn physical_tag(self) -> u16 {
+        match self {
+            Self::NonFinite => 0,
+            Self::OutOfRange => 3,
+            Self::Fractional => 1,
+            Self::Inexact => 2,
+        }
+    }
 }
 
 pub fn f64_from_i64_rounded(value: i64) -> f64 {

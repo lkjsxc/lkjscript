@@ -10,7 +10,7 @@ pub(in crate::operation) fn variant_signature(operation: Operation) -> Type {
                 &["T", "E"],
                 function(
                     vec![success.clone()],
-                    Type::Result(Box::new(success), Box::new(failure)),
+                    crate::types::result_type(success, failure),
                 ),
             )
         }
@@ -21,7 +21,7 @@ pub(in crate::operation) fn variant_signature(operation: Operation) -> Type {
                 &["T", "E"],
                 function(
                     vec![failure.clone()],
-                    Type::Result(Box::new(success), Box::new(failure)),
+                    crate::types::result_type(success, failure),
                 ),
             )
         }
@@ -41,21 +41,21 @@ pub(in crate::operation) fn variant_signature(operation: Operation) -> Type {
             let value = Type::Param("T".into());
             forall(
                 &["T"],
-                function(vec![value.clone()], Type::Option(Box::new(value))),
+                function(vec![value.clone()], crate::types::option_type(value)),
             )
         }
         Operation::IsSome => {
             let value = Type::Param("T".into());
             forall(
                 &["T"],
-                function(vec![Type::Option(Box::new(value))], Type::Bool),
+                function(vec![crate::types::option_type(value)], Type::Bool),
             )
         }
         Operation::UnwrapSome => {
             let value = Type::Param("T".into());
             forall(
                 &["T"],
-                function(vec![Type::Option(Box::new(value.clone()))], value),
+                function(vec![crate::types::option_type(value.clone())], value),
             )
         }
         _ => unreachable!("operation signature family mismatch"),

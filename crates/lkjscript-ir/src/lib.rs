@@ -5,6 +5,8 @@ mod eval;
 mod model;
 mod numeric_contract;
 mod optimize;
+pub mod prelude_contract;
+mod utf8_contract;
 mod verify;
 
 #[cfg(test)]

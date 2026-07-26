@@ -1,5 +1,38 @@
 use super::*;
 
+fn error_reference_types(
+    function: FunctionId,
+    operation: RuntimeOp,
+    result: &SsaType,
+    layouts: &LayoutInterner,
+) -> Result<Vec<ReferenceType>, lkjscript_native::PlanError> {
+    if operation != RuntimeOp::BufToStr && operation != RuntimeOp::BufSlice {
+        return Ok(Vec::new());
+    }
+    let SsaType::Enum { arguments, .. } = result else {
+        return Err(lkjscript_native::PlanError::InvalidHeapCall);
+    };
+    let error = arguments
+        .get(1)
+        .ok_or(lkjscript_native::PlanError::InvalidHeapCall)?;
+    let error = lower_type(function, error, layouts)
+        .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?
+        .reference_type()
+        .ok_or(lkjscript_native::PlanError::InvalidHeapCall)?;
+    let mut references = vec![error];
+    if operation == RuntimeOp::BufSlice {
+        for ty in [SsaType::I64, SsaType::Str] {
+            let option = lkjscript_ir::prelude_contract::option(ty);
+            let reference = lower_type(function, &option, layouts)
+                .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?
+                .reference_type()
+                .ok_or(lkjscript_native::PlanError::InvalidHeapCall)?;
+            references.push(reference);
+        }
+    }
+    Ok(references)
+}
+
 pub(super) fn lower_runtime(
     function: &Function,
     operation: RuntimeOp,
@@ -19,11 +52,18 @@ pub(super) fn lower_runtime(
         && input_types
             .first()
             .is_some_and(|ty| matches!(ty, ValueType::Reference(_)));
-    if reference_equality || heap_operation(operation).is_some() {
+    let error_types = error_reference_types(
+        function.id,
+        operation,
+        context.result_ssa_type,
+        context.layouts,
+    )?;
+    let heap = heap_operation(operation, &error_types);
+    if reference_equality || heap.is_some() {
         let operation = if reference_equality {
             HeapOperation::EqualValue
         } else {
-            heap_operation(operation).ok_or(lkjscript_native::PlanError::InvalidHeapCall)?
+            heap.ok_or(lkjscript_native::PlanError::InvalidHeapCall)?
         };
         return builder.heap_call(
             block,

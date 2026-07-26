@@ -17,11 +17,11 @@ canonical local gate, and Docker verification are implemented and verified.
 Add these Result-valued primitives:
 
 ```text
-sys-read-into Handle Buf I64 I64 -> Result I64 Str
-sys-write-from Handle Buf I64 I64 -> Result I64 Str
+sys-read-into Handle Buf I64 I64 -> Result I64 SystemError
+sys-write-from Handle Buf I64 I64 -> Result I64 SystemError
 buf-from-str Str -> Buf
-buf-to-str Buf -> Result Str Str
-buf-slice Buf I64 I64 -> Result Buf Str
+buf-to-str Buf -> Result Str Utf8Error
+buf-slice Buf I64 I64 -> Result Buf SystemError
 ```
 
 For read/write, offset and requested length are non-negative, fit the buffer,

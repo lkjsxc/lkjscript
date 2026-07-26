@@ -9,7 +9,7 @@ mod functions;
 mod headers;
 mod implementations;
 mod indexes;
-mod numeric_error;
+mod prelude;
 mod products;
 mod type_facts;
 

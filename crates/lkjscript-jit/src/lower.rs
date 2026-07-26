@@ -116,6 +116,7 @@ pub(crate) struct LoweredGroup {
 #[derive(Default)]
 struct LayoutInterner {
     identities: HashMap<SsaType, LayoutIdentity>,
+    enum_layouts: HashMap<SsaType, [u8; 32]>,
     next: u32,
 }
 
@@ -132,6 +133,8 @@ struct RuntimeLoweringContext<'a> {
     locals: &'a [LocalId],
     value_types: &'a [ValueType],
     result_type: ValueType,
+    result_ssa_type: &'a SsaType,
+    layouts: &'a LayoutInterner,
 }
 
 #[derive(Clone, Copy)]

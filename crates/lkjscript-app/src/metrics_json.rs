@@ -7,7 +7,9 @@ pub fn outcome(outcome: &ExecutionOutcome) -> String {
                 ("unit", "unit".to_string())
             } else if value.is_empty_list() {
                 ("empty-list", "empty-list".to_string())
-            } else if value.is_none() {
+            } else if value.enum_identity().is_some_and(|(layout, tag)| {
+                layout.bytes() == lkjscript_core::OPTION_LAYOUT && tag == 1
+            }) {
                 ("none", "none".to_string())
             } else if let Some(value) = value.as_bool() {
                 ("bool", value.to_string())

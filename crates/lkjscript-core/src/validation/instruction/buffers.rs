@@ -19,13 +19,13 @@ pub(super) fn apply(
         }
         Op::BufToStr => {
             expect_pop(state, Kind::Buf, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::BufSlice => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Buf, proto, instruction)?;
-            state.stack.push(Kind::Result);
+            state.stack.push(result_kind());
         }
         Op::BufLen | Op::BufClone => {
             expect_pop(state, Kind::Buf, proto, instruction)?;

@@ -27,7 +27,7 @@ pub(crate) enum Operation {
     WriteLocal(LocalId, ValueId),
     Call(FunctionId, Vec<ValueId>),
     RuntimeCall(RuntimeCallSlot, Vec<ValueId>),
-    HeapCall(HeapCallDescriptor, Vec<ValueId>),
+    HeapCall(Box<HeapCallDescriptor>, Vec<ValueId>),
 }
 
 impl Operation {

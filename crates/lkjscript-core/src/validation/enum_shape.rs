@@ -17,6 +17,7 @@ pub(super) fn validate(chunk: &Chunk) -> Result<usize> {
             || !enum_ids.insert(definition.id)
             || !enum_names.insert(definition.name.as_str())
             || !layouts.insert(definition.layout)
+            || !super::prelude_shape::valid(definition)
         {
             return Err(Error::msg("bytecode enum has invalid identity/name/layout"));
         }

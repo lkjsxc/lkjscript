@@ -1,7 +1,7 @@
 use super::*;
 
 fn enum_type() -> ValueType {
-    ValueType::Reference(ReferenceType::Enum(LayoutIdentity::new(100)))
+    ValueType::Reference(ReferenceType::Enum(LayoutIdentity::new(100), [3; 32]))
 }
 
 fn construction(substitutions: usize) -> HeapOperation {

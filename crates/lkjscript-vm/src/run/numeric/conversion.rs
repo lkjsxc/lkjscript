@@ -60,7 +60,7 @@ fn push_f64_result<J: RuntimeTier>(
     let result = match result {
         Ok(value) => {
             let value = vm.arena.alloc(HeapObj::Float(value))?;
-            vm.arena.alloc(HeapObj::ResultOk(value))?
+            result_value(vm, 0, value)?
         }
         Err(error) => error_result(vm, error)?,
     };
@@ -75,7 +75,7 @@ fn push_i64_result<J: RuntimeTier>(
     let result = match result {
         Ok(value) => {
             let value = vm.make_i64(value)?;
-            vm.arena.alloc(HeapObj::ResultOk(value))?
+            result_value(vm, 0, value)?
         }
         Err(error) => error_result(vm, error)?,
     };
@@ -89,5 +89,13 @@ fn error_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, error: NumericError) -> Resu
         physical_tag: error.physical_tag(),
         active_payload: Vec::new(),
     })?;
-    vm.arena.alloc(HeapObj::ResultErr(error))
+    result_value(vm, 1, error)
+}
+
+fn result_value<J: RuntimeTier>(vm: &mut Vm<'_, J>, tag: u16, payload: Value) -> Result<Value> {
+    vm.arena.alloc(HeapObj::Enum {
+        layout: lkjscript_core::RuntimeLayoutId::new(lkjscript_core::RESULT_LAYOUT),
+        physical_tag: tag,
+        active_payload: vec![payload],
+    })
 }

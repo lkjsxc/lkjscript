@@ -4,16 +4,24 @@ use lkjscript_core::{HeapObj, Op, Result, Value};
 
 use crate::run::{RuntimeTier, Vm};
 
-fn push_language_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<Value>) {
-    match crate::host_ext::language_result(&mut vm.arena, result) {
+fn push_language_result<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    kind: lkjscript_core::SystemErrorKind,
+    result: Result<Value>,
+) {
+    match crate::host_ext::language_result(&mut vm.arena, kind, result) {
         Ok(value) => vm.push(value),
         Err(error) => vm.allocation_error = Some(error),
     }
 }
 
-fn push_i64_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<i64>) {
+fn push_i64_result<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    kind: lkjscript_core::SystemErrorKind,
+    result: Result<i64>,
+) {
     let result = result.and_then(|number| vm.make_i64(number));
-    push_language_result(vm, result);
+    push_language_result(vm, kind, result);
 }
 
 fn sleep_result(milliseconds: u64) -> Result<Value> {
@@ -42,7 +50,6 @@ fn wait_readable<J: RuntimeTier>(
 mod buffers;
 mod files;
 mod process;
-mod results;
 mod sockets;
 mod sqlite_read;
 mod sqlite_write;
@@ -57,9 +64,6 @@ pub fn dispatch_ext<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> 
         return Ok(true);
     }
     if process::dispatch(vm, op)? {
-        return Ok(true);
-    }
-    if results::dispatch(vm, op)? {
         return Ok(true);
     }
     if sockets::dispatch(vm, op)? {

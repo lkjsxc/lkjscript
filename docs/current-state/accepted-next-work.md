@@ -30,10 +30,12 @@ The immediate implementation sequence has progressed as follows:
    JIT are Current;
 8. Edition 2 Never/structured control, typed loop/while SSA block parameters,
    dynamic trap values, all-four-engine differentials, and precise Semantic
-   Source/hole control facts and actions are Current; and
-9. automatic/host-native enum transitions, migration publication,
-   nonzero query caching, whole-pipeline pre-allocation, and shared request
-   ledgers remain next.
+   Source/hole control facts and actions are Current;
+9. the four explicit numeric conversions and the generic `Option`/`Result`
+   prelude with closed `NumericError`, `Utf8Error`, and `SystemError` are Current
+   through generic enum IR/runtime paths and zero-fallback typed-error differentials; and
+10. broader host-native enum transitions, migration publication, nonzero query
+   caching, whole-pipeline pre-allocation, and shared request ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

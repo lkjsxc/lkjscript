@@ -35,14 +35,14 @@ complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
 local stdio sessions, the Edition 2 identity/non-publishing migration slice,
 generic enum declarations/resolved type facts, exact `variant-value`
-construction, exhaustive source match, Never/structured control, and the four
-explicit numeric conversions through verified ordinary SSA, the evaluator,
-validated bytecode, reference VM, and forced Linux x86-64 baseline/proof
-execution, compiler
-Resource Profile V2, and the core hierarchical pre-allocation foundation are
-Current. Agent Foundation V1 and Semantic Source Schema V1 identities are
-historical and rejected. Other Edition 2 ADTs,
-changed semantics, execution cutover, migration publication, whole-pipeline
+construction, exhaustive source match, Never/structured control, the generic
+prelude `Option`/`Result` cutover with closed typed errors, and the four explicit
+numeric conversions through verified ordinary SSA, the evaluator, validated
+bytecode, reference VM, and forced Linux x86-64 baseline/proof execution,
+compiler Resource Profile V2, and the core hierarchical pre-allocation
+foundation are Current. Agent Foundation V1 and Semantic Source Schema V1
+identities are historical and rejected. Other Edition 2 changed semantics,
+execution cutover, migration publication, whole-pipeline
 pre-allocation, logical metering beyond enum construction, nonzero query
 caching, and cross-authority ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
@@ -83,8 +83,8 @@ commands/APIs are Current on the containing implementation revision.
    target-independent layout facts, verified SSA primitives/evaluator,
    validated bytecode, boxed active-payload GC representation, reference VM,
    exhaustive match planning/lowering, and forced Linux x86-64 baseline/proof
-   JIT execution are Current. Automatic/native-host enum transitions, publish,
-   and corpus cutover remain targets.
+   JIT execution are Current. Typed prelude runtime boundaries are the Current
+   native-host exception; broader transitions, publish, and corpus cutover remain targets.
 8. Edition 2 Never is Current as a join-only HIR type with no value/storage/ABI
    representation. Typed loop and while control lower to verified SSA block
    parameters and ordinary terminators consumed by evaluator, bytecode/VM,
@@ -95,6 +95,11 @@ commands/APIs are Current on the containing implementation revision.
    bit/exponent algorithms, validated bytecode/VM, and forced baseline/proof JIT
    runtime calls with zero fallback. Edition 1 mixed numeric behavior remains
    migration input and is not available in Edition 2.
+10. Prelude `Option T` and `Result T E` are ordinary stable-identity generic
+   enums across HIR, SSA, evaluator, bytecode/VM, GC, and native plans. Closed
+   `NumericError`, `Utf8Error`, and `SystemError` values use the same enum path;
+   UTF-8 and host failures are classified once at their capability boundary,
+   and dedicated option/result opcodes, heap objects, and native types are absent.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

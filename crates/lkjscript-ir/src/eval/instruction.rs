@@ -184,7 +184,6 @@ impl Evaluator<'_> {
                 Ok(EvalValue::Symbol(value.clone()))
             }
             Constant::EmptyList => Ok(EvalValue::List(Vec::new())),
-            Constant::None => Ok(EvalValue::None),
         }
     }
 }

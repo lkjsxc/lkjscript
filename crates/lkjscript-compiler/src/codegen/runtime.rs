@@ -106,13 +106,5 @@ pub(in crate::codegen) fn runtime_opcode(operation: RuntimeOp) -> Op {
         RuntimeOp::SysPoll => Op::SysPoll,
         RuntimeOp::SysTtyGet => Op::SysTtyGet,
         RuntimeOp::SysTtySet => Op::SysTtySet,
-        RuntimeOp::Ok => Op::OkWrap,
-        RuntimeOp::Err => Op::ErrWrap,
-        RuntimeOp::IsOk => Op::IsOk,
-        RuntimeOp::UnwrapOk => Op::UnwrapOk,
-        RuntimeOp::UnwrapErr => Op::UnwrapErr,
-        RuntimeOp::Some => Op::SomeWrap,
-        RuntimeOp::IsSome => Op::IsSome,
-        RuntimeOp::UnwrapSome => Op::UnwrapSome,
     }
 }

@@ -94,19 +94,19 @@ pub(super) fn host_signature(
         ),
         RuntimeOp::SysSqliteColumnI64 => exact(
             &[SsaType::Handle, SsaType::I64],
-            &system_result(SsaType::Option(Box::new(SsaType::I64))),
+            &system_result(crate::prelude_contract::option(SsaType::I64)),
         ),
         RuntimeOp::SysSqliteColumnF64 => exact(
             &[SsaType::Handle, SsaType::I64],
-            &system_result(SsaType::Option(Box::new(SsaType::F64))),
+            &system_result(crate::prelude_contract::option(SsaType::F64)),
         ),
         RuntimeOp::SysSqliteColumnText => exact(
             &[SsaType::Handle, SsaType::I64],
-            &system_result(SsaType::Option(Box::new(SsaType::Str))),
+            &system_result(crate::prelude_contract::option(SsaType::Str)),
         ),
         RuntimeOp::SysSqliteColumnBytes => exact(
             &[SsaType::Handle, SsaType::I64],
-            &system_result(SsaType::Option(Box::new(SsaType::Buf))),
+            &system_result(crate::prelude_contract::option(SsaType::Buf)),
         ),
         RuntimeOp::SysSqliteBackup => exact(
             &[SsaType::Handle, SsaType::Str, SsaType::I64],

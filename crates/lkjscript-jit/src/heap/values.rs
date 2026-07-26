@@ -11,10 +11,8 @@ pub(crate) fn reference_layout_key(reference_type: ReferenceType) -> u64 {
         ReferenceType::Buf => 1_u64 << 56,
         ReferenceType::Str => 2_u64 << 56,
         ReferenceType::List(layout, _) => (3_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Option(layout, _) => (4_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Result(layout, _, _) => (5_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Product(layout) => (6_u64 << 56) | u64::from(layout.get()),
-        ReferenceType::Enum(layout) => (7_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Product(layout) => (4_u64 << 56) | u64::from(layout.get()),
+        ReferenceType::Enum(layout, _) => (5_u64 << 56) | u64::from(layout.get()),
     }
 }
 
@@ -27,7 +25,6 @@ pub(crate) fn native_reference_value(
     if word == 0 {
         return match reference_type {
             ReferenceType::List(_, _) => Ok(Value::EMPTY_LIST),
-            ReferenceType::Option(_, _) => Ok(Value::NONE),
             _ => Err("zero native reference is invalid for this category".into()),
         };
     }
@@ -39,15 +36,13 @@ pub(crate) fn native_reference_value(
     let category_matches = match (reference_type, heap.get(value)) {
         (ReferenceType::Buf, Ok(HeapObj::Buf(_)))
         | (ReferenceType::Str, Ok(HeapObj::Str(_)))
-        | (ReferenceType::List(_, _), Ok(HeapObj::Pair { .. }))
-        | (ReferenceType::Option(_, _), Ok(HeapObj::OptionSome(_)))
-        | (ReferenceType::Result(_, _, _), Ok(HeapObj::ResultOk(_) | HeapObj::ResultErr(_))) => {
-            true
-        }
+        | (ReferenceType::List(_, _), Ok(HeapObj::Pair { .. })) => true,
         (ReferenceType::Product(layout), Ok(HeapObj::Product { product, .. })) => {
             layout == lkjscript_native::LayoutIdentity::product(u32::from(product.raw()))
         }
-        (ReferenceType::Enum(_), Ok(HeapObj::Enum { .. })) => true,
+        (ReferenceType::Enum(_, semantic_layout), Ok(HeapObj::Enum { layout, .. })) => {
+            layout.bytes() == semantic_layout
+        }
         _ => false,
     };
     if !category_matches {
@@ -61,9 +56,7 @@ pub(crate) fn reference_native_value(
     value: Value,
     reference_type: ReferenceType,
 ) -> Result<NativeValue, String> {
-    if value.is_empty_list() && matches!(reference_type, ReferenceType::List(_, _))
-        || value.is_none() && matches!(reference_type, ReferenceType::Option(_, _))
-    {
+    if value.is_empty_list() && matches!(reference_type, ReferenceType::List(_, _)) {
         return Ok(NativeValue::Reference(
             lkjscript_native::NativeReference::new(reference_type, 0),
         ));
@@ -123,14 +116,40 @@ pub(crate) fn value_equal(heap: &GcHeap, left: Value, right: Value) -> Result<bo
         (Ok(HeapObj::Int(left)), Ok(HeapObj::Int(right))) => Ok(left == right),
         (Ok(HeapObj::Float(left)), Ok(HeapObj::Float(right))) => Ok(left == right),
         (Ok(HeapObj::Str(left)), Ok(HeapObj::Str(right))) => Ok(left == right),
-        (Ok(HeapObj::OptionSome(left)), Ok(HeapObj::OptionSome(right)))
-        | (Ok(HeapObj::ResultOk(left)), Ok(HeapObj::ResultOk(right)))
-        | (Ok(HeapObj::ResultErr(left)), Ok(HeapObj::ResultErr(right))) => {
-            value_equal(heap, *left, *right)
+        (
+            Ok(HeapObj::Enum {
+                layout: left_layout,
+                physical_tag: left_tag,
+                ..
+            }),
+            Ok(HeapObj::Enum {
+                layout: right_layout,
+                physical_tag: right_tag,
+                ..
+            }),
+        ) if left_layout == right_layout && left_tag != right_tag => Ok(false),
+        (
+            Ok(HeapObj::Enum {
+                layout: left_layout,
+                physical_tag: left_tag,
+                active_payload: left_payload,
+            }),
+            Ok(HeapObj::Enum {
+                layout: right_layout,
+                physical_tag: right_tag,
+                active_payload: right_payload,
+            }),
+        ) if left_layout == right_layout && left_tag == right_tag => {
+            if left_payload.len() != right_payload.len() {
+                return Err("enum payload shape mismatch".into());
+            }
+            for (left, right) in left_payload.iter().zip(right_payload) {
+                if !value_equal(heap, *left, *right)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
-        (Ok(HeapObj::ResultOk(_)), Ok(HeapObj::ResultErr(_)))
-        | (Ok(HeapObj::ResultErr(_)), Ok(HeapObj::ResultOk(_))) => Ok(false),
-        _ if left.is_none() || right.is_none() => Ok(left.is_none() && right.is_none()),
         _ => Err("equal-value category mismatch".into()),
     }
 }

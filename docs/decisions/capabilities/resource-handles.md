@@ -34,8 +34,8 @@ that token metadata matters.
 Remove script-controlled `sys-ioctl Handle I64 Buf`. Replace it with exactly:
 
 ```text
-sys-tty-get Handle Buf -> Result Unit Str
-sys-tty-set Handle Buf -> Result Unit Str
+sys-tty-get Handle Buf -> Result Unit SystemError
+sys-tty-set Handle Buf -> Result Unit SystemError
 ```
 
 The Linux backend selects `TCGETS` and `TCSETS` internally. Both safe Rust
@@ -50,7 +50,7 @@ cycle.
 
 ## Related Result Decisions
 
-`sys-poll` becomes `Handle I64 -> Result I64 Str`. Terminal and poll wrappers
+`sys-poll` becomes `Handle I64 -> Result I64 SystemError`. Terminal and poll wrappers
 unwrap or propagate these values explicitly. Ordinary invalid/stale handle and
 OS failures are data at `sys-*` language boundaries, not VM termination.
 

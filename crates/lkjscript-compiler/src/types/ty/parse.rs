@@ -13,6 +13,8 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         "I64" => Ok((Type::I64, i + 1)),
         "F64" => Ok((Type::F64, i + 1)),
         "NumericError" => Ok((crate::types::numeric_error_type(), i + 1)),
+        "Utf8Error" => Ok((crate::types::utf8_error_type(), i + 1)),
+        "SystemError" => Ok((crate::types::system_error_type(), i + 1)),
         "I32" | "U32" | "U64" | "F32" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "Int"
         | "Float" => Err(format!(
             "unsupported numeric type {a}; use canonical I64 or F64"
@@ -51,12 +53,12 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         }
         "Option" => {
             let (inner, next) = parse_one(atoms, i + 1)?;
-            Ok((Type::Option(Box::new(inner)), next))
+            Ok((crate::types::option_type(inner), next))
         }
         "Result" => {
             let (ok, n1) = parse_one(atoms, i + 1)?;
             let (err, n2) = parse_one(atoms, n1)?;
-            Ok((Type::Result(Box::new(ok), Box::new(err)), n2))
+            Ok((crate::types::result_type(ok, err), n2))
         }
         other if is_numeric_width_name(other) => Err(format!(
             "unsupported numeric type {other}; use canonical I64 or F64"
@@ -86,6 +88,8 @@ fn is_type_param_name(s: &str) -> bool {
                 | "I64"
                 | "F64"
                 | "NumericError"
+                | "Utf8Error"
+                | "SystemError"
                 | "Str"
                 | "Buf"
                 | "Owned"

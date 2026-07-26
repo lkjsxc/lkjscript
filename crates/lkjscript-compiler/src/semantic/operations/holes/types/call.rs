@@ -45,11 +45,22 @@ fn bind_parameters(pattern: &Type, actual: &Type, output: &mut HashMap<String, T
         (Type::Owned(left), Type::Owned(right))
         | (Type::Ref(left), Type::Ref(right))
         | (Type::RefMut(left), Type::RefMut(right))
-        | (Type::List(left), Type::List(right))
-        | (Type::Option(left), Type::Option(right)) => bind_parameters(left, right, output),
-        (Type::Result(left_ok, left_error), Type::Result(right_ok, right_error)) => {
-            bind_parameters(left_ok, right_ok, output);
-            bind_parameters(left_error, right_error, output);
+        | (Type::List(left), Type::List(right)) => bind_parameters(left, right, output),
+        (
+            Type::Enum {
+                id: left_id,
+                arguments: left,
+                ..
+            },
+            Type::Enum {
+                id: right_id,
+                arguments: right,
+                ..
+            },
+        ) if left_id == right_id && left.len() == right.len() => {
+            for (left, right) in left.iter().zip(right) {
+                bind_parameters(left, right, output);
+            }
         }
         _ => {}
     }
@@ -64,7 +75,7 @@ fn simple_expression_type(node: &SourceNode) -> Option<Type> {
         SyntaxKind::Str { .. } => Some(Type::Str),
         SyntaxKind::Call { name } if name == "none" => {
             let (inner, used) = super::parse_type_nodes(&node.children)?;
-            (used == node.children.len()).then(|| Type::Option(Box::new(inner)))
+            (used == node.children.len()).then(|| crate::types::option_type(inner))
         }
         SyntaxKind::Call { name } if name == "empty-list" => {
             let (inner, used) = super::parse_type_nodes(&node.children)?;
@@ -77,12 +88,10 @@ fn simple_expression_type(node: &SourceNode) -> Option<Type> {
 fn contains_parameter(ty: &Type) -> bool {
     match ty {
         Type::Param(_) | Type::Forall { .. } => true,
-        Type::Owned(inner)
-        | Type::Ref(inner)
-        | Type::RefMut(inner)
-        | Type::List(inner)
-        | Type::Option(inner) => contains_parameter(inner),
-        Type::Result(ok, error) => contains_parameter(ok) || contains_parameter(error),
+        Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
+            contains_parameter(inner)
+        }
+        Type::Enum { arguments, .. } => arguments.iter().any(contains_parameter),
         Type::Fn { params, ret } => {
             params.iter().any(contains_parameter) || contains_parameter(ret)
         }

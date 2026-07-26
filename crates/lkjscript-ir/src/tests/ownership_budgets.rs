@@ -70,7 +70,7 @@ fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() 
 
     let mut nested_function = one_block_program();
     *nested_function.functions[0].signature.result =
-        SsaType::Option(Box::new(SsaType::Function(Box::new(
+        SsaType::List(Box::new(SsaType::Function(Box::new(
             Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
         ))));
     let error = verify(nested_function)
@@ -82,7 +82,7 @@ fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() 
     for _ in 0..70 {
         nested = SsaType::Function(Box::new(Signature::monomorphic(Vec::new(), nested)));
     }
-    *deeply_nested_function.functions[0].signature.result = SsaType::Option(Box::new(nested));
+    *deeply_nested_function.functions[0].signature.result = SsaType::List(Box::new(nested));
     let error = verify(deeply_nested_function)
         .expect_err("nested function ownership scan must remain under type verifier bounds");
     assert!(

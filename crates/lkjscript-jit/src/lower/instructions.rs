@@ -36,15 +36,6 @@ pub(super) fn lower_instruction(
                 )?,
                 Vec::new(),
             ),
-            Constant::None => builder.heap_call(
-                block,
-                heap_descriptor(
-                    HeapOperation::None,
-                    Vec::new(),
-                    value_type(value_types, instruction.id)?,
-                )?,
-                Vec::new(),
-            ),
             Constant::Symbol(_) => return unsupported_operation(function.id, "Symbol constant"),
         },
         InstructionKind::Copy(value) => {
@@ -64,6 +55,8 @@ pub(super) fn lower_instruction(
                 locals,
                 value_types,
                 result_type: value_type(value_types, instruction.id)?,
+                result_ssa_type: &instruction.ty,
+                layouts,
             },
             builder,
         ),
@@ -76,6 +69,7 @@ pub(super) fn lower_instruction(
             block,
             locals,
             value_types,
+            layouts,
             builder,
         )?),
         InstructionKind::Call {

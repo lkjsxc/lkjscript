@@ -2,11 +2,11 @@ use crate::ownership::*;
 
 pub(in crate::ownership) fn reject_unsupported_type_placement(ty: &Type) -> Result<()> {
     match ty {
-        Type::List(inner) | Type::Option(inner) if contains_ownership(inner) => Err(Error::msg(
-            "ownership/reference values cannot be stored in List or Option",
+        Type::List(inner) if contains_ownership(inner) => Err(Error::msg(
+            "ownership/reference values cannot be stored in List",
         )),
-        Type::Result(ok, error) if contains_ownership(ok) || contains_ownership(error) => Err(
-            Error::msg("ownership/reference values cannot be stored in Result"),
+        Type::Enum { arguments, .. } if arguments.iter().any(contains_ownership) => Err(
+            Error::msg("ownership/reference values cannot instantiate an enum"),
         ),
         _ => Ok(()),
     }
@@ -15,8 +15,8 @@ pub(in crate::ownership) fn reject_unsupported_type_placement(ty: &Type) -> Resu
 pub(in crate::ownership) fn contains_ownership(ty: &Type) -> bool {
     match ty {
         Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => true,
-        Type::List(inner) | Type::Option(inner) => contains_ownership(inner),
-        Type::Result(ok, error) => contains_ownership(ok) || contains_ownership(error),
+        Type::List(inner) => contains_ownership(inner),
+        Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership),
         Type::Fn { params, ret } => {
             params.iter().any(contains_ownership) || contains_ownership(ret)
         }

@@ -35,12 +35,12 @@ pub(super) fn verify(
 }
 
 fn numeric_result(ok: SsaType) -> SsaType {
-    SsaType::Result(
-        Box::new(ok),
-        Box::new(SsaType::Enum {
+    crate::prelude_contract::result(
+        ok,
+        SsaType::Enum {
             id: crate::EnumId::new(ERROR_ID),
             arguments: Vec::new(),
-        }),
+        },
     )
 }
 

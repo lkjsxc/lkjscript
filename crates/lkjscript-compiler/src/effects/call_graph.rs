@@ -59,7 +59,6 @@ pub(super) fn collect_direct_callees(
         | ExprKind::LitBool(_)
         | ExprKind::LitUnit
         | ExprKind::EmptyList
-        | ExprKind::LitNone
         | ExprKind::LitStr(_)
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
@@ -121,7 +120,8 @@ pub(super) fn collect_direct_callees(
         | ExprKind::SetLocal { value, .. }
         | ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
-        | ExprKind::EnumField { value, .. } => {
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => {
             collect_direct_callees(value, binding_to_function, callees);
         }
         ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {

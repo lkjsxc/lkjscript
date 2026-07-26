@@ -1,3 +1,5 @@
+#![allow(clippy::panic)]
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -46,7 +48,9 @@ fn buffers_convert_exact_utf8_without_replacement() {
         .expect("test text allocation");
     let buffer = buf_from_str(&mut arena, text).expect("encode exact UTF-8");
     assert_eq!(as_buf(&arena, buffer).ok(), Some("nul\0é".as_bytes()));
-    let round_trip = buf_to_str(&mut arena, buffer).expect("decode exact UTF-8");
+    let round_trip = buf_to_str(&mut arena, buffer)
+        .expect("decode operation")
+        .expect("decode exact UTF-8");
     assert_eq!(
         crate::host_ext::as_str(&arena, round_trip).ok(),
         Some("nul\0é")
@@ -55,17 +59,32 @@ fn buffers_convert_exact_utf8_without_replacement() {
     let invalid = buf_new(&mut arena, 2).expect("invalid buffer");
     buf_set(&mut arena, invalid, 0, 0xc3).expect("set invalid prefix");
     buf_set(&mut arena, invalid, 1, 0x28).expect("set invalid suffix");
-    let conversion = buf_to_str(&mut arena, invalid);
-    let result = crate::host_ext::language_result(&mut arena, conversion)
-        .expect("language Result allocation");
-    assert_eq!(
-        crate::host_ext::is_ok(&arena, result).ok(),
-        Some(Value::FALSE)
-    );
-    let error = crate::host_ext::unwrap_err(&arena, result).expect("ResultErr message");
-    assert!(crate::host_ext::as_str(&arena, error)
-        .expect("ResultErr string")
-        .contains("invalid UTF-8"));
+    let conversion = buf_to_str(&mut arena, invalid).expect("decode operation");
+    let result = crate::host_ext::utf8_result(&mut arena, conversion)
+        .expect("typed UTF-8 Result allocation");
+    let error = match arena.get(result).expect("Result value") {
+        lkjscript_core::HeapObj::Enum {
+            layout,
+            physical_tag: 1,
+            active_payload,
+        } if layout.bytes() == lkjscript_core::RESULT_LAYOUT => active_payload[0],
+        other => panic!("malformed UTF-8 Result: {other:?}"),
+    };
+    match arena.get(error).expect("Utf8Error value") {
+        lkjscript_core::HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        } => {
+            assert_eq!(layout.bytes(), lkjscript_core::UTF8_ERROR_LAYOUT);
+            assert_eq!(
+                *physical_tag,
+                lkjscript_core::Utf8ErrorKind::MissingContinuation.physical_tag()
+            );
+            assert_eq!(active_payload[0].as_small_i64(), Some(0));
+        }
+        other => panic!("malformed Utf8Error: {other:?}"),
+    }
 }
 
 mod ranges;

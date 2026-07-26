@@ -133,8 +133,8 @@
 - Semantics: executable roots have exactly one no-parameter typed main;
   imports contain declarations only; top-level `do` and runtime value defs are
   removed; `var` introduces one exactly typed mutable local and local-only
-  `set` returns Unit; Unit, typed empty-list, and Option none have distinct
-  singleton tags, while Option some is traced; `nil`, `Nil`, `nil?`, and
+  `set` returns Unit; Unit, typed empty-list, and generic `Option.None` have
+  distinct singleton tags, while `Option.Some` uses ordinary enum tracing; `nil`, `Nil`, `nil?`, and
   `null?` are removed; `arg` returns `Option Str`; universal `eq`/`ne` are
   removed in favor of exact value, object-identity, bounded structural-list,
   and F64-bit equality families; nominal products have ordered named fields,
@@ -148,7 +148,7 @@
   evaluator, validated bytecode/reference VM, and forced baseline/proof JIT
   with zero fallback. The four explicit Edition 2 numeric conversions, stable
   `NumericError`, bit-exact evaluator/VM behavior, and generated baseline/proof
-  runtime sites are Current; mixed numeric operations are rejected. Host-native enum transitions are absent
+  runtime sites and generic prelude typed-error native transitions are Current; mixed numerics are rejected
 - Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
   fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
   aggregate ownership-analysis budget; lexical place initialization/end;
@@ -196,5 +196,5 @@
 - Terminal ABI: arbitrary ioctl is absent; fixed `sys-tty-get`/`sys-tty-set`
   operations validate the exact 60-byte Linux state before FFI and return Results
 - System Results: open, path existence, close/read/write, `isatty`, time,
-  socket, poll, terminal, and terminal-guard failures return operation-qualified
-  `ResultErr` values; standard wrappers unwrap explicitly
+  socket, poll, terminal, and terminal-guard failures return ordinary `Result.Err`
+  values carrying closed `SystemError`; UTF-8 failures carry closed `Utf8Error`; wrappers unwrap explicitly

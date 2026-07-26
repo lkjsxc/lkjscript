@@ -6,6 +6,7 @@ mod entry;
 mod enum_shape;
 mod instruction;
 mod merge;
+mod prelude_shape;
 mod shape;
 
 use crate::{Chunk, Constant, DecodedInstruction, EnumId, FunctionProto, ProductId, VariantId};
@@ -81,10 +82,6 @@ pub(super) enum Kind {
     List,
     Buf,
     Handle,
-    Result,
-    NumericResultF64,
-    NumericResultI64,
-    Option,
     Product(ProductId),
     Enum(EnumId, Option<VariantId>),
 }

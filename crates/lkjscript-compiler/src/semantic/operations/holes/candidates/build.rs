@@ -42,8 +42,12 @@ pub(super) fn literal_expressions(
     if let Some(expression) = super::super::validate::witness(tree, ty, 0) {
         let category = match ty {
             Type::Product(_) => CandidateCategory::ProductConstructor,
-            Type::Option(_) => CandidateCategory::OptionConstructor,
-            Type::Result(_, _) => CandidateCategory::ResultConstructor,
+            Type::Enum { id, .. } if id.bytes() == lkjscript_core::OPTION_ID => {
+                CandidateCategory::OptionConstructor
+            }
+            Type::Enum { id, .. } if id.bytes() == lkjscript_core::RESULT_ID => {
+                CandidateCategory::ResultConstructor
+            }
             _ => CandidateCategory::ExactLiteral,
         };
         if !matches!(

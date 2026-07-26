@@ -9,8 +9,9 @@ become Current.
 
 ## Status
 
-**Current for source match, Never/structured control, and the four numeric
-conversions; Accepted Target for full Edition 2 cutover.** Differentials cover
+**Current for source match, Never/structured control, the four numeric
+conversions, and the typed-error/generic-prelude cutover; Accepted Target for
+full Edition 2 source-corpus cutover.** Differentials cover
 the evaluator, reference VM, forced baseline, and forced proof execution with
 zero fallback for these slices. The
 complete cutover gate below is not claimed.
@@ -28,6 +29,9 @@ fallback. Edition 2 numeric conversion, ADT allocation/access, Never control,
 and representative match CFG must reach actual generated calls; emission,
 disassembly, metadata, or VM observation alone is not native evidence. The
 proof JIT independently checks its complete proof before source effects.
+Native heap-call metadata carries the concrete substitution identity and stable
+semantic layout identity of every constructed typed-error payload; allocating
+an error under a reserved, synthetic, or outer-result identity is forbidden.
 Malformed tags, layouts, plans, roots, safepoints, charge sites, control targets,
 bytecode, runtime-call identities, and proof metadata fail closed.
 
@@ -46,8 +50,8 @@ Before ordinary Edition 1 compilation is removed:
 
 1. all 125 tracked `.lkjscript` sources, including all 121 under `src/`, are
    atomically migrated;
-2. Option/Result generic-ADT replacement passes dedicated old/new differential
-   coverage and obsolete machinery is removed;
+2. the Current Option/Result generic-ADT replacement and typed-error
+   differentials remain green with no obsolete machinery;
 3. evaluator, VM, forced baseline, and forced proof-JIT differentials pass;
 4. Profile V2 pre-allocation boundaries pass exact-limit, limit-plus-one,
    overflow, adversarial, and deterministic-diagnostic tests; and

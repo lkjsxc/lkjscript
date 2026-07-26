@@ -22,17 +22,48 @@ pub(crate) fn compare_values<T: PartialOrd>(
 
 pub(crate) fn value_equal(left: &EvalValue, right: &EvalValue) -> std::result::Result<bool, Flow> {
     match (left, right) {
-        (EvalValue::Unit, EvalValue::Unit) | (EvalValue::None, EvalValue::None) => Ok(true),
+        (EvalValue::Unit, EvalValue::Unit) => Ok(true),
         (EvalValue::Bool(left), EvalValue::Bool(right)) => Ok(left == right),
         (EvalValue::I64(left), EvalValue::I64(right)) => Ok(left == right),
         (EvalValue::F64(left), EvalValue::F64(right)) => Ok(left == right),
         (EvalValue::Str(left), EvalValue::Str(right))
         | (EvalValue::Symbol(left), EvalValue::Symbol(right)) => Ok(left == right),
-        (EvalValue::Some(left), EvalValue::Some(right))
-        | (EvalValue::Ok(left), EvalValue::Ok(right))
-        | (EvalValue::Err(left), EvalValue::Err(right)) => value_equal(left, right),
-        (EvalValue::None, EvalValue::Some(_)) | (EvalValue::Some(_), EvalValue::None) => Ok(false),
-        (EvalValue::Ok(_), EvalValue::Err(_)) | (EvalValue::Err(_), EvalValue::Ok(_)) => Ok(false),
+        (
+            EvalValue::Enum {
+                enum_id: left_enum,
+                variant: left_variant,
+                ..
+            },
+            EvalValue::Enum {
+                enum_id: right_enum,
+                variant: right_variant,
+                ..
+            },
+        ) if left_enum == right_enum && left_variant != right_variant => Ok(false),
+        (
+            EvalValue::Enum {
+                enum_id: left_enum,
+                variant: left_variant,
+                payload: left_payload,
+                ..
+            },
+            EvalValue::Enum {
+                enum_id: right_enum,
+                variant: right_variant,
+                payload: right_payload,
+                ..
+            },
+        ) if left_enum == right_enum && left_variant == right_variant => {
+            if left_payload.len() != right_payload.len() {
+                return Err(Flow::Trap("enum payload shape mismatch".into()));
+            }
+            for (left, right) in left_payload.iter().zip(right_payload) {
+                if !value_equal(left, right)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
         _ => Err(Flow::Trap("equal-value category mismatch".into())),
     }
 }

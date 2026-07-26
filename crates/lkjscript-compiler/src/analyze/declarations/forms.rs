@@ -108,6 +108,8 @@ pub(in crate::analyze) fn is_builtin_type_name(name: &str) -> bool {
             | "I64"
             | "F64"
             | "NumericError"
+            | "Utf8Error"
+            | "SystemError"
             | "Str"
             | "Buf"
             | "Symbol"

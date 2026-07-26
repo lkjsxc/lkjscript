@@ -1,5 +1,45 @@
 use super::*;
 
+fn add_result_ok_test(chunk: &mut Chunk) {
+    let enum_id = lkjscript_core::EnumId::new(lkjscript_core::RESULT_ID);
+    let layout = lkjscript_core::RuntimeLayoutId::new(lkjscript_core::RESULT_LAYOUT);
+    let ok = lkjscript_core::VariantId::new(lkjscript_core::RESULT_OK_ID);
+    let err = lkjscript_core::VariantId::new(lkjscript_core::RESULT_ERR_ID);
+    chunk.enums.push(lkjscript_core::EnumMetadata {
+        id: enum_id,
+        name: "Result".into(),
+        type_parameter_count: 2,
+        layout,
+        variants: vec![
+            lkjscript_core::EnumVariantMetadata {
+                id: ok,
+                name: "Ok".into(),
+                physical_tag: 0,
+                fields: vec![lkjscript_core::EnumFieldMetadata {
+                    id: lkjscript_core::VariantFieldId::new(lkjscript_core::RESULT_OK_VALUE_ID),
+                    name: "value".into(),
+                    traced: true,
+                }],
+            },
+            lkjscript_core::EnumVariantMetadata {
+                id: err,
+                name: "Err".into(),
+                physical_tag: 1,
+                fields: vec![lkjscript_core::EnumFieldMetadata {
+                    id: lkjscript_core::VariantFieldId::new(lkjscript_core::RESULT_ERR_ERROR_ID),
+                    name: "error".into(),
+                    traced: true,
+                }],
+            },
+        ],
+    });
+    chunk.enum_variants.push(lkjscript_core::EnumVariantRef {
+        enum_id,
+        variant: ok,
+        layout,
+    });
+}
+
 #[test]
 fn fuel_and_returned_values_use_structured_outcomes() {
     let chunk = validated(&[Op::Unit, Op::Return]);
@@ -87,7 +127,8 @@ fn sha256_opcode_returns_language_results_for_valid_and_invalid_ranges() {
     valid.main.emit_op_u16(Op::LoadConst, zero.0);
     valid.main.emit_op_u16(Op::LoadConst, zero.0);
     valid.main.emit(Op::SysSha256);
-    valid.main.emit(Op::IsOk);
+    add_result_ok_test(&mut valid);
+    valid.main.emit_op_u16(Op::IsEnumVariant, 0);
     valid.main.emit(Op::Return);
     let valid = validate(valid);
     assert!(matches!(
@@ -103,7 +144,8 @@ fn sha256_opcode_returns_language_results_for_valid_and_invalid_ranges() {
     invalid.main.emit_op_u16(Op::LoadConst, zero.0);
     invalid.main.emit_op_u16(Op::LoadConst, one.0);
     invalid.main.emit(Op::SysSha256);
-    invalid.main.emit(Op::IsOk);
+    add_result_ok_test(&mut invalid);
+    invalid.main.emit_op_u16(Op::IsEnumVariant, 0);
     invalid.main.emit(Op::Return);
     let invalid = validate(invalid);
     assert!(matches!(

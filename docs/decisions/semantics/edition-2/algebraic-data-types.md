@@ -16,8 +16,8 @@ Edition 2 accepts generic nominal `enum` declarations, `variant-value`, and
 exhaustive source `match`; validates exact named variant, field, and pattern
 shape; resolves invariant explicit instantiations; and executes construction,
 tag tests, active projection, and match CFG on the evaluator, VM, forced
-baseline JIT, and forced proof JIT. Prelude replacement remains an Accepted
-Target.
+baseline JIT, and forced proof JIT. The stable compiler-owned prelude enum
+replacement is Current.
 
 ## Declaration Projection
 
@@ -105,6 +105,8 @@ payload. These execution facts do not alter declaration identity.
 
 `Option` and `Result` are compiler-recognized prelude enum identities, never
 recognized by source names. Product remains its distinct nominal product
-concept; Product does not become an enum. Dedicated Option/Result semantics are
-removed only after generic ADT replacement passes complete differential
-coverage. No compatibility machinery remains afterward.
+concept; Product does not become an enum. Dedicated Option/Result runtime
+semantics are removed. Prelude constructors and accessors resolve to stable
+compiler-owned identities and lower only through generic enum construction,
+tag test, active projection, and ordinary CFG. No compatibility machinery
+remains.

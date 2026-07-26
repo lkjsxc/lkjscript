@@ -1,3 +1,5 @@
+mod results;
+
 use super::*;
 use crate::*;
 
@@ -75,17 +77,21 @@ impl<'a> JitHeapServices<'a> {
         })
     }
 
-    pub(crate) fn result_error(
+    pub(crate) fn enum_value(
         &mut self,
-        message: &str,
-        result_type: ValueType,
-    ) -> Result<NativeValue, NativeServiceError> {
-        let payload = self.allocate(HeapObj::Str(message.into()), ReferenceType::Str)?;
-        let reference_type = result_type
-            .reference_type()
-            .ok_or(NativeServiceError::HostFailure)?;
-        let result = self.allocate(HeapObj::ResultErr(payload), reference_type)?;
-        self.native_from_value(result, result_type)
+        layout: [u8; 32],
+        physical_tag: u16,
+        payload: Vec<Value>,
+        reference_type: ReferenceType,
+    ) -> Result<Value, NativeServiceError> {
+        self.allocate(
+            HeapObj::Enum {
+                layout: lkjscript_core::RuntimeLayoutId::new(layout),
+                physical_tag,
+                active_payload: payload,
+            },
+            reference_type,
+        )
     }
 
     pub(crate) fn value_from_native(

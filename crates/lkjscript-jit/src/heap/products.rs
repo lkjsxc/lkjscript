@@ -42,7 +42,7 @@ impl JitHeapServices<'_> {
                 let value = self.allocate(HeapObj::Str(String::new()), reference_type)?;
                 self.native_from_value(value, result_type)
             }
-            HeapOperation::EmptyList | HeapOperation::None => Ok(NativeValue::Reference(
+            HeapOperation::EmptyList => Ok(NativeValue::Reference(
                 lkjscript_native::NativeReference::new(
                     result_type
                         .reference_type()

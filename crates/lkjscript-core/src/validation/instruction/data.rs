@@ -88,7 +88,6 @@ pub(super) fn apply(
         Op::False | Op::True => state.stack.push(Kind::Bool),
         Op::Unit => state.stack.push(Kind::Unit),
         Op::EmptyList => state.stack.push(Kind::List),
-        Op::OptionNone => state.stack.push(Kind::Option),
         Op::Argc => state.stack.push(Kind::I64),
         Op::EmptyStr => state.stack.push(Kind::Str),
         _ => unreachable!("opcode dispatched to wrong validation family"),

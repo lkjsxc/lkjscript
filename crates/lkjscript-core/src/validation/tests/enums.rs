@@ -4,6 +4,35 @@ use crate::{
     EnumVariantMetadata, RuntimeLayoutId, VariantFieldId, VariantId,
 };
 
+fn prelude_option_chunk() -> Chunk {
+    let mut chunk = unit_chunk();
+    chunk.enums.push(EnumMetadata {
+        id: EnumId::new(crate::OPTION_ID),
+        name: "Option".into(),
+        type_parameter_count: 1,
+        layout: RuntimeLayoutId::new(crate::OPTION_LAYOUT),
+        variants: vec![
+            EnumVariantMetadata {
+                id: VariantId::new(crate::OPTION_NONE_ID),
+                name: "None".into(),
+                physical_tag: 1,
+                fields: Vec::new(),
+            },
+            EnumVariantMetadata {
+                id: VariantId::new(crate::OPTION_SOME_ID),
+                name: "Some".into(),
+                physical_tag: 0,
+                fields: vec![EnumFieldMetadata {
+                    id: VariantFieldId::new(crate::OPTION_VALUE_ID),
+                    name: "value".into(),
+                    traced: false,
+                }],
+            },
+        ],
+    });
+    chunk
+}
+
 fn enum_chunk() -> Chunk {
     let enum_id = EnumId::new([1; 32]);
     let a = VariantId::new([2; 32]);
@@ -51,6 +80,24 @@ fn enum_chunk() -> Chunk {
     chunk.main.emit_op_u16(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);
     chunk
+}
+
+#[test]
+fn canonical_prelude_identity_accepts_only_its_exact_metadata() {
+    assert!(validate_chunk(prelude_option_chunk(), &ValidationLimits::default()).is_ok());
+    let mut forged = prelude_option_chunk();
+    forged.enums[0].layout = RuntimeLayoutId::new([9; 32]);
+    assert!(error(forged).contains("invalid identity/name/layout"));
+}
+
+#[test]
+fn duplicate_enum_identity_collision_is_rejected() {
+    let mut collided = prelude_option_chunk();
+    let mut duplicate = collided.enums[0].clone();
+    duplicate.name = "ForgedOption".into();
+    duplicate.layout = RuntimeLayoutId::new([8; 32]);
+    collided.enums.push(duplicate);
+    assert!(error(collided).contains("invalid identity/name/layout"));
 }
 
 #[test]

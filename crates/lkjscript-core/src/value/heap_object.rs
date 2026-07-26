@@ -17,9 +17,6 @@ pub enum HeapObj {
     },
     Builtin(u16),
     Buf(Vec<u8>),
-    ResultOk(Value),
-    ResultErr(Value),
-    OptionSome(Value),
     Product {
         product: ProductId,
         fields: Vec<Value>,
@@ -43,7 +40,6 @@ impl HeapObj {
                     mark(*c);
                 }
             }
-            HeapObj::ResultOk(v) | HeapObj::ResultErr(v) | HeapObj::OptionSome(v) => mark(*v),
             HeapObj::Product { fields, .. } => {
                 for field in fields {
                     mark(*field);

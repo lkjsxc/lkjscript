@@ -9,6 +9,7 @@ mod limits;
 mod numeric_conversion;
 mod opcode;
 mod outcome;
+mod prelude;
 mod profile;
 mod sha256;
 mod validation;
@@ -36,10 +37,10 @@ pub use limits::{
 };
 pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
-    NUMERIC_ERROR_ID, NUMERIC_ERROR_LAYOUT,
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap};
+pub use prelude::*;
 pub use profile::{
     InvalidCeiling, ResourceCeilings, ResourceProfile, ResourceProfileIdentity,
     ResourceProfileName, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,

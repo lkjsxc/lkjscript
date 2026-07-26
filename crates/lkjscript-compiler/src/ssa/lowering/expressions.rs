@@ -1,3 +1,5 @@
+mod enum_dispatch;
+
 use crate::ssa::*;
 
 impl FunctionBuilder<'_> {
@@ -20,7 +22,6 @@ impl FunctionBuilder<'_> {
             }
             ExprKind::LitUnit => self.constant(SsaType::Unit, Constant::Unit, expression.origin)?,
             ExprKind::EmptyList => self.constant(ty, Constant::EmptyList, expression.origin)?,
-            ExprKind::LitNone => self.constant(ty, Constant::None, expression.origin)?,
             ExprKind::LitStr(value) => self.constant(
                 SsaType::Str,
                 Constant::Str(value.clone()),
@@ -147,43 +148,11 @@ impl FunctionBuilder<'_> {
                     expression.origin,
                 );
             }
-            ExprKind::EnumValue {
-                enum_id,
-                variant,
-                layout,
-                fields,
-            } => {
-                return self.lower_enum_value(
-                    *enum_id,
-                    *variant,
-                    *layout,
-                    fields,
-                    ty,
-                    expression.origin,
-                );
-            }
-            ExprKind::EnumIsVariant {
-                enum_id,
-                variant,
-                layout,
-                value,
-            } => {
-                return self.lower_enum_test(*enum_id, *variant, *layout, value, expression.origin);
-            }
-            ExprKind::EnumField {
-                enum_id,
-                variant,
-                field,
-                layout,
-                value,
-            } => {
-                return self.lower_enum_field(
-                    (*enum_id, *variant, *field),
-                    *layout,
-                    value,
-                    ty,
-                    expression.origin,
-                );
+            kind @ (ExprKind::EnumValue { .. }
+            | ExprKind::EnumIsVariant { .. }
+            | ExprKind::EnumField { .. }
+            | ExprKind::EnumUnwrap { .. }) => {
+                return self.lower_enum_expression(kind, ty, expression.origin);
             }
             ExprKind::MatchUnreachable { plan } => {
                 return self.lower_match_unreachable(*plan, expression.origin);

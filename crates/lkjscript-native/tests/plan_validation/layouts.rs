@@ -8,12 +8,9 @@ fn rejects_reused_interned_identity_for_distinct_structural_layouts(
         reused,
         ValueType::I64.layout_identity(),
     ));
-    let option = ValueType::Reference(ReferenceType::Option(
-        reused,
-        ValueType::I64.layout_identity(),
-    ));
+    let generic_enum = ValueType::Reference(ReferenceType::Enum(reused, [9; 32]));
     let mut plan = MachinePlanBuilder::new();
-    for (source, value_type) in [(1, list), (2, option)] {
+    for (source, value_type) in [(1, list), (2, generic_enum)] {
         let function = plan.declare_function(
             SourceFunctionId::new(source),
             Signature::new(vec![value_type], value_type)?,

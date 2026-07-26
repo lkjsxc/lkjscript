@@ -60,7 +60,6 @@ impl Resolver<'_> {
             | ExprKind::LitBool(_)
             | ExprKind::LitUnit
             | ExprKind::EmptyList
-            | ExprKind::LitNone
             | ExprKind::LitStr(_)
             | ExprKind::MatchUnreachable { .. }
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
@@ -111,7 +110,8 @@ impl Resolver<'_> {
             }
             ExprKind::ProductField { value, .. }
             | ExprKind::EnumIsVariant { value, .. }
-            | ExprKind::EnumField { value, .. } => value.effects.union(EffectSet::READS_MEMORY),
+            | ExprKind::EnumField { value, .. }
+            | ExprKind::EnumUnwrap { value, .. } => value.effects.union(EffectSet::READS_MEMORY),
             ExprKind::WithProductField {
                 value, replacement, ..
             } => value

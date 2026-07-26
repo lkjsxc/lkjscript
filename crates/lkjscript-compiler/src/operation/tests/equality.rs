@@ -9,8 +9,8 @@ fn explicit_equality_families_enforce_static_categories() {
         Type::F64,
         Type::Str,
         Type::Symbol,
-        Type::Option(Box::new(Type::I64)),
-        Type::Result(Box::new(Type::Str), Box::new(Type::I64)),
+        crate::types::option_type(Type::I64),
+        crate::types::result_type(Type::Str, Type::I64),
     ] {
         assert!(Operation::EqualValue
             .resolve_types(&[ty.clone(), ty])
@@ -43,7 +43,7 @@ fn explicit_equality_families_enforce_static_categories() {
         .resolve_types(&[Type::I64, Type::I64])
         .is_err());
 
-    let list = Type::List(Box::new(Type::Option(Box::new(Type::Str))));
+    let list = Type::List(Box::new(crate::types::option_type(Type::Str)));
     assert!(Operation::ListEqual
         .resolve_types(&[list.clone(), list])
         .is_ok());

@@ -17,6 +17,20 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::Symbol => "Symbol".into(),
         Type::Handle => "Handle".into(),
         Type::Product(name) => format!("Product {name}"),
+        Type::Enum { id, arguments, .. }
+            if id.bytes() == lkjscript_core::OPTION_ID && arguments.len() == 1 =>
+        {
+            format!("Option {}", canonical(&arguments[0]))
+        }
+        Type::Enum { id, arguments, .. }
+            if id.bytes() == lkjscript_core::RESULT_ID && arguments.len() == 2 =>
+        {
+            format!(
+                "Result {} {}",
+                canonical(&arguments[0]),
+                canonical(&arguments[1])
+            )
+        }
         Type::Enum {
             name, arguments, ..
         } => {
@@ -32,8 +46,6 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::Ref(inner) => format!("Ref {}", canonical(inner)),
         Type::RefMut(inner) => format!("RefMut {}", canonical(inner)),
         Type::List(inner) => format!("List {}", canonical(inner)),
-        Type::Option(inner) => format!("Option {}", canonical(inner)),
-        Type::Result(ok, error) => format!("Result {} {}", canonical(ok), canonical(error)),
         Type::Fn { params, ret } => {
             let mut parts: Vec<_> = params.iter().map(canonical).collect();
             parts.push("->".into());

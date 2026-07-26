@@ -1,36 +1,102 @@
 use super::*;
 
 #[test]
-fn language_results_preserve_operation_error_text() {
+fn language_results_preserve_structured_system_error_identity() {
     let mut arena = Arena::default();
-    let result = language_result(&mut arena, Err(Error::msg("sys-example: failure")))
+    let kind = lkjscript_core::SystemErrorKind::Io;
+    let result = language_result(&mut arena, kind, Err(Error::msg("sys-example: failure")))
         .expect("language error allocation");
-    assert_eq!(is_ok(&arena, result).ok(), Some(Value::FALSE));
-    let error = unwrap_err(&arena, result).expect("unwrap Result error");
-    assert_eq!(as_str(&arena, error).ok(), Some("sys-example: failure"));
-    let unwrapped = unwrap_ok(&arena, result)
-        .err()
-        .map(|error| error.to_string());
-    assert_eq!(
-        unwrapped.as_deref(),
-        Some("unwrap-ok: sys-example: failure")
-    );
+    let error = match arena.get(result).expect("Result value") {
+        HeapObj::Enum {
+            layout,
+            physical_tag: 1,
+            active_payload,
+        } if layout.bytes() == lkjscript_core::RESULT_LAYOUT => active_payload[0],
+        other => panic!("malformed Result error: {other:?}"),
+    };
+    match arena.get(error).expect("SystemError value") {
+        HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        } => {
+            assert_eq!(layout.bytes(), lkjscript_core::SYSTEM_ERROR_LAYOUT);
+            assert_eq!(*physical_tag, kind.physical_tag());
+            assert_eq!(active_payload.len(), 2);
+        }
+        other => panic!("malformed SystemError: {other:?}"),
+    }
+    assert!(language_result(
+        &mut arena,
+        lkjscript_core::SystemErrorKind::Utf8,
+        Err(Error::msg("unstructured")),
+    )
+    .is_err());
 }
-#[test]
-fn option_variants_are_distinct_and_type_checked() {
-    let mut arena = Arena::default();
-    assert_eq!(is_some(&arena, Value::NONE).ok(), Some(Value::FALSE));
-    assert!(unwrap_some(&arena, Value::NONE)
-        .expect_err("none must not unwrap")
-        .to_string()
-        .contains("unwrap-some on none"));
 
+#[test]
+fn system_utf8_errors_preserve_both_closed_variant_identities() {
+    let mut arena = Arena::default();
+    let kind = lkjscript_core::Utf8ErrorKind::Surrogate;
+    let result = system_utf8_error(&mut arena, lkjscript_core::Utf8Failure { offset: 2, kind })
+        .expect("structured system UTF-8 allocation");
+    let system = match arena.get(result).expect("Result value") {
+        HeapObj::Enum {
+            physical_tag: 1,
+            active_payload,
+            ..
+        } => active_payload[0],
+        other => panic!("malformed Result error: {other:?}"),
+    };
+    let utf8 = match arena.get(system).expect("SystemError value") {
+        HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        } => {
+            assert_eq!(layout.bytes(), lkjscript_core::SYSTEM_ERROR_LAYOUT);
+            assert_eq!(
+                *physical_tag,
+                lkjscript_core::SystemErrorKind::Utf8.physical_tag()
+            );
+            active_payload[0]
+        }
+        other => panic!("malformed SystemError: {other:?}"),
+    };
+    match arena.get(utf8).expect("Utf8Error value") {
+        HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        } => {
+            assert_eq!(layout.bytes(), lkjscript_core::UTF8_ERROR_LAYOUT);
+            assert_eq!(*physical_tag, kind.physical_tag());
+            assert_eq!(active_payload[0].as_small_i64(), Some(2));
+        }
+        other => panic!("malformed Utf8Error: {other:?}"),
+    }
+}
+
+#[test]
+fn option_constructors_use_generic_enum_layout_and_tags() {
+    let mut arena = Arena::default();
+    let none = option_none(&mut arena).expect("none allocation");
     let payload = Value::from_small_i64(7).expect("7 is an immediate I64");
-    let some = option_some(&mut arena, payload).expect("option allocation");
-    assert_eq!(is_some(&arena, some).ok(), Some(Value::TRUE));
-    assert_eq!(unwrap_some(&arena, some).ok(), Some(payload));
-    assert!(is_some(&arena, Value::UNIT).is_err());
-    assert!(unwrap_some(&arena, Value::EMPTY_LIST).is_err());
+    let some = option_some(&mut arena, payload).expect("some allocation");
+    for (value, tag, fields) in [(none, 1, 0), (some, 0, 1)] {
+        match arena.get(value).expect("Option value") {
+            HeapObj::Enum {
+                layout,
+                physical_tag,
+                active_payload,
+            } => {
+                assert_eq!(layout.bytes(), lkjscript_core::OPTION_LAYOUT);
+                assert_eq!(*physical_tag, tag);
+                assert_eq!(active_payload.len(), fields);
+            }
+            other => panic!("malformed Option: {other:?}"),
+        }
+    }
 }
 #[test]
 fn numeric_string_conversions_are_type_strict_and_exact() {

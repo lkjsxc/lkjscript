@@ -86,11 +86,6 @@ pub(in crate::ssa) fn lower_type(
         },
         Type::Param(name) => SsaType::TypeParameter(name.clone()),
         Type::List(item) => SsaType::List(Box::new(lower_type(item, products)?)),
-        Type::Option(item) => SsaType::Option(Box::new(lower_type(item, products)?)),
-        Type::Result(ok, err) => SsaType::Result(
-            Box::new(lower_type(ok, products)?),
-            Box::new(lower_type(err, products)?),
-        ),
         Type::Fn { .. } | Type::Forall { .. } => {
             SsaType::Function(Box::new(signature_from_type(ty, products)?))
         }

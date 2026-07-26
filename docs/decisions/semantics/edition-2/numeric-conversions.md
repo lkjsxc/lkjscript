@@ -13,9 +13,10 @@ conversion operations.
 
 **Current for the four explicit Edition 2 conversions and Edition 2 rejection
 of mixed numeric arithmetic and ordering.** Stable `NumericError` identity and
-cases, Semantic Source and typed-hole candidates, resolved HIR, verified SSA,
-the evaluator, validated bytecode/reference VM, forced Linux x86-64 baseline,
-and forced proof-checked JIT are included. Edition 1 mixed I64/F64 arithmetic
+cases, generic prelude `Result` construction, Semantic Source and typed-hole
+candidates, resolved HIR, verified SSA, the evaluator, validated
+bytecode/reference VM, forced Linux x86-64 baseline, and forced proof-checked
+JIT are included. Edition 1 mixed I64/F64 arithmetic
 and ordering remain Current only for Edition 1 migration input.
 
 ## Mixed Operations

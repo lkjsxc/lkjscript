@@ -19,11 +19,19 @@ fn collection_preserves_nested_graph_and_reports_exact_counters() {
         })
         .expect("list allocation");
     let result = heap
-        .alloc(HeapObj::ResultOk(list))
-        .expect("result allocation");
+        .alloc(HeapObj::Enum {
+            layout: crate::RuntimeLayoutId::new(crate::RESULT_LAYOUT),
+            physical_tag: 0,
+            active_payload: vec![list],
+        })
+        .expect("generic Result allocation");
     let option = heap
-        .alloc(HeapObj::OptionSome(result))
-        .expect("option allocation");
+        .alloc(HeapObj::Enum {
+            layout: crate::RuntimeLayoutId::new(crate::OPTION_LAYOUT),
+            physical_tag: 0,
+            active_payload: vec![result],
+        })
+        .expect("generic Option allocation");
     let product = heap
         .alloc(HeapObj::Product {
             product: crate::ProductId::new(0),
@@ -170,8 +178,12 @@ fn snapshot_clones_only_transitively_reachable_objects() {
         .alloc(HeapObj::Str("child".into()))
         .expect("snapshot child allocation");
     let root = heap
-        .alloc(HeapObj::OptionSome(child))
-        .expect("snapshot root allocation");
+        .alloc(HeapObj::Enum {
+            layout: crate::RuntimeLayoutId::new(crate::OPTION_LAYOUT),
+            physical_tag: 0,
+            active_payload: vec![child],
+        })
+        .expect("generic snapshot root allocation");
     let _unreachable = heap
         .alloc(HeapObj::Str("unreachable".into()))
         .expect("snapshot unreachable allocation");

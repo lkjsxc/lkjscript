@@ -48,8 +48,6 @@ pub enum SsaType {
     Product(ProductId),
     Enum { id: EnumId, arguments: Vec<SsaType> },
     List(Box<SsaType>),
-    Option(Box<SsaType>),
-    Result(Box<SsaType>, Box<SsaType>),
     Function(Box<Signature>),
     TypeParameter(String),
 }

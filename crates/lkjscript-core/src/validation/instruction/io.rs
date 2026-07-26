@@ -28,7 +28,7 @@ pub(super) fn apply(
         }
         Op::Arg => {
             expect_pop(state, Kind::I64, proto, instruction)?;
-            state.stack.push(Kind::Option);
+            state.stack.push(option_kind());
         }
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }

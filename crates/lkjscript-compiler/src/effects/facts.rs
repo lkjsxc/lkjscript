@@ -7,7 +7,6 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         | ExprKind::LitBool(_)
         | ExprKind::LitUnit
         | ExprKind::EmptyList
-        | ExprKind::LitNone
         | ExprKind::LitStr(_)
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
@@ -78,7 +77,8 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         }
         ExprKind::ProductField { value, .. }
         | ExprKind::EnumIsVariant { value, .. }
-        | ExprKind::EnumField { value, .. } => {
+        | ExprKind::EnumField { value, .. }
+        | ExprKind::EnumUnwrap { value, .. } => {
             recompute_expr(value, summaries).union(EffectSet::READS_MEMORY)
         }
         ExprKind::WithProductField {

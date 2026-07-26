@@ -99,24 +99,35 @@ impl Resolver<'_> {
                 | Type::Ref(_)
                 | Type::RefMut(_)
                 | Type::Handle
-                | Type::Enum { .. }
                 | Type::Fn { .. }
                 | Type::Forall { .. }
                 | Type::Param(_) => false,
-                Type::List(inner) | Type::Option(inner) => {
+                Type::List(inner) => {
                     self.auto_trait_holds(core_trait, inner, depth + 1, work, active, memo)?
                 }
-                Type::Result(ok, error) => {
-                    self.auto_trait_holds(core_trait, ok, depth + 1, work, active, memo)?
-                        && self.auto_trait_holds(
+                Type::Enum { id, arguments, .. }
+                    if matches!(
+                        id.bytes(),
+                        lkjscript_core::OPTION_ID | lkjscript_core::RESULT_ID
+                    ) =>
+                {
+                    let mut result = true;
+                    for argument in arguments {
+                        if !self.auto_trait_holds(
                             core_trait,
-                            error,
+                            argument,
                             depth + 1,
                             work,
                             active,
                             memo,
-                        )?
+                        )? {
+                            result = false;
+                            break;
+                        }
+                    }
+                    result
                 }
+                Type::Enum { .. } => false,
                 Type::Product(name) => {
                     let product = self.analyzer.product_by_name(name)?;
                     if !active.insert(product.id) {

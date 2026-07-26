@@ -26,8 +26,7 @@ pub(super) fn preflight_function(
                     | Constant::I64(_)
                     | Constant::F64(_)
                     | Constant::Str(_)
-                    | Constant::EmptyList
-                    | Constant::None => {}
+                    | Constant::EmptyList => {}
                     Constant::Symbol(_) => {
                         return unsupported_operation(function.id, "Symbol constant")
                     }
@@ -134,14 +133,6 @@ pub(super) fn supported_runtime(operation: RuntimeOp) -> bool {
             | RuntimeOp::StrFromByte
             | RuntimeOp::StrFromI64
             | RuntimeOp::StrFromF64
-            | RuntimeOp::Ok
-            | RuntimeOp::Err
-            | RuntimeOp::IsOk
-            | RuntimeOp::UnwrapOk
-            | RuntimeOp::UnwrapErr
-            | RuntimeOp::Some
-            | RuntimeOp::IsSome
-            | RuntimeOp::UnwrapSome
     )
 }
 

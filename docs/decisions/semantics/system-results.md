@@ -12,11 +12,13 @@ library wrappers use the Result-explicit system surface.
 
 ## Decision
 
-Every canonical `sys-*` OS/resource primitive returns `Result Success Str`.
-Core console operations remain VM-failure surfaces. Static types,
-bytecode dispatch, and runtime allocation must agree on the exact success type.
-Ordinary errno, invalid/stale handle, range, and no-progress outcomes become
-`ResultErr` containing their operation-qualified message.
+Every canonical `sys-*` OS/resource primitive returns
+`Result Success SystemError`. Core console operations remain VM-failure
+surfaces. Static types, bytecode dispatch, and generic enum allocation must
+agree on the exact success and error identities. Ordinary errno, invalid/stale
+handle, range, and no-progress outcomes become the capability-domain
+`SystemError` variant. Hosts translate once at the VM/native capability
+boundary; display text is never inspected to select a variant.
 
 VM errors remain appropriate for malformed bytecode, impossible compiler/VM
 ABI states, and violations of a non-Result core language operation. A standard
@@ -29,23 +31,23 @@ The descriptor-facing surface becomes:
 
 ```text
 stdin-handle                         -> Handle
-sys-isatty Handle                    -> Result Bool Str
-sys-close Handle                     -> Result Unit Str
-sys-read-byte Handle                 -> Result I64 Str
-sys-write-byte Handle I64            -> Result Unit Str
-sys-read-into Handle Buf I64 I64     -> Result I64 Str
-sys-write-from Handle Buf I64 I64    -> Result I64 Str
+sys-isatty Handle                    -> Result Bool SystemError
+sys-close Handle                     -> Result Unit SystemError
+sys-read-byte Handle                 -> Result I64 SystemError
+sys-write-byte Handle I64            -> Result Unit SystemError
+sys-read-into Handle Buf I64 I64     -> Result I64 SystemError
+sys-write-from Handle Buf I64 I64    -> Result I64 SystemError
 buf-from-str Str                      -> Buf
-buf-to-str Buf                        -> Result Str Str
-sys-open-append Str                  -> Result Handle Str
-sys-open-create-new Str              -> Result Handle Str
-sys-open-dir Str                     -> Result Handle Str
-sys-fsync Handle                     -> Result Unit Str
-sys-truncate Handle I64              -> Result Unit Str
-sys-rename Str Str                   -> Result Unit Str
-sys-random-fill Buf I64 I64          -> Result Unit Str
-sys-tty-guard-save Buf               -> Result Unit Str
-sys-tty-guard-clear                  -> Result Unit Str
+buf-to-str Buf                        -> Result Str Utf8Error
+sys-open-append Str                  -> Result Handle SystemError
+sys-open-create-new Str              -> Result Handle SystemError
+sys-open-dir Str                     -> Result Handle SystemError
+sys-fsync Handle                     -> Result Unit SystemError
+sys-truncate Handle I64              -> Result Unit SystemError
+sys-rename Str Str                   -> Result Unit SystemError
+sys-random-fill Buf I64 I64          -> Result Unit SystemError
+sys-tty-guard-save Buf               -> Result Unit SystemError
+sys-tty-guard-clear                  -> Result Unit SystemError
 ```
 
 The old `stdin-fd`, `isatty`, `close`, `read-byte-fd`, `write-byte-fd`,
@@ -61,14 +63,14 @@ than being clamped or cast.
 
 User-facing convenience wrappers may preserve direct return types by calling
 `unwrap-ok` explicitly. Low-level applications may call `sys-*` primitives and
-handle errors without terminating the VM. `unwrap-ok` includes the original
-Result error text in its VM diagnostic.
+handle errors without terminating the VM. `unwrap-ok` traps on `Err`; human
+rendering of the structured error is diagnostic projection only.
 
 ## Verification
 
-- A missing file open returns `ResultErr`, subsequent expressions run, and the
+- A missing file open returns generic `Result.Err(SystemError.Io)`, subsequent expressions run, and the
   process exits successfully.
-- A repeated close returns `ResultErr` without reviving or terminating the VM.
+- A repeated close returns generic `Result.Err(SystemError.Io)` without reviving or terminating the VM.
 - Integer, borrowed, stale, and wrong-kind handles return Result errors at the
   language boundary.
 - Missing path returns `Ok(false)`; malformed path returns `Err`.

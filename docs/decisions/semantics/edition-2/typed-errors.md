@@ -9,10 +9,9 @@ becoming control flow.
 
 ## Status
 
-**Current only for the stable compiler-recognized `NumericError` enum used by
-the four Edition 2 numeric conversions.** The wider typed-error hierarchy in
-this record remains an Accepted Target. Existing Current Result and structured
-outcome surfaces retain their documented boundaries.
+**Current for the compiler-recognized `NumericError`, `Utf8Error`, and
+`SystemError` enums and the generic prelude `Option T` and `Result T E`
+boundary.** Structured execution outcomes retain their distinct boundary.
 
 ## Failure Domains
 
@@ -31,20 +30,22 @@ text are not control mechanisms.
 
 ## UTF-8
 
-`Utf8Error` is a compiler-recognized prelude enum identity. It records the exact
-zero-based byte offset of the first invalid sequence and a typed category:
-`UnexpectedContinuation`, `InvalidLeadingByte`, `MissingContinuation`,
-`OverlongEncoding`, `Surrogate`, or `OutOfRange`. Human detail is diagnostic
-projection, not semantic discrimination.
+`Utf8Error` is a compiler-recognized prelude enum identity. Its closed variants
+are `UnexpectedContinuation`, `InvalidLeadingByte`, `MissingContinuation`,
+`OverlongEncoding`, `Surrogate`, and `OutOfRange`; each carries one `offset I64`
+field containing the exact zero-based byte offset of the first invalid sequence.
+Human detail is diagnostic projection, not semantic discrimination.
 
 ## System Error Target
 
-`SystemError` is a typed hierarchy whose top-level cases are exactly `Io`,
-`Network`, `Terminal`, `Time`, `Random`, `Sqlite`, `Utf8`, and `Unsupported`.
-Each case has operation-specific typed subcases where known and may include an
-optional platform code and optional bounded detail. Platform code/detail is
-for reporting and roundtrip, never name-based branching. `Utf8` carries
-`Utf8Error`.
+`SystemError` is a closed compiler-recognized prelude enum whose top-level
+cases are exactly `Io`, `Network`, `Terminal`, `Time`, `Random`, `Sqlite`,
+`Utf8`, and `Unsupported`. `Utf8` carries one `error Utf8Error` field. Every
+other case carries `code Option I64` and `detail Option Str`; either may be
+absent. The selected top-level identity records the capability domain, while
+code/detail preserve bounded reporting evidence and are never name-based
+branching inputs. More detailed operation-specific sub-enums require a later
+contract change rather than an open residual value.
 
 Hosts translate platform failures once at the capability boundary. VM,
 evaluator, native runtime, and protocol compare stable enum/variant identities,

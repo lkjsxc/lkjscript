@@ -65,9 +65,9 @@ result
 /unwrap-ok
 do/
 bf-fail/
-unwrap-err/
-result
-/unwrap-err
+str/
+system operation failed
+/str
 /bf-fail
 unwrap-ok/
 result
@@ -107,9 +107,9 @@ result
 /unwrap-ok
 do/
 bf-fail/
-unwrap-err/
-result
-/unwrap-err
+str/
+system operation failed
+/str
 /bf-fail
 -1
 /do
@@ -144,9 +144,9 @@ result
 /is-ok
 unit
 bf-fail/
-unwrap-err/
-result
-/unwrap-err
+str/
+system operation failed
+/str
 /bf-fail
 /if
 /let

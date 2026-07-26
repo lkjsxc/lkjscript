@@ -88,10 +88,7 @@ fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
         | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
         | (HeapObj::Closure { .. }, HeapObj::Closure { .. })
         | (HeapObj::Builtin(_), HeapObj::Builtin(_))
-        | (HeapObj::Buf(_), HeapObj::Buf(_))
-        | (HeapObj::ResultOk(_), HeapObj::ResultOk(_))
-        | (HeapObj::ResultErr(_), HeapObj::ResultErr(_))
-        | (HeapObj::OptionSome(_), HeapObj::OptionSome(_)) => true,
+        | (HeapObj::Buf(_), HeapObj::Buf(_)) => true,
         (
             HeapObj::Product {
                 product: old_product,
@@ -148,9 +145,6 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
             clone.extend_from_slice(bytes);
             HeapObj::Buf(clone)
         }
-        HeapObj::ResultOk(value) => HeapObj::ResultOk(*value),
-        HeapObj::ResultErr(value) => HeapObj::ResultErr(*value),
-        HeapObj::OptionSome(value) => HeapObj::OptionSome(*value),
         HeapObj::Product { product, fields } => HeapObj::Product {
             product: *product,
             fields: clone_values(fields, fields.capacity()),

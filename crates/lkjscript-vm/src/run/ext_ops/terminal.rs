@@ -1,5 +1,13 @@
 use super::*;
 
+fn push_language_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<Value>) {
+    super::push_language_result(vm, lkjscript_core::SystemErrorKind::Terminal, result);
+}
+
+fn push_i64_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<i64>) {
+    super::push_i64_result(vm, lkjscript_core::SystemErrorKind::Terminal, result);
+}
+
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::SysTtyGet as u8 => {

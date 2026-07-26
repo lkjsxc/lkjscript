@@ -17,26 +17,18 @@ impl RuntimeOp {
             | Self::EmptyStr
             | Self::BufNew
             | Self::OwnedBufNew
-            | Self::BufClone
-            | Self::Ok
-            | Self::Err
-            | Self::Some => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
+            | Self::BufClone => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
             Self::Car
             | Self::Cdr
             | Self::BufRef
             | Self::OwnedBufRef
             | Self::BufGetU32
             | Self::StrRef
-            | Self::StrSlice
-            | Self::UnwrapOk
-            | Self::UnwrapErr
-            | Self::UnwrapSome => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
+            | Self::StrSlice => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
             Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet => {
                 EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
             }
-            Self::BufLen | Self::OwnedBufLen | Self::StrLen | Self::IsOk | Self::IsSome => {
-                EffectSet::READS_MEMORY
-            }
+            Self::BufLen | Self::OwnedBufLen | Self::StrLen => EffectSet::READS_MEMORY,
             Self::SysReadInto => EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::WRITES_MEMORY)

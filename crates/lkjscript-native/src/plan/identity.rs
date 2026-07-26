@@ -33,13 +33,9 @@ pub enum ReferenceType {
     Str,
     /// Complete interned list identity followed by its element identity.
     List(LayoutIdentity, LayoutIdentity),
-    /// Complete interned option identity followed by its payload identity.
-    Option(LayoutIdentity, LayoutIdentity),
-    /// Complete interned result identity followed by its Ok and Err identities.
-    Result(LayoutIdentity, LayoutIdentity, LayoutIdentity),
     Product(LayoutIdentity),
-    /// Complete concrete enum substitution/layout identity.
-    Enum(LayoutIdentity),
+    /// Concrete substitution identity and stable semantic runtime layout identity.
+    Enum(LayoutIdentity, [u8; 32]),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -73,9 +69,7 @@ impl ValueType {
             Self::Reference(ReferenceType::Buf) => LayoutIdentity::new(7),
             Self::Reference(ReferenceType::Product(layout))
             | Self::Reference(ReferenceType::List(layout, _))
-            | Self::Reference(ReferenceType::Option(layout, _))
-            | Self::Reference(ReferenceType::Result(layout, _, _))
-            | Self::Reference(ReferenceType::Enum(layout)) => layout,
+            | Self::Reference(ReferenceType::Enum(layout, _)) => layout,
         }
     }
 }

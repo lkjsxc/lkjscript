@@ -39,13 +39,6 @@ pub(super) fn substitute_enum_type(ty: &SsaType, names: &[String], values: &[Ssa
             .cloned()
             .unwrap_or_else(|| ty.clone()),
         SsaType::List(inner) => SsaType::List(Box::new(substitute_enum_type(inner, names, values))),
-        SsaType::Option(inner) => {
-            SsaType::Option(Box::new(substitute_enum_type(inner, names, values)))
-        }
-        SsaType::Result(ok, error) => SsaType::Result(
-            Box::new(substitute_enum_type(ok, names, values)),
-            Box::new(substitute_enum_type(error, names, values)),
-        ),
         SsaType::Enum { id, arguments } => SsaType::Enum {
             id: *id,
             arguments: arguments
