@@ -43,6 +43,8 @@ fn ownership_source(body: &str, result: &str) -> String {
 }
 
 mod constants;
+mod ledger_hir;
+mod ledger_phases;
 mod match_nested;
 mod match_resources;
 mod matches;

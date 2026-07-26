@@ -78,7 +78,7 @@ pub(crate) fn load_with_metrics_and_budget(
     ledger: &mut BudgetLedger,
 ) -> Result<(ValidatedSourceTree, LoadMetrics)> {
     let (tree, metrics) = load_with_metrics(path, limits).map_err(SourceDiagnostic::into_core)?;
-    crate::budget::charge_source(&tree, ledger)?;
+    crate::budget::reserve_source_shape(&tree, ledger)?;
     Ok((tree, metrics))
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn validate_for_compiler_with_budget(
     ledger: &mut BudgetLedger,
 ) -> Result<ValidatedSourceTree> {
     let tree = validate_for_compiler(source, logical_path, limits)?;
-    crate::budget::charge_source(&tree, ledger)?;
+    crate::budget::reserve_source_shape(&tree, ledger)?;
     Ok(tree)
 }
 
@@ -111,7 +111,7 @@ pub(crate) fn load_for_compiler_with_budget(
     ledger: &mut BudgetLedger,
 ) -> Result<ValidatedSourceTree> {
     let tree = load_for_compiler(path, limits)?;
-    crate::budget::charge_source(&tree, ledger)?;
+    crate::budget::reserve_source_shape(&tree, ledger)?;
     Ok(tree)
 }
 

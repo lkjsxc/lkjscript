@@ -1,14 +1,23 @@
-use super::*;
+use lkjscript_core::{Error, ResourceCategory, Result};
+
 use crate::hir::Type;
 
-pub(super) fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> {
+use super::{checked_add, count_usize};
+
+#[derive(Default)]
+pub(super) struct TypeCharges {
+    pub(super) work: u64,
+    pub(super) nesting: u64,
+}
+
+pub(super) fn measure_type(root: &Type, charges: &mut TypeCharges) -> Result<()> {
     let mut stack = Vec::new();
     stack
         .try_reserve(1)
         .map_err(|_| Error::msg("cannot reserve type accounting stack"))?;
     stack.push(root);
     while let Some(ty) = stack.pop() {
-        charge(ledger, ResourceCategory::TypeWork, 1)?;
+        checked_add(&mut charges.work, 1, ResourceCategory::TypeWork)?;
         let growth = match ty {
             Type::Never => 0,
             Type::Owned(_)
@@ -26,7 +35,11 @@ pub(super) fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> 
         stack
             .try_reserve(growth)
             .map_err(|_| Error::msg("cannot reserve type accounting stack"))?;
-        charge_usize(ledger, ResourceCategory::TypeNesting, growth)?;
+        checked_add(
+            &mut charges.nesting,
+            count_usize(ResourceCategory::TypeNesting, growth)?,
+            ResourceCategory::TypeNesting,
+        )?;
         match ty {
             Type::Owned(child)
             | Type::Ref(child)

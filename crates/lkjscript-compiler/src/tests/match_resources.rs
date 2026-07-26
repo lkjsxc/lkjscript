@@ -36,10 +36,25 @@ fn match_matrix_categories_reserve_exactly_before_hir_allocation() {
             profile,
         )
         .unwrap_err();
-        let diagnostic = error.compiler_resource_diagnostic().unwrap();
-        assert_eq!(diagnostic.category, category);
-        assert_eq!(diagnostic.before, 0);
-        assert_eq!(diagnostic.increment, count);
-        assert!(!diagnostic.to_string().contains("nonexhaustive match"));
+        let rejection = error.budget_error().unwrap();
+        assert_eq!(rejection.category, category);
+        assert_eq!(
+            rejection.authority,
+            Some(crate::BudgetAuthority::PatternUsefulness)
+        );
+        assert_eq!(rejection.observed, 0);
+        assert_eq!(rejection.attempted, count);
+        assert!(!rejection.to_string().contains("nonexhaustive match"));
+        let repeated = compile_source_with_profile(
+            source,
+            "match-plus-one.lkjscript",
+            &Limits::default(),
+            profile,
+        )
+        .unwrap_err();
+        assert_eq!(
+            rejection.prefix(),
+            repeated.budget_error().unwrap().prefix()
+        );
     }
 }

@@ -86,15 +86,15 @@
   record sequence, reconstructs a private candidate, requires exact bitwise
   equality, verifies edit and cleanup stages, and rejects stale, forged,
   non-dominating, effectful, oversized, or aggregate-over-budget proofs
-- Resource profiles: `lkjscript.resource-profile` V2 preserves the first 25
-  category names/order and appends 29 closed categories across five positive
-  monotonic bounded profiles. Core provides closed authorities, fixed 16-entry
-  paths, lower-only grants, move-only reservations, and a fixed nonallocating
-  256-record journal; Drop commits unused units unless returned. Compiler
-  source/HIR/SSA charging remains post-phase except exact enum declaration,
-  variant, and field counts plus the conservative maximum recursion-work
-  reservation before HIR allocation. Protocol/compiler ledgers remain separate;
-  fixed limits remain the complete-pipeline defense
+- Resource profiles: `lkjscript.resource-profile` V2 preserves the first 25 category names/order and appends 29 closed
+  categories across five positive monotonic bounded profiles. Core provides closed authorities, fixed 16-entry paths,
+  lower-only grants, move-only reservations, and a fixed nonallocating 256-record journal; Drop commits unused units
+  unless returned. Public compiler `_with_ledger` APIs borrow one outer-owned ledger. Validated source shape reserves
+  enum/match HIR work, immutable HIR reserves exact charged input shape before SSA, and immutable normalized SSA
+  reserves exact charged input shape before bytecode; failures preserve typed authority/path and the deterministic
+  prefix. Aggregate source accounting still follows parser allocation, and Profile V2 has no exact bytecode-output
+  categories. Protocol/compiler ledgers remain separate; fixed limits defend parser, HIR construction, normalization,
+  and bytecode-output gaps
 - Host implementation: nine Rust workspace crates. Exact locked `serde` and
   `serde_json` dependencies are confined to strict JSON protocol/tooling
   boundaries; unsafe Rust is confined to `lkjscript-sys`

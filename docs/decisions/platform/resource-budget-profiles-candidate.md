@@ -5,14 +5,15 @@
 ## Status
 
 **Current for the compiler and core foundation described here.** Resource
-Profile V2, checked legacy compiler ledgers, five named ceiling sets,
-profile-aware compiler entry points, successful compile metrics, publication
-guards, and the hierarchical pre-allocation core are implemented. This does not
-weaken or replace an Edition 1 or implementation safety limit. The one-shot
-Semantic Protocol selects the same profile identity and ceilings for its
-request-local categories. Whole-pipeline pre-allocation and one ledger shared
-across compiler, protocol, repository, agent-state, artifact, proof, or runtime
-authorities remain Accepted work.
+Profile V2, one request-owned compiler ledger, five named ceiling sets,
+profile-aware and public `_with_ledger` compiler entry points, successful
+compile metrics, typed preflight reservations, publication guards, and the
+hierarchical pre-allocation core are implemented. This does not weaken or
+replace an Edition 1 or implementation safety limit. The one-shot Semantic
+Protocol selects the same profile identity and ceilings for its request-local
+categories. Parser-wide pre-allocation and one ledger shared across compiler,
+protocol, repository, agent-state, artifact, proof, or runtime authorities
+remain Accepted work.
 
 ## Identity And Selection
 
@@ -25,7 +26,10 @@ bounded implementation maxima; it is not an unsafe or unbounded mode.
 
 A host may lower any category from a selected profile. Raising it fails.
 Existing compile entry points select `default`; explicit Rust API entry points
-accept a `ResourceProfile`. The `run` and `disasm` CLI commands accept
+accept a `ResourceProfile`. Public compile and validate entry points ending in
+`_with_ledger` borrow an outer-owned `BudgetLedger`, derive profile identity
+from it, and retain all earlier request charges across repeated operations. The
+`run` and `disasm` CLI commands accept
 `--resource-profile NAME` before the source path and reject unknown names.
 Successful `CompileMetrics` exposes profile identity and exact charged totals,
 and `ExecutableProgram` retains the profile identity. Package manifests do not
@@ -84,30 +88,42 @@ The exact appended ceilings are in the hierarchical-preallocation capsule.
 One checked ledger flows through one compiler request. Addition is checked and
 exhaustion rejects the attempted increment without mutating the recorded total.
 
-- A complete validated source tree is charged exactly after loading/parsing and
-  before HIR construction. Enum shape and match pattern/arm/matrix/plan/witness
-  reservations complete before their HIR allocations. Edition 1 limits remain;
-  closed match wrapper depth has its own fixed physical bound.
-- Constructed and ownership-checked HIR is charged before effect inference and
-  SSA construction. Existing type, ownership, and HIR maxima remain the
-  allocation defenses.
-- Verified normalized SSA is charged before bytecode lowering and before an
-  executable can be published. Existing IR and verifier maxima protect SSA
-  construction.
-- On compiler failure, one diagnostic record is charged. Charges completed by
-  earlier phases are not rewound.
+- A complete validated source tree is measured after loading/parsing. Aggregate
+  source-shape reservations then complete before HIR construction. Enum shape
+  and match pattern/arm/matrix/plan/witness reservations complete before their
+  HIR allocations. Edition 1 limits remain; closed match wrapper depth has its
+  own fixed physical bound.
+- Constructed and ownership-checked immutable HIR is measured once; typed
+  `ssa_construction` reservations for HIR/type/trait/ownership input shape
+  complete before effect inference or SSA construction. Existing type,
+  ownership, and HIR maxima still protect HIR construction itself.
+- Verified normalized immutable SSA is measured once; typed `bytecode`
+  reservations for exact SSA function/block/value/edge/frame-state input shape
+  complete before bytecode construction and executable publication. Profile V2
+  has no bytecode-output categories, so bytecode allocation remains protected
+  by existing fixed bytecode limits rather than an overclaimed output preflight.
+- Match reservations use `pattern_usefulness`; enum HIR reservations use `hir`;
+  diagnostic publication uses `diagnostics`. Missing authority is not accepted
+  by compiler reservation helpers.
+- On ordinary compiler failure, one diagnostic record is reserved. A budget
+  rejection is already the structured diagnostic and is never replaced if the
+  diagnostic category is also exhausted. Charges completed by earlier phases
+  are not rewound. `BudgetError` and its immutable deterministic prefix remain
+  available through the core `Error` accessor.
 
-This is exact post-phase aggregate accounting and a publication guard, not a
-claim that profile ceilings stop the first allocation in each phase. Moving the
-same charges before allocation is a separate Current gate.
+This is pre-allocation accounting for the named target phases, not a claim that
+Profile V2 preflights source parser allocation, HIR construction generally, SSA
+normalization, or exact bytecode output. Those paths retain fixed hard limits.
 
 ## Diagnostics And Failure
 
-A resource diagnostic contains profile schema/version/name, category and unit,
-configured limit, charge before, and attempted increment. Arithmetic overflow
-uses the same deterministic diagnostic shape. No over-profile executable is
-returned. Successful metrics expose the complete totals; failed requests do not
-yet return a complete ledger summary or responsible semantic node.
+A `BudgetError` contains profile schema/version/name, category and unit,
+configured limit, observed and attempted charge, typed authority/path/cause,
+and an immutable deterministic ledger prefix. Arithmetic overflow uses the
+same rejection contract. No over-profile executable is returned. Successful
+metrics expose the complete totals; callers of `_with_ledger` can inspect the
+outer ledger after failure. Responsible semantic nodes are present only where
+the preceding immutable representation already provides one.
 
 `protocol_request_bytes` and `protocol_response_bytes` are reserved at zero in
 the compiler ledger. Semantic Source V2 selects one of the same five profile
@@ -127,7 +143,7 @@ enforced. No fixed source rule becomes a profile or lint through this slice.
 
 Focused tests cover all five profiles across the canonical source roots, unknown
 names, lower-only ceilings, zero/exact/+1/overflow ledger behavior, deterministic
-diagnostics, profile identity, nested phase propagation, diagnostic charging,
-and type/ownership charge invariance. Full workspace, release, runtime, and
-Docker evidence is recorded only after those commands run on the integrated
-revision.
+prefixes, profile identity, HIR/SSA/match/bytecode-input phase reservations,
+diagnostic reservation, outer-ledger accumulation, and type/ownership charge
+invariance. Full workspace, release, runtime, and Docker evidence is recorded
+only after those commands run on the integrated revision.

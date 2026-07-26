@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-//! Aggregate source/HIR/SSA counts are exact post-phase checks. Existing
-//! Edition 1, Foundation V1, ownership, and IR bounds protect phase allocation;
-//! profile failure is checked before the next phase or executable publication.
+//! Typed reservations measure immutable phase input before the named target
+//! phase allocates. Fixed parser, HIR, IR, and bytecode limits remain active.
 
 use std::path::{Path, PathBuf};
 
@@ -80,11 +79,16 @@ fn exact_source_ceiling_succeeds_and_plus_one_is_structured() {
     let error =
         compile_source_with_profile(&source, "too-large.lkjscript", &Limits::default(), lowered)
             .unwrap_err();
-    let diagnostic = error.compiler_resource_diagnostic().unwrap();
-    assert_eq!(diagnostic.category, ResourceCategory::SourceBytes);
-    assert_eq!(diagnostic.limit, exact - 1);
-    assert_eq!(diagnostic.before, 0);
-    assert_eq!(diagnostic.increment, exact);
+    let rejection = error.budget_error().unwrap();
+    assert_eq!(rejection.category, ResourceCategory::SourceBytes);
+    assert_eq!(
+        rejection.authority,
+        Some(crate::BudgetAuthority::SourceLoading)
+    );
+    assert_eq!(rejection.limit, exact - 1);
+    assert_eq!(rejection.observed, 0);
+    assert_eq!(rejection.attempted, exact);
+    assert!(!rejection.allocated_before_rejection);
 }
 
 #[test]
@@ -101,6 +105,7 @@ fn profiles_do_not_change_type_or_ownership_safety() {
         )
         .unwrap_err();
         assert!(type_error.compiler_resource_diagnostic().is_none());
+        assert!(type_error.budget_error().is_none());
         let ownership_error = compile_source_with_profile(
             invalid_reference,
             "invalid-reference.lkjscript",
@@ -124,72 +129,12 @@ fn diagnostic_publication_is_profile_charged() {
         profile,
     )
     .unwrap_err();
-    let diagnostic = error.compiler_resource_diagnostic().unwrap();
-    assert_eq!(diagnostic.category, ResourceCategory::Diagnostics);
-    assert_eq!(diagnostic.limit, 0);
-    assert_eq!(diagnostic.increment, 1);
-}
-
-#[test]
-fn enum_shape_categories_are_reserved_before_hir_at_exact_and_plus_one() {
-    let source = concat!(
-        "edition/\n2\n/edition\n",
-        "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
-        "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
-        "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\n",
-        "name/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n",
-        "/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+    let rejection = error.budget_error().unwrap();
+    assert_eq!(rejection.category, ResourceCategory::Diagnostics);
+    assert_eq!(
+        rejection.authority,
+        Some(crate::BudgetAuthority::Diagnostics)
     );
-    let counts = [
-        (ResourceCategory::EnumDeclarations, 1),
-        (ResourceCategory::EnumVariants, 2),
-        (ResourceCategory::VariantFields, 1),
-        (
-            ResourceCategory::EnumRecursionWork,
-            u64::try_from(crate::hir::ENUM_RECURSION_MAX_WORK).unwrap(),
-        ),
-    ];
-    let mut exact = ResourceProfile::default();
-    for (category, count) in counts {
-        exact = exact.lowered(category, count).unwrap();
-    }
-    compile_source_with_profile(source, "enum-exact.lkjscript", &Limits::default(), exact)
-        .expect("exact enum reservations");
-    for (category, count) in counts {
-        let profile = ResourceProfile::default()
-            .lowered(category, count - 1)
-            .unwrap();
-        let error = compile_source_with_profile(
-            source,
-            "enum-plus-one.lkjscript",
-            &Limits::default(),
-            profile,
-        )
-        .unwrap_err();
-        let diagnostic = error.compiler_resource_diagnostic().unwrap();
-        assert_eq!(diagnostic.category, category);
-        assert_eq!(diagnostic.before, 0);
-        assert_eq!(diagnostic.increment, count);
-    }
-}
-
-#[test]
-fn lowered_hir_ceiling_prevents_ssa_and_is_deterministic() {
-    let source = unit_main("");
-    let profile = ResourceProfile::new(ResourceProfileName::Deterministic)
-        .lowered(ResourceCategory::HirFunctions, 0)
-        .unwrap();
-    let compile = || {
-        compile_source_with_profile(&source, "lowered.lkjscript", &Limits::default(), profile)
-            .unwrap_err()
-    };
-    let first = compile();
-    let second = compile();
-    assert_eq!(first, second);
-    let diagnostic = first.compiler_resource_diagnostic().unwrap();
-    assert_eq!(diagnostic.category, ResourceCategory::HirFunctions);
-    assert_eq!(diagnostic.before, 0);
-    assert_eq!(diagnostic.increment, 1);
-    assert_eq!(diagnostic.profile, profile.identity());
+    assert_eq!(rejection.limit, 0);
+    assert_eq!(rejection.attempted, 1);
 }

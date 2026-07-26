@@ -42,7 +42,7 @@ pub(crate) fn analyze_program_without_effects_with_budget(
     ledger: &mut BudgetLedger,
 ) -> Result<hir::Program> {
     let program = analyze_program_without_effects(source)?;
-    crate::budget::charge_hir(&program, ledger)?;
+    crate::budget::reserve_ssa_input(&program, ledger)?;
     Ok(program)
 }
 

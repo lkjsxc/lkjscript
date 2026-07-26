@@ -14,10 +14,12 @@ incomplete.** Profile V2's closed categories, named ceilings, bounded authority
 paths, lower-only child grants, move-only pre-allocation reservations, and fixed
 nonallocating deterministic ledger journal are Current in `lkjscript-core`.
 Compiler enum shape and match pattern/arm/matrix/plan/witness categories reserve
-from validated source shape before HIR allocation. Existing compiler and
-protocol entry points still use separate legacy/current charging paths; one
-cross-authority request ledger and pre-allocation coverage of every
-amplification path remain Accepted Targets.
+from validated source shape before HIR allocation. Immutable HIR reserves its
+exact charged input shape before SSA construction, and immutable normalized SSA
+reserves its exact charged input shape before bytecode construction. Public
+compiler `_with_ledger` entry points share one outer-owned compiler ledger;
+protocol and compiler still use separate ledgers. Parser-wide and complete
+cross-authority pre-allocation remain Accepted Targets.
 
 ## One Ledger
 
@@ -77,10 +79,14 @@ A prefix cannot claim totals for work that did not occur or expose noncanonical
 host paths. Publication is staged only within an already reserved bound and is
 atomic after validation.
 
-Source bytes reserve token/line space before lexing; decoded lengths reserve
-collections before growth; pattern rows/columns reserve specialization;
-diagnostics, hole candidates, SSA IDs, response bytes, enum metadata, and
-staged publication bytes reserve before accumulation or copying.
+The accepted complete design requires source bytes to reserve token/line space
+before lexing; that source-parser reservation is not Current. Current compiler
+source bytes/tokens/nodes are measured after the fixed-limit parser and before
+HIR. Pattern rows/columns reserve usefulness work, immutable HIR shape reserves
+before SSA construction, and immutable normalized SSA shape reserves before
+bytecode construction. Diagnostics, hole candidates, response bytes, enum
+metadata, and staged publication bytes reserve at their documented Current
+boundaries.
 
 ## Closed Profile V2 Categories
 

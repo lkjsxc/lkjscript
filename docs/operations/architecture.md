@@ -75,12 +75,13 @@ state use versioned bounded contracts without pretending to share that ledger.
 Topology and graph bound traversal; task state bounds decode, retained Git
 output, references, context, and publication; the protocol pre-bounds request,
 source bytes/units, work, hole candidates, legal actions, transactions, staged
-publication, and serialized output; compiler profile charges remain exact
-post-phase guards before downstream phases not yet migrated, except enum
-declaration/variant/field/recursion shape charges which precede enum HIR
-allocation.
-Exhaustion cannot publish partial authority. Edition 1 source limits remain
-unchanged.
+publication, and serialized output. Public compiler `_with_ledger` APIs borrow
+one outer-owned compiler ledger. Validated source shape reserves enum/match HIR
+work; immutable HIR reserves its charged input shape before SSA; immutable
+normalized SSA reserves its charged input shape before bytecode. Parser-wide
+preflight and exact bytecode-output categories are not Current, and protocol and
+compiler ledgers remain separate. Exhaustion cannot publish partial authority.
+Edition 1 source limits remain unchanged.
 
 ## Accepted Edition 2 Path
 

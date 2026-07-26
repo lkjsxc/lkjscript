@@ -43,9 +43,9 @@ compiler Resource Profile V2, and the core hierarchical pre-allocation and
 deterministic journal foundation are Current. All 125 canonical sources are exact Edition 2 and
 ordinary compilation rejects Edition 1. Agent Foundation V1 and Semantic
 Source Schema V1 identities are historical and rejected. Other Edition 2
-changed semantics, whole-pipeline pre-allocation, logical metering beyond enum
-construction, nonzero query
-caching, and cross-authority ledgers remain Accepted Targets, not Current.
+changed semantics, parser-wide and whole-platform pre-allocation, exact
+bytecode-output metering, logical metering beyond enum construction, nonzero
+query caching, and cross-authority ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
 
 ## Current Baseline
@@ -73,8 +73,11 @@ commands/APIs are Current on the containing implementation revision.
    bounded one-shot/session protocol; its exact V1 base remains documented.
 5. The [Profile V2 resource foundation](decisions/platform/resource-budget-profiles-candidate.md)
    is Current for core hierarchical reservation, its deterministic journal,
-   and the documented legacy compiler post-phase charging boundaries;
-   whole-pipeline shared-ledger migration is not.
+   public outer-owned compiler-ledger APIs, and typed preflight from validated
+   source to enum/match HIR allocations, immutable HIR to SSA construction, and
+   immutable normalized SSA to bytecode construction. Source parsing and exact
+   bytecode-output sizing are not profile-preflight Current; cross-authority
+   shared-ledger migration is not Current.
 
 6. Explicit Edition 2 markers, homogeneous closure identity, edition-separated
    source/tree/revision/declaration/node identities, Schema V2 facts, exact

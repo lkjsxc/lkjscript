@@ -30,15 +30,17 @@ pub use lkjscript_core::{
     RESOURCE_PROFILE_VERSION,
 };
 pub use pipeline::{
-    compile_path, compile_path_with_metrics, compile_path_with_profile,
+    compile_path, compile_path_with_ledger, compile_path_with_metrics,
+    compile_path_with_metrics_and_ledger, compile_path_with_profile,
     compile_path_with_profile_and_metrics, compile_path_with_sources,
-    compile_path_with_sources_and_profile, compile_source, compile_source_with_profile,
-    validate_source, validate_source_tree, validate_source_with_profile,
+    compile_path_with_sources_and_ledger, compile_path_with_sources_and_profile, compile_source,
+    compile_source_with_ledger, compile_source_with_profile, validate_source, validate_source_tree,
+    validate_source_with_ledger, validate_source_with_profile,
 };
 
 pub const SOURCE_EXTENSION: &str = "lkjscript";
 
-/// Monotonic direct phase timings and exact logical resource totals for one compilation.
+/// Monotonic direct phase timings and compiler-ledger totals at completion.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompileMetrics {
     pub total: Duration,

@@ -1,28 +1,52 @@
-use lkjscript_core::{BudgetLedger, ResourceCategory, Result};
+use lkjscript_core::{BudgetAuthority, BudgetLedger, ResourceCategory, Result};
 use lkjscript_ir::{Terminator, VerifiedProgram};
 
-use super::{charge, charge_usize};
+use super::{checked_add, count_usize, reserve};
 
-/// Exact post-normalization accounting. SSA construction and verification keep
-/// their existing implementation bounds; this check precedes bytecode lowering
-/// and prevents publication of an over-profile executable.
-pub(crate) fn charge_ssa(program: &VerifiedProgram, ledger: &mut BudgetLedger) -> Result<()> {
+#[derive(Default)]
+struct SsaCharges {
+    functions: u64,
+    blocks: u64,
+    values: u64,
+    edges: u64,
+    frame_states: u64,
+}
+
+/// Measure immutable normalized SSA and reserve its exact charged input shape
+/// before bytecode construction allocates chunks, prototypes, code, or links.
+pub(crate) fn reserve_bytecode_input(
+    program: &VerifiedProgram,
+    ledger: &mut BudgetLedger,
+) -> Result<()> {
+    let mut charges = SsaCharges::default();
     for function in &program.program().functions {
-        charge(ledger, ResourceCategory::SsaFunctions, 1)?;
+        checked_add(&mut charges.functions, 1, ResourceCategory::SsaFunctions)?;
         for block in &function.blocks {
-            charge(ledger, ResourceCategory::SsaBlocks, 1)?;
-            charge_usize(ledger, ResourceCategory::SsaValues, block.parameters.len())?;
-            charge_usize(
-                ledger,
+            checked_add(&mut charges.blocks, 1, ResourceCategory::SsaBlocks)?;
+            checked_add(
+                &mut charges.values,
+                count_usize(ResourceCategory::SsaValues, block.parameters.len())?,
                 ResourceCategory::SsaValues,
-                block.instructions.len(),
+            )?;
+            checked_add(
+                &mut charges.values,
+                count_usize(ResourceCategory::SsaValues, block.instructions.len())?,
+                ResourceCategory::SsaValues,
             )?;
             if block.metadata.frame_state.is_some() {
-                charge(ledger, ResourceCategory::SsaFrameStates, 1)?;
+                checked_add(
+                    &mut charges.frame_states,
+                    1,
+                    ResourceCategory::SsaFrameStates,
+                )?;
             }
             for instruction in &block.instructions {
                 if instruction.metadata.frame_state.is_some() {
-                    charge(ledger, ResourceCategory::SsaFrameStates, 1)?;
+                    checked_add(
+                        &mut charges.frame_states,
+                        1,
+                        ResourceCategory::SsaFrameStates,
+                    )?;
                 }
             }
             let edges = match block.terminator {
@@ -30,8 +54,17 @@ pub(crate) fn charge_ssa(program: &VerifiedProgram, ledger: &mut BudgetLedger) -
                 Terminator::ConditionalBranch { .. } => 2,
                 _ => 0,
             };
-            charge(ledger, ResourceCategory::SsaEdges, edges)?;
+            checked_add(&mut charges.edges, edges, ResourceCategory::SsaEdges)?;
         }
+    }
+    for (category, amount) in [
+        (ResourceCategory::SsaFunctions, charges.functions),
+        (ResourceCategory::SsaBlocks, charges.blocks),
+        (ResourceCategory::SsaValues, charges.values),
+        (ResourceCategory::SsaEdges, charges.edges),
+        (ResourceCategory::SsaFrameStates, charges.frame_states),
+    ] {
+        reserve(ledger, BudgetAuthority::Bytecode, category, amount)?;
     }
     Ok(())
 }

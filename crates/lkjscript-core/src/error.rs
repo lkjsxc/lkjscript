@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{ResourceDiagnostic, ResourceLimitKind};
+use crate::{BudgetError, ResourceDiagnostic, ResourceLimitKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[doc(hidden)]
@@ -18,6 +18,7 @@ pub struct Error {
     message: String,
     class: ErrorClass,
     compiler_resource: Option<Box<ResourceDiagnostic>>,
+    budget: Option<Box<BudgetError>>,
 }
 
 impl Error {
@@ -26,6 +27,7 @@ impl Error {
             message: message.into(),
             class: ErrorClass::Ordinary,
             compiler_resource: None,
+            budget: None,
         }
     }
 
@@ -35,6 +37,7 @@ impl Error {
             message: message.into(),
             class: ErrorClass::Deadline,
             compiler_resource: None,
+            budget: None,
         }
     }
 
@@ -44,6 +47,7 @@ impl Error {
             message: message.into(),
             class: ErrorClass::Resource(kind),
             compiler_resource: None,
+            budget: None,
         }
     }
 
@@ -53,6 +57,7 @@ impl Error {
             message: message.into(),
             class: ErrorClass::Host,
             compiler_resource: None,
+            budget: None,
         }
     }
 
@@ -61,6 +66,16 @@ impl Error {
             message: diagnostic.to_string(),
             class: ErrorClass::Ordinary,
             compiler_resource: Some(Box::new(diagnostic)),
+            budget: None,
+        }
+    }
+
+    pub fn budget(error: BudgetError) -> Self {
+        Self {
+            message: error.to_string(),
+            class: ErrorClass::Ordinary,
+            compiler_resource: None,
+            budget: Some(Box::new(error)),
         }
     }
 
@@ -70,6 +85,10 @@ impl Error {
 
     pub fn compiler_resource_diagnostic(&self) -> Option<&ResourceDiagnostic> {
         self.compiler_resource.as_deref()
+    }
+
+    pub fn budget_error(&self) -> Option<&BudgetError> {
+        self.budget.as_deref()
     }
 
     #[doc(hidden)]

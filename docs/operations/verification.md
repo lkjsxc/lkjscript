@@ -125,9 +125,10 @@ boundaries, category order, positive monotonic ceilings, parent-child
 oversubscription, consume/return/Drop reservation behavior, authority depth,
 missing authority, deterministic prefix equality and nested order, exact
 journal capacity plus one, no-mutation rejection, and identity. Compiler tests
-retain corpus-root and legacy post-phase source/HIR/SSA publication coverage.
-Whole-pipeline pre-allocation and shared cross-authority ledger gates remain
-Accepted.
+retain corpus-root coverage and add exact/+1 deterministic-prefix boundaries
+for HIR, match planning, SSA construction, bytecode input, diagnostics, and
+outer-ledger accumulation. Parser-wide pre-allocation, exact bytecode-output
+sizing, and shared cross-authority ledger gates remain Accepted.
 
 ## Current Edition 2 Gate
 

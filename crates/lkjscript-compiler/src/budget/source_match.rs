@@ -1,4 +1,4 @@
-use lkjscript_core::{BudgetLedger, Error, ResourceCategory, Result};
+use lkjscript_core::{BudgetAuthority, BudgetLedger, Error, ResourceCategory, Result};
 
 use crate::source::{Expr, ValidatedSourceTree};
 
@@ -27,7 +27,7 @@ pub(super) fn reserve_matches(tree: &ValidatedSourceTree, ledger: &mut BudgetLed
             shape.witness_bytes,
         ),
     ] {
-        super::source::reserve_hir(ledger, category, amount)?;
+        super::reserve(ledger, BudgetAuthority::PatternUsefulness, category, amount)?;
     }
     Ok(())
 }

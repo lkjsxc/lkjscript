@@ -42,7 +42,7 @@ pub(crate) fn lower_program_with_metrics_and_budget(
     ledger: &mut BudgetLedger,
 ) -> Result<(VerifiedProgram, SsaMetrics)> {
     let (program, metrics) = lower_program_with_metrics(program)?;
-    crate::budget::charge_ssa(&program, ledger)?;
+    crate::budget::reserve_bytecode_input(&program, ledger)?;
     Ok((program, metrics))
 }
 
