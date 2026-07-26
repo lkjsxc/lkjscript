@@ -142,9 +142,9 @@
   and F64-bit equality families; nominal products have ordered named fields,
   exact construction, access, and immutable replacement. Edition 2 enum
   declarations/type facts and exact `variant-value` construction are Current
-  through HIR, verified SSA, evaluator, validated bytecode, boxed active-payload
-  GC values, the reference VM, and forced Linux x86-64 baseline/proof JIT.
-  Source match and automatic/host-native enum transitions are absent
+  through HIR, verified SSA, evaluator, bytecode/VM, boxed active-payload GC,
+  and forced Linux x86-64 baseline/proof JIT.
+  Exhaustive match is Current through bounded plans and all four engines; host-native enum transitions are absent
 - Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
   fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
   aggregate ownership-analysis budget; lexical place initialization/end;

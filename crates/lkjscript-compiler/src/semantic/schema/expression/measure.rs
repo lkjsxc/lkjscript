@@ -40,10 +40,17 @@ impl Expression {
                 measure_many(body, next, counts);
             }
             Self::Do { expressions } => measure_many(expressions, next, counts),
-            Self::ProductValue { fields, .. } => {
+            Self::ProductValue { fields, .. } | Self::VariantValue { fields, .. } => {
                 for field in fields {
                     field.value.measure(next, counts);
                 }
+                if let Self::VariantValue { value_type, .. } = self {
+                    value_type.measure(next, counts);
+                }
+            }
+            Self::Match { scrutinee, arms } => {
+                scrutinee.measure(next, counts);
+                super::matching::measure_arms(arms, next, counts);
             }
             Self::WithField {
                 value, replacement, ..
@@ -75,6 +82,9 @@ impl Expression {
             Self::ProductValue { product, fields } => {
                 product.len() + fields.iter().map(|field| field.name.len()).sum::<usize>()
             }
+            Self::VariantValue {
+                variant, fields, ..
+            } => variant.len() + fields.iter().map(|field| field.name.len()).sum::<usize>(),
             Self::Field { field, .. } | Self::WithField { field, .. } => field.len(),
             Self::Let { bindings, .. } => bindings.iter().map(|binding| binding.name.len()).sum(),
             _ => 0,

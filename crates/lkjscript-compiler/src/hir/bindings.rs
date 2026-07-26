@@ -38,6 +38,7 @@ pub struct Program {
     pub enums: Vec<EnumDefinition>,
     pub traits: Vec<TraitDefinition>,
     pub implementations: Vec<ImplDefinition>,
+    pub match_plans: Vec<MatchPlan>,
     pub functions: Vec<Function>,
     pub main: Main,
     /// Internal function-closure slots in deterministic bytecode layout order.

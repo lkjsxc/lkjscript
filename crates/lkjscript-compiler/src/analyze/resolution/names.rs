@@ -62,6 +62,7 @@ impl Resolver<'_> {
             | ExprKind::EmptyList
             | ExprKind::LitNone
             | ExprKind::LitStr(_)
+            | ExprKind::MatchUnreachable { .. }
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
             ExprKind::Load(_) | ExprKind::Move { .. } | ExprKind::Borrow { .. } => EffectSet::PURE,
             ExprKind::Call { args, .. } => fold_effects(args).union(EffectSet::CONSERVATIVE_CALL),

@@ -106,6 +106,9 @@ pub enum ExprKind {
         layout: RuntimeLayoutId,
         value: Box<Expr>,
     },
+    MatchUnreachable {
+        plan: MatchPlanId,
+    },
     QuoteSymbol(String),
 }
 

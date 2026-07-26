@@ -29,19 +29,20 @@ pub(crate) fn charge_source(tree: &ValidatedSourceTree, ledger: &mut BudgetLedge
         ResourceCategory::TopLevelDeclarations,
         tree.declarations().len(),
     )?;
+    super::source_match::reserve_matches(tree, ledger)?;
     let (enums, variants, fields) = enum_shape_counts(tree)?;
     // These exact source-shape reservations complete before any enum HIR
     // declaration, variant, field, or recursion-validation state is allocated.
-    reserve_enum(ledger, ResourceCategory::EnumDeclarations, enums)?;
-    reserve_enum(ledger, ResourceCategory::EnumVariants, variants)?;
-    reserve_enum(ledger, ResourceCategory::VariantFields, fields)?;
+    reserve_hir(ledger, ResourceCategory::EnumDeclarations, enums)?;
+    reserve_hir(ledger, ResourceCategory::EnumVariants, variants)?;
+    reserve_hir(ledger, ResourceCategory::VariantFields, fields)?;
     let recursion = if enums == 0 {
         0
     } else {
         u64::try_from(crate::hir::ENUM_RECURSION_MAX_WORK)
             .map_err(|_| Error::msg("enum recursion preallocation count overflow"))?
     };
-    reserve_enum(ledger, ResourceCategory::EnumRecursionWork, recursion)?;
+    reserve_hir(ledger, ResourceCategory::EnumRecursionWork, recursion)?;
     charge_usize(ledger, ResourceCategory::ValidationWork, tree.nodes().len())?;
     charge_usize(
         ledger,
@@ -50,7 +51,11 @@ pub(crate) fn charge_source(tree: &ValidatedSourceTree, ledger: &mut BudgetLedge
     )
 }
 
-fn reserve_enum(ledger: &mut BudgetLedger, category: ResourceCategory, amount: u64) -> Result<()> {
+pub(super) fn reserve_hir(
+    ledger: &mut BudgetLedger,
+    category: ResourceCategory,
+    amount: u64,
+) -> Result<()> {
     ledger
         .charge_with_authority(
             Some(BudgetAuthority::Hir),

@@ -1,4 +1,7 @@
+mod matching;
 mod measure;
+
+pub(crate) use matching::{MatchExpressionArm, MatchPatternExpression, MatchPatternField};
 
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +69,15 @@ pub(crate) enum Expression {
     ProductValue {
         product: String,
         fields: Vec<ExpressionField>,
+    },
+    VariantValue {
+        value_type: TypeExpression,
+        variant: String,
+        fields: Vec<ExpressionField>,
+    },
+    Match {
+        scrutinee: Box<Expression>,
+        arms: Vec<MatchExpressionArm>,
     },
     Field {
         value: Box<Expression>,

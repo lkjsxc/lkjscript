@@ -1,10 +1,10 @@
+mod calls;
 mod hole;
+mod matches;
 mod trivia;
 mod type_nodes;
 
-use crate::semantic::schema::{
-    ClosedBuiltinOperation, SemanticNodeKind as Kind, SemanticNodeValue as Value, TriviaRecord,
-};
+use crate::semantic::schema::{SemanticNodeKind as Kind, SemanticNodeValue as Value, TriviaRecord};
 use crate::source::{SourceNode, SyntaxKind};
 
 pub(crate) fn classify(
@@ -41,7 +41,7 @@ pub(crate) fn classify(
         SyntaxKind::Str { value } => classify_text(value, parent),
         SyntaxKind::Symbol { name } => classify_symbol(name, parent, parent_kind, index),
         SyntaxKind::Call { name } if name == "hole" => (Kind::TypedHole, hole::value(node)),
-        SyntaxKind::Call { name } => classify_call(name, parent),
+        SyntaxKind::Call { name } => classify_call(node, name, parent),
     }
 }
 
@@ -88,7 +88,8 @@ fn classify_symbol(
         (Some(Kind::Bound), 0) => Kind::TypeVariable,
         (Some(Kind::Bound), _) => Kind::TraitName,
         (Some(Kind::ProductValue), 0) => Kind::ProductName,
-        (Some(Kind::ProductValueField), 0) => Kind::FieldName,
+        (Some(Kind::ContextVariant), 0) => Kind::VariantName,
+        (Some(Kind::ProductValueField | Kind::VariantValueField), 0) => Kind::FieldName,
         (Some(Kind::FieldAccess), 1) | (Some(Kind::WithField), 1) => Kind::FieldName,
         (Some(Kind::Bind), 0) => Kind::BindingName,
         (Some(Kind::Set), 0) => Kind::MutableName,
@@ -115,7 +116,14 @@ fn classify_symbol(
     )
 }
 
-fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value>) {
+fn classify_call(
+    node: &SourceNode,
+    name: &str,
+    parent: Option<&SourceNode>,
+) -> (Kind, Option<Value>) {
+    if let Some(kind) = matches::call(node, name) {
+        return (kind, None);
+    }
     let kind = match name {
         "import" => Kind::Import,
         "main" => Kind::Main,
@@ -130,7 +138,6 @@ fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value
         "enum" => Kind::EnumDeclaration,
         "variants" => Kind::ContextVariants,
         "variant" => Kind::EnumVariant,
-        "variant-field" => Kind::EnumVariantField,
         "fields" => Kind::ContextFields,
         "trait" if type_nodes::call_name(parent) == Some("impl") => Kind::ContextTrait,
         "trait" => Kind::MarkerTrait,
@@ -174,25 +181,7 @@ fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value
                 }),
             )
         }
-        _ => return classify_plain_call(name),
+        _ => return calls::plain(name),
     };
     (kind, None)
-}
-
-fn classify_plain_call(name: &str) -> (Kind, Option<Value>) {
-    if let Some(operation) = crate::hir::Operation::from_name(name) {
-        (
-            Kind::BuiltinCall,
-            Some(Value::BuiltinOperation {
-                operation: ClosedBuiltinOperation(operation),
-            }),
-        )
-    } else {
-        (
-            Kind::UserFunctionCall,
-            Some(Value::UserFunction {
-                name: name.to_string(),
-            }),
-        )
-    }
 }

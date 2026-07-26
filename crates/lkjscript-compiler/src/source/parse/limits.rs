@@ -24,26 +24,39 @@ pub(super) fn check_file_limits(
     }
     let mut depth = 0_u32;
     let mut child_stack = Vec::new();
+    let mut marker_stack: Vec<(bool, bool)> = Vec::new();
     for token in tokens {
         match &token.kind {
-            TokenKind::Open(_) => {
+            TokenKind::Open(name) => {
                 count_child(&mut child_stack, limits, origin, token.span)?;
-                depth = depth.saturating_add(1);
-                if depth > limits.max_nest_depth {
+                let in_match =
+                    name == "match" || marker_stack.last().is_some_and(|(_, inside)| *inside);
+                let counted = !in_match || !transparent_match_marker(name);
+                if counted {
+                    depth = depth.saturating_add(1);
+                }
+                let physical_limit = limits.max_nest_depth.saturating_mul(4);
+                if depth > limits.max_nest_depth || marker_stack.len() >= physical_limit as usize {
                     return Err(resource_error(
                         origin,
                         token.span,
                         format!(
-                            "nest depth exceeded (>{}); extract a def",
-                            limits.max_nest_depth
+                            concat!(
+                                "semantic nest depth exceeded (>{}) or match marker depth ",
+                                "exceeded (>{}); extract a def",
+                            ),
+                            limits.max_nest_depth, physical_limit
                         ),
                     ));
                 }
                 child_stack.push(0_u32);
+                marker_stack.push((counted, in_match));
             }
             TokenKind::Close(_) => {
                 child_stack.pop();
-                depth = depth.saturating_sub(1);
+                if marker_stack.pop().is_some_and(|(counted, _)| counted) {
+                    depth = depth.saturating_sub(1);
+                }
             }
             TokenKind::Atom(_) | TokenKind::Str(_) => {
                 count_child(&mut child_stack, limits, origin, token.span)?;
@@ -51,6 +64,21 @@ pub(super) fn check_file_limits(
         }
     }
     Ok(())
+}
+
+fn transparent_match_marker(name: &str) -> bool {
+    matches!(
+        name,
+        "arms"
+            | "arm"
+            | "fields"
+            | "variant-field"
+            | "variant-field-pattern"
+            | "product-field-pattern"
+            | "name"
+            | "type"
+            | "variant"
+    )
 }
 
 fn count_child(

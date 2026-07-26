@@ -33,11 +33,12 @@ complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
 local stdio sessions, the Edition 2 identity/non-publishing migration slice,
 generic enum declarations/resolved type facts, exact `variant-value`
-construction through verified SSA, the SSA evaluator, validated bytecode, and
-the reference VM, forced Linux x86-64 baseline/proof enum execution, compiler
+construction and exhaustive source match through verified ordinary SSA, the
+evaluator, validated bytecode, reference VM, and forced Linux x86-64
+baseline/proof execution, compiler
 Resource Profile V2, and the core hierarchical pre-allocation foundation are
 Current. Agent Foundation V1 and Semantic Source Schema V1 identities are
-historical and rejected. Source match and patterns, other Edition 2 ADTs,
+historical and rejected. Other Edition 2 ADTs,
 changed semantics, execution cutover, migration publication, whole-pipeline
 pre-allocation, logical metering beyond enum construction, nonzero query
 caching, and cross-authority ledgers remain Accepted Targets, not Current.
@@ -78,9 +79,9 @@ commands/APIs are Current on the containing implementation revision.
    exact Profile V2 enum-shape preallocation, exact enum value construction,
    target-independent layout facts, verified SSA primitives/evaluator,
    validated bytecode, boxed active-payload GC representation, reference VM,
-   and forced Linux x86-64 baseline/proof JIT execution are Current. Match,
-   automatic/native-host enum transitions, publish, and corpus cutover remain
-   targets.
+   exhaustive match planning/lowering, and forced Linux x86-64 baseline/proof
+   JIT execution are Current. Automatic/native-host enum transitions, publish,
+   and corpus cutover remain targets.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

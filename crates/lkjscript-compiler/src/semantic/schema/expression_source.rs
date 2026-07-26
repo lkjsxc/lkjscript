@@ -1,4 +1,5 @@
 mod build;
+mod matching;
 
 use super::{Expression, ExpressionBinding, ExpressionField};
 use crate::source::{SourceNode, SourceSpan, SyntaxKind};
@@ -79,6 +80,12 @@ pub(super) fn to_source(expression: &Expression, span: SourceSpan) -> Result<Sou
         Expression::Do { expressions } => call("do", convert_many(expressions, span)?, span),
         Expression::Quote { name } => call("quote", vec![symbol(name, span)?], span),
         Expression::ProductValue { product, fields } => product_value(product, fields, span)?,
+        Expression::VariantValue {
+            value_type,
+            variant,
+            fields,
+        } => matching::variant_value(value_type, variant, fields, span)?,
+        Expression::Match { scrutinee, arms } => matching::match_expression(scrutinee, arms, span)?,
         Expression::Field { value, field } => call(
             "field",
             vec![to_source(value, span)?, symbol(field, span)?],

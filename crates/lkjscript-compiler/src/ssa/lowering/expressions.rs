@@ -162,6 +162,15 @@ impl FunctionBuilder<'_> {
                     expression.origin,
                 );
             }
+            ExprKind::MatchUnreachable { plan } => {
+                self.terminate(Terminator::Trap {
+                    message: format!(
+                        "verified exhaustive match plan {} reached unreachable edge",
+                        plan.raw()
+                    ),
+                })?;
+                return Ok(None);
+            }
         };
         Ok(Some(value))
     }

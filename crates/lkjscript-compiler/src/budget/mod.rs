@@ -1,5 +1,6 @@
 mod hir;
 mod source;
+mod source_match;
 mod ssa;
 
 use lkjscript_core::{BudgetLedger, Error, ResourceCategory, Result};

@@ -5,6 +5,7 @@ mod corpus;
 mod diagnostics;
 mod edition;
 mod holes;
+mod match_schema;
 mod publication;
 mod publication_conflict;
 mod query;

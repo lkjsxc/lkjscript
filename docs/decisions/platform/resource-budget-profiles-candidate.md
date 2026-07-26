@@ -85,8 +85,9 @@ One checked ledger flows through one compiler request. Addition is checked and
 exhaustion rejects the attempted increment without mutating the recorded total.
 
 - A complete validated source tree is charged exactly after loading/parsing and
-  before HIR construction. Edition 1 and Semantic Source Foundation V1 limits
-  remain the pre-allocation defenses for this phase.
+  before HIR construction. Enum shape and match pattern/arm/matrix/plan/witness
+  reservations complete before their HIR allocations. Edition 1 limits remain;
+  closed match wrapper depth has its own fixed physical bound.
 - Constructed and ownership-checked HIR is charged before effect inference and
   SSA construction. Existing type, ownership, and HIR maxima remain the
   allocation defenses.

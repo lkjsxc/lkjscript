@@ -12,11 +12,12 @@ exact Edition 2 line projection.
 <!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
 
 **Current for declarations, resolved type facts, and exact value construction.**
-Edition 2 accepts generic nominal `enum` declarations and `variant-value`,
-validates complete named variant and field shape, resolves invariant explicit
-instantiations, and executes construction on the SSA evaluator and reference VM.
-Source `match`, native JIT, proof JIT, and prelude replacement remain Accepted
-Targets.
+Edition 2 accepts generic nominal `enum` declarations, `variant-value`, and
+exhaustive source `match`; validates exact named variant, field, and pattern
+shape; resolves invariant explicit instantiations; and executes construction,
+tag tests, active projection, and match CFG on the evaluator, VM, forced
+baseline JIT, and forced proof JIT. Prelude replacement remains an Accepted
+Target.
 
 ## Declaration Projection
 

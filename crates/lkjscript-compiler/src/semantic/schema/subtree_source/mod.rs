@@ -96,6 +96,7 @@ fn symbol_kind(kind: Kind) -> bool {
             | Kind::MutableName
             | Kind::FieldName
             | Kind::ProductName
+            | Kind::VariantName
             | Kind::TraitName
             | Kind::QuotedName
             | Kind::PlaceName

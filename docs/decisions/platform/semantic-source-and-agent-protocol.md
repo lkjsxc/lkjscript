@@ -10,14 +10,16 @@ agent-facing transaction/query slice.
 <!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
 
 **Current** for closed `lkjscript.semantic-source` version 2 over Edition 1 and
-the Edition 2 identity/marker slice over existing declarations. Source-unit
-records expose exact edition and edition-framed identity; snapshots expose tree
-edition and identity; marker and edition-number nodes roundtrip strictly.
+the implemented Edition 2 identity, generic-enum, construction, closed-pattern,
+and source-match slice. Source-unit records expose exact edition and
+edition-framed identity; snapshots expose tree edition and identity; marker,
+enum, match, pattern, and edition-number nodes roundtrip strictly.
 Schema identity remains version 2 rather than introducing an edition-specific
 schema version.
 Schema V2 preserves the exact V1 node, value, declaration, type, built-in,
 trivia, transaction-expression, diagnostic, and correlation representation as
-its base and adds typed-hole source identity and bounded legal actions. Version
+its base and adds typed-hole source identity, bounded legal actions, exact enum
+and match transaction expressions, and match-arm expected/scope facts. Version
 1 input is historical and rejected; there is no alias, shim, or fallback.
 Unknown kinds, fields, operations, versions, duplicates, and trailing input
 fail. Inferred facts remain derived authority.

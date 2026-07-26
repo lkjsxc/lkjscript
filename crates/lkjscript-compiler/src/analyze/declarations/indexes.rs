@@ -25,6 +25,7 @@ impl Analyzer {
             implementations: Vec::new(),
             implementation_index: HashMap::new(),
             function_bounds: HashMap::new(),
+            match_plans: Vec::new(),
             next_loan: 0,
         })
     }

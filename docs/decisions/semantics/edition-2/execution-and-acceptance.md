@@ -9,8 +9,10 @@ become Current.
 
 ## Status
 
-**Accepted Target gate, not Current.** No command is claimed to implement this
-gate yet.
+**Current for the source-match slice; Accepted Target for full Edition 2
+cutover.** Match differentials cover evaluator, reference VM, forced baseline,
+and forced proof execution with zero fallback. The complete cutover gate below
+is not claimed.
 
 ## Engine Contract
 

@@ -35,6 +35,23 @@ fn all_existing_source_limits_remain_enforced_at_boundaries() {
 }
 
 #[test]
+fn match_structural_markers_have_a_separate_hard_depth_bound() {
+    let nesting = 33;
+    let mut source = String::from("edition/\n2\n/edition\nmain/\nsig/\n->\nI64\n/sig\nmatch/\n");
+    source.push_str(&"fields/\n".repeat(nesting));
+    source.push_str("x\n");
+    source.push_str(&"/fields\n".repeat(nesting));
+    source.push_str("arms/\narm/\nwildcard/\n/wildcard\n0\n/arm\n/arms\n/match\n/main\n");
+    let error = validate(&source, "match-depth.lkjscript", &Limits::default())
+        .expect_err("match marker depth plus one");
+    assert_eq!(error.category().as_str(), "resource-limit", "{error}");
+    assert!(
+        error.message().contains("match marker depth exceeded"),
+        "{error}"
+    );
+}
+
+#[test]
 fn source_file_safety_maximum_checks_metadata_and_actual_read_without_large_input() {
     let origin = SourceOrigin::in_memory("src/limit.lkjscript");
     let budget = SourceFoundationBudget::default();

@@ -94,6 +94,7 @@ mod effects_direct;
 mod effects_recursive;
 mod enum_values;
 mod enums;
+mod matches;
 mod metadata;
 mod products;
 mod program_shape;

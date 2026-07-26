@@ -12,6 +12,7 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
+        | ExprKind::MatchUnreachable { .. }
         | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
         ExprKind::Call { callee, args, .. } => {
             let callee_effects = if callee.storage == BindingStorage::Function {

@@ -1,3 +1,4 @@
+mod active_enum;
 mod block;
 mod enum_instruction;
 mod function;

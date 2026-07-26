@@ -16,6 +16,9 @@ fn ownership_source(body: &str, result: &str) -> String {
 }
 
 mod constants;
+mod match_nested;
+mod match_resources;
+mod matches;
 mod numeric;
 mod operations;
 mod ownership_boundaries;

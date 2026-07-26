@@ -9,7 +9,12 @@ lowering boundary.
 
 ## Status
 
-**Accepted Target, not Current.** Current Edition 1 has no general match form.
+<!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
+
+**Current for Edition 2 source match.** Edition 1 remains unchanged. The closed
+patterns, bounded usefulness matrices, independently verified match plan,
+ordinary-SSA lowering, evaluator/VM execution, and forced baseline/proof
+execution described below are implemented.
 
 ## Exact Projection
 

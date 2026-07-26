@@ -5,6 +5,7 @@ mod derived_facts;
 mod enums;
 mod literals;
 mod locals;
+pub(super) mod matching;
 mod model;
 mod names;
 mod products;

@@ -1,5 +1,6 @@
 mod declarations;
 mod infer;
+mod pattern;
 
 use declarations::{declared_functions, insert};
 pub(super) use declarations::{function_signatures, parse_canonical};
@@ -102,6 +103,11 @@ fn add_lexical(
                 );
             }
         }
+        if super::types::call_is(current, "arm") && *child_index == 1 {
+            if let Some(pattern) = current.children.first() {
+                pattern::add(pattern, site, program, revision, &prefix, output);
+            }
+        }
         if super::types::call_is(current, "var") && *child_index == 3 {
             if let (Some(name), Some(ty)) = (
                 current.children.first().and_then(super::types::source_name),
@@ -158,7 +164,7 @@ fn add_parameters(
     }
 }
 
-fn local_identity(
+pub(super) fn local_identity(
     declaration: &str,
     kind: &str,
     path: &[usize],

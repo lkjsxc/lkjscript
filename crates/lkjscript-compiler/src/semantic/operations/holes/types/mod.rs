@@ -44,6 +44,9 @@ pub(crate) fn canonical(ty: &Type) -> String {
 }
 
 pub(super) fn parse_type_nodes(nodes: &[SourceNode]) -> Option<(Type, usize)> {
+    if let Some(enum_type) = nodes.first().and_then(parse_enum_node) {
+        return Some((enum_type, 1));
+    }
     let mut atoms = Vec::new();
     let mut boundaries = Vec::new();
     for node in nodes {
@@ -56,6 +59,35 @@ pub(super) fn parse_type_nodes(nodes: &[SourceNode]) -> Option<(Type, usize)> {
         .position(|boundary| *boundary == atom_end)?
         + 1;
     Some((ty, used))
+}
+
+fn parse_enum_node(node: &SourceNode) -> Option<Type> {
+    let SyntaxKind::Call { name } = &node.kind else {
+        return None;
+    };
+    if matches!(
+        name.as_str(),
+        "Owned" | "Ref" | "RefMut" | "List" | "Option" | "Result" | "Product"
+    ) || !crate::source::is_source_identifier(name)
+        || !name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase())
+    {
+        return None;
+    }
+    let mut arguments = Vec::new();
+    let mut index = 0;
+    while index < node.children.len() {
+        let (argument, used) = parse_type_nodes(&node.children[index..])?;
+        arguments.push(argument);
+        index = index.checked_add(used)?;
+    }
+    Some(Type::Enum {
+        id: crate::hir::EnumId::UNRESOLVED,
+        name: name.clone(),
+        arguments,
+    })
 }
 
 fn collect_type_atoms(node: &SourceNode, output: &mut Vec<String>) -> Option<()> {

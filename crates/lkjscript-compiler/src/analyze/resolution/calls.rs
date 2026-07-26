@@ -1,3 +1,4 @@
+use super::model::context_only_form;
 use crate::analyze::*;
 
 impl Resolver<'_> {
@@ -8,6 +9,7 @@ impl Resolver<'_> {
     ) -> Result<Expr> {
         match name {
             "if" => self.resolve_if(args),
+            "match" => self.resolve_match(args),
             "while" => self.resolve_while(args),
             "do" => self.resolve_do(args),
             "let" => self.resolve_let(args),
@@ -24,9 +26,7 @@ impl Resolver<'_> {
             "field" => self.resolve_product_field(args),
             "with-field" => self.resolve_with_product_field(args),
             "bind" => Err(self.error("bind is only valid inside let")),
-            "fn" | "def" | "main" | "sig" | "params" | "forall" | "bounds" | "bound" | "type"
-            | "import" | "name" | "product" | "fields" | "variant" | "variant-field" | "enum"
-            | "variants" | "trait" | "impl" | "for" => {
+            name if context_only_form(name) => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
             }
             _ => self.resolve_plain_call(name, args),

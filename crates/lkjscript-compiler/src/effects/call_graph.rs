@@ -64,6 +64,7 @@ pub(super) fn collect_direct_callees(
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
+        | ExprKind::MatchUnreachable { .. }
         | ExprKind::QuoteSymbol(_) => {}
         ExprKind::Call { callee, args, .. } => {
             if callee.storage == BindingStorage::Function {

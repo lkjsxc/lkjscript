@@ -26,8 +26,9 @@ The immediate implementation sequence has progressed as follows:
 7. generic enum declarations/type facts plus exact construction, independent
    layout/runtime identities, verified SSA/evaluator, validated bytecode, boxed
    active-payload GC values, reference VM execution, enum construction
-   precharging, and forced Linux x86-64 baseline/proof JIT are Current; and
-8. source match, automatic/host-native enum transitions, migration publication,
+   precharging, exhaustive source match, and forced Linux x86-64 baseline/proof
+   JIT are Current; and
+8. automatic/host-native enum transitions, migration publication,
    nonzero query caching, whole-pipeline pre-allocation, and shared request
    ledgers remain next.
 

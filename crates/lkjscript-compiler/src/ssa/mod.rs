@@ -50,6 +50,7 @@ pub(crate) fn lower_program_with_metrics(
     program: &hir::Program,
 ) -> Result<(VerifiedProgram, SsaMetrics)> {
     let construction_started = Instant::now();
+    crate::analyze::verify_match_plans(program)?;
     let ssa = construct_program(program)?;
     let construction = construction_started.elapsed();
     let verification_started = Instant::now();

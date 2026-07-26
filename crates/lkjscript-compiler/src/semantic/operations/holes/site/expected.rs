@@ -64,6 +64,11 @@ fn child_expectation(
         "fn" => None,
         "if" if index == 0 => Some(Type::Bool),
         "if" => inherited,
+        "match" if index == 0 => match_scrutinee_type(parent),
+        "match" => inherited,
+        "arms" => inherited,
+        "arm" if index == 1 => inherited,
+        "arm" => None,
         "var" if index == 2 => parent
             .children
             .get(1)
@@ -77,5 +82,26 @@ fn child_expectation(
         other => {
             super::super::types::call_parameter_type(parent, other, index, inherited.as_ref(), tree)
         }
+    }
+}
+
+fn match_scrutinee_type(node: &SourceNode) -> Option<Type> {
+    let arms = node.children.get(1)?;
+    let pattern = arms.children.first()?.children.first()?;
+    pattern_type(pattern)
+}
+
+fn pattern_type(pattern: &SourceNode) -> Option<Type> {
+    let SyntaxKind::Call { name } = &pattern.kind else {
+        return None;
+    };
+    match name.as_str() {
+        "bool-pattern" => Some(Type::Bool),
+        "i64-pattern" => Some(Type::I64),
+        "variant-pattern" | "product-pattern" => pattern
+            .children
+            .first()
+            .and_then(super::super::types::type_form),
+        _ => None,
     }
 }

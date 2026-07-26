@@ -29,6 +29,7 @@ fn aggregate_expression_budget_is_enforced_on_constructed_hir() {
         enums: Vec::new(),
         traits: Vec::new(),
         implementations: Vec::new(),
+        match_plans: Vec::new(),
         functions: Vec::new(),
         main: Main {
             origin,

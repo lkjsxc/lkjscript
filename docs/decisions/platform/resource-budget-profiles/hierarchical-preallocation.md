@@ -12,8 +12,10 @@ pre-allocation accounting, failed prefixes, and closed Profile V2 categories.
 **Current core foundation; whole-pipeline migration incomplete.** Profile V2's
 closed categories, named ceilings, bounded authority paths, lower-only child
 grants, and move-only pre-allocation reservations are Current in
-`lkjscript-core`. Rejections report the exact event and always mark current
-prechecks as `allocated_before_rejection=false`; deterministic event-prefix
+`lkjscript-core`. Compiler enum shape and match pattern/arm/matrix/plan/witness
+categories reserve from validated source shape before HIR allocation.
+Rejections report the exact event and mark current prechecks as
+`allocated_before_rejection=false`; deterministic event-prefix
 journaling is not yet Current. Existing compiler and protocol entry points still
 use separate legacy/current charging paths; one cross-authority request ledger
 and pre-allocation coverage of every amplification path remain Accepted Targets.

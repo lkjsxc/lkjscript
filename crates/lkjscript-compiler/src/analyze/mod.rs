@@ -8,7 +8,9 @@ use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
     EffectSet, EnumDefinition, EnumId, EnumLayoutFacts, EnumVariant, EnumVariantField, Expr,
     ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId, LocalDefinition,
-    Main, Operation, Origin, PlaceId, ProductDefinition, ProductField, RuntimeLayoutId, Source,
+    Main, MatchBindingAssignment, MatchEdgeTarget, MatchFieldPattern, MatchLocal, MatchPattern,
+    MatchPlan, MatchPlanCharges, MatchPlanId, MatchProjection, MatchTest, MatchTestKind, Operation,
+    Origin, PlaceId, PlannedMatchArm, ProductDefinition, ProductField, RuntimeLayoutId, Source,
     SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
     TypeSubstitution, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH, ENUM_RECURSION_MAX_WORK,
     MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
@@ -77,6 +79,7 @@ pub(crate) fn analyze_program_without_effects(
         enums: analyzer.enums,
         traits: analyzer.traits,
         implementations: analyzer.implementations,
+        match_plans: analyzer.match_plans,
         functions,
         main,
         global_layout,
@@ -99,6 +102,7 @@ struct Analyzer {
     implementations: Vec<ImplDefinition>,
     implementation_index: HashMap<(TraitId, ProductId), ImplId>,
     function_bounds: HashMap<BindingId, Vec<TraitBound>>,
+    match_plans: Vec<MatchPlan>,
     next_loan: u32,
 }
 
@@ -109,6 +113,10 @@ mod resolution;
 use declarations::*;
 use diagnostics::{AnalysisDiagnostic, NameUse};
 use resolution::*;
+
+pub(crate) fn verify_match_plans(program: &hir::Program) -> Result<()> {
+    resolution::matching::verify_match_plans(program)
+}
 
 struct Resolver<'a> {
     analyzer: &'a mut Analyzer,

@@ -31,12 +31,12 @@
     },
     {
       "id": "edition-2-enum-declarations/1",
-      "status": "current",
-      "interface": "Edition 2 enum declarations, construction, evaluator, and reference VM",
+      "status": "current", "interface": "Edition 2 generic enums and exhaustive source match through all four engines",
       "authority": "docs/decisions/semantics/edition-2/algebraic-data-types.md",
       "evidence": "docs/operations/verification.md",
       "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
-        "docs/decisions/semantics/edition-2/algebraic-data-types.md"]
+        "docs/decisions/semantics/edition-2/algebraic-data-types.md",
+        "docs/decisions/semantics/edition-2/patterns-and-match.md"]
     },
     {
       "id": "edition-2-identity-migration/1",

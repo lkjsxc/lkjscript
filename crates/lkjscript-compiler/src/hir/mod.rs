@@ -12,6 +12,7 @@ mod effects;
 mod enums;
 mod expressions;
 mod ids;
+mod matches;
 mod products;
 mod traits;
 
@@ -20,5 +21,6 @@ pub use effects::*;
 pub use enums::*;
 pub use expressions::*;
 pub use ids::*;
+pub use matches::*;
 pub use products::*;
 pub use traits::*;

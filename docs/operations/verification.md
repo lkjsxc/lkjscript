@@ -11,9 +11,9 @@ Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
 Schema V2 with its exact V1 base, typed holes/legal actions and transactions,
-Edition 2 enum declaration/type facts and construction through the SSA evaluator
-and reference VM, its one-shot protocol, bounded local stdio sessions, Profile
-V2 core reservation tests, and compiler resource-profile checks are described
+Edition 2 enum construction and exhaustive match through evaluator, VM, forced
+baseline, and forced proof, its one-shot protocol, bounded local stdio sessions,
+Profile V2 core reservation tests, and compiler resource checks are described
 in the capsules. Complete Edition 2 cross-engine/JIT acceptance, nonzero query
 caching, whole-pipeline pre-allocation, and logical metering beyond enum
 construction remain **Accepted Targets**, not Current commands.
@@ -80,8 +80,9 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 The Semantic Source V2 gate covers all 125 tracked files with the unchanged V1
 base representation, closed node/value/type/built-in/declaration/trivia/
-expression/correlation records, typed holes, schema/source
-roundtrip, `snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic
+expression/correlation records, enum/match/pattern nodes and expressions,
+typed holes including match expected/scope facts, schema/source roundtrip,
+`snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic
 `rename`, and atomic `replace_expression`. It includes strict
 schema/version/field/variant rejection; exact pinned serde boundary;
 duplicate/trailing/malformed Unicode JSON; aggregate budgets; deterministic
@@ -109,9 +110,10 @@ SSA metadata/provenance/layout/substitution rejection, inactive projection
 rejection, stable physical tags, boxed active-payload tracing, validated
 bytecode descriptors, evaluator/VM/native/proof differential values and logical
 exhaustion, exact generated entries/runtime calls/roots, malformed native
-metadata/tag/projection rejection, and zero forced fallback. Source match and
-automatic/host-native enum transitions remain part of the Accepted Edition 2
-gate.
+metadata/tag/projection rejection, and zero forced fallback. Match tests add
+nested usefulness/witness, stale plan, active projection, resource, source-order,
+single-evaluation, and four-engine zero-fallback coverage. Automatic/host-native
+enum transitions remain part of the Accepted Edition 2 gate.
 
 Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child

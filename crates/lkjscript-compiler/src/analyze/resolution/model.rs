@@ -104,3 +104,38 @@ impl<'a> Resolver<'a> {
         Ok(self.expression(ty, ExprKind::Load(binding)))
     }
 }
+
+pub(in crate::analyze) fn context_only_form(name: &str) -> bool {
+    matches!(
+        name,
+        "fn" | "def"
+            | "main"
+            | "sig"
+            | "params"
+            | "forall"
+            | "bounds"
+            | "bound"
+            | "type"
+            | "import"
+            | "name"
+            | "product"
+            | "fields"
+            | "variant"
+            | "variant-field"
+            | "enum"
+            | "variants"
+            | "trait"
+            | "impl"
+            | "for"
+            | "arms"
+            | "arm"
+            | "wildcard"
+            | "binding"
+            | "bool-pattern"
+            | "i64-pattern"
+            | "variant-pattern"
+            | "variant-field-pattern"
+            | "product-pattern"
+            | "product-field-pattern"
+    )
+}

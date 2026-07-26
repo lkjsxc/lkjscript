@@ -80,6 +80,8 @@ fn expression_descendant(node: &SourceNode, path: &[usize]) -> bool {
         "set" => index == 1,
         "quote" | "move" | "borrow" | "borrow-mut" => false,
         "product-value" => return product_field_descendant(node, index, rest),
+        "variant-value" => return variant_value_descendant(node, index, rest),
+        "match" => return match_descendant(node, index, rest),
         "field" => index == 0,
         "with-field" => index == 0 || index == 2,
         "let" if index + 1 != node.children.len() => {
@@ -105,6 +107,50 @@ fn product_field_descendant(node: &SourceNode, index: usize, rest: &[usize]) -> 
             .children
             .get(1)
             .is_some_and(|value| expression_descendant(value, &rest[1..]))
+}
+
+fn variant_value_descendant(node: &SourceNode, index: usize, rest: &[usize]) -> bool {
+    if index != 2 || rest.len() < 2 {
+        return false;
+    }
+    let Some(fields) = node.children.get(index) else {
+        return false;
+    };
+    let field_index = rest[0];
+    let Some(field) = fields.children.get(field_index) else {
+        return false;
+    };
+    rest[1] == 1
+        && matches!(&field.kind, SyntaxKind::Call { name } if name == "variant-field")
+        && field
+            .children
+            .get(1)
+            .is_some_and(|value| expression_descendant(value, &rest[2..]))
+}
+
+fn match_descendant(node: &SourceNode, index: usize, rest: &[usize]) -> bool {
+    if index == 0 {
+        return node
+            .children
+            .first()
+            .is_some_and(|value| expression_descendant(value, rest));
+    }
+    if index != 1 || rest.len() < 2 {
+        return false;
+    }
+    let Some(arm) = node
+        .children
+        .get(1)
+        .and_then(|arms| arms.children.get(rest[0]))
+    else {
+        return false;
+    };
+    rest[1] == 1
+        && matches!(&arm.kind, SyntaxKind::Call { name } if name == "arm")
+        && arm
+            .children
+            .get(1)
+            .is_some_and(|body| expression_descendant(body, &rest[2..]))
 }
 
 fn binding_descendant(node: &SourceNode, index: usize, rest: &[usize]) -> bool {

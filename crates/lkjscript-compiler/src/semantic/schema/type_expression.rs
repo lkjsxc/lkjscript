@@ -16,6 +16,10 @@ pub(crate) enum TypeExpression {
     Product {
         name: String,
     },
+    Enum {
+        name: String,
+        arguments: Vec<TypeExpression>,
+    },
     Variable {
         name: String,
     },
@@ -42,39 +46,46 @@ pub(crate) enum TypeExpression {
 
 impl TypeExpression {
     pub(crate) fn to_atoms(&self, span: SourceSpan) -> Result<Vec<SourceNode>, String> {
-        let mut names = Vec::new();
-        self.collect_atoms(&mut names)?;
-        Ok(names.into_iter().map(|name| atom(name, span)).collect())
+        let mut output = Vec::new();
+        self.collect_nodes(span, &mut output)?;
+        Ok(output)
     }
 
-    fn collect_atoms(&self, output: &mut Vec<String>) -> Result<(), String> {
+    fn collect_nodes(&self, span: SourceSpan, output: &mut Vec<SourceNode>) -> Result<(), String> {
         match self {
-            Self::Unit {} => output.push("Unit".into()),
-            Self::Bool {} => output.push("Bool".into()),
-            Self::I64 {} => output.push("I64".into()),
-            Self::F64 {} => output.push("F64".into()),
-            Self::String {} => output.push("Str".into()),
-            Self::Buffer {} => output.push("Buf".into()),
-            Self::Symbol {} => output.push("Symbol".into()),
-            Self::Handle {} => output.push("Handle".into()),
+            Self::Unit {} => output.push(atom("Unit".into(), span)),
+            Self::Bool {} => output.push(atom("Bool".into(), span)),
+            Self::I64 {} => output.push(atom("I64".into(), span)),
+            Self::F64 {} => output.push(atom("F64".into(), span)),
+            Self::String {} => output.push(atom("Str".into(), span)),
+            Self::Buffer {} => output.push(atom("Buf".into(), span)),
+            Self::Symbol {} => output.push(atom("Symbol".into(), span)),
+            Self::Handle {} => output.push(atom("Handle".into(), span)),
             Self::Product { name } => {
                 validate_type_name(name, "product")?;
-                output.push("Product".into());
-                output.push(name.clone());
+                output.extend([atom("Product".into(), span), atom(name.clone(), span)]);
+            }
+            Self::Enum { name, arguments } => {
+                validate_type_name(name, "enum")?;
+                let mut children = Vec::new();
+                for argument in arguments {
+                    argument.collect_nodes(span, &mut children)?;
+                }
+                output.push(call(name, children, span));
             }
             Self::Variable { name } => {
                 validate_type_name(name, "variable")?;
-                output.push(name.clone());
+                output.push(atom(name.clone(), span));
             }
-            Self::Owned { inner } => collect_prefixed("Owned", inner, output)?,
-            Self::Ref { inner } => collect_prefixed("Ref", inner, output)?,
-            Self::RefMut { inner } => collect_prefixed("RefMut", inner, output)?,
-            Self::List { element } => collect_prefixed("List", element, output)?,
-            Self::Option { value } => collect_prefixed("Option", value, output)?,
+            Self::Owned { inner } => collect_prefixed("Owned", inner, span, output)?,
+            Self::Ref { inner } => collect_prefixed("Ref", inner, span, output)?,
+            Self::RefMut { inner } => collect_prefixed("RefMut", inner, span, output)?,
+            Self::List { element } => collect_prefixed("List", element, span, output)?,
+            Self::Option { value } => collect_prefixed("Option", value, span, output)?,
             Self::Result { ok, error } => {
-                output.push("Result".into());
-                ok.collect_atoms(output)?;
-                error.collect_atoms(output)?;
+                output.push(atom("Result".into(), span));
+                ok.collect_nodes(span, output)?;
+                error.collect_nodes(span, output)?;
             }
         }
         Ok(())
@@ -86,6 +97,12 @@ impl TypeExpression {
         match self {
             Self::Product { name } | Self::Variable { name } => {
                 counts.string_bytes = counts.string_bytes.saturating_add(name.len() as u64);
+            }
+            Self::Enum { name, arguments } => {
+                counts.string_bytes = counts.string_bytes.saturating_add(name.len() as u64);
+                for argument in arguments {
+                    argument.measure(depth.saturating_add(1), counts);
+                }
             }
             Self::Owned { inner }
             | Self::Ref { inner }
@@ -104,10 +121,23 @@ impl TypeExpression {
 fn collect_prefixed(
     prefix: &str,
     inner: &TypeExpression,
-    output: &mut Vec<String>,
+    span: SourceSpan,
+    output: &mut Vec<SourceNode>,
 ) -> Result<(), String> {
-    output.push(prefix.into());
-    inner.collect_atoms(output)
+    output.push(atom(prefix.into(), span));
+    inner.collect_nodes(span, output)
+}
+
+fn call(name: &str, children: Vec<SourceNode>, span: SourceSpan) -> SourceNode {
+    SourceNode {
+        kind: SyntaxKind::Call {
+            name: name.to_string(),
+        },
+        span,
+        leading_trivia: Vec::new(),
+        before_close_trivia: Vec::new(),
+        children,
+    }
 }
 
 fn validate_type_name(name: &str, context: &str) -> Result<(), String> {

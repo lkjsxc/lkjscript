@@ -10,8 +10,9 @@ conversions, runtime facts, and logical charges.
 ## Status
 
 **Current for resolved enum metadata, construction/test/projection HIR and SSA,
-the SSA evaluator, validated bytecode, and reference VM.** Source `match`, native
-JIT, proof JIT, and their representation plans remain Accepted Targets.
+the independently verified source-match plan and ordinary-CFG lowering, the
+SSA evaluator, validated bytecode, reference VM, and forced baseline/proof JIT.**
+Wider Edition 2 control and representation plans remain Accepted Targets.
 
 ## Resolved HIR
 
@@ -30,9 +31,9 @@ materialization, and mismatched control targets before lowering.
 
 ## Verified SSA
 
-The latent test and active-field projection primitives are Current for verified
-hand-built SSA; source match remains a target. Match will lower to SSA CFG only
-after independent match-plan verification. SSA has
+Tag tests and active-field projection are Current for verified hand-built and
+source-lowered SSA. Match lowers to SSA CFG only after independent match-plan
+verification. SSA has
 no Match instruction. It uses exact discriminant tests, active-variant field
 projections, block parameters for immutable pattern bindings and joins, and the
 control terminators specified by this authority. Numeric conversions are typed
