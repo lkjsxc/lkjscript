@@ -16,7 +16,7 @@ fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
     ));
     let mut config = JitConfig::default();
     config.force_gc_before_allocation = true;
-    let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
+    let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config.clone())
         .expect("nested graph executes through generated heap sites");
     let optimized = execute_optimizing(program.ssa(), &ExecutionConfig::default(), config)
         .expect("nested graph executes through optimized generated heap sites");

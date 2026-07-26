@@ -26,6 +26,10 @@ use lkjscript_native::{
     ImageContracts, OutcomeMapEntry, ReferenceType, Relocation, RuntimeCallSlot, Safepoint,
     SourceMapEntry, TrapMapEntry,
 };
+use lkjscript_native_cache::{
+    artifact_key, ArtifactKey, CacheTier, Lookup as CacheLookup, MissReason, NativeArtifactCache,
+    Publication,
+};
 use lkjscript_sys::executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
     InvocationOutcome, NativeInvocationConfig, NativeResourceLimitKind, NativeRoot,
@@ -34,6 +38,7 @@ use lkjscript_sys::executable::{
 
 pub use lkjscript_ir::FunctionId;
 pub use lkjscript_native::{NativeValue, TrapCode, ValueType};
+pub use lkjscript_native_cache::{CacheContext, CacheLimits};
 pub use lower::{LoweringError, LoweringFailureCode};
 
 mod code;
@@ -60,7 +65,7 @@ pub use scalar::{
     native_type, EntryDecision, JitExecution, ScalarInvocation, ScalarInvocationOutcome,
     ScalarSignature,
 };
-pub use stats::{CompileStats, FunctionTierRecord, JitStats};
+pub use stats::{CacheStatus, CompileStats, FunctionTierRecord, JitStats};
 
 enum ProgramAuthority {
     Baseline(VerifiedProgram),
@@ -72,6 +77,15 @@ impl ProgramAuthority {
         match self {
             Self::Baseline(program) => program.program(),
             Self::Optimizing(program) => program.program(),
+        }
+    }
+
+    fn verified_digest(&self) -> Result<[u8; 32], lkjscript_ir::IdentityError> {
+        match self {
+            Self::Baseline(program) => lkjscript_ir::verified_program_digest(program),
+            Self::Optimizing(program) => {
+                lkjscript_ir::verified_program_digest(program.verified_program())
+            }
         }
     }
 
@@ -114,6 +128,16 @@ pub struct JitSession {
     native_to_vm_transitions: u64,
     last_runtime_trap: Option<String>,
     last_runtime_resource: Option<ResourceLimitKind>,
+    cache_lookups: u64,
+    cache_hits: u64,
+    cache_misses: u64,
+    cache_corruptions: u64,
+    cache_bytes_read: u64,
+    cache_bytes_written: u64,
+    cache_publications: u64,
+    cache_publication_skips: u64,
+    cache_lookup_time: Duration,
+    cache_publication_time: Duration,
 }
 
 impl fmt::Debug for JitSession {

@@ -3,6 +3,8 @@ use crate::{RuntimeOp, Signature, SsaType};
 
 mod core;
 mod host;
+#[cfg(test)]
+mod tests;
 
 pub(crate) fn verify_runtime_signature(
     operation: RuntimeOp,

@@ -14,10 +14,11 @@ use std::fmt;
 
 pub use encode::{encode, EncodingConfig};
 pub use image::{
-    CodeAccounting, EntryMetadata, ExactStackMap, FrameFacts, FrameHome, FrameHomeKind,
-    HeapRuntimeSite, ImageContracts, ImageIntegrityError, InstallableImage, NativeReference,
-    NativeValue, OutcomeKind, OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget,
-    RootLocation, Safepoint, SourceMapEntry, TrapMapEntry,
+    decode_image, encode_image, CodeAccounting, EntryMetadata, ExactStackMap, FrameFacts,
+    FrameHome, FrameHomeKind, HeapRuntimeSite, ImageCodecError, ImageCodecLimits, ImageContracts,
+    ImageIntegrityError, InstallableImage, NativeReference, NativeValue, OutcomeKind,
+    OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget, RootLocation, Safepoint,
+    SourceMapEntry, TrapMapEntry,
 };
 pub use plan::{
     AllocationClass, BlockId, BoolComparison, F64Comparison, FunctionBuilder, FunctionId,

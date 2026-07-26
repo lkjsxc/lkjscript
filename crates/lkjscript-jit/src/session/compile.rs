@@ -15,29 +15,7 @@ impl JitSession {
                 record.state = TierState::OptimizingCompiling;
             }
         }
-        let started = Instant::now();
-        let lowered = match &self.program {
-            ProgramAuthority::Baseline(program) => {
-                lower::lower_baseline_group(program, root, self.config.backend_limits)?
-            }
-            ProgramAuthority::Optimizing(program) => {
-                lower::lower_optimizing_group(program, root, self.config.backend_limits)?
-            }
-        };
-        let lowering_and_encoding = started.elapsed();
-        if self.optimization_time.saturating_add(lowering_and_encoding)
-            > self.config.max_object_compile_time
-            || self
-                .total_compile_time
-                .saturating_add(lowering_and_encoding)
-                > self.config.max_total_compile_time
-        {
-            return Err(EngineError::new(
-                FailureCode::CompileWallTime,
-                Some(root),
-                "native compilation wall-time budget exceeded",
-            ));
-        }
+        let (lowered, lowering_and_encoding, cache) = self.prepare_native_group(root)?;
 
         let accounting = lowered.image.accounting();
         let contracts = lowered.image.contracts();
@@ -84,7 +62,10 @@ impl JitSession {
             .map_err(|error| install_error(root, error))?;
         let installation = install_started.elapsed();
         let accounted_allocation_bytes = installed.accounted_allocation_bytes();
-        let total = lowering_and_encoding.saturating_add(installation);
+        let total = lowering_and_encoding
+            .saturating_add(cache.lookup)
+            .saturating_add(cache.publication)
+            .saturating_add(installation);
         if self.optimization_time.saturating_add(total) > self.config.max_object_compile_time
             || self.total_compile_time.saturating_add(total) > self.config.max_total_compile_time
         {
@@ -126,6 +107,9 @@ impl JitSession {
                 work_units: accounting
                     .work_units()
                     .saturating_add(optimization_stats.map_or(0, |stats| stats.work_units)),
+                cache_status: cache.status,
+                cache_lookup: cache.lookup,
+                cache_publication: cache.publication,
             },
             optimization_certificate,
             optimization_stats,

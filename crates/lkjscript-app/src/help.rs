@@ -6,8 +6,10 @@ pub fn print() {
         "  lkjscript run [--engine vm|auto|baseline-jit|optimizing-jit] [--auto-jit-threshold N]"
     );
     println!("                 [--disable-auto-jit] [--resource-profile NAME]");
+    println!("                 [--native-cache disabled|local]");
     println!("                 <file.lkjscript> [--] [script-args...]");
-    println!("                 default: auto at 64 function entries; explicit vm is deterministic");
+    println!("                 default: auto at 64 function entries");
+    println!("                 native cache default: disabled until measured adoption");
     println!("  lkjscript describe [--json]");
     println!("  lkjscript package <lock|check> [package-path]");
     println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");

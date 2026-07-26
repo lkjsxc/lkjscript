@@ -79,6 +79,14 @@
       "claimants": ["docs/current-state.md"]
     },
     {
+      "id": "persistent-native-image-cache",
+      "status": "accepted-selection",
+      "interface": "bounded local content-addressed InstallableImage cache",
+      "authority": "docs/decisions/execution/execution-portfolio/native-image-cache.md",
+      "evidence": "docs/decisions/execution/execution-portfolio/native-image-cache.md",
+      "claimants": ["docs/current-state.md", "docs/decisions/execution/execution-portfolio/native-image-cache.md"]
+    },
+    {
       "id": "repository-graph-context",
       "status": "current",
       "interface": "lkjscript-xtask structure context",

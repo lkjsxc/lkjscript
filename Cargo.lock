@@ -54,9 +54,11 @@ dependencies = [
 name = "lkjscript-jit"
 version = "0.1.0"
 dependencies = [
+ "lkjscript-contracts",
  "lkjscript-core",
  "lkjscript-ir",
  "lkjscript-native",
+ "lkjscript-native-cache",
  "lkjscript-sys",
 ]
 
@@ -65,6 +67,15 @@ name = "lkjscript-native"
 version = "0.1.0"
 dependencies = [
  "lkjscript-contracts",
+]
+
+[[package]]
+name = "lkjscript-native-cache"
+version = "0.1.0"
+dependencies = [
+ "lkjscript-contracts",
+ "lkjscript-core",
+ "lkjscript-native",
 ]
 
 [[package]]

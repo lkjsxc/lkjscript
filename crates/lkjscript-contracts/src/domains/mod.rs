@@ -22,6 +22,7 @@ pub const VERIFIED_SSA: &str = "lkjscript.verified-ssa";
 pub const BYTECODE: &str = "lkjscript.bytecode";
 pub const RUNTIME_CALLS: &str = "lkjscript.runtime-calls";
 pub const NATIVE_LAYOUT: &str = "lkjscript.native-layout";
+pub const NATIVE_IMAGE_CACHE: &str = "lkjscript.native-image-cache";
 pub const METRICS: &str = "lkjscript.metrics";
 pub const PACKAGE_MANIFEST: &str = "lkjscript.package";
 pub const PACKAGE_LOCK: &str = "lkjscript.package-lock";
@@ -41,8 +42,12 @@ pub const LANGUAGE_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x28, 0xef, 0xc5, 0xbe, 0xe5, 0xd7, 0xb4, 0x35, 0x1e, 0xbd, 0x5b, 0x45, 0x2f, 0xb1, 0x90, 0x07,
 ]);
 pub const METRICS_DIGEST: ContractDigest = ContractDigest::from_bytes([
-    0x11, 0xbb, 0xd5, 0x98, 0x71, 0xb1, 0xa8, 0x16, 0x4a, 0xf1, 0x6b, 0xba, 0x28, 0xee, 0xde, 0x6e,
-    0x9a, 0xe1, 0x9c, 0x00, 0xdb, 0x95, 0x5a, 0xb7, 0x89, 0xb0, 0xf7, 0xc5, 0x42, 0xe3, 0x09, 0x4e,
+    0x37, 0x18, 0x7c, 0xf8, 0x91, 0x9c, 0x79, 0x65, 0xc6, 0xc4, 0xc7, 0x37, 0xd0, 0xce, 0x5b, 0x09,
+    0xb2, 0x3e, 0xb1, 0x5a, 0xd7, 0x3f, 0x6c, 0xdd, 0xe7, 0xbe, 0x3e, 0xc8, 0x29, 0xa1, 0x4b, 0xd7,
+]);
+pub const NATIVE_IMAGE_CACHE_DIGEST: ContractDigest = ContractDigest::from_bytes([
+    0x14, 0x65, 0xfd, 0x76, 0xe1, 0xd3, 0xb4, 0x61, 0x98, 0x6b, 0xcb, 0x24, 0xc7, 0x8c, 0xe9, 0x88,
+    0xde, 0x58, 0x51, 0x38, 0xae, 0x66, 0x4a, 0xaf, 0xbb, 0x8c, 0x2a, 0x0d, 0x1a, 0x32, 0x28, 0xb3,
 ]);
 pub const NATIVE_LAYOUT_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0xaf, 0x07, 0x29, 0x29, 0x3e, 0xe4, 0x3e, 0xd8, 0x8a, 0x5b, 0xd8, 0x80, 0x0e, 0x32, 0x02, 0x4e,
@@ -93,21 +98,28 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     let semantic = add(&mut set, language::semantic_source(source, diagnostics))?;
     add(&mut set, language::agent_protocol(semantic))?;
     let categories = add(&mut set, platform::resource_categories())?;
-    add(&mut set, platform::resource_profiles(categories))?;
+    let profiles = add(&mut set, platform::resource_profiles(categories))?;
     add(&mut set, platform::repository_graph())?;
     add(&mut set, platform::capsule_manifest())?;
     add(&mut set, platform::agent_work_state(semantic))?;
     add(&mut set, platform::capability_status())?;
     let hir = add(&mut set, execution::typed_hir(language))?;
     let ssa = add(&mut set, execution::verified_ssa(hir))?;
-    add(&mut set, execution::bytecode(ssa))?;
+    let bytecode = add(&mut set, execution::bytecode(ssa))?;
     let runtime = add(&mut set, execution::runtime_calls())?;
-    add(&mut set, execution::native_layout(ssa, runtime))?;
+    let native = add(&mut set, execution::native_layout(ssa, runtime))?;
     add(&mut set, execution::metrics())?;
     let manifest = add(&mut set, platform::package_manifest())?;
     let module = add(&mut set, platform::module_interface(language))?;
-    add(&mut set, platform::package_lock(manifest, module))?;
+    let lock = add(&mut set, platform::package_lock(manifest, module))?;
     add(&mut set, platform::component_interface(module))?;
+    add(
+        &mut set,
+        execution::native_image_cache(
+            language, source, hir, ssa, bytecode, categories, profiles, manifest, lock, module,
+            runtime, native,
+        ),
+    )?;
     Ok(set)
 }
 

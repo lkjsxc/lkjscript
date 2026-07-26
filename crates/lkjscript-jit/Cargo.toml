@@ -6,9 +6,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-native = { path = "../lkjscript-native" }
+lkjscript-native-cache = { path = "../lkjscript-native-cache" }
 lkjscript-sys = { path = "../lkjscript-sys" }
 
 [lints]

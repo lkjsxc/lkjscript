@@ -122,10 +122,11 @@ fn current_registry_is_closed_deterministic_and_dependency_checked() {
     );
     let second = second_result.unwrap_or_default();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 21);
+    assert_eq!(first.len(), 22);
     assert!(first.get(LANGUAGE).is_some());
     assert!(first.get(CAPABILITY_STATUS).is_some());
     assert!(first.get(COMPONENT_INTERFACE).is_some());
+    assert!(first.get(NATIVE_IMAGE_CACHE).is_some());
 }
 
 #[test]
@@ -170,6 +171,7 @@ fn compiled_source_digests_match_descriptors() {
         (VERIFIED_SSA, VERIFIED_SSA_DIGEST),
         (RUNTIME_CALLS, RUNTIME_CALLS_DIGEST),
         (NATIVE_LAYOUT, NATIVE_LAYOUT_DIGEST),
+        (NATIVE_IMAGE_CACHE, NATIVE_IMAGE_CACHE_DIGEST),
         (METRICS, METRICS_DIGEST),
     ] {
         assert_eq!(

@@ -27,6 +27,7 @@ const LANGUAGE_FORMS: &[&str] = &[
     "typed-holes",
 ];
 const ENGINES: &[&str] = &["vm", "auto", "baseline-jit", "optimizing-jit"];
+const NATIVE_CACHE_MODES: &[&str] = &["disabled", "local"];
 const RESOURCE_PROFILES: &[&str] = &[
     "sandbox",
     "default",
@@ -85,6 +86,8 @@ fn print_human(contracts: &ContractSet) {
     println!("language-forms: {}", LANGUAGE_FORMS.join(", "));
     println!("engines: {}", ENGINES.join(", "));
     println!("resource-profiles: {}", RESOURCE_PROFILES.join(", "));
+    println!("native-cache-modes: {}", NATIVE_CACHE_MODES.join(", "));
+    println!("native-cache-default: disabled");
     println!("package-capabilities: local-content-addressed");
     println!("unsupported: {}", UNSUPPORTED.join(", "));
 }
@@ -114,6 +117,9 @@ fn json_description(contracts: &ContractSet) -> String {
     push_array(&mut output, "language_forms", LANGUAGE_FORMS);
     push_array(&mut output, "engines", ENGINES);
     push_array(&mut output, "resource_profiles", RESOURCE_PROFILES);
+    push_array(&mut output, "native_cache_modes", NATIVE_CACHE_MODES);
+    output.push(',');
+    push_string(&mut output, "native_cache_default", "disabled");
     push_array(&mut output, "unsupported", UNSUPPORTED);
     output.push('}');
     output

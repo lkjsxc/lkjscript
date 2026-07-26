@@ -5,6 +5,7 @@ members = [
     "crates/lkjscript-core",
     "crates/lkjscript-compiler",
     "crates/lkjscript-native",
+    "crates/lkjscript-native-cache",
     "crates/lkjscript-jit",
     "crates/lkjscript-sys",
     "crates/lkjscript-vm",

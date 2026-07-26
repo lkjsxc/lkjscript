@@ -1,7 +1,9 @@
+mod cache;
 mod compile;
 mod diagnostics;
 mod invoke;
 mod lifecycle;
 mod lookup;
+mod prepare;
 mod state;
 mod tiering;

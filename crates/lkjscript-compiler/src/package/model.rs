@@ -2,6 +2,15 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExecutionIdentity {
+    pub module_path: String,
+    pub source_sha256: [u8; 32],
+    pub module_sha256: [u8; 32],
+    pub package_sha256: [u8; 32],
+    pub lock_sha256: [u8; 32],
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {

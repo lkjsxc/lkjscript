@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use lkjscript_core::{Error, Result};
 
-pub use model::{Dependency, LockFile, LockedModule, LockedPackage, Manifest, Target};
+pub use model::{
+    Dependency, ExecutionIdentity, LockFile, LockedModule, LockedPackage, Manifest, Target,
+};
 
 pub const MANIFEST_FILE: &str = manifest::MANIFEST;
 pub const LOCK_FILE: &str = manifest::LOCK;
@@ -61,6 +63,46 @@ pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
         }
     }
     Ok((root, manifest))
+}
+
+pub fn execution_identity(entry: &Path) -> Result<(PathBuf, Manifest, ExecutionIdentity)> {
+    let (root, manifest) = verify(entry)?;
+    if entry.is_dir() {
+        return Err(Error::msg("execution identity requires an entry module"));
+    }
+    let module_path = entry
+        .canonicalize()
+        .map_err(|error| Error::host(format!("canonicalize package entry: {error}")))?
+        .strip_prefix(&root)
+        .map_err(|_| Error::msg("package entry escapes root"))?
+        .to_str()
+        .ok_or_else(|| Error::msg("package entry is not UTF-8"))?
+        .replace('\\', "/");
+    let (lock, bytes) = encoding::read(&root)?;
+    let package = lock
+        .packages
+        .iter()
+        .find(|package| package.package_sha256 == lock.root)
+        .ok_or_else(|| Error::msg("root package identity is absent"))?;
+    let module = package
+        .modules
+        .iter()
+        .find(|module| module.id == module_path)
+        .ok_or_else(|| Error::msg("entry module identity is absent"))?;
+    let identity = ExecutionIdentity {
+        module_path,
+        source_sha256: parse_digest(&module.source_sha256)?,
+        module_sha256: parse_digest(&module.module_sha256)?,
+        package_sha256: parse_digest(&package.package_sha256)?,
+        lock_sha256: lkjscript_contracts::sha256(&bytes),
+    };
+    Ok((root, manifest, identity))
+}
+
+fn parse_digest(value: &str) -> Result<[u8; 32]> {
+    lkjscript_contracts::ContractDigest::from_hex(value)
+        .map(lkjscript_contracts::ContractDigest::as_bytes)
+        .ok_or_else(|| Error::msg("package identity digest is malformed"))
 }
 
 pub fn target(entry: &Path, name: &str) -> Result<PathBuf> {

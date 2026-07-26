@@ -184,6 +184,16 @@ impl JitSession {
             algebraic_rewrites: optimization_totals.algebraic_rewrites,
             gvn_rewrites: optimization_totals.gvn_rewrites,
             checked_i64_rewrites: optimization_totals.checked_i64_rewrites,
+            cache_lookups: self.cache_lookups,
+            cache_hits: self.cache_hits,
+            cache_misses: self.cache_misses,
+            cache_corruptions: self.cache_corruptions,
+            cache_bytes_read: self.cache_bytes_read,
+            cache_bytes_written: self.cache_bytes_written,
+            cache_publications: self.cache_publications,
+            cache_publication_skips: self.cache_publication_skips,
+            cache_lookup_time: self.cache_lookup_time,
+            cache_publication_time: self.cache_publication_time,
         }
     }
 }
