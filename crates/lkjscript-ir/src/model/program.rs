@@ -32,6 +32,7 @@ pub struct Function {
 pub struct Program {
     pub sources: Vec<SourceMetadata>,
     pub products: Vec<ProductMetadata>,
+    pub enums: Vec<EnumMetadata>,
     pub traits: Vec<TraitMetadata>,
     pub implementations: Vec<ImplMetadata>,
     pub functions: Vec<Function>,

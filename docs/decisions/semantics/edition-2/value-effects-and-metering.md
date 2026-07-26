@@ -9,8 +9,8 @@ resource charges.
 
 ## Status
 
-**Accepted Target, not Current.** Current effect summaries and physical runtime
-metrics are not reclassified by this contract.
+**Current for enum construction on the SSA evaluator and reference VM.** Native
+JIT preservation and physical-metric reporting remain Accepted Targets.
 
 ## Semantic Effects
 
@@ -33,7 +33,8 @@ behavior, exact tracing, traps, outcomes, and required metering.
 
 Each semantically evaluated aggregate construction performs a deterministic
 logical construction charge after child evaluation and before the value is
-available. Deterministic profiles retain that charge even when scalar
+available. The Current enum path precharges this event before boxed allocation;
+exhaustion publishes no partial value. Deterministic profiles retain that charge even when scalar
 replacement, constant folding, placement, reuse, or allocation elimination
 removes physical allocation. Exhaustion occurs at that semantic point and
 publishes no partial value.

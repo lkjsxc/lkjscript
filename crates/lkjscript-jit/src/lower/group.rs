@@ -21,6 +21,13 @@ pub(super) fn lower_group(
     root: FunctionId,
     limits: BackendLimits,
 ) -> Result<LoweredGroup, LoweringError> {
+    if !program.enums.is_empty() {
+        return Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(root),
+            "Edition 2 enum-containing requests are rejected by native tiers; no fallback was claimed",
+        ));
+    }
     let functions = reachable_group(program, root)?;
     let layouts = LayoutInterner::build(program, &functions)?;
     for function in &functions {

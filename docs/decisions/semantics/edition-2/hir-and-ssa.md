@@ -9,17 +9,16 @@ conversions, runtime facts, and logical charges.
 
 ## Status
 
-**Current only for resolved generic enum declaration/type metadata in HIR.**
-Enum construction/projection/tests, match, Edition 2 SSA, and every backend
-consumer remain Accepted Targets. Existing verified SSA remains Current only
-for its documented pre-enum executable surface.
+**Current for resolved enum metadata, construction/test/projection HIR and SSA,
+the SSA evaluator, validated bytecode, and reference VM.** Source `match`, native
+JIT, proof JIT, and their representation plans remain Accepted Targets.
 
 ## Resolved HIR
 
 HIR currently resolves every enum, variant, and field declaration to stable
 canonical IDs and retains exact invariant substitutions in declared field and
-function types. The accepted execution target adds typed enum
-construction/projection/test primitives,
+function types. The Current execution slice adds typed enum construction/projection/test
+primitives,
 a verified match-plan input, the exact control terminators in
 [Never and control](never-and-control.md), and distinct nodes for all four
 numeric conversions. Semantic effects, runtime facts, layout facts, source
@@ -31,7 +30,9 @@ materialization, and mismatched control targets before lowering.
 
 ## Verified SSA
 
-Match lowers to SSA CFG only after independent match-plan verification. SSA has
+The latent test and active-field projection primitives are Current for verified
+hand-built SSA; source match remains a target. Match will lower to SSA CFG only
+after independent match-plan verification. SSA has
 no Match instruction. It uses exact discriminant tests, active-variant field
 projections, block parameters for immutable pattern bindings and joins, and the
 control terminators specified by this authority. Numeric conversions are typed

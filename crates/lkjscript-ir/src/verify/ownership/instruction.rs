@@ -111,7 +111,10 @@ pub(crate) fn process_ownership_instruction(
         | InstructionKind::FunctionRef(_)
         | InstructionKind::ProductValue { .. }
         | InstructionKind::ProductField { .. }
-        | InstructionKind::WithProductField { .. } => {}
+        | InstructionKind::WithProductField { .. }
+        | InstructionKind::EnumValue { .. }
+        | InstructionKind::EnumIsVariant { .. }
+        | InstructionKind::EnumField { .. } => {}
     }
 
     if is_owned_buf(&instruction.ty) && !matches!(instruction.kind, InstructionKind::Move { .. }) {

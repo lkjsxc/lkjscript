@@ -32,13 +32,15 @@ Graph/context, externalized Agent Work State V2 with semantic references,
 complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
 local stdio sessions, the Edition 2 identity/non-publishing migration slice,
-generic enum declarations/resolved type facts, compiler Resource Profile V2,
-and the core hierarchical pre-allocation foundation are Current. Agent
+generic enum declarations/resolved type facts, exact `variant-value`
+construction through verified SSA, the SSA evaluator, validated bytecode, and
+the reference VM, compiler Resource Profile V2, and the core hierarchical
+pre-allocation foundation are Current. Agent
 Foundation V1 and Semantic Source Schema V1 identities are historical and
-rejected. Enum construction and execution, other Edition 2 ADTs, changed
-semantics, execution cutover, migration publication, whole-pipeline pre-allocation,
-logical metering integration, nonzero query caching, and cross-authority
-ledgers remain Accepted Targets, not Current.
+rejected. Source match and patterns, enum JIT execution, other Edition 2 ADTs,
+changed semantics, execution cutover, migration publication, whole-pipeline
+pre-allocation, logical metering beyond enum construction, nonzero query
+caching, and cross-authority ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
 
 ## Current Baseline
@@ -73,9 +75,11 @@ commands/APIs are Current on the containing implementation revision.
    non-publishing Edition 1-to-2 migration check/diff are Current.
 7. Generic nominal enum declarations, stable enum/variant/field identities,
    invariant resolved HIR type facts, bounded recursion/ownership validation,
-   and exact Profile V2 enum-shape preallocation are Current. Enum values,
-   match, layouts, SSA/backends, changed execution, publish, and corpus cutover
-   remain targets.
+   exact Profile V2 enum-shape preallocation, exact enum value construction,
+   target-independent layout facts, verified SSA primitives/evaluator,
+   validated bytecode, boxed active-payload GC representation, and reference VM
+   execution are Current. Match, native/proof JIT enum execution, changed
+   execution beyond this slice, publish, and corpus cutover remain targets.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

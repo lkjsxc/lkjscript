@@ -4,6 +4,7 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     let program = verified.program();
     let mut chunk = Chunk::new();
     chunk.main.name = "main".into();
+    install_enum_metadata(&mut chunk, program)?;
     for product in &program.products {
         if product.id.index() != Some(chunk.products.len()) {
             return Err(Error::msg(

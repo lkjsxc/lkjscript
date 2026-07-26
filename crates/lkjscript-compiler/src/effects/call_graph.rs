@@ -106,10 +106,13 @@ pub(super) fn collect_direct_callees(
             collect_direct_callees(initial, binding_to_function, callees);
             collect_direct_callees(body, binding_to_function, callees);
         }
-        ExprKind::SetLocal { value, .. } | ExprKind::ProductField { value, .. } => {
+        ExprKind::SetLocal { value, .. }
+        | ExprKind::ProductField { value, .. }
+        | ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. } => {
             collect_direct_callees(value, binding_to_function, callees);
         }
-        ExprKind::ProductValue { fields, .. } => {
+        ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
             collect_direct_callees_slice(fields, binding_to_function, callees);
         }
         ExprKind::WithProductField {

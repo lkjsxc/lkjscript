@@ -23,12 +23,12 @@ The immediate implementation sequence has progressed as follows:
    without changing Edition 1 limits;
 6. Edition 2 identity, homogeneous closures, Schema V2 marker facts, and strict
    non-publishing Edition 1-to-2 migration check/diff are Current;
-7. generic enum source declarations, Semantic Source V2 projection, stable
-   member identities, resolved invariant HIR type facts, bounded declaration
-   recursion, ownership rejection, and enum-shape preallocation are Current; and
-8. enum construction/layout/SSA/execution, match, migration publication,
-   nonzero query caching, whole-pipeline pre-allocation, and shared request
-   ledgers remain next.
+7. generic enum declarations/type facts plus exact construction, independent
+   layout/runtime identities, verified SSA/evaluator, validated bytecode, boxed
+   active-payload GC values, reference VM execution, and enum construction
+   precharging are Current; and
+8. source match, enum JIT execution, migration publication, nonzero query
+   caching, whole-pipeline pre-allocation, and shared request ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

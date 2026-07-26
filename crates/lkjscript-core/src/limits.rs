@@ -78,6 +78,7 @@ pub struct ExecutionConfig {
     pub max_frames: usize,
     pub max_heap_bytes: usize,
     pub max_allocations: u64,
+    pub max_logical_aggregate_constructions: u64,
     pub max_handles: usize,
     pub max_output_bytes: usize,
     /// A cooperative monotonic wall limit. Read/poll/wait operations are
@@ -98,6 +99,7 @@ impl Default for ExecutionConfig {
             max_frames: 65_536,
             max_heap_bytes: 256 * 1024 * 1024,
             max_allocations: 10_000_000,
+            max_logical_aggregate_constructions: 1_000_000,
             max_handles: 4_096,
             max_output_bytes: 64 * 1024 * 1024,
             wall_time: Some(Duration::from_secs(30 * 60)),
@@ -133,6 +135,7 @@ mod tests {
         assert!(limits.max_frames > 0);
         assert!(limits.max_heap_bytes > 0);
         assert!(limits.max_allocations > 0);
+        assert!(limits.max_logical_aggregate_constructions > 0);
         assert!(limits.max_handles > 0);
         assert!(limits.max_output_bytes > 0);
         assert!(limits.wall_time.is_some());

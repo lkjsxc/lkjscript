@@ -17,6 +17,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
     let dominating = Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![Function {
@@ -60,6 +61,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
     let siblings = Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![Function {

@@ -11,13 +11,17 @@ mod types;
 pub use constant::Constant;
 pub use error::{IrError, Result};
 pub use ids::{
-    BindingId, BlockId, FunctionId, ImplId, LoanId, PlaceId, ProductId, TraitId, ValueId,
+    BindingId, BlockId, EnumId, FunctionId, ImplId, LoanId, PlaceId, ProductId, RuntimeLayoutId,
+    TraitId, ValueId, VariantFieldId, VariantId,
 };
 pub use instruction::{
     BlockParameter, BorrowKind, CallTarget, FailureBehavior, FrameLocal, FrameState, Instruction,
     InstructionKind, InstructionMetadata, Safepoint,
 };
-pub use metadata::{EffectSet, ProductField, ProductMetadata, SourceMetadata};
+pub use metadata::{
+    EffectSet, EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, ProductField,
+    ProductMetadata, SourceMetadata,
+};
 pub use program::{
     Block, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, Function,
     FunctionBytecodeLink, PlaceMetadata, Program,

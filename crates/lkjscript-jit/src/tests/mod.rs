@@ -42,6 +42,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
             path: "terminal.lkjscript".into(),
         }],
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![Function {

@@ -101,6 +101,51 @@ impl Emitter<'_> {
                 let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
                 self.proto.emit_op_u16(Op::WithProductField, descriptor);
             }
+            InstructionKind::EnumValue {
+                enum_id,
+                variant,
+                layout,
+                fields,
+            } => {
+                for field in fields {
+                    self.load(*field)?;
+                }
+                let SsaType::Enum { arguments, .. } = &instruction.ty else {
+                    return Err(Error::msg(
+                        "verified enum construction lost enum result type",
+                    ));
+                };
+                let descriptor = intern_enum_construction(
+                    self.chunk,
+                    *enum_id,
+                    *variant,
+                    *layout,
+                    arguments.len(),
+                )?;
+                self.proto.emit_op_u16(Op::MakeEnum, descriptor);
+            }
+            InstructionKind::EnumIsVariant {
+                enum_id,
+                variant,
+                layout,
+                value,
+            } => {
+                self.load(*value)?;
+                let descriptor = intern_enum_variant(self.chunk, *enum_id, *variant, *layout)?;
+                self.proto.emit_op_u16(Op::IsEnumVariant, descriptor);
+            }
+            InstructionKind::EnumField {
+                enum_id,
+                variant,
+                field,
+                layout,
+                value,
+            } => {
+                self.load(*value)?;
+                let descriptor =
+                    intern_enum_field(self.chunk, (*enum_id, *variant, *field), *layout)?;
+                self.proto.emit_op_u16(Op::LoadEnumField, descriptor);
+            }
         }
         if store_result {
             self.store_result(instruction.id)?;

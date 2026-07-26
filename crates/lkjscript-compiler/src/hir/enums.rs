@@ -12,6 +12,7 @@ pub struct EnumDefinition {
     pub origin: SourceId,
     pub type_parameters: Vec<String>,
     pub variants: Vec<EnumVariant>,
+    pub layout: EnumLayoutFacts,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,9 +24,17 @@ pub struct EnumVariant {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumLayoutFacts {
+    pub identity: RuntimeLayoutId,
+    pub recursive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnumVariantField {
     pub id: VariantFieldId,
     pub name: String,
     pub source_order: u16,
     pub ty: Type,
+    pub indirect: bool,
+    pub traced: bool,
 }

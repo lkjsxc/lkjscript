@@ -13,6 +13,7 @@ pub fn execute_forced(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
+    reject_enum_program(program)?;
     let main = program.program().main;
     let mut session = JitSession::new_baseline(program, config);
     session.compile_group(main)?;
@@ -37,6 +38,7 @@ pub fn execute_optimizing(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
+    reject_enum_program(program)?;
     let started = Instant::now();
     let optimized = optimize(program, config.optimization_limits).map_err(optimization_error)?;
     let optimization_time = started.elapsed();
@@ -69,6 +71,17 @@ pub fn execute_optimizing(
         ));
     }
     Ok(JitExecution { outcome, stats })
+}
+
+fn reject_enum_program(program: &VerifiedProgram) -> Result<(), EngineError> {
+    if program.program().enums.is_empty() {
+        return Ok(());
+    }
+    Err(EngineError::new(
+        FailureCode::UnsupportedType,
+        Some(program.program().main),
+        "Edition 2 enum-containing requests are rejected by native tiers; no fallback was claimed",
+    ))
 }
 
 fn verify_forced_entry(

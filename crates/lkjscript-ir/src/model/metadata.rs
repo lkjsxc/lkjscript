@@ -19,6 +19,38 @@ pub struct ProductField {
     pub ty: SsaType,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumMetadata {
+    pub id: EnumId,
+    pub name: String,
+    pub type_parameters: Vec<String>,
+    pub variants: Vec<EnumVariantMetadata>,
+    pub layout: EnumLayoutFacts,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumVariantMetadata {
+    pub id: VariantId,
+    pub name: String,
+    pub physical_tag: u16,
+    pub fields: Vec<EnumFieldMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumFieldMetadata {
+    pub id: VariantFieldId,
+    pub name: String,
+    pub ty: SsaType,
+    pub indirect: bool,
+    pub traced: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnumLayoutFacts {
+    pub identity: RuntimeLayoutId,
+    pub recursive: bool,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct EffectSet(u16);
 

@@ -13,6 +13,14 @@ impl Evaluator<'_> {
         self.allocate_dynamic(0)
     }
 
+    pub(crate) fn charge_aggregate(&mut self) -> std::result::Result<(), Flow> {
+        if self.logical_aggregate_constructions >= self.config.max_logical_aggregate_constructions {
+            return Err(Flow::Resource("logical_aggregate_constructions".into()));
+        }
+        self.logical_aggregate_constructions += 1;
+        Ok(())
+    }
+
     pub(crate) fn allocate_dynamic(
         &mut self,
         dynamic_bytes: usize,

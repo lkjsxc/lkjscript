@@ -53,10 +53,12 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         ExprKind::SetLocal { value, .. } => {
             recompute_expr(value, summaries).union(EffectSet::MUTATES_LOCAL)
         }
-        ExprKind::ProductValue { fields, .. } => {
+        ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
             recompute_slice(fields, summaries).union(EffectSet::ALLOCATES)
         }
-        ExprKind::ProductField { value, .. } => {
+        ExprKind::ProductField { value, .. }
+        | ExprKind::EnumIsVariant { value, .. }
+        | ExprKind::EnumField { value, .. } => {
             recompute_expr(value, summaries).union(EffectSet::READS_MEMORY)
         }
         ExprKind::WithProductField {

@@ -1,3 +1,4 @@
+use super::enum_instruction;
 use crate::verify::*;
 use crate::{EffectSet, Function, Instruction, InstructionKind, Program, SsaType};
 
@@ -183,6 +184,11 @@ pub(crate) fn expected_instruction_effects(
                 return fail("SSA product replacement type or identity mismatch");
             }
             EffectSet::READS_MEMORY.union(EffectSet::ALLOCATES)
+        }
+        kind @ (InstructionKind::EnumValue { .. }
+        | InstructionKind::EnumIsVariant { .. }
+        | InstructionKind::EnumField { .. }) => {
+            enum_instruction::verify(program, instruction, types, kind)?
         }
     };
     Ok(effects)

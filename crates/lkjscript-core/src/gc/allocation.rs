@@ -29,6 +29,33 @@ impl GcHeap {
         self.publish_with_layout(object, None)
     }
 
+    /// Publish a boxed enum only after validating layout, physical tag, and
+    /// exact active initialized payload against immutable metadata.
+    pub fn alloc_validated_enum(
+        &mut self,
+        definition: &crate::EnumMetadata,
+        layout: crate::RuntimeLayoutId,
+        physical_tag: u16,
+        active_payload: Vec<Value>,
+    ) -> Result<Value> {
+        if definition.layout != layout {
+            return Err(Error::msg("enum allocation layout identity mismatch"));
+        }
+        let variant = definition
+            .variants
+            .iter()
+            .find(|variant| variant.physical_tag == physical_tag)
+            .ok_or_else(|| Error::msg("enum allocation physical tag is invalid"))?;
+        if active_payload.len() != variant.fields.len() {
+            return Err(Error::msg("enum allocation active payload is malformed"));
+        }
+        self.alloc(HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        })
+    }
+
     /// Bounded typed publication used by generated runtime adapters. The
     /// opaque layout tag is checked on every later typed handle conversion.
     pub fn try_alloc_with_layout(
@@ -113,6 +140,9 @@ pub(super) fn estimated_object_bytes(object: &HeapObj) -> usize {
             .saturating_mul(std::mem::size_of::<Value>()),
         HeapObj::Buf(bytes) => bytes.capacity(),
         HeapObj::Product { fields, .. } => fields
+            .capacity()
+            .saturating_mul(std::mem::size_of::<Value>()),
+        HeapObj::Enum { active_payload, .. } => active_payload
             .capacity()
             .saturating_mul(std::mem::size_of::<Value>()),
     };

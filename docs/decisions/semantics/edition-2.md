@@ -12,9 +12,10 @@ them become implementation claims.
 <!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
 
 **Accepted Target overall.** Explicit identity/non-publishing migration and the
-generic enum declaration/resolved-type-fact slice are Current. Enum value
-construction, patterns, changed semantics, backend execution, semantic
-publication, corpus migration, and cutover are not Current. Edition 1 remains
+generic enum declaration/resolved-type-fact and construction/evaluator/
+reference-VM slice are Current. Patterns, source match, enum JIT execution,
+changed semantics beyond this slice, semantic publication, corpus migration,
+and cutover are not Current. Edition 1 remains
 accepted for ordinary compilation and as migration input.
 
 ## Authority
@@ -30,9 +31,10 @@ is Edition 1 until cutover. The Semantic Source identity is
 Semantic Source remains primary. Edition 1 and Edition 2 share one source
 parser and validated tree plus deterministic edition projections; a second
 parser/tree is forbidden. The current line projection remains canonical during
-this target. Edition 2 now accepts the complete generic `enum` declaration and
-resolved type-fact contract under exactly that name, with no alias. It does not
-expose enum values or backend operations.
+this target. Edition 2 now accepts the complete generic `enum` declaration, resolved type
+facts, and exact `variant-value` construction under exactly those names, with
+no aliases. Construction executes only through verified SSA, its evaluator,
+and validated reference bytecode/VM; enum JIT execution is rejected.
 
 ## Strict Capsule Manifest
 

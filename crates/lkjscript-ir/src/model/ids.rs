@@ -28,3 +28,29 @@ dense_id!(TraitId, u32);
 dense_id!(ImplId, u32);
 dense_id!(PlaceId, u32);
 dense_id!(LoanId, u32);
+
+macro_rules! stable_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name([u8; 32]);
+
+        impl $name {
+            pub const fn new(bytes: [u8; 32]) -> Self {
+                Self(bytes)
+            }
+
+            pub const fn bytes(self) -> [u8; 32] {
+                self.0
+            }
+
+            pub fn is_resolved(self) -> bool {
+                self.0 != [0; 32]
+            }
+        }
+    };
+}
+
+stable_id!(EnumId);
+stable_id!(VariantId);
+stable_id!(VariantFieldId);
+stable_id!(RuntimeLayoutId);

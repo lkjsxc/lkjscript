@@ -32,7 +32,7 @@
     {
       "id": "edition-2-enum-declarations/1",
       "status": "current",
-      "interface": "Edition 2 generic enum declarations and resolved type facts",
+      "interface": "Edition 2 enum declarations, construction, evaluator, and reference VM",
       "authority": "docs/decisions/semantics/edition-2/algebraic-data-types.md",
       "evidence": "docs/operations/verification.md",
       "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",

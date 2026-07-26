@@ -77,12 +77,15 @@ pub(crate) fn rewrite_function_values(
                         *target = rewrite(*target);
                     }
                 }
-                InstructionKind::ProductValue { fields, .. } => {
+                InstructionKind::ProductValue { fields, .. }
+                | InstructionKind::EnumValue { fields, .. } => {
                     for field in fields {
                         *field = rewrite(*field);
                     }
                 }
-                InstructionKind::ProductField { value, .. } => *value = rewrite(*value),
+                InstructionKind::ProductField { value, .. }
+                | InstructionKind::EnumIsVariant { value, .. }
+                | InstructionKind::EnumField { value, .. } => *value = rewrite(*value),
                 InstructionKind::WithProductField {
                     value, replacement, ..
                 } => {

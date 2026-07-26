@@ -71,6 +71,11 @@ pub(super) fn preflight_function(
                 InstructionKind::ProductValue { .. }
                 | InstructionKind::ProductField { .. }
                 | InstructionKind::WithProductField { .. } => {}
+                InstructionKind::EnumValue { .. }
+                | InstructionKind::EnumIsVariant { .. }
+                | InstructionKind::EnumField { .. } => {
+                    return unsupported_operation(function.id, "Edition 2 enum operation")
+                }
             }
         }
         if let Terminator::Outcome {

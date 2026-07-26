@@ -61,6 +61,9 @@ pub(super) fn apply(
             expect_product(product, descriptor.product, proto, instruction)?;
             state.stack.push(Kind::Product(descriptor.product));
         }
+        Op::MakeEnum | Op::IsEnumVariant | Op::LoadEnumField => {
+            return super::enums::apply(chunk, proto, instruction, state);
+        }
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }
     Ok(())

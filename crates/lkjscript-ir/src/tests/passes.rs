@@ -38,6 +38,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
     let program = Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![

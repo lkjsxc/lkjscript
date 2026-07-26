@@ -143,6 +143,7 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
                 })
             })
             .collect::<Result<Vec<_>>>()?,
+        enums: lower_enums(&program.enums, &product_ids)?,
         products: program
             .products
             .iter()

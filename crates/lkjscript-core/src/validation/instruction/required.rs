@@ -34,5 +34,30 @@ pub(super) fn stack(
                     "product metadata is missing",
                 )
             }),
+        StackEffect::MakeEnum => instruction
+            .operand()
+            .map(usize::from)
+            .and_then(|index| chunk.enum_constructions.get(index))
+            .and_then(|descriptor| {
+                chunk
+                    .enums
+                    .iter()
+                    .find(|definition| definition.id == descriptor.enum_id)
+                    .and_then(|definition| {
+                        definition
+                            .variants
+                            .iter()
+                            .find(|variant| variant.id == descriptor.variant)
+                    })
+            })
+            .map(|variant| variant.fields.len())
+            .ok_or_else(|| {
+                instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "enum construction metadata is missing",
+                )
+            }),
     }
 }

@@ -6,11 +6,12 @@ use std::time::{Duration, Instant};
 use lkjscript_core::{BudgetLedger, Error, Result};
 use lkjscript_ir::{
     verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter,
-    BorrowKind as SsaBorrowKind, CallTarget, Constant, EffectSet, FailureBehavior, FrameLocal,
-    FrameState, Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction,
-    InstructionKind, InstructionMetadata, LoanId as SsaLoanId, Origin, PlaceId as SsaPlaceId,
-    PlaceMetadata, ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint,
-    Signature, SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
+    BorrowKind as SsaBorrowKind, CallTarget, Constant, EffectSet, EnumFieldMetadata,
+    EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, FailureBehavior, FrameLocal, FrameState,
+    Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
+    InstructionMetadata, LoanId as SsaLoanId, Origin, PlaceId as SsaPlaceId, PlaceMetadata,
+    ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint, Signature,
+    SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
     TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VerifiedProgram,
 };
 
@@ -68,12 +69,14 @@ pub(crate) fn lower_program_with_metrics(
 }
 
 mod builder;
+mod enums;
 mod facts;
 mod lowering;
 mod model;
 mod operations;
 mod program;
 
+use enums::*;
 use facts::*;
 use model::*;
 use operations::*;

@@ -36,6 +36,7 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
             }
         }
     }
+    verify_enum_metadata(program)?;
     verify_trait_metadata(program)?;
     if program.functions.is_empty() {
         return fail("SSA program has no functions");

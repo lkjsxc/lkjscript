@@ -19,5 +19,6 @@ fn validate(chunk: Chunk) -> lkjscript_core::ValidatedChunk {
     validate_chunk(chunk, &ValidationLimits::default()).expect("test chunk validates")
 }
 
+mod enums;
 mod execution;
 mod resources;

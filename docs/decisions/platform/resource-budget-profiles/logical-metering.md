@@ -9,11 +9,12 @@ engine-dependent physical resource metrics.
 
 ## Status
 
-**Current category and authority foundation; metering integration not Current.**
-Profile V2 defines a distinct positive `logical_aggregate_constructions`
-ceiling and the core can reserve it under typed authority. HIR/SSA charge
-metadata, preservation proofs, and evaluator/VM/JIT differential exhaustion
-remain Accepted Targets. Current VM and compiler meters retain their existing
+**Current for the category, authority, and enum evaluator/reference-VM
+integration.** Profile V2 defines a distinct positive
+`logical_aggregate_constructions` ceiling. Verified enum construction retains
+one charge and evaluator/VM precharge before allocation. Product migration,
+optimization preservation proofs, and JIT differential exhaustion remain
+Accepted Targets. Current VM and compiler meters retain their existing
 documented physical/work meanings.
 
 ## Logical Events

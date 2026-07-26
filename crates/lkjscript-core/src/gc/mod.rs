@@ -2,6 +2,8 @@
 
 mod allocation;
 mod collection;
+#[cfg(test)]
+mod enum_tests;
 mod model;
 mod mutation;
 mod snapshot;

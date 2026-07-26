@@ -1,4 +1,5 @@
 mod block;
+mod enum_instruction;
 mod function;
 mod instruction;
 mod instruction_effects;

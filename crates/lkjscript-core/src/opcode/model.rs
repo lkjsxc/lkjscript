@@ -134,4 +134,7 @@ pub enum Op {
     SysSqliteExtendedResultCode = 189,
     SysSqliteBackup = 190,
     BufSlice = 191,
+    MakeEnum = 192,
+    IsEnumVariant = 193,
+    LoadEnumField = 194,
 }

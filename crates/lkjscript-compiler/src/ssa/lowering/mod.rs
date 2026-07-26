@@ -1,6 +1,7 @@
 mod branches;
 mod calls;
 mod control;
+mod enums;
 mod expressions;
 mod loads;
 mod locals;

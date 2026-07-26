@@ -6,11 +6,12 @@ use lkjscript_core::{BudgetLedger, Error, ProductId, Result, MAX_PRODUCT_FIELDS}
 
 use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
-    EffectSet, EnumDefinition, EnumId, EnumVariant, EnumVariantField, Expr, ExprKind, Function,
-    GenericInstantiation, ImplDefinition, ImplId, LoanId, LocalDefinition, Main, Operation, Origin,
-    PlaceId, ProductDefinition, ProductField, Source, SourceId, TraitBound, TraitDefinition,
-    TraitId, TraitWitness, TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId,
-    ENUM_RECURSION_MAX_DEPTH, ENUM_RECURSION_MAX_WORK, MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
+    EffectSet, EnumDefinition, EnumId, EnumLayoutFacts, EnumVariant, EnumVariantField, Expr,
+    ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId, LocalDefinition,
+    Main, Operation, Origin, PlaceId, ProductDefinition, ProductField, RuntimeLayoutId, Source,
+    SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
+    TypeSubstitution, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH, ENUM_RECURSION_MAX_WORK,
+    MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
 };
 use crate::source::Expr as AstExpr;
 

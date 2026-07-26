@@ -102,6 +102,25 @@ pub enum InstructionKind {
         value: ValueId,
         replacement: ValueId,
     },
+    EnumValue {
+        enum_id: EnumId,
+        variant: VariantId,
+        layout: RuntimeLayoutId,
+        fields: Vec<ValueId>,
+    },
+    EnumIsVariant {
+        enum_id: EnumId,
+        variant: VariantId,
+        layout: RuntimeLayoutId,
+        value: ValueId,
+    },
+    EnumField {
+        enum_id: EnumId,
+        variant: VariantId,
+        field: VariantFieldId,
+        layout: RuntimeLayoutId,
+        value: ValueId,
+    },
 }
 
 impl InstructionKind {
@@ -133,6 +152,8 @@ impl InstructionKind {
             Self::WithProductField {
                 value, replacement, ..
             } => vec![*value, *replacement],
+            Self::EnumValue { fields, .. } => fields.clone(),
+            Self::EnumIsVariant { value, .. } | Self::EnumField { value, .. } => vec![*value],
         }
     }
 }

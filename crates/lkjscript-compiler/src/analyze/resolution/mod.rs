@@ -2,6 +2,7 @@ mod borrowing;
 mod calls;
 mod control;
 mod derived_facts;
+mod enums;
 mod literals;
 mod locals;
 mod model;

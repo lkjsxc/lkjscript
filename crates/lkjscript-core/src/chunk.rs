@@ -61,6 +61,10 @@ pub struct Chunk {
     pub global_names: Vec<String>,
     pub products: Vec<ProductMetadata>,
     pub product_fields: Vec<ProductFieldRef>,
+    pub enums: Vec<crate::EnumMetadata>,
+    pub enum_constructions: Vec<crate::EnumConstructionRef>,
+    pub enum_variants: Vec<crate::EnumVariantRef>,
+    pub enum_fields: Vec<crate::EnumFieldRef>,
 }
 
 impl Default for Chunk {
@@ -83,6 +87,10 @@ impl Chunk {
             global_names: Vec::new(),
             products: Vec::new(),
             product_fields: Vec::new(),
+            enums: Vec::new(),
+            enum_constructions: Vec::new(),
+            enum_variants: Vec::new(),
+            enum_fields: Vec::new(),
         }
     }
 

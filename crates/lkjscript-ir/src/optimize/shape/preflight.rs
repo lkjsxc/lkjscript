@@ -89,7 +89,9 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
         | InstructionKind::PlaceInit { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
-        | InstructionKind::ProductField { .. } => 1,
+        | InstructionKind::ProductField { .. }
+        | InstructionKind::EnumIsVariant { .. }
+        | InstructionKind::EnumField { .. } => 1,
         InstructionKind::Runtime { arguments, .. }
         | InstructionKind::Call {
             target: crate::CallTarget::Direct(_),
@@ -101,7 +103,8 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
             arguments,
             ..
         } => arguments.len().checked_add(1).ok_or_else(budget_error)?,
-        InstructionKind::ProductValue { fields, .. } => fields.len(),
+        InstructionKind::ProductValue { fields, .. }
+        | InstructionKind::EnumValue { fields, .. } => fields.len(),
         InstructionKind::WithProductField { .. } => 2,
     };
     u64::try_from(count).map_err(|_| budget_error())

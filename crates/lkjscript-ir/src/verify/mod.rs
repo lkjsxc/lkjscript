@@ -3,6 +3,7 @@ use crate::*;
 mod api;
 mod calls;
 mod cfg;
+mod enums;
 mod lookup;
 mod ownership;
 mod runtime;
@@ -21,6 +22,7 @@ pub(crate) use api::{
 };
 pub(crate) use calls::*;
 pub(crate) use cfg::*;
+pub(crate) use enums::*;
 pub(crate) use lookup::*;
 pub(crate) use ownership::*;
 pub(crate) use runtime::*;

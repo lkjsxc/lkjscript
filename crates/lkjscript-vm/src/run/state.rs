@@ -24,6 +24,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
             allocation_error: None,
+            logical_aggregate_constructions: 0,
             started: Instant::now(),
             config,
         }

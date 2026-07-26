@@ -9,6 +9,10 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         ("globals", chunk.global_names.len()),
         ("products", chunk.products.len()),
         ("product field descriptors", chunk.product_fields.len()),
+        ("enums", chunk.enums.len()),
+        ("enum constructors", chunk.enum_constructions.len()),
+        ("enum variants", chunk.enum_variants.len()),
+        ("enum fields", chunk.enum_fields.len()),
     ];
     for (name, length) in tables {
         if length > limits.max_table_entries {
@@ -128,6 +132,12 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
             )));
         }
     }
+
+    metadata_bytes = checked_add(
+        metadata_bytes,
+        super::enum_shape::validate(chunk)?,
+        "metadata byte size",
+    )?;
 
     for (index, constant) in chunk.constants.iter().enumerate() {
         encoded_bytes = checked_add(encoded_bytes, 1, "encoded byte size")?;

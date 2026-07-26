@@ -76,11 +76,13 @@ pub(in crate::ssa) fn lower_type(
                 .get(name)
                 .ok_or_else(|| Error::msg(format!("HIR type references unknown product {name}")))?,
         ),
-        Type::Enum { name, .. } => {
-            return Err(Error::msg(format!(
-                "Edition 2 enum type {name} has no SSA/backend representation in the declaration-only slice"
-            )))
-        }
+        Type::Enum { id, arguments, .. } => SsaType::Enum {
+            id: lkjscript_ir::EnumId::new(id.bytes()),
+            arguments: arguments
+                .iter()
+                .map(|argument| lower_type(argument, products))
+                .collect::<Result<Vec<_>>>()?,
+        },
         Type::Param(name) => SsaType::TypeParameter(name.clone()),
         Type::List(item) => SsaType::List(Box::new(lower_type(item, products)?)),
         Type::Option(item) => SsaType::Option(Box::new(lower_type(item, products)?)),

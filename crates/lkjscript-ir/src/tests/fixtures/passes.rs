@@ -6,6 +6,7 @@ pub(crate) fn pass_program() -> Program {
     Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![Function {

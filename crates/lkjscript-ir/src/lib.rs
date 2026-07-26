@@ -13,12 +13,13 @@ pub use eval::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 pub use model::{
     BindingId, Block, BlockId, BlockMetadata, BlockParameter, BorrowKind, BytecodeBlockLink,
     BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget, Constant, EffectSet,
-    FailureBehavior, FrameLocal, FrameState, Function, FunctionBytecodeLink, FunctionId,
-    GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind, InstructionMetadata,
-    IrError, LoanId, Origin, PlaceId, PlaceMetadata, ProductField, ProductId, ProductMetadata,
-    Program, Result, RuntimeOp, Safepoint, Signature, SourceMetadata, SsaType, StructuredOutcome,
+    EnumFieldMetadata, EnumId, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, FailureBehavior,
+    FrameLocal, FrameState, Function, FunctionBytecodeLink, FunctionId, GenericInstantiation,
+    ImplId, ImplMetadata, Instruction, InstructionKind, InstructionMetadata, IrError, LoanId,
+    Origin, PlaceId, PlaceMetadata, ProductField, ProductId, ProductMetadata, Program, Result,
+    RuntimeLayoutId, RuntimeOp, Safepoint, Signature, SourceMetadata, SsaType, StructuredOutcome,
     Terminator, TraitBound, TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind,
-    TypeSubstitution, ValueId,
+    TypeSubstitution, ValueId, VariantFieldId, VariantId,
 };
 pub use optimize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,

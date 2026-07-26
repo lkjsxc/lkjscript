@@ -46,6 +46,7 @@ pub enum SsaType {
     RefMut(Box<SsaType>),
     Handle,
     Product(ProductId),
+    Enum { id: EnumId, arguments: Vec<SsaType> },
     List(Box<SsaType>),
     Option(Box<SsaType>),
     Result(Box<SsaType>, Box<SsaType>),

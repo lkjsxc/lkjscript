@@ -54,6 +54,7 @@ pub(crate) fn one_block_program() -> Program {
     Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![Function {
@@ -111,4 +112,49 @@ pub(crate) fn ownership_program(function: Function) -> Program {
     let mut program = one_block_program();
     program.functions.push(function);
     program
+}
+
+pub(crate) fn enum_metadata() -> EnumMetadata {
+    EnumMetadata {
+        id: EnumId::new([1; 32]),
+        name: "Boxed".into(),
+        type_parameters: vec!["T".into()],
+        variants: vec![
+            EnumVariantMetadata {
+                id: VariantId::new([2; 32]),
+                name: "A".into(),
+                physical_tag: 1,
+                fields: vec![EnumFieldMetadata {
+                    id: VariantFieldId::new([3; 32]),
+                    name: "value".into(),
+                    ty: SsaType::TypeParameter("T".into()),
+                    indirect: false,
+                    traced: false,
+                }],
+            },
+            EnumVariantMetadata {
+                id: VariantId::new([4; 32]),
+                name: "B".into(),
+                physical_tag: 0,
+                fields: vec![EnumFieldMetadata {
+                    id: VariantFieldId::new([5; 32]),
+                    name: "value".into(),
+                    ty: SsaType::TypeParameter("T".into()),
+                    indirect: false,
+                    traced: false,
+                }],
+            },
+        ],
+        layout: EnumLayoutFacts {
+            identity: RuntimeLayoutId::new([6; 32]),
+            recursive: false,
+        },
+    }
+}
+
+pub(crate) fn enum_type() -> SsaType {
+    SsaType::Enum {
+        id: EnumId::new([1; 32]),
+        arguments: vec![SsaType::I64],
+    }
 }

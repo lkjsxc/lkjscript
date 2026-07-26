@@ -26,6 +26,7 @@ pub(crate) fn contains_ownership_type(ty: &SsaType) -> bool {
     match ty {
         SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => true,
         SsaType::List(inner) | SsaType::Option(inner) => contains_ownership_type(inner),
+        SsaType::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
         SsaType::Result(ok, error) => contains_ownership_type(ok) || contains_ownership_type(error),
         SsaType::Function(signature) => {
             signature.parameters.iter().any(contains_ownership_type)
@@ -78,6 +79,16 @@ pub(crate) fn verify_type_at(
     match ty {
         SsaType::Product(product) => {
             let _metadata = product_by_id(program, *product)?;
+            Ok(())
+        }
+        SsaType::Enum { id, arguments } => {
+            let definition = enum_by_id(program, *id)?;
+            if arguments.len() != definition.type_parameters.len() {
+                return fail("SSA enum substitution arity mismatch");
+            }
+            for argument in arguments {
+                verify_type_at(program, argument, type_parameters, depth + 1, work, false)?;
+            }
             Ok(())
         }
         SsaType::Owned(inner) | SsaType::Ref(inner) | SsaType::RefMut(inner) => {

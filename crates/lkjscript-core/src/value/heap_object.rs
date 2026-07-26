@@ -24,6 +24,11 @@ pub enum HeapObj {
         product: ProductId,
         fields: Vec<Value>,
     },
+    Enum {
+        layout: crate::RuntimeLayoutId,
+        physical_tag: u16,
+        active_payload: Vec<Value>,
+    },
 }
 
 impl HeapObj {
@@ -41,6 +46,11 @@ impl HeapObj {
             HeapObj::ResultOk(v) | HeapObj::ResultErr(v) | HeapObj::OptionSome(v) => mark(*v),
             HeapObj::Product { fields, .. } => {
                 for field in fields {
+                    mark(*field);
+                }
+            }
+            HeapObj::Enum { active_payload, .. } => {
+                for field in active_payload {
                     mark(*field);
                 }
             }

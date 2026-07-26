@@ -11,12 +11,12 @@ Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
 Schema V2 with its exact V1 base, typed holes/legal actions and transactions,
-Edition 2 generic enum declaration/type facts, its one-shot protocol, bounded
-local stdio sessions, Profile V2 core reservation
-tests, and compiler resource-profile checks are described in the capsules.
-Edition 2 cross-engine acceptance, nonzero query caching, whole-pipeline
-pre-allocation, and logical metering integration remain **Accepted Targets**,
-not Current commands.
+Edition 2 enum declaration/type facts and construction through the SSA evaluator
+and reference VM, its one-shot protocol, bounded local stdio sessions, Profile
+V2 core reservation tests, and compiler resource-profile checks are described
+in the capsules. Complete Edition 2 cross-engine/JIT acceptance, nonzero query
+caching, whole-pipeline pre-allocation, and logical metering beyond enum
+construction remain **Accepted Targets**, not Current commands.
 
 ## Current Documentation Gate
 
@@ -101,12 +101,15 @@ stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
 
-Focused enum declaration tests cover exact Schema V2 nodes and roundtrip,
-stable nominal/member identities, source order, generic substitutions,
+Focused enum tests cover exact Schema V2 declaration nodes and roundtrip,
+stable nominal/member/layout identities, source order, generic substitutions,
 invariance, duplicate/empty/malformed rejection, nested ownership rejection,
-recursion exact/+1 bounds, and declaration/variant/field/recursion Profile V2
-exact/+1 charges before HIR allocation. Construction and backend tests remain
-part of the Accepted Edition 2 gate.
+recursion exact/+1 bounds, exact constructor field order/arity/type rejection,
+SSA metadata/provenance/layout/substitution rejection, inactive projection
+rejection, stable physical tags, boxed active-payload tracing, validated
+bytecode descriptors, evaluator/VM differential values and logical exhaustion,
+and deterministic forced-JIT rejection without fallback claims. Source match
+and enum JIT execution remain part of the Accepted Edition 2 gate.
 
 Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child

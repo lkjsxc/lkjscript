@@ -3,11 +3,12 @@
 mod control;
 mod decode;
 mod entry;
+mod enum_shape;
 mod instruction;
 mod merge;
 mod shape;
 
-use crate::{Chunk, Constant, DecodedInstruction, FunctionProto, ProductId};
+use crate::{Chunk, Constant, DecodedInstruction, EnumId, FunctionProto, ProductId, VariantId};
 
 #[derive(Debug, Clone)]
 pub struct ValidatedChunk {
@@ -41,6 +42,22 @@ impl ValidatedChunk {
         &self.chunk.product_fields
     }
 
+    pub fn enums(&self) -> &[crate::EnumMetadata] {
+        &self.chunk.enums
+    }
+
+    pub fn enum_constructions(&self) -> &[crate::EnumConstructionRef] {
+        &self.chunk.enum_constructions
+    }
+
+    pub fn enum_variants(&self) -> &[crate::EnumVariantRef] {
+        &self.chunk.enum_variants
+    }
+
+    pub fn enum_fields(&self) -> &[crate::EnumFieldRef] {
+        &self.chunk.enum_fields
+    }
+
     pub fn main_instructions(&self) -> &[DecodedInstruction] {
         &self.main_instructions
     }
@@ -67,6 +84,7 @@ pub(super) enum Kind {
     Result,
     Option,
     Product(ProductId),
+    Enum(EnumId, Option<VariantId>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

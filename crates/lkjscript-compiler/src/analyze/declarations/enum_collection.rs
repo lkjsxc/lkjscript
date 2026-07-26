@@ -77,30 +77,6 @@ impl Analyzer {
         Ok(())
     }
 
-    fn validate_nominal_name(&self, source: SourceId, name: &str, kind: &str) -> Result<()> {
-        if !is_declaration_type_name(name) {
-            return Err(self.error(source, format!("invalid {kind} declaration name {name}")));
-        }
-        if Operation::from_name(name).is_some()
-            || is_contextual_name(name)
-            || is_builtin_type_name(name)
-        {
-            return Err(self.error(
-                source,
-                format!(
-                    "{kind} declaration {name} collides with a reserved operation, form, or type"
-                ),
-            ));
-        }
-        if self.product_names.contains_key(name) || self.trait_names.contains_key(name) {
-            return Err(self.error(
-                source,
-                format!("enum declaration {name} collides with another nominal declaration"),
-            ));
-        }
-        Ok(())
-    }
-
     pub(in crate::analyze) fn collect_enums(
         &mut self,
         program: &ValidatedSourceTree,
@@ -179,12 +155,18 @@ impl Analyzer {
                         fields,
                     });
                 }
+                let recursive = variants
+                    .iter()
+                    .flat_map(|variant| &variant.fields)
+                    .any(|field| super::enum_fields::type_contains_enum(&field.ty, id));
+                let layout = super::enum_fields::enum_layout(id, recursive);
                 self.enums.push(EnumDefinition {
                     id,
                     name: parsed.name,
                     origin: source,
                     type_parameters: parameters,
                     variants,
+                    layout,
                 });
             }
         }

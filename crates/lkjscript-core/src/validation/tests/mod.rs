@@ -17,5 +17,6 @@ fn error(chunk: Chunk) -> String {
 }
 
 mod control;
+mod enums;
 mod metadata;
 mod types;

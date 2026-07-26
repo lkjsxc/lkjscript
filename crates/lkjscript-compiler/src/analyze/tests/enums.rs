@@ -1,11 +1,11 @@
 use super::*;
 use crate::hir::{EnumId, VariantFieldId, VariantId, ENUM_RECURSION_MAX_DEPTH};
 
-fn edition2(body: &str) -> String {
+pub(super) fn edition2(body: &str) -> String {
     format!("edition/\n2\n/edition\n{body}")
 }
 
-fn maybe_declaration(name: &str) -> String {
+pub(super) fn maybe_declaration(name: &str) -> String {
     format!(
         "enum/\nname/\n{name}\n/name\nforall/\nT\n/forall\nvariants/\nvariant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\nvariant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n"
     )
@@ -177,15 +177,4 @@ fn recursion_depth_exact_bound_succeeds_and_plus_one_rejects() {
         unit_main_source()
     ));
     assert!(analysis_error(&plus_one).contains("enum recursion depth exceeds"));
-}
-
-#[test]
-fn enum_value_construction_remains_unexposed() {
-    let source = edition2(&format!(
-        "{}{}",
-        maybe_declaration("Maybe"),
-        main_source("Unit", "variant-value/\n/variant-value")
-    ));
-    let error = analysis_error(&source);
-    assert!(error.contains("unknown call variant-value"), "{error}");
 }

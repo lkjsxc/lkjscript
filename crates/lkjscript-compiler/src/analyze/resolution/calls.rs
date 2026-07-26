@@ -20,11 +20,13 @@ impl Resolver<'_> {
             "empty-list" => self.resolve_empty_list(args),
             "none" => self.resolve_none(args),
             "product-value" => self.resolve_product_value(args),
+            "variant-value" => self.resolve_enum_value(args),
             "field" => self.resolve_product_field(args),
             "with-field" => self.resolve_with_product_field(args),
             "bind" => Err(self.error("bind is only valid inside let")),
             "fn" | "def" | "main" | "sig" | "params" | "forall" | "bounds" | "bound" | "type"
-            | "import" | "name" | "product" | "fields" | "trait" | "impl" | "for" => {
+            | "import" | "name" | "product" | "fields" | "variant" | "variant-field" | "enum"
+            | "variants" | "trait" | "impl" | "for" => {
                 Err(self.error(format!("{name} is only valid in its declaration context")))
             }
             _ => self.resolve_plain_call(name, args),

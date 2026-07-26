@@ -18,6 +18,7 @@ pub(crate) fn bounded_call_program() -> Program {
             path: "traits.lkjscript".into(),
         }],
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![

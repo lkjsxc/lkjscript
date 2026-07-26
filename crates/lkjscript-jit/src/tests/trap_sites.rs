@@ -25,6 +25,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
             path: "selected-trap.lkjscript".into(),
         }],
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![

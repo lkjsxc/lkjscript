@@ -38,7 +38,9 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> usize {
         | InstructionKind::PlaceInit { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
-        | InstructionKind::ProductField { .. } => 1,
+        | InstructionKind::ProductField { .. }
+        | InstructionKind::EnumIsVariant { .. }
+        | InstructionKind::EnumField { .. } => 1,
         InstructionKind::Runtime { arguments, .. }
         | InstructionKind::Call {
             target: CallTarget::Direct(_),
@@ -46,6 +48,9 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> usize {
             ..
         }
         | InstructionKind::ProductValue {
+            fields: arguments, ..
+        }
+        | InstructionKind::EnumValue {
             fields: arguments, ..
         } => arguments.len(),
         InstructionKind::Call {

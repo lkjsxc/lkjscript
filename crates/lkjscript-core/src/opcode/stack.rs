@@ -1,7 +1,7 @@
 use super::{metadata::StackEffect, model::Op};
 
 pub(super) const fn stack_effect(op: Op) -> StackEffect {
-    use StackEffect::{Call, MakeProduct};
+    use StackEffect::{Call, MakeEnum, MakeProduct};
 
     match op {
         Op::Nop | Op::Trap => fixed(0, 0, 0),
@@ -118,6 +118,8 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::IsSome
         | Op::UnwrapSome
         | Op::LoadProductField
+        | Op::IsEnumVariant
+        | Op::LoadEnumField
         | Op::BufFromStr
         | Op::BufToStr => fixed(1, 1, 1),
         Op::Jump => fixed(0, 0, 0),
@@ -125,6 +127,7 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         Op::MakeClosure => fixed(1, 1, 1),
         Op::Call => Call,
         Op::MakeProduct => MakeProduct,
+        Op::MakeEnum => MakeEnum,
         Op::Dup => fixed(1, 0, 1),
         Op::WithProductField => fixed(2, 2, 1),
     }

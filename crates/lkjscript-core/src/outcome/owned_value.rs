@@ -98,6 +98,20 @@ impl OwnedValue {
         }
     }
 
+    pub fn enum_physical_tag(&self) -> Option<u16> {
+        match self.object()? {
+            HeapObj::Enum { physical_tag, .. } => Some(*physical_tag),
+            _ => None,
+        }
+    }
+
+    pub fn enum_field_i64(&self, field: usize) -> Option<i64> {
+        let HeapObj::Enum { active_payload, .. } = self.object()? else {
+            return None;
+        };
+        self.value_i64(*active_payload.get(field)?)
+    }
+
     /// Test/diagnostic inspection of retained reachable snapshot storage.
     #[doc(hidden)]
     pub fn snapshot_object_count(&self) -> usize {
@@ -107,6 +121,17 @@ impl OwnedValue {
     fn object(&self) -> Option<&HeapObj> {
         let index = usize::try_from(self.root.as_heap()?).ok()?;
         self.heap.get(index)?.as_ref()
+    }
+
+    fn value_i64(&self, value: Value) -> Option<i64> {
+        if let Some(number) = value.as_small_i64() {
+            return Some(number);
+        }
+        let index = usize::try_from(value.as_heap()?).ok()?;
+        match self.heap.get(index)?.as_ref()? {
+            HeapObj::Int(number) => Some(*number),
+            _ => None,
+        }
     }
 }
 
@@ -146,6 +171,9 @@ impl fmt::Debug for OwnedValue {
             Some(HeapObj::OptionSome(_)) => formatter.write_str("#<owned-some>"),
             Some(HeapObj::Product { product, .. }) => {
                 write!(formatter, "#<owned-product:{}>", product.raw())
+            }
+            Some(HeapObj::Enum { physical_tag, .. }) => {
+                write!(formatter, "#<owned-enum:{physical_tag}>")
             }
             Some(HeapObj::Int(_) | HeapObj::Float(_) | HeapObj::Str(_) | HeapObj::Symbol(_)) => {
                 formatter.write_str("#<owned-value>")

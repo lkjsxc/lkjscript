@@ -129,6 +129,7 @@ fn unreachable_diamond_and_loop_are_cleaned_deterministically() {
     let program = Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![Function {

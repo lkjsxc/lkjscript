@@ -9,6 +9,7 @@ pub enum StackEffect {
     },
     Call,
     MakeProduct,
+    MakeEnum,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +54,9 @@ const fn operand_width(op: Op) -> usize {
         | Op::MakeProduct
         | Op::LoadProductField
         | Op::WithProductField
+        | Op::MakeEnum
+        | Op::IsEnumVariant
+        | Op::LoadEnumField
         | Op::Trap => 2,
         Op::LoadLocal | Op::StoreLocal | Op::Call => 1,
         _ => 0,

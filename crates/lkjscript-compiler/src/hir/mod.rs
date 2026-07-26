@@ -5,7 +5,7 @@ use std::path::PathBuf;
 pub use lkjscript_core::ProductId;
 
 pub use crate::operation::Operation;
-pub use crate::types::{EnumId, Type, VariantFieldId, VariantId};
+pub use crate::types::{EnumId, RuntimeLayoutId, Type, VariantFieldId, VariantId};
 
 mod bindings;
 mod effects;

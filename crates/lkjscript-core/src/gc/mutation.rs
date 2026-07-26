@@ -102,6 +102,18 @@ fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
                 ..
             },
         ) => old_product == new_product,
+        (
+            HeapObj::Enum {
+                layout: old_layout,
+                physical_tag: old_tag,
+                ..
+            },
+            HeapObj::Enum {
+                layout: new_layout,
+                physical_tag: new_tag,
+                ..
+            },
+        ) => old_layout == new_layout && old_tag == new_tag,
         _ => false,
     }
 }
@@ -142,6 +154,15 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
         HeapObj::Product { product, fields } => HeapObj::Product {
             product: *product,
             fields: clone_values(fields, fields.capacity()),
+        },
+        HeapObj::Enum {
+            layout,
+            physical_tag,
+            active_payload,
+        } => HeapObj::Enum {
+            layout: *layout,
+            physical_tag: *physical_tag,
+            active_payload: clone_values(active_payload, active_payload.capacity()),
         },
     }
 }

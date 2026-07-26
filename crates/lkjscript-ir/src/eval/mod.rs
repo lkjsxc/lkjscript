@@ -3,8 +3,8 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::{
-    CallTarget, Constant, FunctionId, Instruction, InstructionKind, ProductId, RuntimeOp,
-    StructuredOutcome, Terminator, ValueId, VerifiedProgram,
+    CallTarget, Constant, EnumId, FunctionId, Instruction, InstructionKind, ProductId,
+    RuntimeLayoutId, RuntimeOp, StructuredOutcome, Terminator, ValueId, VariantId, VerifiedProgram,
 };
 
 #[derive(Clone)]
@@ -41,6 +41,13 @@ pub enum EvalValue {
     Buf(EvalBuffer),
     Handle(u64),
     Product(ProductId, Vec<Self>),
+    Enum {
+        enum_id: EnumId,
+        variant: VariantId,
+        layout: RuntimeLayoutId,
+        physical_tag: u16,
+        payload: Vec<Self>,
+    },
     List(Vec<Self>),
     None,
     Some(Box<Self>),
@@ -64,6 +71,22 @@ impl PartialEq for EvalValue {
             (Self::Product(left_id, left), Self::Product(right_id, right)) => {
                 left_id == right_id && left == right
             }
+            (
+                Self::Enum {
+                    enum_id: le,
+                    variant: lv,
+                    layout: ll,
+                    physical_tag: lt,
+                    payload: lp,
+                },
+                Self::Enum {
+                    enum_id: re,
+                    variant: rv,
+                    layout: rl,
+                    physical_tag: rt,
+                    payload: rp,
+                },
+            ) => le == re && lv == rv && ll == rl && lt == rt && lp == rp,
             (Self::List(left), Self::List(right)) => left == right,
             (Self::Some(left), Self::Some(right))
             | (Self::Ok(left), Self::Ok(right))
@@ -90,6 +113,7 @@ pub struct EvalConfig {
     pub fuel: u64,
     pub max_frames: usize,
     pub max_allocations: u64,
+    pub max_logical_aggregate_constructions: u64,
     pub max_heap_bytes: usize,
     pub max_buffer_bytes: usize,
     pub max_list_equal_steps: usize,
@@ -102,6 +126,7 @@ impl Default for EvalConfig {
             fuel: 1_000_000,
             max_frames: 1_024,
             max_allocations: 1_000_000,
+            max_logical_aggregate_constructions: 1_000_000,
             max_heap_bytes: usize::MAX,
             max_buffer_bytes: 1_000_000,
             max_list_equal_steps: 1_000_000,
@@ -116,6 +141,7 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         config,
         fuel: config.fuel,
         allocations: 0,
+        logical_aggregate_constructions: 0,
         heap_bytes: 0,
         next_buffer_id: 1,
     };
@@ -130,6 +156,7 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) config: &'a EvalConfig,
     pub(crate) fuel: u64,
     pub(crate) allocations: u64,
+    pub(crate) logical_aggregate_constructions: u64,
     pub(crate) heap_bytes: usize,
     pub(crate) next_buffer_id: u64,
 }

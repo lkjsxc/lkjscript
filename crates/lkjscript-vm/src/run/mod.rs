@@ -4,6 +4,7 @@ mod calls;
 mod control;
 mod data;
 mod dispatch;
+mod enum_value;
 mod ext_ops;
 mod host_ops;
 mod limits;
@@ -14,9 +15,10 @@ mod state;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    Constant, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap as Arena,
-    HeapObj, HostError, Op, ProductFieldRef, ProductId, ResourceLimitKind, Result, Trap,
-    ValidatedChunk, Value, MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
+    Constant, EnumConstructionRef, EnumFieldRef, EnumId, EnumVariantRef, Error, ErrorClass,
+    ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap as Arena, HeapObj, HostError, Op,
+    ProductFieldRef, ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
+    MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
 };
 use lkjscript_jit::{
     EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,
@@ -121,6 +123,7 @@ pub struct Vm<'a, J: RuntimeTier> {
     fuel_remaining: u64,
     output_bytes: usize,
     allocation_error: Option<Error>,
+    logical_aggregate_constructions: u64,
     started: Instant,
 }
 

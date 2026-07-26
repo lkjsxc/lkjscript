@@ -14,6 +14,7 @@ pub enum BorrowKind {
     Mutable,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     LitI64(i64),
@@ -85,6 +86,25 @@ pub enum ExprKind {
         field: u8,
         value: Box<Expr>,
         replacement: Box<Expr>,
+    },
+    EnumValue {
+        enum_id: EnumId,
+        variant: VariantId,
+        layout: RuntimeLayoutId,
+        fields: Vec<Expr>,
+    },
+    EnumIsVariant {
+        enum_id: EnumId,
+        variant: VariantId,
+        layout: RuntimeLayoutId,
+        value: Box<Expr>,
+    },
+    EnumField {
+        enum_id: EnumId,
+        variant: VariantId,
+        field: VariantFieldId,
+        layout: RuntimeLayoutId,
+        value: Box<Expr>,
     },
     QuoteSymbol(String),
 }

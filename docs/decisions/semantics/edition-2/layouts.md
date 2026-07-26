@@ -9,8 +9,9 @@ layout identity.
 
 ## Status
 
-**Accepted Target, not Current.** Only representations explicitly evidenced by
-a later implementation record may be called Current.
+**Current for target-independent enum facts and the validated boxed reference-VM
+plan.** Target-specific native/JIT representation plans, niches, unboxing, and
+cross-tier adapters remain Accepted Targets.
 
 ## Four Identities
 
@@ -35,10 +36,11 @@ rules. Backend physical tags are a mapping from stable `VariantId`; source order
 is not tag identity. Public source cannot observe null, tags, padding, addresses,
 boxing, or a niche choice.
 
-The initial VM may use exact boxed tagged generic ADTs. Recursive ADTs are
-physically indirect. Collection reads a validated runtime layout identity and
-traces only the active variant's initialized traced fields. Unknown identities,
-tags, offsets, trace metadata, or niche proofs fail closed before unsafe access.
+The reference VM uses exact boxed tagged generic ADTs. Each value stores its
+validated runtime layout identity, physical tag, and active payload. Recursive
+ADT edges are physically indirect. Collection traces only the active variant's
+initialized fields. Unknown identities, tags, fields, substitutions, or layout
+facts fail closed before access.
 
 A niche is used only with a compiler proof retained for independent validation.
 No source sentinel or host ABI accident grants one. This contract does not

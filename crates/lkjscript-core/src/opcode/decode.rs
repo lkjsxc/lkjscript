@@ -173,6 +173,9 @@ impl Op {
         Self::SysSqliteExtendedResultCode,
         Self::SysSqliteBackup,
         Self::BufSlice,
+        Self::MakeEnum,
+        Self::IsEnumVariant,
+        Self::LoadEnumField,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {

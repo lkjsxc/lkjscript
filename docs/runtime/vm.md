@@ -16,16 +16,19 @@ next repairs.
   signed 61-bit integers, heap references, and opaque handle tokens; all-zero
   is private invalid/uninitialized state, not a language value.
 - Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
-  closures, buffers, Option some wrappers, language Result wrappers, and
-  immutable nominal products whose complete field vectors are traced.
+  closures, buffers, Option some wrappers, language Result wrappers, immutable
+  nominal products, and boxed enums storing validated layout identity, physical
+  tag, and only the active initialized payload.
 - I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64
   arithmetic, exact value/object/F64-bit equality, structural List equality
   bounded to 1,000,000 pair nodes, immutable product construction/access/update,
-  and checked narrow host domains.
+  exact enum construction/test/active projection primitives, and checked narrow
+  host domains.
 - Precise non-moving mark-sweep collection after 1,024 allocations.
 - Return-adjacent frame reuse for tail recursion.
 - Synchronous, single-threaded execution with explicit fuel, stack/frame,
-  estimated-live-heap, allocation, handle-slot, output, and wall-time budgets.
+  estimated-live-heap, allocation, logical aggregate construction, handle-slot,
+  output, and wall-time budgets.
 - One compiler invocation and one VM per CLI process.
 - Process-global console/terminal behavior, but no process termination from VM
   core.
@@ -34,7 +37,8 @@ Mutable `Chunk` remains the compiler/test builder. The only executable boundary
 is opaque immutable `ValidatedChunk`, created by `validate_chunk`; public VM,
 disassembly, and runtime-tiering APIs require it. The validator decodes all code
 before effects and checks encoding/table/metadata limits, operands and indexes,
-function/main/local/global shape, zero captures, products, jump boundaries, CFG
+function/main/local/global shape, zero captures, products, enum identities,
+layouts, tags, variants, fields, constructor substitutions, jump boundaries, CFG
 stack joins, definite local initialization, return/fallthrough shape, and
 statically known operation categories. Compiler output uses this same path.
 

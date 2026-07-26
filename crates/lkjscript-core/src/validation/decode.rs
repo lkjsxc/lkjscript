@@ -139,6 +139,29 @@ pub(super) fn validate_instruction_operands(
                     return operand_error(proto, op, at, "product descriptor index out of range");
                 }
             }
+            Op::MakeEnum => {
+                let descriptor = operand_index(operand, proto, op, at)?;
+                if chunk.enum_constructions.get(descriptor).is_none() {
+                    return operand_error(
+                        proto,
+                        op,
+                        at,
+                        "enum construction descriptor out of range",
+                    );
+                }
+            }
+            Op::IsEnumVariant => {
+                let descriptor = operand_index(operand, proto, op, at)?;
+                if chunk.enum_variants.get(descriptor).is_none() {
+                    return operand_error(proto, op, at, "enum variant descriptor out of range");
+                }
+            }
+            Op::LoadEnumField => {
+                let descriptor = operand_index(operand, proto, op, at)?;
+                if chunk.enum_fields.get(descriptor).is_none() {
+                    return operand_error(proto, op, at, "enum field descriptor out of range");
+                }
+            }
             Op::Call => {
                 let _argc = operand_index(operand, proto, op, at)?;
             }

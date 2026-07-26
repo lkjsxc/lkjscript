@@ -3,6 +3,7 @@ mod buffers;
 mod calls;
 mod collections;
 mod data;
+mod enums;
 mod io;
 mod numeric;
 mod required;
@@ -154,6 +155,9 @@ pub(super) fn apply_instruction(
         | Op::UnwrapSome
         | Op::MakeProduct
         | Op::LoadProductField
-        | Op::WithProductField => algebraic::apply(chunk, proto, instruction, state),
+        | Op::WithProductField
+        | Op::MakeEnum
+        | Op::IsEnumVariant
+        | Op::LoadEnumField => algebraic::apply(chunk, proto, instruction, state),
     }
 }

@@ -13,6 +13,7 @@ macro_rules! stable_id {
                 self.0
             }
 
+            #[allow(dead_code)]
             pub fn is_resolved(self) -> bool {
                 self.0 != [0; 32]
             }
@@ -28,3 +29,4 @@ impl EnumId {
 
 stable_id!(VariantId);
 stable_id!(VariantFieldId);
+stable_id!(RuntimeLayoutId);

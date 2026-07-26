@@ -16,6 +16,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
     Program {
         sources: Vec::new(),
         products: Vec::new(),
+        enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
         functions: vec![

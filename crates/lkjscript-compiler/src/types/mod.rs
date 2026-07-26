@@ -3,6 +3,6 @@
 mod enum_ids;
 mod ty;
 
-pub use enum_ids::{EnumId, VariantFieldId, VariantId};
+pub use enum_ids::{EnumId, RuntimeLayoutId, VariantFieldId, VariantId};
 pub(crate) use ty::parse_one;
 pub use ty::Type;

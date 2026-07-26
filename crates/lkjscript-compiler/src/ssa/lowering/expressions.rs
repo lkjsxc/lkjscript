@@ -124,6 +124,44 @@ impl FunctionBuilder<'_> {
                     expression.origin,
                 );
             }
+            ExprKind::EnumValue {
+                enum_id,
+                variant,
+                layout,
+                fields,
+            } => {
+                return self.lower_enum_value(
+                    *enum_id,
+                    *variant,
+                    *layout,
+                    fields,
+                    ty,
+                    expression.origin,
+                );
+            }
+            ExprKind::EnumIsVariant {
+                enum_id,
+                variant,
+                layout,
+                value,
+            } => {
+                return self.lower_enum_test(*enum_id, *variant, *layout, value, expression.origin);
+            }
+            ExprKind::EnumField {
+                enum_id,
+                variant,
+                field,
+                layout,
+                value,
+            } => {
+                return self.lower_enum_field(
+                    (*enum_id, *variant, *field),
+                    *layout,
+                    value,
+                    ty,
+                    expression.origin,
+                );
+            }
         };
         Ok(Some(value))
     }

@@ -2,6 +2,7 @@
 
 mod budget;
 mod chunk;
+mod enum_metadata;
 mod error;
 mod gc;
 mod limits;
@@ -19,6 +20,10 @@ pub use budget::{
 };
 pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
+};
+pub use enum_metadata::{
+    EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
+    EnumVariantMetadata, EnumVariantRef, RuntimeLayoutId, VariantFieldId, VariantId,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use gc::{GcConfig, GcHeap, GcLimit, GcStats};

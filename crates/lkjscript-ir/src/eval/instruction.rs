@@ -73,6 +73,93 @@ impl Evaluator<'_> {
                 }
                 _ => Err(Flow::Trap("product replacement identity mismatch".into())),
             },
+            InstructionKind::EnumValue {
+                enum_id,
+                variant,
+                layout,
+                fields,
+            } => {
+                let definition = self
+                    .program
+                    .program()
+                    .enums
+                    .iter()
+                    .find(|definition| definition.id == *enum_id)
+                    .ok_or_else(|| Flow::Trap("enum metadata missing".into()))?;
+                let selected = definition
+                    .variants
+                    .iter()
+                    .find(|candidate| candidate.id == *variant)
+                    .ok_or_else(|| Flow::Trap("enum variant metadata missing".into()))?;
+                self.charge_aggregate()?;
+                self.allocate()?;
+                Ok(EvalValue::Enum {
+                    enum_id: *enum_id,
+                    variant: *variant,
+                    layout: *layout,
+                    physical_tag: selected.physical_tag,
+                    payload: values_for(values, fields)?,
+                })
+            }
+            InstructionKind::EnumIsVariant {
+                enum_id,
+                variant,
+                layout,
+                value: input,
+            } => match value(values, *input)? {
+                EvalValue::Enum {
+                    enum_id: actual,
+                    variant: active,
+                    layout: actual_layout,
+                    ..
+                } if actual == enum_id && actual_layout == layout => {
+                    Ok(EvalValue::Bool(active == variant))
+                }
+                _ => Err(Flow::Trap(
+                    "enum variant test identity/layout mismatch".into(),
+                )),
+            },
+            InstructionKind::EnumField {
+                enum_id,
+                variant,
+                field,
+                layout,
+                value: input,
+            } => {
+                let definition = self
+                    .program
+                    .program()
+                    .enums
+                    .iter()
+                    .find(|definition| definition.id == *enum_id)
+                    .ok_or_else(|| Flow::Trap("enum metadata missing".into()))?;
+                let selected = definition
+                    .variants
+                    .iter()
+                    .find(|candidate| candidate.id == *variant)
+                    .ok_or_else(|| Flow::Trap("enum variant metadata missing".into()))?;
+                let index = selected
+                    .fields
+                    .iter()
+                    .position(|candidate| candidate.id == *field)
+                    .ok_or_else(|| Flow::Trap("enum field metadata missing".into()))?;
+                match value(values, *input)? {
+                    EvalValue::Enum {
+                        enum_id: actual,
+                        variant: active,
+                        layout: actual_layout,
+                        payload,
+                        ..
+                    } if actual == enum_id && active == variant && actual_layout == layout => {
+                        payload
+                            .get(index)
+                            .cloned()
+                            .ok_or_else(|| Flow::Trap("enum active payload is malformed".into()))
+                    }
+                    EvalValue::Enum { .. } => Err(Flow::Trap("inactive enum projection".into())),
+                    _ => Err(Flow::Trap("enum projection expects enum".into())),
+                }
+            }
         }
     }
 

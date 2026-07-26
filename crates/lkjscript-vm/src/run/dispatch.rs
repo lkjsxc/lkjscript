@@ -11,6 +11,9 @@ pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
     if super::control::handles(op) {
         return super::control::dispatch(vm, op);
     }
+    if super::enum_value::handles(op) {
+        return super::enum_value::dispatch(vm, op);
+    }
     if super::product::handles(op) {
         return super::product::dispatch(vm, op);
     }

@@ -89,10 +89,12 @@ impl Resolver<'_> {
                 .union(body.effects),
             ExprKind::MutableLocal { initial, body, .. } => initial.effects.union(body.effects),
             ExprKind::SetLocal { value, .. } => value.effects.union(EffectSet::MUTATES_LOCAL),
-            ExprKind::ProductValue { fields, .. } => {
+            ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
                 fold_effects(fields).union(EffectSet::ALLOCATES)
             }
-            ExprKind::ProductField { value, .. } => value.effects.union(EffectSet::READS_MEMORY),
+            ExprKind::ProductField { value, .. }
+            | ExprKind::EnumIsVariant { value, .. }
+            | ExprKind::EnumField { value, .. } => value.effects.union(EffectSet::READS_MEMORY),
             ExprKind::WithProductField {
                 value, replacement, ..
             } => value
