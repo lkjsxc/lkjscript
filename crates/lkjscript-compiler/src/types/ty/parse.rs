@@ -21,6 +21,13 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         )),
         "Str" => Ok((Type::Str, i + 1)),
         "Buf" => Ok((Type::Buf, i + 1)),
+        "Capability" => {
+            let kind = atoms
+                .get(i + 1)
+                .and_then(|name| CapabilityKind::parse(name))
+                .ok_or_else(|| "Capability requires one closed capability kind".to_string())?;
+            Ok((Type::Capability(kind), i + 2))
+        }
         "Owned" | "Ref" | "RefMut" => {
             let (inner, next) = parse_one(atoms, i + 1)?;
             if inner != Type::Buf {
@@ -92,6 +99,15 @@ fn is_type_param_name(s: &str) -> bool {
                 | "SystemError"
                 | "Str"
                 | "Buf"
+                | "Capability"
+                | "Arguments"
+                | "Clock"
+                | "Entropy"
+                | "FileSystem"
+                | "Network"
+                | "Sqlite"
+                | "Stdio"
+                | "Terminal"
                 | "Owned"
                 | "Ref"
                 | "RefMut"

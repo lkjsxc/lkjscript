@@ -54,12 +54,14 @@ preserves source-visible names in diagnostics and runtime metrics.
 - package name and contained source root;
 - sorted exact module and public-root lists;
 - sorted local path dependencies with full expected package hashes;
-- requested capability names;
+- a sorted subset of the eight closed provider capability kinds;
 - sorted named targets; and
 - an optional exact resource-profile name.
 
 Unknown fields, noncanonical paths, missing modules, unsorted/duplicate values,
-undeclared public roots or targets, path escapes, and symlink components fail.
+undeclared public roots or targets, unknown capabilities, path escapes, and symlink
+components fail. Each selected target receives only its exact typed main requirements;
+a missing package grant fails before execution and extra declarations are not injected.
 Only dependencies contained beneath the root package are Current. No network,
 registry, home-directory, environment-variable, or current-directory search is
 performed.

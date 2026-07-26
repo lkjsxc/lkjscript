@@ -4,7 +4,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub fn new(
         chunk: &'a ValidatedChunk,
         jit: J,
-        args: Vec<String>,
+        inputs: ExecutionInputs,
         config: ExecutionConfig,
     ) -> Self {
         Self {
@@ -19,7 +19,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             }),
             jit,
             exit_code: None,
-            args,
+            inputs,
             resources: ResourceTable::new(config.max_handles),
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
@@ -52,8 +52,18 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
 
         let resources = std::mem::replace(&mut self.resources, ResourceTable::new(0));
         drop(resources);
-        let restore_error = crate::host_term::restore_tty().err();
-        let flush_error = crate::host::flush_out().err();
+        let restore_error = self
+            .inputs
+            .capabilities
+            .contains(&lkjscript_core::CapabilityKind::Terminal)
+            .then(crate::host_term::restore_tty)
+            .and_then(Result::err);
+        let flush_error = self
+            .inputs
+            .capabilities
+            .contains(&lkjscript_core::CapabilityKind::Stdio)
+            .then(crate::host::flush_out)
+            .and_then(Result::err);
         if restore_error.is_some() || flush_error.is_some() {
             let prior = outcome.summary();
             let message = match (restore_error, flush_error) {
@@ -70,13 +80,23 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     }
 
     fn run_loop(&mut self) -> Result<Stop> {
+        if self.inputs.capabilities != self.chunk.required_capabilities() {
+            return Err(Error::msg(format!(
+                "execution capability mismatch: required {:?}, received {:?}",
+                self.chunk.required_capabilities(),
+                self.inputs.capabilities
+            )));
+        }
         self.frames.push(Frame {
             proto: u32::MAX,
             ip: 0,
             stack_base: 0,
             locals_base: 0,
         });
-        for _ in 0..self.chunk.main().locals {
+        for kind in &self.inputs.capabilities {
+            self.stack.push(Value::from_capability(*kind));
+        }
+        for _ in self.inputs.capabilities.len()..usize::from(self.chunk.main().locals) {
             self.stack.push(Value::INVALID);
         }
         self.check_runtime_limits()?;

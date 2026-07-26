@@ -13,6 +13,9 @@ editor-redraw
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 EditorState
 ->
@@ -20,6 +23,10 @@ Product
 EditorState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 EditorState
@@ -27,6 +34,7 @@ EditorState
 /params
 do/
 redraw/
+stdio
 field/
 state
 lines
@@ -42,9 +50,11 @@ mode
 /equal-value
 do/
 write-byte/
+stdio
 58
 /write-byte
 write-str/
+stdio
 field/
 state
 cmd
@@ -55,6 +65,7 @@ unit
 unit
 /if
 flush/
+stdio
 /flush
 state
 /do

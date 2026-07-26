@@ -78,6 +78,25 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         Ok(value)
     }
 
+    pub(crate) fn require_capability(
+        &mut self,
+        expected: lkjscript_core::CapabilityKind,
+    ) -> Result<()> {
+        let value = self.pop()?;
+        match value.as_capability() {
+            Some(actual) if actual == expected => Ok(()),
+            Some(actual) => Err(Error::msg(format!(
+                "expected {} capability, received {}",
+                expected.as_str(),
+                actual.as_str()
+            ))),
+            None => Err(Error::msg(format!(
+                "expected {} capability",
+                expected.as_str()
+            ))),
+        }
+    }
+
     pub(crate) fn peek(&self) -> Result<Value> {
         let value = self
             .stack

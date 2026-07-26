@@ -9,7 +9,11 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     let unsupported = [
         (
             "host.lkjscript",
-            "main/\nsig/\n->\nUnit\n/sig\nflush/\n/flush\n/main\n",
+            concat!(
+                "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
+                "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+                "flush/\nstdio\n/flush\n/main\n"
+            ),
         ),
         (
             "owned-buffer.lkjscript",
@@ -103,7 +107,11 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
             expected
         );
         assert_eq!(
-            execution(run_chunk(program.bytecode(), &ExecutionConfig::default())),
+            execution(run_chunk(
+                program.bytecode(),
+                &lkjscript_vm::ExecutionInputs::default(),
+                &ExecutionConfig::default()
+            )),
             expected
         );
         let baseline = forced(&source, name);
@@ -136,7 +144,11 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
         expected
     );
     assert_eq!(
-        execution(run_chunk(program.bytecode(), &ExecutionConfig::default())),
+        execution(run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default()
+        )),
         expected
     );
     let baseline = forced(invalid_utf8, "buf-to-str-error.lkjscript");

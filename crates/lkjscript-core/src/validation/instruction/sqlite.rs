@@ -12,6 +12,12 @@ pub(super) fn apply(
         Op::SysSqliteOpen => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Str, proto, instruction)?;
+            expect_pop(
+                state,
+                Kind::Capability(crate::CapabilityKind::Sqlite),
+                proto,
+                instruction,
+            )?;
             state.stack.push(result_kind());
         }
         Op::SysSqliteClose
@@ -74,6 +80,12 @@ pub(super) fn apply(
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::Str, proto, instruction)?;
             expect_pop(state, Kind::Handle, proto, instruction)?;
+            expect_pop(
+                state,
+                Kind::Capability(crate::CapabilityKind::Sqlite),
+                proto,
+                instruction,
+            )?;
             state.stack.push(result_kind());
         }
         _ => unreachable!("opcode dispatched to wrong validation family"),

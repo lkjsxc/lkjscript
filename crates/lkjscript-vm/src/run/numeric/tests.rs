@@ -7,7 +7,12 @@ use crate::run::{test_chunk, Vm};
 
 fn test_vm() -> Vm<'static, NullJit> {
     let chunk = Box::leak(Box::new(test_chunk()));
-    Vm::new(chunk, NullJit, Vec::new(), ExecutionConfig::default())
+    Vm::new(
+        chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
 }
 
 fn test_i64(vm: &mut Vm<'_, NullJit>, number: i64) -> lkjscript_core::Value {

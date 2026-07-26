@@ -6,11 +6,15 @@ pub(super) fn host_signature(
     parameters: &[SsaType],
     result: &SsaType,
 ) -> Option<bool> {
+    use lkjscript_contracts::CapabilityKind::{
+        Clock, Entropy, FileSystem, Network, Sqlite, Stdio, Terminal,
+    };
+
     let exact = |expected: &[SsaType], result_type: &SsaType| {
         parameters == expected && result == result_type
     };
     let valid = match operation {
-        RuntimeOp::StdinHandle => exact(&[], &SsaType::Handle),
+        RuntimeOp::StdinHandle => exact(&[SsaType::Capability(Stdio)], &SsaType::Handle),
         RuntimeOp::SysIsatty => exact(&[SsaType::Handle], &system_result(SsaType::Bool)),
         RuntimeOp::SysClose => exact(&[SsaType::Handle], &system_result(SsaType::Unit)),
         RuntimeOp::SysReadByte => exact(&[SsaType::Handle], &system_result(SsaType::I64)),
@@ -22,21 +26,38 @@ pub(super) fn host_signature(
             &[SsaType::Handle, SsaType::Buf, SsaType::I64, SsaType::I64],
             &system_result(SsaType::I64),
         ),
-        RuntimeOp::SysTtyGuardSave => exact(&[SsaType::Buf], &system_result(SsaType::Unit)),
-        RuntimeOp::SysTtyGuardClear => exact(&[], &system_result(SsaType::Unit)),
+        RuntimeOp::SysTtyGuardSave => exact(
+            &[SsaType::Capability(Terminal), SsaType::Buf],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysTtyGuardClear => exact(
+            &[SsaType::Capability(Terminal)],
+            &system_result(SsaType::Unit),
+        ),
         RuntimeOp::SysOpenRead
         | RuntimeOp::SysOpenWrite
         | RuntimeOp::SysOpenAppend
         | RuntimeOp::SysOpenCreateNew
-        | RuntimeOp::SysOpenDir => exact(&[SsaType::Str], &system_result(SsaType::Handle)),
+        | RuntimeOp::SysOpenDir => exact(
+            &[SsaType::Capability(FileSystem), SsaType::Str],
+            &system_result(SsaType::Handle),
+        ),
         RuntimeOp::SysFsync => exact(&[SsaType::Handle], &system_result(SsaType::Unit)),
         RuntimeOp::SysTruncate => exact(
             &[SsaType::Handle, SsaType::I64],
             &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysRename => exact(&[SsaType::Str, SsaType::Str], &system_result(SsaType::Unit)),
+        RuntimeOp::SysRename => exact(
+            &[SsaType::Capability(FileSystem), SsaType::Str, SsaType::Str],
+            &system_result(SsaType::Unit),
+        ),
         RuntimeOp::SysRandomFill => exact(
-            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &[
+                SsaType::Capability(Entropy),
+                SsaType::Buf,
+                SsaType::I64,
+                SsaType::I64,
+            ],
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysSha256 => exact(
@@ -44,7 +65,7 @@ pub(super) fn host_signature(
             &system_result(SsaType::Buf),
         ),
         RuntimeOp::SysSqliteOpen => exact(
-            &[SsaType::Str, SsaType::I64],
+            &[SsaType::Capability(Sqlite), SsaType::Str, SsaType::I64],
             &system_result(SsaType::Handle),
         ),
         RuntimeOp::SysSqliteClose
@@ -109,13 +130,27 @@ pub(super) fn host_signature(
             &system_result(crate::prelude_contract::option(SsaType::Buf)),
         ),
         RuntimeOp::SysSqliteBackup => exact(
-            &[SsaType::Handle, SsaType::Str, SsaType::I64],
+            &[
+                SsaType::Capability(Sqlite),
+                SsaType::Handle,
+                SsaType::Str,
+                SsaType::I64,
+            ],
             &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysPathExists => exact(&[SsaType::Str], &system_result(SsaType::Bool)),
-        RuntimeOp::SysWaitMs => exact(&[SsaType::I64], &system_result(SsaType::Unit)),
-        RuntimeOp::SysNowMs => exact(&[], &system_result(SsaType::I64)),
-        RuntimeOp::SysSocket => exact(&[], &system_result(SsaType::Handle)),
+        RuntimeOp::SysPathExists => exact(
+            &[SsaType::Capability(FileSystem), SsaType::Str],
+            &system_result(SsaType::Bool),
+        ),
+        RuntimeOp::SysWaitMs => exact(
+            &[SsaType::Capability(Clock), SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysNowMs => exact(&[SsaType::Capability(Clock)], &system_result(SsaType::I64)),
+        RuntimeOp::SysSocket => exact(
+            &[SsaType::Capability(Network)],
+            &system_result(SsaType::Handle),
+        ),
         RuntimeOp::SysBind | RuntimeOp::SysListen => exact(
             &[SsaType::Handle, SsaType::I64],
             &system_result(SsaType::Unit),

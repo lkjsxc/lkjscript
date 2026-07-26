@@ -3,6 +3,7 @@
 mod control;
 mod decode;
 mod entry;
+mod entry_capabilities;
 mod enum_shape;
 mod instruction;
 mod merge;
@@ -29,6 +30,10 @@ impl ValidatedChunk {
 
     pub fn main(&self) -> &FunctionProto {
         &self.chunk.main
+    }
+
+    pub fn required_capabilities(&self) -> &[crate::CapabilityKind] {
+        &self.chunk.required_capabilities
     }
 
     pub fn global_names(&self) -> &[String] {
@@ -81,6 +86,7 @@ pub(super) enum Kind {
     Closure(u32),
     List,
     Buf,
+    Capability(crate::CapabilityKind),
     Handle,
     Product(ProductId),
     Enum(EnumId, Option<VariantId>),

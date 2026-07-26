@@ -4,6 +4,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     match op {
         x if x == Op::SysSocket as u8 => {
             vm.ensure_host_deadline_support("sys-socket", false)?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Network)?;
             let result = vm.resources.sys_socket();
             push_language_result(vm, lkjscript_core::SystemErrorKind::Network, result);
             Ok(true)

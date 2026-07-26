@@ -2,7 +2,14 @@ use super::*;
 
 fn handle_main(body: &str) -> String {
     format!(
-        "main/\nsig/\n->\nUnit\n/sig\nlet/\nbind/\nhandle\nunwrap-ok/\nsys-open-read/\nstr/\n/tmp/lkjscript-affine-test\n/str\n/sys-open-read\n/unwrap-ok\n/bind\n{body}\n/let\n/main\n"
+        concat!(
+            "main/\nsig/\nCapability/\nFileSystem\n/Capability\n->\nUnit\n/sig\n",
+            "params/\nfile-system\nCapability/\nFileSystem\n/Capability\n/params\n",
+            "let/\nbind/\nhandle\nunwrap-ok/\nsys-open-read/\nfile-system\n",
+            "str/\n/tmp/lkjscript-affine-test\n/str\n/sys-open-read\n/unwrap-ok\n",
+            "/bind\n{body}\n/let\n/main\n"
+        ),
+        body = body
     )
 }
 
@@ -52,7 +59,9 @@ fn affine_handle_cleanup_reaches_verified_ssa() {
 
 #[test]
 fn borrowed_stdin_handle_cannot_be_dropped_as_an_owned_local() {
-    let source = unit_main("unwrap-ok/\ndrop/\nstdin-handle/\n/stdin-handle\n/drop\n/unwrap-ok");
+    let source = stdio_unit_main(
+        "unwrap-ok/\ndrop/\nstdin-handle/\nstdio\n/stdin-handle\n/drop\n/unwrap-ok",
+    );
     let error = compile_source(&source, "borrowed-drop.lkjscript", &Limits::default())
         .expect_err("borrowed handle drop")
         .to_string();

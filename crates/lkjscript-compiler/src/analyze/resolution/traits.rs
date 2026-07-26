@@ -91,7 +91,13 @@ impl Resolver<'_> {
         }
         let result = match core_trait {
             CoreTrait::Copy => match ty {
-                Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Symbol => true,
+                Type::Unit
+                | Type::Bool
+                | Type::I64
+                | Type::F64
+                | Type::Capability(_)
+                | Type::Str
+                | Type::Symbol => true,
                 Type::Ref(inner) if inner.as_ref() == &Type::Buf => true,
                 Type::Never
                 | Type::Buf

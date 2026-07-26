@@ -119,6 +119,7 @@ pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
             arguments.iter().all(supports_value_equality)
         }
         Type::Never
+        | Type::Capability(_)
         | Type::Buf
         | Type::Owned(_)
         | Type::Ref(_)

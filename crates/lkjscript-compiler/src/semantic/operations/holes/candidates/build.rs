@@ -149,7 +149,7 @@ pub(super) fn candidate(
         } else {
             super::super::types::ownership(ty)
         },
-        capabilities: Vec::new(),
+        capabilities: super::capabilities::required(site.tree, &expression),
         construction_cost: cost,
         expression,
         snippets: vec![ConcreteSnippet {

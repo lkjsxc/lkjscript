@@ -22,7 +22,12 @@ fn tail_call_reuses_the_current_frame() {
     });
     let chunk =
         validate_chunk(chunk, &ValidationLimits::default()).expect("call test chunk validates");
-    let mut vm = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default());
+    let mut vm = Vm::new(
+        &chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    );
     vm.frames.push(Frame {
         proto: 1,
         ip: 1,

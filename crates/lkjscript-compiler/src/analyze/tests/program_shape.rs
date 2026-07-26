@@ -9,7 +9,7 @@ fn explicit_main_is_unique_root_only_and_exactly_typed() {
     let mismatch = main_source("I64", "unit");
     assert!(analysis_error(&mismatch).contains("does not exactly equal"));
     let parameter = "main/\nsig/\nI64\n->\nI64\n/sig\n1\n/main\n";
-    assert!(analysis_error(parameter).contains("no parameters"));
+    assert!(analysis_error(parameter).contains("requires params"));
 
     let ast = parsed_program(&[
         (
@@ -133,11 +133,13 @@ fn resolution_never_crosses_a_function_boundary() {
 
 #[test]
 fn operation_identity_and_local_mutation_reach_bytecode() {
-    let source = main_source(
-        "I64",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\nargc/\n/argc\ndo/\nset/\nx\n+/\nx\n2\n/+\n/set\nx\n/do\n/var",
+    let source = concat!(
+        "main/\nsig/\nCapability/\nArguments\n/Capability\n->\nI64\n/sig\n",
+        "params/\narguments\nCapability/\nArguments\n/Capability\n/params\n",
+        "var/\nname/\nx\n/name\ntype/\nI64\n/type\n",
+        "argc/\narguments\n/argc\ndo/\nset/\nx\n+/\nx\n2\n/+\n/set\nx\n/do\n/var\n/main\n"
     );
-    let program = analyze_one(&source).expect("analyze operation and set");
+    let program = analyze_one(source).expect("analyze operation and set");
     let chunk = compile_hir(&program).expect("lower operation and set through SSA");
     assert!(chunk.main.code.contains(&(Op::Add as u8)));
     assert!(chunk.main.code.contains(&(Op::StoreLocal as u8)));

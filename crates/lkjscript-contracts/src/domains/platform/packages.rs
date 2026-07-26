@@ -25,7 +25,7 @@ pub(crate) fn package_manifest() -> ContractDescriptor {
             .fact(fact(
                 "capabilities",
                 "capabilities",
-                "closed requested host authorities",
+                "sorted subset of eight exact provider authorities",
             ))
             .fact(fact("targets", "targets", "closed build target set"))
             .fact(fact(
@@ -55,7 +55,7 @@ pub(crate) fn module_interface(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "capabilities",
                     "capabilities",
-                    "required authority types",
+                    "explicit provider parameter types and delegation",
                 ))
                 .fact(fact(
                     "ownership",

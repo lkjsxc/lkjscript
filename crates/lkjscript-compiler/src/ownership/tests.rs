@@ -33,7 +33,11 @@ fn aggregate_expression_budget_is_enforced_on_constructed_hir() {
         functions: Vec::new(),
         main: Main {
             origin,
+            params: Vec::new(),
+            param_places: Vec::new(),
+            param_types: Vec::new(),
             return_type: Type::Unit,
+            arity: 0,
             local_count: 0,
             body,
         },

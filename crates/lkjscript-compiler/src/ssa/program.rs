@@ -104,27 +104,13 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
     let main_id = FunctionId::new(
         u32::try_from(functions.len()).map_err(|_| Error::msg("too many SSA functions"))?,
     );
-    let main_signature = Signature::monomorphic(
-        Vec::new(),
-        lower_type(&program.main.return_type, &product_ids)?,
-    );
-    let mut builder = FunctionBuilder::new(
+    functions.push(super::entry_function::construct(
+        program,
         &product_ids,
         &function_ids,
         &function_effects,
         main_id,
-        "main".into(),
-        main_signature,
-        effects(program.main.body.effects),
-        origin(program.main.origin.raw(), 0),
-    );
-    let entry = builder.new_block(origin(program.main.origin.raw(), 0), false)?;
-    builder.entry = entry;
-    builder.current = Some(entry);
-    if let Some(result) = builder.lower_expr(&program.main.body)? {
-        builder.terminate(Terminator::Return(result))?;
-    }
-    functions.push(builder.finish()?);
+    )?);
 
     Ok(Program {
         sources: program

@@ -2,7 +2,7 @@
 
 use lkjscript_compiler::{compile_source, ExecutableProgram};
 use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, Op, OwnedValue};
-use lkjscript_vm::{run_chunk, run_chunk_with_args};
+use lkjscript_vm::run_chunk;
 
 fn compile(source: &str) -> lkjscript_core::Result<ExecutableProgram> {
     let source = source.to_string();
@@ -19,7 +19,11 @@ fn returned(outcome: ExecutionOutcome) -> lkjscript_core::Result<OwnedValue> {
 
 fn evaluate(source: &str) -> lkjscript_core::Result<OwnedValue> {
     let program = compile(source)?;
-    returned(run_chunk(program.bytecode(), &ExecutionConfig::default()))
+    returned(run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ))
 }
 
 fn bool_main(expression: &str) -> String {
@@ -58,9 +62,13 @@ fn local_var_set_and_shadowing_execute_through_ssa() {
         .code
         .contains(&(Op::StoreLocal as u8)));
     assert_eq!(
-        returned(run_chunk(program.bytecode(), &ExecutionConfig::default(),))
-            .expect("run local mutation")
-            .as_i64(),
+        returned(run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        ))
+        .expect("run local mutation")
+        .as_i64(),
         Some(6)
     );
 
@@ -128,12 +136,19 @@ fn immutable_product_state_threads_through_a_local_var() {
 
 #[test]
 fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
-    let argument = "main/\nsig/\n->\nI64\n/sig\nstr-len/\nunwrap-some/\narg/\n0\n/arg\n/unwrap-some\n/str-len\n/main\n";
+    let argument = concat!(
+        "main/\nsig/\nCapability/\nArguments\n/Capability\n->\nI64\n/sig\n",
+        "params/\narguments\nCapability/\nArguments\n/Capability\n/params\n",
+        "str-len/\nunwrap-some/\narg/\narguments\n0\n/arg\n/unwrap-some\n/str-len\n/main\n"
+    );
     let program = compile(argument).expect("compile argument main");
     assert_eq!(
-        returned(run_chunk_with_args(
+        returned(run_chunk(
             program.bytecode(),
-            &["hello".into()],
+            &lkjscript_vm::ExecutionInputs {
+                arguments: vec!["hello".into()],
+                capabilities: vec![lkjscript_core::CapabilityKind::Arguments],
+            },
             &ExecutionConfig::default(),
         ))
         .expect("argument present")

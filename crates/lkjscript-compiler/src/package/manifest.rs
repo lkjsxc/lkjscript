@@ -54,6 +54,13 @@ fn validate(root: &Path, manifest: &Manifest) -> Result<()> {
     sorted("modules", &manifest.modules)?;
     sorted("public", &manifest.public)?;
     sorted("capabilities", &manifest.capabilities)?;
+    for capability in &manifest.capabilities {
+        if lkjscript_core::CapabilityKind::parse(capability).is_none() {
+            return Err(Error::msg(format!(
+                "unknown package capability: {capability}"
+            )));
+        }
+    }
     let source_root = root.join(&manifest.source_root);
     reject_symlink(root, &source_root)?;
     for module in &manifest.modules {

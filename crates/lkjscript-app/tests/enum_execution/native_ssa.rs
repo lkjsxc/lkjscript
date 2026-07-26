@@ -109,9 +109,11 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
     else {
         panic!("evaluator returns nullary enum")
     };
-    let ExecutionOutcome::Returned(vm) =
-        run_chunk(compiled.bytecode(), &ExecutionConfig::default())
-    else {
+    let ExecutionOutcome::Returned(vm) = run_chunk(
+        compiled.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) else {
         panic!("VM returns nullary enum")
     };
     assert_eq!(vm.enum_physical_tag(), Some(physical_tag));

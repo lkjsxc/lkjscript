@@ -10,6 +10,9 @@ bf-input
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -17,6 +20,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -26,6 +33,7 @@ let/
 bind/
 byte
 read-byte/
+stdio
 /read-byte
 /bind
 do/
@@ -59,6 +67,9 @@ bf-output
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -66,6 +77,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -73,6 +88,7 @@ BrainfuckState
 /params
 do/
 write-byte/
+stdio
 buf-ref/
 field/
 state

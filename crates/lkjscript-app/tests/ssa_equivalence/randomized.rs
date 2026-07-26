@@ -76,11 +76,21 @@ impl Generator {
 
 #[test]
 fn evaluator_reports_host_operations_as_explicitly_unsupported() {
-    let source = main_source("Unit", "print/\nstr/\nnot emitted\n/str\n/print");
-    let program = compile_source(&source, "unsupported-host.lkjscript", &Limits::default())
+    let source = concat!(
+        "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
+        "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+        "print/\nstdio\nstr/\nnot emitted\n/str\n/print\n/main\n"
+    );
+    let program = compile_source(source, "unsupported-host.lkjscript", &Limits::default())
         .expect("compile host operation");
     assert_eq!(
-        evaluate(program.ssa(), &EvalConfig::default()),
+        evaluate(
+            program.ssa(),
+            &EvalConfig {
+                capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
+                ..EvalConfig::default()
+            },
+        ),
         EvalOutcome::UnsupportedOperation(RuntimeOp::Print)
     );
 }

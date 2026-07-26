@@ -55,15 +55,27 @@ fn validate_declaration_shape(
                     if name == "import" && valid_import(value)
             )
         }),
-        "main" => matches!(
-            form.children.as_slice(),
-            [SourceNode {
-                kind: SyntaxKind::Call { name },
-                children,
-                ..
-            }, _] if name == "sig"
-                && children.iter().any(|node| matches!(node.kind, SyntaxKind::Symbol { ref name } if name == "->"))
-        ),
+        "main" => {
+            matches!(
+                form.children.as_slice(),
+                [SourceNode {
+                    kind: SyntaxKind::Call { name },
+                    children,
+                    ..
+                }, _] if name == "sig"
+                    && children.iter().any(|node| matches!(node.kind, SyntaxKind::Symbol { ref name } if name == "->"))
+            ) || matches!(
+                form.children.as_slice(),
+                [SourceNode {
+                    kind: SyntaxKind::Call { name },
+                    children,
+                    ..
+                }, SourceNode { kind: SyntaxKind::Call { name: params }, .. }, _]
+                    if name == "sig"
+                        && params == "params"
+                        && has_arrow(children)
+            )
+        }
         "def" => valid_named_body(&form.children, "fn", valid_function),
         "product" => valid_named_body(&form.children, "fields", |fields| {
             fields.iter().all(valid_product_field)
@@ -96,6 +108,12 @@ fn validate_declaration_shape(
         form.span,
         format!("malformed top-level {name} declaration shape"),
     ))
+}
+
+fn has_arrow(children: &[SourceNode]) -> bool {
+    children
+        .iter()
+        .any(|node| matches!(node.kind, SyntaxKind::Symbol { ref name } if name == "->"))
 }
 
 fn valid_named_only(children: &[SourceNode]) -> bool {

@@ -64,6 +64,9 @@ bf-prepare-close
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -71,6 +74,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -86,6 +93,7 @@ depth
 /equal-value
 do/
 bf-fail/
+stdio
 str/
 unmatched ]
 /str

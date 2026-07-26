@@ -10,6 +10,7 @@ pub enum Type {
     F64,
     Str,
     Buf,
+    Capability(CapabilityKind),
     /// Initial ownership slice: only `Owned Buf` is well formed.
     Owned(Box<Type>),
     /// Initial ownership slice: only `Ref Buf` is well formed.
@@ -61,28 +62,6 @@ impl Type {
             (left, right) if left == right => Some(left.clone()),
             _ => None,
         }
-    }
-
-    pub fn parse_atoms(atoms: &[String]) -> Result<(Vec<Type>, Type), String> {
-        let arrow = atoms
-            .iter()
-            .position(|a| a == "->")
-            .ok_or_else(|| "sig requires -> before return type".to_string())?;
-        if arrow + 1 >= atoms.len() {
-            return Err("sig missing return type after ->".into());
-        }
-        let mut params = Vec::new();
-        let mut i = 0;
-        while i < arrow {
-            let (t, next) = parse_one(atoms, i)?;
-            params.push(t);
-            i = next;
-        }
-        let (ret, end) = parse_one(atoms, arrow + 1)?;
-        if end != atoms.len() {
-            return Err("trailing tokens after return type".into());
-        }
-        Ok((params, ret))
     }
 
     pub fn unify_assignable(got: &Type, expect: &Type) -> bool {

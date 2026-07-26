@@ -11,11 +11,15 @@ pub(in crate::analyze) fn definition_name(args: &[AstExpr]) -> std::result::Resu
     }
 }
 
+type ParsedMain<'a> = (Vec<String>, Vec<Type>, Type, &'a AstExpr);
+
 pub(in crate::analyze) fn parse_main(
     args: &[AstExpr],
-) -> std::result::Result<(Type, &AstExpr), String> {
-    let [signature_form, body] = args else {
-        return Err("expected exactly sig/…/sig and one body expression".into());
+) -> std::result::Result<ParsedMain<'_>, String> {
+    let (signature_form, params_form, body) = match args {
+        [signature, body] => (signature, None, body),
+        [signature, params, body] => (signature, Some(params), body),
+        _ => return Err("expected sig/, optional capability params/, and one body".into()),
     };
     let AstExpr::Call {
         name,
@@ -27,11 +31,43 @@ pub(in crate::analyze) fn parse_main(
     if name != "sig" {
         return Err("expected sig/…/sig first".into());
     }
-    let (params, return_type) = parse_signature(signature_args)?;
-    if !params.is_empty() {
-        return Err("signature must have no parameters".into());
+    let (signature_params, return_type) = parse_signature(signature_args)?;
+    let (names, params) = match params_form {
+        None if signature_params.is_empty() => (Vec::new(), Vec::new()),
+        None => return Err("capability-bearing main requires params/".into()),
+        Some(AstExpr::Call { name, args }) if name == "params" => parse_typed_params(args)?,
+        Some(_) => return Err("main expects params/ immediately after sig/".into()),
+    };
+    if params.is_empty() && params_form.is_some() {
+        return Err("pure main must omit empty params/".into());
     }
-    Ok((return_type, body))
+    validate_main_capabilities(&signature_params, &names, &params)?;
+    Ok((names, params, return_type, body))
+}
+
+fn validate_main_capabilities(
+    signature: &[Type],
+    names: &[String],
+    params: &[Type],
+) -> std::result::Result<(), String> {
+    if signature != params || names.len() != params.len() {
+        return Err("main sig/params must agree exactly".into());
+    }
+    let mut prior = None;
+    let mut seen_names = HashSet::new();
+    for (name, ty) in names.iter().zip(params) {
+        let Type::Capability(kind) = ty else {
+            return Err("main parameters must be exact Capability values".into());
+        };
+        if !seen_names.insert(name) {
+            return Err(format!("main has duplicate parameter {name}"));
+        }
+        if prior.is_some_and(|previous| previous >= *kind) {
+            return Err("main capability kinds must be sorted and unique".into());
+        }
+        prior = Some(*kind);
+    }
+    Ok(())
 }
 
 pub(in crate::analyze) fn parse_function(

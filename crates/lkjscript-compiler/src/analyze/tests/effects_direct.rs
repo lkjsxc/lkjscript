@@ -13,9 +13,9 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
     let host = function_source(
         "host",
         &[],
-        "->\nUnit",
-        "",
-        "print/\nstr/\nhello\n/str\n/print",
+        "Capability/\nStdio\n/Capability\n->\nUnit",
+        "stdio\nCapability/\nStdio\n/Capability",
+        "print/\nstdio\nstr/\nhello\n/str\n/print",
     );
     let outcome = function_source("outcome", &[], "->\nUnit", "", "exit/\n0\n/exit");
     let mutation = function_source(

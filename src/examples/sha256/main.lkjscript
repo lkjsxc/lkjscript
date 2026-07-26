@@ -1,8 +1,17 @@
 main/
 sig/
+Capability/
+Stdio
+/Capability
 ->
 Unit
 /sig
+params/
+stdio
+Capability/
+Stdio
+/Capability
+/params
 let/
 bind/
 payload
@@ -25,6 +34,7 @@ payload
 /bind
 do/
 write-str/
+stdio
 str-from-i64/
 buf-ref/
 digest

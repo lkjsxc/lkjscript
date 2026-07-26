@@ -31,12 +31,21 @@ fn unit_main(body: &str) -> String {
     format!("main/\nsig/\n->\nUnit\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
 }
 
+fn stdio_unit_main(body: &str) -> String {
+    format!(
+        "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n\
+         params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n\
+         do/\n{body}\nunit\n/do\n/main\n"
+    )
+}
+
 fn ownership_source(body: &str, result: &str) -> String {
     let result = result.replace(' ', "\n");
     format!("main/\nsig/\n->\n{result}\n/sig\n{body}\n/main\n")
 }
 
 mod affine_handles;
+mod capabilities;
 mod constants;
 mod ledger_hir;
 mod ledger_phases;

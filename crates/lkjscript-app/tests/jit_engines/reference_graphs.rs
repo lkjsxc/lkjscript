@@ -9,7 +9,11 @@ fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
     let source = include_str!("../fixtures/allocation-graph.lkjscript");
     let program = compile(source, "allocation-graph.lkjscript");
     let expected = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
-    let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let vm = execution(run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ));
     let mut config = JitConfig::default();
     config.force_gc_before_allocation = true;
     let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)
@@ -53,7 +57,11 @@ fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
 fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames() {
     let source = "def/\nname/\nwalk\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\nwalk/\ntext\n-/\ndepth\n1\n/-\n/walk\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nwalk/\nempty-str/\n/empty-str\n4\n/walk\n/main\n";
     let program = compile(source, "recursive-roots.lkjscript");
-    let vm = run_chunk(program.bytecode(), &ExecutionConfig::default());
+    let vm = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
     let mut config = JitConfig::default();
     config.force_gc_before_allocation = true;
     let native = execute_forced(program.ssa(), &ExecutionConfig::default(), config)

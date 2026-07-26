@@ -7,7 +7,11 @@ use lkjscript_vm::run_chunk;
 fn i64_multiblock_loop_and_direct_call_match_vm() {
     let source = "def/\nname/\nadd-if-even\n/name\nfn/\nsig/\nI64\nI64\n->\nI64\n/sig\nparams/\nacc\nI64\ni\nI64\n/params\nif/\nequal-value/\nbit-and/\ni\n1\n/bit-and\n0\n/equal-value\n+/\nacc\ni\n/+\nacc\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nvar/\nname/\ni\n/name\ntype/\nI64\n/type\n0\nvar/\nname/\nacc\n/name\ntype/\nI64\n/type\n0\ndo/\nwhile/\nlt/\ni\n100\n/lt\ndo/\nset/\nacc\nadd-if-even/\nacc\ni\n/add-if-even\n/set\nset/\ni\n+/\ni\n1\n/+\n/set\n/do\n/while\nacc\n/do\n/var\n/var\n/main\n";
     let program = compile(source, "i64-cfg.lkjscript");
-    let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let vm = execution(run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ));
     let native = forced(source, "i64-cfg.lkjscript");
     assert_eq!(vm, Scalar::I64(2450));
     assert_eq!(execution(native.outcome), vm);
@@ -27,7 +31,11 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
         let source = format!("main/\nsig/\n->\nI64\n/sig\n{expression}\n/main\n");
         let program = compile(&source, name);
         assert_eq!(
-            execution(run_chunk(program.bytecode(), &ExecutionConfig::default())),
+            execution(run_chunk(
+                program.bytecode(),
+                &lkjscript_vm::ExecutionInputs::default(),
+                &ExecutionConfig::default()
+            )),
             Scalar::Trapped
         );
         assert_eq!(execution(forced(&source, name).outcome), Scalar::Trapped);
@@ -132,7 +140,11 @@ fn f64_bits_ieee_comparisons_and_mixed_conversion_are_exact() {
     for (name, ty, expression, expected) in cases {
         let source = format!("main/\nsig/\n->\n{ty}\n/sig\n{expression}\n/main\n");
         let program = compile(&source, name);
-        let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+        let vm = execution(run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        ));
         let native = execution(forced(&source, name).outcome);
         assert_eq!(vm, expected, "VM oracle for {name}");
         assert_eq!(native, vm, "native result for {name}");

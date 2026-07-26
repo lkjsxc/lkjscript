@@ -1,4 +1,5 @@
 mod build;
+mod capabilities;
 mod control;
 mod ranking;
 
@@ -73,6 +74,12 @@ pub(super) fn enumerate_with_ledger(
             expressions.push((CandidateCategory::VisibleBinding, expression));
         }
     }
+    let call_argument = |ty: &crate::hir::Type| {
+        scope
+            .iter()
+            .find_map(|entity| binding_expression(entity, ty))
+            .or_else(|| super::validate::witness(site.tree, ty, 0))
+    };
     for operation in crate::hir::Operation::ALL {
         let crate::hir::Type::Fn { params, ret } = operation.signature() else {
             continue;
@@ -82,7 +89,7 @@ pub(super) fn enumerate_with_ledger(
         }
         let Some(arguments) = params
             .iter()
-            .map(|ty| super::validate::witness(site.tree, ty, 0))
+            .map(&call_argument)
             .collect::<Option<Vec<_>>>()
         else {
             continue;
@@ -101,7 +108,7 @@ pub(super) fn enumerate_with_ledger(
         }
         let Some(arguments) = params
             .iter()
-            .map(|ty| super::validate::witness(site.tree, ty, 0))
+            .map(&call_argument)
             .collect::<Option<Vec<_>>>()
         else {
             continue;

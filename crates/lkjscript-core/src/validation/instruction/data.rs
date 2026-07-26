@@ -84,11 +84,27 @@ pub(super) fn apply(
             let value = top(state, proto, instruction)?;
             state.stack.push(value);
         }
-        Op::StdinHandle => state.stack.push(Kind::Handle),
+        Op::StdinHandle => {
+            expect_pop(
+                state,
+                Kind::Capability(crate::CapabilityKind::Stdio),
+                proto,
+                instruction,
+            )?;
+            state.stack.push(Kind::Handle);
+        }
         Op::False | Op::True => state.stack.push(Kind::Bool),
         Op::Unit => state.stack.push(Kind::Unit),
         Op::EmptyList => state.stack.push(Kind::List),
-        Op::Argc => state.stack.push(Kind::I64),
+        Op::Argc => {
+            expect_pop(
+                state,
+                Kind::Capability(crate::CapabilityKind::Arguments),
+                proto,
+                instruction,
+            )?;
+            state.stack.push(Kind::I64);
+        }
         Op::EmptyStr => state.stack.push(Kind::Str),
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }

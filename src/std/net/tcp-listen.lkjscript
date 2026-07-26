@@ -5,11 +5,18 @@ tcp-listen
 public
 fn/
 sig/
+Capability/
+Network
+/Capability
 I64
 ->
 Handle
 /sig
 params/
+network
+Capability/
+Network
+/Capability
 port
 I64
 /params
@@ -18,6 +25,7 @@ bind/
 fd
 unwrap-ok/
 sys-socket/
+network
 /sys-socket
 /unwrap-ok
 /bind

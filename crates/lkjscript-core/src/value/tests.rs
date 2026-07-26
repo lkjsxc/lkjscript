@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used)]
 
-use super::{Value, MAX_SMALL_I64, MIN_SMALL_I64};
+use super::{CapabilityKind, Value, MAX_SMALL_I64, MIN_SMALL_I64};
 
 #[test]
 fn semantic_singletons_are_distinct_from_invalid() {
@@ -11,6 +11,17 @@ fn semantic_singletons_are_distinct_from_invalid() {
     assert!(!Value::EMPTY_LIST.is_unit());
     assert!(!Value::EMPTY_LIST.is_invalid());
     assert_ne!(Value::UNIT, Value::EMPTY_LIST);
+}
+
+#[test]
+fn closed_capabilities_round_trip_without_aliasing_other_values() {
+    for kind in CapabilityKind::ALL {
+        let value = Value::from_capability(kind);
+        assert_eq!(value.as_capability(), Some(kind));
+        assert!(value.as_small_i64().is_none());
+        assert!(value.as_handle().is_none());
+        assert!(value.as_heap().is_none());
+    }
 }
 
 #[test]

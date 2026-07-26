@@ -64,18 +64,21 @@ fn ownership_and_effect_candidates_are_checker_derived() {
 
     let effect_root = directory.join("effect.lkjscript");
     let effect_source = concat!(
-        "def/\nname/\ng\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
-        "print/\nstr/\nx\n/str\n/print\n/fn\n/def\n",
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
+        "def/\nname/\ng\n/name\nfn/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
+        "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+        "print/\nstdio\nstr/\nx\n/str\n/print\n/fn\n/def\n",
+        "def/\nname/\nf\n/name\nfn/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
+        "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
         "hole/\nname/\neffect\n/name\n/hole\n/fn\n/def\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+        "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
+        "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\nf/\nstdio\n/f\n/main\n",
     );
     std::fs::write(&effect_root, effect_source).expect("write effect hole");
     let effects = context(&effect_root);
     let call = effects
         .candidates
         .iter()
-        .find(|candidate| candidate.snippets[0].source == "g/\n/g\n")
+        .find(|candidate| candidate.snippets[0].source == "g/\nstdio\n/g\n")
         .expect("effectful direct call");
     assert!(call.effects.contains(&SemanticEffect::HostIo));
     assert!(call.effects.contains(&SemanticEffect::MayTrap));

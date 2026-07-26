@@ -14,7 +14,11 @@ use lkjscript_vm::run_chunk;
 fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<OwnedValue> {
     let source = format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n");
     let program = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
-    match run_chunk(program.bytecode(), &ExecutionConfig::default()) {
+    match run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) {
         ExecutionOutcome::Returned(value) => Ok(value),
         ExecutionOutcome::Trapped(trap) => Err(Error::msg(trap.to_string())),
         other => Err(Error::msg(other.summary())),

@@ -72,8 +72,18 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
         }
     }
     let main = function(program, program.main)?;
-    if !main.signature.type_parameters.is_empty() || !main.signature.parameters.is_empty() {
-        return fail("SSA main must be monomorphic and have no parameters");
+    if !main.signature.type_parameters.is_empty() {
+        return fail("SSA main must be monomorphic");
+    }
+    let mut prior = None;
+    for parameter in &main.signature.parameters {
+        let SsaType::Capability(kind) = parameter else {
+            return fail("SSA main parameters must be exact capability types");
+        };
+        if prior.is_some_and(|previous| previous >= *kind) {
+            return fail("SSA main capabilities must be sorted and unique");
+        }
+        prior = Some(*kind);
     }
     Ok(())
 }

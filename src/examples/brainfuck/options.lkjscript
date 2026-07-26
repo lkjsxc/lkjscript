@@ -12,6 +12,9 @@ bf-config-fail
 /name
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -19,6 +22,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -26,6 +33,7 @@ BrainfuckState
 /params
 do/
 bf-fail/
+stdio
 str/
 usage: brainfuck PROGRAM.bf [--fold-runs]
 /str
@@ -41,6 +49,12 @@ bf-configure
 public
 fn/
 sig/
+Capability/
+Arguments
+/Capability
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -48,6 +62,14 @@ Product
 BrainfuckState
 /sig
 params/
+arguments
+Capability/
+Arguments
+/Capability
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -56,6 +78,7 @@ BrainfuckState
 if/
 lte/
 argc/
+arguments
 /argc
 1
 /lte
@@ -63,6 +86,7 @@ state
 if/
 equal-value/
 argc/
+arguments
 /argc
 2
 /equal-value
@@ -71,6 +95,7 @@ bind/
 option
 unwrap-some/
 arg/
+arguments
 1
 /arg
 /unwrap-some
@@ -88,11 +113,13 @@ fold-runs
 true
 /with-field
 bf-config-fail/
+stdio
 state
 /bf-config-fail
 /if
 /let
 bf-config-fail/
+stdio
 state
 /bf-config-fail
 /if

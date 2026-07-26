@@ -8,7 +8,7 @@
   "layer": "typed intermediate representation",
   "concepts": ["typed SSA", "verification", "proof-checked optimization"],
   "facade": ["crates/lkjscript-ir/src/lib.rs"],
-  "allowed_dependencies": [],
+  "allowed_dependencies": ["contracts"],
   "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
   "tests": ["crates/lkjscript-ir/src/tests/mod.rs"],
   "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/jit/proof-based-optimizing-jit.md"],

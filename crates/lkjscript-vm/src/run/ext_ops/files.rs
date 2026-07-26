@@ -4,40 +4,35 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     match op {
         x if x == Op::SysOpenRead as u8 => {
             vm.ensure_host_deadline_support("sys-open-read", false)?;
-            let path = vm.pop()?;
-            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let path = pop_filesystem_path(vm)?;
             let result = vm.resources.sys_open_read(&path);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         x if x == Op::SysOpenWrite as u8 => {
             vm.ensure_host_deadline_support("sys-open-write", false)?;
-            let path = vm.pop()?;
-            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let path = pop_filesystem_path(vm)?;
             let result = vm.resources.sys_open_write(&path);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         x if x == Op::SysOpenAppend as u8 => {
             vm.ensure_host_deadline_support("sys-open-append", false)?;
-            let path = vm.pop()?;
-            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let path = pop_filesystem_path(vm)?;
             let result = vm.resources.sys_open_append(&path);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         x if x == Op::SysOpenCreateNew as u8 => {
             vm.ensure_host_deadline_support("sys-open-create-new", false)?;
-            let path = vm.pop()?;
-            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let path = pop_filesystem_path(vm)?;
             let result = vm.resources.sys_open_create_new(&path);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         x if x == Op::SysOpenDir as u8 => {
             vm.ensure_host_deadline_support("sys-open-dir", false)?;
-            let path = vm.pop()?;
-            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let path = pop_filesystem_path(vm)?;
             let result = vm.resources.sys_open_dir(&path);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
@@ -62,6 +57,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             vm.ensure_host_deadline_support("sys-rename", false)?;
             let to = vm.pop()?;
             let from = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::FileSystem)?;
             let from = crate::host_ext::as_str(&vm.arena, from)?.to_string();
             let to = crate::host_ext::as_str(&vm.arena, to)?.to_string();
             let result = crate::host_ext::ResourceTable::sys_rename(&from, &to);
@@ -96,12 +92,17 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         x if x == Op::SysPathExists as u8 => {
             vm.ensure_host_deadline_support("sys-path-exists", false)?;
-            let path = vm.pop()?;
-            let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
+            let path = pop_filesystem_path(vm)?;
             let result = crate::host_ext::ResourceTable::sys_path_exists(&path);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Io, result);
             Ok(true)
         }
         _ => Ok(false),
     }
+}
+
+fn pop_filesystem_path<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<String> {
+    let path = vm.pop()?;
+    vm.require_capability(lkjscript_core::CapabilityKind::FileSystem)?;
+    Ok(crate::host_ext::as_str(&vm.arena, path)?.to_string())
 }

@@ -29,7 +29,7 @@ fn formatter_is_structural_idempotent_and_handles_escape_zero_utf8_and_lf() {
 }
 
 #[test]
-fn all_124_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
+fn all_132_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()> {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files = Vec::new();
     collect_sources(&workspace.join("src"), &mut files)?;
@@ -42,7 +42,7 @@ fn all_124_tracked_source_corpus_files_roundtrip_exactly() -> std::io::Result<()
         &mut files,
     )?;
     files.sort();
-    assert_eq!(files.len(), 124, "tracked source corpus changed");
+    assert_eq!(files.len(), 132, "tracked source corpus changed");
     for path in files {
         let source = fs::read_to_string(&path)?;
         let logical = path

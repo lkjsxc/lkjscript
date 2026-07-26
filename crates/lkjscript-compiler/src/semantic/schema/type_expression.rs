@@ -12,6 +12,9 @@ pub(crate) enum TypeExpression {
     F64 {},
     String {},
     Buffer {},
+    Capability {
+        capability: String,
+    },
     Symbol {},
     Handle {},
     Product {
@@ -61,6 +64,16 @@ impl TypeExpression {
             Self::F64 {} => output.push(atom("F64".into(), span)),
             Self::String {} => output.push(atom("Str".into(), span)),
             Self::Buffer {} => output.push(atom("Buf".into(), span)),
+            Self::Capability { capability } => {
+                if lkjscript_core::CapabilityKind::parse(capability).is_none() {
+                    return Err(format!("unknown capability kind {capability}"));
+                }
+                output.push(call(
+                    "Capability",
+                    vec![atom(capability.clone(), span)],
+                    span,
+                ));
+            }
             Self::Symbol {} => output.push(atom("Symbol".into(), span)),
             Self::Handle {} => output.push(atom("Handle".into(), span)),
             Self::Product { name } => {
@@ -97,7 +110,9 @@ impl TypeExpression {
         counts.nodes = counts.nodes.saturating_add(1);
         counts.depth = counts.depth.max(depth);
         match self {
-            Self::Product { name } | Self::Variable { name } => {
+            Self::Product { name }
+            | Self::Variable { name }
+            | Self::Capability { capability: name } => {
                 counts.string_bytes = counts.string_bytes.saturating_add(name.len() as u64);
             }
             Self::Enum { name, arguments } => {

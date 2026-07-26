@@ -3,21 +3,24 @@
   "contract": "69d72b81dcab539574b6890e69ac15e5a2ed6db85e03e611e25eb0e756802341",
   "capabilities": [
     {
-      "id": "affine-resource-handles", "status": "current",
+      "id": "affine-resource-handles",
+      "status": "current",
       "interface": "affine Handle move and deterministic drop through verified SSA",
       "authority": "docs/decisions/capabilities/resource-handles.md",
       "evidence": "docs/decisions/semantics/ownership-and-borrowing.md",
       "claimants": ["docs/current-state.md"]
     },
     {
-      "id": "agent-work-state", "status": "current",
+      "id": "agent-work-state",
+      "status": "current",
       "interface": "lkjscript.agent-work-state",
       "authority": "docs/decisions/platform/agent-work-state.md",
       "evidence": "docs/decisions/platform/agent-work-state.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "enum-declarations", "status": "current",
+      "id": "enum-declarations",
+      "status": "current",
       "interface": "generic enums and exhaustive source match through all four engines",
       "authority": "docs/decisions/semantics/algebraic-data-types.md",
       "evidence": "docs/operations/verification.md",
@@ -28,98 +31,120 @@
       ]
     },
     {
-      "id": "jit-auto-promotion", "status": "accepted-selection",
+      "id": "jit-auto-promotion",
+      "status": "accepted-selection",
       "interface": "auto --auto-jit-threshold",
       "authority": "docs/current-state/accepted-target-automatic-baseline-to-proof-promotion.md",
       "evidence": "docs/operations/verification/accepted-automatic-promotion-gate.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "jit-proof-forced", "status": "current",
+      "id": "jit-proof-forced",
+      "status": "current",
       "interface": "run --engine optimizing-jit",
       "authority": "docs/decisions/jit/proof-based-optimizing-jit.md",
       "evidence": "docs/current-state/optimizer-and-allocation-evidence.md",
       "claimants": ["README.md", "docs/current-state.md"]
     },
     {
-      "id": "modules-and-packages", "status": "current",
+      "id": "modules-and-packages",
+      "status": "current",
       "interface": "exact modules and content-addressed local package lock",
       "authority": "docs/decisions/platform/modules-and-packages.md",
       "evidence": "docs/operations/verification.md",
       "claimants": ["docs/current-state.md"]
     },
     {
-      "id": "never-control", "status": "current",
+      "id": "never-control",
+      "status": "current",
       "interface": "Never and structured control through all four engines",
       "authority": "docs/decisions/semantics/never-and-control.md",
       "evidence": "docs/history/semantics/edition/execution-and-acceptance.md",
       "claimants": ["docs/current-state.md", "docs/decisions/semantics/never-and-control.md"]
     },
     {
-      "id": "numeric-conversions", "status": "current",
+      "id": "numeric-conversions",
+      "status": "current",
       "interface": "explicit I64/F64 conversions through all four engines",
       "authority": "docs/decisions/semantics/numeric-conversions.md",
       "evidence": "docs/operations/verification.md",
       "claimants": ["docs/current-state.md", "docs/decisions/semantics/numeric-conversions.md"]
     },
     {
-      "id": "repository-graph-context", "status": "current",
+      "id": "repository-graph-context",
+      "status": "current",
       "interface": "lkjscript-xtask structure context",
       "authority": "docs/decisions/platform/repository-intelligence-graph.md",
       "evidence": "docs/decisions/platform/repository-intelligence-graph.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "repository-topology", "status": "current",
+      "id": "repository-topology",
+      "status": "current",
       "interface": "lkjscript-xtask structure check",
       "authority": "docs/decisions/platform/bounded-repository-topology.md",
       "evidence": "docs/decisions/platform/bounded-repository-topology.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "resource-profile-compiler", "status": "current",
+      "id": "resource-profile-compiler",
+      "status": "current",
       "interface": "content-addressed compiler resource profile",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "resource-profile-preallocation", "status": "current",
+      "id": "resource-profile-preallocation",
+      "status": "current",
       "interface": "content-addressed hierarchical reservations",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles/hierarchical-preallocation.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "resource-profile-shared-ledger", "status": "accepted-target",
+      "id": "resource-profile-shared-ledger",
+      "status": "accepted-target",
       "interface": "request-owned hierarchical ledger",
       "authority": "docs/decisions/platform/resource-budget-profiles.md",
       "evidence": "docs/decisions/platform/resource-budget-profiles-candidate.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "semantic-core-target", "status": "accepted-target",
+      "id": "semantic-core-target",
+      "status": "accepted-target",
       "interface": "canonical semantic core target",
       "authority": "docs/history/semantics/edition.md",
       "evidence": "docs/history/semantics/edition/execution-and-acceptance.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "semantic-session", "status": "current",
+      "id": "semantic-session",
+      "status": "current",
       "interface": "lkjscript semantic serve --stdio",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "semantic-source", "status": "current",
+      "id": "semantic-source",
+      "status": "current",
       "interface": "lkjscript.semantic-source",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
-      "id": "typed-holes", "status": "current",
+      "id": "typed-capabilities",
+      "status": "current",
+      "interface": "explicit closed Capability values and exact package grants",
+      "authority": "docs/decisions/capabilities/typed-capabilities.md",
+      "evidence": "docs/current-state.md",
+      "claimants": ["docs/current-state.md"]
+    },
+    {
+      "id": "typed-holes",
+      "status": "current",
       "interface": "hole_context",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",

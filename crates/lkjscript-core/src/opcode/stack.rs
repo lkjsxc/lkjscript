@@ -8,18 +8,11 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         Op::LoadConst
         | Op::LoadLocal
         | Op::LoadGlobal
-        | Op::Flush
-        | Op::ReadByte
-        | Op::StdinHandle
-        | Op::SysTtyGuardClear
         | Op::False
         | Op::True
         | Op::Unit
         | Op::EmptyList
-        | Op::Argc
-        | Op::EmptyStr
-        | Op::SysNowMs
-        | Op::SysSocket => fixed(0, 0, 1),
+        | Op::EmptyStr => fixed(0, 0, 1),
         Op::StoreLocal | Op::StoreGlobal => fixed(1, 0, 0),
         Op::Add
         | Op::Sub
@@ -47,9 +40,20 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SysListen
         | Op::SysSend
         | Op::SysTruncate
-        | Op::SysRename => fixed(2, 2, 1),
+        | Op::Print
+        | Op::WriteByte
+        | Op::WriteStr
+        | Op::SysTtyGuardSave
+        | Op::SysOpenRead
+        | Op::SysOpenWrite
+        | Op::SysOpenAppend
+        | Op::SysOpenCreateNew
+        | Op::SysOpenDir
+        | Op::Arg
+        | Op::SysWaitMs
+        | Op::SysPathExists => fixed(2, 2, 1),
         Op::SysReadInto | Op::SysWriteFrom => fixed(4, 4, 1),
-        Op::SysRandomFill => fixed(3, 3, 1),
+        Op::SysRandomFill => fixed(4, 4, 1),
         Op::SysSha256 => fixed(3, 3, 1),
         Op::SysSqliteClose
         | Op::SysSqliteFinalize
@@ -60,8 +64,7 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SysSqliteChanges
         | Op::SysSqliteLastInsertRowid
         | Op::SysSqliteExtendedResultCode => fixed(1, 1, 1),
-        Op::SysSqliteOpen
-        | Op::SysSqliteBindNull
+        Op::SysSqliteBindNull
         | Op::SysSqliteBusyTimeout
         | Op::SysSqliteExec
         | Op::SysSqlitePrepare
@@ -74,8 +77,9 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SysSqliteBindI64
         | Op::SysSqliteBindF64
         | Op::SysSqliteBindText
-        | Op::SysSqliteBindBytes
-        | Op::SysSqliteBackup => fixed(3, 3, 1),
+        | Op::SysSqliteBindBytes => fixed(3, 3, 1),
+        Op::SysRename | Op::SysSqliteOpen => fixed(3, 3, 1),
+        Op::SysSqliteBackup => fixed(4, 4, 1),
         Op::BufRef | Op::BufGetU32 => fixed(2, 2, 1),
         Op::StrSlice | Op::BufSet => fixed(3, 3, 1),
         Op::BufSetU32 => fixed(3, 3, 1),
@@ -83,28 +87,23 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::Car
         | Op::Cdr
         | Op::IsEmptyList
-        | Op::Print
-        | Op::WriteByte
-        | Op::WriteStr
+        | Op::Flush
+        | Op::ReadByte
+        | Op::StdinHandle
+        | Op::SysTtyGuardClear
+        | Op::Argc
+        | Op::SysNowMs
+        | Op::SysSocket
         | Op::BufNew
         | Op::BufLen
         | Op::BufClone
         | Op::SysIsatty
-        | Op::SysTtyGuardSave
         | Op::StrLen
         | Op::StrFromByte
-        | Op::SysOpenRead
-        | Op::SysOpenWrite
-        | Op::SysOpenAppend
-        | Op::SysOpenCreateNew
-        | Op::SysOpenDir
         | Op::SysFsync
         | Op::SysClose
         | Op::SysReadByte
-        | Op::Arg
-        | Op::SysWaitMs
         | Op::SysAccept
-        | Op::SysPathExists
         | Op::SysRecv
         | Op::StrFromI64
         | Op::StrFromF64

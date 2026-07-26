@@ -48,4 +48,4 @@ pub use profile::{
 };
 pub use sha256::sha256;
 pub use validation::{validate_chunk, ValidatedChunk};
-pub use value::{HeapObj, Value, MAX_SMALL_I64, MIN_SMALL_I64};
+pub use value::{CapabilityKind, HeapObj, Value, MAX_SMALL_I64, MIN_SMALL_I64};

@@ -13,6 +13,9 @@ bf-left
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -20,6 +23,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -55,6 +62,7 @@ next
 /lt
 do/
 bf-fail/
+stdio
 str/
 tape pointer underflow
 /str
@@ -77,6 +85,9 @@ bf-right
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -84,6 +95,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -119,6 +134,7 @@ next
 /gte
 do/
 bf-fail/
+stdio
 str/
 tape pointer overflow
 /str

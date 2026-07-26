@@ -80,7 +80,7 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Current Semantic Operation And Resource-Profile Gates
 
-The Semantic Source contract gate covers all 124 tracked files with the unchanged legacy contract
+The Semantic Source contract gate covers all 132 tracked files with the unchanged legacy contract
 base representation, closed node/value/type/built-in/declaration/trivia/
 expression/correlation records, enum/match/pattern nodes and expressions,
 typed holes including match expected/scope facts, schema/source roundtrip,
@@ -136,7 +136,7 @@ whole-platform cross-authority ledger remain Accepted.
 ## Current the canonical source contract Gate
 
 The [the canonical source contract acceptance contract](../history/semantics/edition/execution-and-acceptance.md)
-is Current for all 124 tracked sources (120 under `src/`), exact old/new
+is Current for all 132 tracked sources (128 under `src/`), exact old/new
 identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
 rejection, atomic all-file rollback and crash recovery, compiler-resolved
 conversion, ordinary markerless rejection, evaluator/VM/forced-JIT

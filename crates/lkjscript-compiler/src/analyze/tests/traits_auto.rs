@@ -31,19 +31,22 @@ fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles(
             panic!("scalar {worker_trait} fact unexpectedly failed: {error}")
         });
     }
-    for ty in ["Buf", "Handle"] {
-        let body = if ty == "Buf" {
-            "buf-new/\n0\n/buf-new"
-        } else {
-            "stdin-handle/\n/stdin-handle"
-        };
-        let source = format!(
-            "{}{}",
-            bounded_identity("send-value", "Send"),
-            main_source(ty, &format!("send-value/\n{body}\n/send-value"))
-        );
-        assert!(analysis_error(&source).contains("does not satisfy trait Send"));
-    }
+    let buffer = format!(
+        "{}{}",
+        bounded_identity("send-value", "Send"),
+        main_source("Buf", "send-value/\nbuf-new/\n0\n/buf-new\n/send-value")
+    );
+    assert!(analysis_error(&buffer).contains("does not satisfy trait Send"));
+    let handle = format!(
+        "{}{}",
+        bounded_identity("send-value", "Send"),
+        concat!(
+            "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nHandle\n/sig\n",
+            "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+            "send-value/\nstdin-handle/\nstdio\n/stdin-handle\n/send-value\n/main\n"
+        )
+    );
+    assert!(analysis_error(&handle).contains("does not satisfy trait Send"));
 
     let recursive = "product/\nname/\nRecursive\n/name\nfields/\nfield/\nname/\nnext\n/name\ntype/\nOption\nProduct\nRecursive\n/type\n/field\n/fields\n/product\n";
     let source = format!(

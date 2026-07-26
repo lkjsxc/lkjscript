@@ -21,6 +21,11 @@ pub(super) fn validate_control_flow(
     for slot in locals.iter_mut().take(usize::from(proto.arity)) {
         *slot = Some(Kind::Any);
     }
+    if is_main {
+        for (slot, kind) in locals.iter_mut().zip(&chunk.required_capabilities) {
+            *slot = Some(Kind::Capability(*kind));
+        }
+    }
     let globals = if is_main {
         vec![None; chunk.global_names.len()]
     } else {

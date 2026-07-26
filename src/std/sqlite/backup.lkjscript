@@ -5,12 +5,19 @@ sqlite-backup
 public
 fn/
 sig/
+Capability/
+Sqlite
+/Capability
 Handle
 Str
 ->
 Unit
 /sig
 params/
+sqlite
+Capability/
+Sqlite
+/Capability
 database
 Handle
 path
@@ -18,6 +25,7 @@ Str
 /params
 unwrap-ok/
 sys-sqlite-backup/
+sqlite
 database
 path
 65542

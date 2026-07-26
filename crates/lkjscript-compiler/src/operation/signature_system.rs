@@ -2,10 +2,14 @@ use crate::operation::instantiation::function;
 use crate::operation::*;
 
 pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
+    use lkjscript_core::CapabilityKind::{
+        Clock, Entropy, FileSystem, Network, Sqlite, Stdio, Terminal,
+    };
+
     let system_result =
         |success| crate::types::result_type(success, crate::types::system_error_type());
     match operation {
-        Operation::StdinHandle => function(Vec::new(), Type::Handle),
+        Operation::StdinHandle => function(vec![Type::Capability(Stdio)], Type::Handle),
         Operation::SysIsatty => function(vec![Type::Handle], system_result(Type::Bool)),
         Operation::DropResource => function(vec![Type::Handle], system_result(Type::Unit)),
         Operation::SysReadByte => function(vec![Type::Handle], system_result(Type::I64)),
@@ -16,29 +20,41 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
             vec![Type::Handle, Type::Buf, Type::I64, Type::I64],
             system_result(Type::I64),
         ),
-        Operation::SysTtyGuardSave => function(vec![Type::Buf], system_result(Type::Unit)),
-        Operation::SysTtyGuardClear => function(Vec::new(), system_result(Type::Unit)),
+        Operation::SysTtyGuardSave => function(
+            vec![Type::Capability(Terminal), Type::Buf],
+            system_result(Type::Unit),
+        ),
+        Operation::SysTtyGuardClear => {
+            function(vec![Type::Capability(Terminal)], system_result(Type::Unit))
+        }
         Operation::SysOpenRead
         | Operation::SysOpenWrite
         | Operation::SysOpenAppend
         | Operation::SysOpenCreateNew
-        | Operation::SysOpenDir => function(vec![Type::Str], system_result(Type::Handle)),
+        | Operation::SysOpenDir => function(
+            vec![Type::Capability(FileSystem), Type::Str],
+            system_result(Type::Handle),
+        ),
         Operation::SysFsync => function(vec![Type::Handle], system_result(Type::Unit)),
         Operation::SysTruncate => {
             function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
         }
-        Operation::SysRename => function(vec![Type::Str, Type::Str], system_result(Type::Unit)),
+        Operation::SysRename => function(
+            vec![Type::Capability(FileSystem), Type::Str, Type::Str],
+            system_result(Type::Unit),
+        ),
         Operation::SysRandomFill => function(
-            vec![Type::Buf, Type::I64, Type::I64],
+            vec![Type::Capability(Entropy), Type::Buf, Type::I64, Type::I64],
             system_result(Type::Unit),
         ),
         Operation::SysSha256 => function(
             vec![Type::Buf, Type::I64, Type::I64],
             system_result(Type::Buf),
         ),
-        Operation::SysSqliteOpen => {
-            function(vec![Type::Str, Type::I64], system_result(Type::Handle))
-        }
+        Operation::SysSqliteOpen => function(
+            vec![Type::Capability(Sqlite), Type::Str, Type::I64],
+            system_result(Type::Handle),
+        ),
         Operation::SysSqliteClose
         | Operation::SysSqliteFinalize
         | Operation::SysSqliteReset
@@ -99,13 +115,21 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
             system_result(crate::types::option_type(Type::Buf)),
         ),
         Operation::SysSqliteBackup => function(
-            vec![Type::Handle, Type::Str, Type::I64],
+            vec![Type::Capability(Sqlite), Type::Handle, Type::Str, Type::I64],
             system_result(Type::Unit),
         ),
-        Operation::SysPathExists => function(vec![Type::Str], system_result(Type::Bool)),
-        Operation::SysWaitMs => function(vec![Type::I64], system_result(Type::Unit)),
-        Operation::SysNowMs => function(Vec::new(), system_result(Type::I64)),
-        Operation::SysSocket => function(Vec::new(), system_result(Type::Handle)),
+        Operation::SysPathExists => function(
+            vec![Type::Capability(FileSystem), Type::Str],
+            system_result(Type::Bool),
+        ),
+        Operation::SysWaitMs => function(
+            vec![Type::Capability(Clock), Type::I64],
+            system_result(Type::Unit),
+        ),
+        Operation::SysNowMs => function(vec![Type::Capability(Clock)], system_result(Type::I64)),
+        Operation::SysSocket => {
+            function(vec![Type::Capability(Network)], system_result(Type::Handle))
+        }
         Operation::SysBind | Operation::SysListen => {
             function(vec![Type::Handle, Type::I64], system_result(Type::Unit))
         }

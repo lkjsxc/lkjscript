@@ -12,7 +12,7 @@ fn auto_group_reference_helper_remains_vm_entry_ineligible() {
     let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
-        &[],
+        &lkjscript_vm::ExecutionInputs::default(),
         &ExecutionConfig::default(),
         session,
     );
@@ -39,13 +39,17 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
     let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
-        &[],
+        &lkjscript_vm::ExecutionInputs::default(),
         &ExecutionConfig::default(),
         session,
     );
     assert_eq!(
         execution(outcome),
-        execution(run_chunk(program.bytecode(), &ExecutionConfig::default()))
+        execution(run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default()
+        ))
     );
     let step = stats
         .functions
@@ -64,7 +68,7 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
     let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
     let (outcome, stats) = run_chunk_auto(
         program.bytecode(),
-        &[],
+        &lkjscript_vm::ExecutionInputs::default(),
         &ExecutionConfig::default(),
         session,
     );

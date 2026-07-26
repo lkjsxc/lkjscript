@@ -106,6 +106,18 @@ fn public_enum_identity_includes_its_variants() {
 }
 
 #[test]
+fn package_capabilities_are_closed_and_exact() {
+    let root = fixture("capabilities");
+    let path = root.join(MANIFEST_FILE);
+    let mut manifest: Manifest = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    manifest.capabilities = vec!["AmbientEverything".into()];
+    fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+    let error = graph::build(&root).unwrap_err().to_string();
+    assert!(error.contains("unknown package capability"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn lock_decoder_rejects_noncanonical_bytes() {
     let root = fixture("encoding");
     let (path, bytes) = create_lock(&root).unwrap();

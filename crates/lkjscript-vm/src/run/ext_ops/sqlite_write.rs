@@ -15,6 +15,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let flags = vm.pop()?;
             let flags = vm.as_i64(flags)?;
             let path = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Sqlite)?;
             let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
             let result = vm.resources.sqlite_open(&path, flags);
             push_language_result(vm, result);
@@ -149,6 +150,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let path = vm.pop()?;
             let path = crate::host_ext::as_str(&vm.arena, path)?.to_string();
             let handle = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Sqlite)?;
             let result = vm.resources.sqlite_backup(handle, &path, flags);
             push_language_result(vm, result);
             Ok(true)

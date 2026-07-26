@@ -43,9 +43,11 @@ fn source_construction_is_differential_on_evaluator_and_vm() {
         panic!("evaluator must return enum")
     };
     assert_eq!(payload, [EvalValue::I64(42)]);
-    let ExecutionOutcome::Returned(value) =
-        run_chunk(program.bytecode(), &ExecutionConfig::default())
-    else {
+    let ExecutionOutcome::Returned(value) = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) else {
         panic!("VM must return enum")
     };
     assert_eq!(value.enum_physical_tag(), Some(physical_tag));
@@ -86,9 +88,11 @@ fn fields_evaluate_once_in_declaration_order() {
         panic!("evaluator must return enum")
     };
     assert_eq!(payload, [EvalValue::I64(1), EvalValue::I64(2)]);
-    let ExecutionOutcome::Returned(value) =
-        run_chunk(program.bytecode(), &ExecutionConfig::default())
-    else {
+    let ExecutionOutcome::Returned(value) = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) else {
         panic!("VM must return enum")
     };
     assert_eq!(value.enum_field_i64(0), Some(1));
@@ -112,7 +116,11 @@ fn logical_construction_exhausts_before_allocation_on_both_engines() {
         ..ExecutionConfig::default()
     };
     assert!(matches!(
-        run_chunk(program.bytecode(), &execution),
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &execution
+        ),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::LogicalAggregateConstructions)
     ));
 }

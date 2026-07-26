@@ -3,28 +3,51 @@ use crate::analyze::*;
 pub(in crate::analyze) fn parse_signature(
     args: &[AstExpr],
 ) -> std::result::Result<(Vec<Type>, Type), String> {
-    let nested = args.iter().any(|argument| match argument {
-        AstExpr::Call { name, args } => {
-            !args.is_empty() || (is_declaration_type_name(name) && !is_builtin_type_name(name))
-        }
-        _ => false,
-    });
-    if nested {
-        let arrow = args
-            .iter()
-            .position(|argument| matches!(argument, AstExpr::Symbol(name) if name == "->"))
-            .ok_or_else(|| "sig requires -> before return type".to_string())?;
-        let [return_expression] = args.get(arrow + 1..).unwrap_or_default() else {
-            return Err("sig requires exactly one return type after ->".into());
-        };
-        let parameters = args[..arrow]
-            .iter()
-            .map(parameter_type)
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok((parameters, parameter_type(return_expression)?))
-    } else {
-        Type::parse_atoms(&type_atoms(args)?)
+    let arrow = args
+        .iter()
+        .position(|argument| matches!(argument, AstExpr::Symbol(name) if name == "->"))
+        .ok_or_else(|| "sig requires -> before return type".to_string())?;
+    let mut parameters = Vec::new();
+    let mut index = 0;
+    while index < arrow {
+        let (ty, next) = parse_signature_type(args, index, arrow)?;
+        parameters.push(ty);
+        index = next;
     }
+    let (return_type, end) = parse_signature_type(args, arrow + 1, args.len())?;
+    if end != args.len() {
+        return Err("sig requires exactly one return type after ->".into());
+    }
+    Ok((parameters, return_type))
+}
+
+fn parse_signature_type(
+    args: &[AstExpr],
+    index: usize,
+    end: usize,
+) -> std::result::Result<(Type, usize), String> {
+    let expression = args
+        .get(index)
+        .ok_or_else(|| "sig missing type".to_string())?;
+    if matches!(
+        expression,
+        AstExpr::Call { name, args }
+            if !args.is_empty()
+                || (is_declaration_type_name(name) && !is_builtin_type_name(name))
+    ) {
+        return parameter_type(expression).map(|ty| (ty, index + 1));
+    }
+    let mut atoms = Vec::new();
+    for expression in &args[index..end] {
+        match expression {
+            AstExpr::Symbol(atom) => atoms.push(atom.clone()),
+            AstExpr::Call { name, args } if args.is_empty() => atoms.push(name.clone()),
+            AstExpr::Call { .. } => break,
+            _ => return Err("invalid type expression in sig".into()),
+        }
+    }
+    let (ty, used) = parse_one(&atoms, 0)?;
+    Ok((ty, index + used))
 }
 
 pub(in crate::analyze) fn parse_type_form(args: &[AstExpr]) -> std::result::Result<Type, String> {
@@ -75,6 +98,12 @@ pub(in crate::analyze) fn parameter_type(
         AstExpr::Symbol(name) => atom_type(name),
         AstExpr::Call { name, args } if args.is_empty() && is_builtin_type_name(name) => {
             atom_type(name)
+        }
+        AstExpr::Call { name, args } if name == "Capability" && args.len() == 1 => {
+            let kind = symbolic_name(&args[0])?;
+            lkjscript_core::CapabilityKind::parse(&kind)
+                .map(Type::Capability)
+                .ok_or_else(|| format!("unknown capability kind {kind}"))
         }
         AstExpr::Call { name, args }
             if matches!(name.as_str(), "Owned" | "Ref" | "RefMut") && args.len() == 1 =>

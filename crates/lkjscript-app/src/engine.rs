@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use lkjscript_compiler::ExecutableProgram;
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig, JitSession, JitStats};
-use lkjscript_vm::{run_chunk_auto, run_chunk_with_args};
+use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
 
 use crate::args::{Engine, RunOptions};
 
@@ -16,6 +16,7 @@ pub struct Execution {
 pub fn execute(
     options: &RunOptions,
     program: &ExecutableProgram,
+    inputs: &ExecutionInputs,
     config: &ExecutionConfig,
     jit_config: JitConfig,
     measure: bool,
@@ -24,7 +25,7 @@ pub fn execute(
     let (outcome, stats) = match options.engine {
         Engine::Vm => {
             let started = measure.then(Instant::now);
-            let outcome = run_chunk_with_args(program.bytecode(), &options.script_args, config);
+            let outcome = run_chunk(program.bytecode(), inputs, config);
             if let Some(started) = started {
                 vm_duration = started.elapsed();
             }
@@ -43,8 +44,7 @@ pub fn execute(
         Engine::Auto => {
             let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), jit_config);
             let started = measure.then(Instant::now);
-            let (outcome, stats) =
-                run_chunk_auto(program.bytecode(), &options.script_args, config, session);
+            let (outcome, stats) = run_chunk_auto(program.bytecode(), inputs, config, session);
             if let Some(started) = started {
                 vm_duration = started.elapsed();
             }

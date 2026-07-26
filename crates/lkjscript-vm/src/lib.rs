@@ -6,30 +6,32 @@ mod host_ext;
 mod host_term;
 mod run;
 
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, ValidatedChunk};
+use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome, ValidatedChunk};
 use lkjscript_jit::{JitSession, JitStats};
 
 pub use run::{NoTier, Vm};
 
-pub fn run_chunk(chunk: &ValidatedChunk, config: &ExecutionConfig) -> ExecutionOutcome {
-    run_chunk_with_args(chunk, &[], config)
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ExecutionInputs {
+    pub arguments: Vec<String>,
+    pub capabilities: Vec<CapabilityKind>,
 }
 
-pub fn run_chunk_with_args(
+pub fn run_chunk(
     chunk: &ValidatedChunk,
-    args: &[String],
+    inputs: &ExecutionInputs,
     config: &ExecutionConfig,
 ) -> ExecutionOutcome {
-    Vm::new(chunk, NoTier, args.to_vec(), config.clone()).run()
+    Vm::new(chunk, NoTier, inputs.clone(), config.clone()).run()
 }
 
 pub fn run_chunk_auto(
     chunk: &ValidatedChunk,
-    args: &[String],
+    inputs: &ExecutionInputs,
     config: &ExecutionConfig,
     session: JitSession,
 ) -> (ExecutionOutcome, JitStats) {
-    Vm::new(chunk, session, args.to_vec(), config.clone()).run_auto()
+    Vm::new(chunk, session, inputs.clone(), config.clone()).run_auto()
 }
 
 #[cfg(test)]
@@ -48,7 +50,11 @@ mod tests {
         chunk.main.emit_op_u16(Op::LoadConst, 0);
         chunk.main.emit(Op::Trap);
         let chunk = validate_chunk(chunk, &ValidationLimits::default()).expect("validate trap");
-        match run_chunk(&chunk, &lkjscript_core::ExecutionConfig::default()) {
+        match run_chunk(
+            &chunk,
+            &crate::ExecutionInputs::default(),
+            &lkjscript_core::ExecutionConfig::default(),
+        ) {
             ExecutionOutcome::Trapped(trap) => assert_eq!(trap.as_str(), "explicit SSA trap"),
             other => panic!("unexpected trap outcome: {other:?}"),
         }

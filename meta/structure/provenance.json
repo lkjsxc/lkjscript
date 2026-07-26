@@ -5,7 +5,7 @@
     {
       "path": "Cargo.lock",
       "class": "generated-mutable",
-      "sha256": "27e71584a1ba988f1ab6df3519127538b2207b0568dfeb5185b62a5464c8d771",
+      "sha256": "bfad5b9d26b04d8b03d1fdc8d3591c52260afe2fc7a5ee80b7472abf9df0d0b9",
       "generator": "cargo 1.96.0 lockfile v4; Cargo.toml workspace dependency resolution"
     },
     {
@@ -17,7 +17,7 @@
     {
       "path": "lkjscript.lock.json",
       "class": "generated-mutable",
-      "sha256": "b2163ad225d284a4782e1a55a6f93b6a35ae07cc77390c9e433ee9e56932325d",
+      "sha256": "16c74e3c26450373fbd3bc000f392a86a23a8ac2fb3c9760bed7adbdc6bd671a",
       "generator": "lkjscript package lock; canonical local package graph and current contract registry"
     },
     {

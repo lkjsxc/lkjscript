@@ -30,6 +30,13 @@ construction. No sibling parser or raw public AST enters analysis. VM,
 baseline JIT, proof optimizer, future AOT tests, and Wasm must share verified
 semantic IR rather than reinterpret syntax.
 
+Provider authority enters only through explicit closed capability parameters.
+Package verification bounds grants; bytecode records exact main requirements;
+VM entry validates them before source effects. Acquired handles remain object
+capabilities and do not repeat provider parameters on every operation.
+Capability-bearing functions remain VM-only where a native tier lacks the exact
+value and operation contract; forced tiers reject before effects without fallback.
+
 Linux x86-64 callable baseline and forced proof-optimizing claims require real
 synchronous generated entry from verified SSA. Exact Current coverage and
 historical evidence remain in [Current State](../current-state.md).

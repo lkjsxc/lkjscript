@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use super::CapabilityKind;
+
 /// Low 3 bits are the tag; payload lives in the upper bits or as a heap index.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Value(u64);
@@ -14,6 +16,7 @@ const TAG_HEAP: u64 = 3;
 const TAG_HANDLE: u64 = 4;
 const TAG_UNIT: u64 = 5;
 const TAG_EMPTY_LIST: u64 = 6;
+const TAG_CAPABILITY: u64 = 7;
 
 pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
 pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
@@ -46,6 +49,10 @@ impl Value {
 
     pub fn from_handle(index: u32) -> Self {
         Self(((index as u64) << 3) | TAG_HANDLE)
+    }
+
+    pub const fn from_capability(kind: CapabilityKind) -> Self {
+        Self(((kind as u64) << 3) | TAG_CAPABILITY)
     }
 
     pub fn is_invalid(self) -> bool {
@@ -88,6 +95,15 @@ impl Value {
         Some((self.0 >> 3) as u32)
     }
 
+    pub fn as_capability(self) -> Option<CapabilityKind> {
+        if self.0 & TAG_MASK != TAG_CAPABILITY {
+            return None;
+        }
+        u8::try_from(self.0 >> 3)
+            .ok()
+            .and_then(CapabilityKind::from_tag)
+    }
+
     pub fn raw(self) -> u64 {
         self.0
     }
@@ -112,6 +128,9 @@ impl fmt::Debug for Value {
         }
         if let Some(h) = self.as_handle() {
             return write!(f, "handle#{h}");
+        }
+        if let Some(kind) = self.as_capability() {
+            return write!(f, "capability#{}", kind.as_str());
         }
         if let Some(i) = self.as_heap() {
             return write!(f, "heap#{i}");

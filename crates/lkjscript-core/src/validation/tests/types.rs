@@ -22,6 +22,7 @@ fn bulk_byte_opcodes_reject_malformed_type_stacks() {
         Op::Unit as u8,
         Op::Unit as u8,
         Op::Unit as u8,
+        Op::Unit as u8,
         Op::SysRandomFill as u8,
         Op::Return as u8,
     ];

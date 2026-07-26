@@ -82,11 +82,22 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
         .get(program.main.index().unwrap_or(usize::MAX))
         .filter(|function| function.id == program.main)
         .ok_or_else(|| Error::msg("SSA main function is missing"))?;
+    chunk.required_capabilities = main
+        .signature
+        .parameters
+        .iter()
+        .map(|ty| match ty {
+            SsaType::Capability(kind) => Ok(*kind),
+            _ => Err(Error::msg(
+                "SSA main parameters must be exact capability types",
+            )),
+        })
+        .collect::<Result<Vec<_>>>()?;
     let code_base = u16::try_from(chunk.main.len())
         .map_err(|_| Error::msg("bytecode main closure prelude exceeds u16"))?;
     let (main_proto, main_link) = compile_function(&mut chunk, &globals, main, code_base, None)?;
     chunk.main.locals = main_proto.locals;
-    chunk.main.arity = 0;
+    chunk.main.arity = main_proto.arity;
     chunk.main.code.extend(main_proto.code);
     links.push(main_link);
     links.sort_by_key(|link| link.function);

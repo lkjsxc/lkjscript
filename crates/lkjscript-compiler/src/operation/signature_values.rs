@@ -2,6 +2,8 @@ use crate::operation::instantiation::{forall, function};
 use crate::operation::*;
 
 pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
+    use lkjscript_core::CapabilityKind::{Arguments, Stdio};
+
     let i64_binary = || function(vec![Type::I64, Type::I64], Type::I64);
     let numeric_binary = || {
         forall(
@@ -87,14 +89,19 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
                 Type::Bool,
             ),
         ),
-        Operation::Print | Operation::WriteStr => function(vec![Type::Str], Type::Unit),
-        Operation::Flush => function(Vec::new(), Type::Unit),
-        Operation::ReadByte => function(Vec::new(), Type::I64),
-        Operation::WriteByte => function(vec![Type::I64], Type::Unit),
+        Operation::Print | Operation::WriteStr => {
+            function(vec![Type::Capability(Stdio), Type::Str], Type::Unit)
+        }
+        Operation::Flush => function(vec![Type::Capability(Stdio)], Type::Unit),
+        Operation::ReadByte => function(vec![Type::Capability(Stdio)], Type::I64),
+        Operation::WriteByte => function(vec![Type::Capability(Stdio), Type::I64], Type::Unit),
         Operation::Exit => function(vec![Type::I64], Type::Unit),
         Operation::EmptyStr => function(Vec::new(), Type::Str),
-        Operation::ArgCount => function(Vec::new(), Type::I64),
-        Operation::Arg => function(vec![Type::I64], crate::types::option_type(Type::Str)),
+        Operation::ArgCount => function(vec![Type::Capability(Arguments)], Type::I64),
+        Operation::Arg => function(
+            vec![Type::Capability(Arguments), Type::I64],
+            crate::types::option_type(Type::Str),
+        ),
         _ => unreachable!("operation signature family mismatch"),
     }
 }

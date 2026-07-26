@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 //! Canonical descriptors and exact content identities for Current lkjscript contracts.
 
+mod capability;
 mod digest;
 mod domains;
 mod encoding;
@@ -8,6 +9,7 @@ mod model;
 mod registry;
 mod sha256;
 
+pub use capability::CapabilityKind;
 pub use digest::ContractDigest;
 pub use domains::{
     capability_status, current_contracts, AGENT_PROTOCOL, AGENT_PROTOCOL_DIGEST, AGENT_WORK_STATE,

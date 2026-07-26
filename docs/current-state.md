@@ -19,6 +19,7 @@
 <!-- LKJ-STATUS id=semantic-session status=current -->
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
+<!-- LKJ-STATUS id=typed-capabilities status=current -->
 
 This file is the concise Current authority. Historical source generations,
 protocol experiments, candidate resource profiles, rejected performance
@@ -39,6 +40,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Semantic Source requests, sessions, diagnostics, typed holes, transactions,
   and publications require stable schema names plus exact full contract
   digests. No generation-numbered envelope is accepted.
+- `Capability/ Kind /Capability` values carry one of eight closed provider
+  authorities. Capability-bearing main and library APIs pass them explicitly;
+  provider acquisition and ambient host services have no zero-argument form.
+- Packages declare a sorted capability union. Each target receives only its
+  exact typed main requirements, validated before any source effect. Capability
+  values are unforgeable, copyable, process-local, and never serialized.
 
 ## Modules and local packages
 
@@ -102,7 +109,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Accepted targets not claimed Current
 
-- first-class typed capability values threaded through main and library APIs;
 - complete region/borrow/drop semantics for resources nested in products and
   collections;
 - an opaque byte-preserving path type and portable path policy;

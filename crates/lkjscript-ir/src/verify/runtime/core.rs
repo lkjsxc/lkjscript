@@ -6,6 +6,8 @@ pub(super) fn core_signature(
     parameters: &[SsaType],
     result: &SsaType,
 ) -> Option<bool> {
+    use lkjscript_contracts::CapabilityKind::{Arguments, Stdio};
+
     let exact = |expected: &[SsaType], result_type: &SsaType| {
         parameters == expected && result == result_type
     };
@@ -57,14 +59,16 @@ pub(super) fn core_signature(
         RuntimeOp::IsEmptyList => {
             matches!(parameters, [SsaType::List(_)]) && result == &SsaType::Bool
         }
-        RuntimeOp::Print | RuntimeOp::WriteStr => exact(&[SsaType::Str], &SsaType::Unit),
-        RuntimeOp::Flush => exact(&[], &SsaType::Unit),
-        RuntimeOp::ReadByte => exact(&[], &SsaType::I64),
-        RuntimeOp::WriteByte => exact(&[SsaType::I64], &SsaType::Unit),
+        RuntimeOp::Print | RuntimeOp::WriteStr => {
+            exact(&[SsaType::Capability(Stdio), SsaType::Str], &SsaType::Unit)
+        }
+        RuntimeOp::Flush => exact(&[SsaType::Capability(Stdio)], &SsaType::Unit),
+        RuntimeOp::ReadByte => exact(&[SsaType::Capability(Stdio)], &SsaType::I64),
+        RuntimeOp::WriteByte => exact(&[SsaType::Capability(Stdio), SsaType::I64], &SsaType::Unit),
         RuntimeOp::EmptyStr => exact(&[], &SsaType::Str),
-        RuntimeOp::ArgCount => exact(&[], &SsaType::I64),
+        RuntimeOp::ArgCount => exact(&[SsaType::Capability(Arguments)], &SsaType::I64),
         RuntimeOp::Arg => exact(
-            &[SsaType::I64],
+            &[SsaType::Capability(Arguments), SsaType::I64],
             &crate::prelude_contract::option(SsaType::Str),
         ),
         RuntimeOp::BufNew => exact(&[SsaType::I64], &SsaType::Buf),

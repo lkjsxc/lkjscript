@@ -34,7 +34,11 @@ fn owned_buf_borrows_moves_and_mutation_match_evaluator_and_vm() {
         ..ExecutionConfig::default()
     };
     assert!(matches!(
-        run_chunk(program.bytecode(), &vm_limits),
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &vm_limits
+        ),
         ExecutionOutcome::ResourceLimitExceeded(_)
     ));
 }

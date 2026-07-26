@@ -11,6 +11,9 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         Type::F64 => T::F64 {},
         Type::Str => T::String {},
         Type::Buf => T::Buffer {},
+        Type::Capability(kind) => T::Capability {
+            capability: kind.as_str().into(),
+        },
         Type::Symbol => T::Symbol {},
         Type::Handle => T::Handle {},
         Type::Product(name) => T::Product { name: name.clone() },

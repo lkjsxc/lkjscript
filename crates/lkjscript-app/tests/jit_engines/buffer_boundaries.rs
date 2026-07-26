@@ -45,7 +45,11 @@ fn evaluator_vm_and_native_buffer_results_share_tiny_resource_boundaries() {
             ..ExecutionConfig::default()
         };
         assert!(matches!(
-            run_chunk(program.bytecode(), &allocation_limits),
+            run_chunk(
+                program.bytecode(),
+                &lkjscript_vm::ExecutionInputs::default(),
+                &allocation_limits
+            ),
             ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
         ));
         assert!(matches!(
@@ -68,7 +72,11 @@ fn evaluator_vm_and_native_buffer_results_share_tiny_resource_boundaries() {
             ..ExecutionConfig::default()
         };
         assert!(matches!(
-            run_chunk(program.bytecode(), &heap_limits),
+            run_chunk(
+                program.bytecode(),
+                &lkjscript_vm::ExecutionInputs::default(),
+                &heap_limits
+            ),
             ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
         ));
         assert!(matches!(

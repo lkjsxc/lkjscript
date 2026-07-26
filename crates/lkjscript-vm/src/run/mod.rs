@@ -27,6 +27,7 @@ use lkjscript_jit::{
 
 use crate::host::{display_value, flush_out, read_byte, write_byte, write_output, write_str};
 use crate::host_ext::ResourceTable;
+use crate::ExecutionInputs;
 use calls::{call, car, cdr, make_closure};
 
 pub(crate) struct Frame {
@@ -117,7 +118,7 @@ pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) arena: Arena,
     pub(crate) jit: J,
     pub(crate) exit_code: Option<i32>,
-    pub(crate) args: Vec<String>,
+    pub(crate) inputs: ExecutionInputs,
     pub(crate) resources: ResourceTable,
     config: ExecutionConfig,
     fuel_remaining: u64,

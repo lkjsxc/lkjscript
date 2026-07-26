@@ -7,7 +7,11 @@ use lkjscript_vm::run_chunk;
 #[test]
 fn canonical_source_ssa_installs_and_calls_main_callee_poll_without_fallback() {
     let program = compile(&f64_loop(), "f64-loop.lkjscript");
-    let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let vm = execution(run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ));
     let evaluated = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
     let native = execute_forced(
         program.ssa(),
@@ -60,7 +64,11 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
     let source = include_str!("../fixtures/optimizing-loop.lkjscript");
     let program = compile(source, "optimizing-loop.lkjscript");
     let evaluated = evaluator(evaluate(program.ssa(), &EvalConfig::default()));
-    let vm = execution(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let vm = execution(run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ));
     let baseline = execute_forced(
         program.ssa(),
         &ExecutionConfig::default(),
@@ -119,7 +127,11 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
 #[test]
 fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() {
     let unsupported = compile(
-        "main/\nsig/\n->\nUnit\n/sig\nflush/\n/flush\n/main\n",
+        concat!(
+            "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
+            "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+            "flush/\nstdio\n/flush\n/main\n"
+        ),
         "optimizing-unsupported.lkjscript",
     );
     let error = execute_optimizing(
@@ -128,7 +140,7 @@ fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() 
         JitConfig::default(),
     )
     .expect_err("forced optimizing host operation must not fall back");
-    assert_eq!(error.code(), FailureCode::UnsupportedOperation);
+    assert_eq!(error.code(), FailureCode::UnsupportedType);
 
     let source = include_str!("../fixtures/optimizing-loop.lkjscript");
     let program = compile(source, "optimizing-budget.lkjscript");

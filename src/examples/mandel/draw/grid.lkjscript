@@ -10,6 +10,9 @@ grid
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 I64
 I64
 I64
@@ -17,6 +20,10 @@ I64
 Unit
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 y
 I64
 h
@@ -32,11 +39,13 @@ h
 unit
 do/
 row/
+stdio
 0
 y
 w
 /row
 grid/
+stdio
 +/
 y
 1

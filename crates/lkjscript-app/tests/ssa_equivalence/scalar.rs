@@ -71,6 +71,7 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
         evaluator_outcome(evaluate(tail_program.ssa(), &EvalConfig::default())),
         vm_outcome(run_chunk(
             tail_program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
             &ExecutionConfig::default(),
         ))
     );

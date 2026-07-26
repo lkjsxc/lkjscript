@@ -68,6 +68,7 @@ pub(crate) fn auto_trait_holds(
             | SsaType::Bool
             | SsaType::I64
             | SsaType::F64
+            | SsaType::Capability(_)
             | SsaType::Str
             | SsaType::Symbol => Ok(true),
             SsaType::Ref(inner) if inner.as_ref() == &SsaType::Buf => Ok(true),

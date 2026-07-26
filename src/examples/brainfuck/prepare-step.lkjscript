@@ -42,6 +42,9 @@ bf-prepare-command
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 I64
@@ -50,6 +53,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -71,6 +78,7 @@ command
 93
 /equal-value
 bf-prepare-close/
+stdio
 state
 /bf-prepare-close
 state

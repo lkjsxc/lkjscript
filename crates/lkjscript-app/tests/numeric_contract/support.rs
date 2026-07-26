@@ -14,7 +14,11 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
         expected,
     );
     assert_owned(
-        run_chunk(program.bytecode(), &ExecutionConfig::default()),
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        ),
         expected,
     );
     for execution in [

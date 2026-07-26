@@ -13,12 +13,19 @@ write-file
 public
 fn/
 sig/
+Capability/
+FileSystem
+/Capability
 Str
 Str
 ->
 Unit
 /sig
 params/
+file-system
+Capability/
+FileSystem
+/Capability
 path
 Str
 s
@@ -28,6 +35,7 @@ let/
 bind/
 fd
 open-write/
+file-system
 path
 /open-write
 /bind

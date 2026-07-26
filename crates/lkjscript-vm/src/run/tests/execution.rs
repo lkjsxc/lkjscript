@@ -43,12 +43,18 @@ fn add_result_ok_test(chunk: &mut Chunk) {
 #[test]
 fn fuel_and_returned_values_use_structured_outcomes() {
     let chunk = validated(&[Op::Unit, Op::Return]);
-    let returned = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default()).run();
+    let returned = Vm::new(
+        &chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
+    .run();
     assert!(matches!(returned, ExecutionOutcome::Returned(value) if value.is_unit()));
 
     let mut config = ExecutionConfig::default();
     config.instruction_fuel = 1;
-    let exhausted = Vm::new(&chunk, NullJit, Vec::new(), config).run();
+    let exhausted = Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), config).run();
     assert_eq!(
         exhausted,
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::InstructionFuel)
@@ -62,7 +68,13 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
     exit.main.emit(Op::Exit);
     let exit = validate_chunk(exit, &ValidationLimits::default()).expect("exit validates");
     assert_eq!(
-        Vm::new(&exit, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+        Vm::new(
+            &exit,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            ExecutionConfig::default()
+        )
+        .run(),
         ExecutionOutcome::Exited(0)
     );
 
@@ -71,7 +83,7 @@ fn exit_does_not_terminate_or_contaminate_later_vms() {
         Vm::new(
             &returned,
             NullJit,
-            Vec::new(),
+            crate::ExecutionInputs::default(),
             ExecutionConfig::default()
         )
         .run(),
@@ -89,7 +101,13 @@ fn trap_does_not_contaminate_a_later_vm() {
     trap.main.emit(Op::Return);
     let trap = validate(trap);
     assert!(matches!(
-        Vm::new(&trap, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+        Vm::new(
+            &trap,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            ExecutionConfig::default()
+        )
+        .run(),
         ExecutionOutcome::Trapped(_)
     ));
 
@@ -98,7 +116,7 @@ fn trap_does_not_contaminate_a_later_vm() {
         Vm::new(
             &returned,
             NullJit,
-            Vec::new(),
+            crate::ExecutionInputs::default(),
             ExecutionConfig::default()
         )
         .run(),
@@ -112,7 +130,13 @@ fn returned_heap_values_own_their_storage() {
     chunk.main.emit_op_u16(Op::LoadConst, text.0);
     chunk.main.emit(Op::Return);
     let chunk = validate(chunk);
-    let outcome = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default()).run();
+    let outcome = Vm::new(
+        &chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
+    .run();
     assert!(matches!(
         outcome,
         ExecutionOutcome::Returned(value) if value.as_str() == Some("owned")
@@ -132,7 +156,7 @@ fn sha256_opcode_returns_language_results_for_valid_and_invalid_ranges() {
     valid.main.emit(Op::Return);
     let valid = validate(valid);
     assert!(matches!(
-        Vm::new(&valid, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+        Vm::new(&valid, NullJit, crate::ExecutionInputs::default(), ExecutionConfig::default()).run(),
         ExecutionOutcome::Returned(value) if value.as_bool() == Some(true)
     ));
 
@@ -149,7 +173,7 @@ fn sha256_opcode_returns_language_results_for_valid_and_invalid_ranges() {
     invalid.main.emit(Op::Return);
     let invalid = validate(invalid);
     assert!(matches!(
-        Vm::new(&invalid, NullJit, Vec::new(), ExecutionConfig::default()).run(),
+        Vm::new(&invalid, NullJit, crate::ExecutionInputs::default(), ExecutionConfig::default()).run(),
         ExecutionOutcome::Returned(value) if value.as_bool() == Some(false)
     ));
 }

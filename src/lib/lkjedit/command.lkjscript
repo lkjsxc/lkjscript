@@ -16,6 +16,9 @@ editor-handle-command
 public
 fn/
 sig/
+Capability/
+FileSystem
+/Capability
 Product
 EditorState
 I64
@@ -24,6 +27,10 @@ Product
 EditorState
 /sig
 params/
+file-system
+Capability/
+FileSystem
+/Capability
 state
 Product/
 EditorState
@@ -53,6 +60,7 @@ key
 /equal-value
 /or
 editor-run-command/
+file-system
 state
 /editor-run-command
 editor-command-type/

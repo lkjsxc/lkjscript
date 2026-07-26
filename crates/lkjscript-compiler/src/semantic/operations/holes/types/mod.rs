@@ -14,6 +14,7 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::F64 => "F64".into(),
         Type::Str => "Str".into(),
         Type::Buf => "Buf".into(),
+        Type::Capability(kind) => format!("Capability {}", kind.as_str()),
         Type::Symbol => "Symbol".into(),
         Type::Handle => "Handle".into(),
         Type::Product(name) => format!("Product {name}"),
@@ -80,7 +81,7 @@ fn parse_enum_node(node: &SourceNode) -> Option<Type> {
     };
     if matches!(
         name.as_str(),
-        "Owned" | "Ref" | "RefMut" | "List" | "Option" | "Result" | "Product"
+        "Owned" | "Ref" | "RefMut" | "List" | "Option" | "Result" | "Product" | "Capability"
     ) || !crate::source::is_source_identifier(name)
         || !name
             .chars()
@@ -109,7 +110,14 @@ fn collect_type_atoms(node: &SourceNode, output: &mut Vec<String>) -> Option<()>
         SyntaxKind::Call { name }
             if matches!(
                 name.as_str(),
-                "Owned" | "Ref" | "RefMut" | "List" | "Option" | "Result" | "Product"
+                "Owned"
+                    | "Ref"
+                    | "RefMut"
+                    | "List"
+                    | "Option"
+                    | "Result"
+                    | "Product"
+                    | "Capability"
             ) =>
         {
             output.push(name.clone());

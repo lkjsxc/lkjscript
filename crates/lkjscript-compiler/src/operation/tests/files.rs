@@ -13,9 +13,18 @@ fn durable_file_operations_have_exact_signatures_and_effects() {
         Some(Operation::SysRandomFill)
     );
     assert_eq!(
-        Operation::SysOpenCreateNew.resolve_types(&[Type::Str]),
+        Operation::SysOpenCreateNew.resolve_types(&[
+            Type::Capability(lkjscript_core::CapabilityKind::FileSystem),
+            Type::Str,
+        ]),
         Ok((
-            function(vec![Type::Str], result_handle.clone()),
+            function(
+                vec![
+                    Type::Capability(lkjscript_core::CapabilityKind::FileSystem),
+                    Type::Str,
+                ],
+                result_handle.clone(),
+            ),
             result_handle
         ))
     );
@@ -27,9 +36,22 @@ fn durable_file_operations_have_exact_signatures_and_effects() {
         ))
     );
     assert_eq!(
-        Operation::SysRandomFill.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
+        Operation::SysRandomFill.resolve_types(&[
+            Type::Capability(lkjscript_core::CapabilityKind::Entropy),
+            Type::Buf,
+            Type::I64,
+            Type::I64,
+        ]),
         Ok((
-            function(vec![Type::Buf, Type::I64, Type::I64], result_unit),
+            function(
+                vec![
+                    Type::Capability(lkjscript_core::CapabilityKind::Entropy),
+                    Type::Buf,
+                    Type::I64,
+                    Type::I64,
+                ],
+                result_unit,
+            ),
             crate::types::result_type(Type::Unit, crate::types::system_error_type()),
         ))
     );

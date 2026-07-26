@@ -19,6 +19,9 @@ editor-save
 public
 fn/
 sig/
+Capability/
+FileSystem
+/Capability
 Product
 EditorState
 ->
@@ -26,6 +29,10 @@ Product
 EditorState
 /sig
 params/
+file-system
+Capability/
+FileSystem
+/Capability
 state
 Product/
 EditorState
@@ -33,6 +40,7 @@ EditorState
 /params
 do/
 write-file/
+file-system
 field/
 state
 path

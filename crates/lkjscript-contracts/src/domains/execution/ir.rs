@@ -26,7 +26,7 @@ pub(crate) fn typed_hir(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "capabilities",
                     "capabilities",
-                    "typed values with exact origins",
+                    "closed provider types with explicit value flow",
                 ))
                 .fact(fact("control", "control", "structured typed control facts")),
         )
@@ -66,6 +66,11 @@ pub(crate) fn verified_ssa(hir: ContractDigest) -> ContractDescriptor {
                     "charges",
                     "charges",
                     "deterministic logical resource facts",
+                ))
+                .fact(fact(
+                    "capabilities",
+                    "capabilities",
+                    "sorted exact main parameters and checked call operands",
                 )),
         )
 }
@@ -82,6 +87,11 @@ pub(crate) fn bytecode(ssa: ContractDigest) -> ContractDescriptor {
                     "bounded typed constant table",
                 ))
                 .fact(fact("functions", "functions", "bounded function metadata"))
+                .fact(fact(
+                    "capabilities",
+                    "capabilities",
+                    "sorted exact main requirements and arity",
+                ))
                 .fact(fact("code", "code", "validated instruction bytes"))
                 .fact(fact("products", "products", "nominal product metadata"))
                 .fact(fact("enums", "enums", "nominal enum metadata"))

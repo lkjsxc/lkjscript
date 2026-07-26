@@ -7,14 +7,20 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     let mut stack = ExecutionConfig::default();
     stack.max_stack_values = 0;
     assert_eq!(
-        Vm::new(&returned, NullJit, Vec::new(), stack).run(),
+        Vm::new(&returned, NullJit, crate::ExecutionInputs::default(), stack).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::StackValues)
     );
 
     let mut frames = ExecutionConfig::default();
     frames.max_frames = 0;
     assert_eq!(
-        Vm::new(&returned, NullJit, Vec::new(), frames).run(),
+        Vm::new(
+            &returned,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            frames
+        )
+        .run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::FrameDepth)
     );
 
@@ -27,19 +33,29 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     let mut heap = ExecutionConfig::default();
     heap.max_heap_bytes = 0;
     assert_eq!(
-        Vm::new(&string, NullJit, Vec::new(), heap).run(),
+        Vm::new(&string, NullJit, crate::ExecutionInputs::default(), heap).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
     );
 
     let mut allocations = ExecutionConfig::default();
     allocations.max_allocations = 0;
     assert_eq!(
-        Vm::new(&string, NullJit, Vec::new(), allocations).run(),
+        Vm::new(
+            &string,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            allocations
+        )
+        .run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
     );
 
     let mut output_chunk = Chunk::new();
+    output_chunk.required_capabilities = vec![lkjscript_core::CapabilityKind::Stdio];
+    output_chunk.main.arity = 1;
+    output_chunk.main.locals = 1;
     let text = output_chunk.add_const(Constant::Str("x".into()));
+    output_chunk.main.emit_op_u16(Op::LoadLocal, 0);
     output_chunk.main.emit_op_u16(Op::LoadConst, text.0);
     output_chunk.main.emit(Op::WriteStr);
     output_chunk.main.emit(Op::Return);
@@ -47,25 +63,50 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     let mut output = ExecutionConfig::default();
     output.max_output_bytes = 0;
     assert_eq!(
-        Vm::new(&output_chunk, NullJit, Vec::new(), output).run(),
+        Vm::new(
+            &output_chunk,
+            NullJit,
+            capability_inputs(lkjscript_core::CapabilityKind::Stdio),
+            output
+        )
+        .run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::OutputBytes)
     );
 
     let mut hard_deadline = ExecutionConfig::default();
     hard_deadline.require_hard_deadline = true;
     assert!(matches!(
-        Vm::new(&output_chunk, NullJit, Vec::new(), hard_deadline).run(),
+        Vm::new(
+            &output_chunk,
+            NullJit,
+            capability_inputs(lkjscript_core::CapabilityKind::Stdio),
+            hard_deadline,
+        )
+        .run(),
         ExecutionOutcome::HostFailure(error)
             if error.as_str().contains("hard wall deadline is unsupported")
     ));
 }
 #[test]
 fn configured_handle_and_wall_limits_are_structured() {
-    let socket = validated(&[Op::SysSocket, Op::Return]);
+    let mut socket = Chunk::new();
+    socket.required_capabilities = vec![lkjscript_core::CapabilityKind::Network];
+    socket.main.arity = 1;
+    socket.main.locals = 1;
+    socket.main.emit_op_u16(Op::LoadLocal, 0);
+    socket.main.emit(Op::SysSocket);
+    socket.main.emit(Op::Return);
+    let socket = validate(socket);
     let mut handles = ExecutionConfig::default();
     handles.max_handles = 0;
     assert_eq!(
-        Vm::new(&socket, NullJit, Vec::new(), handles).run(),
+        Vm::new(
+            &socket,
+            NullJit,
+            capability_inputs(lkjscript_core::CapabilityKind::Network),
+            handles,
+        )
+        .run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Handles)
     );
 
@@ -75,12 +116,22 @@ fn configured_handle_and_wall_limits_are_structured() {
     let mut deadline = ExecutionConfig::default();
     deadline.wall_time = Some(Duration::ZERO);
     assert_eq!(
-        Vm::new(&loop_chunk, NullJit, Vec::new(), deadline).run(),
+        Vm::new(
+            &loop_chunk,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            deadline
+        )
+        .run(),
         ExecutionOutcome::DeadlineExceeded
     );
 
     let mut wait = Chunk::new();
+    wait.required_capabilities = vec![lkjscript_core::CapabilityKind::Clock];
+    wait.main.arity = 1;
+    wait.main.locals = 1;
     let duration = wait.add_const(Constant::I64(50));
+    wait.main.emit_op_u16(Op::LoadLocal, 0);
     wait.main.emit_op_u16(Op::LoadConst, duration.0);
     wait.main.emit(Op::SysWaitMs);
     wait.main.emit(Op::Return);
@@ -88,7 +139,20 @@ fn configured_handle_and_wall_limits_are_structured() {
     let mut deadline = ExecutionConfig::default();
     deadline.wall_time = Some(Duration::from_millis(1));
     assert_eq!(
-        Vm::new(&wait, NullJit, Vec::new(), deadline).run(),
+        Vm::new(
+            &wait,
+            NullJit,
+            capability_inputs(lkjscript_core::CapabilityKind::Clock),
+            deadline,
+        )
+        .run(),
         ExecutionOutcome::DeadlineExceeded
     );
+}
+
+fn capability_inputs(kind: lkjscript_core::CapabilityKind) -> crate::ExecutionInputs {
+    crate::ExecutionInputs {
+        arguments: Vec::new(),
+        capabilities: vec![kind],
+    }
 }

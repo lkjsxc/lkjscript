@@ -50,6 +50,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::StdinHandle as u8 => {
+            vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
             vm.push(crate::host_buf::stdin_handle());
             Ok(true)
         }
@@ -63,12 +64,14 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         x if x == Op::SysTtyGuardSave as u8 => {
             vm.ensure_host_deadline_support("sys-tty-guard-save", false)?;
             let buffer = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Terminal)?;
             let result = crate::host_buf::sys_tty_guard_save(&vm.arena, buffer);
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysTtyGuardClear as u8 => {
             vm.ensure_host_deadline_support("sys-tty-guard-clear", false)?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Terminal)?;
             let result = crate::host_buf::sys_tty_guard_clear();
             push_language_result(vm, result);
             Ok(true)

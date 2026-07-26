@@ -39,8 +39,11 @@ fn assert_all_engines(source: &str, expected: i64) {
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(expected)),
     );
-    let ExecutionOutcome::Returned(vm) = run_chunk(program.bytecode(), &ExecutionConfig::default())
-    else {
+    let ExecutionOutcome::Returned(vm) = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) else {
         panic!("VM must return")
     };
     assert_eq!(vm.as_i64(), Some(expected));

@@ -15,6 +15,9 @@ bf-prepare-loop
 /name
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -22,6 +25,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -42,6 +49,7 @@ let/
 bind/
 prepared
 bf-prepare-command/
+stdio
 state
 buf-ref/
 field/
@@ -70,6 +78,7 @@ scan
 /with-field
 /bind
 bf-prepare-loop/
+stdio
 advanced
 /bf-prepare-loop
 /let
@@ -84,6 +93,9 @@ bf-prepare
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -91,6 +103,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -145,6 +161,7 @@ depth
 set/
 current
 bf-prepare-loop/
+stdio
 current
 /bf-prepare-loop
 /set
@@ -159,6 +176,7 @@ depth
 current
 do/
 bf-fail/
+stdio
 str/
 unmatched [
 /str

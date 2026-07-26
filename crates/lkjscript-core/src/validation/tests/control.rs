@@ -64,7 +64,7 @@ fn main_arity_global_initialization_and_static_operation_categories_are_checked(
     let mut main = unit_chunk();
     main.main.arity = 1;
     main.main.locals = 1;
-    assert!(error(main).contains("main entry"));
+    assert!(error(main).contains("capability requirements"));
 
     let mut global = unit_chunk();
     global.global_names.push("g".into());

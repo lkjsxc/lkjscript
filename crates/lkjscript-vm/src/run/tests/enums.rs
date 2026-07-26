@@ -47,7 +47,13 @@ fn hand_built_validated_enum_constructs_and_projects_active_payload() {
     chunk.main.emit_op_u16(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);
     let chunk = validate(chunk);
-    let outcome = Vm::new(&chunk, NullJit, Vec::new(), ExecutionConfig::default()).run();
+    let outcome = Vm::new(
+        &chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
+    .run();
     let ExecutionOutcome::Returned(value) = outcome else {
         panic!("enum VM program must return")
     };

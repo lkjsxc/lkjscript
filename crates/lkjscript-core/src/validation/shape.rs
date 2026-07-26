@@ -7,6 +7,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         ("constants", chunk.constants.len()),
         ("prototypes", chunk.protos.len()),
         ("globals", chunk.global_names.len()),
+        ("required capabilities", chunk.required_capabilities.len()),
         ("products", chunk.products.len()),
         ("product field descriptors", chunk.product_fields.len()),
         ("enums", chunk.enums.len()),
@@ -22,9 +23,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
             )));
         }
     }
-    if chunk.main.arity != 0 {
-        return Err(Error::msg("bytecode main entry must have arity 0"));
-    }
+    super::entry_capabilities::validate(chunk)?;
     validate_proto_shape(&chunk.main, "main")?;
 
     let mut function_names = HashSet::with_capacity(chunk.protos.len());
@@ -41,7 +40,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         }
     }
 
-    let mut metadata_bytes = chunk.main.name.len();
+    let mut metadata_bytes = super::entry_capabilities::metadata_bytes(chunk)?;
     let mut encoded_bytes = chunk.main.code.len();
     for proto in &chunk.protos {
         metadata_bytes = checked_add(metadata_bytes, proto.name.len(), "metadata byte size")?;

@@ -39,6 +39,7 @@ pub enum EvalValue {
     Str(String),
     Symbol(String),
     Buf(EvalBuffer),
+    Capability(lkjscript_contracts::CapabilityKind),
     Handle(u64),
     Product(ProductId, Vec<Self>),
     Enum {
@@ -63,6 +64,7 @@ impl PartialEq for EvalValue {
                 left == right
             }
             (Self::Buf(left), Self::Buf(right)) => left == right,
+            (Self::Capability(left), Self::Capability(right)) => left == right,
             (Self::Handle(left), Self::Handle(right)) => left == right,
             (Self::Product(left_id, left), Self::Product(right_id, right)) => {
                 left_id == right_id && left == right
@@ -111,6 +113,7 @@ pub struct EvalConfig {
     pub max_buffer_bytes: usize,
     pub max_list_equal_steps: usize,
     pub args: Vec<String>,
+    pub capabilities: Vec<lkjscript_contracts::CapabilityKind>,
 }
 
 impl Default for EvalConfig {
@@ -124,6 +127,7 @@ impl Default for EvalConfig {
             max_buffer_bytes: 1_000_000,
             max_list_equal_steps: 1_000_000,
             args: Vec::new(),
+            capabilities: Vec::new(),
         }
     }
 }
@@ -138,7 +142,11 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         heap_bytes: 0,
         next_buffer_id: 1,
     };
-    match evaluator.call(program.program().main, Vec::new(), 0) {
+    let arguments = match capabilities::main_arguments(program, config) {
+        Ok(arguments) => arguments,
+        Err(message) => return EvalOutcome::HostFailure(message),
+    };
+    match evaluator.call(program.program().main, arguments, 0) {
         Ok(value) => EvalOutcome::Returned(value),
         Err(flow) => flow.outcome(),
     }
@@ -180,6 +188,7 @@ impl Flow {
 mod allocation;
 #[cfg(test)]
 mod boundary_tests;
+mod capabilities;
 mod control;
 mod instruction;
 mod numeric_conversion;

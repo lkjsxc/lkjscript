@@ -19,8 +19,11 @@ fn assert_i64_all(source: &str, expected: i64) {
         evaluate(program.ssa(), &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(expected)),
     );
-    let ExecutionOutcome::Returned(vm) = run_chunk(program.bytecode(), &ExecutionConfig::default())
-    else {
+    let ExecutionOutcome::Returned(vm) = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ) else {
         panic!("reference VM did not return")
     };
     assert_eq!(vm.as_i64(), Some(expected));
@@ -115,7 +118,11 @@ fn value_trap_is_exact_in_all_engines() {
     assert_eq!(baseline.stats.vm_fallbacks, 0);
     assert_eq!(optimized.stats.vm_fallbacks, 0);
     let outcomes = [
-        run_chunk(program.bytecode(), &ExecutionConfig::default()),
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        ),
         baseline.outcome,
         optimized.outcome,
     ];
@@ -137,7 +144,11 @@ fn exit_is_structured_in_all_engines() {
         EvalOutcome::Exited(23),
     );
     assert_eq!(
-        run_chunk(program.bytecode(), &ExecutionConfig::default()),
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default()
+        ),
         ExecutionOutcome::Exited(23),
     );
     for execution in [

@@ -25,8 +25,8 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 Implemented control and binding forms include `main`, `def`, `fn`, `if`,
 `while`, `let`, `bind`, `var`, `set`, `do`, `quote`, `product-value`, `field`,
-and `with-field`. the canonical source contract additionally implements typed `loop`, early
-`return`, nearest-loop `break`/`continue`, value-bearing `trap`, and `exit`.
+and `with-field`. Typed `loop`, early `return`, nearest-loop `break`/`continue`,
+value-bearing `trap`, and `exit` are also Current.
 `product`, `trait`, `impl`, `fields`, `sig`, `params`,
 `forall`, `bounds`, `bound`, `type`, `name`, and `import` are contextual
 declaration/loading forms rather than freely evaluable runtime calls.
@@ -36,8 +36,14 @@ Every function definition has a mandatory signature and typed parameters.
 bounded declaration-only markers described below. There is no `Any`,
 Hindley-Milner inference, or implemented user-defined type alias.
 
+Provider types use `Capability/ Kind /Capability`, where `Kind` is one of the
+eight closed authorities. Capability-bearing `main` and ordinary functions
+name exact capability parameters. There is no constructor, ambient lookup,
+inferred parameter, integer conversion, equality operation, or old-arity host
+operation. See [Typed Capabilities](../../decisions/capabilities/typed-capabilities.md).
+
 `if` requires exactly three operands: a Bool condition and two reachable
-branches with exactly the same type. In the canonical source contract, a divergent `Never` arm
+branches with exactly the same type. A divergent `Never` arm
 joins only with the surviving arm type and creates no value. There is no
 omitted branch or nil-based type join. Empty `do`, `while`, `set`, and
 side-effecting operations return Unit.

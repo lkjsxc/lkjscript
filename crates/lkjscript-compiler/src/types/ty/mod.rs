@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use lkjscript_core::CapabilityKind;
+
 use crate::types::EnumId;
 
 mod model;

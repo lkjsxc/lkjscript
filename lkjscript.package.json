@@ -1,226 +1,158 @@
 {
   "schema": "lkjscript.package",
-  "contract": "b1fd10259e7e215edc9ad5288dbd8d71199ed085573acd045d7511867fc680c0",
+  "contract": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
   "name": "lkjscript-workspace",
   "source_root": ".",
   "modules": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
     "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
-    "meta/benchmarks/jit/pre-jit-workload/kernel.lkjscript",
-    "meta/benchmarks/jit/pre-jit-workload/main.lkjscript",
-    "src/examples/bench/leibniz-loop.lkjscript",
-    "src/examples/bench/main.lkjscript",
-    "src/examples/brainfuck/cells.lkjscript",
-    "src/examples/brainfuck/dispatch.lkjscript",
-    "src/examples/brainfuck/error.lkjscript",
-    "src/examples/brainfuck/execute.lkjscript",
-    "src/examples/brainfuck/execution/io.lkjscript",
-    "src/examples/brainfuck/fold.lkjscript",
-    "src/examples/brainfuck/load.lkjscript",
-    "src/examples/brainfuck/loading/fold-policy.lkjscript",
-    "src/examples/brainfuck/loading/source-size.lkjscript",
-    "src/examples/brainfuck/loops.lkjscript",
-    "src/examples/brainfuck/main.lkjscript",
-    "src/examples/brainfuck/options.lkjscript",
-    "src/examples/brainfuck/pointer.lkjscript",
-    "src/examples/brainfuck/preparation/loop-stack.lkjscript",
-    "src/examples/brainfuck/prepare-step.lkjscript",
-    "src/examples/brainfuck/prepare.lkjscript",
-    "src/examples/brainfuck/state.lkjscript",
-    "src/examples/bulk-bytes/main.lkjscript",
-    "src/examples/durable-files/main.lkjscript",
-    "src/examples/hello/base.lkjscript",
-    "src/examples/hello/dec.lkjscript",
-    "src/examples/hello/fact.lkjscript",
-    "src/examples/hello/main.lkjscript",
-    "src/examples/http/crlf.lkjscript",
-    "src/examples/http/hello.lkjscript",
-    "src/examples/http/resp.lkjscript",
+    "meta/benchmarks/jit/pre-jit-workload/kernel.lkjscript", "meta/benchmarks/jit/pre-jit-workload/main.lkjscript",
+    "src/examples/bench/leibniz-loop.lkjscript", "src/examples/bench/main.lkjscript",
+    "src/examples/brainfuck/cells.lkjscript", "src/examples/brainfuck/dispatch.lkjscript",
+    "src/examples/brainfuck/error.lkjscript", "src/examples/brainfuck/execute.lkjscript",
+    "src/examples/brainfuck/execution/dispatch-low.lkjscript", "src/examples/brainfuck/execution/io.lkjscript",
+    "src/examples/brainfuck/fold.lkjscript", "src/examples/brainfuck/load.lkjscript",
+    "src/examples/brainfuck/loading/close.lkjscript", "src/examples/brainfuck/loading/filter-loop.lkjscript",
+    "src/examples/brainfuck/loading/fold-policy.lkjscript", "src/examples/brainfuck/loading/source-size.lkjscript",
+    "src/examples/brainfuck/loops.lkjscript", "src/examples/brainfuck/main.lkjscript",
+    "src/examples/brainfuck/options.lkjscript", "src/examples/brainfuck/pointer.lkjscript",
+    "src/examples/brainfuck/preparation/loop-stack.lkjscript", "src/examples/brainfuck/prepare-step.lkjscript",
+    "src/examples/brainfuck/prepare.lkjscript", "src/examples/brainfuck/state.lkjscript",
+    "src/examples/bulk-bytes/main.lkjscript", "src/examples/bulk-bytes/support.lkjscript",
+    "src/examples/durable-files/main.lkjscript", "src/examples/hello/base.lkjscript",
+    "src/examples/hello/dec.lkjscript", "src/examples/hello/fact.lkjscript", "src/examples/hello/main.lkjscript",
+    "src/examples/http/crlf.lkjscript", "src/examples/http/hello.lkjscript", "src/examples/http/resp.lkjscript",
     "src/examples/jit-optimizing/kernel.lkjscript",
     "src/examples/jit-optimizing/kernel/redundant-divisions.lkjscript",
-    "src/examples/jit-optimizing/main.lkjscript",
-    "src/examples/jit-scalar/kernel.lkjscript",
-    "src/examples/jit-scalar/main.lkjscript",
-    "src/examples/lkjedit/buffer-demo.lkjscript",
-    "src/examples/lkjedit/edit-mem.lkjscript",
-    "src/examples/lkjedit/hello.lkjscript",
-    "src/examples/lkjedit/main.lkjscript",
-    "src/examples/mandel/core/escape.lkjscript",
-    "src/examples/mandel/core/iter.lkjscript",
-    "src/examples/mandel/core/mandel.lkjscript",
-    "src/examples/mandel/core/step-x.lkjscript",
-    "src/examples/mandel/core/step-y.lkjscript",
-    "src/examples/mandel/draw/cell.lkjscript",
-    "src/examples/mandel/draw/cx-of.lkjscript",
-    "src/examples/mandel/draw/cy-of.lkjscript",
-    "src/examples/mandel/draw/grid.lkjscript",
-    "src/examples/mandel/draw/nl.lkjscript",
-    "src/examples/mandel/draw/row.lkjscript",
-    "src/examples/mandel/draw/shade.lkjscript",
-    "src/examples/mandel/main.lkjscript",
-    "src/examples/sha256/main.lkjscript",
-    "src/examples/sqlite/main.lkjscript",
-    "src/lib/lkjedit/buffer.lkjscript",
-    "src/lib/lkjedit/command.lkjscript",
-    "src/lib/lkjedit/edit.lkjscript",
-    "src/lib/lkjedit/extras/back.lkjscript",
-    "src/lib/lkjedit/extras/delete.lkjscript",
-    "src/lib/lkjedit/extras/dispatch.lkjscript",
-    "src/lib/lkjedit/extras/line.lkjscript",
-    "src/lib/lkjedit/extras/motions.lkjscript",
-    "src/lib/lkjedit/extras/motions/word.lkjscript",
-    "src/lib/lkjedit/extras/open.lkjscript",
-    "src/lib/lkjedit/extras/pending.lkjscript",
-    "src/lib/lkjedit/handle.lkjscript",
-    "src/lib/lkjedit/init.lkjscript",
-    "src/lib/lkjedit/insert.lkjscript",
+    "src/examples/jit-optimizing/main.lkjscript", "src/examples/jit-scalar/kernel.lkjscript",
+    "src/examples/jit-scalar/main.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
+    "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
+    "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/core/escape.lkjscript",
+    "src/examples/mandel/core/iter.lkjscript", "src/examples/mandel/core/mandel.lkjscript",
+    "src/examples/mandel/core/step-x.lkjscript", "src/examples/mandel/core/step-y.lkjscript",
+    "src/examples/mandel/draw/cell.lkjscript", "src/examples/mandel/draw/cx-of.lkjscript",
+    "src/examples/mandel/draw/cy-of.lkjscript", "src/examples/mandel/draw/grid.lkjscript",
+    "src/examples/mandel/draw/nl.lkjscript", "src/examples/mandel/draw/row.lkjscript",
+    "src/examples/mandel/draw/shade.lkjscript", "src/examples/mandel/main.lkjscript",
+    "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript",
+    "src/examples/sqlite/read-number.lkjscript", "src/lib/lkjedit/buffer.lkjscript",
+    "src/lib/lkjedit/command.lkjscript", "src/lib/lkjedit/edit.lkjscript", "src/lib/lkjedit/extras/back.lkjscript",
+    "src/lib/lkjedit/extras/delete.lkjscript", "src/lib/lkjedit/extras/dispatch.lkjscript",
+    "src/lib/lkjedit/extras/line.lkjscript", "src/lib/lkjedit/extras/motions.lkjscript",
+    "src/lib/lkjedit/extras/motions/word.lkjscript", "src/lib/lkjedit/extras/open.lkjscript",
+    "src/lib/lkjedit/extras/pending.lkjscript", "src/lib/lkjedit/handle.lkjscript",
+    "src/lib/lkjedit/init.lkjscript", "src/lib/lkjedit/insert.lkjscript",
     "src/lib/lkjedit/interactions/buffer/backspace.lkjscript",
     "src/lib/lkjedit/interactions/command/execution.lkjscript",
     "src/lib/lkjedit/interactions/command/typing.lkjscript",
     "src/lib/lkjedit/interactions/edit/delete-byte.lkjscript",
+    "src/lib/lkjedit/interactions/handle-redraw.lkjscript",
     "src/lib/lkjedit/interactions/input/normal-edit.lkjscript",
-    "src/lib/lkjedit/interactions/input/normal-navigation.lkjscript",
-    "src/lib/lkjedit/keys.lkjscript",
-    "src/lib/lkjedit/lines.lkjscript",
-    "src/lib/lkjedit/load.lkjscript",
-    "src/lib/lkjedit/loop.lkjscript",
-    "src/lib/lkjedit/save.lkjscript",
-    "src/lib/lkjedit/state.lkjscript",
-    "src/lib/lkjedit/view.lkjscript",
-    "src/std/ansi/clear.lkjscript",
-    "src/std/ansi/esc.lkjscript",
-    "src/std/ansi/home.lkjscript",
-    "src/std/buffer/insert-at.lkjscript",
-    "src/std/fs/open-read.lkjscript",
-    "src/std/fs/open-write.lkjscript",
-    "src/std/fs/path-exists.lkjscript",
-    "src/std/fs/read-all.lkjscript",
-    "src/std/fs/read-file.lkjscript",
-    "src/std/fs/text/file-to-buf.lkjscript",
-    "src/std/fs/text/join-lines.lkjscript",
-    "src/std/fs/text/split-lines.lkjscript",
-    "src/std/fs/write-all.lkjscript",
-    "src/std/fs/write-file.lkjscript",
-    "src/std/io/crlf.lkjscript",
-    "src/std/io/get-byte.lkjscript",
-    "src/std/io/poll-byte.lkjscript",
-    "src/std/io/put-byte.lkjscript",
-    "src/std/io/wait-ms.lkjscript",
-    "src/std/list/insert.lkjscript",
-    "src/std/list/len.lkjscript",
-    "src/std/list/nth.lkjscript",
-    "src/std/list/reverse.lkjscript",
-    "src/std/list/set-nth.lkjscript",
-    "src/std/net/tcp-accept.lkjscript",
-    "src/std/net/tcp-listen.lkjscript",
-    "src/std/net/tcp-recv.lkjscript",
-    "src/std/net/tcp-send.lkjscript",
-    "src/std/sqlite/backup.lkjscript",
-    "src/std/sqlite/exec.lkjscript",
-    "src/std/sqlite/open.lkjscript",
-    "src/std/sqlite/row.lkjscript",
-    "src/std/sqlite/statement.lkjscript",
-    "src/std/sqlite/transaction.lkjscript",
-    "src/std/term/banner.lkjscript",
-    "src/std/term/make-raw.lkjscript",
-    "src/std/term/puts.lkjscript",
-    "src/std/term/raw.lkjscript",
-    "src/std/term/redraw-lines.lkjscript",
-    "src/std/term/redraw.lkjscript",
-    "src/std/term/tty-state.lkjscript"
+    "src/lib/lkjedit/interactions/input/normal-navigation.lkjscript", "src/lib/lkjedit/interactions/step.lkjscript",
+    "src/lib/lkjedit/keys.lkjscript", "src/lib/lkjedit/lines.lkjscript", "src/lib/lkjedit/load.lkjscript",
+    "src/lib/lkjedit/loop.lkjscript", "src/lib/lkjedit/save.lkjscript", "src/lib/lkjedit/state.lkjscript",
+    "src/lib/lkjedit/view.lkjscript", "src/std/ansi/clear.lkjscript", "src/std/ansi/esc.lkjscript",
+    "src/std/ansi/home.lkjscript", "src/std/buffer/insert-at.lkjscript", "src/std/fs/open-read.lkjscript",
+    "src/std/fs/open-write.lkjscript", "src/std/fs/path-exists.lkjscript", "src/std/fs/read-all.lkjscript",
+    "src/std/fs/read-file.lkjscript", "src/std/fs/text/file-to-buf.lkjscript",
+    "src/std/fs/text/join-lines.lkjscript", "src/std/fs/text/split-lines.lkjscript",
+    "src/std/fs/write-all.lkjscript", "src/std/fs/write-file.lkjscript", "src/std/io/crlf.lkjscript",
+    "src/std/io/get-byte.lkjscript", "src/std/io/poll-byte.lkjscript", "src/std/io/put-byte.lkjscript",
+    "src/std/io/wait-ms.lkjscript", "src/std/list/insert.lkjscript", "src/std/list/len.lkjscript",
+    "src/std/list/nth.lkjscript", "src/std/list/reverse.lkjscript", "src/std/list/set-nth.lkjscript",
+    "src/std/net/tcp-accept.lkjscript", "src/std/net/tcp-listen.lkjscript", "src/std/net/tcp-recv.lkjscript",
+    "src/std/net/tcp-send.lkjscript", "src/std/sqlite/backup.lkjscript", "src/std/sqlite/exec.lkjscript",
+    "src/std/sqlite/open.lkjscript", "src/std/sqlite/row.lkjscript", "src/std/sqlite/statement.lkjscript",
+    "src/std/sqlite/transaction.lkjscript", "src/std/term/banner.lkjscript", "src/std/term/make-raw.lkjscript",
+    "src/std/term/puts.lkjscript", "src/std/term/raw-work.lkjscript", "src/std/term/raw.lkjscript",
+    "src/std/term/redraw-lines.lkjscript", "src/std/term/redraw.lkjscript", "src/std/term/tty-state.lkjscript"
   ],
   "public": [
     "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript",
     "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript",
-    "meta/benchmarks/jit/pre-jit-workload/main.lkjscript",
-    "src/examples/bench/main.lkjscript",
-    "src/examples/brainfuck/main.lkjscript",
-    "src/examples/bulk-bytes/main.lkjscript",
-    "src/examples/durable-files/main.lkjscript",
-    "src/examples/hello/main.lkjscript",
-    "src/examples/http/hello.lkjscript",
-    "src/examples/jit-optimizing/main.lkjscript",
-    "src/examples/jit-scalar/main.lkjscript",
-    "src/examples/lkjedit/buffer-demo.lkjscript",
-    "src/examples/lkjedit/edit-mem.lkjscript",
-    "src/examples/lkjedit/hello.lkjscript",
-    "src/examples/lkjedit/main.lkjscript",
-    "src/examples/mandel/main.lkjscript",
-    "src/examples/sha256/main.lkjscript",
-    "src/examples/sqlite/main.lkjscript"
+    "meta/benchmarks/jit/pre-jit-workload/main.lkjscript", "src/examples/bench/main.lkjscript",
+    "src/examples/brainfuck/main.lkjscript", "src/examples/bulk-bytes/main.lkjscript",
+    "src/examples/durable-files/main.lkjscript", "src/examples/hello/main.lkjscript",
+    "src/examples/http/hello.lkjscript", "src/examples/jit-optimizing/main.lkjscript",
+    "src/examples/jit-scalar/main.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
+    "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
+    "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/main.lkjscript",
+    "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript"
   ],
   "dependencies": [],
-  "capabilities": [],
+  "capabilities": [
+    "Arguments", "Clock", "FileSystem", "Network", "Sqlite", "Stdio", "Terminal"
+  ],
   "targets": [
-    {
+{
       "name": "allocation-graph",
       "module": "crates/lkjscript-app/tests/fixtures/allocation-graph.lkjscript"
     },
-    {
+{
       "name": "bench-main",
       "module": "src/examples/bench/main.lkjscript"
     },
-    {
+{
       "name": "brainfuck-main",
       "module": "src/examples/brainfuck/main.lkjscript"
     },
-    {
+{
       "name": "buffer-demo",
       "module": "src/examples/lkjedit/buffer-demo.lkjscript"
     },
-    {
+{
       "name": "bulk-bytes-main",
       "module": "src/examples/bulk-bytes/main.lkjscript"
     },
-    {
+{
       "name": "durable-files-main",
       "module": "src/examples/durable-files/main.lkjscript"
     },
-    {
+{
       "name": "edit-mem",
       "module": "src/examples/lkjedit/edit-mem.lkjscript"
     },
-    {
+{
       "name": "hello-main",
       "module": "src/examples/hello/main.lkjscript"
     },
-    {
+{
       "name": "http-hello",
       "module": "src/examples/http/hello.lkjscript"
     },
-    {
+{
       "name": "jit-optimizing-main",
       "module": "src/examples/jit-optimizing/main.lkjscript"
     },
-    {
+{
       "name": "jit-scalar-main",
       "module": "src/examples/jit-scalar/main.lkjscript"
     },
-    {
+{
       "name": "lkjedit-hello",
       "module": "src/examples/lkjedit/hello.lkjscript"
     },
-    {
+{
       "name": "lkjedit-main",
       "module": "src/examples/lkjedit/main.lkjscript"
     },
-    {
+{
       "name": "mandel-main",
       "module": "src/examples/mandel/main.lkjscript"
     },
-    {
+{
       "name": "optimizing-loop",
       "module": "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript"
     },
-    {
+{
       "name": "pre-jit-workload-main",
       "module": "meta/benchmarks/jit/pre-jit-workload/main.lkjscript"
     },
-    {
+{
       "name": "sha256-main",
       "module": "src/examples/sha256/main.lkjscript"
     },
-    {
+{
       "name": "sqlite-main",
       "module": "src/examples/sqlite/main.lkjscript"
     }

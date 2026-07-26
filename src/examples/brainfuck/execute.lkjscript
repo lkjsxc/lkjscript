@@ -12,6 +12,9 @@ bf-execute-loop
 /name
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -19,6 +22,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -39,6 +46,7 @@ let/
 bind/
 stepped
 bf-step/
+stdio
 state
 /bf-step
 /bind
@@ -57,6 +65,7 @@ pc
 /with-field
 /bind
 bf-execute-loop/
+stdio
 advanced
 /bf-execute-loop
 /let
@@ -71,6 +80,9 @@ bf-execute
 public
 fn/
 sig/
+Capability/
+Stdio
+/Capability
 Product
 BrainfuckState
 ->
@@ -78,6 +90,10 @@ Product
 BrainfuckState
 /sig
 params/
+stdio
+Capability/
+Stdio
+/Capability
 state
 Product/
 BrainfuckState
@@ -122,10 +138,12 @@ dp
 set/
 current
 bf-execute-loop/
+stdio
 current
 /bf-execute-loop
 /set
 flush/
+stdio
 /flush
 current
 /do

@@ -8,7 +8,12 @@ use crate::run::{test_chunk, Vm};
 
 fn test_vm() -> Vm<'static, NullJit> {
     let chunk = Box::leak(Box::new(test_chunk()));
-    Vm::new(chunk, NullJit, Vec::new(), ExecutionConfig::default())
+    Vm::new(
+        chunk,
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
 }
 
 fn compare(vm: &mut Vm<'_, NullJit>, op: Op, left: Value, right: Value) -> bool {

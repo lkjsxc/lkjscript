@@ -46,6 +46,9 @@ dependencies = [
 [[package]]
 name = "lkjscript-ir"
 version = "0.1.0"
+dependencies = [
+ "lkjscript-contracts",
+]
 
 [[package]]
 name = "lkjscript-jit"

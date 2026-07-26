@@ -4,26 +4,31 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
     match op {
         x if x == Op::Arg as u8 => {
             let value = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Arguments)?;
             let index = vm.as_i64(value)?;
             let index = usize::try_from(index).ok();
-            if index.is_none_or(|index| index >= vm.args.len()) {
+            if index.is_none_or(|index| index >= vm.inputs.arguments.len()) {
                 let value = crate::host_ext::option_none(&mut vm.arena)?;
                 vm.push(value);
             } else if let Some(index) = index {
-                let string = vm.arena.alloc(HeapObj::Str(vm.args[index].clone()))?;
+                let string = vm
+                    .arena
+                    .alloc(HeapObj::Str(vm.inputs.arguments[index].clone()))?;
                 let value = crate::host_ext::option_some(&mut vm.arena, string)?;
                 vm.push(value);
             }
             Ok(true)
         }
         x if x == Op::Argc as u8 => {
-            let count = i64::try_from(vm.args.len())
+            vm.require_capability(lkjscript_core::CapabilityKind::Arguments)?;
+            let count = i64::try_from(vm.inputs.arguments.len())
                 .map_err(|_| lkjscript_core::Error::msg("argc out of range"))?;
             let value = vm.make_i64(count)?;
             vm.push(value);
             Ok(true)
         }
         x if x == Op::SysNowMs as u8 => {
+            vm.require_capability(lkjscript_core::CapabilityKind::Clock)?;
             let result = lkjscript_sys::now_ms_monotonic()
                 .map_err(|error| lkjscript_core::Error::msg(format!("sys-now-ms: {error}")));
             push_i64_result(vm, lkjscript_core::SystemErrorKind::Time, result);
@@ -31,6 +36,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         x if x == Op::SysWaitMs as u8 => {
             let duration = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Clock)?;
             let milliseconds = vm
                 .as_i64(duration)
                 .map_err(|_| lkjscript_core::Error::msg("sys-wait-ms: expected I64 duration"));

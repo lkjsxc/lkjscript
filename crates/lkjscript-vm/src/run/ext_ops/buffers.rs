@@ -51,6 +51,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let requested = vm.as_i64(requested)?;
             let offset = vm.as_i64(offset)?;
             let buffer = vm.pop()?;
+            vm.require_capability(lkjscript_core::CapabilityKind::Entropy)?;
             let result = crate::host_buf::sys_random_fill(&mut vm.arena, buffer, offset, requested);
             push_language_result(vm, lkjscript_core::SystemErrorKind::Random, result);
             Ok(true)

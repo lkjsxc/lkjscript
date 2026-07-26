@@ -67,6 +67,7 @@ pub(in crate::ssa) fn lower_type(
         Type::F64 => SsaType::F64,
         Type::Str => SsaType::Str,
         Type::Buf => SsaType::Buf,
+        Type::Capability(kind) => SsaType::Capability(*kind),
         Type::Owned(inner) => SsaType::Owned(Box::new(lower_type(inner, products)?)),
         Type::Ref(inner) => SsaType::Ref(Box::new(lower_type(inner, products)?)),
         Type::RefMut(inner) => SsaType::RefMut(Box::new(lower_type(inner, products)?)),

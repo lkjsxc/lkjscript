@@ -17,7 +17,8 @@ use crate::output;
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let options = args::parse_run(args)?;
     let source = PathBuf::from(&options.file);
-    lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
+    let (_, manifest) =
+        lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
     let metrics_enabled = metrics::enabled();
     let (program, compile_metrics) = if metrics_enabled {
         compile_path_with_profile_and_metrics(&source, &Limits::default(), options.resource_profile)
@@ -28,6 +29,23 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
                 .map_err(|error| error.to_string())?,
             CompileMetrics::default(),
         )
+    };
+    let required = program.bytecode().required_capabilities();
+    for capability in required {
+        if manifest
+            .capabilities
+            .binary_search_by_key(&capability.as_str(), String::as_str)
+            .is_err()
+        {
+            return Err(format!(
+                "package does not grant required {} capability",
+                capability.as_str()
+            ));
+        }
+    }
+    let inputs = lkjscript_vm::ExecutionInputs {
+        arguments: options.script_args.clone(),
+        capabilities: required.to_vec(),
     };
     let execution_config = ExecutionConfig::default();
     let jit_config = JitConfig {
@@ -42,6 +60,7 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let execution = engine::execute(
         &options,
         &program,
+        &inputs,
         &execution_config,
         jit_config,
         metrics_enabled,

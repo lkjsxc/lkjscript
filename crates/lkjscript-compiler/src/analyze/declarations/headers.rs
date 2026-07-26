@@ -31,8 +31,9 @@ impl Analyzer {
                                 self.error(source, "executable root declares duplicate main")
                             );
                         }
-                        let (return_type, body) = parse_main(args)
+                        let (param_names, param_types, return_type, body) = parse_main(args)
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
+                        let param_types = self.resolve_main_parameter_types(source, param_types)?;
                         let return_type = self
                             .resolve_enum_type(&return_type, &[])
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
@@ -54,6 +55,8 @@ impl Analyzer {
                         }
                         main = Some(PendingMain {
                             origin: source,
+                            param_names,
+                            param_types,
                             return_type,
                             body,
                         });

@@ -157,6 +157,8 @@ struct PendingFunction<'a> {
 
 struct PendingMain<'a> {
     origin: SourceId,
+    param_names: Vec<String>,
+    param_types: Vec<Type>,
     return_type: Type,
     body: &'a AstExpr,
 }

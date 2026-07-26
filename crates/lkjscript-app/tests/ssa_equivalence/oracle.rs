@@ -63,7 +63,11 @@ pub fn compare_source(source: &str, name: &str) -> ScalarOutcome {
     };
     let program = compile_source(source, name, &Limits::default()).expect("compile SSA fixture");
     let evaluated = evaluator_outcome(evaluate(program.ssa(), &EvalConfig::default()));
-    let executed = vm_outcome(run_chunk(program.bytecode(), &ExecutionConfig::default()));
+    let executed = vm_outcome(run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    ));
     assert_eq!(evaluated, executed, "SSA/VM mismatch for {name}");
     assert_eq!(
         program.bytecode_links().functions.len(),

@@ -70,6 +70,7 @@ pub(crate) fn lower_program_with_metrics(
 }
 
 mod builder;
+mod entry_function;
 mod enums;
 mod facts;
 mod lowering;

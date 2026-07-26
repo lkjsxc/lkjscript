@@ -38,6 +38,11 @@ pub(super) fn language() -> ContractDescriptor {
                 "ownership",
                 "ownership",
                 "type-derived move borrow and drop facts",
+            ))
+            .fact(fact(
+                "capabilities",
+                "capabilities",
+                "eight closed explicit unforgeable provider values",
             )),
     )
 }
@@ -67,7 +72,7 @@ pub(super) fn source(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "visibility",
                     "visibility",
-                    "private by default explicit exports list",
+                    "private by default explicit public declaration field",
                 ))
                 .fact(fact("unknown-fields", "unknown forms", "rejected"))
                 .fact(fact(
