@@ -66,33 +66,6 @@ fn canonical_lock_detects_every_source_change() {
 }
 
 #[test]
-fn execution_identity_binds_entry_source_module_package_and_lock() {
-    let root = fixture("execution-identity");
-    let (path, bytes) = create_lock(&root).unwrap();
-    fs::write(path, bytes).unwrap();
-    let (_, _, first) = execution_identity(&root.join("main.lkjscript")).unwrap();
-    assert_eq!(first.module_path, "main.lkjscript");
-    assert_ne!(first.source_sha256, [0; 32]);
-    assert_ne!(first.module_sha256, [0; 32]);
-    assert_ne!(first.package_sha256, [0; 32]);
-    assert_ne!(first.lock_sha256, [0; 32]);
-
-    fs::write(
-        root.join("main.lkjscript"),
-        "main/\nsig/\n->\nUnit\n/sig\ndo/\nunit\n/do\n/main\n",
-    )
-    .unwrap();
-    let (path, bytes) = create_lock(&root).unwrap();
-    fs::write(path, bytes).unwrap();
-    let (_, _, changed) = execution_identity(&root.join("main.lkjscript")).unwrap();
-    assert_ne!(first.source_sha256, changed.source_sha256);
-    assert_ne!(first.module_sha256, changed.module_sha256);
-    assert_ne!(first.package_sha256, changed.package_sha256);
-    assert_ne!(first.lock_sha256, changed.lock_sha256);
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
 fn lock_contracts_are_full_current_digests() {
     let root = fixture("contracts");
     let lock = graph::build(&root).unwrap();

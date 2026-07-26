@@ -17,9 +17,8 @@ use crate::output;
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let options = args::parse_run(args)?;
     let source = PathBuf::from(&options.file);
-    let (package_root, manifest, package_identity) =
-        lkjscript_compiler::package::execution_identity(&source)
-            .map_err(|error| error.to_string())?;
+    let (_, manifest) =
+        lkjscript_compiler::package::verify(&source).map_err(|error| error.to_string())?;
     let metrics_enabled = metrics::enabled();
     let (program, compile_metrics) = if metrics_enabled {
         compile_path_with_profile_and_metrics(&source, &Limits::default(), options.resource_profile)
@@ -49,24 +48,12 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
         capabilities: required.to_vec(),
     };
     let execution_config = ExecutionConfig::default();
-    let cache = (options.native_cache == args::NativeCacheMode::Local).then(|| {
-        lkjscript_jit::CacheContext {
-            package_root,
-            module_path: package_identity.module_path,
-            source_sha256: package_identity.source_sha256,
-            module_sha256: package_identity.module_sha256,
-            package_sha256: package_identity.package_sha256,
-            lock_sha256: package_identity.lock_sha256,
-            profile: options.resource_profile.identity(),
-        }
-    });
     let jit_config = JitConfig {
         auto_threshold: options.auto_threshold,
         auto_enabled: options.auto_enabled,
         retain_machine_code_diagnostics: output::diagnostics_enabled()
             || env::var_os("LKJSCRIPT_JIT_DUMP_DIR").is_some(),
         collect_metrics: metrics_enabled,
-        cache,
         ..JitConfig::default()
     };
     let engine_started = metrics_enabled.then(Instant::now);

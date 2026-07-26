@@ -9,18 +9,11 @@ pub enum Engine {
     OptimizingJit,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum NativeCacheMode {
-    Disabled,
-    Local,
-}
-
 pub struct RunOptions {
     pub engine: Engine,
     pub auto_threshold: u64,
     pub auto_enabled: bool,
     pub resource_profile: ResourceProfile,
-    pub native_cache: NativeCacheMode,
     pub file: String,
     pub script_args: Vec<String>,
 }
@@ -31,7 +24,6 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
     let mut auto_threshold = JitConfig::default().auto_threshold;
     let mut auto_enabled = true;
     let mut resource_profile = ResourceProfile::default();
-    let mut native_cache = NativeCacheMode::Disabled;
     while let Some(argument) = args.get(index).map(String::as_str) {
         match argument {
             "--engine" => {
@@ -62,17 +54,6 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
                 auto_enabled = false;
                 index += 1;
             }
-            "--native-cache" => {
-                let value = args
-                    .get(index + 1)
-                    .ok_or_else(|| "--native-cache needs disabled or local".to_string())?;
-                native_cache = match value.as_str() {
-                    "disabled" => NativeCacheMode::Disabled,
-                    "local" => NativeCacheMode::Local,
-                    other => return Err(format!("unknown native cache mode: {other}")),
-                };
-                index += 2;
-            }
             "--resource-profile" => {
                 let value = args
                     .get(index + 1)
@@ -98,7 +79,6 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
         auto_threshold,
         auto_enabled,
         resource_profile,
-        native_cache,
         file,
         script_args,
     })
@@ -107,7 +87,7 @@ pub fn parse_run(args: &[String]) -> Result<RunOptions, String> {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::{parse_run, Engine, NativeCacheMode, ResourceProfile};
+    use super::{parse_run, Engine, ResourceProfile};
 
     #[test]
     fn ordinary_run_defaults_to_auto_and_explicit_vm_remains_available() {
@@ -116,7 +96,6 @@ mod tests {
         assert_eq!(default.engine, Engine::Auto);
         assert_eq!(default.auto_threshold, 64);
         assert_eq!(default.resource_profile, ResourceProfile::default());
-        assert_eq!(default.native_cache, NativeCacheMode::Disabled);
 
         let explicit_vm = parse_run(&[
             "run".into(),
@@ -147,14 +126,6 @@ mod tests {
             sandbox.resource_profile,
             ResourceProfile::named("sandbox").expect("registered profile")
         );
-        let cached = parse_run(&[
-            "run".into(),
-            "--native-cache".into(),
-            "local".into(),
-            "main.lkjscript".into(),
-        ])
-        .expect("parse native cache");
-        assert_eq!(cached.native_cache, NativeCacheMode::Local);
         assert!(parse_run(&[
             "run".into(),
             "--resource-profile".into(),

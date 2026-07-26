@@ -28,3 +28,4 @@ its text.
   Rejection](experiments/c6-forced-proof-optimizing-performance-gate-adopted-after-reject.md)
 - [C7 Automatic Baseline-To-Proof Promotion: Predeclared, Not
   Run](experiments/c7-automatic-baseline-to-proof-promotion-predeclared-not-run.md)
+- [C8 Persistent Native Image Cache: Rejected](experiments/c8-persistent-native-image-cache-rejected.md)

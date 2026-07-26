@@ -5,7 +5,7 @@
     {
       "path": "Cargo.lock",
       "class": "generated-mutable",
-      "sha256": "18781029e54f64b12c231bd881324661722f083a5540ed167c33cbee509eff35",
+      "sha256": "bfad5b9d26b04d8b03d1fdc8d3591c52260afe2fc7a5ee80b7472abf9df0d0b9",
       "generator": "cargo 1.96.0 lockfile v4; Cargo.toml workspace dependency resolution"
     },
     {
@@ -90,6 +90,12 @@
       "path": "meta/benchmarks/jit/results/callable-baseline-jit-linux-x86_64.json",
       "class": "immutable-benchmark-result",
       "sha256": "ffdc3671857e44dfba2cbd2d1c287514a12c5a4c58a07124bfd99645c3bb86a7",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/native-image-cache-selection.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "a499c2ab01609dd162a888d822f7e515dcf7bbae2a83c528cc87a3bdf7bb907b",
       "generator": null
     },
     {

@@ -114,11 +114,6 @@ pub(crate) fn metrics() -> ContractDescriptor {
                 "heap",
                 "heap",
                 "allocations collections roots and barriers",
-            ))
-            .fact(fact(
-                "native-cache",
-                "native cache",
-                "hits misses corruption bytes timing publication status",
             )),
     )
 }

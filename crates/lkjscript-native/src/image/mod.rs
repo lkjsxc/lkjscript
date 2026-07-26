@@ -10,7 +10,6 @@ use crate::plan::{
 
 mod access;
 mod accounting;
-mod codec;
 mod construction;
 mod constructors;
 mod entries;
@@ -25,7 +24,6 @@ mod tests;
 mod values;
 
 use accounting::*;
-pub use codec::*;
 pub(crate) use constructors::*;
 pub use entries::*;
 pub use error::*;

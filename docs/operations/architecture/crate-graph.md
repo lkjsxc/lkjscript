@@ -10,26 +10,23 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 ## Crate Graph
 
 ```text
-                         lkjscript-contracts
-                       /        |          \
-           lkjscript-ir   lkjscript-core   lkjscript-native
-                  \          /       \          /       \
-                   compiler           native-cache       sys
-                         \             /  \              /
-                          app ---- lkjscript-jit ---- vm
-                           \
-                            xtask
+lkjscript-ir      lkjscript-core      lkjscript-native
+      ^                 ^                    ^
+      |                 |                    |
+      +--- compiler ----+--- lkjscript-jit --+--- lkjscript-sys
+               ^                   ^                    ^
+               |                   |                    |
+               +------ app --------+------ vm ----------+
+               |
+               +------ xtask
 ```
 
 The actual product dependency edges are:
 
-- `lkjscript-contracts` has no internal dependency
-- `lkjscript-ir -> contracts`; `lkjscript-core -> contracts`
-- `lkjscript-native -> contracts`
-- `lkjscript-compiler -> contracts + lkjscript-ir + lkjscript-core`
-- `lkjscript-native-cache -> contracts + core + native`
-- `lkjscript-sys -> native`
-- `lkjscript-jit -> contracts + ir + core + native + native-cache + sys`
+- `lkjscript-ir` and `lkjscript-native` have no dependencies
+- `lkjscript-compiler -> lkjscript-ir + lkjscript-core`
+- `lkjscript-sys -> lkjscript-native`
+- `lkjscript-jit -> ir + core + native + sys`
 - `lkjscript-vm -> core + jit + sys`
 - `lkjscript-app -> compiler + ir + core + jit + vm`
 - `lkjscript-xtask -> compiler + core`
@@ -50,8 +47,7 @@ checks. No workspace crate has a third-party Rust dependency.
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
 | SSA bytecode lowering | `crates/lkjscript-compiler/src/codegen/` | `compile_program`; no sibling HIR semantic emitter | <!-- LKJ-EXACT-DATA -->
 | Owned x86-64 foundation | `crates/lkjscript-native/src/` | closed scalar/reference machine plan, verifier-owned bounded liveness certificates, exact typed maps plus private structural requirements, canonical native contract reservation/encoding, opaque installable image | <!-- LKJ-EXACT-DATA -->
-| Persistent native image cache | `crates/lkjscript-native-cache/src/` | exact keys, bounded lookup, canonical image decode, atomic local publication | <!-- LKJ-EXACT-DATA -->
-| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, verified image cache integration, `GcHeap` runtime services, code objects, tier state, forced/auto execution | <!-- LKJ-EXACT-DATA -->
+| Verified SSA/native runtime adapter | `crates/lkjscript-jit/src/` | scalar plus host-independent GC lowering, `GcHeap` runtime services, code objects, tier state, forced/auto execution | <!-- LKJ-EXACT-DATA -->
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-core/src/gc/` | pure session-owned non-reusing stable-index `GcHeap`, transactional estimated-byte-accounted mutation, transitive snapshots, bounded counters/collection policy, VM and forced-JIT use | <!-- LKJ-EXACT-DATA -->

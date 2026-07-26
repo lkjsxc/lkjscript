@@ -56,25 +56,12 @@ impl FunctionTierRecord {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CacheStatus {
-    Disabled,
-    Hit,
-    MissNotFound,
-    MissCorrupt,
-    MissOverLimit,
-    Unavailable,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompileStats {
     pub(crate) optimization: Duration,
     pub(crate) lowering_and_encoding: Duration,
     pub(crate) installation: Duration,
     pub(crate) work_units: u64,
-    pub(crate) cache_status: CacheStatus,
-    pub(crate) cache_lookup: Duration,
-    pub(crate) cache_publication: Duration,
 }
 
 impl CompileStats {
@@ -92,18 +79,6 @@ impl CompileStats {
 
     pub const fn work_units(&self) -> u64 {
         self.work_units
-    }
-
-    pub const fn cache_status(&self) -> CacheStatus {
-        self.cache_status
-    }
-
-    pub const fn cache_lookup(&self) -> Duration {
-        self.cache_lookup
-    }
-
-    pub const fn cache_publication(&self) -> Duration {
-        self.cache_publication
     }
 }
 
@@ -152,14 +127,4 @@ pub struct JitStats {
     pub algebraic_rewrites: u64,
     pub gvn_rewrites: u64,
     pub checked_i64_rewrites: u64,
-    pub cache_lookups: u64,
-    pub cache_hits: u64,
-    pub cache_misses: u64,
-    pub cache_corruptions: u64,
-    pub cache_bytes_read: u64,
-    pub cache_bytes_written: u64,
-    pub cache_publications: u64,
-    pub cache_publication_skips: u64,
-    pub cache_lookup_time: Duration,
-    pub cache_publication_time: Duration,
 }

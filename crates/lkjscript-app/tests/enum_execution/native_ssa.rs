@@ -158,7 +158,7 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
         ..JitConfig::default()
     };
     for execution in [
-        execute_forced(compiled.ssa(), &ExecutionConfig::default(), config.clone())
+        execute_forced(compiled.ssa(), &ExecutionConfig::default(), config)
             .expect("baseline returns nested enum"),
         execute_optimizing(compiled.ssa(), &ExecutionConfig::default(), config)
             .expect("proof returns nested enum"),

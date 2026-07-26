@@ -15,7 +15,6 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
     let help = String::from_utf8(help.stdout).expect("help is UTF-8");
     assert!(help.contains("--engine vm|auto|baseline-jit|optimizing-jit"));
     assert!(help.contains("default: auto at 64 function entries"));
-    assert!(help.contains("--native-cache disabled|local"));
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/optimizing-loop.lkjscript");
@@ -49,12 +48,6 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
         "\"optimization_certificate_bytes_estimate\":",
         "\"optimization_metadata_bytes_estimate\":",
         "\"certificate_bytes_estimate\":",
-        "\"cache_lookups\":",
-        "\"cache_hits\":",
-        "\"cache_misses\":",
-        "\"cache_status\":",
-        "\"cache_lookup_ns\":",
-        "\"cache_publication_ns\":",
     ] {
         assert!(json.contains(field), "missing metrics field {field}");
     }

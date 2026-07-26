@@ -2,10 +2,6 @@ use super::*;
 
 pub(super) static NEXT_PLAN_ID: AtomicU64 = AtomicU64::new(1);
 
-pub(crate) fn fresh_plan_id() -> u64 {
-    NEXT_PLAN_ID.fetch_add(1, Ordering::Relaxed)
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct LayoutIdentity(u32);
 

@@ -35,7 +35,7 @@ use enum_lower::*;
 use enum_types::*;
 use enums::*;
 use functions::*;
-pub(crate) use group::{cached_group, lower_baseline_group, lower_optimizing_group};
+pub(crate) use group::{lower_baseline_group, lower_optimizing_group};
 use instructions::*;
 use layout::*;
 use numeric::*;

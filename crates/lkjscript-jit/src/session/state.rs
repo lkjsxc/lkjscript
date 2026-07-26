@@ -86,12 +86,10 @@ impl JitSession {
                     .all(|ty| native_type(ty).is_some()),
             })
             .collect();
-        let installer = ExecutableInstaller::new(config.executable_limits);
-        let metrics_started = config.collect_metrics.then(Instant::now);
         Self {
             program,
             links,
-            installer,
+            installer: ExecutableInstaller::new(config.executable_limits),
             config,
             functions,
             objects: Vec::new(),
@@ -104,7 +102,7 @@ impl JitSession {
             vm_fallbacks: 0,
             compile_failures: 0,
             native_invocations: 0,
-            metrics_started,
+            metrics_started: config.collect_metrics.then(Instant::now),
             time_to_first_native_entry: None,
             first_native_call: None,
             native_execution: Duration::ZERO,
@@ -119,16 +117,6 @@ impl JitSession {
             native_to_vm_transitions: 0,
             last_runtime_trap: None,
             last_runtime_resource: None,
-            cache_lookups: 0,
-            cache_hits: 0,
-            cache_misses: 0,
-            cache_corruptions: 0,
-            cache_bytes_read: 0,
-            cache_bytes_written: 0,
-            cache_publications: 0,
-            cache_publication_skips: 0,
-            cache_lookup_time: Duration::ZERO,
-            cache_publication_time: Duration::ZERO,
         }
     }
 }

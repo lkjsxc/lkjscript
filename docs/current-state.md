@@ -11,7 +11,6 @@
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->
 <!-- LKJ-STATUS id=opaque-paths status=current -->
-<!-- LKJ-STATUS id=persistent-native-image-cache status=accepted-selection -->
 <!-- LKJ-STATUS id=repository-graph-context status=current -->
 <!-- LKJ-STATUS id=repository-topology status=current -->
 <!-- LKJ-STATUS id=resource-profile-compiler status=current -->
@@ -118,7 +117,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - complete region/borrow/drop semantics for resources nested in products and
   collections;
 - a portable path policy beyond the Current Linux absolute-byte contract;
-- the selected persistent verified native-image cache and measured adoption;
+- a replacement persistent verified artifact cache after the first complete
+  candidate failed its measured adoption gate and was removed;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
 - automatic baseline-to-proof promotion acceptance beyond its selected
   measured candidate;

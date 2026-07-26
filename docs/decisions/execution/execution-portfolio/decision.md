@@ -99,13 +99,17 @@ AOT must pass evaluator/VM/native differential tests and exact malformed image,
 relocation, root-map, trap/outcome, and forced-entry checks.
 ## Persistent Native Cache
 
-The selected initial slice is the
-[persistent verified native image cache](native-image-cache.md). It stores only
-canonical `InstallableImage` artifacts after complete package, semantic,
-native, provider, target, and resource-policy identity is verified. Loading
-verifies:
+Persistent native caching remains an **Accepted Target**, not Current. The first
+complete bounded candidate was measured and
+[rejected](../../../vision/experiments/c8-persistent-native-image-cache-rejected.md):
+lookup/decode was slower than Current lowering, cold publication exceeded the
+predeclared regressions, and no representative workload passed adoption. Its
+interface and implementation were removed rather than retained as fallback.
 
-- the complete local content hash (signatures remain outside this slice);
+A replacement cache is implemented only after complete package, semantic, native,
+provider, target, and resource-policy identities are Current. Loading verifies:
+
+- content hash and optional configured signature;
 - semantic/native/runtime/provider ABI;
 - edition/schema and complete source/artifact identity;
 - target and CPU feature requirements;

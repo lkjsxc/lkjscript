@@ -1,6 +1,6 @@
 #![allow(clippy::expect_used, clippy::panic)]
 mod evaluator;
-pub(crate) mod fixtures;
+mod fixtures;
 mod optimization_budgets;
 mod optimization_certificates;
 mod optimization_checker;

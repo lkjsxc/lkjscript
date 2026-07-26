@@ -52,24 +52,24 @@ not Current.
 The previously selected process-local synchronous automatic baseline-to-proof
 promotion remains an **Accepted Implementation Selection** and valid later
 experiment. Its threshold gate and default-disabled policy remain unchanged.
-The bounded local persistent native-image cache is now an **Accepted
-Implementation Selection** with exact identity, proof-rerun, publication, and
-measurement gates. Broader proof passes, OSR, background compilation, guards,
-deoptimization, AOT, remote caches, optional local PGO, and non-Linux targets
-remain non-Current.
+Broader proof passes, OSR, background compilation, guards, deoptimization, AOT,
+caches, optional local PGO, and non-Linux targets remain non-Current.
 ## Rejected
 
 Mandatory uploaded telemetry, hidden forced-engine fallback, incomplete artifact
 cache keys, separate backend semantic compilers, unbounded optimizer search,
-and optimizer-dependent deterministic semantic charges are rejected.
+and optimizer-dependent deterministic semantic charges are rejected. The first
+complete bounded persistent native-image cache candidate is also
+[rejected by measurement](../vision/experiments/c8-persistent-native-image-cache-rejected.md)
+and removed; only a materially different candidate may reopen that target.
 Current-process bounded JIT counters remain local, ephemeral, and not telemetry.
 ## Deferred
 
-Production AOT, remote or shared native caches, optional explicit local PGO,
-automatic optimizing promotion, OSR, package installation/update/registry,
-supervisor/scheduler, adaptive or generational GC, background JIT compilation,
-guarded runtime specialization/deoptimization, non-Linux native backends,
-browser, general HTTP server/framework, and GUI runtime are later cycles. Local
-PGO is optional and is considered only after common SSA/AOT and
+Production AOT, content-addressed native caches, optional explicit local PGO,
+automatic optimizing promotion, OSR, package installation/update/manifests/
+locks/registry, supervisor/scheduler, adaptive or generational GC, background
+JIT compilation, guarded runtime specialization/deoptimization, non-Linux native
+backends, browser, general HTTP server/framework, and GUI runtime are later
+cycles. Local PGO is optional and is considered only after common SSA/AOT and
 complete artifact identity; no uploaded telemetry is accepted. These documents
 are decisions or experiments, not capability claims.

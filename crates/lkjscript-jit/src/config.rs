@@ -18,7 +18,7 @@ pub enum TierState {
     Disabled,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JitConfig {
     pub backend_limits: BackendLimits,
     pub executable_limits: ExecutableLimits,
@@ -34,8 +34,6 @@ pub struct JitConfig {
     /// Force exact-root collection before every allocation-capable heap site.
     pub force_gc_before_allocation: bool,
     pub optimization_limits: OptimizationLimits,
-    pub cache: Option<lkjscript_native_cache::CacheContext>,
-    pub cache_limits: lkjscript_native_cache::CacheLimits,
 }
 
 impl Default for JitConfig {
@@ -54,8 +52,6 @@ impl Default for JitConfig {
             epoch: 1,
             force_gc_before_allocation: false,
             optimization_limits: OptimizationLimits::default(),
-            cache: None,
-            cache_limits: lkjscript_native_cache::CacheLimits::default(),
         }
     }
 }

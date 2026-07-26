@@ -8,52 +8,6 @@ pub(crate) fn lower_baseline_group(
     lower_group(verified.program(), root, limits)
 }
 
-pub(crate) fn cached_group(
-    program: &lkjscript_ir::Program,
-    root: FunctionId,
-    image: InstallableImage,
-) -> Result<LoweredGroup, LoweringError> {
-    let functions = reachable_group(program, root)?;
-    let layouts = LayoutInterner::build(program, &functions)?;
-    let mut native_functions = Vec::with_capacity(functions.len());
-    for function in &functions {
-        let source = source_function(program, *function)?;
-        let expected = lower_signature(*function, &source.signature, &layouts)?;
-        let entry = image
-            .entries()
-            .iter()
-            .find(|entry| entry.source_function().get() == function.raw())
-            .ok_or_else(|| {
-                LoweringError::new(
-                    LoweringFailureCode::Backend,
-                    Some(*function),
-                    "cached image entry is absent",
-                )
-            })?;
-        if entry.signature() != &expected {
-            return Err(LoweringError::new(
-                LoweringFailureCode::Backend,
-                Some(*function),
-                "cached image signature mismatch",
-            ));
-        }
-        native_functions.push((*function, entry.function()));
-    }
-    if image.entries().len() != functions.len() {
-        return Err(LoweringError::new(
-            LoweringFailureCode::Backend,
-            Some(root),
-            "cached image reachable group mismatch",
-        ));
-    }
-    Ok(LoweredGroup {
-        image,
-        functions,
-        native_functions,
-        explicit_traps: Vec::new(),
-    })
-}
-
 pub(crate) fn lower_optimizing_group(
     verified: &VerifiedOptimizedProgram,
     root: FunctionId,

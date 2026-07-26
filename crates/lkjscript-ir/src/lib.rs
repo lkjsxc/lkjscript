@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 
 mod eval;
-mod identity;
 mod model;
 mod numeric_contract;
 mod optimize;
@@ -14,7 +13,6 @@ mod verify;
 mod tests;
 
 pub use eval::{evaluate, EvalConfig, EvalOutcome, EvalValue};
-pub use identity::{verified_program_digest, IdentityError};
 pub use model::{
     BindingId, Block, BlockId, BlockMetadata, BlockParameter, BorrowKind, BytecodeBlockLink,
     BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget, Constant, EffectSet,
