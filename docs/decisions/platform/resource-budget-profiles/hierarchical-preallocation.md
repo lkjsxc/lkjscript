@@ -9,16 +9,15 @@ pre-allocation accounting, failed prefixes, and closed Profile V2 categories.
 
 ## Status
 
-**Current core foundation; whole-pipeline migration incomplete.** Profile V2's
-closed categories, named ceilings, bounded authority paths, lower-only child
-grants, and move-only pre-allocation reservations are Current in
-`lkjscript-core`. Compiler enum shape and match pattern/arm/matrix/plan/witness
-categories reserve from validated source shape before HIR allocation.
-Rejections report the exact event and mark current prechecks as
-`allocated_before_rejection=false`; deterministic event-prefix
-journaling is not yet Current. Existing compiler and protocol entry points still
-use separate legacy/current charging paths; one cross-authority request ledger
-and pre-allocation coverage of every amplification path remain Accepted Targets.
+**Current core foundation and deterministic journal; whole-pipeline migration
+incomplete.** Profile V2's closed categories, named ceilings, bounded authority
+paths, lower-only child grants, move-only pre-allocation reservations, and fixed
+nonallocating deterministic ledger journal are Current in `lkjscript-core`.
+Compiler enum shape and match pattern/arm/matrix/plan/witness categories reserve
+from validated source shape before HIR allocation. Existing compiler and
+protocol entry points still use separate legacy/current charging paths; one
+cross-authority request ledger and pre-allocation coverage of every
+amplification path remain Accepted Targets.
 
 ## One Ledger
 
@@ -54,14 +53,29 @@ budget. Reservation identity, owner, category, amount, semantic cause, parent
 grant, and state are explicit; move semantics prevent double return/commit and
 cross-owner use.
 
-The complete migrated failure response will include the deterministic ledger
-prefix: profile identity, all committed charges and reservation transitions,
-and the rejected event's
-category, unit, ceiling, prior charge, attempted increment, semantic node,
-phase, allocation-before-rejection flag, and child-scope path. It cannot claim
-totals for work that did not occur or expose noncanonical host paths.
-Publication is staged only within an already reserved bound and is atomic after
-validation.
+The Current core journal has a fixed capacity of 256 reservation records and
+uses no heap allocation. Journal capacity is checked before a reservation ID is
+issued or category grant is changed: the 256th reservation succeeds and the
+257th rejects without mutation or allocation. IDs are monotonic and never
+reused. ID exhaustion, journal exhaustion, consume overrun, invalid child grant,
+and path overflow reject without mutation.
+
+Every precheck rejection owns an immutable deterministic prefix containing the
+Profile V2 identity, aggregate committed totals in closed category order, every
+prior reservation in ID order, and the exact rejected event. Each reservation
+record contains identity, owner path, category, semantic cause, amount,
+consumed amount, explicitly returned amount, and whether Drop conservatively
+committed its remainder. Prefixes taken in nested scopes include completed
+ancestors and prior siblings plus current work exactly once. Missing authority
+returns the same prefix shape without allocation. Rejected events contain kind,
+category when applicable, ceiling and prior/increment amounts when applicable,
+semantic cause, owner path, and `allocated_before_rejection=false` for all core
+prechecks. The existing post-phase `ResourceDiagnostic` is explicitly legacy,
+does not carry this prefix, and makes no pre-allocation claim.
+
+A prefix cannot claim totals for work that did not occur or expose noncanonical
+host paths. Publication is staged only within an already reserved bound and is
+atomic after validation.
 
 Source bytes reserve token/line space before lexing; decoded lengths reserve
 collections before growth; pattern rows/columns reserve specialization;

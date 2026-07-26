@@ -123,9 +123,11 @@ enum transitions remain part of the Accepted Edition 2 gate.
 Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child
 oversubscription, consume/return/Drop reservation behavior, authority depth,
-missing authority, deterministic diagnostics, and identity. Compiler tests
+missing authority, deterministic prefix equality and nested order, exact
+journal capacity plus one, no-mutation rejection, and identity. Compiler tests
 retain corpus-root and legacy post-phase source/HIR/SSA publication coverage.
-Whole-pipeline pre-allocation and cross-authority ledger gates remain Accepted.
+Whole-pipeline pre-allocation and shared cross-authority ledger gates remain
+Accepted.
 
 ## Current Edition 2 Gate
 

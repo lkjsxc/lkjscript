@@ -22,10 +22,12 @@ use lkjscript_ir::{BytecodeLinkMetadata, VerifiedProgram};
 
 pub use lkjscript_core::{
     BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
-    BudgetScope, InvalidCeiling, Reservation, ReservationId, ReservationState, ResourceCategory,
-    ResourceCeilings, ResourceDiagnostic, ResourceProfile, ResourceProfileIdentity,
-    ResourceProfileName, ResourceUsage, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,
-    MAX_BUDGET_PATH_DEPTH, RESOURCE_PROFILE_SCHEMA, RESOURCE_PROFILE_VERSION,
+    BudgetPrefix, BudgetRejectedEvent, BudgetScope, InvalidCeiling, Reservation, ReservationId,
+    ReservationJournalRecord, ReservationState, ResourceCategory, ResourceCeilings,
+    ResourceDiagnostic, ResourceProfile, ResourceProfileIdentity, ResourceProfileName,
+    ResourceUsage, UnknownResourceProfile, IMPLEMENTATION_MAXIMA_VERSION,
+    MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH, RESOURCE_PROFILE_SCHEMA,
+    RESOURCE_PROFILE_VERSION,
 };
 pub use pipeline::{
     compile_path, compile_path_with_metrics, compile_path_with_profile,

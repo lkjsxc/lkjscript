@@ -29,7 +29,8 @@ verification discipline without preserving obsolete implementation priorities.
 Intelligence Graph/context, Agent Work State V2 semantic references, complete
 Semantic Source Schema V2 with its exact V1 base, typed holes/legal actions,
 closed hole transactions, one-shot protocol, compiler Resource Profile V2, and
-the core hierarchical pre-allocation foundation are Current. Agent Foundation
+the core hierarchical pre-allocation plus deterministic journal foundation are
+Current. Agent Foundation
 V1 and Semantic Source Schema V1 are historical rejected identities. Bounded
 local stdio sessions serve V2 and are Current. Edition 2 identity, homogeneous
 closures, marker projection, exact atomic migration publication, the canonical

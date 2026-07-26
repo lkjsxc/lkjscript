@@ -17,8 +17,9 @@ mod value;
 
 pub use budget::{
     BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
-    BudgetScope, Reservation, ReservationId, ReservationState, ResourceCategory,
-    ResourceDiagnostic, ResourceUsage, MAX_BUDGET_PATH_DEPTH,
+    BudgetPrefix, BudgetRejectedEvent, BudgetScope, Reservation, ReservationId,
+    ReservationJournalRecord, ReservationState, ResourceCategory, ResourceDiagnostic,
+    ResourceUsage, MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH,
 };
 pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,

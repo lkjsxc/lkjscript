@@ -9,8 +9,8 @@ resource profiles, and AI-maintainability lints without weakening safety during 
 
 **Current Profile V2 core and compiler foundation; broader migration Accepted.**
 Profile V2, five bounded named profiles, lower-only host overrides, closed
-hierarchical authorities, fixed authority paths, and conservative
-pre-allocation reservations are implemented in `lkjscript-core`. Existing
+hierarchical authorities, fixed paths, conservative reservations, and a fixed
+nonallocating deterministic journal are in `lkjscript-core`. Existing
 compiler source/HIR/normalized-SSA accounting remains an explicitly legacy
 post-phase wrapper, and the one-shot protocol remains a separate ledger. The
 exact Current surface and remaining boundaries are defined by the

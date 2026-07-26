@@ -3,6 +3,9 @@ use std::fmt;
 use super::ResourceCategory;
 use crate::ResourceProfileIdentity;
 
+/// Legacy compiler post-phase diagnostic.
+///
+/// This does not carry a journal prefix or claim that allocation was prevented.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ResourceDiagnostic {
     pub profile: ResourceProfileIdentity,

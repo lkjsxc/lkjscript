@@ -1,6 +1,7 @@
 use super::{
-    BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetPath, Reservation,
-    ResourceCategory, RESOURCE_CATEGORY_COUNT,
+    BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetJournal, BudgetPath,
+    BudgetPrefix, BudgetRejectedEvent, Reservation, ReservationId, ResourceCategory,
+    RESOURCE_CATEGORY_COUNT,
 };
 use crate::ResourceProfile;
 
@@ -12,6 +13,8 @@ pub struct BudgetScope<'a> {
     pub(crate) reserved: [u64; RESOURCE_CATEGORY_COUNT],
     pub(crate) sink: &'a mut [u64; RESOURCE_CATEGORY_COUNT],
     pub(crate) next_reservation: &'a mut u64,
+    pub(crate) journal: &'a mut BudgetJournal,
+    pub(crate) prefix_base: [u64; RESOURCE_CATEGORY_COUNT],
 }
 
 impl<'a> BudgetScope<'a> {
@@ -38,6 +41,11 @@ impl<'a> BudgetScope<'a> {
         self.reserved[category.index()]
     }
 
+    pub fn prefix(&self) -> BudgetPrefix {
+        self.journal
+            .prefix(self.profile.identity(), &self.prefix_base, None)
+    }
+
     #[allow(
         clippy::result_large_err,
         reason = "budget rejection must not allocate"
@@ -48,9 +56,7 @@ impl<'a> BudgetScope<'a> {
         limit: u64,
     ) -> Result<(), BudgetError> {
         let index = category.index();
-        let committed = self.used[index];
-        let reserved = self.reserved[index];
-        let occupied = committed.saturating_add(reserved);
+        let occupied = self.used[index].saturating_add(self.reserved[index]);
         if limit > self.grant[index] || limit < occupied {
             let kind = if limit > self.grant[index] {
                 BudgetErrorKind::GrantExceedsParent
@@ -91,6 +97,8 @@ impl<'a> BudgetScope<'a> {
             reserved: [0; RESOURCE_CATEGORY_COUNT],
             sink: &mut self.used,
             next_reservation: self.next_reservation,
+            journal: self.journal,
+            prefix_base: self.prefix_base,
         })
     }
 
@@ -111,6 +119,9 @@ impl<'a> BudgetScope<'a> {
         if remaining.is_none_or(|value| amount > value) {
             return Err(self.error(BudgetErrorKind::LimitExceeded, category, amount, cause));
         }
+        if !self.journal.has_capacity() {
+            return Err(self.error(BudgetErrorKind::JournalExhausted, category, amount, cause));
+        }
         let Some(id) = self.next_reservation.checked_add(1) else {
             return Err(self.error(
                 BudgetErrorKind::ReservationIdExhausted,
@@ -119,9 +130,19 @@ impl<'a> BudgetScope<'a> {
                 cause,
             ));
         };
+        let journal_index =
+            self.journal
+                .push(ReservationId::new(id), self.path, category, cause, amount);
         *self.next_reservation = id;
         self.reserved[index] += amount;
-        Ok(Reservation::new(self, id, category, amount, cause))
+        Ok(Reservation::new(
+            self,
+            id,
+            journal_index,
+            category,
+            amount,
+            cause,
+        ))
     }
 
     pub(crate) fn error(
@@ -132,9 +153,8 @@ impl<'a> BudgetScope<'a> {
         cause: BudgetCause,
     ) -> BudgetError {
         let index = category.index();
-        BudgetError {
+        let event = BudgetRejectedEvent {
             kind,
-            profile: self.profile.identity(),
             category,
             authority: self.path.authority(),
             path: self.path,
@@ -144,12 +164,19 @@ impl<'a> BudgetScope<'a> {
             attempted,
             observed: self.used[index],
             allocated_before_rejection: false,
-        }
+        };
+        BudgetError::new(
+            self.profile.identity(),
+            event,
+            self.journal,
+            &self.prefix_base,
+        )
     }
 }
 
 impl Drop for BudgetScope<'_> {
     fn drop(&mut self) {
+        self.journal.commit_owner_remainders(self.path);
         for index in 0..RESOURCE_CATEGORY_COUNT {
             self.used[index] = self.used[index].saturating_add(self.reserved[index]);
             self.sink[index] = self.sink[index].saturating_add(self.used[index]);

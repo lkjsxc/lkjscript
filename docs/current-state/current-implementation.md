@@ -89,8 +89,8 @@
 - Resource profiles: `lkjscript.resource-profile` V2 preserves the first 25
   category names/order and appends 29 closed categories across five positive
   monotonic bounded profiles. Core provides closed authorities, fixed 16-entry
-  paths, lower-only child grants, and move-only pre-allocation reservations;
-  unused reservations commit on Drop unless explicitly returned. Compiler
+  paths, lower-only grants, move-only reservations, and a fixed nonallocating
+  256-record journal; Drop commits unused units unless returned. Compiler
   source/HIR/SSA charging remains post-phase except exact enum declaration,
   variant, and field counts plus the conservative maximum recursion-work
   reservation before HIR allocation. Protocol/compiler ledgers remain separate;

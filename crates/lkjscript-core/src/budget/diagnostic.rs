@@ -1,6 +1,9 @@
 use std::fmt;
 
-use super::{BudgetAuthority, BudgetPath, ResourceCategory};
+use super::{
+    BudgetAuthority, BudgetJournal, BudgetPath, BudgetPrefix, BudgetRejectedEvent,
+    ResourceCategory, RESOURCE_CATEGORY_COUNT,
+};
 use crate::ResourceProfileIdentity;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -18,6 +21,7 @@ pub enum BudgetErrorKind {
     GrantExceedsParent,
     GrantBelowObserved,
     LimitExceeded,
+    JournalExhausted,
     ReservationExceeded,
     ReservationIdExhausted,
 }
@@ -35,6 +39,35 @@ pub struct BudgetError {
     pub attempted: u64,
     pub observed: u64,
     pub allocated_before_rejection: bool,
+    prefix: BudgetPrefix,
+}
+
+impl BudgetError {
+    pub(crate) fn new(
+        profile: ResourceProfileIdentity,
+        event: BudgetRejectedEvent,
+        journal: &BudgetJournal,
+        base: &[u64; RESOURCE_CATEGORY_COUNT],
+    ) -> Self {
+        Self {
+            kind: event.kind,
+            profile,
+            category: event.category,
+            authority: event.authority,
+            path: event.path,
+            cause: event.cause,
+            limit: event.limit,
+            reserved: event.reserved,
+            attempted: event.attempted,
+            observed: event.observed,
+            allocated_before_rejection: event.allocated_before_rejection,
+            prefix: journal.prefix(profile, base, Some(event)),
+        }
+    }
+
+    pub const fn prefix(&self) -> &BudgetPrefix {
+        &self.prefix
+    }
 }
 
 impl fmt::Display for BudgetError {
@@ -44,7 +77,7 @@ impl fmt::Display for BudgetError {
             formatter,
             concat!(
                 "budget rejection: profile={}/{}:{}; category={}; unit={}; ",
-                "authority={}; path={}; kind={:?}; limit={}; reserved={}; ",
+                "authority={}; path={}; kind={:?}; cause={:?}; limit={}; reserved={}; ",
                 "attempted={}; observed={}; allocated-before-rejection={}"
             ),
             self.profile.schema,
@@ -55,6 +88,7 @@ impl fmt::Display for BudgetError {
             authority,
             self.path,
             self.kind,
+            self.cause,
             self.limit,
             self.reserved,
             self.attempted,
