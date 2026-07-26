@@ -18,6 +18,8 @@ impl Analyzer {
             operations: HashMap::new(),
             product_names: HashMap::new(),
             products: Vec::new(),
+            enum_headers: HashMap::new(),
+            enums: Vec::new(),
             trait_names: HashMap::new(),
             traits: Vec::new(),
             implementations: Vec::new(),

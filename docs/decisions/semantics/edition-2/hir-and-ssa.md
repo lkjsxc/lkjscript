@@ -9,13 +9,17 @@ conversions, runtime facts, and logical charges.
 
 ## Status
 
-**Accepted Target, not Current.** Existing HIR and verified SSA remain Current
-only for their documented Edition 1 surface.
+**Current only for resolved generic enum declaration/type metadata in HIR.**
+Enum construction/projection/tests, match, Edition 2 SSA, and every backend
+consumer remain Accepted Targets. Existing verified SSA remains Current only
+for its documented pre-enum executable surface.
 
 ## Resolved HIR
 
-HIR resolves every enum, variant, and field to stable canonical IDs and retains
-exact substitutions. It has typed enum construction/projection/test primitives,
+HIR currently resolves every enum, variant, and field declaration to stable
+canonical IDs and retains exact invariant substitutions in declared field and
+function types. The accepted execution target adds typed enum
+construction/projection/test primitives,
 a verified match-plan input, the exact control terminators in
 [Never and control](never-and-control.md), and distinct nodes for all four
 numeric conversions. Semantic effects, runtime facts, layout facts, source

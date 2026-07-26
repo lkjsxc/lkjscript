@@ -92,6 +92,7 @@ fn bounded_identity(name: &str, trait_name: &str) -> String {
 
 mod effects_direct;
 mod effects_recursive;
+mod enums;
 mod metadata;
 mod products;
 mod program_shape;

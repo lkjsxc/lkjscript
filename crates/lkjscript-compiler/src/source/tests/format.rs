@@ -1,4 +1,18 @@
 use super::*;
+use crate::source::{SourceNode, SyntaxKind};
+
+#[test]
+fn edition_marker_kind_cannot_be_authored_by_other_syntax() {
+    let source = "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+    let tree = validate(source, "src/main.lkjscript", &Limits::default()).unwrap();
+    assert!(tree.files()[0].syntax.iter().all(|node| !matches!(
+        node,
+        SourceNode {
+            kind: SyntaxKind::EditionMarker,
+            ..
+        }
+    )));
+}
 
 #[test]
 fn formatter_is_structural_idempotent_and_handles_escape_zero_utf8_and_lf() {

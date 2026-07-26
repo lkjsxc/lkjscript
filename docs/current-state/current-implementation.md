@@ -4,15 +4,13 @@
 
 ## Status
 
-**Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
-explicit labels in this capsule and its authority; this capsule cannot promote a capability.
+**Mixed.** Status follows explicit labels in this capsule and its authority; this capsule cannot promote a capability.
 
 ## Current Implementation
 
 - Repository: `https://github.com/lkjsxc/lkjscript`
 - Canonical source: `.lkjscript`; other extensions are rejected without shims
-- Corpus: all canonical language files under `src` have executable roots that
-  cover the exact corpus closure
+- Corpus: all canonical language files under `src` have executable roots covering the exact corpus closure
 - Physical format: one column-one marker/atom per line. Edition 1 has no marker.
   Edition 2 requires exact first form `edition/`, `2`, `/edition`; leading trivia
   is retained, loaded units must agree, and the marker consumes no body token or
@@ -21,9 +19,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   version 1 input is historical and rejected. One opaque immutable
   `ValidatedSourceTree` is parser/load authority. V2 preserves every V1 Edition
   1 node/value/type/built-in/declaration/trivia/transaction-expression/
-  diagnostic/correlation record and adds typed-hole nodes and facts. Subtrees
-  roundtrip deterministically; exact spans/origins/revisions, stable keys, dense
-  nodes, and canonical formatting remain authoritative. Unknown schema kinds,
+  diagnostic/correlation record, typed-hole facts, and generic enum declaration
+  nodes. Subtrees roundtrip with exact spans/origins/revisions, stable keys,
+  dense nodes, and canonical formatting. Unknown schema kinds,
   fields, operations, versions, duplicates, and trailing input fail. The
   bounded one-shot endpoint provides snapshot/entity/node/diagnostic/hole/legal
   action queries plus atomic rename, expression replacement, and all four hole
@@ -35,7 +33,8 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   through the same engine. Nonzero query caching, shared ledgers, and
   unavailable exact downstream correlations remain non-Current. Schema V2 also
   represents Edition 2 without another version: identities are edition-separated,
-  and snapshots expose marker/number nodes plus source/tree identity facts
+  snapshots expose marker/number nodes, source/tree identity facts, and stable
+  generic enum declaration/variant/field/type identities
 - Migration: `check_edition2_migration` pins a homogeneous closure revision,
   pre-reserves Profile V2 staging, inserts only the marker after leading trivia,
   and reports exact old/new editions, bytes, identities, revisions, offsets, and
@@ -65,10 +64,10 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   Semantic Source validator, without compatibility aliases
 - Compiler boundary: one analysis pass collects immutable headers and produces
   owned, resolved typed HIR with explicit Main and Functions, BindingIds,
-  local-slot references, MutableLocal/SetLocal, ProductIds, numeric field
-  identities, dense TraitIds/ImplIds, resolved marker bounds and witnesses,
-  source origins, exact operation/type facts, and deterministic fixed-point
-  function effect summaries; HIR lowers once into verified typed
+  local-slot references, MutableLocal/SetLocal, ProductIds, stable EnumIds/VariantIds/
+  VariantFieldIds, invariant enum substitutions, dense TraitIds/ImplIds, marker
+  witnesses, source origins, exact type facts, and fixed-point function effects;
+  HIR lowers once into verified typed
   SSA, deterministic baseline normalization, and then reference bytecode
 - Typed SSA: dependency-free `lkjscript-ir` owns dense function/block/value
   identities, exact types, nominal product metadata, dense trait/impl metadata,
@@ -94,9 +93,10 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   monotonic bounded profiles. Core provides closed authorities, fixed 16-entry
   paths, lower-only child grants, and move-only pre-allocation reservations;
   unused reservations commit on Drop unless explicitly returned. Compiler
-  source/HIR/SSA charging remains an explicit legacy post-phase wrapper, and
-  protocol/compiler ledgers remain separate. Current fixed limits remain the
-  complete-pipeline pre-allocation defense
+  source/HIR/SSA charging remains post-phase except exact enum declaration,
+  variant, and field counts plus the conservative maximum recursion-work
+  reservation before HIR allocation. Protocol/compiler ledgers remain separate;
+  fixed limits remain the complete-pipeline defense
 - Host implementation: nine Rust workspace crates. Exact locked `serde` and
   `serde_json` dependencies are confined to strict JSON protocol/tooling
   boundaries; unsafe Rust is confined to `lkjscript-sys`
@@ -142,7 +142,9 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   `null?` are removed; `arg` returns `Option Str`; universal `eq`/`ne` are
   removed in favor of exact value, object-identity, bounded structural-list,
   and F64-bit equality families; nominal products have ordered named fields,
-  exact construction, access, and immutable replacement
+  exact construction, access, and immutable replacement. Edition 2 enum
+  declaration/HIR type facts are Current; enum construction and all backend
+  behavior are absent
 - Ownership safe island: exact `Owned Buf`, `Ref Buf`, and `RefMut Buf` types;
   fresh `owned-buf-new`; whole-local `move`/`borrow`/`borrow-mut`; a 16,384-node
   aggregate ownership-analysis budget; lexical place initialization/end;

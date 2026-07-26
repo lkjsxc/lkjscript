@@ -22,9 +22,13 @@ The immediate implementation sequence has progressed as follows:
 5. compiler Resource Profile V2 and hole/transaction pre-allocation are Current
    without changing Edition 1 limits;
 6. Edition 2 identity, homogeneous closures, Schema V2 marker facts, and strict
-   non-publishing Edition 1-to-2 migration check/diff are Current; and
-7. Edition 2 ADTs/execution, migration publication, nonzero query caching,
-   whole-pipeline pre-allocation, and shared request ledgers remain next.
+   non-publishing Edition 1-to-2 migration check/diff are Current;
+7. generic enum source declarations, Semantic Source V2 projection, stable
+   member identities, resolved invariant HIR type facts, bounded declaration
+   recursion, ownership rejection, and enum-shape preallocation are Current; and
+8. enum construction/layout/SSA/execution, match, migration publication,
+   nonzero query caching, whole-pipeline pre-allocation, and shared request
+   ledgers remain next.
 
 The authorities are [Bounded Repository
 Topology](../decisions/platform/bounded-repository-topology.md), [Repository

@@ -24,6 +24,15 @@ pub(crate) fn charge_hir(program: &Program, ledger: &mut BudgetLedger) -> Result
             charge_type(&field.ty, ledger)?;
         }
     }
+    for definition in &program.enums {
+        for field in definition
+            .variants
+            .iter()
+            .flat_map(|variant| &variant.fields)
+        {
+            charge_type(&field.ty, ledger)?;
+        }
+    }
     for binding in &program.bindings {
         charge_type(&binding.ty, ledger)?;
     }
@@ -150,6 +159,7 @@ fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> {
             | Type::List(_)
             | Type::Option(_)
             | Type::Forall { .. } => 1,
+            Type::Enum { arguments, .. } => arguments.len(),
             Type::Result(_, _) => 2,
             Type::Fn { params, .. } => params
                 .len()
@@ -169,6 +179,7 @@ fn charge_type(root: &Type, ledger: &mut BudgetLedger) -> Result<()> {
             | Type::Option(child)
             | Type::Forall { body: child, .. } => stack.push(child),
             Type::Result(left, right) => stack.extend([left.as_ref(), right.as_ref()]),
+            Type::Enum { arguments, .. } => stack.extend(arguments),
             Type::Fn { params, ret } => {
                 stack.extend(params);
                 stack.push(ret);

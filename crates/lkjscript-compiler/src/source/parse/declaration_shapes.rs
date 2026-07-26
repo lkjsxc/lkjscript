@@ -41,6 +41,61 @@ pub(super) fn valid_function(children: &[SourceNode]) -> bool {
     )
 }
 
+pub(super) fn valid_enum(children: &[SourceNode]) -> bool {
+    let [name, tail @ ..] = children else {
+        return false;
+    };
+    if !named_form(name) {
+        return false;
+    }
+    let variants = match tail {
+        [SourceNode {
+            kind: SyntaxKind::Call { name },
+            children,
+            ..
+        }] if name == "variants" => children,
+        [SourceNode {
+            kind: SyntaxKind::Call { name: forall },
+            children: parameters,
+            ..
+        }, SourceNode {
+            kind: SyntaxKind::Call { name: variants },
+            children,
+            ..
+        }] if forall == "forall"
+            && variants == "variants"
+            && !parameters.is_empty()
+            && parameters
+                .iter()
+                .all(|node| matches!(node.kind, SyntaxKind::Symbol { .. })) =>
+        {
+            children
+        }
+        _ => return false,
+    };
+    !variants.is_empty() && variants.iter().all(valid_variant)
+}
+
+fn valid_variant(node: &SourceNode) -> bool {
+    matches!(node,
+        SourceNode { kind: SyntaxKind::Call { name }, children, .. }
+            if name == "variant" && matches!(children.as_slice(), [variant_name, fields]
+                if named_form(variant_name)
+                    && matches!(fields,
+                        SourceNode { kind: SyntaxKind::Call { name }, children, .. }
+                            if name == "fields" && children.iter().all(valid_variant_field))))
+}
+
+fn valid_variant_field(field: &SourceNode) -> bool {
+    matches!(field,
+        SourceNode { kind: SyntaxKind::Call { name }, children, .. }
+            if name == "variant-field" && matches!(children.as_slice(), [name_node, type_node]
+                if named_form(name_node)
+                    && matches!(type_node,
+                        SourceNode { kind: SyntaxKind::Call { name }, children, .. }
+                            if name == "type" && !children.is_empty())))
+}
+
 pub(super) fn valid_product_field(field: &SourceNode) -> bool {
     matches!(
         field,

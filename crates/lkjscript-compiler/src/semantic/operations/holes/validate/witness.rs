@@ -119,6 +119,7 @@ fn type_expression(ty: &Type) -> Option<TypeExpression> {
         Type::Symbol => T::Symbol {},
         Type::Handle => T::Handle {},
         Type::Product(name) => T::Product { name: name.clone() },
+        Type::Enum { .. } => return None,
         Type::Param(name) => T::Variable { name: name.clone() },
         Type::Owned(inner) => T::Owned {
             inner: Box::new(type_expression(inner)?),

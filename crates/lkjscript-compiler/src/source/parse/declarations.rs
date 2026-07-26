@@ -2,7 +2,7 @@ use lkjscript_core::Limits;
 
 use crate::source::{SourceNode, SourceOrigin, SourceResult, SourceSpan, SyntaxKind};
 
-use super::declaration_shapes::{valid_function, valid_name, valid_product_field};
+use super::declaration_shapes::{valid_enum, valid_function, valid_name, valid_product_field};
 
 pub(super) fn validate_top_level(
     forms: &[SourceNode],
@@ -25,7 +25,7 @@ pub(super) fn validate_top_level(
             SyntaxKind::Call { name }
                 if matches!(
                     name.as_str(),
-                    "def" | "main" | "import" | "product" | "trait" | "impl"
+                    "def" | "main" | "import" | "product" | "enum" | "trait" | "impl"
                 ) =>
             {
                 validate_declaration_shape(form, name, origin)?
@@ -34,7 +34,7 @@ pub(super) fn validate_top_level(
                 return Err(super::limits::syntax_error(
                     origin,
                     form.span,
-                    "top-level must be def, main, import, product, trait, or impl; top-level do was removed",
+                    "top-level must be def, main, import, product, enum, trait, or impl; top-level do was removed",
                 ));
             }
         }
@@ -96,6 +96,7 @@ fn validate_declaration_shape(
                     && valid_name(name_children)
                     && fields.iter().all(valid_product_field)
         ),
+        "enum" => valid_enum(&form.children),
         "trait" => matches!(
             form.children.as_slice(),
             [SourceNode {

@@ -16,6 +16,16 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::Symbol => "Symbol".into(),
         Type::Handle => "Handle".into(),
         Type::Product(name) => format!("Product {name}"),
+        Type::Enum {
+            name, arguments, ..
+        } => {
+            let arguments = arguments
+                .iter()
+                .map(canonical)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("Enum {name}[{arguments}]")
+        }
         Type::Param(name) => name.clone(),
         Type::Owned(inner) => format!("Owned {}", canonical(inner)),
         Type::Ref(inner) => format!("Ref {}", canonical(inner)),

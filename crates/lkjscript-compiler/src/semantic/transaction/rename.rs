@@ -12,7 +12,7 @@ pub(crate) fn resolve(
     let declaration = crate::semantic::operations::entity::find(tree, key)?;
     if matches!(
         declaration.kind(),
-        DeclarationKind::Main | DeclarationKind::Implementation
+        DeclarationKind::Main | DeclarationKind::Enum | DeclarationKind::Implementation
     ) {
         return Err(error(
             ProtocolErrorCode::InvalidOperation,
@@ -44,7 +44,10 @@ pub(crate) fn resolve(
         candidate.name() == new_name
             && matches!(
                 candidate.kind(),
-                DeclarationKind::Function | DeclarationKind::Product | DeclarationKind::Trait
+                DeclarationKind::Function
+                    | DeclarationKind::Product
+                    | DeclarationKind::Enum
+                    | DeclarationKind::Trait
             )
     }) {
         return Err(error(

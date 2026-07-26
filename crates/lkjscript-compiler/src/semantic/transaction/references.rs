@@ -15,7 +15,7 @@ pub(super) fn rename_references(
             rename_function_references(node, old, new, expression, shadowed);
             return;
         }
-        DeclarationKind::Main | DeclarationKind::Implementation => {}
+        DeclarationKind::Main | DeclarationKind::Enum | DeclarationKind::Implementation => {}
     }
     for child in &mut node.children {
         rename_references(child, kind, old, new, false, false);

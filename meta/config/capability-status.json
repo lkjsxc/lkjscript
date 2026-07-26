@@ -8,10 +8,7 @@
       "interface": "lkjscript.agent-foundation/1",
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/current-state/semantic-source-foundation-evidence.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
       "id": "agent-work-state/1",
@@ -19,10 +16,7 @@
       "interface": "lkjscript.agent-work-state/1",
       "authority": "docs/decisions/platform/agent-work-state.md",
       "evidence": "docs/decisions/platform/agent-work-state.md",
-      "claimants": [
-        "docs/current-state.md",
-        "docs/operations/agent-handoff.md"
-      ]
+      "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
       "id": "agent-work-state/2",
@@ -34,6 +28,15 @@
         "docs/current-state.md",
         "docs/operations/agent-handoff.md"
       ]
+    },
+    {
+      "id": "edition-2-enum-declarations/1",
+      "status": "current",
+      "interface": "Edition 2 generic enum declarations and resolved type facts",
+      "authority": "docs/decisions/semantics/edition-2/algebraic-data-types.md",
+      "evidence": "docs/operations/verification.md",
+      "claimants": ["docs/current-state.md", "docs/decisions/semantics/edition-2.md",
+        "docs/decisions/semantics/edition-2/algebraic-data-types.md"]
     },
     {
       "id": "edition-2-identity-migration/1",

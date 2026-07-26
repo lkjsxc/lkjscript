@@ -1,6 +1,33 @@
 use crate::semantic::schema::SemanticNodeKind as Kind;
 use crate::source::{SourceNode, SyntaxKind};
 
+pub(super) fn call_name(node: Option<&SourceNode>) -> Option<&str> {
+    match node?.kind {
+        SyntaxKind::Call { ref name } => Some(name),
+        _ => None,
+    }
+}
+
+pub(super) fn enum_context(name: &str, parent: Option<&SourceNode>) -> bool {
+    let valid = crate::source::is_source_identifier(name)
+        && name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase());
+    let parent_name = match parent.map(|node| &node.kind) {
+        Some(SyntaxKind::Call { name }) => Some(name.as_str()),
+        _ => None,
+    };
+    valid
+        && parent_name.is_some_and(|name| {
+            matches!(name, "sig" | "params" | "type" | "for")
+                || name
+                    .chars()
+                    .next()
+                    .is_some_and(|character| character.is_ascii_uppercase())
+        })
+}
+
 pub(super) fn classify(name: &str, parent: Option<&SourceNode>, index: usize) -> Kind {
     if index > 0
         && parent

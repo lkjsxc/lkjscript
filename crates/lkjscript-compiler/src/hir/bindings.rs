@@ -35,6 +35,7 @@ pub struct Program {
     pub sources: Vec<Source>,
     pub bindings: Vec<Binding>,
     pub products: Vec<ProductDefinition>,
+    pub enums: Vec<EnumDefinition>,
     pub traits: Vec<TraitDefinition>,
     pub implementations: Vec<ImplDefinition>,
     pub functions: Vec<Function>,

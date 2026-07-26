@@ -9,8 +9,14 @@ exact Edition 2 line projection.
 
 ## Status
 
-**Accepted Target, not Current.** No generic enum machinery is implemented by
-this contract.
+<!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
+
+**Current for declarations and resolved type facts only.** Edition 2 accepts
+generic nominal `enum` declarations, validates their complete named variant and
+field shape, resolves invariant explicit instantiations into HIR, and projects
+the closed nodes and stable identities through Semantic Source V2. Enum value
+construction, source `match`, SSA, layout/runtime plans, bytecode, VM, native
+JIT, proof JIT, and prelude replacement remain Accepted Targets.
 
 ## Declaration Projection
 
@@ -51,7 +57,9 @@ T
 
 ## Construction Projection
 
-Every constructor names the fully instantiated enum type, variant, and all
+**Accepted Target, not Current.** No `variant-value` source form or constructor
+operation is exposed by the declaration/type-fact slice. When implemented,
+every constructor names the fully instantiated enum type, variant, and all
 named fields in declaration order:
 
 ```text
@@ -87,10 +95,12 @@ semantic identities; any collision is rejected. Backend tag plans map stable
 order, never backend identity. Same-shaped enums are nominally distinct.
 Generic parameters are invariant.
 
-Ownership-bearing fields, directly or nested, are rejected in the initial
-slice. Recursive immutable ADTs must be finite values, physically indirect in
-the initial representation, exactly traced, and accepted only through bounded
-recursion validation.
+Ownership-bearing fields and ownership-bearing explicit enum arguments,
+directly or nested, are rejected in the Current declaration slice. Declaration
+graph recursion is validated under exact depth/work bounds; stable source order
+is retained separately from identity. Physical indirection, finite runtime
+values, and exact active tracing remain requirements for the later execution
+slice and are not claimed by declaration metadata.
 
 ## Prelude Migration
 

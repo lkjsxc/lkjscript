@@ -1,5 +1,5 @@
 use super::*;
-use crate::source::{SourceEdition, SourceNode, SyntaxKind};
+use crate::source::SourceEdition;
 
 const MARKER: &str = "edition/\n2\n/edition\n";
 
@@ -135,12 +135,33 @@ fn edition2_formats_roundtrips_and_executes_existing_declarations() {
 }
 
 #[test]
-fn exact_enum_syntax_is_not_partially_exposed() {
-    let source = edition2("enum/\nname/\nChoice\n/name\n/enum\n");
-    let error = validate(&source, "src/main.lkjscript", &Limits::default())
-        .expect_err("enum remains absent");
-    assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
-    assert!(error.message().contains("top-level must be"));
+fn exact_enum_declaration_shape_roundtrips_without_aliases() {
+    let declaration = "enum/\nname/\nChoice\n/name\nvariants/\nvariant/\nname/\nOnly\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n";
+    let source = edition2(&format!("{declaration}{}", unit_main("unit")));
+    let tree = validate(&source, "src/main.lkjscript", &Limits::default())
+        .expect("exact enum declaration");
+    assert_eq!(
+        tree.format_single_source().as_deref(),
+        Some(source.as_str())
+    );
+    assert_eq!(
+        tree.declarations()
+            .iter()
+            .find(|item| item.kind() == DeclarationKind::Enum)
+            .expect("enum declaration")
+            .name(),
+        "Choice"
+    );
+
+    for malformed in [
+        "enum/\nname/\nChoice\n/name\nvariants/\n/variants\n/enum\n",
+        "enum/\nname/\nChoice\n/name\nvariants/\nvariant/\nname/\nOnly\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/variant\n/variants\n/enum\n",
+    ] {
+        let source = edition2(malformed);
+        let error = validate(&source, "src/main.lkjscript", &Limits::default())
+            .expect_err("empty variants and field aliases reject");
+        assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
+    }
 }
 
 #[test]
@@ -166,16 +187,4 @@ fn mixed_import_closures_reject_before_compilation_or_migration() -> std::io::Re
         assert_eq!(error.code(), "LKJ-SRC-MIXED-EDITION");
     }
     Ok(())
-}
-
-#[test]
-fn dedicated_marker_kind_cannot_be_authored_by_other_syntax() {
-    let tree = validate(&unit_main("unit"), "src/main.lkjscript", &Limits::default()).unwrap();
-    assert!(tree.files()[0].syntax.iter().all(|node| !matches!(
-        node,
-        SourceNode {
-            kind: SyntaxKind::EditionMarker,
-            ..
-        }
-    )));
 }

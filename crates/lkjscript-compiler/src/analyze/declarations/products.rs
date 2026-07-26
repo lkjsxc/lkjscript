@@ -43,6 +43,9 @@ impl Analyzer {
                     let (field_name, ty) = parse_product_field(field_form).map_err(|message| {
                         self.error(source, format!("product {product_name}: {message}"))
                     })?;
+                    let ty = self.resolve_enum_type(&ty, &[]).map_err(|message| {
+                        self.error(source, format!("product {product_name}: {message}"))
+                    })?;
                     if !names.insert(field_name.clone()) {
                         return Err(self.error(
                             source,
@@ -105,6 +108,22 @@ impl Analyzer {
                 } else {
                     Err(format!("unknown product type {name}"))
                 }
+            }
+            Type::Enum {
+                id,
+                name,
+                arguments,
+            } => {
+                let Some((expected, parameters)) = self.enum_headers.get(name) else {
+                    return Err(format!("unknown enum type {name}"));
+                };
+                if id != expected || arguments.len() != parameters.len() {
+                    return Err(format!("enum type {name} has invalid identity or arity"));
+                }
+                for argument in arguments {
+                    self.validate_product_type(argument)?;
+                }
+                Ok(())
             }
             Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) => {
                 if inner.as_ref() == &Type::Buf {

@@ -11,6 +11,7 @@ pub(crate) fn declaration_identity(node: &SourceNode) -> Option<(DeclarationKind
         "main" => Some((DeclarationKind::Main, "$main".into())),
         "def" => declaration_name(node).map(|name| (DeclarationKind::Function, name)),
         "product" => declaration_name(node).map(|name| (DeclarationKind::Product, name)),
+        "enum" => declaration_name(node).map(|name| (DeclarationKind::Enum, name)),
         "trait" => declaration_name(node).map(|name| (DeclarationKind::Trait, name)),
         "impl" => Some((
             DeclarationKind::Implementation,
@@ -61,6 +62,19 @@ pub(crate) fn declaration_key_bytes(
         super::append_framed(&mut exact, field);
     }
     exact
+}
+
+pub(crate) fn enum_member_identity(parent: [u8; 32], kind: &str, name: &str) -> [u8; 32] {
+    let mut exact = Vec::new();
+    for field in [
+        b"lkjscript.enum-member/1".as_slice(),
+        parent.as_slice(),
+        kind.as_bytes(),
+        name.as_bytes(),
+    ] {
+        super::append_framed(&mut exact, field);
+    }
+    lkjscript_core::sha256(&exact)
 }
 
 pub(crate) fn declaration_key_human_identity(

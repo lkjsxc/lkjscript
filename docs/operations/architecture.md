@@ -12,17 +12,19 @@ Complete Semantic Source Schema V2 with its preserved V1 representation,
 typed holes/legal actions, Bounded Repository Topology, Repository Intelligence
 Graph/context, externalized Agent Work State V2 with exact semantic references,
 the bounded one-shot semantic protocol, bounded local stdio sessions, and
-compiler Resource Profile V2 are Current. Agent Foundation V1 and Semantic
-Source Schema V1 are historical rejected identities. Edition 2, whole-pipeline
-Profile V2 pre-allocation, nonzero incremental query caching, and logical
-metering are **Accepted Targets**, not Current code.
+compiler Resource Profile V2 and the Edition 2 generic enum declaration/type-
+fact slice are Current. Agent Foundation V1 and Semantic Source Schema V1 are
+historical rejected identities. Edition 2 enum construction/execution and the
+remaining semantic core, whole-pipeline Profile V2 pre-allocation, nonzero
+incremental query caching, and logical metering are **Accepted Targets**.
 
 ## Current Compiler/Runtime Boundary
 
 Validated Semantic Source Foundation tree -> resolved typed HIR -> verified
 typed SSA -> verified baseline normalization -> reference bytecode is Current.
-HIR currently consumes a private mechanically checked Edition 1 projection from
-the validated tree; no sibling parser or raw public AST enters analysis. VM,
+HIR consumes one private mechanically checked projection from the validated
+Edition 1 or Edition 2 tree; Edition 2 currently adds only resolved generic enum
+declarations/type facts. No sibling parser or raw public AST enters analysis. VM,
 baseline JIT, proof optimizer, future AOT tests, and Wasm must share verified
 semantic IR rather than reinterpret syntax.
 
@@ -72,7 +74,9 @@ Topology and graph bound traversal; task state bounds decode, retained Git
 output, references, context, and publication; the protocol pre-bounds request,
 source bytes/units, work, hole candidates, legal actions, transactions, staged
 publication, and serialized output; compiler profile charges remain exact
-post-phase guards before downstream phases not yet migrated.
+post-phase guards before downstream phases not yet migrated, except enum
+declaration/variant/field/recursion shape charges which precede enum HIR
+allocation.
 Exhaustion cannot publish partial authority. Edition 1 source limits remain
 unchanged.
 
@@ -80,9 +84,11 @@ unchanged.
 
 [Edition 2](../decisions/semantics/edition-2.md) preserves the same architecture:
 Semantic Source -> resolved typed HIR -> verified SSA -> evaluator/VM/native/
-proof consumers. Match lowers to SSA CFG only after plan verification; layout,
-roots, runtime facts, and logical charges remain explicit. Every surface is
-Accepted Target, not Current, until its cross-engine acceptance gate passes.
+proof consumers. Generic enum declarations and resolved type facts are Current
+only before SSA; construction is deliberately unexposed. Match lowers to SSA CFG
+only after plan verification; layout, roots, runtime facts, and logical charges
+remain explicit. Every execution surface remains an Accepted Target until its
+cross-engine acceptance gate passes.
 
 ## Authority Links
 

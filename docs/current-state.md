@@ -11,6 +11,7 @@ next work without mixing them with long-term vision.
 <!-- LKJ-STATUS id=agent-work-state/1 status=historical -->
 <!-- LKJ-STATUS id=agent-work-state/2 status=current -->
 <!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
+<!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
 <!-- LKJ-STATUS id=edition-2-semantic-core/2 status=accepted-target -->
 <!-- LKJ-STATUS id=jit-auto-promotion/1 status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced/1 status=current -->
@@ -31,10 +32,11 @@ Graph/context, externalized Agent Work State V2 with semantic references,
 complete Semantic Source Schema V2 with its preserved V1 base, typed holes,
 legal actions, closed hole transactions, one-shot query/edit protocol, bounded
 local stdio sessions, the Edition 2 identity/non-publishing migration slice,
-compiler Resource Profile V2, and the core hierarchical pre-allocation
-foundation are Current. Agent Foundation V1 and Semantic Source Schema V1
-identities are historical and rejected. Edition 2 ADTs, changed semantics,
-execution cutover, migration publication, whole-pipeline pre-allocation,
+generic enum declarations/resolved type facts, compiler Resource Profile V2,
+and the core hierarchical pre-allocation foundation are Current. Agent
+Foundation V1 and Semantic Source Schema V1 identities are historical and
+rejected. Enum construction and execution, other Edition 2 ADTs, changed
+semantics, execution cutover, migration publication, whole-pipeline pre-allocation,
 logical metering integration, nonzero query caching, and cross-authority
 ledgers remain Accepted Targets, not Current.
 Deferred and Rejected work remains non-current.
@@ -46,9 +48,10 @@ reference bytecode/VM, callable host-independent Linux x86-64 baseline code,
 host-independent native allocation/collection, and forced proof-checked
 optimization are Current at baseline `dd8fb316`. Exact boundaries and retained
 historical command evidence are in the manifest below. Automatic proof
-promotion, wider future Agent operations, all [Edition 2
-surfaces](decisions/semantics/edition-2.md), cross-authority aggregate profiles,
-OSR, AOT/cache, and wider host-native transitions are not Current.
+promotion, wider future Agent operations, Edition 2 surfaces beyond identity,
+migration checking, and generic enum declaration/type facts, cross-authority
+aggregate profiles, OSR, AOT/cache, and wider host-native transitions are not
+Current.
 Structure, graph/context, work-state, one-shot protocol, and compiler-profile
 commands/APIs are Current on the containing implementation revision.
 
@@ -67,8 +70,12 @@ commands/APIs are Current on the containing implementation revision.
 
 6. Explicit Edition 2 markers, homogeneous closure identity, edition-separated
    source/tree/revision/declaration identities, Schema V2 facts, and strict
-   non-publishing Edition 1-to-2 migration check/diff are Current. Enum, match,
-   changed execution, publish, and corpus cutover remain targets.
+   non-publishing Edition 1-to-2 migration check/diff are Current.
+7. Generic nominal enum declarations, stable enum/variant/field identities,
+   invariant resolved HIR type facts, bounded recursion/ownership validation,
+   and exact Profile V2 enum-shape preallocation are Current. Enum values,
+   match, layouts, SSA/backends, changed execution, publish, and corpus cutover
+   remain targets.
 
 Current status applies only to each implemented bounded surface, not to broader accepted protocol designs.
 Automatic baseline-to-proof promotion remains an Accepted Implementation

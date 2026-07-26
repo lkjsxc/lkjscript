@@ -55,6 +55,7 @@ pub(crate) enum SemanticDeclarationKind {
     Main,
     Function,
     Product,
+    Enum,
     MarkerTrait,
     TraitImplementation,
 }

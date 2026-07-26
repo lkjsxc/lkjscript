@@ -80,6 +80,23 @@ pub(in crate::operation) fn bind_type_params(
             bind_type_params(name, ok_pattern, ok_argument, variables, substitutions)?;
             bind_type_params(name, err_pattern, err_argument, variables, substitutions)
         }
+        (
+            Type::Enum {
+                id: pattern_id,
+                arguments: patterns,
+                ..
+            },
+            Type::Enum {
+                id: argument_id,
+                arguments,
+                ..
+            },
+        ) if pattern_id == argument_id && patterns.len() == arguments.len() => {
+            for (pattern, argument) in patterns.iter().zip(arguments) {
+                bind_type_params(name, pattern, argument, variables, substitutions)?;
+            }
+            Ok(())
+        }
         (pattern, argument) if Type::unify_assignable(argument, pattern) => Ok(()),
         (pattern, argument) => Err(format!(
             "{name}: cannot instantiate {pattern:?} from {argument:?}"
@@ -106,6 +123,7 @@ pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
         | Type::RefMut(_)
         | Type::Handle
         | Type::Product(_)
+        | Type::Enum { .. }
         | Type::Param(_)
         | Type::List(_)
         | Type::Fn { .. }

@@ -15,7 +15,10 @@ impl Analyzer {
             for form in &file.forms {
                 match form {
                     AstExpr::Call { name, .. }
-                        if matches!(name.as_str(), "import" | "product" | "trait" | "impl") => {}
+                        if matches!(
+                            name.as_str(),
+                            "import" | "product" | "enum" | "trait" | "impl"
+                        ) => {}
                     AstExpr::Call { name, args } if name == "def" => {
                         functions.push(self.collect_definition(source, args)?);
                     }
@@ -29,6 +32,9 @@ impl Analyzer {
                             );
                         }
                         let (return_type, body) = parse_main(args)
+                            .map_err(|message| self.error(source, format!("main: {message}")))?;
+                        let return_type = self
+                            .resolve_enum_type(&return_type, &[])
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
                         self.validate_product_type(&return_type)
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
@@ -90,7 +96,9 @@ impl Analyzer {
                 format!("def {name}: top-level def must declare an immutable fn"),
             ));
         }
-        let parsed = parse_function(fn_args)
+        let mut parsed = parse_function(fn_args)
+            .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
+        self.resolve_function_enum_types(&mut parsed)
             .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
         validate_function_header(&name, &parsed).map_err(|message| self.error(origin, message))?;
         for ty in parsed

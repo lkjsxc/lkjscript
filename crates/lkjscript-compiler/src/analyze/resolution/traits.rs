@@ -98,6 +98,7 @@ impl Resolver<'_> {
                 | Type::Ref(_)
                 | Type::RefMut(_)
                 | Type::Handle
+                | Type::Enum { .. }
                 | Type::Fn { .. }
                 | Type::Forall { .. }
                 | Type::Param(_) => false,

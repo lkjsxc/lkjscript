@@ -18,6 +18,12 @@ pub enum Type {
     Handle,
     /// Globally unique nominal product declaration name.
     Product(String),
+    /// Nominal enum identity with invariant explicit arguments.
+    Enum {
+        id: EnumId,
+        name: String,
+        arguments: Vec<Type>,
+    },
     /// Type parameter (annotation-driven polymorphism).
     Param(String),
     List(Box<Type>),
@@ -63,6 +69,18 @@ impl Type {
             (Type::Owned(g), Type::Owned(e))
             | (Type::Ref(g), Type::Ref(e))
             | (Type::RefMut(g), Type::RefMut(e)) => Self::unify_assignable(g, e),
+            (
+                Type::Enum {
+                    id: got_id,
+                    arguments: got_arguments,
+                    ..
+                },
+                Type::Enum {
+                    id: expected_id,
+                    arguments: expected_arguments,
+                    ..
+                },
+            ) => got_id == expected_id && got_arguments == expected_arguments,
             (Type::List(g), Type::List(e)) => g == e,
             (Type::Option(g), Type::Option(e)) => Self::unify_assignable(g, e),
             (Type::Result(a, b), Type::Result(c, d)) => {
@@ -91,6 +109,18 @@ impl Type {
             Type::Owned(t) => Type::Owned(Box::new(t.subst(map))),
             Type::Ref(t) => Type::Ref(Box::new(t.subst(map))),
             Type::RefMut(t) => Type::RefMut(Box::new(t.subst(map))),
+            Type::Enum {
+                id,
+                name,
+                arguments,
+            } => Type::Enum {
+                id: *id,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| argument.subst(map))
+                    .collect(),
+            },
             Type::List(t) => Type::List(Box::new(t.subst(map))),
             Type::Option(t) => Type::Option(Box::new(t.subst(map))),
             Type::Result(a, b) => Type::Result(Box::new(a.subst(map)), Box::new(b.subst(map))),

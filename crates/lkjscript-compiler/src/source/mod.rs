@@ -28,6 +28,7 @@ pub use diagnostics::{
 };
 pub use edition::SourceEdition;
 pub(crate) use format::{format_f64, format_file, format_node_identity, format_node_source};
+pub(crate) use identity::enum_member_identity;
 pub use identity::{
     DeclarationKey, DeclarationKind, DeclarationSummary, NodeId, NodeKind, NodeSummary, RevisionId,
     SourceIdentity, SourceTreeIdentity, StaleNodeId,

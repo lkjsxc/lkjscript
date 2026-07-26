@@ -24,7 +24,10 @@ pub(crate) fn build_declarations(
             };
             if matches!(
                 kind,
-                DeclarationKind::Function | DeclarationKind::Product | DeclarationKind::Trait
+                DeclarationKind::Function
+                    | DeclarationKind::Product
+                    | DeclarationKind::Enum
+                    | DeclarationKind::Trait
             ) && !parse::is_source_identifier(&name)
             {
                 return Err(SourceDiagnostic::new(
@@ -40,7 +43,10 @@ pub(crate) fn build_declarations(
             }
             if matches!(
                 kind,
-                DeclarationKind::Function | DeclarationKind::Product | DeclarationKind::Trait
+                DeclarationKind::Function
+                    | DeclarationKind::Product
+                    | DeclarationKind::Enum
+                    | DeclarationKind::Trait
             ) {
                 if let Some((first_kind, first_origin, first_span)) = global_names.get(&name) {
                     let message = if *first_kind == kind {
@@ -51,6 +57,14 @@ pub(crate) fn build_declarations(
                             | (DeclarationKind::Product, DeclarationKind::Trait)
                     ) {
                         format!("product {name} collides with a trait")
+                    } else if *first_kind != DeclarationKind::Function
+                        && kind != DeclarationKind::Function
+                    {
+                        format!(
+                            "nominal type {name} collides between {} and {} declarations",
+                            first_kind.as_str(),
+                            kind.as_str()
+                        )
                     } else {
                         format!(
                             "duplicate global declaration {name}: {} conflicts with {}",

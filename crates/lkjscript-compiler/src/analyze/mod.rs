@@ -6,10 +6,11 @@ use lkjscript_core::{BudgetLedger, Error, ProductId, Result, MAX_PRODUCT_FIELDS}
 
 use crate::hir::{
     self, Binding, BindingId, BindingKind, BindingRef, BindingStorage, BorrowKind, CoreTrait,
-    EffectSet, Expr, ExprKind, Function, GenericInstantiation, ImplDefinition, ImplId, LoanId,
-    LocalDefinition, Main, Operation, Origin, PlaceId, ProductDefinition, ProductField, Source,
-    SourceId, TraitBound, TraitDefinition, TraitId, TraitWitness, TraitWitnessKind, Type,
-    TypeSubstitution,
+    EffectSet, EnumDefinition, EnumId, EnumVariant, EnumVariantField, Expr, ExprKind, Function,
+    GenericInstantiation, ImplDefinition, ImplId, LoanId, LocalDefinition, Main, Operation, Origin,
+    PlaceId, ProductDefinition, ProductField, Source, SourceId, TraitBound, TraitDefinition,
+    TraitId, TraitWitness, TraitWitnessKind, Type, TypeSubstitution, VariantFieldId, VariantId,
+    ENUM_RECURSION_MAX_DEPTH, ENUM_RECURSION_MAX_WORK, MAX_ENUM_VARIANTS, MAX_VARIANT_FIELDS,
 };
 use crate::source::Expr as AstExpr;
 
@@ -50,6 +51,8 @@ pub(crate) fn analyze_program_without_effects(
     analyzer.install_core_traits()?;
     analyzer.collect_trait_names(program)?;
     analyzer.collect_product_names(program)?;
+    analyzer.collect_enum_names(program)?;
+    analyzer.collect_enums(program)?;
     analyzer.collect_products(program)?;
     analyzer.collect_implementations(program)?;
     let (pending_functions, pending_main) = analyzer.collect_headers(program)?;
@@ -70,6 +73,7 @@ pub(crate) fn analyze_program_without_effects(
         sources: analyzer.sources,
         bindings: analyzer.bindings,
         products: analyzer.products,
+        enums: analyzer.enums,
         traits: analyzer.traits,
         implementations: analyzer.implementations,
         functions,
@@ -87,6 +91,8 @@ struct Analyzer {
     operations: HashMap<Operation, BindingId>,
     product_names: HashMap<String, ProductId>,
     products: Vec<ProductDefinition>,
+    enum_headers: HashMap<String, (EnumId, Vec<String>)>,
+    enums: Vec<EnumDefinition>,
     trait_names: HashMap<String, TraitId>,
     traits: Vec<TraitDefinition>,
     implementations: Vec<ImplDefinition>,

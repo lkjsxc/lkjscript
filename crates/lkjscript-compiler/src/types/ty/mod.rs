@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use crate::types::EnumId;
+
 mod model;
 mod parse;
 

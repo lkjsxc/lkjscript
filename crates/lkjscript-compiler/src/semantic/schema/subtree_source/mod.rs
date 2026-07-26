@@ -1,9 +1,12 @@
+mod markers;
+
 use crate::source::{SourceNode, SourceSpan, SyntaxKind};
 
 use super::{
     edition_source, SemanticNodeKind as Kind, SemanticNodeValue as Value, SemanticSubtreeRecord,
     TriviaAttachment,
 };
+use markers::marker;
 
 impl SemanticSubtreeRecord {
     pub(crate) fn to_source(&self) -> Result<SourceNode, String> {
@@ -62,6 +65,17 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
             }
             Ok(call(name))
         }
+        (Kind::TypeEnum, Some(Value::SourceName { name })) => {
+            if !crate::source::is_source_identifier(name)
+                || !name
+                    .chars()
+                    .next()
+                    .is_some_and(|character| character.is_ascii_uppercase())
+            {
+                return Err("semantic enum type name is invalid".into());
+            }
+            Ok(call(name))
+        }
         (kind, Some(Value::SourceName { name })) if symbol_kind(kind) => {
             Ok(SyntaxKind::Symbol { name: name.clone() })
         }
@@ -70,45 +84,6 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
         }
         _ => Err("semantic node kind/value combination is invalid".into()),
     }
-}
-
-fn marker(kind: Kind) -> Option<&'static str> {
-    Some(match kind {
-        Kind::Import => "import",
-        Kind::Main => "main",
-        Kind::FunctionDeclaration => "def",
-        Kind::Function => "fn",
-        Kind::Signature => "sig",
-        Kind::Parameters => "params",
-        Kind::TypeVariables => "forall",
-        Kind::Bounds => "bounds",
-        Kind::Bound => "bound",
-        Kind::Product => "product",
-        Kind::ProductField | Kind::ProductValueField | Kind::FieldAccess => "field",
-        Kind::MarkerTrait | Kind::ContextTrait => "trait",
-        Kind::TraitImplementation => "impl",
-        Kind::ContextName => "name",
-        Kind::ContextType => "type",
-        Kind::ContextFields => "fields",
-        Kind::ContextFor => "for",
-        Kind::Let => "let",
-        Kind::Bind => "bind",
-        Kind::Var => "var",
-        Kind::Set => "set",
-        Kind::If => "if",
-        Kind::While => "while",
-        Kind::Do => "do",
-        Kind::Quote => "quote",
-        Kind::ProductValue => "product-value",
-        Kind::WithField => "with-field",
-        Kind::EmptyList => "empty-list",
-        Kind::None => "none",
-        Kind::HoleGoal => "goal",
-        Kind::Move => "move",
-        Kind::Borrow => "borrow",
-        Kind::BorrowMut => "borrow-mut",
-        _ => return None,
-    })
 }
 
 fn symbol_kind(kind: Kind) -> bool {

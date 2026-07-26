@@ -1,4 +1,8 @@
 mod bindings;
+mod enum_collection;
+mod enum_fields;
+mod enum_validation;
+mod enums;
 mod forms;
 mod function_headers;
 mod functions;
@@ -9,6 +13,7 @@ mod products;
 mod type_facts;
 
 pub(in crate::analyze) use bindings::*;
+pub(in crate::analyze) use enums::*;
 pub(in crate::analyze) use forms::*;
 pub(in crate::analyze) use function_headers::*;
 pub(in crate::analyze) use type_facts::*;

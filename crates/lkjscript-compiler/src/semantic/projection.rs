@@ -50,7 +50,7 @@ pub(crate) fn trivia(node: &SourceNode) -> Vec<TriviaRecord> {
 }
 
 fn classify_text(value: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value>) {
-    match call_name(parent) {
+    match type_nodes::call_name(parent) {
         Some("import") => (
             Kind::StringLiteral,
             Some(Value::ImportPath {
@@ -84,6 +84,7 @@ fn classify_symbol(
         (Some(Kind::Parameters), index) if index.is_multiple_of(2) => Kind::ParameterName,
         (Some(Kind::Parameters), _) => type_nodes::classify(name, parent, index),
         (Some(Kind::TypeVariables), _) => Kind::TypeVariable,
+        (Some(Kind::TypeEnum), _) => type_nodes::classify(name, parent, index),
         (Some(Kind::Bound), 0) => Kind::TypeVariable,
         (Some(Kind::Bound), _) => Kind::TraitName,
         (Some(Kind::ProductValue), 0) => Kind::ProductName,
@@ -126,15 +127,21 @@ fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value
         "bounds" => Kind::Bounds,
         "bound" => Kind::Bound,
         "product" => Kind::Product,
+        "enum" => Kind::EnumDeclaration,
+        "variants" => Kind::ContextVariants,
+        "variant" => Kind::EnumVariant,
+        "variant-field" => Kind::EnumVariantField,
         "fields" => Kind::ContextFields,
-        "trait" if call_name(parent) == Some("impl") => Kind::ContextTrait,
+        "trait" if type_nodes::call_name(parent) == Some("impl") => Kind::ContextTrait,
         "trait" => Kind::MarkerTrait,
         "impl" => Kind::TraitImplementation,
         "name" => Kind::ContextName,
         "type" => Kind::ContextType,
         "for" => Kind::ContextFor,
-        "field" if call_name(parent) == Some("fields") => Kind::ProductField,
-        "field" if call_name(parent) == Some("product-value") => Kind::ProductValueField,
+        "field" if type_nodes::call_name(parent) == Some("fields") => Kind::ProductField,
+        "field" if type_nodes::call_name(parent) == Some("product-value") => {
+            Kind::ProductValueField
+        }
         "field" => Kind::FieldAccess,
         "let" => Kind::Let,
         "bind" => Kind::Bind,
@@ -159,6 +166,14 @@ fn classify_call(name: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value
         "Option" => Kind::TypeOption,
         "Result" => Kind::TypeResult,
         "Product" => Kind::TypeProduct,
+        _ if type_nodes::enum_context(name, parent) => {
+            return (
+                Kind::TypeEnum,
+                Some(Value::SourceName {
+                    name: name.to_string(),
+                }),
+            )
+        }
         _ => return classify_plain_call(name),
     };
     (kind, None)
@@ -179,12 +194,5 @@ fn classify_plain_call(name: &str) -> (Kind, Option<Value>) {
                 name: name.to_string(),
             }),
         )
-    }
-}
-
-fn call_name(node: Option<&SourceNode>) -> Option<&str> {
-    match node?.kind {
-        SyntaxKind::Call { ref name } => Some(name),
-        _ => None,
     }
 }

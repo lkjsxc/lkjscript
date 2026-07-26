@@ -9,11 +9,13 @@ them become implementation claims.
 ## Status
 
 <!-- LKJ-STATUS id=edition-2-identity-migration/1 status=current -->
+<!-- LKJ-STATUS id=edition-2-enum-declarations/1 status=current -->
 
-**Accepted Target overall.** The explicit identity and non-publishing migration
-slice is Current. ADTs, patterns, changed semantics, execution acceptance,
-semantic publication, corpus migration, and cutover are not Current. Edition 1
-remains accepted for ordinary compilation and as migration input.
+**Accepted Target overall.** Explicit identity/non-publishing migration and the
+generic enum declaration/resolved-type-fact slice are Current. Enum value
+construction, patterns, changed semantics, backend execution, semantic
+publication, corpus migration, and cutover are not Current. Edition 1 remains
+accepted for ordinary compilation and as migration input.
 
 ## Authority
 
@@ -28,10 +30,9 @@ is Edition 1 until cutover. The Semantic Source identity is
 Semantic Source remains primary. Edition 1 and Edition 2 share one source
 parser and validated tree plus deterministic edition projections; a second
 parser/tree is forbidden. The current line projection remains canonical during
-this target. The first slice accepts only Edition 2 identity plus existing
-Edition 1 declarations; `enum` remains absent until its complete declaration
-contract is implemented. Edition 2's later declaration name is exactly `enum`,
-with no alias.
+this target. Edition 2 now accepts the complete generic `enum` declaration and
+resolved type-fact contract under exactly that name, with no alias. It does not
+expose enum values or backend operations.
 
 ## Strict Capsule Manifest
 

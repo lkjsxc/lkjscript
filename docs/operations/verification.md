@@ -11,7 +11,8 @@ Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
 `structure`, repository graph/context, agent-state, complete Semantic Source
 Schema V2 with its exact V1 base, typed holes/legal actions and transactions,
-its one-shot protocol, bounded local stdio sessions, Profile V2 core reservation
+Edition 2 generic enum declaration/type facts, its one-shot protocol, bounded
+local stdio sessions, Profile V2 core reservation
 tests, and compiler resource-profile checks are described in the capsules.
 Edition 2 cross-engine acceptance, nonzero query caching, whole-pipeline
 pre-allocation, and logical metering integration remain **Accepted Targets**,
@@ -99,6 +100,13 @@ partial/oversized/cumulative boundaries, strict envelopes, pinned profile/root,
 stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
+
+Focused enum declaration tests cover exact Schema V2 nodes and roundtrip,
+stable nominal/member identities, source order, generic substitutions,
+invariance, duplicate/empty/malformed rejection, nested ownership rejection,
+recursion exact/+1 bounds, and declaration/variant/field/recursion Profile V2
+exact/+1 charges before HIR allocation. Construction and backend tests remain
+part of the Accepted Edition 2 gate.
 
 Core Profile V2 tests cover all five profiles, exact/lowered/+1/overflow
 boundaries, category order, positive monotonic ceilings, parent-child

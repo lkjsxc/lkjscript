@@ -1,5 +1,7 @@
+mod identities;
 mod projection;
 
+use identities::enum_node_identity;
 use projection::{projections, Projection};
 
 use crate::semantic::schema::{
@@ -103,6 +105,7 @@ fn declaration_kind(kind: DeclarationKind) -> SemanticDeclarationKind {
         DeclarationKind::Main => SemanticDeclarationKind::Main,
         DeclarationKind::Function => SemanticDeclarationKind::Function,
         DeclarationKind::Product => SemanticDeclarationKind::Product,
+        DeclarationKind::Enum => SemanticDeclarationKind::Enum,
         DeclarationKind::Trait => SemanticDeclarationKind::MarkerTrait,
         DeclarationKind::Implementation => SemanticDeclarationKind::TraitImplementation,
     }
@@ -138,6 +141,7 @@ pub(crate) fn node_records(tree: &ValidatedSourceTree) -> Vec<NodeRecord> {
                 node,
                 source.get(index)?,
                 projection.get(index)?,
+                &source,
             ))
         })
         .collect()
@@ -147,7 +151,7 @@ pub(crate) fn node_record(tree: &ValidatedSourceTree, node: &NodeSummary) -> Nod
     let index = node.id().index() as usize;
     let source = source_nodes(tree);
     let projection = projections(tree);
-    node_record_parts(tree, node, source[index], &projection[index])
+    node_record_parts(tree, node, source[index], &projection[index], &source)
 }
 
 fn node_record_parts(
@@ -155,6 +159,7 @@ fn node_record_parts(
     node: &NodeSummary,
     source: &SourceNode,
     projection: &Projection,
+    source_nodes: &[&SourceNode],
 ) -> NodeRecord {
     NodeRecord {
         index: node.id().index(),
@@ -165,6 +170,7 @@ fn node_record_parts(
         parent: node.parent().map(|id| id.index()),
         children: node.children().iter().map(|id| id.index()).collect(),
         declaration: containing_declaration(tree, node).map(|decl| decl.key().to_hex()),
+        semantic_identity: enum_node_identity(tree, node, source, projection, source_nodes),
         fingerprint: fingerprint(source),
         trivia: projection.trivia.clone(),
     }

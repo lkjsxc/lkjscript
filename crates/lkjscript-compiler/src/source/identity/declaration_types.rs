@@ -7,6 +7,7 @@ pub enum DeclarationKind {
     Main,
     Function,
     Product,
+    Enum,
     Trait,
     Implementation,
 }
@@ -17,6 +18,7 @@ impl DeclarationKind {
             Self::Main => "main",
             Self::Function => "function",
             Self::Product => "product",
+            Self::Enum => "enum",
             Self::Trait => "trait",
             Self::Implementation => "implementation",
         }
