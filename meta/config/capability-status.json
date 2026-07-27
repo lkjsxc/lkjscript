@@ -19,6 +19,22 @@
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
     },
     {
+      "id": "byte-text-ownership",
+      "status": "accepted-contract",
+      "interface": "bytes byte-vector byte-slice byte-slice-mut string str path",
+      "authority": "docs/decisions/semantics/byte-and-text-ownership.md",
+      "evidence": "docs/decisions/semantics/byte-and-text-ownership.md",
+      "claimants": ["docs/current-state.md"]
+    },
+    {
+      "id": "canonical-lowercase-vocabulary",
+      "status": "accepted-contract",
+      "interface": "lowercase word vocabulary structured signatures and imports",
+      "authority": "docs/decisions/semantics/canonical-lowercase-word-vocabulary.md",
+      "evidence": "docs/decisions/semantics/canonical-lowercase-word-vocabulary.md",
+      "claimants": ["docs/current-state.md"]
+    },
+    {
       "id": "enum-declarations",
       "status": "current",
       "interface": "generic enums and exhaustive source match through all four engines",
@@ -157,6 +173,14 @@
       "authority": "docs/decisions/platform/semantic-source-and-agent-protocol.md",
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
       "claimants": ["docs/current-state.md", "docs/operations/agent-handoff.md"]
+    },
+    {
+      "id": "typed-resources",
+      "status": "accepted-contract",
+      "interface": "typed affine resource kinds and generation-safe cleanup",
+      "authority": "docs/decisions/capabilities/typed-affine-resources.md",
+      "evidence": "docs/decisions/capabilities/typed-affine-resources.md",
+      "claimants": ["docs/current-state.md"]
     }
   ]
 }

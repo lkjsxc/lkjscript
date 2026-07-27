@@ -6,14 +6,14 @@
   "kind": "source",
   "purpose": "Own compiler implementation and the public validated Semantic Source facts API.",
   "layer": "compiler source",
-  "concepts": ["edition identity", "declaration identity", "source origin", "source diagnostics"],
+  "concepts": ["source contract identity", "declaration identity", "source origin", "source diagnostics", "canonical lowercase vocabulary"],
   "facade": ["crates/lkjscript-compiler/src/lib.rs", "crates/lkjscript-compiler/src/source/mod.rs"],
   "allowed_dependencies": ["core", "ir"],
   "forbidden_dependencies": ["app", "jit", "vm"],
   "tests": ["crates/lkjscript-compiler/src/source/tests/mod.rs"],
   "decisions": [
     "docs/decisions/platform/semantic-source-and-agent-protocol.md",
-    "docs/history/semantics/edition/identity-and-migration.md"
+    "docs/decisions/semantics/canonical-lowercase-word-vocabulary.md"
   ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },

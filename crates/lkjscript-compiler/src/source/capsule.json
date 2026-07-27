@@ -11,7 +11,8 @@
     "contract identity",
     "revision identity",
     "source diagnostics",
-    "canonical formatting"
+    "canonical formatting",
+    "lowercase word vocabulary"
   ],
   "facade": [
     "crates/lkjscript-compiler/src/source/mod.rs"
@@ -33,7 +34,8 @@
   ],
   "decisions": [
     "docs/decisions/platform/content-addressed-contracts.md",
-    "docs/decisions/platform/semantic-source-and-agent-protocol.md"
+    "docs/decisions/platform/semantic-source-and-agent-protocol.md",
+    "docs/decisions/semantics/canonical-lowercase-word-vocabulary.md"
   ],
   "unsafe_boundary": {
     "status": "forbidden",

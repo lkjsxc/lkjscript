@@ -7,6 +7,8 @@ Current and which policy layers remain Accepted Targets.
 
 ## Authorities
 
+- [typed capabilities](typed-capabilities.md)
+- [typed affine resources](typed-affine-resources.md)
 - [resource handles](resource-handles.md)
 - [durable files](durable-file-capabilities.md)
 - [lossless bulk bytes](lossless-bulk-bytes.md)

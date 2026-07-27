@@ -18,7 +18,7 @@ it is not the permanent editing identity.
 Linux x86-64 tier evidence requires real synchronous calls from verified SSA;
 code emission, disassembly, SSA scaffolding, or observation alone is
 insufficient. The canonical accepted extension is `.lkjscript`; `.lkjml` is
-rejected without an explicitly editioned migration mode. Linux x86-64 is the
+rejected and no language edition or compatibility mode exists. Linux x86-64 is the
 current acceptance platform. Portability is a design constraint, not a current
 support claim.
 
@@ -63,7 +63,10 @@ support claim.
     evidence, including combinations useful under other conditions.
 15. `[verified: commit review]` Commits are coherent and include exact `Tested:`
     and `Not-tested:` trailers.
-16. `[information]` Runtime JIT is the primary adaptive path. AOT, native caches,
+16. `[machine: LKJ-SOURCE-*]` Source semantic names are lowercase ASCII
+    kebab-case, operations use words, signatures/imports are structured, and
+    removed spellings have no aliases.
+17. `[information]` Runtime JIT is the primary adaptive path. AOT, native caches,
     and explicit local PGO require shared verified SSA/artifact identity,
     accepted measured slices, no telemetry upload, and no semantic divergence.
 
@@ -79,21 +82,24 @@ support claim.
 8. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
 9. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
 10. [Language](docs/language/README.md)
-11. [Semantic core](docs/decisions/semantics/semantic-core.md)
-12. [Equality](docs/decisions/semantics/equality-families.md)
-13. [Products](docs/decisions/semantics/immutable-nominal-products.md)
-14. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
-15. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
-16. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
-17. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
-18. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
-19. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
-20. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
-21. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
-22. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
-23. [Agent state](docs/decisions/platform/agent-work-state.md)
-24. [Verification](docs/operations/verification.md)
-25. [Vision and evidence](docs/vision/README.md)
+11. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
+12. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
+13. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
+14. [Semantic core](docs/decisions/semantics/semantic-core.md)
+15. [Equality](docs/decisions/semantics/equality-families.md)
+16. [Products](docs/decisions/semantics/immutable-nominal-products.md)
+17. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
+18. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
+19. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
+20. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
+21. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
+22. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
+23. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
+24. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
+25. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
+26. [Agent state](docs/decisions/platform/agent-work-state.md)
+27. [Verification](docs/operations/verification.md)
+28. [Vision and evidence](docs/vision/README.md)
 
 ## Development Loop
 

@@ -4,6 +4,8 @@
 
 <!-- LKJ-STATUS id=affine-resource-handles status=current -->
 <!-- LKJ-STATUS id=agent-work-state status=current -->
+<!-- LKJ-STATUS id=byte-text-ownership status=accepted-contract -->
+<!-- LKJ-STATUS id=canonical-lowercase-vocabulary status=accepted-contract -->
 <!-- LKJ-STATUS id=enum-declarations status=current -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
@@ -21,6 +23,7 @@
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
 <!-- LKJ-STATUS id=typed-capabilities status=current -->
+<!-- LKJ-STATUS id=typed-resources status=accepted-contract -->
 
 This file is the concise Current authority. Historical source generations,
 protocol experiments, candidate resource profiles, rejected performance
@@ -114,6 +117,15 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Accepted targets not claimed Current
 
+- canonical lowercase ASCII kebab-case identifiers, word operations,
+  structured signatures/imports, and one typed vocabulary registry until the
+  complete corpus cutover and old-spelling rejection gates pass;
+- typed affine resource kinds with generation-safe slots and verified
+  exactly-once cleanup, replacing universal source `Handle` only for complete
+  end-to-end domains;
+- immutable `bytes`, affine `byte-vector`, lexical byte slices, owned `string`,
+  borrowed `str`, and removal of ambiguous `Buf` surfaces after complete
+  cross-engine replacement;
 - complete region/borrow/drop semantics for resources nested in products and
   collections;
 - a portable path policy beyond the Current Linux absolute-byte contract;
