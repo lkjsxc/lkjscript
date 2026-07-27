@@ -35,6 +35,7 @@ const RESOURCE_PROFILES: &[&str] = &[
     "deterministic",
 ];
 const UNSUPPORTED: &[&str] = &[
+    "collector-free production runtime",
     "non-Linux host acceptance",
     "remote package registry",
     "remote artifact cache",

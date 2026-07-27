@@ -30,6 +30,12 @@ construction. No sibling parser or raw public AST enters analysis. VM,
 baseline JIT, proof optimizer, future AOT tests, and Wasm must share verified
 semantic IR rather than reinterpret syntax.
 
+Executable programs now retain an independently recomputed direct-affine SSA
+inventory for byte-vector owners/loans and typed resources. The public 62-record
+memory inventory reports Current tracing layouts and Accepted deterministic
+candidates. General modes, storage plans, drops, regions, pools, and collector
+removal remain Accepted Contract work.
+
 Provider authority enters only through explicit closed capability parameters.
 Package verification bounds grants; bytecode records exact main requirements;
 VM entry validates them before source effects. Acquired handles remain object
@@ -103,6 +109,7 @@ VM reference transitions remain Accepted Targets.
 
 ## Authority Links
 
+- [Collector-Free Deterministic Memory](../decisions/memory/collector-free-deterministic-memory.md)
 - [Bounded Repository Topology](../decisions/platform/bounded-repository-topology.md)
 - [Repository Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md)
 - [Agent Work State](../decisions/platform/agent-work-state.md)

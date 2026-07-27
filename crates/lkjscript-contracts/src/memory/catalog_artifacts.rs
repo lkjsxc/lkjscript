@@ -1,0 +1,77 @@
+use super::templates::host_owned;
+use super::MemoryObligation;
+
+pub(super) const ARTIFACTS: &[MemoryObligation] = &[
+    host_owned(
+        "bytecode-constants",
+        "validated bytecode",
+        "bounded typed constant Vec",
+        "bytecode chunk owner",
+        "reference bytecode lowering",
+        "bytecode validation suites",
+    ),
+    host_owned(
+        "diagnostics",
+        "compiler and Semantic Source",
+        "bounded structured diagnostic records",
+        "request or returned response owner",
+        "parser, analyzer and Semantic Source",
+        "diagnostic schema, bounds and roundtrip suites",
+    ),
+    host_owned(
+        "hir",
+        "compiler",
+        "resolved typed HIR Rust graph",
+        "compiler phase owner",
+        "source analysis",
+        "HIR behavior and ownership suites",
+    ),
+    host_owned(
+        "module-graph",
+        "package compiler",
+        "validated module dependency graph",
+        "package compilation",
+        "module loading and resolution",
+        "module/package conformance suites",
+    ),
+    host_owned(
+        "package-metadata",
+        "package authority",
+        "canonical manifest, lock and interface records",
+        "artifact or compilation",
+        "package codec and content addressing",
+        "package lock/check and contract suites",
+    ),
+    host_owned(
+        "semantic-source-revision",
+        "Semantic Source",
+        "immutable source snapshot and revision facts",
+        "bounded one-shot/session revision owner",
+        "semantic publication transaction",
+        "snapshot, transaction, stale revision and session suites",
+    ),
+    host_owned(
+        "source-tree",
+        "compiler source authority",
+        "validated modules and source text",
+        "compiler request",
+        "bounded source loader",
+        "source closure, package and parser suites",
+    ),
+    host_owned(
+        "ssa",
+        "compiler and IR verifier",
+        "typed SSA CFG and metadata",
+        "VerifiedProgram owner",
+        "SSA construction and independent verification",
+        "SSA verification, optimization and differential suites",
+    ),
+    host_owned(
+        "typed-hole-candidates",
+        "Semantic Source",
+        "bounded checked candidate/action records",
+        "one response or session journal",
+        "hole context and candidate checker",
+        "typed-hole bounds, validity and transaction suites",
+    ),
+];

@@ -7,6 +7,7 @@ mod engine;
 mod errors;
 mod execution_command;
 mod help;
+mod memory;
 mod metrics;
 mod metrics_jit;
 mod metrics_json;
@@ -39,6 +40,7 @@ fn real_main() -> Result<ExitCode, String> {
         Some("run") => execution_command::command(&args),
         Some("disasm") => disasm::command(&args),
         Some("package") => package::command(&args),
+        Some("memory") => memory::command(&args),
         Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),
     }

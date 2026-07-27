@@ -19,7 +19,9 @@ Current capabilities and known defects are recorded in
 execution is Current for its documented supported slice. Future installation,
 update, package, GUI, browser, server, loop OSR, automatic optimizing promotion,
 and full-language native coverage remain direction rather than current product
-behavior. The exact Current native boundaries are documented separately.
+behavior. The collector-free deterministic architecture is an Accepted Contract,
+not Current: VM and native reference execution still use tracing `GcHeap`.
+The exact Current native boundaries are documented separately.
 
 ## Development Commands
 
@@ -31,6 +33,7 @@ cargo run --locked -p lkjscript-app -- run --engine vm src/examples/mandel/main.
 cargo run --locked -p lkjscript-app -- run src/examples/lkjedit/main.lkjscript path/to/file
 cargo run --locked -p lkjscript-app -- run src/examples/http/hello.lkjscript
 cargo run --locked -p lkjscript-app -- disasm src/examples/hello/main.lkjscript
+cargo run --locked -p lkjscript-app -- memory inventory --json
 cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
 
@@ -80,8 +83,9 @@ See [docs/operations/architecture.md](docs/operations/architecture.md).
 6. [Agent Work State](docs/decisions/platform/agent-work-state.md)
 7. [Semantic Source And Agent Protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
 8. [Resource Budget Profiles](docs/decisions/platform/resource-budget-profiles.md)
-9. [docs/language/README.md](docs/language/README.md)
-10. [docs/operations/verification.md](docs/operations/verification.md)
-11. [docs/vision/README.md](docs/vision/README.md)
+9. [Collector-Free Deterministic Memory](docs/decisions/memory/collector-free-deterministic-memory.md)
+10. [docs/language/README.md](docs/language/README.md)
+11. [docs/operations/verification.md](docs/operations/verification.md)
+12. [docs/vision/README.md](docs/vision/README.md)
 
 Agent instructions: [AGENTS.md](AGENTS.md)

@@ -1,0 +1,48 @@
+use super::MemoryObligation;
+
+#[allow(clippy::too_many_arguments)]
+pub const fn runtime_state(
+    identity: &'static str,
+    layout: &'static str,
+    aliases: &'static str,
+    lifetime: &'static str,
+    trace_fields: &'static str,
+    roots: &'static str,
+    identity_kind: &'static str,
+    placement: &'static str,
+    candidates: &'static str,
+    reclamation: &'static str,
+    producers: &'static str,
+    tests: &'static str,
+) -> MemoryObligation {
+    MemoryObligation {
+        identity,
+        authority: "runtime execution boundary",
+        semantic_type: "runtime ownership state",
+        runtime_layout: layout,
+        value_semantics: "not an ordinary source value",
+        mutability: "runtime-private",
+        possible_aliases: aliases,
+        copyability: "contract-specific",
+        current_ownership: "session or explicit wrapper owner",
+        escape_behavior: "only through validated runtime boundary",
+        lifetime,
+        strong_cycles: "only inside traced snapshot where applicable",
+        weak_links: "none Current",
+        destructor: "Rust field drop and explicit runtime cleanup",
+        external_resources: "tracked separately from heap references",
+        portability: "worker-local Current",
+        contention: "single-owner",
+        allocation_frequency: "call or session dependent",
+        size_class: "bounded metadata or owned graph",
+        current_trace_fields: trace_fields,
+        current_exact_roots: roots,
+        object_identity: identity_kind,
+        current_placement: placement,
+        candidate_placements: candidates,
+        reclamation_plan: reclamation,
+        producers,
+        tests,
+        status: "current collector boundary; deterministic replacement accepted",
+    }
+}

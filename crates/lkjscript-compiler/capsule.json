@@ -6,7 +6,7 @@
   "kind": "crate",
   "purpose": "Validate canonical source and lower it through HIR into verified typed SSA and bytecode.",
   "layer": "compiler",
-  "concepts": ["Semantic Source", "explicit modules", "local packages", "affine resources", "HIR analysis", "SSA lowering"],
+  "concepts": ["Semantic Source", "explicit modules", "local packages", "affine resources", "memory obligations", "HIR analysis", "SSA lowering"],
   "facade": ["crates/lkjscript-compiler/src/lib.rs"],
   "allowed_dependencies": ["contracts", "core", "ir"],
   "forbidden_dependencies": ["app", "jit", "vm"],
@@ -16,7 +16,7 @@
     "crates/lkjscript-compiler/src/semantic/tests/mod.rs",
     "crates/lkjscript-compiler/src/source/tests/mod.rs"
   ],
-  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md", "docs/decisions/semantics/ownership-and-borrowing.md"],
+  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/memory/collector-free-deterministic-memory.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/semantic-source-and-agent-protocol.md", "docs/decisions/semantics/ownership-and-borrowing.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Rust crate source" },

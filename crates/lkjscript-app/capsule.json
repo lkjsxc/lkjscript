@@ -11,7 +11,8 @@
     "contract discovery",
     "package lock CLI",
     "semantic stdio session",
-    "integration execution"
+    "integration execution",
+    "memory inventory"
   ],
   "facade": [
     "crates/lkjscript-app/src/main.rs"
@@ -35,6 +36,7 @@
   ],
   "decisions": [
     "docs/decisions/execution/execution-portfolio.md",
+    "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/modules-and-packages.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
@@ -63,6 +65,7 @@
       "lkjscript",
       "lkjscript describe",
       "lkjscript package",
+      "lkjscript memory inventory",
       "lkjscript semantic serve --stdio"
     ],
     "invariants": [

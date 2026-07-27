@@ -11,7 +11,7 @@
   "allowed_dependencies": ["crates"],
   "forbidden_dependencies": [],
   "tests": ["crates/lkjscript-xtask/src/structure/graph_tests/mod.rs"],
-  "decisions": ["docs/decisions/platform/bounded-repository-topology.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/repository-intelligence-graph.md"],
+  "decisions": ["docs/decisions/memory/collector-free-deterministic-memory.md", "docs/decisions/platform/bounded-repository-topology.md", "docs/decisions/platform/content-addressed-contracts.md", "docs/decisions/platform/modules-and-packages.md", "docs/decisions/platform/repository-intelligence-graph.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "defines", "names": ["repository policy"] },
   "provenance": { "class": "authored", "source": "Git-tracked repository authority" },

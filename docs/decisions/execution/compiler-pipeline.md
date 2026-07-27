@@ -17,6 +17,9 @@ narrow verified-SSA adapter, bounded code objects, forced/automatic callable
 baseline tier, host-independent native references/allocation, and the forced
 first proof-based optimizing slice are **Current**. Synchronous automatic
 proof promotion is an **Accepted Implementation Selection**, not Current.
+The direct-affine SSA memory inventory is Current derived evidence; complete
+mode/region/storage/drop elaboration and collector removal remain an
+[Accepted Contract](../memory/collector-free-deterministic-memory.md).
 Handle/host native calls, native/VM reference transitions, loop OSR, minimal AOT
 test emission, production AOT, content-addressed cache, and direct Wasm are
 **Accepted Targets**. The backend is specified by [Linux x86-64 Native

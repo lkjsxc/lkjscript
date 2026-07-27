@@ -10,6 +10,8 @@ pub fn print() {
     println!("                 default: auto at 64 function entries; explicit vm is deterministic");
     println!("  lkjscript describe [--json]");
     println!("  lkjscript package <lock|check> [package-path]");
+    println!("  lkjscript memory inventory [--json]");
+    println!("  lkjscript memory explain <identity>");
     println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");
     println!("  lkjscript semantic describe");
     println!("  lkjscript semantic [-] < request.json");

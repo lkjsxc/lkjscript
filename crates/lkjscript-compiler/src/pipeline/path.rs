@@ -9,7 +9,7 @@ use crate::source::{load_for_compiler_with_budget, load_with_metrics_and_budget}
 use crate::ssa::lower_program_with_metrics_and_budget;
 use crate::{CompileMetrics, ExecutableProgram};
 
-use super::common::{compile_analyzed, finish};
+use super::common::{checked_memory_inventory, compile_analyzed, finish};
 
 pub fn compile_path(path: &Path, limits: &Limits) -> Result<ExecutableProgram> {
     compile_path_with_profile(path, limits, ResourceProfile::default())
@@ -68,6 +68,7 @@ pub fn compile_path_with_metrics_and_ledger(
         crate::effects::infer(&mut analyzed);
         let effect_analysis = effects_started.elapsed();
         let (ssa, ssa_metrics) = lower_program_with_metrics_and_budget(&analyzed, ledger)?;
+        let memory_inventory = checked_memory_inventory(&ssa)?;
         let bytecode_started = Instant::now();
         let (chunk, bytecode_links) = compile_program(&ssa)?;
         let bytecode_lowering = bytecode_started.elapsed();
@@ -78,6 +79,7 @@ pub fn compile_path_with_metrics_and_ledger(
         let executable = ExecutableProgram {
             bytecode,
             ssa,
+            memory_inventory,
             bytecode_links,
             profile: identity,
         };

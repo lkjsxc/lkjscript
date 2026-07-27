@@ -51,6 +51,34 @@ fn ownership_function_signature_escape_boundary_is_exact() {
 }
 
 #[test]
+fn memory_inventory_retains_verified_owner_and_loan_modes() {
+    let source = ownership_source(
+        "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nbyte-slice-length/\nborrow/\nb\n/borrow\n/byte-slice-length\n/let",
+        "i64",
+    );
+    let executable = compile_source(&source, "memory-inventory.lkjscript", &Limits::default())
+        .expect("compile direct affine memory inventory");
+    let obligations = &executable.memory_inventory().obligations;
+    assert_eq!(obligations.len(), 2);
+    assert!(obligations.iter().any(|obligation| {
+        obligation.mode.storage == lkjscript_ir::MemoryStorage::TransitionalTracedBuffer
+            && obligation.mode.destruction == lkjscript_ir::MemoryDestruction::CompilerFactOnly
+    }));
+    assert!(obligations.iter().any(|obligation| {
+        obligation.mode.aliasing == lkjscript_ir::MemoryAliasing::BorrowedShared
+            && obligation.mode.destruction == lkjscript_ir::MemoryDestruction::EndBorrow
+    }));
+    lkjscript_ir::verify_memory_inventory(executable.ssa(), executable.memory_inventory())
+        .expect("compiler-published inventory must independently verify");
+    let mut forged = executable.memory_inventory().clone();
+    forged.obligations[0].mode.storage = lkjscript_ir::MemoryStorage::ExternalSlot;
+    let error = lkjscript_ir::verify_memory_inventory(executable.ssa(), &forged)
+        .expect_err("forged memory inventory must fail")
+        .to_string();
+    assert!(error.contains("does not match verified ownership facts"));
+}
+
+#[test]
 fn ownership_types_cannot_escape_into_products_or_collections() {
     let product_direct = "product/\nname/\nbad\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nbyte-vector\n/type\n/field\n/fields\n/product\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     let product_nested = "product/\nname/\nbad-nested\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\noption\nbyte-slice\n/type\n/field\n/fields\n/product\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";

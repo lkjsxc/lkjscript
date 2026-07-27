@@ -19,6 +19,13 @@ on every structured edge, resource state/provider proofs, and generated native
 host execution remain **Accepted Targets**, so the complete typed-resource
 contract is not Current.
 
+`ExecutableProgram` now retains an independently recomputed SSA inventory for
+this direct affine slice. It records unique owners, shared/exclusive loans,
+external resource identity, transitional traced buffer storage, and incomplete
+cleanup facts. General inference and deterministic storage remain governed by
+the [collector-free memory contract](../memory/collector-free-deterministic-memory.md)
+and are not Current.
+
 ## Authority And Status Vocabulary
 
 This page is the authority for the record and its capsule manifest. Each capsule preserves one

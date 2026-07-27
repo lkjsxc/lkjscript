@@ -10,9 +10,11 @@ Define the working contract for automated engineering in this repository.
 platform implemented today by a small Rust compiler, verified typed SSA,
 reference bytecode VM, callable Linux x86-64 baseline JIT, and forced
 proof-checked optimizing JIT. The language has one content-addressed semantic
-contract, explicit capabilities/effects, value semantics, hybrid
-affine/region/traced memory safety, reproducible packages/components, and one
-semantic IR family feeding a measured evaluator/VM/JIT/AOT/cache/Wasm
+contract, explicit capabilities/effects, and value semantics. Current execution
+still uses an exact tracing heap during migration; the accepted destination is
+collector-free inferred ownership, borrowing, regions, sealed sharing, and
+pools. Reproducible packages/components and one semantic IR family feed a
+measured evaluator/VM/JIT/AOT/cache/Wasm
 portfolio. Current line-oriented source is the deterministic text projection;
 it is not the permanent editing identity.
 Linux x86-64 tier evidence requires real synchronous calls from verified SSA;
@@ -69,6 +71,9 @@ support claim.
 17. `[information]` Runtime JIT is the primary adaptive path. AOT, native caches,
     and explicit local PGO require shared verified SSA/artifact identity,
     accepted measured slices, no telemetry upload, and no semantic divergence.
+18. `[verified: memory authority]` Claim collector-free execution only after no
+    tracing liveness traversal, collector fallback, collecting safepoint,
+    collector barrier, or collection metric remains in Current production code.
 
 ## Read Order
 
@@ -90,16 +95,17 @@ support claim.
 16. [Products](docs/decisions/semantics/immutable-nominal-products.md)
 17. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
 18. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
-19. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
-20. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
-21. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
-22. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
-23. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
-24. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
-25. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
-26. [Agent state](docs/decisions/platform/agent-work-state.md)
-27. [Verification](docs/operations/verification.md)
-28. [Vision and evidence](docs/vision/README.md)
+19. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
+20. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
+21. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
+22. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
+23. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
+24. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
+25. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
+26. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
+27. [Agent state](docs/decisions/platform/agent-work-state.md)
+28. [Verification](docs/operations/verification.md)
+29. [Vision and evidence](docs/vision/README.md)
 
 ## Development Loop
 

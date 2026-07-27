@@ -6,6 +6,7 @@
 <!-- LKJ-STATUS id=agent-work-state status=current -->
 <!-- LKJ-STATUS id=byte-text-ownership status=accepted-contract -->
 <!-- LKJ-STATUS id=canonical-lowercase-vocabulary status=accepted-contract -->
+<!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
 <!-- LKJ-STATUS id=enum-declarations status=current -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
@@ -103,6 +104,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
 - Metrics use schema `lkjscript.metrics` and the full metrics contract digest.
+- `lkjscript memory inventory` exposes 62 sorted memory-obligation records under
+  `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
+  exact roots, transitional ownership island, PLACEHOLDER `bytes`, and accepted
+  deterministic candidates; it is derived evidence, not semantic authority.
+  Executable programs retain an independently recomputed direct-affine SSA
+  inventory for byte-vector owners/loans and typed resources.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected ledger spans compiler phases; one request-owned ledger
   across every compiler/runtime authority remains an accepted target.
@@ -134,6 +141,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   cross-engine replacement;
 - complete region/borrow/drop semantics for resources nested in products and
   collections;
+- the selected collector-free deterministic cutover: inferred modes and loans,
+  ordinary and sealed shared regions, pools, exact cleanup, migrated evaluator,
+  VM and native storage, no-RC falsification, and deletion of all tracing paths;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;

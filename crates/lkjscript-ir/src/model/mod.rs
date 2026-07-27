@@ -2,6 +2,7 @@ mod constant;
 mod error;
 mod ids;
 mod instruction;
+mod memory;
 mod metadata;
 mod program;
 mod runtime;
@@ -17,6 +18,11 @@ pub use ids::{
 pub use instruction::{
     BlockParameter, BorrowKind, CallTarget, FailureBehavior, FrameLocal, FrameState, Instruction,
     InstructionKind, InstructionMetadata, Safepoint,
+};
+pub use memory::{
+    MemoryAliasing, MemoryContention, MemoryDestruction, MemoryIdentity, MemoryLocality,
+    MemoryMode, MemoryMultiplicity, MemoryObligationSubject, MemoryPortability, MemoryStorage,
+    SsaMemoryInventory, SsaMemoryObligation,
 };
 pub use metadata::{
     EffectSet, EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, ProductField,

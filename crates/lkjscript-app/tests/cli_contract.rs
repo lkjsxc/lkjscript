@@ -15,6 +15,7 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
     let help = String::from_utf8(help.stdout).expect("help is UTF-8");
     assert!(help.contains("--engine vm|auto|baseline-jit|optimizing-jit"));
     assert!(help.contains("default: auto at 64 function entries"));
+    assert!(help.contains("memory inventory [--json]"));
 
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/optimizing-loop.lkjscript");
@@ -53,4 +54,30 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
     }
     assert!(!json.contains("\"optimization_certificate_bytes\":"));
     assert!(!json.contains("\"optimization_metadata_bytes\":"));
+}
+
+#[test]
+fn memory_inventory_and_explain_are_deterministic_public_evidence() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    let inventory = Command::new(binary)
+        .args(["memory", "inventory", "--json"])
+        .output()
+        .expect("run memory inventory");
+    assert!(inventory.status.success());
+    assert!(inventory.stderr.is_empty());
+    let json = String::from_utf8(inventory.stdout).expect("inventory is UTF-8");
+    assert!(json.contains("\"schema\":\"lkjscript.memory-obligations\""));
+    assert!(json.contains("\"identity\":\"gc-heap\""));
+    assert!(json.contains("\"current_trace_fields\":\"HeapObj::trace from exact roots\""));
+    assert!(json.contains("PLACEHOLDER accepted contract"));
+
+    let explain = Command::new(binary)
+        .args(["memory", "explain", "byte-vector"])
+        .output()
+        .expect("run memory explanation");
+    assert!(explain.status.success());
+    assert!(explain.stderr.is_empty());
+    let text = String::from_utf8(explain.stdout).expect("explanation is UTF-8");
+    assert!(text.contains("memory-identity=byte-vector"));
+    assert!(text.contains("current compiler island; deterministic storage accepted"));
 }

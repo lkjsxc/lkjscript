@@ -35,6 +35,17 @@
       "claimants": ["docs/current-state.md"]
     },
     {
+      "id": "collector-free-deterministic-memory",
+      "status": "accepted-contract",
+      "interface": "lkjscript.memory-obligations and deterministic memory cutover",
+      "authority": "docs/decisions/memory/collector-free-deterministic-memory.md",
+      "evidence": "docs/decisions/memory/collector-free-deterministic-memory.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/decisions/memory/collector-free-deterministic-memory.md"
+      ]
+    },
+    {
       "id": "enum-declarations",
       "status": "current",
       "interface": "generic enums and exhaustive source match through all four engines",

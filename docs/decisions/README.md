@@ -31,6 +31,8 @@ Index active architecture decisions separately from superseded history.
 - [callable-baseline-jit.md](jit/callable-baseline-jit.md): current allocation-free scalar callable
   Linux x86-64 baseline-JIT cycle and later boundaries
 - [compiler-pipeline.md](execution/compiler-pipeline.md): typed HIR/SSA and runtime JIT pipeline
+- [collector-free-deterministic-memory.md](memory/collector-free-deterministic-memory.md): inferred
+  deterministic memory destination, Current inventory, migration, and falsification contract
 - [equality-families.md](semantics/equality-families.md): explicit value, identity, list, and F64-bit equality
 - [immutable-nominal-products.md](semantics/immutable-nominal-products.md): named immutable aggregate state
 - [isolates-and-structured-concurrency.md](platform/isolates-and-structured-concurrency.md):

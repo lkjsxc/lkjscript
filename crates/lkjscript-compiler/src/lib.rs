@@ -19,7 +19,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use lkjscript_core::ValidatedChunk;
-use lkjscript_ir::{BytecodeLinkMetadata, VerifiedProgram};
+use lkjscript_ir::{BytecodeLinkMetadata, SsaMemoryInventory, VerifiedProgram};
 
 pub use lkjscript_core::{
     BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
@@ -84,6 +84,7 @@ impl Default for CompileMetrics {
 pub struct ExecutableProgram {
     bytecode: ValidatedChunk,
     ssa: VerifiedProgram,
+    memory_inventory: SsaMemoryInventory,
     bytecode_links: BytecodeLinkMetadata,
     profile: ResourceProfileIdentity,
 }
@@ -95,6 +96,10 @@ impl ExecutableProgram {
 
     pub fn ssa(&self) -> &VerifiedProgram {
         &self.ssa
+    }
+
+    pub fn memory_inventory(&self) -> &SsaMemoryInventory {
+        &self.memory_inventory
     }
 
     pub fn bytecode_links(&self) -> &BytecodeLinkMetadata {

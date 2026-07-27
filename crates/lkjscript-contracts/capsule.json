@@ -6,12 +6,13 @@
   "kind": "crate",
   "purpose": "Define canonical Current contract descriptors and full content identities.",
   "layer": "semantic foundation",
-  "concepts": ["canonical descriptor encoding", "contract digest", "current contract registry", "typed source vocabulary"],
+  "concepts": ["canonical descriptor encoding", "contract digest", "current contract registry", "memory obligations", "typed source vocabulary"],
   "facade": ["crates/lkjscript-contracts/src/lib.rs"],
   "allowed_dependencies": [],
   "forbidden_dependencies": ["app", "compiler", "jit", "sys", "vm"],
   "tests": ["crates/lkjscript-contracts/src/tests.rs"],
   "decisions": [
+    "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/semantics/canonical-lowercase-word-vocabulary.md"
   ],

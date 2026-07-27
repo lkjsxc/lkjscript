@@ -65,6 +65,7 @@ The registry is closed for each build and includes at least:
 - language semantics and canonical source grammar;
 - Semantic Source nodes and agent requests, responses, and diagnostics;
 - resource categories and profile ceiling sets;
+- deterministic memory-obligation inventory schema and storage taxonomy;
 - repository graph, capsule manifests, and agent work state;
 - serialized HIR, verified SSA, bytecode, runtime calls, native layouts, and
   metrics where those bytes cross an independent boundary;
