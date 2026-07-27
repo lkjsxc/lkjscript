@@ -62,7 +62,7 @@ Index active architecture decisions separately from superseded history.
 - [traits-and-static-dispatch.md](semantics/traits-and-static-dispatch.md): coherent bounded traits,
   auto traits, and monomorphization
 - [resource-handles.md](capabilities/resource-handles.md): stale-safe resources and bounded terminal ABI
-- [system-results.md](semantics/system-results.md): truthful host failures as language values
+- [system-results.md](capabilities/system-results.md): truthful host failures as language values
 - [web-platform-roadmap.md](roadmaps/web-platform-roadmap.md): ownership-first async Web framework
   and TLS-provider sequence
 - [limits/essential-limits.md](limits/essential-limits.md): Current fixed source budgets during

@@ -17,7 +17,7 @@
     {
       "path": "lkjscript.lock.json",
       "class": "generated-mutable",
-      "sha256": "8dc012304f2b803347e446da2bf908bd1513d3e9f6a99aede64cc70c3544d176",
+      "sha256": "180889abf0d9f57d82b7f35fab65cf2289189f6227c9ec3c1229160473af558c",
       "generator": "lkjscript package lock; canonical local package graph and current contract registry"
     },
     {

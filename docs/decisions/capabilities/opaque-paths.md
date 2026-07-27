@@ -54,8 +54,9 @@ overload:
 - both operands of `rename-path`;
 - the pathname operand of `open-sqlite` and `backup-sqlite`.
 
-Their explicit provider capability parameter remains argument zero. Operations on acquired `file-reader`, `file-writer`, `file-appender`,
-`directory`, and SQLite resource values require their exact declared kinds.
+Their explicit provider capability parameter remains argument zero. Operations
+on acquired `file-reader`, `file-writer`, `file-appender`, `directory`, and
+SQLite resource values require their exact declared kinds.
 
 Only `lkjscript-sys` constructs NUL-terminated host buffers and enters FFI.
 Production and acceptance paths do not use lossy string conversion. Existing

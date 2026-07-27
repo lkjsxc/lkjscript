@@ -36,7 +36,11 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
         arity: 1,
         type_scheme: "forall resource fn inputs resource output result unit system-error",
         generic_variables: &["resource"],
-        generic_constraints: &["resource:one-of(output-stream,file-reader,file-writer,file-appender,directory,tcp-listener,tcp-stream,sqlite-connection,sqlite-statement,terminal-session)"],
+        generic_constraints: &[concat!(
+            "resource:one-of(output-stream,file-reader,file-writer,file-appender,",
+            "directory,tcp-listener,tcp-stream,sqlite-connection,",
+            "sqlite-statement,terminal-session)",
+        )],
         effects: OperationEffects(49),
         capability_requirements: &[],
         ownership: OperationOwnership::ConsumesResource,
@@ -66,7 +70,9 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
         arity: 2,
         type_scheme: "forall resource fn inputs resource i64 output result unit system-error",
         generic_variables: &["resource"],
-        generic_constraints: &["resource:one-of(output-stream,file-writer,file-appender,tcp-stream)"],
+        generic_constraints: &[
+            "resource:one-of(output-stream,file-writer,file-appender,tcp-stream)",
+        ],
         effects: OperationEffects(49),
         capability_requirements: &[],
         ownership: OperationOwnership::Allocates,
@@ -98,7 +104,9 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
         type_scheme:
             "forall resource fn inputs resource buf i64 i64 output result i64 system-error",
         generic_variables: &["resource"],
-        generic_constraints: &["resource:one-of(output-stream,file-writer,file-appender,tcp-stream)"],
+        generic_constraints: &[
+            "resource:one-of(output-stream,file-writer,file-appender,tcp-stream)",
+        ],
         effects: OperationEffects(51),
         capability_requirements: &[],
         ownership: OperationOwnership::Allocates,

@@ -142,6 +142,7 @@ mod resolution;
 mod signature;
 mod signature_memory;
 mod signature_system;
+mod signature_system_sqlite;
 mod signature_values;
 mod signature_variants;
 

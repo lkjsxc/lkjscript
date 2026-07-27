@@ -19,8 +19,12 @@ Add `result`-valued primitives:
 open-file-appender: fn inputs capability file-system path output result file-appender system-error
 create-file: fn inputs capability file-system path output result file-writer system-error
 open-directory: fn inputs capability file-system path output result directory system-error
-sync-file: forall resource; resource one-of file-writer,file-appender,directory; fn inputs resource output result unit system-error
-truncate-file: forall resource; resource one-of file-writer,file-appender; fn inputs resource i64 output result unit system-error
+sync-file:
+  forall resource; resource one-of file-writer,file-appender,directory;
+  fn inputs resource output result unit system-error
+truncate-file:
+  forall resource; resource one-of file-writer,file-appender;
+  fn inputs resource i64 output result unit system-error
 rename-path: fn inputs capability file-system path path output result unit system-error
 fill-random: fn inputs capability entropy buf i64 i64 output result unit system-error
 ```

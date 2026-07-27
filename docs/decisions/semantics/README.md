@@ -15,4 +15,3 @@ Rejected semantics explicitly.
 - [immutable nominal products](immutable-nominal-products.md)
 - [ownership and borrowing](ownership-and-borrowing.md)
 - [traits and static dispatch](traits-and-static-dispatch.md)
-- [system results](system-results.md)

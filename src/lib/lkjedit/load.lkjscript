@@ -1,7 +1,7 @@
 imports/
 import/
 module/
-src/lib/lkjedit/lines.lkjscript
+src/lib/lkjedit/read-lines.lkjscript
 /module
 declarations/
 editor-read-lines

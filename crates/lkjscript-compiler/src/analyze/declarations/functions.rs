@@ -15,7 +15,6 @@ impl Analyzer {
         }
         Ok(types)
     }
-
     pub(in crate::analyze) fn resolve_main(&mut self, pending: PendingMain<'_>) -> Result<Main> {
         if pending.return_type.contains_never() {
             return Err(self.error(pending.origin, "never is not a public main return payload"));
@@ -87,7 +86,6 @@ impl Analyzer {
             body,
         })
     }
-
     pub(in crate::analyze) fn resolve_function(
         &mut self,
         binding: BindingId,
@@ -147,7 +145,6 @@ impl Analyzer {
             );
             params.push(id);
         }
-
         let (body, local_count, param_places) = {
             let type_variables = parsed.forall_vars.iter().cloned().collect();
             let mut resolver = Resolver::new(
@@ -177,7 +174,6 @@ impl Analyzer {
                 ),
             ));
         }
-
         Ok(Function {
             binding,
             origin,
@@ -190,7 +186,6 @@ impl Analyzer {
             body,
         })
     }
-
     pub(in crate::analyze) fn build_global_layout(
         &self,
         functions: &[Function],

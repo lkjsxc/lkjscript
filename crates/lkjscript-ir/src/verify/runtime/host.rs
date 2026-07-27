@@ -8,7 +8,7 @@ pub(super) fn host_signature(
     result: &SsaType,
 ) -> Option<bool> {
     use lkjscript_contracts::CapabilityKind::{
-        Clock, Entropy, FileSystem, Network, Sqlite, Stdio, Terminal,
+        Clock, Entropy, FileSystem, Network, Stdio, Terminal,
     };
     use ResourceKind::{
         Directory, FileAppender, FileReader, FileWriter, InputStream, OutputStream, TcpListener,
@@ -25,6 +25,9 @@ pub(super) fn host_signature(
         };
         allowed.contains(kind) && rest == tail && result == result_type
     };
+    if let Some(valid) = super::host_sqlite::sqlite_signature(operation, parameters, result) {
+        return Some(valid);
+    }
     let valid = match operation {
         RuntimeOp::StdinHandle => exact(&[SsaType::Capability(Stdio)], &resource(InputStream)),
         RuntimeOp::SysIsatty => exact(&[resource(InputStream)], &system_result(SsaType::Bool)),
@@ -109,126 +112,6 @@ pub(super) fn host_signature(
             &[SsaType::Buf, SsaType::I64, SsaType::I64],
             &system_result(SsaType::Buf),
         ),
-        RuntimeOp::SysSqliteOpen => exact(
-            &[SsaType::Capability(Sqlite), SsaType::Path, SsaType::I64],
-            &system_result(resource(ResourceKind::SqliteConnection)),
-        ),
-        RuntimeOp::SysSqliteClose => {
-            sqlite_one(ResourceKind::SqliteConnection, result, SsaType::Unit)
-        }
-        RuntimeOp::SysSqliteFinalize
-        | RuntimeOp::SysSqliteReset
-        | RuntimeOp::SysSqliteClearBindings => {
-            sqlite_one(ResourceKind::SqliteStatement, result, SsaType::Unit)
-        }
-        RuntimeOp::SysSqliteBusyTimeout => sqlite_tail(
-            ResourceKind::SqliteConnection,
-            &[SsaType::I64],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqliteBindNull => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqliteExec => sqlite_tail(
-            ResourceKind::SqliteConnection,
-            &[SsaType::Str],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqlitePrepare => sqlite_tail(
-            ResourceKind::SqliteConnection,
-            &[SsaType::Str],
-            parameters,
-            result,
-            resource(ResourceKind::SqliteStatement),
-        ),
-        RuntimeOp::SysSqliteBindI64 => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64, SsaType::I64],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqliteBindF64 => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64, SsaType::F64],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqliteBindText => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64, SsaType::Str],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqliteBindBytes => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64, SsaType::Buf],
-            parameters,
-            result,
-            SsaType::Unit,
-        ),
-        RuntimeOp::SysSqliteStep | RuntimeOp::SysSqliteColumnCount => {
-            sqlite_one(ResourceKind::SqliteStatement, result, SsaType::I64)
-        }
-        RuntimeOp::SysSqliteChanges
-        | RuntimeOp::SysSqliteLastInsertRowid
-        | RuntimeOp::SysSqliteExtendedResultCode => {
-            sqlite_one(ResourceKind::SqliteConnection, result, SsaType::I64)
-        }
-        RuntimeOp::SysSqliteColumnType => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64],
-            parameters,
-            result,
-            SsaType::I64,
-        ),
-        RuntimeOp::SysSqliteColumnI64 => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64],
-            parameters,
-            result,
-            crate::prelude_contract::option(SsaType::I64),
-        ),
-        RuntimeOp::SysSqliteColumnF64 => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64],
-            parameters,
-            result,
-            crate::prelude_contract::option(SsaType::F64),
-        ),
-        RuntimeOp::SysSqliteColumnText => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64],
-            parameters,
-            result,
-            crate::prelude_contract::option(SsaType::Str),
-        ),
-        RuntimeOp::SysSqliteColumnBytes => sqlite_tail(
-            ResourceKind::SqliteStatement,
-            &[SsaType::I64],
-            parameters,
-            result,
-            crate::prelude_contract::option(SsaType::Buf),
-        ),
-        RuntimeOp::SysSqliteBackup => exact(
-            &[
-                SsaType::Capability(Sqlite),
-                resource(ResourceKind::SqliteConnection),
-                SsaType::Path,
-                SsaType::I64,
-            ],
-            &system_result(SsaType::Unit),
-        ),
         RuntimeOp::SysPathExists => exact(
             &[SsaType::Capability(FileSystem), SsaType::Path],
             &system_result(SsaType::Bool),
@@ -276,20 +159,4 @@ fn file_open(kind: ResourceKind, parameters: &[SsaType], result: &SsaType) -> bo
             SsaType::Path,
         ]
         && result == &system_result(SsaType::Resource(kind))
-}
-
-fn sqlite_one(kind: ResourceKind, result: &SsaType, output: SsaType) -> bool {
-    sqlite_tail(kind, &[], &[SsaType::Resource(kind)], result, output)
-}
-
-fn sqlite_tail(
-    kind: ResourceKind,
-    tail: &[SsaType],
-    parameters: &[SsaType],
-    result: &SsaType,
-    output: SsaType,
-) -> bool {
-    parameters.first() == Some(&SsaType::Resource(kind))
-        && parameters.get(1..) == Some(tail)
-        && result == &system_result(output)
 }

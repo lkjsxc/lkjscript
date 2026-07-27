@@ -1,7 +1,7 @@
 imports/
 import/
 module/
-src/lib/lkjedit/extras/line.lkjscript
+src/lib/lkjedit/extras/list-remove.lkjscript
 /module
 declarations/
 editor-list-remove

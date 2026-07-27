@@ -3,6 +3,7 @@ use crate::{RuntimeOp, Signature, SsaType};
 
 mod core;
 mod host;
+mod host_sqlite;
 #[cfg(test)]
 mod tests;
 

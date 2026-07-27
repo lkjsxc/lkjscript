@@ -33,7 +33,8 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 - arithmetic / compare / logic
 - `list-prepend` / `list-first` / `list-rest` / `is-empty-list`
-- string ops (`string-byte-length`, `string-byte-at`, `append-string`, `copy-string-byte-slice`, `convert-byte-to-string`)
+- string ops (`string-byte-length`, `string-byte-at`, `append-string`,
+  `copy-string-byte-slice`, `convert-byte-to-string`)
 - `print` / control (`if`, `while`, `call`, …)
 
 **Fat host ops to migrate later** (ranked):

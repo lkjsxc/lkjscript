@@ -1,11 +1,10 @@
 use crate::operation::instantiation::{forall, function};
+use crate::operation::signature_system_sqlite::sqlite_signature;
 use crate::operation::*;
 use lkjscript_core::ResourceKind;
 
 pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
-    use lkjscript_core::CapabilityKind::{
-        Clock, Entropy, FileSystem, Network, Sqlite, Stdio, Terminal,
-    };
+    use lkjscript_core::CapabilityKind::{Clock, Entropy, FileSystem, Network, Stdio, Terminal};
 
     let system_result =
         |success| crate::types::result_type(success, crate::types::system_error_type());
@@ -13,6 +12,9 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
     let any_resource = || Type::Param("resource".into());
     let resource_function =
         |params: Vec<Type>, result: Type| forall(&["resource"], function(params, result));
+    if let Some(signature) = sqlite_signature(operation) {
+        return signature;
+    }
     match operation {
         Operation::StdinHandle => function(
             vec![Type::Capability(Stdio)],
@@ -71,107 +73,6 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
         Operation::SysSha256 => function(
             vec![Type::Buf, Type::I64, Type::I64],
             system_result(Type::Buf),
-        ),
-        Operation::SysSqliteOpen => function(
-            vec![Type::Capability(Sqlite), Type::Path, Type::I64],
-            system_result(resource(ResourceKind::SqliteConnection)),
-        ),
-        Operation::SysSqliteClose => function(
-            vec![resource(ResourceKind::SqliteConnection)],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteFinalize
-        | Operation::SysSqliteReset
-        | Operation::SysSqliteClearBindings => function(
-            vec![resource(ResourceKind::SqliteStatement)],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteBusyTimeout => function(
-            vec![resource(ResourceKind::SqliteConnection), Type::I64],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteBindNull => function(
-            vec![resource(ResourceKind::SqliteStatement), Type::I64],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteExec => function(
-            vec![resource(ResourceKind::SqliteConnection), Type::Str],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqlitePrepare => function(
-            vec![resource(ResourceKind::SqliteConnection), Type::Str],
-            system_result(resource(ResourceKind::SqliteStatement)),
-        ),
-        Operation::SysSqliteBindI64 => function(
-            vec![
-                resource(ResourceKind::SqliteStatement),
-                Type::I64,
-                Type::I64,
-            ],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteBindF64 => function(
-            vec![
-                resource(ResourceKind::SqliteStatement),
-                Type::I64,
-                Type::F64,
-            ],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteBindText => function(
-            vec![
-                resource(ResourceKind::SqliteStatement),
-                Type::I64,
-                Type::Str,
-            ],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteBindBytes => function(
-            vec![
-                resource(ResourceKind::SqliteStatement),
-                Type::I64,
-                Type::Buf,
-            ],
-            system_result(Type::Unit),
-        ),
-        Operation::SysSqliteStep | Operation::SysSqliteColumnCount => function(
-            vec![resource(ResourceKind::SqliteStatement)],
-            system_result(Type::I64),
-        ),
-        Operation::SysSqliteChanges
-        | Operation::SysSqliteLastInsertRowid
-        | Operation::SysSqliteExtendedResultCode => function(
-            vec![resource(ResourceKind::SqliteConnection)],
-            system_result(Type::I64),
-        ),
-        Operation::SysSqliteColumnType => function(
-            vec![resource(ResourceKind::SqliteStatement), Type::I64],
-            system_result(Type::I64),
-        ),
-        Operation::SysSqliteColumnI64 => function(
-            vec![resource(ResourceKind::SqliteStatement), Type::I64],
-            system_result(crate::types::option_type(Type::I64)),
-        ),
-        Operation::SysSqliteColumnF64 => function(
-            vec![resource(ResourceKind::SqliteStatement), Type::I64],
-            system_result(crate::types::option_type(Type::F64)),
-        ),
-        Operation::SysSqliteColumnText => function(
-            vec![resource(ResourceKind::SqliteStatement), Type::I64],
-            system_result(crate::types::option_type(Type::Str)),
-        ),
-        Operation::SysSqliteColumnBytes => function(
-            vec![resource(ResourceKind::SqliteStatement), Type::I64],
-            system_result(crate::types::option_type(Type::Buf)),
-        ),
-        Operation::SysSqliteBackup => function(
-            vec![
-                Type::Capability(Sqlite),
-                resource(ResourceKind::SqliteConnection),
-                Type::Path,
-                Type::I64,
-            ],
-            system_result(Type::Unit),
         ),
         Operation::SysPathExists => function(
             vec![Type::Capability(FileSystem), Type::Path],

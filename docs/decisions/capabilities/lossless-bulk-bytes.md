@@ -17,8 +17,13 @@ canonical local gate, and Docker verification are implemented and verified.
 Add these `result`-valued primitives:
 
 ```text
-read-into: forall resource; resource one-of input-stream,file-reader,tcp-stream; fn inputs resource buf i64 i64 output result i64 system-error
-write-from: forall resource; resource one-of output-stream,file-writer,file-appender,tcp-stream; fn inputs resource buf i64 i64 output result i64 system-error
+read-into:
+  forall resource; resource one-of input-stream,file-reader,tcp-stream;
+  fn inputs resource buf i64 i64 output result i64 system-error
+write-from:
+  forall resource;
+  resource one-of output-stream,file-writer,file-appender,tcp-stream;
+  fn inputs resource buf i64 i64 output result i64 system-error
 convert-string-to-buf: fn inputs string output buf
 convert-buf-to-string: fn inputs buf output result string utf8-error
 copy-buf-slice: fn inputs buf i64 i64 output result buf system-error

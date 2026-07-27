@@ -53,8 +53,9 @@ The canonical binary arithmetic names are `add`, `subtract`, `multiply`, and `di
 `bit-and`, `bit-or`, and `bit-xor` accept exactly two I64 values and operate on
 all 64 two's-complement bits.
 
-Canonical numeric ordering operations are `less-than`, `less-than-or-equal`, `greater-than`, and `greater-than-or-equal`.
-Ordering uses the same I64/F64 promotion rule as arithmetic.
+Canonical numeric ordering operations are `less-than`,
+`less-than-or-equal`, `greater-than`, and `greater-than-or-equal`. Ordering uses
+the same I64/F64 promotion rule as arithmetic.
 
 Equality does not promote. `equal-value` requires identical supported operand
 types: I64 equality is exact and F64 equality is IEEE equality, where NaN is

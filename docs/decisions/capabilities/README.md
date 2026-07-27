@@ -10,6 +10,7 @@ Current and which policy layers remain Accepted Targets.
 - [typed capabilities](typed-capabilities.md)
 - [typed affine resources](typed-affine-resources.md)
 - [resource handles](resource-handles.md)
+- [system results](system-results.md)
 - [durable files](durable-file-capabilities.md)
 - [lossless bulk bytes](lossless-bulk-bytes.md)
 - [SHA-256](sha256.md)

@@ -9,6 +9,7 @@ mod instruction;
 mod merge;
 mod prelude_shape;
 mod shape;
+mod shape_products;
 
 use crate::{Chunk, Constant, DecodedInstruction, EnumId, FunctionProto, ProductId, VariantId};
 

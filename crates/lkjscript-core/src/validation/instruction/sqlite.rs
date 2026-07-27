@@ -1,4 +1,4 @@
-use super::{system::expect_resource, types::*, Kind, State};
+use super::{system_types::expect_resource, types::*, Kind, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, ResourceKind, Result};
 
 pub(super) fn apply(
