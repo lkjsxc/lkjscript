@@ -3,14 +3,14 @@ use super::*;
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::SysSocket as u8 => {
-            vm.ensure_host_deadline_support("sys-socket", false)?;
+            vm.ensure_host_deadline_support("open-tcp-socket", false)?;
             vm.require_capability(lkjscript_core::CapabilityKind::Network)?;
             let result = vm.resources.sys_socket();
             push_language_result(vm, lkjscript_core::SystemErrorKind::Network, result);
             Ok(true)
         }
         x if x == Op::SysBind as u8 => {
-            vm.ensure_host_deadline_support("sys-bind", false)?;
+            vm.ensure_host_deadline_support("bind-tcp", false)?;
             let port = vm.pop()?;
             let handle = vm.pop()?;
             let port = vm.as_i64(port)?;
@@ -19,7 +19,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysListen as u8 => {
-            vm.ensure_host_deadline_support("sys-listen", false)?;
+            vm.ensure_host_deadline_support("listen-tcp", false)?;
             let backlog = vm.pop()?;
             let handle = vm.pop()?;
             let backlog = vm.as_i64(backlog)?;
@@ -29,7 +29,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         x if x == Op::SysAccept as u8 => {
             let handle = vm.pop()?;
-            if let Some(error) = wait_readable(vm, handle, "sys-accept")? {
+            if let Some(error) = wait_readable(vm, handle, "accept-tcp")? {
                 push_language_result(vm, lkjscript_core::SystemErrorKind::Network, Err(error));
                 return Ok(true);
             }
@@ -39,7 +39,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         x if x == Op::SysRecv as u8 => {
             let handle = vm.pop()?;
-            if let Some(error) = wait_readable(vm, handle, "sys-recv")? {
+            if let Some(error) = wait_readable(vm, handle, "receive-string")? {
                 push_language_result(vm, lkjscript_core::SystemErrorKind::Network, Err(error));
                 return Ok(true);
             }
@@ -59,7 +59,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysSend as u8 => {
-            vm.ensure_host_deadline_support("sys-send", false)?;
+            vm.ensure_host_deadline_support("send-string", false)?;
             let data = vm.pop()?;
             let handle = vm.pop()?;
             let result = vm.resources.sys_send(&vm.arena, handle, data);

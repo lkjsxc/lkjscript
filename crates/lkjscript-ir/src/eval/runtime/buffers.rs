@@ -24,7 +24,7 @@ impl Evaluator<'_> {
             }),
             Op::BufRef | Op::OwnedBufRef => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
-                let index = index_value(index, "buf-ref")?;
+                let index = index_value(index, "buf-byte-at")?;
                 let byte = buffer
                     .bytes
                     .borrow()
@@ -35,7 +35,7 @@ impl Evaluator<'_> {
             }),
             Op::BufSet | Op::OwnedBufSet => ternary(&arguments, |buffer, index, byte| {
                 let buffer = as_buffer(buffer)?;
-                let index = index_value(index, "buf-set")?;
+                let index = index_value(index, "buf-set-byte")?;
                 let byte = u8::try_from(as_i64(byte)?)
                     .map_err(|_| Flow::Trap("buf-set byte out of range".into()))?;
                 let mut bytes = buffer.bytes.borrow_mut();
@@ -99,7 +99,7 @@ impl Evaluator<'_> {
             }),
             Op::BufGetU32 => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
-                let index = index_value(index, "buf-get-u32")?;
+                let index = index_value(index, "buf-read-u32")?;
                 let end = index
                     .checked_add(4)
                     .ok_or_else(|| Flow::Trap("buf-get-u32 index overflow".into()))?;
@@ -113,7 +113,7 @@ impl Evaluator<'_> {
             }),
             Op::BufSetU32 => ternary(&arguments, |buffer, index, number| {
                 let buffer = as_buffer(buffer)?;
-                let index = index_value(index, "buf-set-u32")?;
+                let index = index_value(index, "buf-write-u32")?;
                 let end = index
                     .checked_add(4)
                     .ok_or_else(|| Flow::Trap("buf-set-u32 index overflow".into()))?;

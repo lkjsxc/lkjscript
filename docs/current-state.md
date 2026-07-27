@@ -2,7 +2,7 @@
 
 ## Status
 
-<!-- LKJ-STATUS id=affine-resource-handles status=current -->
+<!-- LKJ-STATUS id=affine-resource-handles status=superseded -->
 <!-- LKJ-STATUS id=agent-work-state status=current -->
 <!-- LKJ-STATUS id=byte-text-ownership status=accepted-contract -->
 <!-- LKJ-STATUS id=canonical-lowercase-vocabulary status=accepted-contract -->
@@ -36,7 +36,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - `.lkjscript` is the only accepted source suffix.
 - Source is marker-free and has one exact contract digest. Unknown or removed
   marker forms are ordinary syntax errors.
-- Generic enums, exhaustive `match`, `Never`, structured control, and explicit
+- All language-owned and user-defined names use exact lowercase ASCII
+  kebab-case. Word operations, structured signatures/imports, and
+  `string-literal/` are the only accepted source projections; removed spellings
+  are rejected from one typed registry.
+- Generic enums, exhaustive `match`, `never`, structured control, and explicit
   numeric conversions run through evaluator, VM, baseline JIT, and proof JIT
   where each engine supports the relevant operation set.
 - Source, declaration, node, revision, and Semantic Source identities frame the
@@ -44,16 +48,16 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Semantic Source requests, sessions, diagnostics, typed holes, transactions,
   and publications require stable schema names plus exact full contract
   digests. No generation-numbered envelope is accepted.
-- `Capability/ Kind /Capability` values carry one of eight closed provider
+- `capability/ kind /capability` values carry one of eight closed provider
   authorities. Capability-bearing main and library APIs pass them explicitly;
   provider acquisition and ambient host services have no zero-argument form.
 - Packages declare a sorted capability union. Each target receives only its
   exact typed main requirements, validated before any source effect. Capability
   values are unforgeable, copyable, process-local, and never serialized.
-- Linux runtime pathnames use immutable byte-preserving `Path` values. Explicit
+- Linux runtime pathnames use immutable byte-preserving `path` values. Explicit
   constructors reject empty, relative, NUL-containing, and oversized paths;
   observation is either exact bytes or strict UTF-8. Filesystem and SQLite
-  operations reject `Str` pathname operands.
+  operations reject `string` pathname operands.
 
 ## Modules and local packages
 
@@ -74,16 +78,19 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Ownership and resources
 
-- Fresh `Owned Buf`, whole-place `move`, and bounded lexical `borrow` /
-  `borrow-mut` remain the Current ownership island.
-- Owned `Handle` locals are affine. They must be returned, explicitly moved, or
-  cleaned up with `drop`; leak, double-drop, borrowed-handle drop, and use after
-  move/drop are compile errors.
-- Generic `drop`, SQLite close, and SQLite finalize consume ownership through
-  HIR and verified SSA. VM resource-table teardown is a deterministic safety
-  net for host failure, not an implicit source cleanup policy.
-- Opaque monotonic handle tokens remain stale-safe and disjoint from integers
-  and borrowed standard streams.
+- `byte-vector`, whole-place `move`, `byte-slice`, and `byte-slice-mut` expose
+  the existing bounded ownership foundation without `owned buf`, `ref buf`, or
+  `ref-mut buf` source aliases.
+- The universal source type `handle` is removed. Eleven exact resource kinds
+  flow through source typing, HIR, verified SSA, bytecode validation, and VM
+  resource-kind checks. Resources cannot use value/object equality, escape from
+  `main`, or enter unsupported aggregates.
+- Explicit `drop`, SQLite close, and SQLite finalize consume ownership through
+  HIR and verified SSA. Exactly-once compiler-inserted cleanup and generated
+  native host execution remain accepted-contract work, so typed resources are
+  not claimed Current as a complete capability.
+- Opaque monotonic runtime tokens remain stale-safe, exact-kind checked, and
+  disjoint from integers and borrowed standard input.
 
 ## Compiler and execution
 
@@ -117,14 +124,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Accepted targets not claimed Current
 
-- canonical lowercase ASCII kebab-case identifiers, word operations,
-  structured signatures/imports, and one typed vocabulary registry until the
-  complete corpus cutover and old-spelling rejection gates pass;
-- typed affine resource kinds with generation-safe slots and verified
-  exactly-once cleanup, replacing universal source `Handle` only for complete
-  end-to-end domains;
-- immutable `bytes`, affine `byte-vector`, lexical byte slices, owned `string`,
-  borrowed `str`, and removal of ambiguous `Buf` surfaces after complete
+- promotion of the implemented lowercase vocabulary to Current remains blocked
+  only by the atomic removal of transitional `buf` source surfaces;
+- complete typed-resource provider/state facts, reusable generation-bearing
+  slots, compiler-inserted exactly-once cleanup, evaluator providers, and forced
+  native host execution;
+- immutable `bytes`, full affine `byte-vector` corpus migration, ranged lexical
+  byte slices, borrowed `str`, and removal of transitional `buf` after complete
   cross-engine replacement;
 - complete region/borrow/drop semantics for resources nested in products and
   collections;
@@ -136,7 +142,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   measured candidate;
 - portability acceptance beyond Linux x86-64.
 
-These are not placeholders and expose no inert endpoints.
+The reserved immutable `bytes` parser path is explicitly reported as
+`PLACEHOLDER` until implemented. Other targets expose no inert endpoint.
 
 ## Verification authority
 

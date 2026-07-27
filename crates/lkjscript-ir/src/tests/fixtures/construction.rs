@@ -79,11 +79,11 @@ pub(crate) fn one_block_program() -> Program {
 
 pub(crate) fn core_traits() -> Vec<TraitMetadata> {
     [
-        ("Copy", TraitRole::Copy),
-        ("Clone", TraitRole::Clone),
-        ("Drop", TraitRole::Drop),
-        ("Send", TraitRole::Send),
-        ("Sync", TraitRole::Sync),
+        ("copy", TraitRole::Copy),
+        ("clone", TraitRole::Clone),
+        ("drop", TraitRole::Drop),
+        ("send", TraitRole::Send),
+        ("sync", TraitRole::Sync),
     ]
     .into_iter()
     .enumerate()
@@ -118,28 +118,28 @@ pub(crate) fn enum_metadata() -> EnumMetadata {
     EnumMetadata {
         id: EnumId::new([1; 32]),
         name: "Boxed".into(),
-        type_parameters: vec!["T".into()],
+        type_parameters: vec!["t".into()],
         variants: vec![
             EnumVariantMetadata {
                 id: VariantId::new([2; 32]),
-                name: "A".into(),
+                name: "a".into(),
                 physical_tag: 1,
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new([3; 32]),
                     name: "value".into(),
-                    ty: SsaType::TypeParameter("T".into()),
+                    ty: SsaType::TypeParameter("t".into()),
                     indirect: false,
                     traced: false,
                 }],
             },
             EnumVariantMetadata {
                 id: VariantId::new([4; 32]),
-                name: "B".into(),
+                name: "b".into(),
                 physical_tag: 0,
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new([5; 32]),
                     name: "value".into(),
-                    ty: SsaType::TypeParameter("T".into()),
+                    ty: SsaType::TypeParameter("t".into()),
                     indirect: false,
                     traced: false,
                 }],

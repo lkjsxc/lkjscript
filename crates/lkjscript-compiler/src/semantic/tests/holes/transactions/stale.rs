@@ -18,7 +18,7 @@ fn stale_revision_and_expected_type_reject_without_mutation() {
         node: node.index,
         node_fingerprint: node.fingerprint.clone(),
         hole_identity: "body".into(),
-        expected_type: "Bool".into(),
+        expected_type: "bool".into(),
         expression: Expression::Bool { value: true },
     };
     assert!(
@@ -32,7 +32,7 @@ fn stale_revision_and_expected_type_reject_without_mutation() {
         node: node.index,
         node_fingerprint: node.fingerprint.clone(),
         hole_identity: "body".into(),
-        expected_type: "I64".into(),
+        expected_type: "i64".into(),
         expression: Expression::I64 { value: 0 },
     };
     assert!(

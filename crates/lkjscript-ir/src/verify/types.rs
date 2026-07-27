@@ -40,7 +40,7 @@ pub(crate) fn is_owned_buf(ty: &SsaType) -> bool {
 }
 
 pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
-    is_owned_buf(ty) || ty == &SsaType::Handle
+    is_owned_buf(ty) || matches!(ty, SsaType::Resource(_))
 }
 
 pub(crate) fn is_affine(ty: &SsaType) -> bool {

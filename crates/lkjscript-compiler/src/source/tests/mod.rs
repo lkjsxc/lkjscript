@@ -37,12 +37,12 @@ impl Drop for TempDir {
 }
 
 fn unit_main(body: &str) -> String {
-    format!("main/\nsig/\n->\nUnit\n/sig\n{body}\n/main\n")
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n{body}\n/main\n")
 }
 
 fn named_def(name: &str) -> String {
     format!(
-        "def/\nname/\n{name}\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n"
+        "def/\nname/\n{name}\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nunit\n/fn\n/def\n"
     )
 }
 

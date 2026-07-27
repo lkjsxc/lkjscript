@@ -55,7 +55,7 @@ fn nested_product_option_result_list_string_buffer_graph_matches_all_engines() {
 
 #[test]
 fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames() {
-    let source = "def/\nname/\nwalk\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\nwalk/\ntext\n-/\ndepth\n1\n/-\n/walk\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nwalk/\nempty-str/\n/empty-str\n4\n/walk\n/main\n";
+    let source = "def/\nname/\nwalk\n/name\nfn/\nsig/\ninputs/\nstring\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\ntext\nstring\ndepth\ni64\n/params\nif/\nless-than-or-equal/\ndepth\n0\n/less-than-or-equal\nstring-byte-length/\ntext\n/string-byte-length\nwalk/\ntext\nsubtract/\ndepth\n1\n/subtract\n/walk\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nwalk/\nempty-string/\n/empty-string\n4\n/walk\n/main\n";
     let program = compile(source, "recursive-roots.lkjscript");
     let vm = run_chunk(
         program.bytecode(),
@@ -98,7 +98,7 @@ fn forced_collection_sees_live_reference_in_recursive_caller_and_callee_frames()
         .iter()
         .any(|object| !object.exact_scalar_stack_maps));
 
-    let mutual = "def/\nname/\neven\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\nodd/\ntext\n-/\ndepth\n1\n/-\n/odd\n/if\n/fn\n/def\ndef/\nname/\nodd\n/name\nfn/\nsig/\nStr\nI64\n->\nI64\n/sig\nparams/\ntext\nStr\ndepth\nI64\n/params\nif/\nlte/\ndepth\n0\n/lte\nstr-len/\ntext\n/str-len\neven/\ntext\n-/\ndepth\n1\n/-\n/even\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\neven/\nempty-str/\n/empty-str\n5\n/even\n/main\n";
+    let mutual = "def/\nname/\neven\n/name\nfn/\nsig/\ninputs/\nstring\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\ntext\nstring\ndepth\ni64\n/params\nif/\nless-than-or-equal/\ndepth\n0\n/less-than-or-equal\nstring-byte-length/\ntext\n/string-byte-length\nodd/\ntext\nsubtract/\ndepth\n1\n/subtract\n/odd\n/if\n/fn\n/def\ndef/\nname/\nodd\n/name\nfn/\nsig/\ninputs/\nstring\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\ntext\nstring\ndepth\ni64\n/params\nif/\nless-than-or-equal/\ndepth\n0\n/less-than-or-equal\nstring-byte-length/\ntext\n/string-byte-length\neven/\ntext\nsubtract/\ndepth\n1\n/subtract\n/even\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\neven/\nempty-string/\n/empty-string\n5\n/even\n/main\n";
     let program = compile(mutual, "mutual-recursive-roots.lkjscript");
     let mut config = JitConfig::default();
     config.force_gc_before_allocation = true;

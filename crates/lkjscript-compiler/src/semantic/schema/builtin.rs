@@ -21,6 +21,7 @@ impl<'de> Deserialize<'de> for ClosedBuiltinOperation {
     {
         let name = String::deserialize(deserializer)?;
         Operation::from_name(&name)
+            .filter(|operation| operation.record().semantic_source_builtin_call)
             .map(Self)
             .ok_or_else(|| serde::de::Error::custom(format!("unknown built-in operation {name:?}")))
     }

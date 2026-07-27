@@ -79,7 +79,7 @@ def run_smokes(
     assert_failure(
         "unreadable source",
         run_small(interpreter_command(binary, main, missing), root),
-        b"sys-open-read",
+        b"unwrap-ok on Err",
     )
     assert_failure(
         "unknown option",

@@ -7,28 +7,28 @@ use crate::source::{SourceNode, SyntaxKind};
 
 pub(crate) fn canonical(ty: &Type) -> String {
     match ty {
-        Type::Never => "Never".into(),
-        Type::Unit => "Unit".into(),
-        Type::Bool => "Bool".into(),
-        Type::I64 => "I64".into(),
-        Type::F64 => "F64".into(),
-        Type::Str => "Str".into(),
-        Type::Buf => "Buf".into(),
-        Type::Path => "Path".into(),
-        Type::Capability(kind) => format!("Capability {}", kind.as_str()),
-        Type::Symbol => "Symbol".into(),
-        Type::Handle => "Handle".into(),
-        Type::Product(name) => format!("Product {name}"),
+        Type::Never => "never".into(),
+        Type::Unit => "unit".into(),
+        Type::Bool => "bool".into(),
+        Type::I64 => "i64".into(),
+        Type::F64 => "f64".into(),
+        Type::Str => "string".into(),
+        Type::Buf => "buf".into(),
+        Type::Path => "path".into(),
+        Type::Capability(kind) => format!("capability {}", kind.as_str()),
+        Type::Symbol => "symbol".into(),
+        Type::Resource(kind) => kind.as_str().into(),
+        Type::Product(name) => format!("product {name}"),
         Type::Enum { id, arguments, .. }
             if id.bytes() == lkjscript_core::OPTION_ID && arguments.len() == 1 =>
         {
-            format!("Option {}", canonical(&arguments[0]))
+            format!("option {}", canonical(&arguments[0]))
         }
         Type::Enum { id, arguments, .. }
             if id.bytes() == lkjscript_core::RESULT_ID && arguments.len() == 2 =>
         {
             format!(
-                "Result {} {}",
+                "result {} {}",
                 canonical(&arguments[0]),
                 canonical(&arguments[1])
             )
@@ -40,21 +40,24 @@ pub(crate) fn canonical(ty: &Type) -> String {
                 .iter()
                 .map(canonical)
                 .collect::<Vec<_>>()
-                .join(",");
-            format!("Enum {name}[{arguments}]")
+                .join(" ");
+            format!("enum {name} {arguments}")
         }
         Type::Param(name) => name.clone(),
-        Type::Owned(inner) => format!("Owned {}", canonical(inner)),
-        Type::Ref(inner) => format!("Ref {}", canonical(inner)),
-        Type::RefMut(inner) => format!("RefMut {}", canonical(inner)),
-        Type::List(inner) => format!("List {}", canonical(inner)),
+        Type::Owned(inner) if inner.as_ref() == &Type::Buf => "byte-vector".into(),
+        Type::Ref(inner) if inner.as_ref() == &Type::Buf => "byte-slice".into(),
+        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => "byte-slice-mut".into(),
+        Type::Owned(inner) => format!("owned {}", canonical(inner)),
+        Type::Ref(inner) => format!("ref {}", canonical(inner)),
+        Type::RefMut(inner) => format!("ref-mut {}", canonical(inner)),
+        Type::List(inner) => format!("list {}", canonical(inner)),
         Type::Fn { params, ret } => {
-            let mut parts: Vec<_> = params.iter().map(canonical).collect();
-            parts.push("->".into());
-            parts.push(canonical(ret));
-            parts.join(" ")
+            let parameters = params.iter().map(canonical).collect::<Vec<_>>().join(" ");
+            format!("fn inputs {parameters} output {}", canonical(ret))
         }
-        Type::Forall { vars, body } => format!("forall {} . {}", vars.join(" "), canonical(body)),
+        Type::Forall { vars, body } => {
+            format!("forall {} body {}", vars.join(" "), canonical(body))
+        }
     }
 }
 
@@ -82,12 +85,8 @@ fn parse_enum_node(node: &SourceNode) -> Option<Type> {
     };
     if matches!(
         name.as_str(),
-        "Owned" | "Ref" | "RefMut" | "List" | "Option" | "Result" | "Product" | "Capability"
+        "owned" | "ref" | "ref-mut" | "list" | "option" | "result" | "product" | "capability"
     ) || !crate::source::is_source_identifier(name)
-        || !name
-            .chars()
-            .next()
-            .is_some_and(|character| character.is_ascii_uppercase())
     {
         return None;
     }
@@ -107,18 +106,19 @@ fn parse_enum_node(node: &SourceNode) -> Option<Type> {
 
 fn collect_type_atoms(node: &SourceNode, output: &mut Vec<String>) -> Option<()> {
     match &node.kind {
+        SyntaxKind::Unit => output.push("unit".into()),
         SyntaxKind::Symbol { name } => output.push(name.clone()),
         SyntaxKind::Call { name }
             if matches!(
                 name.as_str(),
-                "Owned"
-                    | "Ref"
-                    | "RefMut"
-                    | "List"
-                    | "Option"
-                    | "Result"
-                    | "Product"
-                    | "Capability"
+                "owned"
+                    | "ref"
+                    | "ref-mut"
+                    | "list"
+                    | "option"
+                    | "result"
+                    | "product"
+                    | "capability"
             ) =>
         {
             output.push(name.clone());
@@ -135,19 +135,21 @@ pub(super) fn signature(node: &SourceNode) -> Option<(Vec<Type>, Type)> {
     if !call_is(node, "sig") {
         return None;
     }
-    let arrow = node
-        .children
-        .iter()
-        .position(|child| type_atom(child).as_deref() == Some("->"))?;
+    let [inputs, output] = node.children.as_slice() else {
+        return None;
+    };
+    if !call_is(inputs, "inputs") || !call_is(output, "output") {
+        return None;
+    }
     let mut parameters = Vec::new();
     let mut index = 0;
-    while index < arrow {
-        let (parameter, used) = parse_type_nodes(&node.children[index..arrow])?;
+    while index < inputs.children.len() {
+        let (parameter, used) = parse_type_nodes(&inputs.children[index..])?;
         parameters.push(parameter);
         index = index.checked_add(used)?;
     }
-    let (result, used) = parse_type_nodes(&node.children[arrow + 1..])?;
-    (arrow + 1 + used == node.children.len()).then_some((parameters, result))
+    let (result, used) = parse_type_nodes(&output.children)?;
+    (used == output.children.len()).then_some((parameters, result))
 }
 
 pub(super) fn type_form(node: &SourceNode) -> Option<Type> {
@@ -156,13 +158,6 @@ pub(super) fn type_form(node: &SourceNode) -> Option<Type> {
     }
     let (ty, used) = parse_type_nodes(&node.children)?;
     (used == node.children.len()).then_some(ty)
-}
-
-pub(super) fn type_atom(node: &SourceNode) -> Option<String> {
-    match &node.kind {
-        SyntaxKind::Symbol { name } => Some(name.clone()),
-        _ => None,
-    }
 }
 
 pub(super) fn call_is(node: &SourceNode, expected: &str) -> bool {
@@ -184,7 +179,7 @@ pub(super) fn ownership(ty: &Type) -> crate::semantic::schema::OwnershipAccess {
         Type::Owned(_) => OwnershipAccess::Move,
         Type::Ref(_) => OwnershipAccess::SharedBorrow,
         Type::RefMut(_) => OwnershipAccess::MutableBorrow,
-        Type::Buf | Type::Handle => OwnershipAccess::Unavailable,
+        Type::Buf | Type::Resource(_) => OwnershipAccess::Unavailable,
         _ => OwnershipAccess::Copy,
     }
 }

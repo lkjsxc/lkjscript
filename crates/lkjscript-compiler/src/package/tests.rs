@@ -22,7 +22,7 @@ fn fixture(label: &str) -> PathBuf {
     let root = directory(label);
     fs::write(
         root.join("main.lkjscript"),
-        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
     )
     .unwrap();
     let manifest = Manifest {
@@ -58,7 +58,7 @@ fn canonical_lock_detects_every_source_change() {
     assert!(verify(&root).is_ok());
     fs::write(
         root.join("main.lkjscript"),
-        "main/\nsig/\n->\nUnit\n/sig\ndo/\nunit\n/do\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\ndo/\nunit\n/do\n/main\n",
     )
     .unwrap();
     assert!(verify(&root).unwrap_err().to_string().contains("stale"));
@@ -83,8 +83,8 @@ fn public_enum_identity_includes_its_variants() {
     fs::write(
         root.join("color.lkjscript"),
         concat!(
-            "enum/\nname/\nColor\n/name\npublic\nvariants/\n",
-            "variant/\nname/\nRed\n/name\nfields/\n/fields\n/variant\n",
+            "enum/\nname/\ncolor\n/name\npublic\nvariants/\n",
+            "variant/\nname/\nred\n/name\nfields/\n/fields\n/variant\n",
             "/variants\n/enum\n"
         ),
     )
@@ -101,7 +101,7 @@ fn public_enum_identity_includes_its_variants() {
         .iter()
         .find(|module| module.id == "color.lkjscript")
         .unwrap();
-    assert_eq!(module.exports, ["Color", "Red"]);
+    assert_eq!(module.exports, ["color", "red"]);
     fs::remove_dir_all(root).unwrap();
 }
 

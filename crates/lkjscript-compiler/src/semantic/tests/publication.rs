@@ -17,9 +17,9 @@ fn publication_failure_restores_every_original_byte() {
     let directory = case_dir("publication-failure");
     let root = directory.join("main.lkjscript");
     let source = concat!(
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+        "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
         "params/\n/params\nunit\n/fn\n/def\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
     );
     std::fs::write(&root, source).expect("write publication source");
     let snapshot = snapshot(&root);
@@ -70,9 +70,9 @@ fn publication_rejects_changed_ancestor_without_touching_alias() {
     let root = sources.join("main.lkjscript");
     let alias_root = alias.join("main.lkjscript");
     let source = concat!(
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+        "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
         "params/\n/params\nunit\n/fn\n/def\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
     );
     std::fs::write(&root, source).expect("write source");
     std::fs::write(&alias_root, source).expect("write alias source");
@@ -124,11 +124,11 @@ fn prepared_journal_is_rolled_back_before_the_next_read() {
     let root = directory.join("main.lkjscript");
     let library = directory.join("lib.lkjscript");
     let root_source = concat!(
-        "imports/\nimport/\nlib.lkjscript#f\n/import\n/imports\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n"
+        "imports/\nimport/\nmodule/\nlib.lkjscript\n/module\ndeclarations/\nf\n/declarations\n/import\n/imports\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n"
     );
     let library_source = concat!(
-        "def/\nname/\nf\n/name\npublic\nfn/\nsig/\n->\nUnit\n/sig\n",
+        "def/\nname/\nf\n/name\npublic\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
         "params/\n/params\nunit\n/fn\n/def\n"
     );
     std::fs::write(&root, root_source).expect("write recovery root");

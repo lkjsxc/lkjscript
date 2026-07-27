@@ -12,7 +12,7 @@ narrowing, and compiled source-to-VM conformance tests enforce this record.
 
 ## Canonical Types
 
-The numeric type vocabulary is exactly `I64` and `F64`.
+The numeric type vocabulary is exactly `i64` and `f64`.
 
 `I32`, `U32`, `U64`, `F32`, lowercase type aliases, `Int`, `Float`, numeric
 cast names, float-prefixed operators, symbolic comparison aliases, `le`, `ge`,
@@ -39,13 +39,13 @@ infinity or NaN.
 
 ## Operators
 
-The canonical binary arithmetic names are `+`, `-`, `*`, and `div`.
+The canonical binary arithmetic names are `add`, `subtract`, `multiply`, and `divide`.
 
-- Two `I64` operands produce `I64` using checked signed arithmetic.
-- I64 `div` truncates toward zero. Division by zero and `I64::MIN div -1` are
+- Two `i64` operands produce `i64` using checked signed arithmetic.
+- I64 `divide` truncates toward zero. Division by zero and `I64::MIN div -1` are
   runtime errors.
-- If either operand is `F64`, the I64 operand is converted using normal IEEE-754
-  round-to-nearest semantics and the result is `F64`.
+- If either operand is `f64`, the I64 operand is converted using normal IEEE-754
+  round-to-nearest semantics and the result is `f64`.
 - F64 division follows IEEE-754, including infinity, NaN, and signed zero.
 - F64 results remain F64 even when mathematically integral.
 - Arithmetic operators require exactly two operands.
@@ -53,13 +53,13 @@ The canonical binary arithmetic names are `+`, `-`, `*`, and `div`.
 `bit-and`, `bit-or`, and `bit-xor` accept exactly two I64 values and operate on
 all 64 two's-complement bits.
 
-Canonical numeric ordering operations are `lt`, `lte`, `gt`, and `gte`.
+Canonical numeric ordering operations are `less-than`, `less-than-or-equal`, `greater-than`, and `greater-than-or-equal`.
 Ordering uses the same I64/F64 promotion rule as arithmetic.
 
 Equality does not promote. `equal-value` requires identical supported operand
 types: I64 equality is exact and F64 equality is IEEE equality, where NaN is
 unequal to every value and positive/negative zero are equal.
-`f64-bits-equal` accepts only F64 and compares complete bit patterns, so equal
+`equal-f64-bits` accepts only F64 and compares complete bit patterns, so equal
 NaN payloads match and signed zero differs. Use `not` around a positive
 operation instead of a negative alias. Non-numeric equality categories are
 specified by [Explicit Equality Families](equality-families.md).
@@ -82,8 +82,8 @@ host domain, including bytes, u32 words, ports, backlogs, timeouts, buffer
 indices, exit codes, and allocation lengths, performs an explicit checked
 conversion and fails according to that primitive's documented error channel.
 Implicit truncation, wrapping, saturation, and float coercion are forbidden.
-`str-from-i64` accepts only I64 and emits the exact decimal value;
-`str-from-f64` accepts only F64.
+`format-i64` accepts only I64 and emits the exact decimal value;
+`format-f64` accepts only F64.
 
 ## Verification
 
@@ -103,7 +103,7 @@ Focused conformance covers:
 ## Rejected
 
 - **F64-backed integers:** loses exactness and changes runtime type.
-- **A small-integer-only public type:** contradicts the `I64` name and host ABI.
+- **A small-integer-only public type:** contradicts the `i64` name and host ABI.
 - **Approximate F64 equality:** is scale-dependent and not IEEE equality.
 - **Unimplemented advertised widths and casts:** typechecks code that cannot run.
 - **Always-boxed I64:** makes common counters, indices, and bytecode constants

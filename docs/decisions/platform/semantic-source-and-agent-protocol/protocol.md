@@ -24,13 +24,13 @@ Required requests in the first complete slice are:
 
 - `snapshot`: source units, declarations, stable keys, revision, fingerprints,
   and compact summaries;
-- `read_entity`: one complete declaration and descendants;
-- `query_node`: source node plus available derived type/effect/ownership facts;
-- `apply_transaction`: atomic operations and validation policy;
+- `read-entity`: one complete declaration and descendants;
+- `query-node`: source node plus available derived type/effect/ownership facts;
+- `apply-transaction`: atomic operations and validation policy;
 - `diagnostics`: structured diagnostics for the loaded revision; and
-- `hole_context`: expected type, visible bindings, allowed effects, source
+- `hole-context`: expected type, visible bindings, allowed effects, source
   origin, and bounded candidates for one hole; and
-- `legal_actions`: the exact supported the removed legacy source contract child/action/transaction subset
+- `legal-actions`: the exact supported the removed legacy source contract child/action/transaction subset
   plus explicit coverage blockers.
 
 Responses are deterministic for the same source closure, compiler build,
@@ -91,7 +91,7 @@ traits, effects, ownership, or values. Independent surrounding declarations
 continue to typecheck. Executable, release, AOT, cache, package, and component
 artifacts reject every unresolved hole with a structured diagnostic.
 
-`hole_context` returns bounded, deterministically sorted candidates from exact
+`hole-context` returns bounded, deterministically sorted candidates from exact
 literals, visible local bindings, available constructors, and directly callable
 functions whose result and effect contract fit. Candidate enumeration is
 resource bounded and explicitly reports truncation. It does not claim complete
@@ -120,7 +120,7 @@ the roundtrip gate.
 ## Constrained Generation Boundary
 
 Full-language legal-next-token masking and constrained decoding remain
-**Deferred**. Current `legal_actions` claims only its closed the removed legacy source contract semantic
+**Deferred**. Current `legal-actions` claims only its closed the removed legacy source contract semantic
 child/action subset and reports every unsupported context or form. A future
 constrainer must state its exact supported subset and soundness/completeness
 evidence. Unsupported states fail open to ordinary generation followed by

@@ -64,7 +64,7 @@ impl Resolver<'_> {
                 if let Some(previous) = substitutions.get(parameter) {
                     if previous != got {
                         return Err(self.error(format!(
-                            "{function}: type param {parameter} conflict: {previous:?} vs {got:?}"
+                            "{function}: type param {parameter} conflict: {previous} vs {got}"
                         )));
                     }
                 } else {
@@ -97,7 +97,7 @@ impl Resolver<'_> {
             }
             (pattern, got) if Type::unify_assignable(got, pattern) => Ok(()),
             (pattern, got) => Err(self.error(format!(
-                "{function}: cannot instantiate {pattern:?} from {got:?}"
+                "{function}: cannot instantiate {pattern} from {got}"
             ))),
         }
     }

@@ -9,7 +9,7 @@ use lkjscript_vm::run_chunk;
 const E2: &str = "";
 
 fn main_source(result: &str, body: &str) -> String {
-    format!("{E2}main/\nsig/\n->\n{result}\n/sig\n{body}\n/main\n")
+    format!("{E2}main/\nsig/\ninputs/\n/inputs\noutput/\n{result}\n/output\n/sig\n{body}\n/main\n")
 }
 
 fn assert_i64_all(source: &str, expected: i64) {
@@ -53,17 +53,17 @@ fn assert_i64_all(source: &str, expected: i64) {
 #[test]
 fn early_return_and_divergent_branch_join_cross_all_engines() {
     let source = format!(
-        "{E2}def/\nname/\nchoose\n/name\nfn/\nsig/\nBool\n->\nI64\n/sig\nparams/\nflag\nBool\n/params\ndo/\nif/\nflag\nreturn/\n41\n/return\nunit\n/if\n42\n/do\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nchoose/\ntrue\n/choose\n/main\n"
+        "{E2}def/\nname/\nchoose\n/name\nfn/\nsig/\ninputs/\nbool\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nflag\nbool\n/params\ndo/\nif/\nflag\nreturn/\n41\n/return\nunit\n/if\n42\n/do\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nchoose/\ntrue\n/choose\n/main\n"
     );
     assert_i64_all(&source, 41);
     let joined = main_source(
-        "I64",
-        "if/\nfalse\ntrap/\nstr/\nunselected\n/str\n/trap\n7\n/if",
+        "i64",
+        "if/\nfalse\ntrap/\nstring-literal/\nunselected\n/string-literal\n/trap\n7\n/if",
     );
     assert_i64_all(&joined, 7);
     let matched = main_source(
-        "I64",
-        "match/\nfalse\narms/\narm/\nbool-pattern/\ntrue\n/bool-pattern\ntrap/\nstr/\nunselected\n/str\n/trap\n/arm\narm/\nbool-pattern/\nfalse\n/bool-pattern\n11\n/arm\n/arms\n/match",
+        "i64",
+        "match/\nfalse\narms/\narm/\nbool-pattern/\ntrue\n/bool-pattern\ntrap/\nstring-literal/\nunselected\n/string-literal\n/trap\n/arm\narm/\nbool-pattern/\nfalse\n/bool-pattern\n11\n/arm\n/arms\n/match",
     );
     assert_i64_all(&matched, 11);
 }
@@ -71,12 +71,12 @@ fn early_return_and_divergent_branch_join_cross_all_engines() {
 #[test]
 fn typed_loop_break_and_unit_while_break_cross_all_engines() {
     assert_i64_all(
-        &main_source("I64", "loop/\ntype/\nI64\n/type\nbreak/\n42\n/break\n/loop"),
+        &main_source("i64", "loop/\ntype/\ni64\n/type\nbreak/\n42\n/break\n/loop"),
         42,
     );
     assert_i64_all(
         &main_source(
-            "I64",
+            "i64",
             "do/\nwhile/\ntrue\nbreak/\nunit\n/break\n/while\n9\n/do",
         ),
         9,
@@ -85,14 +85,14 @@ fn typed_loop_break_and_unit_while_break_cross_all_engines() {
 
 #[test]
 fn nested_continue_targets_nearest_loop() {
-    let body = "loop/\ntype/\nI64\n/type\nvar/\nname/\nj\n/name\ntype/\nI64\n/type\n0\ndo/\nwhile/\nlt/\nj\n3\n/lt\nset/\nj\n+/\nj\n1\n/+\n/set\ncontinue/\n/continue\n/while\nbreak/\n2\n/break\n/do\n/var\n/loop";
-    assert_i64_all(&main_source("I64", body), 2);
+    let body = "loop/\ntype/\ni64\n/type\nvar/\nname/\nj\n/name\ntype/\ni64\n/type\n0\ndo/\nwhile/\nless-than/\nj\n3\n/less-than\nset/\nj\nadd/\nj\n1\n/add\n/set\ncontinue/\n/continue\n/while\nbreak/\n2\n/break\n/do\n/var\n/loop";
+    assert_i64_all(&main_source("i64", body), 2);
 }
 
 #[test]
 fn value_trap_is_exact_in_all_engines() {
     let source = format!(
-        "{E2}def/\nname/\nfail\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\ntrap/\nstr-from-i64/\nbit-or/\nn\n0\n/bit-or\n/str-from-i64\n/trap\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nfail/\n7\n/fail\n/main\n"
+        "{E2}def/\nname/\nfail\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\ntrap/\nformat-i64/\nbit-or/\nn\n0\n/bit-or\n/format-i64\n/trap\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nfail/\n7\n/fail\n/main\n"
     );
     let program = compile_source(&source, "trap-control.lkjscript", &Limits::default())
         .expect("compile value trap");
@@ -136,7 +136,7 @@ fn value_trap_is_exact_in_all_engines() {
 
 #[test]
 fn exit_is_structured_in_all_engines() {
-    let source = main_source("I64", "exit/\n23\n/exit");
+    let source = main_source("i64", "exit/\n23\n/exit");
     let program = compile_source(&source, "exit-control.lkjscript", &Limits::default())
         .expect("compile exit control");
     assert_eq!(
@@ -174,17 +174,17 @@ fn exit_is_structured_in_all_engines() {
 #[test]
 fn never_storage_and_illegal_control_are_rejected() {
     let invalid = [
-        main_source("Never", "trap/\nstr/\nx\n/str\n/trap"),
-        main_source("I64", "let/\nbind/\nx\nreturn/\n1\n/return\n/bind\nx\n/let"),
-        main_source("I64", "break/\n1\n/break"),
-        main_source("I64", "do/\nreturn/\n1\n/return\n2\n/do"),
-        main_source("I64", "while/\ntrue\nbreak/\n1\n/break\n/while"),
-        main_source("I64", "var/\nname/\nx\n/name\ntype/\nNever\n/type\nunit\n1\n/var"),
-        main_source("List Never", "empty-list/\nNever\n/empty-list"),
-        format!("{E2}product/\nname/\nBad\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nNever\n/type\n/field\n/fields\n/product\nmain/\nsig/\n->\nI64\n/sig\n1\n/main\n"),
-        format!("{E2}def/\nname/\nbad\n/name\nfn/\nsig/\nNever\n->\nI64\n/sig\nparams/\nx\nNever\n/params\n1\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\n1\n/main\n"),
-        format!("{E2}enum/\nname/\nBad\n/name\nvariants/\nvariant/\nname/\nOnly\n/name\nfields/\nvariant-field/\nname/\nx\n/name\ntype/\nNever\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\nmain/\nsig/\n->\nI64\n/sig\n1\n/main\n"),
-        format!("{E2}enum/\nname/\nBoxed\n/name\nforall/\nT\n/forall\nvariants/\nvariant/\nname/\nEmpty\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\nmain/\nsig/\n->\nI64\n/sig\ndo/\nvariant-value/\ntype/\nBoxed/\nNever\n/Boxed\n/type\nvariant/\nEmpty\n/variant\nfields/\n/fields\n/variant-value\n1\n/do\n/main\n"),
+        main_source("never", "trap/\nstring-literal/\nx\n/string-literal\n/trap"),
+        main_source("i64", "let/\nbind/\nx\nreturn/\n1\n/return\n/bind\nx\n/let"),
+        main_source("i64", "break/\n1\n/break"),
+        main_source("i64", "do/\nreturn/\n1\n/return\n2\n/do"),
+        main_source("i64", "while/\ntrue\nbreak/\n1\n/break\n/while"),
+        main_source("i64", "var/\nname/\nx\n/name\ntype/\nnever\n/type\nunit\n1\n/var"),
+        main_source("list never", "empty-list/\nnever\n/empty-list"),
+        format!("{E2}product/\nname/\nbad\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nnever\n/type\n/field\n/fields\n/product\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n1\n/main\n"),
+        format!("{E2}def/\nname/\nbad\n/name\nfn/\nsig/\ninputs/\nnever\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nx\nnever\n/params\n1\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n1\n/main\n"),
+        format!("{E2}enum/\nname/\nbad\n/name\nvariants/\nvariant/\nname/\nonly\n/name\nfields/\nvariant-field/\nname/\nx\n/name\ntype/\nnever\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n1\n/main\n"),
+        format!("{E2}enum/\nname/\nboxed\n/name\nforall/\nt\n/forall\nvariants/\nvariant/\nname/\nempty\n/name\nfields/\n/fields\n/variant\n/variants\n/enum\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\nvariant-value/\ntype/\nboxed/\nnever\n/boxed\n/type\nvariant/\nempty\n/variant\nfields/\n/fields\n/variant-value\n1\n/do\n/main\n"),
     ];
     for source in invalid {
         assert!(compile_source(&source, "invalid-never.lkjscript", &Limits::default()).is_err());

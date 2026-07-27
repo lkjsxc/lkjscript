@@ -49,7 +49,7 @@ pub(crate) struct SourceUnitRecord {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum SemanticDeclarationKind {
     Main,
     Function,
@@ -92,7 +92,7 @@ pub(crate) struct NodeQueryRecord {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum IdentityRelationKind {
     RenamedDeclaration,
     ReplacedExpression,

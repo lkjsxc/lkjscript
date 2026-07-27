@@ -14,6 +14,19 @@ pub(crate) fn classify(
     index: usize,
 ) -> (Kind, Option<Value>) {
     match &node.kind {
+        SyntaxKind::Unit
+            if matches!(
+                parent_kind,
+                Some(
+                    Kind::SignatureInputs
+                        | Kind::SignatureOutput
+                        | Kind::ContextType
+                        | Kind::ContextFor
+                )
+            ) =>
+        {
+            (Kind::TypeUnit, None)
+        }
         SyntaxKind::Unit => (Kind::UnitLiteral, None),
         SyntaxKind::Bool { value } => (Kind::BoolLiteral, Some(Value::Bool { value: *value })),
         SyntaxKind::I64 { value } => (Kind::I64Literal, Some(Value::I64 { value: *value })),
@@ -36,7 +49,7 @@ pub(crate) fn trivia(node: &SourceNode) -> Vec<TriviaRecord> {
 
 fn classify_text(value: &str, parent: Option<&SourceNode>) -> (Kind, Option<Value>) {
     match type_nodes::call_name(parent) {
-        Some("import") => (
+        Some("module") => (
             Kind::StringLiteral,
             Some(Value::ImportPath {
                 path: value.to_string(),
@@ -68,8 +81,13 @@ fn classify_symbol(
         (Some(Kind::TypedHole), _) => Kind::HoleGoal,
         (Some(Kind::Parameters), index) if index.is_multiple_of(2) => Kind::ParameterName,
         (Some(Kind::Parameters), _) => type_nodes::classify(name, parent, index),
+        (Some(Kind::ImportDeclarations), _) => Kind::ImportDeclaration,
         (Some(Kind::TypeVariables), _) => Kind::TypeVariable,
-        (Some(Kind::TypeEnum), _) => type_nodes::classify(name, parent, index),
+        (Some(Kind::TypeCapability), _) => Kind::CapabilityKind,
+        (Some(Kind::TypeProduct), _) => Kind::ProductName,
+        (Some(Kind::TypeEnum | Kind::TypeList | Kind::TypeOption | Kind::TypeResult), _) => {
+            type_nodes::classify(name, parent, index)
+        }
         (Some(Kind::Bound), 0) => Kind::TypeVariable,
         (Some(Kind::Bound), _) => Kind::TraitName,
         (Some(Kind::ProductValue), 0) => Kind::ProductName,
@@ -84,6 +102,8 @@ fn classify_symbol(
         (
             Some(
                 Kind::Signature
+                | Kind::SignatureInputs
+                | Kind::SignatureOutput
                 | Kind::ContextType
                 | Kind::ContextFor
                 | Kind::EmptyList
@@ -111,15 +131,20 @@ fn classify_call(
     }
     let kind = match name {
         "import" => Kind::Import,
+        "module" => Kind::ImportModule,
+        "declarations" => Kind::ImportDeclarations,
         "main" => Kind::Main,
         "def" => Kind::FunctionDeclaration,
         "fn" => Kind::Function,
         "sig" => Kind::Signature,
+        "inputs" => Kind::SignatureInputs,
+        "output" => Kind::SignatureOutput,
         "params" => Kind::Parameters,
         "forall" => Kind::TypeVariables,
         "bounds" => Kind::Bounds,
         "bound" => Kind::Bound,
-        "product" => Kind::Product,
+        "product" if parent.is_none() => Kind::Product,
+        "product" => Kind::TypeProduct,
         "enum" => Kind::EnumDeclaration,
         "variants" => Kind::ContextVariants,
         "variant" => Kind::EnumVariant,
@@ -157,13 +182,9 @@ fn classify_call(
         "move" => Kind::Move,
         "borrow" => Kind::Borrow,
         "borrow-mut" => Kind::BorrowMut,
-        "Owned" => Kind::TypeOwned,
-        "Ref" => Kind::TypeRef,
-        "RefMut" => Kind::TypeRefMut,
-        "List" => Kind::TypeList,
-        "Option" => Kind::TypeOption,
-        "Result" => Kind::TypeResult,
-        "Product" => Kind::TypeProduct,
+        "list" => Kind::TypeList,
+        "option" => Kind::TypeOption,
+        "result" => Kind::TypeResult,
         _ if type_nodes::enum_context(name, parent) => {
             return (
                 Kind::TypeEnum,

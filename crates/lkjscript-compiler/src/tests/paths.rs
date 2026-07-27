@@ -6,11 +6,11 @@ use crate::{ensure_source_path, types::Type, validate_source};
 fn filesystem_main(path_expression: &str) -> String {
     format!(
         concat!(
-            "main/\nsig/\nCapability/\nFileSystem\n/Capability\n->\nUnit\n/sig\n",
-            "params/\nfile-system\nCapability/\nFileSystem\n/Capability\n/params\n",
-            "let/\nbind/\nhandle\nunwrap-ok/\nsys-open-read/\nfile-system\n",
-            "{path_expression}\n/sys-open-read\n/unwrap-ok\n/bind\n",
-            "do/\nunwrap-ok/\ndrop/\nhandle\n/drop\n/unwrap-ok\nunit\n/do\n/let\n/main\n"
+            "main/\nsig/\ninputs/\ncapability/\nfile-system\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+            "params/\nfile-system\ncapability/\nfile-system\n/capability\n/params\n",
+            "let/\nbind/\nreader\nunwrap-ok/\nopen-file-reader/\nfile-system\n",
+            "{path_expression}\n/open-file-reader\n/unwrap-ok\n/bind\n",
+            "do/\nunwrap-ok/\ndrop/\nreader\n/drop\n/unwrap-ok\nunit\n/do\n/let\n/main\n"
         ),
         path_expression = path_expression,
     )
@@ -18,18 +18,18 @@ fn filesystem_main(path_expression: &str) -> String {
 
 #[test]
 fn filesystem_operations_require_path_instead_of_str() {
-    let source = filesystem_main("str/\n/tmp/rejected-string-path\n/str");
+    let source = filesystem_main("string-literal/\n/tmp/rejected-string-path\n/string-literal");
     let error = compile_source(&source, "string-path.lkjscript", &Limits::default())
         .expect_err("Str pathname must fail")
         .to_string();
-    assert!(error.contains("arg type Str not assignable to Path"));
+    assert!(error.contains("arg type string not assignable to path"));
 }
 
 #[test]
 fn explicit_path_construction_reaches_verified_ssa() {
     let source = filesystem_main(concat!(
-        "unwrap-ok/\npath-from-str/\nstr/\n/tmp/verified-path\n/str\n",
-        "/path-from-str\n/unwrap-ok"
+        "unwrap-ok/\nconvert-string-to-path/\nstring-literal/\n/tmp/verified-path\n/string-literal\n",
+        "/convert-string-to-path\n/unwrap-ok"
     ));
     let program = compile_source(&source, "path.lkjscript", &Limits::default())
         .expect("explicit Path program");
@@ -52,7 +52,7 @@ fn explicit_path_construction_reaches_verified_ssa() {
 #[test]
 fn path_is_a_distinct_non_affine_source_type() {
     assert_eq!(
-        crate::types::parse_one(&["Path".into()], 0),
+        crate::types::parse_one(&["path".into()], 0),
         Ok((Type::Path, 1))
     );
     assert_ne!(Type::Path, Type::Str);

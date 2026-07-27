@@ -26,7 +26,7 @@ impl Resolver<'_> {
                 true => TraitWitnessKind::AutoTrait,
                 false => {
                     return Err(self.error(format!(
-                        "{function}: type {ty:?} does not satisfy trait {}",
+                        "{function}: type {ty} does not satisfy trait {}",
                         definition.name
                     )))
                 }
@@ -34,7 +34,7 @@ impl Resolver<'_> {
         } else {
             let Type::Product(name) = ty else {
                 return Err(self.error(format!(
-                    "{function}: type {ty:?} has no exact implementation of trait {}",
+                    "{function}: type {ty} has no exact implementation of trait {}",
                     definition.name
                 )));
             };
@@ -105,7 +105,7 @@ impl Resolver<'_> {
                 | Type::Owned(_)
                 | Type::Ref(_)
                 | Type::RefMut(_)
-                | Type::Handle
+                | Type::Resource(_)
                 | Type::Fn { .. }
                 | Type::Forall { .. }
                 | Type::Param(_) => false,

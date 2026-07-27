@@ -10,14 +10,14 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
         (
             "host.lkjscript",
             concat!(
-                "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
-                "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+                "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+                "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
                 "flush/\nstdio\n/flush\n/main\n"
             ),
         ),
         (
             "owned-buffer.lkjscript",
-            "main/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nb\nowned-buf-new/\n1\n/owned-buf-new\n/bind\nowned-buf-ref/\nborrow/\nb\n/borrow\n0\n/owned-buf-ref\n/let\n/main\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nbyte-slice-byte-at/\nborrow/\nb\n/borrow\n0\n/byte-slice-byte-at\n/let\n/main\n",
         ),
     ];
     for (name, source) in unsupported {
@@ -41,7 +41,7 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
         }
     }
 
-    let recursion = "def/\nname/\nrecur\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nn\nI64\n/params\nif/\nlte/\nn\n0\n/lte\n0\nrecur/\n-/\nn\n1\n/-\n/recur\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nrecur/\n3\n/recur\n/main\n";
+    let recursion = "def/\nname/\nrecur\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\nif/\nless-than-or-equal/\nn\n0\n/less-than-or-equal\n0\nrecur/\nsubtract/\nn\n1\n/subtract\n/recur\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nrecur/\n3\n/recur\n/main\n";
     let program = compile(recursion, "recursion.lkjscript");
     let executed = execute_forced(
         program.ssa(),
@@ -56,7 +56,7 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
     assert_eq!(executed.stats.vm_fallbacks, 0);
 
     let allocation = compile(
-        "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nempty-string/\n/empty-string\n/main\n",
         "allocation.lkjscript",
     );
     let mut config = JitConfig::default();
@@ -80,9 +80,9 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
         (
             "buf-slice-negative-offset.lkjscript",
             concat!(
-                "match/\nunwrap-err/\nbuf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n",
-                "/buf-slice\n/unwrap-err\narms/\narm/\nvariant-pattern/\ntype/\n",
-                "SystemError/\n/SystemError\n/type\nvariant/\nUnsupported\n/variant\nfields/\n",
+                "match/\nunwrap-err/\ncopy-buf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n",
+                "/copy-buf-slice\n/unwrap-err\narms/\narm/\nvariant-pattern/\ntype/\n",
+                "system-error/\n/system-error\n/type\nvariant/\nunsupported\n/variant\nfields/\n",
                 "variant-field-pattern/\nname/\ncode\n/name\nwildcard/\n/wildcard\n",
                 "/variant-field-pattern\nvariant-field-pattern/\nname/\ndetail\n/name\n",
                 "wildcard/\n/wildcard\n/variant-field-pattern\n/fields\n/variant-pattern\n",
@@ -91,15 +91,17 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
         ),
         (
             "buf-slice-negative-length.lkjscript",
-            "not/\nis-ok/\nbuf-slice/\nbuf-new/\n1\n/buf-new\n0\n-1\n/buf-slice\n/is-ok\n/not",
+            "not/\nis-ok/\ncopy-buf-slice/\nbuf-new/\n1\n/buf-new\n0\n-1\n/copy-buf-slice\n/is-ok\n/not",
         ),
         (
             "buf-slice-out-of-range.lkjscript",
-            "not/\nis-ok/\nbuf-slice/\nbuf-new/\n1\n/buf-new\n1\n1\n/buf-slice\n/is-ok\n/not",
+            "not/\nis-ok/\ncopy-buf-slice/\nbuf-new/\n1\n/buf-new\n1\n1\n/copy-buf-slice\n/is-ok\n/not",
         ),
     ];
     for (name, expression) in cases {
-        let source = format!("main/\nsig/\n->\nBool\n/sig\n{expression}\n/main\n");
+        let source = format!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\n{expression}\n/main\n"
+        );
         let program = compile(&source, name);
         let expected = Scalar::Bool(true);
         assert_eq!(
@@ -128,11 +130,11 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
     }
 
     let invalid_utf8 = concat!(
-        "main/\nsig/\n->\nBool\n/sig\nvar/\nname/\nb\n/name\n",
-        "type/\nBuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set/\nb\n0\n255\n/buf-set\n",
-        "match/\nunwrap-err/\nbuf-to-str/\nb\n/buf-to-str\n/unwrap-err\narms/\narm/\n",
-        "variant-pattern/\ntype/\nUtf8Error/\n/Utf8Error\n/type\nvariant/\n",
-        "InvalidLeadingByte\n/variant\nfields/\nvariant-field-pattern/\nname/\noffset\n/name\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\nvar/\nname/\nb\n/name\n",
+        "type/\nbuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set-byte/\nb\n0\n255\n/buf-set-byte\n",
+        "match/\nunwrap-err/\nconvert-buf-to-string/\nb\n/convert-buf-to-string\n/unwrap-err\narms/\narm/\n",
+        "variant-pattern/\ntype/\nutf8-error/\n/utf8-error\n/type\nvariant/\n",
+        "invalid-leading-byte\n/variant\nfields/\nvariant-field-pattern/\nname/\noffset\n/name\n",
         "i64-pattern/\n0\n/i64-pattern\n/variant-field-pattern\n/fields\n/variant-pattern\n",
         "true\n/arm\narm/\nwildcard/\n/wildcard\nfalse\n/arm\n/arms\n/match\n",
         "/do\n/var\n/main\n",

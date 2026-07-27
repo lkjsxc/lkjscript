@@ -77,7 +77,7 @@ pub(crate) fn auto_trait_holds(
             | SsaType::Owned(_)
             | SsaType::Ref(_)
             | SsaType::RefMut(_)
-            | SsaType::Handle
+            | SsaType::Resource(_)
             | SsaType::Function(_)
             | SsaType::TypeParameter(_) => Ok(false),
             SsaType::List(inner) => auto_trait_holds(program, role, inner, depth + 1, work, active),

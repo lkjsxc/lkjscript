@@ -55,7 +55,7 @@ fn semantic_session_uses_exact_framing_and_command() {
     assert!(partial.stdout.is_empty());
     assert!(String::from_utf8(partial.stderr)
         .expect("process diagnostic")
-        .contains("partial_header"));
+        .contains("partial-header"));
     assert!(!invoke(&["semantic", "serve"], &[]).status.success());
 }
 
@@ -65,14 +65,18 @@ fn semantic_cli_keeps_protocol_and_process_errors_separate() {
     assert!(!malformed.status.success());
     assert!(malformed.stdout.is_empty());
     let stderr = String::from_utf8(malformed.stderr).expect("UTF-8 diagnostic");
-    assert!(stderr.contains("invalid_json"));
+    assert!(stderr.contains("invalid-json"));
 
     let directory =
         std::env::temp_dir().join(format!("lkjscript-semantic-cli-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).expect("create CLI fixture directory");
     let root = directory.join("main.lkjscript");
-    std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write CLI fixture");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write CLI fixture");
     let request = format!(
         concat!(
             "{{\"schema\":\"lkjscript.semantic-source\",\"contract\":\"{}\",",

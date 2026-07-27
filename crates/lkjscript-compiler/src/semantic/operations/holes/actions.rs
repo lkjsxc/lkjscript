@@ -53,7 +53,7 @@ pub(crate) fn build_with_ledger(
         .map_err(crate::semantic::codec::budget_error)?;
     reservation.return_unused();
     let mut coverage = context.exploration;
-    coverage.charged_category = "legal_actions".into();
+    coverage.charged_category = "legal-actions".into();
     coverage.charged_count = charged;
     Ok(LegalActionsResult {
         hole: context.hole,

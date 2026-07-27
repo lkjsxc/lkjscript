@@ -2,10 +2,13 @@
 
 ## Status
 
-**Accepted contract.** This replaces the universal source `Handle` contract.
-A resource kind becomes Current only after complete source, HIR, verified SSA,
-bytecode, VM, forced native, cleanup, malformed-input, and acceptance coverage.
-No typed annotation over an untyped runtime handle qualifies.
+**Accepted contract with implemented foundation.** Universal source `handle` is
+removed. Exact kinds now cross source typing, HIR, verified SSA, bytecode
+validation, and VM resource-kind checks. The complete capability remains
+non-Current until provider/state facts, reusable generations, exactly-once
+cleanup, evaluator providers, forced native host execution, malformed-input,
+and acceptance coverage are complete. An opaque runtime token alone does not
+qualify.
 
 ## Closed initial kinds
 
@@ -78,6 +81,13 @@ transition, explicit and compiler cleanup, cleanup edge, host effect, typed
 error, safepoint, and frame state. Verification proves initialization,
 kind-correct access, no use after consumption, no double cleanup, and one
 cleanup on every structured outcome.
+
+The implemented bytecode foundation publishes exact resource parameter and
+resource-result metadata plus explicit global-to-prototype links. Validation
+rejects untyped `any` values at host-resource instructions, checks exact kinds
+at statically known calls and returns, and rejects resource flow through calls
+without metadata. This does not supply the pending cleanup or provider/state
+proofs.
 
 VM and forced native execution preflight complete reachable support, preserve
 ownership and exact roots, execute cleanup, produce real native entries, and

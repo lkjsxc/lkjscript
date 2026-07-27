@@ -3,29 +3,29 @@ use crate::{EnumMetadata, NumericError, SystemErrorKind, Utf8ErrorKind};
 pub(super) fn valid(definition: &EnumMetadata) -> bool {
     let id = definition.id.bytes();
     if id == crate::OPTION_ID {
-        return header(definition, "Option", 1, 2, crate::OPTION_LAYOUT)
-            && variant(definition, crate::OPTION_NONE_ID, "None", 1, &[])
+        return header(definition, "option", 1, 2, crate::OPTION_LAYOUT)
+            && variant(definition, crate::OPTION_NONE_ID, "none", 1, &[])
             && variant(
                 definition,
                 crate::OPTION_SOME_ID,
-                "Some",
+                "some",
                 0,
                 &[(crate::OPTION_VALUE_ID, "value")],
             );
     }
     if id == crate::RESULT_ID {
-        return header(definition, "Result", 2, 2, crate::RESULT_LAYOUT)
+        return header(definition, "result", 2, 2, crate::RESULT_LAYOUT)
             && variant(
                 definition,
                 crate::RESULT_OK_ID,
-                "Ok",
+                "ok",
                 0,
                 &[(crate::RESULT_OK_VALUE_ID, "value")],
             )
             && variant(
                 definition,
                 crate::RESULT_ERR_ID,
-                "Err",
+                "err",
                 1,
                 &[(crate::RESULT_ERR_ERROR_ID, "error")],
             );
@@ -39,7 +39,7 @@ pub(super) fn valid(definition: &EnumMetadata) -> bool {
         ];
         return header(
             definition,
-            "NumericError",
+            "numeric-error",
             0,
             4,
             crate::NUMERIC_ERROR_LAYOUT,
@@ -54,7 +54,7 @@ pub(super) fn valid(definition: &EnumMetadata) -> bool {
         });
     }
     if id == crate::UTF8_ERROR_ID {
-        return header(definition, "Utf8Error", 0, 6, crate::UTF8_ERROR_LAYOUT)
+        return header(definition, "utf8-error", 0, 6, crate::UTF8_ERROR_LAYOUT)
             && Utf8ErrorKind::ALL.into_iter().all(|error| {
                 variant_names(
                     definition,
@@ -66,7 +66,7 @@ pub(super) fn valid(definition: &EnumMetadata) -> bool {
             });
     }
     if id == crate::SYSTEM_ERROR_ID {
-        return header(definition, "SystemError", 0, 8, crate::SYSTEM_ERROR_LAYOUT)
+        return header(definition, "system-error", 0, 8, crate::SYSTEM_ERROR_LAYOUT)
             && SystemErrorKind::ALL.into_iter().all(|error| {
                 let fields: &[&str] = if error == SystemErrorKind::Utf8 {
                     &["error"]

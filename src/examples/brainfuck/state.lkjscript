@@ -1,6 +1,6 @@
 product/
 name/
-BrainfuckState
+brainfuck-state
 /name
 public
 fields/
@@ -9,7 +9,7 @@ name/
 code
 /name
 type/
-Buf
+buf
 /type
 /field
 field/
@@ -17,7 +17,7 @@ name/
 jumps
 /name
 type/
-Buf
+buf
 /type
 /field
 field/
@@ -25,7 +25,7 @@ name/
 stack
 /name
 type/
-Buf
+buf
 /type
 /field
 field/
@@ -33,7 +33,7 @@ name/
 counts
 /name
 type/
-Buf
+buf
 /type
 /field
 field/
@@ -41,7 +41,7 @@ name/
 tape
 /name
 type/
-Buf
+buf
 /type
 /field
 field/
@@ -49,7 +49,7 @@ name/
 code-len
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -57,7 +57,7 @@ name/
 scan
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -65,7 +65,7 @@ name/
 depth
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -73,7 +73,7 @@ name/
 pc
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -81,7 +81,7 @@ name/
 dp
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -89,7 +89,7 @@ name/
 fold-runs
 /name
 type/
-Bool
+bool
 /type
 /field
 /fields
@@ -101,14 +101,18 @@ bf-new-state
 public
 fn/
 sig/
-->
-Product
-BrainfuckState
+inputs/
+/inputs
+output/
+product/
+brainfuck-state
+/product
+/output
 /sig
 params/
 /params
 product-value/
-BrainfuckState
+brainfuck-state
 field/
 code
 buf-new/

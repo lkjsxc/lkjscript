@@ -6,6 +6,7 @@ use crate::types::Type;
 ///
 /// Backends consume this identity rather than comparing source spellings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u16)]
 pub enum Operation {
     Add,
     Subtract,
@@ -136,6 +137,7 @@ mod catalog;
 mod effects;
 mod instantiation;
 mod names;
+mod record;
 mod resolution;
 mod signature;
 mod signature_memory;

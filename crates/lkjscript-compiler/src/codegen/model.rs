@@ -21,6 +21,16 @@ pub(in crate::codegen) fn compile_function(
         name: function.name.clone(),
         arity,
         locals,
+        parameter_resources: function
+            .signature
+            .parameters
+            .iter()
+            .map(|ty| match ty {
+                SsaType::Resource(kind) => Some(*kind),
+                _ => None,
+            })
+            .collect(),
+        return_resource: resource_return_kind(&function.signature.result),
         code: Vec::new(),
     };
     let mut emitter = Emitter {
@@ -76,6 +86,22 @@ pub(in crate::codegen) fn compile_function(
             instructions: emitter.instruction_links,
         },
     ))
+}
+
+fn resource_return_kind(ty: &SsaType) -> Option<ResourceReturnKind> {
+    match ty {
+        SsaType::Resource(kind) => Some(ResourceReturnKind::Resource(*kind)),
+        SsaType::Enum { id, arguments }
+            if id.bytes() == lkjscript_core::RESULT_ID
+                && matches!(arguments.as_slice(), [SsaType::Resource(_), _]) =>
+        {
+            let [SsaType::Resource(kind), _] = arguments.as_slice() else {
+                return None;
+            };
+            Some(ResourceReturnKind::Result(*kind))
+        }
+        _ => None,
+    }
 }
 
 pub(in crate::codegen) struct Emitter<'a> {

@@ -119,11 +119,13 @@ fn resolve_import_with_root(
 
 pub(super) fn import_path(args: &[Expr]) -> std::result::Result<&str, &'static str> {
     match args {
-        [Expr::LitStr(spec)] => spec
-            .split_once('#')
-            .map(|(path, _)| path)
-            .ok_or("import expects exact path#name-list encoding"),
-        _ => Err("import expects exact path#name-list encoding"),
+        [Expr::Call { name: module, args }, Expr::Call {
+            name: declarations, ..
+        }] if module == "module" && declarations == "declarations" => match args.as_slice() {
+            [Expr::LitStr(path)] => Ok(path),
+            _ => Err("module requires one exact path text value"),
+        },
+        _ => Err("import expects structured module and declarations fields"),
     }
 }
 

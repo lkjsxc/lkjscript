@@ -13,42 +13,44 @@ canonical local gate, and Docker verification are implemented and verified.
 
 ## Decision
 
-`Buf` is the lossless file/wire representation; `Str` remains valid UTF-8.
-Add these Result-valued primitives:
+`buf` is the lossless file/wire representation; `string` remains valid UTF-8.
+Add these `result`-valued primitives:
 
 ```text
-sys-read-into Handle Buf I64 I64 -> Result I64 SystemError
-sys-write-from Handle Buf I64 I64 -> Result I64 SystemError
-buf-from-str Str -> Buf
-buf-to-str Buf -> Result Str Utf8Error
-buf-slice Buf I64 I64 -> Result Buf SystemError
+read-into: forall resource; resource one-of input-stream,file-reader,tcp-stream; fn inputs resource buf i64 i64 output result i64 system-error
+write-from: forall resource; resource one-of output-stream,file-writer,file-appender,tcp-stream; fn inputs resource buf i64 i64 output result i64 system-error
+convert-string-to-buf: fn inputs string output buf
+convert-buf-to-string: fn inputs buf output result string utf8-error
+copy-buf-slice: fn inputs buf i64 i64 output result buf system-error
 ```
 
 For read/write, offset and requested length are non-negative, fit the buffer,
-and do not exceed a fixed bulk-I/O limit. `Ok(0)` means EOF or no progress;
+and do not exceed a fixed bulk-I/O limit. An `ok 0` branch means EOF or no progress;
 writes report actual progress and never hide a partial write. Invalid ranges,
-wrong/stale handles, ordinary OS errors, and invalid UTF-8 are Result errors.
-UTF-8 conversion never uses replacement characters. `buf-from-str` encodes
-exact UTF-8 and is bounded by the existing buffer limit. `buf-slice` copies an
-exact validated range into a bounded `Buf`; it supplies protocol consumers with
+wrong/stale typed resources, ordinary OS errors, and invalid UTF-8 are
+`result` errors.
+UTF-8 conversion never uses replacement characters. `convert-string-to-buf` encodes
+exact UTF-8 and is bounded by the existing buffer limit. `copy-buf-slice` copies an
+exact validated range into a bounded `buf`; it supplies protocol consumers with
 an exact received prefix without exposing host slices.
 
-The existing Str-only socket operations are retained only while legacy examples
-need them; new consumers use this surface. Blocking bulk calls remain rejected
-by hard-deadline execution before effects.
+The current string-oriented socket operations remain distinct while canonical
+consumers migrate to byte storage. Blocking bulk calls remain rejected by
+hard-deadline execution before effects.
 
 ## Safety And Ownership
 
 Unsafe syscall FFI stays in `lkjscript-sys`. Safe wrappers validate all ranges
-before slicing, preserve handle kind/closed-state checks, and use retry only for
-interrupted syscalls. They do not allocate from untrusted requested lengths.
-The VM owns buffers and handles; no raw pointer, descriptor, or borrowed byte
+before slicing, preserve exact resource-kind and closed-state checks, and use
+retry only for interrupted syscalls. They do not allocate from untrusted
+requested lengths. The VM owns buffers and typed resources; no raw pointer,
+descriptor, or borrowed byte
 slice crosses the language boundary.
 
 ## Verification
 
 Compiler signatures/effects, opcode type-stack validation, malformed chunks,
-file/socket progress, EOF, closed/wrong handles, invalid ranges, invalid UTF-8,
+file/socket progress, EOF, closed/wrong resource kinds, invalid ranges, invalid UTF-8,
 NUL/non-ASCII exact round trips, limits, and hard-deadline rejection pass in
 `cargo run --locked -p lkjscript-xtask -- quiet verify`. The `bulk-bytes` source
 consumer and Docker verification also pass.

@@ -12,15 +12,15 @@ next repairs.
 ## Current Shape
 
 - Dense bytecode with contiguous value and frame stacks.
-- Tagged `u64` immediates for Unit, typed empty-list, Option none, booleans,
-  signed 61-bit integers, heap references, and opaque handle tokens; all-zero
+- Tagged `u64` immediates for `unit`, typed empty lists, `option` none,
+  booleans, signed 61-bit integers, heap references, and opaque resource tokens; all-zero
   is private invalid/uninitialized state, not a language value.
-- Arena objects for wide I64 values, F64 values, strings, symbols, pairs,
-  closures, buffers, Option some wrappers, language Result wrappers, immutable
+- Arena objects for wide `i64` values, `f64` values, strings, symbols, pairs,
+  closures, buffers, `option` some wrappers, language `result` wrappers, immutable
   nominal products, and boxed enums storing validated layout identity, physical
   tag, and only the active initialized payload.
-- I64-preserving bytecode constants, checked I64 arithmetic, IEEE F64
-  arithmetic, exact value/object/F64-bit equality, structural List equality
+- `i64`-preserving constants, checked `i64` arithmetic, IEEE `f64` arithmetic,
+  exact value/object/`f64`-bit equality, structural list equality
   bounded to 1,000,000 pair nodes, immutable product construction/access/update,
   exact enum construction/test/active projection primitives, and checked narrow
   host domains.
@@ -50,18 +50,21 @@ is attempted, and stdout is flushed before the CLI translates the outcome.
 
 ## Current Resource Boundary
 
-- Integer values are never accepted as resource handles.
-- Stdin has a reserved borrowed token disjoint from owned files and sockets.
-- Owned tokens are monotonic and never reused after close; configured handle
-  slots bound their metadata until VM teardown.
+- Integer values are never accepted as resources.
+- Standard input has the exact borrowed kind `input-stream` and a reserved token
+  disjoint from owned slots.
+- Owned tokens are monotonic and never reused after close; exact file mode,
+  listener/stream, connection/statement, and directory kinds are checked before
+  host access.
 - All raw descriptor resolution is centralized in the VM resource table.
-- Close rejects borrowed, unknown, stale, and repeatedly closed tokens.
-- Socket-only operations reject file handles.
-- Arbitrary ioctl is absent. `sys-tty-get` and `sys-tty-set` select fixed Linux
-  requests internally and validate exactly 60 state bytes before FFI.
-- Every fallible resource, filesystem, time, socket, polling, terminal, and
-  terminal-guard primitive returns a language Result.
-- Descriptor-era aliases are removed in favor of handle-explicit `sys-*` names.
+- Close rejects borrowed, unknown, stale, wrong-kind, and repeatedly closed
+  tokens. File readers cannot write, sync, or truncate; listener and stream
+  operations are disjoint.
+- Arbitrary ioctl is absent. `get-terminal-state` and `set-terminal-state`
+  select fixed Linux requests and validate exactly 60 state bytes before FFI.
+- Every fallible host primitive returns a language `result`.
+- Public operations use canonical domain words. `sys-*` labels are internal
+  stable/runtime details, not accepted source names.
 - Missing paths return `Ok(false)` only for absence-class errors; other
   `access(2)` failures return errors.
 - Network send returns its real byte count and uses `MSG_NOSIGNAL`.
@@ -69,7 +72,7 @@ is attempted, and stdout is flushed before the CLI translates the outcome.
 ## Current Host Risks
 
 - Core console IO and terminal-restoration failures are `HostFailure`, while
-  ordinary fallible `sys-*` operation errors remain language Results.
+  ordinary fallible host-operation errors remain language results.
 - The terminal guard and stdin/stdout are process-global rather than per-VM
   leases, preventing safe concurrent VM supervision.
 - Strings and network/file bytes do not provide a complete lossless byte model.

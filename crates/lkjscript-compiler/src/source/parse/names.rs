@@ -26,41 +26,44 @@ pub(super) fn validate_name(
             format!("empty {kind}"),
         ));
     }
+    if let Some(removed) = lkjscript_contracts::removed_spelling(name) {
+        return Err(super::limits::syntax_error(
+            origin,
+            super::lines::line_span(line),
+            format!("{} is removed; use {}", removed.old, removed.replacement),
+        ));
+    }
     if !is_source_identifier(name) {
-        let hint = if name.contains('"') {
-            "; use str/ ... /str instead of quotes"
+        let message = if name.contains('"') {
+            format!("invalid {kind} {name:?}; use string-literal/ ... /string-literal instead of quotes")
         } else {
-            ""
+            format!("invalid {kind} {name:?}; expected lowercase ASCII kebab-case")
         };
         return Err(super::limits::syntax_error(
             origin,
             super::lines::line_span(line),
-            format!("invalid {kind} {name:?}{hint}"),
+            message,
         ));
     }
     Ok(())
 }
 
 pub(crate) fn is_source_identifier(name: &str) -> bool {
-    !name.is_empty() && name.as_bytes().iter().copied().all(is_ident_byte)
+    lkjscript_contracts::is_identifier(name)
 }
 
-fn is_ident_byte(byte: u8) -> bool {
-    matches!(
-        byte,
-        b'a'..=b'z'
-            | b'A'..=b'Z'
-            | b'0'..=b'9'
-            | b'_'
-            | b'-'
-            | b'+'
-            | b'*'
-            | b'='
-            | b'!'
-            | b'?'
-            | b'<'
-            | b'>'
-            | b'.'
-            | b':'
-    )
+pub(super) fn is_numeric_literal_spelling(name: &str) -> bool {
+    let unsigned = name.strip_prefix('-').unwrap_or(name);
+    if unsigned.is_empty() {
+        return false;
+    }
+    match unsigned.split_once('.') {
+        Some((whole, fraction)) => {
+            !whole.is_empty()
+                && !fraction.is_empty()
+                && whole.bytes().all(|byte| byte.is_ascii_digit())
+                && fraction.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        None => unsigned.bytes().all(|byte| byte.is_ascii_digit()),
+    }
 }

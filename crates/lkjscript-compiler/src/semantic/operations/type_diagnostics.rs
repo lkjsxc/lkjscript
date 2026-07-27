@@ -38,9 +38,12 @@ fn declaration_body(node: &SourceNode) -> Option<(&SourceNode, &SourceNode)> {
         return None;
     };
     match name.as_str() {
-        "main" => Some((node.children.first()?, node.children.get(1)?)),
+        "main" => Some((node.children.first()?, node.children.last()?)),
         "def" => {
-            let function = node.children.get(1)?;
+            let function = node
+                .children
+                .iter()
+                .find(|child| matches!(&child.kind, SyntaxKind::Call { name } if name == "fn"))?;
             let signature = function
                 .children
                 .iter()
@@ -52,31 +55,30 @@ fn declaration_body(node: &SourceNode) -> Option<(&SourceNode, &SourceNode)> {
 }
 
 fn return_type(signature: &SourceNode) -> Option<String> {
-    let arrow = signature
+    let output = signature
         .children
         .iter()
-        .position(|child| matches!(&child.kind, SyntaxKind::Symbol { name } if name == "->"))?;
-    let atoms: Vec<_> = signature.children[arrow + 1..]
-        .iter()
-        .filter_map(|child| match &child.kind {
-            SyntaxKind::Symbol { name } => Some(name.as_str()),
-            _ => None,
-        })
-        .collect();
-    if atoms.is_empty() {
-        None
-    } else {
-        Some(atoms.join(" "))
+        .find(|child| matches!(&child.kind, SyntaxKind::Call { name } if name == "output"))?;
+    match output.children.as_slice() {
+        [SourceNode {
+            kind: SyntaxKind::Symbol { name },
+            ..
+        }] => Some(name.clone()),
+        [SourceNode {
+            kind: SyntaxKind::Unit,
+            ..
+        }] => Some("unit".into()),
+        _ => None,
     }
 }
 
 fn literal_type(node: &SourceNode) -> Option<&'static str> {
     match &node.kind {
-        SyntaxKind::I64 { .. } => Some("I64"),
-        SyntaxKind::F64 { .. } => Some("F64"),
-        SyntaxKind::Bool { .. } => Some("Bool"),
-        SyntaxKind::Unit => Some("Unit"),
-        SyntaxKind::Str { .. } => Some("Str"),
+        SyntaxKind::I64 { .. } => Some("i64"),
+        SyntaxKind::F64 { .. } => Some("f64"),
+        SyntaxKind::Bool { .. } => Some("bool"),
+        SyntaxKind::Unit => Some("unit"),
+        SyntaxKind::Str { .. } => Some("string"),
         SyntaxKind::Symbol { .. } | SyntaxKind::Call { .. } => None,
     }
 }

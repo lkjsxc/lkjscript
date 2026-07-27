@@ -1,15 +1,10 @@
 use crate::analyze::*;
 
 pub(super) fn valid_enum_parameter(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .chars()
-            .next()
-            .is_some_and(|character| character.is_ascii_uppercase())
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric())
+    lkjscript_contracts::is_identifier(name)
         && !is_builtin_type_name(name)
+        && !is_contextual_name(name)
+        && Operation::from_name(name).is_none()
 }
 
 impl Analyzer {

@@ -81,6 +81,10 @@ pub(super) fn enumerate_with_ledger(
             .or_else(|| super::validate::witness(site.tree, ty, 0))
     };
     for operation in crate::hir::Operation::ALL {
+        let record = operation.record();
+        if !record.legal_action_available || !record.semantic_source_builtin_call {
+            continue;
+        }
         let crate::hir::Type::Fn { params, ret } = operation.signature() else {
             continue;
         };

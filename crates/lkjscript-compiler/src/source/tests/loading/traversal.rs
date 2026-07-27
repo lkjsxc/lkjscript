@@ -1,7 +1,13 @@
 use super::super::*;
 
 fn exact_import(path: &str, name: &str) -> String {
-    format!("imports/\nimport/\n{path}#{name}\n/import\n/imports\n")
+    format!(
+        concat!(
+            "imports/\nimport/\nmodule/\n{}\n/module\n",
+            "declarations/\n{}\n/declarations\n/import\n/imports\n"
+        ),
+        path, name
+    )
 }
 
 #[test]
@@ -139,14 +145,14 @@ fn loader_rejects_wide_entry_directories_and_accepts_imported_declarations() -> 
     let dependency = declarations.0.join("traits.lkjscript");
     fs::write(
         &dependency,
-        "trait/\nname/\nMarked\n/name\n/trait\nproduct/\nname/\nItem\n/name\nfields/\n/fields\n/product\nimpl/\ntrait/\nMarked\n/trait\nfor/\nProduct\nItem\n/for\n/impl\n",
+        "trait/\nname/\nmarked\n/name\n/trait\nproduct/\nname/\nitem\n/name\nfields/\n/fields\n/product\nimpl/\ntrait/\nmarked\n/trait\nfor/\nproduct\nitem\n/for\n/impl\n",
     )?;
     let root = declarations.0.join("main.lkjscript");
     fs::write(
         &root,
         format!(
             "{}{}",
-            exact_import("traits.lkjscript", "Marked"),
+            exact_import("traits.lkjscript", "marked"),
             unit_main("unit")
         ),
     )?;

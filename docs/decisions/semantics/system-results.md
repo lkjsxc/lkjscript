@@ -8,20 +8,20 @@ unexpected VM termination or false success.
 ## Status
 
 **Current.** The compiler prelude, opcode mapping, VM dispatch, and standard
-library wrappers use the Result-explicit system surface.
+library wrappers use the `result`-explicit system surface.
 
 ## Decision
 
-Every canonical `sys-*` OS/resource primitive returns
-`Result Success SystemError`. Core console operations remain VM-failure
+Every canonical host/resource operation described below returns
+`result success system-error`. Core console operations remain VM-failure
 surfaces. Static types, bytecode dispatch, and generic enum allocation must
 agree on the exact success and error identities. Ordinary errno, invalid/stale
-handle, range, and no-progress outcomes become the capability-domain
-`SystemError` variant. Hosts translate once at the VM/native capability
+resource kind, range, and no-progress outcomes become the capability-domain
+`system-error` variant. Hosts translate once at the VM/native capability
 boundary; display text is never inspected to select a variant.
 
 VM errors remain appropriate for malformed bytecode, impossible compiler/VM
-ABI states, and violations of a non-Result core language operation. A standard
+ABI states, and violations of a non-`result` core language operation. A standard
 library wrapper may deliberately call `unwrap-ok`, but that explicit policy is
 different from the VM silently converting an OS error into process failure.
 
@@ -30,58 +30,52 @@ different from the VM silently converting an OS error into process failure.
 The descriptor-facing surface becomes:
 
 ```text
-stdin-handle Capability Stdio        -> Handle
-sys-isatty Handle                    -> Result Bool SystemError
-drop Handle                     -> Result Unit SystemError
-sys-read-byte Handle                 -> Result I64 SystemError
-sys-write-byte Handle I64            -> Result Unit SystemError
-sys-read-into Handle Buf I64 I64     -> Result I64 SystemError
-sys-write-from Handle Buf I64 I64    -> Result I64 SystemError
-buf-from-str Str                      -> Buf
-buf-to-str Buf                        -> Result Str Utf8Error
-sys-open-append Capability FileSystem Path
-                                     -> Result Handle SystemError
-sys-open-create-new Capability FileSystem Path
-                                     -> Result Handle SystemError
-sys-open-dir Capability FileSystem Path
-                                     -> Result Handle SystemError
-sys-fsync Handle                     -> Result Unit SystemError
-sys-truncate Handle I64              -> Result Unit SystemError
-sys-rename Capability FileSystem Path Path
-                                     -> Result Unit SystemError
-sys-random-fill Capability Entropy Buf I64 I64
-                                     -> Result Unit SystemError
-sys-tty-guard-save Capability Terminal Buf
-                                     -> Result Unit SystemError
-sys-tty-guard-clear Capability Terminal
-                                     -> Result Unit SystemError
+standard-input: fn inputs capability stdio output input-stream
+is-terminal: fn inputs input-stream output result bool system-error
+drop: forall resource; resource one-of output-stream,file-reader,file-writer,file-appender,directory,tcp-listener,tcp-stream,sqlite-connection,sqlite-statement,terminal-session; fn inputs resource output result unit system-error
+read-resource-byte: forall resource; resource one-of input-stream,file-reader,tcp-stream; fn inputs resource output result i64 system-error
+write-resource-byte: forall resource; resource one-of output-stream,file-writer,file-appender,tcp-stream; fn inputs resource i64 output result unit system-error
+read-into: forall resource; resource one-of input-stream,file-reader,tcp-stream; fn inputs resource buf i64 i64 output result i64 system-error
+write-from: forall resource; resource one-of output-stream,file-writer,file-appender,tcp-stream; fn inputs resource buf i64 i64 output result i64 system-error
+convert-string-to-buf: fn inputs string output buf
+convert-buf-to-string: fn inputs buf output result string utf8-error
+open-file-appender: fn inputs capability file-system path output result file-appender system-error
+create-file: fn inputs capability file-system path output result file-writer system-error
+open-directory: fn inputs capability file-system path output result directory system-error
+sync-file: forall resource; resource one-of file-writer,file-appender,directory; fn inputs resource output result unit system-error
+truncate-file: forall resource; resource one-of file-writer,file-appender; fn inputs resource i64 output result unit system-error
+rename-path: fn inputs capability file-system path path output result unit system-error
+fill-random: fn inputs capability entropy buf i64 i64 output result unit system-error
+save-terminal-guard: fn inputs capability terminal buf output result unit system-error
+clear-terminal-guard: fn inputs capability terminal output result unit system-error
 ```
 
 The old `stdin-fd`, `isatty`, `close`, `read-byte-fd`, `write-byte-fd`,
 `tty-guard-save`, and `tty-guard-clear` names are removed without aliases.
 
-Existing `sys-open-*`, `sys-path-exists`, time, socket, poll, and terminal
-operations all return Results. `sys-path-exists` returns `Ok(false)` only for
+The canonical file-open, `does-path-exist`, time, socket, poll, and terminal
+operations all return `result` values. `does-path-exist` returns `ok false` only for
 absence-class errors; permission, malformed path, and other failures return
-`Err`. Negative waits, ports, backlogs, and poll timeouts return errors rather
+`err`. Negative waits, ports, backlogs, and poll timeouts return errors rather
 than being clamped or cast.
 
 ## Standard Library Policy
 
 User-facing convenience wrappers may preserve direct return types by calling
-`unwrap-ok` explicitly. Low-level applications may call `sys-*` primitives and
-handle errors without terminating the VM. `unwrap-ok` traps on `Err`; human
+`unwrap-ok` explicitly. Low-level applications may call canonical host operations and handle errors
+without terminating the VM. `unwrap-ok` traps on `err`; human
 rendering of the structured error is diagnostic projection only.
 
 ## Verification
 
-- A missing file open returns generic `Result.Err(SystemError.Io)`, subsequent expressions run, and the
-  process exits successfully.
-- A repeated close returns generic `Result.Err(SystemError.Io)` without reviving or terminating the VM.
-- Integer, borrowed, stale, and wrong-kind handles return Result errors at the
-  language boundary.
-- Missing path returns `Ok(false)`; malformed path returns `Err`.
-- Negative wait, timeout, port, and backlog values return `Err`.
+- A missing file open returns the generic `err system-error` branch,
+  subsequent expressions run, and the process exits successfully.
+- A repeated drop returns an `err system-error` branch without reviving or
+  terminating the VM.
+- Scalar, borrowed, stale, and wrong-kind resources return `result` errors at
+  the language boundary.
+- Missing path returns `ok false`; malformed path returns `err`.
+- Negative wait, timeout, port, and backlog values return `err`.
 - Successful send and bulk write report actual byte counts.
 - Bulk reads/writes preserve bytes exactly, validate offset/length before
   slicing, and reject invalid UTF-8 rather than applying replacement text.
@@ -92,8 +86,8 @@ rendering of the structured error is diagnostic projection only.
 
 ## Rejected
 
-- Declaring `Result` while propagating only the Rust `Err` branch.
+- Declaring `result` while propagating only the Rust `err` branch.
 - Returning zero or absence as a placeholder success payload.
-- Keeping descriptor terminology after the language value became an opaque
-  handle.
+- Keeping universal descriptor terminology after language values became exact
+  typed resources.
 - Treating all `access(2)` failures as a nonexistent path.

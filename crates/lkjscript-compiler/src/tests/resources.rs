@@ -93,8 +93,8 @@ fn exact_source_ceiling_succeeds_and_plus_one_is_structured() {
 
 #[test]
 fn profiles_do_not_change_type_or_ownership_safety() {
-    let invalid_type = "main/\nsig/\n->\nBool\n/sig\n1\n/main\n";
-    let invalid_reference = "def/\nname/\nreturn-ref\n/name\nfn/\nsig/\nRef\nBuf\n->\nRef\nBuf\n/sig\nparams/\nr\nRef/\nBuf\n/Ref\n/params\nr\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+    let invalid_type = "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\n1\n/main\n";
+    let invalid_reference = "def/\nname/\nreturn-ref\n/name\nfn/\nsig/\ninputs/\nbyte-slice\n/inputs\noutput/\nbyte-slice\n/output\n/sig\nparams/\nr\nbyte-slice\n/params\nr\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     for name in ResourceProfileName::ALL {
         let profile = ResourceProfile::new(name);
         let type_error = compile_source_with_profile(
@@ -123,7 +123,7 @@ fn diagnostic_publication_is_profile_charged() {
         .lowered(ResourceCategory::Diagnostics, 0)
         .unwrap();
     let error = compile_source_with_profile(
-        "main/\nsig/\n->\nBool\n/sig\n1\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\n1\n/main\n",
         "diagnostic.lkjscript",
         &Limits::default(),
         profile,

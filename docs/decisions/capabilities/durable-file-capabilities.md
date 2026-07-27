@@ -13,16 +13,16 @@ and Docker verification are implemented and verified.
 
 ## Decision
 
-Add Result-valued primitives:
+Add `result`-valued primitives:
 
 ```text
-sys-open-append Capability FileSystem Path -> Result Handle SystemError
-sys-open-create-new Capability FileSystem Path -> Result Handle SystemError
-sys-open-dir Capability FileSystem Path -> Result Handle SystemError
-sys-fsync Handle -> Result Unit SystemError
-sys-truncate Handle I64 -> Result Unit SystemError
-sys-rename Capability FileSystem Path Path -> Result Unit SystemError
-sys-random-fill Capability Entropy Buf I64 I64 -> Result Unit SystemError
+open-file-appender: fn inputs capability file-system path output result file-appender system-error
+create-file: fn inputs capability file-system path output result file-writer system-error
+open-directory: fn inputs capability file-system path output result directory system-error
+sync-file: forall resource; resource one-of file-writer,file-appender,directory; fn inputs resource output result unit system-error
+truncate-file: forall resource; resource one-of file-writer,file-appender; fn inputs resource i64 output result unit system-error
+rename-path: fn inputs capability file-system path path output result unit system-error
+fill-random: fn inputs capability entropy buf i64 i64 output result unit system-error
 ```
 
 Append uses `O_APPEND`; it is not a multi-process transaction. Create-new is
@@ -33,15 +33,16 @@ Offset/length range validation follows the lossless bulk-byte contract.
 
 ## Safety
 
-The sys crate owns FFI and validates exact absolute Path bytes before C calls. Directory is a
-distinct owned handle kind. All errors, wrong/stale handles, overflow, short
-random fill, and ordinary errno become qualified language Result errors. No
+The sys crate owns FFI and validates exact absolute `path` bytes before C calls.
+`directory` is a distinct owned resource kind. All errors, wrong/stale resource
+kinds, overflow, short random fill, and ordinary errno become qualified
+language `result` errors. No
 script controls flags, permissions, or random source selection.
 
 ## Verification
 
 Append/create exclusivity, binary random fill/range errors, file/directory
-sync, truncation, rename, stale/wrong handles, and opcode validation pass. The
+sync, truncation, rename, stale/wrong resource kinds, and opcode validation pass. The
 `.lkjscript` append/replay/restart consumer passes locally; canonical and Docker
 gates pass.
 

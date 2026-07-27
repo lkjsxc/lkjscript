@@ -12,6 +12,8 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
         name: "f".into(),
         arity: 0,
         locals: 0,
+        parameter_resources: Vec::new(),
+        return_resource: None,
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     captures.main.code = vec![
@@ -28,7 +30,7 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
     let mut product = unit_chunk();
     product.products.push(ProductMetadata {
         id: ProductId::new(0),
-        name: "P".into(),
+        name: "p".into(),
         fields: vec!["x".into()],
     });
     product.product_fields.push(ProductFieldRef {
@@ -46,6 +48,33 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
 }
 
 #[test]
+fn global_closures_must_match_declared_prototypes() {
+    let mut chunk = unit_chunk();
+    chunk.global_names.push("function".into());
+    chunk.global_prototypes.push(Some(0));
+    for name in ["declared", "stored"] {
+        chunk.protos.push(FunctionProto {
+            name: name.into(),
+            arity: 0,
+            locals: 0,
+            parameter_resources: Vec::new(),
+            return_resource: None,
+            code: vec![Op::Unit as u8, Op::Return as u8],
+        });
+    }
+    let stored = chunk.add_const(Constant::Proto(1));
+    chunk.main.code.clear();
+    chunk.main.emit_op_u16(Op::LoadConst, stored.0);
+    chunk.main.emit_op_u16(Op::MakeClosure, 0);
+    chunk.main.emit_op_u16(Op::StoreGlobal, 0);
+    chunk.main.emit(Op::Pop);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    let message = error(chunk);
+    assert!(message.contains("declared prototype metadata"), "{message}");
+}
+
+#[test]
 fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
     let mut valid = Chunk::new();
     valid.constants.push(Constant::Str("explicit trap".into()));
@@ -59,7 +88,7 @@ fn explicit_trap_requires_a_string_value_and_terminates_control_flow() {
     wrong.constants.push(Constant::I64(7));
     wrong.main.emit_op_u16(Op::LoadConst, 0);
     wrong.main.emit(Op::Trap);
-    assert!(error(wrong).contains("expected Str"));
+    assert!(error(wrong).contains("expected string"));
 }
 
 #[test]

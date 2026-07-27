@@ -2,15 +2,19 @@ use super::*;
 
 fn import(path: &str, names: &[&str]) -> String {
     format!(
-        "imports/\nimport/\n{path}#{}\n/import\n/imports\n",
-        names.join(",")
+        concat!(
+            "imports/\nimport/\nmodule/\n{path}\n/module\n",
+            "declarations/\n{}\n/declarations\n/import\n/imports\n"
+        ),
+        names.join("\n"),
+        path = path
     )
 }
 
 fn exported_def(export: Option<&str>, name: &str, body: &str) -> String {
     let visibility = export.map_or("", |_| "public\n");
     format!(
-        "def/\nname/\n{name}\n/name\n{visibility}fn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n{body}\n/fn\n/def\n"
+        "def/\nname/\n{name}\n/name\n{visibility}fn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\n{body}\n/fn\n/def\n"
     )
 }
 
@@ -39,8 +43,8 @@ fn declarations_are_private_until_explicitly_exported() -> std::io::Result<()> {
 fn exact_import_list_does_not_expose_other_public_names() -> std::io::Result<()> {
     let directory = TempDir::new("exact-import")?;
     let library = concat!(
-        "def/\nname/\nallowed\n/name\npublic\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n",
-        "def/\nname/\nsecret\n/name\npublic\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n"
+        "def/\nname/\nallowed\n/name\npublic\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nunit\n/fn\n/def\n",
+        "def/\nname/\nsecret\n/name\npublic\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nunit\n/fn\n/def\n"
     );
     fs::write(directory.0.join("library.lkjscript"), library)?;
     let root = directory.0.join("main.lkjscript");

@@ -14,8 +14,9 @@ fn rounded_i64_boundaries_preserve_exact_f64_bits_on_four_engines() {
         (i64::MAX, 0x43e0_0000_0000_0000),
     ];
     for (value, bits) in cases {
-        let expression = format!("f64-from-i64-rounded/\n{value}\n/f64-from-i64-rounded");
-        assert_scalar(&program("F64", &expression), Expected::F64(bits));
+        let expression =
+            format!("convert-i64-to-f64-rounded/\n{value}\n/convert-i64-to-f64-rounded");
+        assert_scalar(&program("f64", &expression), Expected::F64(bits));
     }
 }
 
@@ -30,9 +31,10 @@ fn exact_i64_boundaries_distinguish_representability() {
         (i64::MIN, true),
         (i64::MAX, false),
     ] {
-        let expression =
-            format!("is-ok/\nf64-from-i64-exact/\n{value}\n/f64-from-i64-exact\n/is-ok");
-        assert_scalar(&program("Bool", &expression), Expected::Bool(exact));
+        let expression = format!(
+            "is-ok/\nconvert-i64-to-f64-exact/\n{value}\n/convert-i64-to-f64-exact\n/is-ok"
+        );
+        assert_scalar(&program("bool", &expression), Expected::Bool(exact));
     }
 }
 
@@ -46,40 +48,41 @@ fn f64_to_i64_boundaries_cover_zero_fraction_nonfinite_and_range() {
         ("9223372036854775808.0", false),
         ("1.5", false),
         ("-1.5", false),
-        ("div/\n1.0\n0.0\n/div", false),
-        ("div/\n-1.0\n0.0\n/div", false),
-        ("div/\n0.0\n0.0\n/div", false),
+        ("divide/\n1.0\n0.0\n/divide", false),
+        ("divide/\n-1.0\n0.0\n/divide", false),
+        ("divide/\n0.0\n0.0\n/divide", false),
     ];
     for (value, accepted) in exact {
-        let expression =
-            format!("is-ok/\ni64-from-f64-exact/\n{value}\n/i64-from-f64-exact\n/is-ok");
-        assert_scalar(&program("Bool", &expression), Expected::Bool(accepted));
+        let expression = format!(
+            "is-ok/\nconvert-f64-to-i64-exact/\n{value}\n/convert-f64-to-i64-exact\n/is-ok"
+        );
+        assert_scalar(&program("bool", &expression), Expected::Bool(accepted));
     }
     for (value, expected) in [("1.9", 1), ("-1.9", -1), ("0.0", 0), ("-0.0", 0)] {
         let expression =
-            format!("unwrap-ok/\ni64-from-f64-trunc/\n{value}\n/i64-from-f64-trunc\n/unwrap-ok");
-        assert_scalar(&program("I64", &expression), Expected::I64(expected));
+            format!("unwrap-ok/\nconvert-f64-to-i64-truncating/\n{value}\n/convert-f64-to-i64-truncating\n/unwrap-ok");
+        assert_scalar(&program("i64", &expression), Expected::I64(expected));
     }
     let subnormal = format!("0.{}5", "0".repeat(323));
     let expression =
-        format!("unwrap-ok/\ni64-from-f64-trunc/\n{subnormal}\n/i64-from-f64-trunc\n/unwrap-ok");
-    assert_scalar(&program("I64", &expression), Expected::I64(0));
+        format!("unwrap-ok/\nconvert-f64-to-i64-truncating/\n{subnormal}\n/convert-f64-to-i64-truncating\n/unwrap-ok");
+    assert_scalar(&program("i64", &expression), Expected::I64(0));
 }
 
 fn error_code(expression: &str) -> String {
     let mut arms = String::new();
     for (name, code) in [
-        ("NonFinite", 1),
-        ("OutOfRange", 2),
-        ("Fractional", 3),
-        ("Inexact", 4),
+        ("non-finite", 1),
+        ("out-of-range", 2),
+        ("fractional", 3),
+        ("inexact", 4),
     ] {
         arms.push_str(&format!(
-            "arm/\nvariant-pattern/\ntype/\nNumericError/\n/NumericError\n/type\nvariant/\n{name}\n/variant\nfields/\n/fields\n/variant-pattern\n{code}\n/arm\n"
+            "arm/\nvariant-pattern/\ntype/\nnumeric-error/\n/numeric-error\n/type\nvariant/\n{name}\n/variant\nfields/\n/fields\n/variant-pattern\n{code}\n/arm\n"
         ));
     }
     program(
-        "I64",
+        "i64",
         &format!("match/\nunwrap-err/\n{expression}\n/unwrap-err\narms/\n{arms}/arms\n/match"),
     )
 }
@@ -88,24 +91,24 @@ fn error_code(expression: &str) -> String {
 fn numeric_error_cases_are_stable_nominal_values_on_four_engines() {
     let cases = [
         (
-            "f64-from-i64-exact/\n9007199254740993\n/f64-from-i64-exact",
+            "convert-i64-to-f64-exact/\n9007199254740993\n/convert-i64-to-f64-exact",
             4,
         ),
         (
-            "i64-from-f64-exact/\ndiv/\n0.0\n0.0\n/div\n/i64-from-f64-exact",
+            "convert-f64-to-i64-exact/\ndivide/\n0.0\n0.0\n/divide\n/convert-f64-to-i64-exact",
             1,
         ),
         (
-            "i64-from-f64-exact/\n9223372036854775808.0\n/i64-from-f64-exact",
+            "convert-f64-to-i64-exact/\n9223372036854775808.0\n/convert-f64-to-i64-exact",
             2,
         ),
-        ("i64-from-f64-exact/\n-1.5\n/i64-from-f64-exact", 3),
+        ("convert-f64-to-i64-exact/\n-1.5\n/convert-f64-to-i64-exact", 3),
         (
-            "i64-from-f64-trunc/\ndiv/\n1.0\n0.0\n/div\n/i64-from-f64-trunc",
+            "convert-f64-to-i64-truncating/\ndivide/\n1.0\n0.0\n/divide\n/convert-f64-to-i64-truncating",
             1,
         ),
         (
-            "i64-from-f64-trunc/\n9223372036854775808.0\n/i64-from-f64-trunc",
+            "convert-f64-to-i64-truncating/\n9223372036854775808.0\n/convert-f64-to-i64-truncating",
             2,
         ),
     ];
@@ -116,9 +119,9 @@ fn numeric_error_cases_are_stable_nominal_values_on_four_engines() {
 
 #[test]
 fn canonical_numeric_operations_require_exact_types_and_explicit_conversions() {
-    let mixed = program("F64", "+/\n1\n2.0\n/+");
+    let mixed = program("f64", "add/\n1\n2.0\n/add");
     assert!(compile_source(&mixed, "mixed.lkjscript", &Limits::default()).is_err());
     let explicit =
-        "main/\nsig/\n->\nF64\n/sig\nf64-from-i64-rounded/\n1\n/f64-from-i64-rounded\n/main\n";
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nf64\n/output\n/sig\nconvert-i64-to-f64-rounded/\n1\n/convert-i64-to-f64-rounded\n/main\n";
     assert!(compile_source(explicit, "explicit.lkjscript", &Limits::default()).is_ok());
 }

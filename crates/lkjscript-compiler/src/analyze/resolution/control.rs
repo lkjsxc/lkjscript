@@ -21,7 +21,7 @@ impl Resolver<'_> {
         let else_branch = self.resolve_expr(else_branch)?;
         let ty = Type::join_control(&then_branch.ty, &else_branch.ty).ok_or_else(|| {
             self.error(format!(
-                "if reachable branches must have the same type: {:?} vs {:?}",
+                "if reachable branches must have the same type: {} vs {}",
                 then_branch.ty, else_branch.ty
             ))
         })?;
@@ -86,6 +86,11 @@ impl Resolver<'_> {
             let value = self.resolve_expr(value)?;
             if value.ty == Type::Never {
                 return Err(self.error("divergent expression cannot initialize a let storage slot"));
+            }
+            if contains_resource_type(&value.ty) && !matches!(value.ty, Type::Resource(_)) {
+                return Err(self.error(
+                    "resource-bearing aggregates cannot be stored in this typed resource slice",
+                ));
             }
             let slot = u8::try_from(self.next_slot)
                 .map_err(|_| self.error("let needs more than 255 bytecode local slots"))?;

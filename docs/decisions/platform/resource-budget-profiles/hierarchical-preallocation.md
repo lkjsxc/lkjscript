@@ -108,7 +108,7 @@ categories and appends these distinct closed categories:
 enum_declarations enum_variants variant_fields enum_recursion_work
 patterns match_arms usefulness_rows usefulness_columns
 usefulness_specialization_work match_plans exhaustiveness_witness_bytes
-hole_count hole_candidates hole_search_work legal_actions
+hole_count hole_candidates hole_search_work legal-actions
 semantic_session_lifetime_fuel semantic_session_input_bytes
 semantic_session_output_bytes semantic_session_nodes
 semantic_session_snapshots semantic_session_retained_bytes
@@ -140,7 +140,7 @@ The appended ceilings are exact inclusive sandbox ceilings below.
 | hole_count | 1,024 |
 | hole_candidates | 16,384 |
 | hole_search_work | 1,000,000 |
-| legal_actions | 65,536 |
+| legal-actions | 65,536 |
 | semantic_session_lifetime_fuel | 1,000,000 |
 | semantic_session_input_bytes, semantic_session_output_bytes | 4,194,304 |
 | semantic_session_nodes | 65,536 |

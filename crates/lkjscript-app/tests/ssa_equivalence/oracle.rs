@@ -81,5 +81,5 @@ pub fn compare_source(source: &str, name: &str) -> ScalarOutcome {
 }
 
 pub fn main_source(return_type: &str, expression: &str) -> String {
-    format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n")
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{expression}\n/main\n")
 }

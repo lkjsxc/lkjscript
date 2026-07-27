@@ -45,11 +45,19 @@ pub enum Constant {
     Proto(u32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceReturnKind {
+    Resource(crate::ResourceKind),
+    Result(crate::ResourceKind),
+}
+
 #[derive(Debug, Clone)]
 pub struct FunctionProto {
     pub name: String,
     pub arity: u8,
     pub locals: u8,
+    pub parameter_resources: Vec<Option<crate::ResourceKind>>,
+    pub return_resource: Option<ResourceReturnKind>,
     pub code: Vec<u8>,
 }
 
@@ -60,6 +68,7 @@ pub struct Chunk {
     pub main: FunctionProto,
     pub required_capabilities: Vec<crate::CapabilityKind>,
     pub global_names: Vec<String>,
+    pub global_prototypes: Vec<Option<u32>>,
     pub products: Vec<ProductMetadata>,
     pub product_fields: Vec<ProductFieldRef>,
     pub enums: Vec<crate::EnumMetadata>,
@@ -83,10 +92,13 @@ impl Chunk {
                 name: "<main>".into(),
                 arity: 0,
                 locals: 0,
+                parameter_resources: Vec::new(),
+                return_resource: None,
                 code: Vec::new(),
             },
             required_capabilities: Vec::new(),
             global_names: Vec::new(),
+            global_prototypes: Vec::new(),
             products: Vec::new(),
             product_fields: Vec::new(),
             enums: Vec::new(),
@@ -113,6 +125,7 @@ impl Chunk {
         }
         let id = self.global_names.len() as u16;
         self.global_names.push(name.to_string());
+        self.global_prototypes.push(None);
         id
     }
 }

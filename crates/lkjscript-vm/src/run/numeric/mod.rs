@@ -152,10 +152,10 @@ fn into_f64(number: Number) -> f64 {
 impl Arithmetic {
     fn name(self) -> &'static str {
         match self {
-            Self::Add => "+",
-            Self::Subtract => "-",
-            Self::Multiply => "*",
-            Self::Divide => "div",
+            Self::Add => "add",
+            Self::Subtract => "subtract",
+            Self::Multiply => "multiply",
+            Self::Divide => "divide",
         }
     }
 }

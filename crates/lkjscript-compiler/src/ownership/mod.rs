@@ -1,4 +1,4 @@
-//! Mandatory bounded ownership analysis for the initial `Owned Buf` safe island.
+//! Mandatory bounded ownership analysis for the initial `byte-vector` safe island.
 
 use std::collections::{BTreeMap, BTreeSet};
 

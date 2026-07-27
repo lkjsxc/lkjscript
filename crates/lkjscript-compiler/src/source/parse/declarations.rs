@@ -2,7 +2,9 @@ use lkjscript_core::Limits;
 
 use crate::source::{SourceNode, SourceOrigin, SourceResult, SourceSpan, SyntaxKind};
 
-use super::declaration_shapes::{valid_enum, valid_function, valid_name, valid_product_field};
+use super::declaration_shapes::{
+    valid_enum, valid_function, valid_name, valid_product_field, valid_signature,
+};
 
 pub(super) fn validate_top_level(
     forms: &[SourceNode],
@@ -48,13 +50,7 @@ fn validate_declaration_shape(
     origin: &SourceOrigin,
 ) -> SourceResult<()> {
     let valid = match name {
-        "imports" => !form.children.is_empty() && form.children.iter().all(|import| {
-            matches!(
-                (&import.kind, import.children.as_slice()),
-                (SyntaxKind::Call { name }, [SourceNode { kind: SyntaxKind::Str { value }, .. }])
-                    if name == "import" && valid_import(value)
-            )
-        }),
+        "imports" => !form.children.is_empty() && form.children.iter().all(valid_import),
         "main" => {
             matches!(
                 form.children.as_slice(),
@@ -62,8 +58,7 @@ fn validate_declaration_shape(
                     kind: SyntaxKind::Call { name },
                     children,
                     ..
-                }, _] if name == "sig"
-                    && children.iter().any(|node| matches!(node.kind, SyntaxKind::Symbol { ref name } if name == "->"))
+                }, _] if name == "sig" && valid_signature(children)
             ) || matches!(
                 form.children.as_slice(),
                 [SourceNode {
@@ -73,7 +68,7 @@ fn validate_declaration_shape(
                 }, SourceNode { kind: SyntaxKind::Call { name: params }, .. }, _]
                     if name == "sig"
                         && params == "params"
-                        && has_arrow(children)
+                        && valid_signature(children)
             )
         }
         "def" => valid_named_body(&form.children, "fn", valid_function),
@@ -108,12 +103,6 @@ fn validate_declaration_shape(
         form.span,
         format!("malformed top-level {name} declaration shape"),
     ))
-}
-
-fn has_arrow(children: &[SourceNode]) -> bool {
-    children
-        .iter()
-        .any(|node| matches!(node.kind, SyntaxKind::Symbol { ref name } if name == "->"))
 }
 
 fn valid_named_only(children: &[SourceNode]) -> bool {
@@ -158,16 +147,52 @@ fn valid_named_body(
         && valid_body(&body.children)
 }
 
-fn valid_import(value: &str) -> bool {
-    let Some((path, names)) = value.split_once('#') else {
+fn valid_import(node: &SourceNode) -> bool {
+    let SourceNode {
+        kind: SyntaxKind::Call { name },
+        children,
+        ..
+    } = node
+    else {
         return false;
     };
-    let names: Vec<_> = names.split(',').collect();
+    let [module, declarations] = children.as_slice() else {
+        return false;
+    };
+    let module = matches!(module,
+        SourceNode { kind: SyntaxKind::Call { name }, children, .. }
+            if name == "module" && matches!(children.as_slice(),
+                [SourceNode { kind: SyntaxKind::Str { value }, .. }] if valid_module(value)));
+    let names = match declarations {
+        SourceNode {
+            kind: SyntaxKind::Call { name },
+            children,
+            ..
+        } if name == "declarations" && !children.is_empty() => children,
+        _ => return false,
+    };
+    name == "import"
+        && module
+        && names.iter().all(|node| {
+            matches!(node,
+            SourceNode { kind: SyntaxKind::Symbol { name }, .. }
+                if super::names::is_source_identifier(name))
+        })
+        && names.windows(2).all(|pair| match pair {
+            [SourceNode {
+                kind: SyntaxKind::Symbol { name: left },
+                ..
+            }, SourceNode {
+                kind: SyntaxKind::Symbol { name: right },
+                ..
+            }] => left < right,
+            _ => false,
+        })
+}
+
+fn valid_module(path: &str) -> bool {
     !path.is_empty()
         && path.ends_with(".lkjscript")
         && !path.starts_with('.')
-        && names.iter().all(|name| {
-            super::names::is_source_identifier(name) && *name != "*" && !name.contains(':')
-        })
-        && names.windows(2).all(|pair| pair[0] < pair[1])
+        && !path.contains('#')
 }

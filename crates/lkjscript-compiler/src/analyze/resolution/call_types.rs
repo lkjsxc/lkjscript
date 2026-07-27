@@ -35,8 +35,8 @@ impl Resolver<'_> {
             if !Type::unify_assignable(&argument.ty, parameter) {
                 return Err(self.diagnostic(AnalysisDiagnostic::TypeMismatch {
                     context: format!("{name}: arg type"),
-                    expected: format!("{parameter:?}"),
-                    actual: format!("{:?}", argument.ty),
+                    expected: format!("{parameter}"),
+                    actual: format!("{}", argument.ty),
                 }));
             }
         }

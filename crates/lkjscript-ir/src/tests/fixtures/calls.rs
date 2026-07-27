@@ -3,13 +3,13 @@ use crate::*;
 
 pub(crate) fn bounded_call_program() -> Program {
     let declared = Signature {
-        type_parameters: vec!["T".into()],
+        type_parameters: vec!["t".into()],
         bounds: vec![TraitBound {
-            parameter: "T".into(),
+            parameter: "t".into(),
             trait_id: TraitId::new(0),
         }],
-        parameters: vec![SsaType::TypeParameter("T".into())],
-        result: Box::new(SsaType::TypeParameter("T".into())),
+        parameters: vec![SsaType::TypeParameter("t".into())],
+        result: Box::new(SsaType::TypeParameter("t".into())),
     };
     let resolved = Signature::monomorphic(vec![SsaType::I64], SsaType::I64);
     Program {
@@ -33,7 +33,7 @@ pub(crate) fn bounded_call_program() -> Program {
                     id: BlockId::new(0),
                     parameters: vec![BlockParameter {
                         id: ValueId::new(0),
-                        ty: SsaType::TypeParameter("T".into()),
+                        ty: SsaType::TypeParameter("t".into()),
                         owner_place: None,
                         origin: Origin::SYNTHETIC,
                     }],
@@ -64,7 +64,7 @@ pub(crate) fn bounded_call_program() -> Program {
                                 signature: resolved,
                                 instantiation: Some(GenericInstantiation {
                                     substitutions: vec![TypeSubstitution {
-                                        parameter: "T".into(),
+                                        parameter: "t".into(),
                                         ty: SsaType::I64,
                                     }],
                                     witnesses: vec![TraitWitness {

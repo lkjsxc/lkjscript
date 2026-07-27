@@ -65,7 +65,7 @@ fn all_closed_hole_transactions_validate_atomically() {
             node.index,
             node.fingerprint.clone(),
             "body".to_string(),
-            "I64".to_string(),
+            "i64".to_string(),
         )
     };
     let (declaration_key, entity_fingerprint, node, node_fingerprint, hole_identity, expected_type) =
@@ -140,7 +140,7 @@ fn all_closed_hole_transactions_validate_atomically() {
         node_fingerprint: node.fingerprint.clone(),
         hole_identity: "inserted".into(),
         goal: None,
-        expected_type: "I64".into(),
+        expected_type: "i64".into(),
     };
     let result = apply(&complete, revision, &snapshot.source_units, vec![insert]);
     let ResponseResult::ApplyTransaction { transaction } = result else {
@@ -153,7 +153,7 @@ fn all_closed_hole_transactions_validate_atomically() {
 
     let deletable = directory.join("delete.lkjscript");
     let delete_source =
-        "main/\nsig/\n->\nI64\n/sig\ndo/\n0\nhole/\nname/\nlast\n/name\n/hole\n/do\n/main\n";
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\n0\nhole/\nname/\nlast\n/name\n/hole\n/do\n/main\n";
     std::fs::write(&deletable, delete_source).expect("write deletable source");
     let (revision, snapshot) = super::snapshot(&deletable);
     let declaration = snapshot
@@ -172,7 +172,7 @@ fn all_closed_hole_transactions_validate_atomically() {
         node: node.index,
         node_fingerprint: node.fingerprint.clone(),
         hole_identity: "last".into(),
-        expected_type: "I64".into(),
+        expected_type: "i64".into(),
     };
     let result = apply(&deletable, revision, &snapshot.source_units, vec![delete]);
     let ResponseResult::ApplyTransaction { transaction } = result else {

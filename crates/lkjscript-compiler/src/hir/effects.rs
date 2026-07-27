@@ -28,6 +28,10 @@ impl EffectSet {
         self.0
     }
 
+    pub(crate) const fn from_bits(bits: u16) -> Self {
+        Self(bits)
+    }
+
     pub const fn contains(self, effects: Self) -> bool {
         self.0 & effects.0 == effects.0
     }

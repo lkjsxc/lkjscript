@@ -43,10 +43,11 @@ impl JitHeapServices<'_> {
                         i64::try_from(text.len()).map_err(|_| NativeServiceError::Trap)?,
                     ))
                 } else {
-                    let index = index(as_i64(argument(1)?)?, "str-ref").map_err(|message| {
-                        self.last_trap = Some(message);
-                        NativeServiceError::Trap
-                    })?;
+                    let index =
+                        index(as_i64(argument(1)?)?, "string-byte-at").map_err(|message| {
+                            self.last_trap = Some(message);
+                            NativeServiceError::Trap
+                        })?;
                     let byte = text.as_bytes().get(index).copied().ok_or_else(|| {
                         self.last_trap = Some("str-ref out of bounds".into());
                         NativeServiceError::Trap

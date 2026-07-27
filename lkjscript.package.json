@@ -52,7 +52,8 @@
     "src/lib/lkjedit/keys.lkjscript", "src/lib/lkjedit/lines.lkjscript", "src/lib/lkjedit/load.lkjscript",
     "src/lib/lkjedit/loop.lkjscript", "src/lib/lkjedit/save.lkjscript", "src/lib/lkjedit/state.lkjscript",
     "src/lib/lkjedit/view.lkjscript", "src/std/ansi/clear.lkjscript", "src/std/ansi/esc.lkjscript",
-    "src/std/ansi/home.lkjscript", "src/std/buffer/insert-at.lkjscript", "src/std/fs/open-read.lkjscript",
+    "src/std/ansi/home.lkjscript", "src/std/buffer/insert-at.lkjscript", "src/std/fs/absolute-path.lkjscript",
+    "src/std/fs/open-read.lkjscript",
     "src/std/fs/open-write.lkjscript", "src/std/fs/path-exists.lkjscript", "src/std/fs/read-all.lkjscript",
     "src/std/fs/read-file.lkjscript", "src/std/fs/text/file-to-buf.lkjscript",
     "src/std/fs/text/join-lines.lkjscript", "src/std/fs/text/split-lines.lkjscript",
@@ -81,7 +82,7 @@
   ],
   "dependencies": [],
   "capabilities": [
-    "Arguments", "Clock", "FileSystem", "Network", "Sqlite", "Stdio", "Terminal"
+    "arguments", "clock", "file-system", "network", "sqlite", "stdio", "terminal"
   ],
   "targets": [
 {

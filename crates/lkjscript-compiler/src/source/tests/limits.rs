@@ -4,20 +4,20 @@ use super::*;
 fn all_existing_source_limits_remain_enforced_at_boundaries() {
     let accepted = unit_main("unit");
     let limits = Limits {
-        max_tokens_per_file: 7,
+        max_tokens_per_file: 10,
         max_toplevel_forms: 1,
-        max_nest_depth: 2,
+        max_nest_depth: 3,
         max_children: 2,
         ..Limits::default()
     };
     assert!(validate(&accepted, "limit.lkjscript", &limits).is_ok());
     for limits in [
         Limits {
-            max_tokens_per_file: 6,
+            max_tokens_per_file: 9,
             ..limits
         },
         Limits {
-            max_nest_depth: 1,
+            max_nest_depth: 2,
             ..limits
         },
         Limits {
@@ -30,7 +30,7 @@ fn all_existing_source_limits_remain_enforced_at_boundaries() {
         assert_eq!(error.category().as_str(), "resource-limit");
     }
     let imports = format!(
-        "imports/\nimport/\na.lkjscript#a\n/import\nimport/\nb.lkjscript#b\n/import\n/imports\n{}",
+        "imports/\nimport/\nmodule/\na.lkjscript\n/module\ndeclarations/\na\n/declarations\n/import\nimport/\nmodule/\nb.lkjscript\n/module\ndeclarations/\nb\n/declarations\n/import\n/imports\n{}",
         named_def("extra")
     );
     let error =
@@ -41,7 +41,8 @@ fn all_existing_source_limits_remain_enforced_at_boundaries() {
 #[test]
 fn match_structural_markers_have_a_separate_hard_depth_bound() {
     let nesting = 33;
-    let mut source = String::from("main/\nsig/\n->\nI64\n/sig\nmatch/\n");
+    let mut source =
+        String::from("main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n");
     source.push_str(&"fields/\n".repeat(nesting));
     source.push_str("x\n");
     source.push_str(&"/fields\n".repeat(nesting));

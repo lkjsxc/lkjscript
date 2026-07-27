@@ -27,7 +27,7 @@ fn evaluate(source: &str) -> lkjscript_core::Result<OwnedValue> {
 }
 
 fn bool_main(expression: &str) -> String {
-    format!("main/\nsig/\n->\nBool\n/sig\n{expression}\n/main\n")
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\n{expression}\n/main\n")
 }
 
 fn assert_main_bool(expression: &str, expected: bool) {
@@ -41,7 +41,7 @@ fn assert_main_bool(expression: &str, expected: bool) {
 
 #[test]
 fn explicit_main_returns_its_exact_body_value() {
-    let source = "main/\nsig/\n->\nI64\n/sig\n42\n/main\n";
+    let source = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n42\n/main\n";
     assert_eq!(evaluate(source).expect("evaluate main").as_i64(), Some(42));
     let program = compile(source).expect("compile explicit main");
     let chunk = program.bytecode();
@@ -54,7 +54,7 @@ fn explicit_main_returns_its_exact_body_value() {
 
 #[test]
 fn local_var_set_and_shadowing_execute_through_ssa() {
-    let source = "main/\nsig/\n->\nI64\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n1\ndo/\nset/\nx\n2\n/set\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n+/\nx\n1\n/+\ndo/\nset/\nx\n+/\nx\n3\n/+\n/set\nx\n/do\n/var\n/do\n/var\n/main\n";
+    let source = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n1\ndo/\nset/\nx\n2\n/set\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\nadd/\nx\n1\n/add\ndo/\nset/\nx\nadd/\nx\n3\n/add\n/set\nx\n/do\n/var\n/do\n/var\n/main\n";
     let program = compile(source).expect("compile local mutation");
     assert!(program
         .bytecode()
@@ -72,13 +72,13 @@ fn local_var_set_and_shadowing_execute_through_ssa() {
         Some(6)
     );
 
-    let set_unit = "main/\nsig/\n->\nUnit\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n0\nset/\nx\n1\n/set\n/var\n/main\n";
+    let set_unit = "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n0\nset/\nx\n1\n/set\n/var\n/main\n";
     assert!(evaluate(set_unit).expect("set returns Unit").is_unit());
 }
 
 #[test]
 fn function_local_var_is_per_invocation_and_typed() {
-    let source = "def/\nname/\nincrement\n/name\nfn/\nsig/\nI64\n->\nI64\n/sig\nparams/\nstart\nI64\n/params\nvar/\nname/\nvalue\n/name\ntype/\nI64\n/type\nstart\ndo/\nset/\nvalue\n+/\nvalue\n1\n/+\n/set\nvalue\n/do\n/var\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\n+/\nincrement/\n4\n/increment\nincrement/\n9\n/increment\n/+\n/main\n";
+    let source = "def/\nname/\nincrement\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nstart\ni64\n/params\nvar/\nname/\nvalue\n/name\ntype/\ni64\n/type\nstart\ndo/\nset/\nvalue\nadd/\nvalue\n1\n/add\n/set\nvalue\n/do\n/var\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nadd/\nincrement/\n4\n/increment\nincrement/\n9\n/increment\n/add\n/main\n";
     assert_eq!(
         evaluate(source).expect("function-local mutation").as_i64(),
         Some(15)
@@ -88,35 +88,35 @@ fn function_local_var_is_per_invocation_and_typed() {
 #[test]
 fn immutable_parameter_function_global_and_cross_function_set_are_rejected() {
     let immutable =
-        "main/\nsig/\n->\nUnit\n/sig\nlet/\nbind/\nx\n1\n/bind\nset/\nx\n2\n/set\n/let\n/main\n";
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nlet/\nbind/\nx\n1\n/bind\nset/\nx\n2\n/set\n/let\n/main\n";
     assert!(compile(immutable).is_err());
 
-    let parameter = "def/\nname/\nf\n/name\nfn/\nsig/\nI64\n->\nUnit\n/sig\nparams/\nx\nI64\n/params\nset/\nx\n2\n/set\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nf/\n1\n/f\n/main\n";
+    let parameter = "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\nx\ni64\n/params\nset/\nx\n2\n/set\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n1\n/f\n/main\n";
     assert!(compile(parameter).is_err());
 
-    let function = "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nset/\nf\nunit\n/set\n/main\n";
+    let function = "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nunit\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nset/\nf\nunit\n/set\n/main\n";
     assert!(compile(function).is_err());
 
-    let source_global = "def/\nname/\nx\n/name\ntype/\nI64\n/type\n0\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+    let source_global = "def/\nname/\nx\n/name\ntype/\ni64\n/type\n0\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     assert!(compile(source_global).is_err());
 
-    let cross_function = "def/\nname/\nmutate\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nset/\nstate\n1\n/set\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nvar/\nname/\nstate\n/name\ntype/\nI64\n/type\n0\nmutate/\n/mutate\n/var\n/main\n";
+    let cross_function = "def/\nname/\nmutate\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nset/\nstate\n1\n/set\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nvar/\nname/\nstate\n/name\ntype/\ni64\n/type\n0\nmutate/\n/mutate\n/var\n/main\n";
     assert!(compile(cross_function).is_err());
 }
 
 #[test]
 fn local_var_exact_type_and_initializer_scope_are_enforced() {
-    let mismatch = "main/\nsig/\n->\nUnit\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n1.0\nunit\n/var\n/main\n";
+    let mismatch = "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n1.0\nunit\n/var\n/main\n";
     assert!(compile(mismatch).is_err());
 
-    let set_mismatch = "main/\nsig/\n->\nUnit\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n1\nset/\nx\n1.0\n/set\n/var\n/main\n";
+    let set_mismatch = "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n1\nset/\nx\n1.0\n/set\n/var\n/main\n";
     assert!(compile(set_mismatch).is_err());
 
     let self_initializer =
-        "main/\nsig/\n->\nI64\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\nx\nx\n/var\n/main\n";
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\nx\nx\n/var\n/main\n";
     assert!(compile(self_initializer).is_err());
 
-    let outer_initializer = "main/\nsig/\n->\nI64\n/sig\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\n7\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\nx\nx\n/var\n/var\n/main\n";
+    let outer_initializer = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\n7\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\nx\nx\n/var\n/var\n/main\n";
     assert_eq!(
         evaluate(outer_initializer)
             .expect("initializer sees outer binding")
@@ -127,7 +127,7 @@ fn local_var_exact_type_and_initializer_scope_are_enforced() {
 
 #[test]
 fn immutable_product_state_threads_through_a_local_var() {
-    let source = "product/\nname/\nCounterState\n/name\nfields/\nfield/\nname/\ncount\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\ndef/\nname/\nincrement-state\n/name\nfn/\nsig/\nProduct\nCounterState\n->\nProduct\nCounterState\n/sig\nparams/\nstate\nProduct/\nCounterState\n/Product\n/params\nwith-field/\nstate\ncount\n+/\nfield/\nstate\ncount\n/field\n1\n/+\n/with-field\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nvar/\nname/\nstate\n/name\ntype/\nProduct\nCounterState\n/type\nproduct-value/\nCounterState\nfield/\ncount\n0\n/field\n/product-value\ndo/\nset/\nstate\nincrement-state/\nstate\n/increment-state\n/set\nset/\nstate\nincrement-state/\nstate\n/increment-state\n/set\nfield/\nstate\ncount\n/field\n/do\n/var\n/main\n";
+    let source = "product/\nname/\ncounter-state\n/name\nfields/\nfield/\nname/\ncount\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\ndef/\nname/\nincrement-state\n/name\nfn/\nsig/\ninputs/\nproduct/\ncounter-state\n/product\n/inputs\noutput/\nproduct/\ncounter-state\n/product\n/output\n/sig\nparams/\nstate\nproduct/\ncounter-state\n/product\n/params\nwith-field/\nstate\ncount\nadd/\nfield/\nstate\ncount\n/field\n1\n/add\n/with-field\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\nstate\n/name\ntype/\nproduct\ncounter-state\n/type\nproduct-value/\ncounter-state\nfield/\ncount\n0\n/field\n/product-value\ndo/\nset/\nstate\nincrement-state/\nstate\n/increment-state\n/set\nset/\nstate\nincrement-state/\nstate\n/increment-state\n/set\nfield/\nstate\ncount\n/field\n/do\n/var\n/main\n";
     assert_eq!(
         evaluate(source).expect("thread product state").as_i64(),
         Some(2)
@@ -137,9 +137,9 @@ fn immutable_product_state_threads_through_a_local_var() {
 #[test]
 fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
     let argument = concat!(
-        "main/\nsig/\nCapability/\nArguments\n/Capability\n->\nI64\n/sig\n",
-        "params/\narguments\nCapability/\nArguments\n/Capability\n/params\n",
-        "str-len/\nunwrap-some/\narg/\narguments\n0\n/arg\n/unwrap-some\n/str-len\n/main\n"
+        "main/\nsig/\ninputs/\ncapability/\narguments\n/capability\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "params/\narguments\ncapability/\narguments\n/capability\n/params\n",
+        "string-byte-length/\nunwrap-some/\nargument-at/\narguments\n0\n/argument-at\n/unwrap-some\n/string-byte-length\n/main\n"
     );
     let program = compile(argument).expect("compile argument main");
     assert_eq!(
@@ -161,15 +161,15 @@ fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
         true,
     );
     assert_main_bool(
-        "list-equal/\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\n/list-equal",
+        "equal-list/\nlist-prepend/\n1\nempty-list/\ni64\n/empty-list\n/list-prepend\nlist-prepend/\n1\nempty-list/\ni64\n/empty-list\n/list-prepend\n/equal-list",
         true,
     );
-    assert_main_bool("f64-bits-equal/\n0.0\n-0.0\n/f64-bits-equal", false);
+    assert_main_bool("equal-f64-bits/\n0.0\n-0.0\n/equal-f64-bits", false);
 }
 
 #[test]
 fn removed_top_level_effects_and_legacy_do_are_compile_errors() {
     assert!(compile("do/\nunit\n/do\n").is_err());
-    let with_main = "do/\nprint/\nstr/\nside effect\n/str\n/print\n/do\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+    let with_main = "do/\nprint/\nstring-literal/\nside effect\n/string-literal\n/print\n/do\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     assert!(compile(with_main).is_err());
 }

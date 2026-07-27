@@ -57,21 +57,21 @@ rule. Bytes is not yet a current language type.
 and polymorphic schemes. In particular, closure allocation or duplication
 remains unobservable.
 
-## `same-object`
+## `is-same-object`
 
 Both operands have exactly the same static type. Current supported types are:
 
 - Buf: equality of the exact mutable buffer object, never byte-content equality;
 - Handle: equality of the opaque capability token.
 
-`buf-clone` produces a distinct object. Copies of one Handle token remain the
+`copy-buf` produces a distinct object. Copies of one Handle token remain the
 same identity even after close; operations on a closed token still fail through
 the existing stale-handle contract. Integers cannot be compared to handles.
 
 No source operation exposes closure identity. Future Cell/Ref identity requires
 those types to be implemented first.
 
-## `list-equal`
+## `equal-list`
 
 Both operands have exactly the same `List T` type, and `T` must support
 `equal-value`. Nested List elements are not implicitly traversed; a future
@@ -94,7 +94,7 @@ chunks.
 The operation reads memory and may trap on the fixed bound or malformed values.
 It does not allocate language heap objects or mutate either list.
 
-## `f64-bits-equal`
+## `equal-f64-bits`
 
 Both operands are exactly F64. Equality compares the complete IEEE-754 bit
 patterns, equivalent to Rust `f64::to_bits` equality:
@@ -126,9 +126,9 @@ rather than exposing raw tagged-value or closure identity.
 
 ## Effects
 
-- `equal-value`, `same-object`, and `f64-bits-equal` conservatively read memory
+- `equal-value`, `is-same-object`, and `equal-f64-bits` conservatively read memory
   because current VM representations may be heap-backed;
-- `list-equal` reads memory and may trap;
+- `equal-list` reads memory and may trap;
 - none of the operations performs host IO, language allocation, mutation, or
   process exit.
 
@@ -144,7 +144,7 @@ The complete cutover covers:
 - list bound and malformed/improper-list errors;
 - F64 NaN payloads and signed zero under both F64 equality operations;
 - rejection of mixed numeric equality, List under `equal-value`, scalar under
-  `same-object`, non-F64 bit equality, closure equality, unconstrained generic
+  `is-same-object`, non-F64 bit equality, closure equality, unconstrained generic
   equality, old `eq`/`ne`, and retired opcode byte 21;
 - exact HIR operation identity, effects, bytecode lowering, disassembly, and VM
   outcomes;

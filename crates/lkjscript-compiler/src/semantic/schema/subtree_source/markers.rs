@@ -3,10 +3,14 @@ use crate::semantic::schema::SemanticNodeKind as Kind;
 pub(super) fn marker(kind: Kind) -> Option<&'static str> {
     Some(match kind {
         Kind::Import => "import",
+        Kind::ImportModule => "module",
+        Kind::ImportDeclarations => "declarations",
         Kind::Main => "main",
         Kind::FunctionDeclaration => "def",
         Kind::Function => "fn",
         Kind::Signature => "sig",
+        Kind::SignatureInputs => "inputs",
+        Kind::SignatureOutput => "output",
         Kind::Parameters => "params",
         Kind::TypeVariables => "forall",
         Kind::Bounds => "bounds",

@@ -90,38 +90,32 @@ pub(in crate::analyze) fn parse_product_field(
 }
 
 pub(in crate::analyze) fn is_declaration_type_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .chars()
-            .next()
-            .is_some_and(|character| character.is_ascii_uppercase())
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    lkjscript_contracts::is_identifier(name) || crate::source::module_names::is_internal_name(name)
 }
 
 pub(in crate::analyze) fn is_builtin_type_name(name: &str) -> bool {
     matches!(
         name,
-        "Unit"
-            | "Bool"
-            | "I64"
-            | "F64"
-            | "NumericError"
-            | "Utf8Error"
-            | "SystemError"
-            | "Str"
-            | "Buf"
-            | "Path"
-            | "Capability"
-            | "Symbol"
-            | "Handle"
-            | "List"
-            | "Option"
-            | "Result"
-            | "Product"
-            | "Any"
-            | "Int"
-            | "Float"
+        "never"
+            | "unit"
+            | "bool"
+            | "i64"
+            | "f64"
+            | "numeric-error"
+            | "utf8-error"
+            | "system-error"
+            | "string"
+            | "buf"
+            | "path"
+            | "capability"
+            | "symbol"
+            | "handle"
+            | "list"
+            | "option"
+            | "result"
+            | "product"
+            | "any"
+            | "int"
+            | "float"
     )
 }

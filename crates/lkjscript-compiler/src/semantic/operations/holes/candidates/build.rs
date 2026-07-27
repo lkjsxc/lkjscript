@@ -132,7 +132,7 @@ pub(super) fn candidate(
                 | Expression::Trap { .. }
                 | Expression::Exit { .. }
         ) {
-            "Never".into()
+            "never".into()
         } else {
             super::super::types::canonical(ty)
         },

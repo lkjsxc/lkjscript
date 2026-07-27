@@ -19,21 +19,21 @@ pub(crate) fn consume_affine_arguments(
         if !seen.insert(*argument) {
             return fail("SSA call duplicates one affine argument");
         }
-        let handle = ty == &SsaType::Handle;
+        let resource = matches!(ty, SsaType::Resource(_));
         let Some(fact) = state.affine.get(argument) else {
-            if handle && !consume_handles {
+            if resource && !consume_handles {
                 continue;
             }
             return Err(IrError::new("SSA call uses an unavailable affine argument"));
         };
-        if handle && !fact.transferred && !consume_handles {
+        if resource && !fact.transferred && !consume_handles {
             continue;
         }
         if user_call && is_owned_buf(ty) && !fact.transferred {
             return fail("SSA Owned call argument requires explicit Move transfer provenance");
         }
         if let Some(place) = current_owner_place(state, *argument) {
-            if handle && consume_handles {
+            if resource && consume_handles {
                 state.owners.remove(&place);
             } else {
                 return fail(format!(

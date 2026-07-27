@@ -14,11 +14,11 @@ impl CoreTrait {
 
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Copy => "Copy",
-            Self::Clone => "Clone",
-            Self::Drop => "Drop",
-            Self::Send => "Send",
-            Self::Sync => "Sync",
+            Self::Copy => "copy",
+            Self::Clone => "clone",
+            Self::Drop => "drop",
+            Self::Send => "send",
+            Self::Sync => "sync",
         }
     }
 

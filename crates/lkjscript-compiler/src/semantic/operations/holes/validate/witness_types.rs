@@ -16,7 +16,9 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
             capability: kind.as_str().into(),
         },
         Type::Symbol => T::Symbol {},
-        Type::Handle => T::Handle {},
+        Type::Resource(kind) => T::Resource {
+            resource: kind.as_str().into(),
+        },
         Type::Product(name) => T::Product { name: name.clone() },
         Type::Enum { id, arguments, .. }
             if id.bytes() == lkjscript_core::OPTION_ID && arguments.len() == 1 =>
@@ -54,15 +56,10 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         }
         Type::Enum { .. } => return None,
         Type::Param(name) => T::Variable { name: name.clone() },
-        Type::Owned(inner) => T::Owned {
-            inner: Box::new(type_expression(inner)?),
-        },
-        Type::Ref(inner) => T::Ref {
-            inner: Box::new(type_expression(inner)?),
-        },
-        Type::RefMut(inner) => T::RefMut {
-            inner: Box::new(type_expression(inner)?),
-        },
+        Type::Owned(inner) if inner.as_ref() == &Type::Buf => T::ByteVector {},
+        Type::Ref(inner) if inner.as_ref() == &Type::Buf => T::ByteSlice {},
+        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => T::ByteSliceMut {},
+        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => return None,
         Type::List(inner) => T::List {
             element: Box::new(type_expression(inner)?),
         },

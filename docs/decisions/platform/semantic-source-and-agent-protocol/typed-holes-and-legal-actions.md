@@ -10,7 +10,7 @@ legal actions, and checked hole transactions.
 ## Status
 
 **Current.** Semantic Source Schema implements typed expression holes,
-`hole_context`, `legal_actions`, and the four closed hole transactions over the
+`hole-context`, `legal-actions`, and the four closed hole transactions over the
 Current the removed legacy source contract expression subset plus Current the canonical source contract enum, match,
 Never, and structured-control forms. Schema input is historical and rejected.
 
@@ -36,14 +36,14 @@ may retain derived facts without granting completeness to a containing hole.
 
 ## Bounded Responses
 
-`hole_context` returns deterministically ordered candidates from exact literals,
+`hole-context` returns deterministically ordered candidates from exact literals,
 visible bindings, enum/product/Option/Result constructors, directly callable
 functions, exact conversions, match skeletons, and legal return/break/continue
 or Never forms. Bounded nested candidates state result type, effects, ownership,
 capability facts when available, construction cost, exact semantic edit,
 inclusion reason, and validating checker/proof.
 
-`legal_actions` reports legal child kinds, constructors, required fields,
+`legal-actions` reports legal child kinds, constructors, required fields,
 expected types, applicable bindings, and transaction kinds for its claimed
 subset. Incomplete Edition/construct coverage is explicit. Neither service
 claims full synthesis or full-language token masking.
@@ -52,12 +52,12 @@ Both responses include `supported`, `truncated`, charged category/count, omitted
 category counts when known, and a typed unsupported/truncation reason. Candidate
 rank is the closed category, effect cost, ownership cost, construction cost,
 canonical source, and candidate identity tuple. Every emitted candidate carries
-one complete canonical snippet and an exact `replace_hole` semantic edit; a
+one complete canonical snippet and an exact `replace-hole` semantic edit; a
 context commonly carries several complete alternatives.
 
 Exploration uses the request's outer-owned ledger and reserves resource profile
 `hole_search_work` and `hole_candidates` before candidate construction.
-`legal_actions` reuses that ledger and reserves its exact bounded amplification
+`legal-actions` reuses that ledger and reserves its exact bounded amplification
 before action construction. Typed budget exhaustion propagates unchanged to the
 internal result and cannot be presented as an empty complete result. Unsupported contexts
 return explicit unsupported, then ordinary authoring may use bounded compiler validation.
@@ -68,8 +68,8 @@ return, nearest-loop result/depth, available forms, and whether Never is admissi
 
 ## Transactions
 
-The exact hole operations are `insert_hole`, `fill_hole`, `refine_hole`, and
-`delete_hole` where deletion leaves a structurally legal node. Each atomic
+The exact hole operations are `insert-hole`, `fill-hole`, `refine-hole`, and
+`delete-hole` where deletion leaves a structurally legal node. Each atomic
 transaction pins source/schema/profile/root/revision,
 checks node and semantic preconditions, then reruns exact type, effect,
 ownership, control/divergence, incompleteness, and resource validation before

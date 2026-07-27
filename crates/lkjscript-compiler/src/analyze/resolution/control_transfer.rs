@@ -11,7 +11,7 @@ impl Resolver<'_> {
         }
         if value.ty != self.return_type {
             return Err(self.error(format!(
-                "return value type {:?} does not exactly equal {:?}",
+                "return value type {} does not exactly equal {}",
                 value.ty, self.return_type
             )));
         }
@@ -38,7 +38,7 @@ impl Resolver<'_> {
         }
         if value.ty != target.result_type {
             return Err(self.error(format!(
-                "break value type {:?} does not exactly equal loop result {:?}",
+                "break value type {} does not exactly equal loop result {}",
                 value.ty, target.result_type
             )));
         }

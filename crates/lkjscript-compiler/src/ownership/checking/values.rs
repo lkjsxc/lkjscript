@@ -17,14 +17,16 @@ pub(in crate::ownership) fn check_values_expr(
             if is_affine_resource(ty) {
                 let place = places
                     .get(&reference.binding)
-                    .ok_or_else(|| Error::msg("affine Handle has no ownership place"))?;
+                    .ok_or_else(|| Error::msg("affine typed resource has no ownership place"))?;
                 if state.initialized.get(place) != Some(&true) {
-                    return Err(Error::msg("affine Handle was already moved or dropped"));
+                    return Err(Error::msg(
+                        "affine typed resource was already moved or dropped",
+                    ));
                 }
             }
             if is_owned(ty) {
                 return Err(Error::msg(
-                    "Owned Buf is affine and cannot be loaded or copied; use move/ name /move",
+                    "byte-vector is affine and cannot be loaded or copied; use move/ name /move",
                 ));
             }
             if is_ref_mut(ty) || is_ref(ty) {
@@ -44,7 +46,7 @@ pub(in crate::ownership) fn check_values_expr(
                 }
                 if is_ref_mut(ty) && !state.consumed_ref_mut.insert(reference.binding) {
                     return Err(Error::msg(
-                        "RefMut Buf is affine and may be used only once in this slice",
+                        "byte-slice-mut is affine and may be used only once in this slice",
                     ));
                 }
             }
@@ -84,7 +86,7 @@ pub(in crate::ownership) fn check_values_expr(
                 return Err(Error::msg("borrow has mismatched place/binding identity"));
             }
             if !state.initialized.get(place).copied().unwrap_or(false) {
-                return Err(Error::msg("cannot borrow Owned Buf after move"));
+                return Err(Error::msg("cannot borrow byte-vector after move"));
             }
             if state.loans.values().flatten().any(|item| item.id == *loan) {
                 return Err(Error::msg("duplicate LoanId in ownership facts"));
@@ -95,7 +97,7 @@ pub(in crate::ownership) fn check_values_expr(
                     && live.iter().any(|item| item.kind == BorrowKind::Mutable))
             {
                 return Err(Error::msg(
-                    "conflicting shared and exclusive Owned Buf loans",
+                    "conflicting shared and exclusive byte-vector loans",
                 ));
             }
             live.push(Loan {

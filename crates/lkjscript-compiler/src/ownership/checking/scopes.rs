@@ -91,7 +91,7 @@ pub(in crate::ownership) fn check_scopes_expr(
             if is_owned(&ty) || is_affine_resource(&ty) {
                 let place = places
                     .get(target)
-                    .ok_or_else(|| Error::msg("Owned Buf assignment target has no PlaceId"))?;
+                    .ok_or_else(|| Error::msg("byte-vector assignment target has no PlaceId"))?;
                 if state.initialized.get(place).copied().unwrap_or(false) {
                     return Err(Error::msg(
                         "affine assignment is only reinitialization after move or drop",
@@ -160,7 +160,7 @@ fn require_resource_consumed(
             .binding(binding)
             .map_or("<unknown>", |binding| binding.name.as_str());
         Err(Error::msg(format!(
-            "affine Handle local {name} ({binding:?}) must be returned, moved, or dropped before scope exit"
+            "affine typed resource local {name} ({binding:?}) must be returned, moved, or dropped before scope exit"
         )))
     } else {
         Ok(())

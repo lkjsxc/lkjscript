@@ -95,6 +95,8 @@ fn configured_handle_and_wall_limits_are_structured() {
     socket.main.locals = 1;
     socket.main.emit_op_u16(Op::LoadLocal, 0);
     socket.main.emit(Op::SysSocket);
+    socket.main.emit(Op::Pop);
+    socket.main.emit(Op::Unit);
     socket.main.emit(Op::Return);
     let socket = validate(socket);
     let mut handles = ExecutionConfig::default();

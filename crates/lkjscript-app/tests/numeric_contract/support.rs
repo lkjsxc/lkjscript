@@ -3,11 +3,11 @@ use lkjscript_ir::{evaluate as evaluate_ssa, EvalConfig, EvalOutcome, EvalValue}
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 
 pub(super) fn program(return_type: &str, expression: &str) -> String {
-    format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n")
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{expression}\n/main\n")
 }
 
 pub(super) fn assert_scalar(source: &str, expected: Expected) {
-    let rounded_i64 = source.contains("f64-from-i64-rounded/");
+    let rounded_i64 = source.contains("convert-i64-to-f64-rounded/");
     let program = compile_source(source, "conversion.lkjscript", &Limits::default())
         .expect("compile conversion");
     assert_eval(

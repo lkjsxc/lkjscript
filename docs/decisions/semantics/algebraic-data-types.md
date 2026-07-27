@@ -103,7 +103,7 @@ payload. These execution facts do not alter declaration identity.
 
 ## Prelude Migration
 
-`Option` and `Result` are compiler-recognized prelude enum identities, never
+`option` and `result` are compiler-recognized prelude enum identities, never
 recognized by source names. Product remains its distinct nominal product
 concept; Product does not become an enum. Dedicated Option/Result runtime
 semantics are removed. Prelude constructors and accessors resolve to stable

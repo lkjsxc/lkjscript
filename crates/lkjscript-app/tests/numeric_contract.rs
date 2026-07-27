@@ -12,7 +12,7 @@ use lkjscript_core::{Error, ExecutionConfig, ExecutionOutcome, Limits, OwnedValu
 use lkjscript_vm::run_chunk;
 
 fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result<OwnedValue> {
-    let source = format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n");
+    let source = format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{expression}\n/main\n");
     let program = compile_source(&source, "numeric-contract.lkjscript", &Limits::default())?;
     match run_chunk(
         program.bytecode(),
@@ -26,7 +26,7 @@ fn evaluate_typed(expression: &str, return_type: &str) -> lkjscript_core::Result
 }
 
 fn evaluate(expression: &str) -> lkjscript_core::Result<OwnedValue> {
-    evaluate_typed(expression, "Bool")
+    evaluate_typed(expression, "bool")
 }
 
 fn assert_true(expression: &str) {
@@ -38,9 +38,11 @@ fn assert_true(expression: &str) {
 
 #[test]
 fn compiled_i64_arithmetic_is_exact_across_f64_and_immediate_boundaries() {
-    assert_true("equal-value/\n+/\n9007199254740993\n2\n/+\n9007199254740995\n/equal-value");
-    assert_true("equal-value/\n+/\n1152921504606846975\n1\n/+\n1152921504606846976\n/equal-value");
-    assert_true("equal-value/\ndiv/\n-7\n2\n/div\n-3\n/equal-value");
+    assert_true("equal-value/\nadd/\n9007199254740993\n2\n/add\n9007199254740995\n/equal-value");
+    assert_true(
+        "equal-value/\nadd/\n1152921504606846975\n1\n/add\n1152921504606846976\n/equal-value",
+    );
+    assert_true("equal-value/\ndivide/\n-7\n2\n/divide\n-3\n/equal-value");
     assert_true(
         "equal-value/\nbit-xor/\n-9223372036854775808\n-1\n/bit-xor\n9223372036854775807\n/equal-value",
     );
@@ -48,8 +50,8 @@ fn compiled_i64_arithmetic_is_exact_across_f64_and_immediate_boundaries() {
 
 #[test]
 fn compiled_numeric_failures_and_ieee_equality_are_truthful() {
-    assert!(evaluate_typed("+/\n9223372036854775807\n1\n/+", "I64").is_err());
-    assert!(evaluate_typed("div/\n1\n0\n/div", "I64").is_err());
+    assert!(evaluate_typed("add/\n9223372036854775807\n1\n/add", "i64").is_err());
+    assert!(evaluate_typed("divide/\n1\n0\n/divide", "i64").is_err());
     assert_eq!(
         evaluate("equal-value/\n1.0\n1.0000000000005\n/equal-value")
             .expect("IEEE equality")
@@ -57,6 +59,6 @@ fn compiled_numeric_failures_and_ieee_equality_are_truthful() {
         Some(false)
     );
     assert_true(
-        "equal-value/\n+/\n2.0\nf64-from-i64-rounded/\n1\n/f64-from-i64-rounded\n/+\n3.0\n/equal-value",
+        "equal-value/\nadd/\n2.0\nconvert-i64-to-f64-rounded/\n1\n/convert-i64-to-f64-rounded\n/add\n3.0\n/equal-value",
     );
 }

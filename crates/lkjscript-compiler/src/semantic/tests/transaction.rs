@@ -34,16 +34,16 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
     let root = directory.join("main.lkjscript");
     let library = directory.join("lib.lkjscript");
     let original_root = concat!(
-        "imports/\nimport/\nlib.lkjscript#inc\n/import\n/imports\n;; inc stays in a comment\n",
-        "def/\nname/\ntext\n/name\nfn/\nsig/\n->\nStr\n/sig\n",
-        "params/\n/params\nstr/\ninc stays in a string\n/str\n/fn\n/def\n",
-        "def/\nname/\nshadow\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
+        "imports/\nimport/\nmodule/\nlib.lkjscript\n/module\ndeclarations/\ninc\n/declarations\n/import\n/imports\n;; inc stays in a comment\n",
+        "def/\nname/\ntext\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\n",
+        "params/\n/params\nstring-literal/\ninc stays in a string\n/string-literal\n/fn\n/def\n",
+        "def/\nname/\nshadow\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\n",
         "let/\nbind/\ninc\nunit\n/bind\ninc\n/let\n/fn\n/def\n",
-        "main/\nsig/\n->\nI64\n/sig\ninc/\n2\n/inc\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ninc/\n2\n/inc\n/main\n",
     );
     let original_library = concat!(
-        "def/\nname/\ninc\n/name\npublic\nfn/\nsig/\nI64\n->\nI64\n/sig\n",
-        "params/\nx\nI64\n/params\n+/\nx\n1\n/+\n/fn\n/def\n",
+        "def/\nname/\ninc\n/name\npublic\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "params/\nx\ni64\n/params\nadd/\nx\n1\n/add\n/fn\n/def\n",
     );
     std::fs::write(&root, original_root).expect("write root");
     std::fs::write(&library, original_library).expect("write library");
@@ -55,9 +55,9 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
         .expect("inc declaration");
     let operation = format!(
         concat!(
-            "{{\"kind\":\"apply_transaction\",\"mode\":\"preview\",",
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
             "\"base_revision\":\"{revision}\",\"file_preconditions\":[{}],",
-            "\"operations\":[{{\"kind\":\"rename_declaration\",",
+            "\"operations\":[{{\"kind\":\"rename-declaration\",",
             "\"declaration_key\":\"{}\",\"entity_fingerprint\":\"{}\",",
             "\"new_name\":\"increment\"}}]}}",
         ),
@@ -124,9 +124,9 @@ fn cross_import_rename_and_expression_replacement_are_atomic() {
     let replace = |kind: &str, value: &str| {
         format!(
             concat!(
-                "{{\"kind\":\"apply_transaction\",\"mode\":\"preview\",",
+                "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
                 "\"base_revision\":\"{revision}\",\"file_preconditions\":[{}],",
-                "\"operations\":[{{\"kind\":\"replace_expression\",",
+                "\"operations\":[{{\"kind\":\"replace-expression\",",
                 "\"declaration_key\":\"{}\",\"entity_fingerprint\":\"{}\",",
                 "\"node\":{},\"node_fingerprint\":\"{}\",",
                 "\"expression\":{{\"kind\":\"{kind}\",\"value\":{value}}}}}]}}",

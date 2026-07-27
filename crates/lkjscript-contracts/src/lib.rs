@@ -7,7 +7,9 @@ mod domains;
 mod encoding;
 mod model;
 mod registry;
+mod resource;
 mod sha256;
+mod vocabulary;
 
 pub use capability::CapabilityKind;
 pub use digest::ContractDigest;
@@ -27,7 +29,17 @@ pub use model::{
     ContractItemKind, ContractName, FactOrdering, NameIdentity,
 };
 pub use registry::{require_exact, ContractMismatch, ContractSet, RegisteredContract};
+pub use resource::ResourceKind;
 pub use sha256::sha256;
+pub use vocabulary::{
+    is_identifier, operation_by_id, operation_by_source_name, operation_semantics_by_id,
+    removed_spelling, OperationCategory, OperationEffects, OperationIdentity, OperationOwnership,
+    OperationSemanticsRecord, OperationVocabularyRecord, RemovedSpelling, RuntimeLowering,
+    SemanticSourceRelationship, BUILTIN_ERROR_NAMES, BYTE_TEXT_FOUNDATION_TYPE_NAMES,
+    COMPILER_TRAIT_NAMES, CONTEXTUAL_FORM_NAMES, OPERATION_COUNT, PRELUDE_TYPE_NAMES,
+    PRELUDE_VARIANT_NAMES, REMOVED_SPELLINGS, RESERVED_WORDS, SIMPLE_TYPE_NAMES,
+    TYPE_CONSTRUCTOR_NAMES,
+};
 
 #[cfg(test)]
 mod tests;

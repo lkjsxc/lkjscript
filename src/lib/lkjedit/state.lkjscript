@@ -1,11 +1,16 @@
 imports/
 import/
-src/std/term/tty-state.lkjscript#TerminalState
+module/
+src/std/term/tty-state.lkjscript
+/module
+declarations/
+terminal-state
+/declarations
 /import
 /imports
 product/
 name/
-EditorState
+editor-state
 /name
 public
 fields/
@@ -14,8 +19,8 @@ name/
 lines
 /name
 type/
-List
-Str
+list
+string
 /type
 /field
 field/
@@ -23,7 +28,7 @@ name/
 row
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -31,7 +36,7 @@ name/
 col
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -39,7 +44,7 @@ name/
 mode
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -47,7 +52,7 @@ name/
 cmd
 /name
 type/
-Str
+string
 /type
 /field
 field/
@@ -55,7 +60,7 @@ name/
 dirty
 /name
 type/
-Bool
+bool
 /type
 /field
 field/
@@ -63,8 +68,8 @@ name/
 path
 /name
 type/
-Option
-Path
+option
+path
 /type
 /field
 field/
@@ -72,7 +77,7 @@ name/
 quit
 /name
 type/
-Bool
+bool
 /type
 /field
 field/
@@ -80,7 +85,7 @@ name/
 pending
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -88,7 +93,7 @@ name/
 msg
 /name
 type/
-Str
+string
 /type
 /field
 field/
@@ -96,7 +101,7 @@ name/
 yank
 /name
 type/
-Str
+string
 /type
 /field
 field/
@@ -104,7 +109,7 @@ name/
 top
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -112,7 +117,7 @@ name/
 rows
 /name
 type/
-I64
+i64
 /type
 /field
 field/
@@ -120,8 +125,8 @@ name/
 terminal
 /name
 type/
-Product
-TerminalState
+product
+terminal-state
 /type
 /field
 /fields

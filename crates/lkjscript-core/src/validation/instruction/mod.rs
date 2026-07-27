@@ -19,6 +19,7 @@ pub(super) fn apply_instruction(
     proto: &FunctionProto,
     instruction: DecodedInstruction,
     state: &mut State,
+    is_main: bool,
 ) -> Result<()> {
     let required = required::stack(chunk, proto, instruction)?;
     if state.stack.len() < required {
@@ -66,7 +67,9 @@ pub(super) fn apply_instruction(
         | Op::F64FromI64Rounded
         | Op::I64FromF64Exact
         | Op::I64FromF64Trunc => numeric::apply(chunk, proto, instruction, state),
-        Op::Call | Op::Return | Op::MakeClosure => calls::apply(chunk, proto, instruction, state),
+        Op::Call | Op::Return | Op::MakeClosure => {
+            calls::apply(chunk, proto, instruction, state, is_main)
+        }
         Op::Cons | Op::Car | Op::Cdr | Op::IsEmptyList | Op::SameObject | Op::ListEqual => {
             collections::apply(chunk, proto, instruction, state)
         }

@@ -25,10 +25,10 @@ impl Generator {
         }
         match self.choose(4) {
             0..=2 => {
-                let operation = ["+", "-", "*"]
+                let operation = ["add", "subtract", "multiply"]
                     .get(usize::try_from(self.choose(3)).unwrap_or(0))
                     .copied()
-                    .unwrap_or("+");
+                    .unwrap_or("add");
                 format!(
                     "{operation}/\n{}\n{}\n/{operation}",
                     self.i64_expression(depth - 1),
@@ -54,7 +54,7 @@ impl Generator {
         }
         match self.choose(4) {
             0 => format!(
-                "lt/\n{}\n{}\n/lt",
+                "less-than/\n{}\n{}\n/less-than",
                 self.i64_expression(depth - 1),
                 self.i64_expression(depth - 1)
             ),
@@ -77,9 +77,9 @@ impl Generator {
 #[test]
 fn evaluator_reports_host_operations_as_explicitly_unsupported() {
     let source = concat!(
-        "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
-        "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
-        "print/\nstdio\nstr/\nnot emitted\n/str\n/print\n/main\n"
+        "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+        "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
+        "print/\nstdio\nstring-literal/\nnot emitted\n/string-literal\n/print\n/main\n"
     );
     let program = compile_source(source, "unsupported-host.lkjscript", &Limits::default())
         .expect("compile host operation");
@@ -100,9 +100,9 @@ fn bounded_randomized_type_correct_scalar_programs_match() {
     let mut generator = Generator(0x5eed_cafe_d00d_f00d);
     for index in 0..64 {
         let (return_type, expression) = if generator.choose(2) == 0 {
-            ("I64", generator.i64_expression(3))
+            ("i64", generator.i64_expression(3))
         } else {
-            ("Bool", generator.bool_expression(3))
+            ("bool", generator.bool_expression(3))
         };
         let source = main_source(return_type, &expression);
         let name = format!("random-{index}.lkjscript");

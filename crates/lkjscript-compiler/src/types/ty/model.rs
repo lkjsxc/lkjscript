@@ -19,7 +19,7 @@ pub enum Type {
     /// Initial ownership slice: only `RefMut Buf` is well formed.
     RefMut(Box<Type>),
     Symbol,
-    Handle,
+    Resource(ResourceKind),
     /// Globally unique nominal product declaration name.
     Product(String),
     /// Nominal enum identity with invariant explicit arguments.

@@ -7,19 +7,19 @@ pub(super) fn canonical_source(body: &str) -> String {
 
 pub(super) fn maybe_declaration(name: &str) -> String {
     format!(
-        "enum/\nname/\n{name}\n/name\nforall/\nT\n/forall\nvariants/\nvariant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\nvariant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n"
+        "enum/\nname/\n{name}\n/name\nforall/\nt\n/forall\nvariants/\nvariant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\nvariant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n"
     )
 }
 
 fn unit_main_source() -> String {
-    main_source("Unit", "unit")
+    main_source("unit", "unit")
 }
 
 #[test]
 fn generic_enum_metadata_has_stable_nominal_member_identities_and_order() {
     let source = canonical_source(&format!(
         "{}{}",
-        maybe_declaration("Maybe"),
+        maybe_declaration("maybe"),
         unit_main_source()
     ));
     let first = analyze_one(&source).expect("generic enum declaration");
@@ -27,7 +27,7 @@ fn generic_enum_metadata_has_stable_nominal_member_identities_and_order() {
     let definition = &first.enums[0];
     assert_eq!(definition.id, second.enums[0].id);
     assert_ne!(definition.id, EnumId::UNRESOLVED);
-    assert_eq!(definition.type_parameters, ["T"]);
+    assert_eq!(definition.type_parameters, ["t"]);
     assert_eq!(definition.variants.len(), 2);
     assert_eq!(definition.variants[0].source_order, 0);
     assert_eq!(definition.variants[1].source_order, 1);
@@ -35,7 +35,7 @@ fn generic_enum_metadata_has_stable_nominal_member_identities_and_order() {
     assert_ne!(definition.variants[0].id, VariantId::new([0; 32]));
     let field = &definition.variants[1].fields[0];
     assert_eq!(field.source_order, 0);
-    assert_eq!(field.ty, Type::Param("T".into()));
+    assert_eq!(field.ty, Type::Param("t".into()));
     assert_ne!(field.id, VariantFieldId::new([0; 32]));
 }
 
@@ -43,20 +43,20 @@ fn generic_enum_metadata_has_stable_nominal_member_identities_and_order() {
 fn same_shaped_enums_are_nominally_unequal_and_instantiation_is_invariant() {
     let declarations = format!(
         "{}{}",
-        maybe_declaration("Left"),
-        maybe_declaration("Right")
+        maybe_declaration("left"),
+        maybe_declaration("right")
     );
     let source = canonical_source(&format!("{declarations}{}", unit_main_source()));
     let program = analyze_one(&source).expect("same-shaped nominal declarations");
     assert_ne!(program.enums[0].id, program.enums[1].id);
     let left_i64 = Type::Enum {
         id: program.enums[0].id,
-        name: "Left".into(),
+        name: "left".into(),
         arguments: vec![Type::I64],
     };
     let left_bool = Type::Enum {
         id: program.enums[0].id,
-        name: "Left".into(),
+        name: "left".into(),
         arguments: vec![Type::Bool],
     };
     assert!(!Type::unify_assignable(&left_i64, &left_bool));
@@ -67,13 +67,13 @@ fn explicit_instantiation_resolves_in_signatures_and_missing_arguments_reject() 
     let valid_function = function_source(
         "identity",
         &[],
-        "Maybe/\nI64\n/Maybe\n->\nMaybe/\nI64\n/Maybe",
-        "value\nMaybe/\nI64\n/Maybe",
+        "inputs/\nmaybe/\ni64\n/maybe\n/inputs\noutput/\nmaybe/\ni64\n/maybe\n/output",
+        "value\nmaybe/\ni64\n/maybe",
         "value",
     );
     let valid = canonical_source(&format!(
         "{}{}{}",
-        maybe_declaration("Maybe"),
+        maybe_declaration("maybe"),
         valid_function,
         unit_main_source()
     ));
@@ -93,13 +93,13 @@ fn explicit_instantiation_resolves_in_signatures_and_missing_arguments_reject() 
     let invalid_function = function_source(
         "bad",
         &[],
-        "Maybe/\n/Maybe\n->\nUnit",
-        "value\nMaybe/\n/Maybe",
+        "inputs/\nmaybe/\n/maybe\n/inputs\noutput/\nunit\n/output",
+        "value\nmaybe/\n/maybe",
         "unit",
     );
     let invalid = canonical_source(&format!(
         "{}{}{}",
-        maybe_declaration("Maybe"),
+        maybe_declaration("maybe"),
         invalid_function,
         unit_main_source()
     ));
@@ -110,30 +110,28 @@ fn explicit_instantiation_resolves_in_signatures_and_missing_arguments_reject() 
 fn duplicates_empty_variants_and_nested_ownership_reject_exactly() {
     let duplicate_declaration = canonical_source(&format!(
         "{}{}{}",
-        maybe_declaration("Maybe"),
-        maybe_declaration("Maybe"),
+        maybe_declaration("maybe"),
+        maybe_declaration("maybe"),
         unit_main_source()
     ));
-    assert!(analysis_error(&duplicate_declaration).contains("duplicate enum declaration Maybe"));
+    assert!(analysis_error(&duplicate_declaration).contains("duplicate enum declaration maybe"));
 
     let duplicate_parameter =
-        maybe_declaration("Maybe").replace("forall/\nT\n/forall", "forall/\nT\nT\n/forall");
+        maybe_declaration("maybe").replace("forall/\nt\n/forall", "forall/\nt\nt\n/forall");
     let source = canonical_source(&format!("{duplicate_parameter}{}", unit_main_source()));
-    assert!(analysis_error(&source).contains("duplicate forall parameter T"));
+    assert!(analysis_error(&source).contains("duplicate forall parameter t"));
 
-    let duplicate_variant = maybe_declaration("Maybe").replace("\nNone\n/name", "\nSome\n/name");
+    let duplicate_variant = maybe_declaration("maybe").replace("\nnone\n/name", "\nsome\n/name");
     let source = canonical_source(&format!("{duplicate_variant}{}", unit_main_source()));
-    assert!(analysis_error(&source).contains("duplicate variant Some"));
+    assert!(analysis_error(&source).contains("duplicate variant some"));
 
-    let duplicate_field = maybe_declaration("Maybe").replace(
-        "/variant-field\n/fields", "/variant-field\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields");
+    let duplicate_field = maybe_declaration("maybe").replace(
+        "/variant-field\n/fields", "/variant-field\nvariant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n/fields");
     let source = canonical_source(&format!("{duplicate_field}{}", unit_main_source()));
     assert!(analysis_error(&source).contains("duplicate field value"));
 
-    let ownership = maybe_declaration("Maybe").replace(
-        "type/\nT\n/type",
-        "type/\nList/\nOwned/\nBuf\n/Owned\n/List\n/type",
-    );
+    let ownership = maybe_declaration("maybe")
+        .replace("type/\nt\n/type", "type/\nlist/\nbyte-vector\n/list\n/type");
     let source = canonical_source(&format!("{ownership}{}", unit_main_source()));
     assert!(analysis_error(&source).contains("ownership/reference types cannot be stored"));
 }
@@ -143,7 +141,7 @@ fn recursive_chain(edges: usize) -> String {
     for index in 0..=edges {
         let next = if index < edges {
             format!(
-                "variant-field/\nname/\nnext\n/name\ntype/\nE{}/\n/E{}\n/type\n/variant-field\n",
+                "variant-field/\nname/\nnext\n/name\ntype/\ne{}/\n/e{}\n/type\n/variant-field\n",
                 index + 1,
                 index + 1
             )
@@ -151,7 +149,7 @@ fn recursive_chain(edges: usize) -> String {
             String::new()
         };
         source.push_str(&format!(
-            "enum/\nname/\nE{index}\n/name\nvariants/\nvariant/\nname/\nNode\n/name\nfields/\n{next}/fields\n/variant\n/variants\n/enum\n"
+            "enum/\nname/\ne{index}\n/name\nvariants/\nvariant/\nname/\nnode\n/name\nfields/\n{next}/fields\n/variant\n/variants\n/enum\n"
         ));
     }
     source
@@ -161,7 +159,7 @@ fn recursive_chain(edges: usize) -> String {
 fn recursion_depth_exact_bound_succeeds_and_plus_one_rejects() {
     let self_cycle = recursive_chain(0).replace(
         "fields/\n/fields",
-        "fields/\nvariant-field/\nname/\nnext\n/name\ntype/\nE0/\n/E0\n/type\n/variant-field\n/fields",
+        "fields/\nvariant-field/\nname/\nnext\n/name\ntype/\ne0/\n/e0\n/type\n/variant-field\n/fields",
     );
     analyze_one(&canonical_source(&format!(
         "{self_cycle}{}",

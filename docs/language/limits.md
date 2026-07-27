@@ -18,7 +18,7 @@ Defined in `lkjscript-core/src/limits.rs`:
 - `MAX_TOPLEVEL_FORMS`: 8
 - `MAX_DIR_CHILDREN`: 16 files plus subdirectories in one source directory
 - `MAX_PRODUCT_FIELDS`: 15 fields in one nominal product declaration
-- `MAX_LIST_EQUAL_STEPS`: 1,000,000 pair-node comparisons in one `list-equal`
+- `MAX_LIST_EQUAL_STEPS`: 1,000,000 pair-node comparisons in one `equal-list`
   call
 
 `MAX_CHILDREN` and `MAX_DIR_CHILDREN` are separate contracts even though both

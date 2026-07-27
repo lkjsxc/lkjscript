@@ -6,9 +6,9 @@ fn external_leaf_created_after_backup_is_preserved() {
     let directory = case_dir("publication-leaf-conflict");
     let root = directory.join("main.lkjscript");
     let source = concat!(
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+        "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
         "params/\n/params\nunit\n/fn\n/def\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
     );
     std::fs::write(&root, source).expect("write source");
     let decoded = response(

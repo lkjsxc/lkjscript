@@ -25,7 +25,7 @@ pub(super) fn parse_element(
                     end: close_span.end,
                 };
                 let before_close_trivia = tokens[cursor].leading_trivia.clone();
-                if name == "str" {
+                if name == "string-literal" {
                     return match children.as_slice() {
                         [SourceNode {
                             kind: SyntaxKind::Str { value },
@@ -45,7 +45,7 @@ pub(super) fn parse_element(
                         _ => Err(super::limits::syntax_error(
                             origin,
                             span,
-                            "str/ must contain one lkjscript text value",
+                            "string-literal/ must contain one lkjscript text value",
                         )),
                     };
                 }

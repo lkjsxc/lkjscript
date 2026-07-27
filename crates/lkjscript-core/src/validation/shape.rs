@@ -24,7 +24,34 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         }
     }
     super::entry_capabilities::validate(chunk)?;
+    if !chunk.global_prototypes.is_empty()
+        && chunk.global_prototypes.len() != chunk.global_names.len()
+    {
+        return Err(Error::msg(
+            "bytecode global prototype metadata must cover every global",
+        ));
+    }
+    for prototype in chunk.global_prototypes.iter().flatten() {
+        if usize::try_from(*prototype)
+            .ok()
+            .is_none_or(|index| index >= chunk.protos.len())
+        {
+            return Err(Error::msg(
+                "bytecode global prototype metadata index is out of range",
+            ));
+        }
+    }
     validate_proto_shape(&chunk.main, "main")?;
+    if chunk.main.return_resource.is_some() {
+        return Err(Error::msg(
+            "bytecode main cannot declare a typed resource return",
+        ));
+    }
+    if chunk.main.parameter_resources.iter().any(Option::is_some) {
+        return Err(Error::msg(
+            "bytecode main cannot declare typed resource parameters",
+        ));
+    }
 
     let mut function_names = HashSet::with_capacity(chunk.protos.len());
     for proto in &chunk.protos {
@@ -41,9 +68,27 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
     }
 
     let mut metadata_bytes = super::entry_capabilities::metadata_bytes(chunk)?;
+    let global_prototype_bytes = chunk
+        .global_prototypes
+        .len()
+        .checked_mul(5)
+        .ok_or_else(|| Error::msg("bytecode metadata byte size overflow"))?;
+    metadata_bytes = checked_add(metadata_bytes, global_prototype_bytes, "metadata byte size")?;
+    metadata_bytes = checked_add(
+        metadata_bytes,
+        chunk.main.parameter_resources.len(),
+        "metadata byte size",
+    )?;
+    metadata_bytes = checked_add(metadata_bytes, 1, "metadata byte size")?;
     let mut encoded_bytes = chunk.main.code.len();
     for proto in &chunk.protos {
         metadata_bytes = checked_add(metadata_bytes, proto.name.len(), "metadata byte size")?;
+        metadata_bytes = checked_add(
+            metadata_bytes,
+            proto.parameter_resources.len(),
+            "metadata byte size",
+        )?;
+        metadata_bytes = checked_add(metadata_bytes, 1, "metadata byte size")?;
         encoded_bytes = checked_add(encoded_bytes, proto.code.len(), "encoded byte size")?;
     }
 
@@ -188,6 +233,14 @@ fn validate_proto_shape(proto: &FunctionProto, category: &str) -> Result<()> {
         return Err(Error::msg(format!(
             "bytecode {category} {} has arity {} greater than local count {}",
             proto.name, proto.arity, proto.locals
+        )));
+    }
+    if !proto.parameter_resources.is_empty()
+        && proto.parameter_resources.len() != usize::from(proto.arity)
+    {
+        return Err(Error::msg(format!(
+            "bytecode {category} {} resource parameter metadata does not match arity",
+            proto.name
         )));
     }
     Ok(())

@@ -2,8 +2,8 @@ use super::*;
 use lkjscript_ir::{verify, InstructionKind, SsaType};
 
 const EXACT: &str = concat!(
-    "main/\nsig/\n->\nResult/\nF64\nNumericError\n/Result\n/sig\n",
-    "f64-from-i64-exact/\n9007199254740993\n/f64-from-i64-exact\n/main\n",
+    "main/\nsig/\ninputs/\n/inputs\noutput/\nresult/\nf64\nnumeric-error\n/result\n/output\n/sig\n",
+    "convert-i64-to-f64-exact/\n9007199254740993\n/convert-i64-to-f64-exact\n/main\n",
 );
 
 fn conversion(program: &mut lkjscript_ir::Program) -> &mut lkjscript_ir::Instruction {
@@ -74,25 +74,31 @@ fn malformed_numeric_error_identity_layout_and_cases_fail_closed() {
 fn source_lowers_to_exactly_four_distinct_ssa_conversion_kinds() {
     let forms = [
         (
-            "Result/\nF64\nNumericError\n/Result",
-            "f64-from-i64-exact/\n1\n/f64-from-i64-exact",
+            "result/\nf64\nnumeric-error\n/result",
+            "convert-i64-to-f64-exact/\n1\n/convert-i64-to-f64-exact",
             0,
         ),
-        ("F64", "f64-from-i64-rounded/\n1\n/f64-from-i64-rounded", 1),
         (
-            "Result/\nI64\nNumericError\n/Result",
-            "i64-from-f64-exact/\n1.0\n/i64-from-f64-exact",
+            "f64",
+            "convert-i64-to-f64-rounded/\n1\n/convert-i64-to-f64-rounded",
+            1,
+        ),
+        (
+            "result/\ni64\nnumeric-error\n/result",
+            "convert-f64-to-i64-exact/\n1.0\n/convert-f64-to-i64-exact",
             2,
         ),
         (
-            "Result/\nI64\nNumericError\n/Result",
-            "i64-from-f64-trunc/\n1.5\n/i64-from-f64-trunc",
+            "result/\ni64\nnumeric-error\n/result",
+            "convert-f64-to-i64-truncating/\n1.5\n/convert-f64-to-i64-truncating",
             3,
         ),
     ];
     let mut seen = [false; 4];
     for (ty, expression, expected) in forms {
-        let source = format!("main/\nsig/\n->\n{ty}\n/sig\n{expression}\n/main\n");
+        let source = format!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\n{ty}\n/output\n/sig\n{expression}\n/main\n"
+        );
         let compiled = compile_source(&source, "four-kinds.lkjscript", &Limits::default())
             .expect("compile conversion kind");
         let kind = compiled

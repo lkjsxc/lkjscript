@@ -7,12 +7,16 @@ impl ResourceTable {
         }
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::File(file)) => Ok(file.as_raw()),
-            Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
-            Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
-            Some(OwnedResource::SqliteConnection { .. })
-            | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(format!(
-                "{operation}: handle is not a file, directory, or socket"
+            Some(OwnedResource::File {
+                descriptor: file,
+                kind: ResourceKind::FileReader,
+            }) => Ok(file.as_raw()),
+            Some(OwnedResource::Socket {
+                descriptor: socket,
+                kind: ResourceKind::TcpListener | ResourceKind::TcpStream,
+            }) => Ok(socket.as_raw()),
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: typed resource kind is not pollable"
             ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
@@ -95,16 +99,22 @@ impl ResourceTable {
         }
     }
 
-    pub(crate) fn socket_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
+    pub(crate) fn socket_raw(
+        &self,
+        handle: Value,
+        expected: ResourceKind,
+        operation: &str,
+    ) -> Result<RawFd> {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::Socket(socket)) => Ok(socket.as_raw()),
-            Some(OwnedResource::File(_))
-            | Some(OwnedResource::Directory(_))
-            | Some(OwnedResource::SqliteConnection { .. })
-            | Some(OwnedResource::SqliteStatement { .. }) => {
-                Err(Error::msg(format!("{operation}: handle is not a socket")))
-            }
+            Some(OwnedResource::Socket {
+                descriptor: socket,
+                kind,
+            }) if *kind == expected => Ok(socket.as_raw()),
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: expected {}",
+                expected.as_str()
+            ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
@@ -112,15 +122,13 @@ impl ResourceTable {
     pub(crate) fn file_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::File(file)) => Ok(file.as_raw()),
-            Some(OwnedResource::Directory(_)) => {
-                Err(Error::msg(format!("{operation}: handle is a directory")))
-            }
-            Some(OwnedResource::Socket(_))
-            | Some(OwnedResource::SqliteConnection { .. })
-            | Some(OwnedResource::SqliteStatement { .. }) => {
-                Err(Error::msg(format!("{operation}: handle is not a file")))
-            }
+            Some(OwnedResource::File {
+                descriptor: file,
+                kind: ResourceKind::FileWriter | ResourceKind::FileAppender,
+            }) => Ok(file.as_raw()),
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: expected file-writer or file-appender"
+            ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
@@ -128,12 +136,13 @@ impl ResourceTable {
     pub(crate) fn sync_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
         let index = self.owned_index(handle, operation)?;
         match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::File(file)) => Ok(file.as_raw()),
+            Some(OwnedResource::File {
+                descriptor: file,
+                kind: ResourceKind::FileWriter | ResourceKind::FileAppender,
+            }) => Ok(file.as_raw()),
             Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
-            Some(OwnedResource::Socket(_))
-            | Some(OwnedResource::SqliteConnection { .. })
-            | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(format!(
-                "{operation}: handle is not a file or directory"
+            Some(_) => Err(Error::msg(format!(
+                "{operation}: expected file-writer, file-appender, or directory"
             ))),
             None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
@@ -142,7 +151,7 @@ impl ResourceTable {
     pub(crate) fn owned_index(&self, handle: Value, operation: &str) -> Result<usize> {
         let token = handle
             .as_handle()
-            .ok_or_else(|| Error::msg(format!("{operation}: expected Handle")))?;
+            .ok_or_else(|| Error::msg(format!("{operation}: expected typed resource")))?;
         let index = token
             .checked_sub(FIRST_OWNED_TOKEN)
             .ok_or_else(|| Error::msg(format!("{operation}: borrowed or invalid handle")))?;

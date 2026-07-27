@@ -32,7 +32,7 @@ pub(crate) struct LegalActionsResult {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum LegalChildKind {
     Literal,
     NameReference,
@@ -67,7 +67,7 @@ pub(crate) struct RequiredField {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 #[allow(
     clippy::enum_variant_names,
     reason = "protocol uses the exact closed operation names"

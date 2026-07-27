@@ -12,7 +12,7 @@ impl Resolver<'_> {
         let ty = self.resolve_pattern_type(type_form)?;
         if &ty != expected {
             return Err(self.error(format!(
-                "variant-pattern type {ty:?} does not exactly equal scrutinee type {expected:?}",
+                "variant-pattern type {ty} does not exactly equal scrutinee type {expected}",
             )));
         }
         let Type::Enum { id, arguments, .. } = &ty else {
@@ -93,7 +93,7 @@ impl Resolver<'_> {
         let ty = self.resolve_pattern_type(type_form)?;
         if &ty != expected {
             return Err(self.error(format!(
-                "product-pattern type {ty:?} does not exactly equal scrutinee type {expected:?}",
+                "product-pattern type {ty} does not exactly equal scrutinee type {expected}",
             )));
         }
         let Type::Product(name) = &ty else {

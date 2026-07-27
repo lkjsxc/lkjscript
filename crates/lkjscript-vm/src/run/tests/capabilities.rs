@@ -49,5 +49,5 @@ fn bytecode_cannot_use_one_capability_as_another() {
     let error = validate_chunk(chunk, &ValidationLimits::default())
         .expect_err("wrong capability operand")
         .to_string();
-    assert!(error.contains("Capability(Stdio)"));
+    assert!(error.contains("capability stdio"));
 }

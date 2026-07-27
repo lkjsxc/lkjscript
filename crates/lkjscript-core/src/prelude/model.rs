@@ -42,12 +42,12 @@ impl Utf8ErrorKind {
 
     pub const fn name(self) -> &'static str {
         match self {
-            Self::UnexpectedContinuation => "UnexpectedContinuation",
-            Self::InvalidLeadingByte => "InvalidLeadingByte",
-            Self::MissingContinuation => "MissingContinuation",
-            Self::OverlongEncoding => "OverlongEncoding",
-            Self::Surrogate => "Surrogate",
-            Self::OutOfRange => "OutOfRange",
+            Self::UnexpectedContinuation => "unexpected-continuation",
+            Self::InvalidLeadingByte => "invalid-leading-byte",
+            Self::MissingContinuation => "missing-continuation",
+            Self::OverlongEncoding => "overlong-encoding",
+            Self::Surrogate => "surrogate",
+            Self::OutOfRange => "out-of-range",
         }
     }
 
@@ -112,14 +112,14 @@ impl SystemErrorKind {
 
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Io => "Io",
-            Self::Network => "Network",
-            Self::Terminal => "Terminal",
-            Self::Time => "Time",
-            Self::Random => "Random",
-            Self::Sqlite => "Sqlite",
-            Self::Utf8 => "Utf8",
-            Self::Unsupported => "Unsupported",
+            Self::Io => "io",
+            Self::Network => "network",
+            Self::Terminal => "terminal",
+            Self::Time => "time",
+            Self::Random => "random",
+            Self::Sqlite => "sqlite",
+            Self::Utf8 => "utf8",
+            Self::Unsupported => "unsupported",
         }
     }
 

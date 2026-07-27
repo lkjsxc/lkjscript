@@ -18,9 +18,9 @@ fn explicit_equality_families_enforce_static_categories() {
     }
     for ty in [
         Type::Buf,
-        Type::Handle,
+        Type::Resource(lkjscript_core::ResourceKind::FileReader),
         Type::List(Box::new(Type::I64)),
-        Type::Param("T".into()),
+        Type::Param("t".into()),
         Type::Fn {
             params: Vec::new(),
             ret: Box::new(Type::Unit),
@@ -34,14 +34,17 @@ fn explicit_equality_families_enforce_static_categories() {
         .resolve_types(&[Type::I64, Type::F64])
         .is_err());
 
-    for ty in [Type::Buf, Type::Handle] {
+    assert!(Operation::SameObject
+        .resolve_types(&[Type::Buf, Type::Buf])
+        .is_ok());
+    for ty in [
+        Type::I64,
+        Type::Resource(lkjscript_core::ResourceKind::FileReader),
+    ] {
         assert!(Operation::SameObject
             .resolve_types(&[ty.clone(), ty])
-            .is_ok());
+            .is_err());
     }
-    assert!(Operation::SameObject
-        .resolve_types(&[Type::I64, Type::I64])
-        .is_err());
 
     let list = Type::List(Box::new(crate::types::option_type(Type::Str)));
     assert!(Operation::ListEqual

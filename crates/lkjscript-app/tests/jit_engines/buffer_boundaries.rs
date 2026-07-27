@@ -9,27 +9,27 @@ fn evaluator_vm_and_native_buffer_results_share_tiny_resource_boundaries() {
     let cases = [
         (
             "buf-to-str-success-limits.lkjscript",
-            "Result\nStr\nUtf8Error",
-            "buf-to-str/\nbuf-new/\n0\n/buf-new\n/buf-to-str",
+            "result/\nstring\nutf8-error\n/result",
+            "convert-buf-to-string/\nbuf-new/\n0\n/buf-new\n/convert-buf-to-string",
         ),
         (
             "buf-to-str-error-limits.lkjscript",
-            "Result\nStr\nUtf8Error",
-            "var/\nname/\nb\n/name\ntype/\nBuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set/\nb\n0\n255\n/buf-set\nbuf-to-str/\nb\n/buf-to-str\n/do\n/var",
+            "result/\nstring\nutf8-error\n/result",
+            "var/\nname/\nb\n/name\ntype/\nbuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set-byte/\nb\n0\n255\n/buf-set-byte\nconvert-buf-to-string/\nb\n/convert-buf-to-string\n/do\n/var",
         ),
         (
             "buf-slice-success-limits.lkjscript",
-            "Result\nBuf\nSystemError",
-            "buf-slice/\nbuf-new/\n1\n/buf-new\n0\n1\n/buf-slice",
+            "result/\nbuf\nsystem-error\n/result",
+            "copy-buf-slice/\nbuf-new/\n1\n/buf-new\n0\n1\n/copy-buf-slice",
         ),
         (
             "buf-slice-error-limits.lkjscript",
-            "Result\nBuf\nSystemError",
-            "buf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n/buf-slice",
+            "result/\nbuf\nsystem-error\n/result",
+            "copy-buf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n/copy-buf-slice",
         ),
     ];
     for (name, return_type, expression) in cases {
-        let source = format!("main/\nsig/\n->\n{return_type}\n/sig\n{expression}\n/main\n");
+        let source = format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{expression}\n/main\n");
         let program = compile(&source, name);
 
         let eval_allocations = EvalConfig {

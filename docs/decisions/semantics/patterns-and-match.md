@@ -82,7 +82,7 @@ expression or one of these closed pattern forms.
 ## Semantics
 
 Arms are tested in source order; the first matching arm is selected. Arm types
-join by exact equality, with `Never` only as the explicit divergence join.
+join by exact equality, with `never` only as the explicit divergence join.
 Useless arms are compile errors. F64, string, range, equality, extractor, regex,
 view, guard, and or-patterns are deferred. I64 coverage requires a wildcard or
 binding remainder.

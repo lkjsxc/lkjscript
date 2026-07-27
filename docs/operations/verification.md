@@ -84,8 +84,8 @@ The Semantic Source contract gate covers all 133 tracked files with the current
 canonical base representation, closed node/value/type/built-in/declaration/trivia/
 expression/correlation records, enum/match/pattern nodes and expressions,
 typed holes including match expected/scope facts, schema/source roundtrip,
-`snapshot`, `read_entity`, `query_node`, `diagnostics`, atomic
-`rename`, and atomic `replace_expression`. It includes strict
+`snapshot`, `read-entity`, `query-node`, `diagnostics`, atomic
+`rename`, and atomic `replace-expression`. It includes strict
 schema/version/field/variant rejection; exact pinned serde boundary;
 duplicate/trailing/malformed Unicode JSON; aggregate budgets; deterministic
 ordering; stale identities/preconditions; rename collisions and complete

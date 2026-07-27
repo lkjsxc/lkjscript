@@ -4,7 +4,8 @@ use lkjscript_core::Limits;
 
 #[test]
 fn canonical_snapshot_has_no_language_generation_fields() {
-    let source = ";; leading\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+    let source =
+        ";; leading\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     let tree =
         validate(source, "src/main.lkjscript", &Limits::default()).expect("canonical source");
     let units = crate::semantic::tree::source_units(&tree);
@@ -26,12 +27,12 @@ fn canonical_snapshot_has_no_language_generation_fields() {
 #[test]
 fn generic_enum_nodes_identities_and_subtree_roundtrip_are_closed() {
     let source = concat!(
-        "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
-        "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
-        "variant/\nname/\nNext\n/name\nfields/\nvariant-field/\n",
-        "name/\nvalue\n/name\ntype/\nMaybe/\nT\n/Maybe\n/type\n",
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nnext\n/name\nfields/\nvariant-field/\n",
+        "name/\nvalue\n/name\ntype/\nmaybe/\nt\n/maybe\n/type\n",
         "/variant-field\n/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
     );
     let tree = validate(source, "src/main.lkjscript", &Limits::default()).expect("enum tree");
     let declaration = tree
@@ -69,7 +70,9 @@ fn generic_enum_nodes_identities_and_subtree_roundtrip_are_closed() {
         crate::semantic::tree::subtree_record(&tree, enum_node.index).expect("enum subtree");
     let rebuilt = subtree.to_source().expect("closed enum subtree");
     let enum_source = crate::source::format_node_source(&rebuilt);
-    let complete = format!("{enum_source}main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n");
+    let complete = format!(
+        "{enum_source}main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n"
+    );
     validate(&complete, "src/main.lkjscript", &Limits::default())
         .expect("roundtripped enum validates");
 }

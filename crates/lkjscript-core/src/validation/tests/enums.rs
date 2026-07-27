@@ -8,19 +8,19 @@ fn prelude_option_chunk() -> Chunk {
     let mut chunk = unit_chunk();
     chunk.enums.push(EnumMetadata {
         id: EnumId::new(crate::OPTION_ID),
-        name: "Option".into(),
+        name: "option".into(),
         type_parameter_count: 1,
         layout: RuntimeLayoutId::new(crate::OPTION_LAYOUT),
         variants: vec![
             EnumVariantMetadata {
                 id: VariantId::new(crate::OPTION_NONE_ID),
-                name: "None".into(),
+                name: "none".into(),
                 physical_tag: 1,
                 fields: Vec::new(),
             },
             EnumVariantMetadata {
                 id: VariantId::new(crate::OPTION_SOME_ID),
-                name: "Some".into(),
+                name: "some".into(),
                 physical_tag: 0,
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new(crate::OPTION_VALUE_ID),
@@ -48,13 +48,13 @@ fn enum_chunk() -> Chunk {
         variants: vec![
             EnumVariantMetadata {
                 id: a,
-                name: "A".into(),
+                name: "a".into(),
                 physical_tag: 1,
                 fields: Vec::new(),
             },
             EnumVariantMetadata {
                 id: b,
-                name: "B".into(),
+                name: "b".into(),
                 physical_tag: 0,
                 fields: vec![EnumFieldMetadata {
                     id: field,

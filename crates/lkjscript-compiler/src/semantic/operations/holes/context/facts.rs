@@ -68,7 +68,7 @@ pub(super) fn constraints(
         .collect();
     let never_admissible = candidates
         .iter()
-        .any(|candidate| candidate.result_type == "Never");
+        .any(|candidate| candidate.result_type == "never");
     HoleConstraints {
         generic_variables,
         trait_obligations,

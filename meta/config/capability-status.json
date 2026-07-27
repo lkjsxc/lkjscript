@@ -4,8 +4,8 @@
   "capabilities": [
     {
       "id": "affine-resource-handles",
-      "status": "current",
-      "interface": "affine Handle move and deterministic drop through verified SSA",
+      "status": "superseded",
+      "interface": "removed universal handle source contract",
       "authority": "docs/decisions/capabilities/resource-handles.md",
       "evidence": "docs/decisions/semantics/ownership-and-borrowing.md",
       "claimants": ["docs/current-state.md"]
@@ -177,7 +177,7 @@
     {
       "id": "typed-resources",
       "status": "accepted-contract",
-      "interface": "typed affine resource kinds and generation-safe cleanup",
+      "interface": "implemented exact-kind typing and VM checks; cleanup/native completion pending",
       "authority": "docs/decisions/capabilities/typed-affine-resources.md",
       "evidence": "docs/decisions/capabilities/typed-affine-resources.md",
       "claimants": ["docs/current-state.md"]

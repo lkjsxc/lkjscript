@@ -11,7 +11,7 @@ fn push_i64_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, result: Result<i64>) {
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<bool> {
     match op {
         x if x == Op::SysTtyGet as u8 => {
-            vm.ensure_host_deadline_support("sys-tty-get", false)?;
+            vm.ensure_host_deadline_support("get-terminal-state", false)?;
             let buffer = vm.pop()?;
             let handle = vm.pop()?;
             let result = crate::host_buf::sys_tty_get(&mut vm.arena, &vm.resources, handle, buffer);
@@ -19,7 +19,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysTtySet as u8 => {
-            vm.ensure_host_deadline_support("sys-tty-set", false)?;
+            vm.ensure_host_deadline_support("set-terminal-state", false)?;
             let buffer = vm.pop()?;
             let handle = vm.pop()?;
             let result = crate::host_buf::sys_tty_set(&vm.arena, &vm.resources, handle, buffer);
@@ -55,14 +55,14 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysIsatty as u8 => {
-            vm.ensure_host_deadline_support("sys-isatty", false)?;
+            vm.ensure_host_deadline_support("is-terminal", false)?;
             let handle = vm.pop()?;
             let result = crate::host_buf::sys_isatty(&vm.resources, handle);
             push_language_result(vm, result);
             Ok(true)
         }
         x if x == Op::SysTtyGuardSave as u8 => {
-            vm.ensure_host_deadline_support("sys-tty-guard-save", false)?;
+            vm.ensure_host_deadline_support("save-terminal-guard", false)?;
             let buffer = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Terminal)?;
             let result = crate::host_buf::sys_tty_guard_save(&vm.arena, buffer);
@@ -70,7 +70,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysTtyGuardClear as u8 => {
-            vm.ensure_host_deadline_support("sys-tty-guard-clear", false)?;
+            vm.ensure_host_deadline_support("clear-terminal-guard", false)?;
             vm.require_capability(lkjscript_core::CapabilityKind::Terminal)?;
             let result = crate::host_buf::sys_tty_guard_clear();
             push_language_result(vm, result);

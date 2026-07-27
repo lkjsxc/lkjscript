@@ -4,9 +4,9 @@ use super::*;
 use crate::semantic::schema::{ResponseResult, SnapshotResult};
 
 const SOURCE: &str = concat!(
-    "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+    "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
     "params/\n/params\nunit\n/fn\n/def\n",
-    "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+    "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
 );
 
 struct Case {
@@ -85,12 +85,12 @@ fn transaction(revision: &str, snapshot: &SnapshotResult, mode: &str) -> String 
         })
         .collect::<Vec<_>>();
     serde_json::json!({
-        "kind": "apply_transaction",
+        "kind": "apply-transaction",
         "mode": mode,
         "base_revision": revision,
         "file_preconditions": preconditions,
         "operations": [{
-            "kind": "rename_declaration",
+            "kind": "rename-declaration",
             "declaration_key": declaration.key,
             "entity_fingerprint": declaration.fingerprint,
             "new_name": "g",

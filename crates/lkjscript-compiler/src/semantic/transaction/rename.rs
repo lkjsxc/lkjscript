@@ -19,7 +19,9 @@ pub(crate) fn resolve(
             "this declaration kind cannot be renamed",
         ));
     }
-    if !crate::source::is_source_identifier(new_name) {
+    if !crate::source::is_source_identifier(new_name)
+        || lkjscript_contracts::removed_spelling(new_name).is_some()
+    {
         return Err(error(
             ProtocolErrorCode::InvalidOperation,
             format!("invalid source identifier {new_name:?}"),
@@ -136,29 +138,42 @@ fn rename_one_import(
     old_name: &str,
     new_name: &str,
 ) -> bool {
-    let Some(crate::source::SourceNode {
-        kind: SyntaxKind::Str { value },
+    let [module_field, declarations_field] = import.children.as_mut_slice() else {
+        return false;
+    };
+    let [crate::source::SourceNode {
+        kind: SyntaxKind::Str { value: path },
         ..
-    }) = import.children.first_mut()
+    }] = module_field.children.as_slice()
     else {
         return false;
     };
-    let Some((path, encoded_names)) = value.split_once('#') else {
-        return false;
-    };
-    if path != module {
+    if !matches!(&module_field.kind, SyntaxKind::Call { name } if name == "module")
+        || path != module
+        || !matches!(&declarations_field.kind, SyntaxKind::Call { name } if name == "declarations")
+    {
         return false;
     }
-    let path = path.to_string();
     let mut renamed = false;
-    let mut names: Vec<_> = encoded_names.split(',').map(str::to_string).collect();
-    for name in &mut names {
+    for declaration in &mut declarations_field.children {
+        let SyntaxKind::Symbol { name } = &mut declaration.kind else {
+            return false;
+        };
         if name == old_name {
             *name = new_name.to_string();
             renamed = true;
         }
     }
-    names.sort();
-    *value = format!("{path}#{}", names.join(","));
+    declarations_field.children.sort_by(|left, right| {
+        let left = match &left.kind {
+            SyntaxKind::Symbol { name } => name,
+            _ => unreachable!("validated import declaration"),
+        };
+        let right = match &right.kind {
+            SyntaxKind::Symbol { name } => name,
+            _ => unreachable!("validated import declaration"),
+        };
+        left.cmp(right)
+    });
     renamed
 }

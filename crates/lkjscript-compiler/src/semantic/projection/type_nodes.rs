@@ -9,22 +9,17 @@ pub(super) fn call_name(node: Option<&SourceNode>) -> Option<&str> {
 }
 
 pub(super) fn enum_context(name: &str, parent: Option<&SourceNode>) -> bool {
-    let valid = crate::source::is_source_identifier(name)
-        && name
-            .chars()
-            .next()
-            .is_some_and(|character| character.is_ascii_uppercase());
+    let valid = crate::source::is_source_identifier(name);
     let parent_name = match parent.map(|node| &node.kind) {
         Some(SyntaxKind::Call { name }) => Some(name.as_str()),
         _ => None,
     };
     valid
         && parent_name.is_some_and(|name| {
-            matches!(name, "sig" | "params" | "type" | "for")
-                || name
-                    .chars()
-                    .next()
-                    .is_some_and(|character| character.is_ascii_uppercase())
+            matches!(
+                name,
+                "inputs" | "output" | "params" | "type" | "for" | "list" | "option" | "result"
+            )
         })
 }
 
@@ -33,29 +28,31 @@ pub(super) fn classify(name: &str, parent: Option<&SourceNode>, index: usize) ->
         && parent
             .and_then(|node| node.children.get(index - 1))
             .is_some_and(
-                |node| matches!(&node.kind, SyntaxKind::Symbol { name } if name == "Product"),
+                |node| matches!(&node.kind, SyntaxKind::Symbol { name } if name == "product"),
             )
     {
         return Kind::ProductName;
     }
     match name {
-        "Never" => Kind::TypeNever,
-        "Unit" => Kind::TypeUnit,
-        "Bool" => Kind::TypeBool,
-        "I64" => Kind::TypeI64,
-        "F64" => Kind::TypeF64,
-        "Str" => Kind::TypeString,
-        "Buf" => Kind::TypeBuffer,
-        "Symbol" => Kind::TypeSymbol,
-        "Handle" => Kind::TypeHandle,
-        "Owned" => Kind::TypeOwned,
-        "Ref" => Kind::TypeRef,
-        "RefMut" => Kind::TypeRefMut,
-        "Product" => Kind::TypeProduct,
-        "List" => Kind::TypeList,
-        "Option" => Kind::TypeOption,
-        "Result" => Kind::TypeResult,
-        "->" => Kind::ReturnArrow,
+        "never" => Kind::TypeNever,
+        "unit" => Kind::TypeUnit,
+        "bool" => Kind::TypeBool,
+        "i64" => Kind::TypeI64,
+        "f64" => Kind::TypeF64,
+        "string" => Kind::TypeString,
+        "buf" => Kind::TypeBuffer,
+        "bytes" => Kind::TypeBytes,
+        "byte-vector" => Kind::TypeByteVector,
+        "byte-slice" => Kind::TypeByteSlice,
+        "byte-slice-mut" => Kind::TypeByteSliceMut,
+        "path" => Kind::TypePath,
+        "capability" => Kind::TypeCapability,
+        "symbol" => Kind::TypeSymbol,
+        resource if lkjscript_core::ResourceKind::parse(resource).is_some() => Kind::TypeResource,
+        "product" => Kind::TypeProduct,
+        "list" => Kind::TypeList,
+        "option" => Kind::TypeOption,
+        "result" => Kind::TypeResult,
         _ => Kind::TypeVariable,
     }
 }

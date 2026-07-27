@@ -9,7 +9,7 @@ mod format;
 mod identity;
 mod load;
 mod model;
-mod module_names;
+pub(crate) mod module_names;
 mod modules;
 pub(crate) use modules::public_names as module_public_names;
 mod parse;

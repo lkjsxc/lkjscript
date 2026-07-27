@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Define the uninhabited `Never` type, structured divergence, early return, and
+Define the uninhabited `never` type, structured divergence, early return, and
 typed loop control.
 
 ## Status
@@ -16,15 +16,15 @@ its existing `exit` operation; the new forms require the exact the canonical lan
 
 ## Never
 
-`Never` is uninhabited and has no runtime materialization, default, slot, field,
+`never` is uninhabited and has no runtime materialization, default, slot, field,
 argument, return payload, or ABI value. It joins only an explicitly divergent
 edge with a surviving expression type. It is not universal assignability,
 subtyping, coercion, or an arbitrary missing value.
 
-These exact control expressions have type `Never`:
+These exact control expressions have type `never`:
 
 - `exit I64`;
-- `trap TrapValue`, where the Current `TrapValue` is exact `Str`;
+- `trap TrapValue`, where the Current `TrapValue` is exact `string`;
 - `return T`, where `T` exactly matches the function return type;
 - `break T`, where `T` exactly matches the targeted typed loop result; and
 - `continue`, targeting the nearest loop.
@@ -36,7 +36,7 @@ exit. `while` remains Unit and its `break` must carry exact Unit. `return`,
 `break`, `trap`, and `exit` each have exactly one child; `continue` has none.
 Labels and nonlocal control are outside this slice.
 
-`Never` may be written as a type node so Semantic Source can describe it, but
+`never` may be written as a type node so Semantic Source can describe it, but
 source analysis rejects it from signatures, returns, parameters, locals,
 fields, enum substitutions, collections, constants, and every other storage or
 ABI position. It is admitted only as the derived type of a terminating control

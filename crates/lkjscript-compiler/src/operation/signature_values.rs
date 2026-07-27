@@ -7,18 +7,18 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
     let i64_binary = || function(vec![Type::I64, Type::I64], Type::I64);
     let numeric_binary = || {
         forall(
-            &["N"],
+            &["n"],
             function(
-                vec![Type::Param("N".into()), Type::Param("N".into())],
-                Type::Param("N".into()),
+                vec![Type::Param("n".into()), Type::Param("n".into())],
+                Type::Param("n".into()),
             ),
         )
     };
     let numeric_comparison = || {
         forall(
-            &["N"],
+            &["n"],
             function(
-                vec![Type::Param("N".into()), Type::Param("N".into())],
+                vec![Type::Param("n".into()), Type::Param("n".into())],
                 Type::Bool,
             ),
         )
@@ -28,16 +28,16 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
             numeric_binary()
         }
         Operation::EqualValue | Operation::SameObject => forall(
-            &["T"],
+            &["t"],
             function(
-                vec![Type::Param("T".into()), Type::Param("T".into())],
+                vec![Type::Param("t".into()), Type::Param("t".into())],
                 Type::Bool,
             ),
         ),
         Operation::ListEqual => {
-            let item = Type::Param("T".into());
+            let item = Type::Param("t".into());
             let list = Type::List(Box::new(item));
-            forall(&["T"], function(vec![list.clone(), list], Type::Bool))
+            forall(&["t"], function(vec![list.clone(), list], Type::Bool))
         }
         Operation::F64BitsEqual => function(vec![Type::F64, Type::F64], Type::Bool),
         Operation::F64FromI64Exact => function(
@@ -56,9 +56,9 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
         Operation::Not => function(vec![Type::Bool], Type::Bool),
         Operation::And | Operation::Or => function(vec![Type::Bool, Type::Bool], Type::Bool),
         Operation::Cons => {
-            let item = Type::Param("T".into());
+            let item = Type::Param("t".into());
             forall(
-                &["T"],
+                &["t"],
                 function(
                     vec![item.clone(), Type::List(Box::new(item.clone()))],
                     Type::List(Box::new(item)),
@@ -66,16 +66,16 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
             )
         }
         Operation::Car => {
-            let item = Type::Param("T".into());
+            let item = Type::Param("t".into());
             forall(
-                &["T"],
+                &["t"],
                 function(vec![Type::List(Box::new(item.clone()))], item),
             )
         }
         Operation::Cdr => {
-            let item = Type::Param("T".into());
+            let item = Type::Param("t".into());
             forall(
-                &["T"],
+                &["t"],
                 function(
                     vec![Type::List(Box::new(item.clone()))],
                     Type::List(Box::new(item)),
@@ -83,9 +83,9 @@ pub(in crate::operation) fn value_signature(operation: Operation) -> Type {
             )
         }
         Operation::IsEmptyList => forall(
-            &["T"],
+            &["t"],
             function(
-                vec![Type::List(Box::new(Type::Param("T".into())))],
+                vec![Type::List(Box::new(Type::Param("t".into())))],
                 Type::Bool,
             ),
         ),

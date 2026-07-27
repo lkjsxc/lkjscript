@@ -41,7 +41,7 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
         return no_value(value).map(|()| SyntaxKind::Call { name: name.into() });
     }
     match (kind, value) {
-        (Kind::UnitLiteral, None) => Ok(SyntaxKind::Unit),
+        (Kind::UnitLiteral | Kind::TypeUnit, None) => Ok(SyntaxKind::Unit),
         (Kind::BoolLiteral, Some(Value::Bool { value })) => Ok(SyntaxKind::Bool { value: *value }),
         (Kind::I64Literal, Some(Value::I64 { value })) => Ok(SyntaxKind::I64 { value: *value }),
         (Kind::F64Literal, Some(Value::F64 { canonical })) => f64_kind(canonical),
@@ -61,12 +61,7 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
             Ok(call(name))
         }
         (Kind::TypeEnum, Some(Value::SourceName { name })) => {
-            if !crate::source::is_source_identifier(name)
-                || !name
-                    .chars()
-                    .next()
-                    .is_some_and(|character| character.is_ascii_uppercase())
-            {
+            if !crate::source::is_source_identifier(name) {
                 return Err("semantic enum type name is invalid".into());
             }
             Ok(call(name))
@@ -101,29 +96,30 @@ fn symbol_kind(kind: Kind) -> bool {
             | Kind::TypeF64
             | Kind::TypeString
             | Kind::TypeBuffer
+            | Kind::TypeBytes
+            | Kind::TypeByteVector
+            | Kind::TypeByteSlice
+            | Kind::TypeByteSliceMut
+            | Kind::TypePath
+            | Kind::CapabilityKind
+            | Kind::ImportDeclaration
             | Kind::TypeSymbol
-            | Kind::TypeHandle
-            | Kind::TypeOwned
-            | Kind::TypeRef
-            | Kind::TypeRefMut
+            | Kind::TypeResource
             | Kind::TypeProduct
             | Kind::TypeList
             | Kind::TypeOption
             | Kind::TypeResult
             | Kind::TypeVariable
-            | Kind::ReturnArrow
     )
 }
 
 fn dual_type_marker(kind: Kind) -> Option<&'static str> {
     Some(match kind {
-        Kind::TypeOwned => "Owned",
-        Kind::TypeRef => "Ref",
-        Kind::TypeRefMut => "RefMut",
-        Kind::TypeProduct => "Product",
-        Kind::TypeList => "List",
-        Kind::TypeOption => "Option",
-        Kind::TypeResult => "Result",
+        Kind::TypeProduct => "product",
+        Kind::TypeCapability => "capability",
+        Kind::TypeList => "list",
+        Kind::TypeOption => "option",
+        Kind::TypeResult => "result",
         _ => return None,
     })
 }

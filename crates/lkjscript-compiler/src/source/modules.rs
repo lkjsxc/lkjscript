@@ -155,11 +155,30 @@ fn import_fields(import: &Expr) -> Option<(&str, Vec<&str>)> {
     if name != "import" {
         return None;
     }
-    let [Expr::LitStr(spec)] = args.as_slice() else {
+    let [Expr::Call {
+        name: module,
+        args: path,
+    }, Expr::Call {
+        name: declarations,
+        args: names,
+    }] = args.as_slice()
+    else {
         return None;
     };
-    let (path, names) = spec.split_once('#')?;
-    Some((path, names.split(',').collect()))
+    let [Expr::LitStr(path)] = path.as_slice() else {
+        return None;
+    };
+    if module != "module" || declarations != "declarations" {
+        return None;
+    }
+    let names = names
+        .iter()
+        .map(|name| match name {
+            Expr::Symbol(name) => Some(name.as_str()),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some((path, names))
 }
 
 fn metadata(expr: &Expr) -> bool {

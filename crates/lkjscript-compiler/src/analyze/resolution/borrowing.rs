@@ -13,13 +13,17 @@ impl Resolver<'_> {
         let ty = self.analyzer.binding(binding)?.ty.clone();
         match ty {
             Type::Owned(ref inner) if inner.as_ref() == &Type::Buf => {}
-            Type::Handle => {}
+            Type::Resource(_) => {}
             Type::RefMut(_) => {
                 return Err(
                     self.error("RefMut forwarding is unsupported in the initial ownership slice")
                 );
             }
-            _ => return Err(self.error("move requires an affine Owned Buf or Handle place")),
+            _ => {
+                return Err(
+                    self.error("move requires an affine byte-vector or typed resource place")
+                )
+            }
         }
         let place = self.place(binding)?;
         let binding = self.binding_ref(binding)?;
@@ -33,7 +37,7 @@ impl Resolver<'_> {
     ) -> Result<Expr> {
         let [AstExpr::Symbol(name)] = args else {
             return Err(
-                self.error("borrow expects exactly one whole Owned Buf local or parameter name")
+                self.error("borrow expects exactly one whole byte-vector local or parameter name")
             );
         };
         let binding = self.lookup_lexical(name).ok_or_else(|| {
@@ -44,7 +48,7 @@ impl Resolver<'_> {
         let owner_ty = self.analyzer.binding(binding)?.ty.clone();
         if owner_ty != Type::Owned(Box::new(Type::Buf)) {
             return Err(self.error(
-                "borrow target must have exact type Owned Buf; reborrow and legacy Buf are unsupported",
+                "borrow target must have exact type byte-vector; reborrow and legacy Buf are unsupported",
             ));
         }
         let place = self.place(binding)?;

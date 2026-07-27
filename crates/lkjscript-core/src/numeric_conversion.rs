@@ -14,10 +14,10 @@ pub enum NumericError {
 impl NumericError {
     pub const fn name(self) -> &'static str {
         match self {
-            Self::NonFinite => "NonFinite",
-            Self::OutOfRange => "OutOfRange",
-            Self::Fractional => "Fractional",
-            Self::Inexact => "Inexact",
+            Self::NonFinite => "non-finite",
+            Self::OutOfRange => "out-of-range",
+            Self::Fractional => "fractional",
+            Self::Inexact => "inexact",
         }
     }
 

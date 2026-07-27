@@ -47,7 +47,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::WriteStr as u8 => {
-            vm.ensure_host_deadline_support("write-str", false)?;
+            vm.ensure_host_deadline_support("write-string", false)?;
             let value = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
             let length = crate::host_ext::as_str(&vm.arena, value)?.len();

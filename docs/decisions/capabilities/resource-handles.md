@@ -7,10 +7,10 @@ state before multi-process or untrusted execution work begins.
 
 ## Status
 
-**Current.** Bounded terminal operations, monotonic stale-safe handles, affine
-local ownership, explicit `move/` transfer, and deterministic `drop` cleanup
-are implemented. Reusable slots and per-process terminal leases remain
-deferred.
+**Superseded source contract.** The universal `Handle` type described below was
+removed by [Typed Affine Resources](typed-affine-resources.md). This file
+retains the prior implementation rationale; it is not Current source authority.
+Opaque monotonic tokens remain an internal VM representation.
 
 ## Handle Decision
 

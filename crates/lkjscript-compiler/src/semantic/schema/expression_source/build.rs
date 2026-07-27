@@ -39,7 +39,9 @@ pub(super) fn symbol(name: &str, span: SourceSpan) -> Result<SourceNode, String>
 }
 
 fn validate_name(name: &str) -> Result<(), String> {
-    if crate::source::is_source_identifier(name) {
+    if crate::source::is_source_identifier(name)
+        && lkjscript_contracts::removed_spelling(name).is_none()
+    {
         Ok(())
     } else {
         Err(format!("invalid source name {name:?}"))

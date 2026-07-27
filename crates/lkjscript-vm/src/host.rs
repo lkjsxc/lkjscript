@@ -51,61 +51,61 @@ fn display_enum(arena: &Arena, layout: [u8; 32], tag: u16, payload: &[Value]) ->
         return match (tag, payload) {
             (0, [value]) => Ok(format!("some({})", display_value(arena, *value)?)),
             (1, []) => Ok("none".into()),
-            _ => Err(Error::msg("malformed Option value")),
+            _ => Err(Error::msg("malformed option value")),
         };
     }
     if layout == lkjscript_core::RESULT_LAYOUT {
         return match (tag, payload) {
-            (0, [value]) => Ok(format!("Ok({})", display_value(arena, *value)?)),
-            (1, [value]) => Ok(format!("Err({})", display_value(arena, *value)?)),
-            _ => Err(Error::msg("malformed Result value")),
+            (0, [value]) => Ok(format!("ok({})", display_value(arena, *value)?)),
+            (1, [value]) => Ok(format!("err({})", display_value(arena, *value)?)),
+            _ => Err(Error::msg("malformed result value")),
         };
     }
     if layout == lkjscript_core::NUMERIC_ERROR_LAYOUT && payload.is_empty() {
         let name = match tag {
-            0 => "Fractional",
-            1 => "NonFinite",
-            2 => "Inexact",
-            3 => "OutOfRange",
-            _ => return Err(Error::msg("malformed NumericError value")),
+            0 => "fractional",
+            1 => "non-finite",
+            2 => "inexact",
+            3 => "out-of-range",
+            _ => return Err(Error::msg("malformed numeric-error value")),
         };
-        return Ok(format!("NumericError.{name}"));
+        return Ok(format!("numeric-error {name}"));
     }
     if layout == lkjscript_core::UTF8_ERROR_LAYOUT {
         let name = match tag {
-            0 => "InvalidLeadingByte",
-            1 => "UnexpectedContinuation",
-            2 => "Surrogate",
-            3 => "OutOfRange",
-            4 => "MissingContinuation",
-            5 => "OverlongEncoding",
-            _ => return Err(Error::msg("malformed Utf8Error value")),
+            0 => "invalid-leading-byte",
+            1 => "unexpected-continuation",
+            2 => "surrogate",
+            3 => "out-of-range",
+            4 => "missing-continuation",
+            5 => "overlong-encoding",
+            _ => return Err(Error::msg("malformed utf8-error value")),
         };
         return match payload {
             [offset] => Ok(format!(
-                "Utf8Error.{name}({})",
+                "utf8-error {name}({})",
                 display_value(arena, *offset)?
             )),
-            _ => Err(Error::msg("malformed Utf8Error payload")),
+            _ => Err(Error::msg("malformed utf8-error payload")),
         };
     }
     if layout == lkjscript_core::SYSTEM_ERROR_LAYOUT {
         let name = match tag {
-            0 => "Io",
-            1 => "Terminal",
-            2 => "Sqlite",
-            3 => "Time",
-            4 => "Network",
-            5 => "Utf8",
-            6 => "Unsupported",
-            7 => "Random",
-            _ => return Err(Error::msg("malformed SystemError value")),
+            0 => "io",
+            1 => "terminal",
+            2 => "sqlite",
+            3 => "time",
+            4 => "network",
+            5 => "utf8",
+            6 => "unsupported",
+            7 => "random",
+            _ => return Err(Error::msg("malformed system-error value")),
         };
         let mut fields = Vec::with_capacity(payload.len());
         for value in payload {
             fields.push(display_value(arena, *value)?);
         }
-        return Ok(format!("SystemError.{name}({})", fields.join(", ")));
+        return Ok(format!("system-error {name}({})", fields.join(", ")));
     }
     Ok(format!("#<enum:{tag}>"))
 }

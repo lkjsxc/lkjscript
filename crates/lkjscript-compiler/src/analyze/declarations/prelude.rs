@@ -12,15 +12,15 @@ impl Analyzer {
     }
 
     fn install_option(&mut self) {
-        let parameter = Type::Param("T".into());
+        let parameter = Type::Param("t".into());
         self.push_prelude(
             PreludeEnum::Option,
-            vec!["T".into()],
+            vec!["t".into()],
             vec![
-                variant(lkjscript_core::OPTION_NONE_ID, "None", Vec::new(), 0),
+                variant(lkjscript_core::OPTION_NONE_ID, "none", Vec::new(), 0),
                 variant(
                     lkjscript_core::OPTION_SOME_ID,
-                    "Some",
+                    "some",
                     vec![field(
                         lkjscript_core::OPTION_VALUE_ID,
                         "value",
@@ -36,26 +36,26 @@ impl Analyzer {
     fn install_result(&mut self) {
         self.push_prelude(
             PreludeEnum::Result,
-            vec!["T".into(), "E".into()],
+            vec!["t".into(), "e".into()],
             vec![
                 variant(
                     lkjscript_core::RESULT_OK_ID,
-                    "Ok",
+                    "ok",
                     vec![field(
                         lkjscript_core::RESULT_OK_VALUE_ID,
                         "value",
-                        Type::Param("T".into()),
+                        Type::Param("t".into()),
                         false,
                     )],
                     0,
                 ),
                 variant(
                     lkjscript_core::RESULT_ERR_ID,
-                    "Err",
+                    "err",
                     vec![field(
                         lkjscript_core::RESULT_ERR_ERROR_ID,
                         "error",
-                        Type::Param("E".into()),
+                        Type::Param("e".into()),
                         false,
                     )],
                     1,

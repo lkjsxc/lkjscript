@@ -4,11 +4,11 @@ use super::*;
 fn trait_and_impl_metadata_follow_source_closure_and_declaration_order() {
     let dependency = format!(
         "{}{}{}",
-        marker_trait("First"),
+        marker_trait("first"),
         POINT_PRODUCT,
-        marker_impl("First", "Point")
+        marker_impl("first", "point")
     );
-    let root = format!("{}{}", marker_trait("Second"), main_source("Unit", "unit"));
+    let root = format!("{}{}", marker_trait("second"), main_source("unit", "unit"));
     let first = analyze_program(
         &parsed_program(&[("dep.lkjscript", &dependency), ("root.lkjscript", &root)])
             .expect("parse closure"),
@@ -40,15 +40,15 @@ fn trait_and_impl_metadata_follow_source_closure_and_declaration_order() {
         )
     };
     assert_eq!(facts(&first), facts(&second));
-    assert_eq!(first.traits[CoreTrait::ALL.len()].name, "First");
-    assert_eq!(first.traits[CoreTrait::ALL.len() + 1].name, "Second");
+    assert_eq!(first.traits[CoreTrait::ALL.len()].name, "first");
+    assert_eq!(first.traits[CoreTrait::ALL.len() + 1].name, "second");
 }
 
 #[test]
 fn generic_and_equality_operation_types_remain_exact() {
     let source = main_source(
-        "Bool",
-        "list-equal/\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\ncons/\n1\nempty-list/\nI64\n/empty-list\n/cons\n/list-equal",
+        "bool",
+        "equal-list/\nlist-prepend/\n1\nempty-list/\ni64\n/empty-list\n/list-prepend\nlist-prepend/\n1\nempty-list/\ni64\n/empty-list\n/list-prepend\n/equal-list",
     );
     let program = analyze_one(&source).expect("analyze exact list equality");
     let ExprKind::Operation {

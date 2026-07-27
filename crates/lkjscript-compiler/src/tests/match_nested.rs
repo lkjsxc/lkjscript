@@ -4,10 +4,10 @@ use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 fn product_source(arms: &str) -> String {
     format!(
         concat!(
-            "product/\nname/\nPair\n/name\nfields/\n",
-            "field/\nname/\nleft\n/name\ntype/\nBool\n/type\n/field\n",
-            "field/\nname/\nright\n/name\ntype/\nBool\n/type\n/field\n/fields\n/product\n",
-            "main/\nsig/\n->\nI64\n/sig\nmatch/\nproduct-value/\nPair\n",
+            "product/\nname/\npair\n/name\nfields/\n",
+            "field/\nname/\nleft\n/name\ntype/\nbool\n/type\n/field\n",
+            "field/\nname/\nright\n/name\ntype/\nbool\n/type\n/field\n/fields\n/product\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\nproduct-value/\npair\n",
             "field/\nleft\ntrue\n/field\nfield/\nright\ntrue\n/field\n/product-value\n",
             "arms/\n{}\n/arms\n/match\n/main\n",
         ),
@@ -18,7 +18,7 @@ fn product_source(arms: &str) -> String {
 fn product_arm(left: &str, right: &str, body: i64) -> String {
     format!(
         concat!(
-            "arm/\nproduct-pattern/\ntype/\nProduct\nPair\n/type\nfields/\n",
+            "arm/\nproduct-pattern/\ntype/\nproduct\npair\n/type\nfields/\n",
             "product-field-pattern/\nname/\nleft\n/name\n{}\n/product-field-pattern\n",
             "product-field-pattern/\nname/\nright\n/name\n{}\n/product-field-pattern\n",
             "/fields\n/product-pattern\n{}\n/arm",
@@ -66,13 +66,13 @@ fn nested_product_matrix_is_complete_and_ordered() {
 
 fn enum_bool_source() -> String {
     concat!(
-        "enum/\nname/\nFlag\n/name\nvariants/\n",
-        "variant/\nname/\nEmpty\n/name\nfields/\n/fields\n/variant\n",
-        "variant/\nname/\nValue\n/name\nfields/\nvariant-field/\nname/\nbit\n/name\ntype/\nBool\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nI64\n/sig\nmatch/\nvariant-value/\ntype/\nFlag/\n/Flag\n/type\nvariant/\nValue\n/variant\nfields/\nvariant-field/\nname/\nbit\n/name\ntrue\n/variant-field\n/fields\n/variant-value\n",
-        "arms/\narm/\nvariant-pattern/\ntype/\nFlag/\n/Flag\n/type\nvariant/\nValue\n/variant\nfields/\nvariant-field-pattern/\nname/\nbit\n/name\nbool-pattern/\nfalse\n/bool-pattern\n/variant-field-pattern\n/fields\n/variant-pattern\n0\n/arm\n",
-        "arm/\nvariant-pattern/\ntype/\nFlag/\n/Flag\n/type\nvariant/\nValue\n/variant\nfields/\nvariant-field-pattern/\nname/\nbit\n/name\nbool-pattern/\ntrue\n/bool-pattern\n/variant-field-pattern\n/fields\n/variant-pattern\n1\n/arm\n",
-        "arm/\nvariant-pattern/\ntype/\nFlag/\n/Flag\n/type\nvariant/\nEmpty\n/variant\nfields/\n/fields\n/variant-pattern\n2\n/arm\n/arms\n/match\n/main\n",
+        "enum/\nname/\nflag\n/name\nvariants/\n",
+        "variant/\nname/\nempty\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nvalue\n/name\nfields/\nvariant-field/\nname/\nbit\n/name\ntype/\nbool\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\nvariant-value/\ntype/\nflag/\n/flag\n/type\nvariant/\nvalue\n/variant\nfields/\nvariant-field/\nname/\nbit\n/name\ntrue\n/variant-field\n/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\nflag/\n/flag\n/type\nvariant/\nvalue\n/variant\nfields/\nvariant-field-pattern/\nname/\nbit\n/name\nbool-pattern/\nfalse\n/bool-pattern\n/variant-field-pattern\n/fields\n/variant-pattern\n0\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nflag/\n/flag\n/type\nvariant/\nvalue\n/variant\nfields/\nvariant-field-pattern/\nname/\nbit\n/name\nbool-pattern/\ntrue\n/bool-pattern\n/variant-field-pattern\n/fields\n/variant-pattern\n1\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nflag/\n/flag\n/type\nvariant/\nempty\n/variant\nfields/\n/fields\n/variant-pattern\n2\n/arm\n/arms\n/match\n/main\n",
     ).into()
 }
 
@@ -108,5 +108,5 @@ fn nested_product_witness_is_canonical_and_repeatable() {
     };
     let first = compile();
     assert_eq!(first, compile());
-    assert!(first.contains("Bool::true"), "{first}");
+    assert!(first.contains("bool::true"), "{first}");
 }

@@ -12,7 +12,7 @@ pub struct SessionProcessError {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(in crate::semantic::session) enum ProcessCode {
     PartialHeader,
     PartialPayload,

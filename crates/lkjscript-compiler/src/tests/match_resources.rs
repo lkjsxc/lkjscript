@@ -4,7 +4,7 @@ use crate::{ResourceCategory, ResourceProfile};
 #[test]
 fn match_matrix_categories_reserve_exactly_before_hir_allocation() {
     let source = concat!(
-        "main/\nsig/\n->\nI64\n/sig\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
         "match/\ntrue\narms/\n",
         "arm/\nbool-pattern/\nfalse\n/bool-pattern\n0\n/arm\n",
         "arm/\nbool-pattern/\ntrue\n/bool-pattern\n1\n/arm\n",

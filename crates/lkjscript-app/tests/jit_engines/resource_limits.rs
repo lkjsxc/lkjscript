@@ -59,7 +59,7 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
     assert_eq!(optimized.stats.baseline_native_entries, 0);
 
     let allocation = compile(
-        "main/\nsig/\n->\nStr\n/sig\nempty-str/\n/empty-str\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nempty-string/\n/empty-string\n/main\n",
         "tiny-allocation-limit.lkjscript",
     );
     let mut no_allocations = ExecutionConfig::default();

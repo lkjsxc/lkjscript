@@ -44,7 +44,7 @@ pub fn buf_to_str(
 }
 
 pub fn buf_slice(arena: &mut Arena, value: Value, offset: i64, length: i64) -> Result<Value> {
-    let range = buffer_range(arena, value, offset, length, "buf-slice")?;
+    let range = buffer_range(arena, value, offset, length, "copy-buf-slice")?;
     let bytes = as_buf(arena, value)?
         .get(range)
         .ok_or_else(|| Error::msg("buf-slice range is invalid"))?

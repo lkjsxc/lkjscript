@@ -37,17 +37,17 @@ Option T absence     none/ T /none
 empty List T         empty-list/ T /empty-list
 ```
 
-`Unit` has one value, `unit`, and means successful completion without useful
+`unit` has one value, `unit`, and means successful completion without useful
 data. `Option T` uses `some/ value /some` or the explicitly typed `none` form.
 `none/ T /none` contains exactly one type expression. `is-some` is the positive
 predicate; absence is `not/is-some/...`, not a second negative alias.
-`unwrap-some` returns the payload or traps explicitly on none. `arg` has type
+`unwrap-some` returns the payload or traps explicitly on none. `argument-at` has type
 `I64 -> Option Str`, including negative and out-of-range indices.
 
 An empty list is a typed collection value, not Unit or Option absence. Its
-canonical form contains exactly one element type expression. `empty-list?` is
+canonical form contains exactly one element type expression. `is-empty-list` is
 the only emptiness predicate and has type `List T -> Bool`; the historical
-`null?` and generic `nil?` spellings are not list aliases. `car` and `cdr` trap
+`null?` and generic `nil?` spellings are not list aliases. `list-first` and `list-rest` trap
 when given an empty list. List structural equality remains a separate explicit
 operation and is not implied by this constructor.
 
@@ -63,14 +63,14 @@ VM uses a dedicated none singleton and a traced wrapper for some.
 The Unit, typed-empty-list, and Option/no-nil slices are implemented. Unit,
 empty-list, and none have distinct singleton tags; some is a traced wrapper.
 Empty `do`, `while`, `set`, and successful side-effecting operations return
-Unit. `empty-list` has exact `List T` HIR type, and `empty-list?` is canonical.
+Unit. `empty-list` has exact `List T` HIR type, and `is-empty-list` is canonical.
 The `Nil` type, `nil` value, `nil?`, and their bytecode operations are removed.
 
 ## Control Flow
 
 `if` is always an expression with exactly three operands: condition, then, and
 else. The condition is Bool and both reachable arms have exactly the same type.
-There is no implicit Unit or absence arm. `while` returns Unit. A future `Never`
+There is no implicit Unit or absence arm. `while` returns Unit. A future `never`
 type represents trap, return, and other unreachable control edges and may join
 with the surviving branch type.
 
@@ -124,7 +124,7 @@ Executable roots contain exactly one explicit `main`; top-level `do` is removed.
 The canonical main form is
 `main/ sig/ -> T /sig body-expression /main`: it has no parameters, its body
 must have exactly the declared return type, and script arguments remain
-available through `arg`. Missing, duplicate, or imported main is a compile
+available through `argument-at`. Missing, duplicate, or imported main is a compile
 error. Runtime effects begin from main and receive capabilities explicitly.
 
 Global data is eventually limited to:
@@ -144,10 +144,10 @@ families:
 
 - `equal-value`: identical-type value equality for current scalar types and
   recursively comparable Option/Result values;
-- `same-object`: identity comparison for current Buf and Handle values;
-- `list-equal`: structural `List T` equality when `T` supports value equality,
+- `is-same-object`: identity comparison for current Buf and Handle values;
+- `equal-list`: structural `List T` equality when `T` supports value equality,
   bounded to 1,000,000 pair-node comparisons;
-- `f64-bits-equal`: exact `to_bits` equality, distinct from IEEE equality.
+- `equal-f64-bits`: exact `to_bits` equality, distinct from IEEE equality.
 
 Mixed I64/F64 equality, unconstrained generic equality, closure identity, and
 negative aliases are rejected. Use `not` around a positive comparison.
@@ -159,7 +159,7 @@ The complete accepted contract is
 
 ## Integer And Floating Modes
 
-The current checked `+`, `-`, `*`, and `div` remain the safe defaults. Explicit
+The current checked `add`, `subtract`, `multiply`, and `divide` remain the safe defaults. Explicit
 wrapping and saturating integer operations may be added as separate names.
 Future floating optimization assumptions are granular and independently
 verified; there is no single implicit fast-math mode. AI-authored `assume` is

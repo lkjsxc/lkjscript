@@ -46,7 +46,9 @@ pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lex
                 leading_trivia: std::mem::take(&mut pending_trivia),
             });
         } else {
-            super::names::validate_name(line.text, line, "atom", origin)?;
+            if !super::names::is_numeric_literal_spelling(line.text) {
+                super::names::validate_name(line.text, line, "atom", origin)?;
+            }
             output.push(Token {
                 kind: TokenKind::Atom(line.text.to_string()),
                 span: super::lines::line_span(line),
@@ -63,9 +65,9 @@ pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lex
 
 fn text_open_name(line: &str) -> Option<&'static str> {
     match line {
-        "str/" => Some("str"),
+        "string-literal/" => Some("string-literal"),
         "name/" => Some("name"),
-        "import/" => Some("import"),
+        "module/" => Some("module"),
         _ => None,
     }
 }

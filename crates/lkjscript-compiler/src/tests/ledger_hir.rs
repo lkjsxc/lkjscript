@@ -5,12 +5,12 @@ use crate::{BudgetAuthority, ResourceCategory, ResourceProfile};
 fn hir_shape_reservations_are_exact_plus_one_and_deterministic() {
     let source = concat!(
         "",
-        "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
-        "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
-        "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\n",
-        "name/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n",
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\n",
+        "name/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n",
         "/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
     );
     let counts = [
         (ResourceCategory::EnumDeclarations, 1),

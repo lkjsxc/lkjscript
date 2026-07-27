@@ -6,7 +6,11 @@ use super::*;
 fn valid_128_request_session_rolls_journal_with_deterministic_prefix() {
     let directory = case("ledger-rollover");
     let root = directory.join("main.lkjscript");
-    std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write source");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write source");
     let operation = execute_operation(&semantic_request(
         &root,
         "default",
@@ -21,7 +25,7 @@ fn valid_128_request_session_rolls_journal_with_deterministic_prefix() {
             let (_, response) = handle(&mut session, &session_request(&id, 0, &operation));
             assert_eq!(
                 response["response"]["error"]["code"],
-                "stale_session_revision"
+                "stale-session-revision"
             );
         }
         let ledger = session.ledger.as_ref().expect("session ledger");

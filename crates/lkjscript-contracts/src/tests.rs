@@ -21,10 +21,10 @@ fn fact(id: &str, name: &str, value: &str) -> ContractFact {
 #[test]
 fn canonical_encoding_is_independent_of_item_and_stable_fact_order() {
     let first = ContractItem::new("a", ContractItemKind::Type)
-        .fact(fact("field-b", "b", "Bool"))
-        .fact(fact("field-a", "a", "I64"));
+        .fact(fact("field-b", "b", "bool"))
+        .fact(fact("field-a", "a", "i64"));
     let second =
-        ContractItem::new("b", ContractItemKind::Operation).fact(fact("result", "result", "Unit"));
+        ContractItem::new("b", ContractItemKind::Operation).fact(fact("result", "result", "unit"));
     let left = descriptor(vec![first.clone(), second.clone()]);
     let right = descriptor(vec![
         second,
@@ -44,15 +44,15 @@ fn semantic_order_changes_identity() {
         ContractItemKind::Operation,
     )
     .semantic_order()
-    .fact(fact("first", "first", "I64"))
-    .fact(fact("second", "second", "Bool"))]);
+    .fact(fact("first", "first", "i64"))
+    .fact(fact("second", "second", "bool"))]);
     let right = descriptor(vec![ContractItem::new(
         "slots",
         ContractItemKind::Operation,
     )
     .semantic_order()
-    .fact(fact("second", "second", "Bool"))
-    .fact(fact("first", "first", "I64"))]);
+    .fact(fact("second", "second", "bool"))
+    .fact(fact("first", "first", "i64"))]);
     assert_ne!(digest(&left), digest(&right));
 }
 
@@ -71,10 +71,10 @@ fn length_framing_prevents_ambiguous_concatenation() {
 #[test]
 fn every_contract_fact_changes_identity() {
     let base = descriptor(vec![
-        ContractItem::new("item", ContractItemKind::Field).fact(fact("field", "field", "I64"))
+        ContractItem::new("item", ContractItemKind::Field).fact(fact("field", "field", "i64"))
     ]);
     let changed = descriptor(vec![
-        ContractItem::new("item", ContractItemKind::Field).fact(fact("field", "field", "Bool"))
+        ContractItem::new("item", ContractItemKind::Field).fact(fact("field", "field", "bool"))
     ]);
     assert_ne!(digest(&base), digest(&changed));
 }
@@ -82,12 +82,12 @@ fn every_contract_fact_changes_identity() {
 #[test]
 fn names_are_metadata_only_when_explicitly_declared() {
     let metadata_left = descriptor(vec![ContractItem::new("item", ContractItemKind::Field)
-        .fact(fact("field", "old-name", "I64").presentation_name())]);
+        .fact(fact("field", "old-name", "i64").presentation_name())]);
     let metadata_right = descriptor(vec![ContractItem::new("item", ContractItemKind::Field)
-        .fact(fact("field", "new-name", "I64").presentation_name())]);
+        .fact(fact("field", "new-name", "i64").presentation_name())]);
     let included =
         descriptor(vec![ContractItem::new("item", ContractItemKind::Field)
-            .fact(fact("field", "new-name", "I64"))]);
+            .fact(fact("field", "new-name", "i64"))]);
     assert_eq!(digest(&metadata_left), digest(&metadata_right));
     assert_ne!(digest(&metadata_left), digest(&included));
 }

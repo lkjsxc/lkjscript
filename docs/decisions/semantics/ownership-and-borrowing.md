@@ -6,17 +6,18 @@ Define the Rust-grade ownership direction and one canonical AI-authored syntax
 without claiming that the complete borrow conformance matrix is implemented.
 ## Status
 
-The **Initial Sound Slice** below is **Current** for fresh `Owned Buf` values,
-whole-local moves, and non-escaping `Ref Buf`/`RefMut Buf` loans. `Handle` is
-also a Current affine resource: acquired locals must be explicitly returned,
-moved, or `drop`ped; double drop and use after move/drop are compile errors.
-Handle parameters are borrowed unless an explicit `move/` transfers ownership.
-Generic `drop` consumes owned handles through verified SSA and the existing
-resource-table close operation; SQLite close/finalize are consuming operations.
-Program teardown remains a deterministic safety net, not a substitute for
-static local cleanup. Products and collections containing affine resources,
-general regions, and full Rust-style borrow checking remain **Accepted
-Targets**.
+The **Initial Sound Slice** below is **Current** under direct source spellings
+`byte-vector`, `byte-slice`, and `byte-slice-mut`: fresh vectors move as whole
+locals and views are bounded, lexical, and non-escaping. The former `owned
+buf`, `ref buf`, and `ref-mut buf` source forms are removed.
+
+Exact typed resources have an implemented affine foundation: acquired locals
+must be returned, moved, or explicitly dropped; double drop and use after
+consumption are compile errors. Parameters are borrowed unless `move` transfers
+ownership. Resource-bearing aggregates are rejected. Compiler-inserted cleanup
+on every structured edge, resource state/provider proofs, and generated native
+host execution remain **Accepted Targets**, so the complete typed-resource
+contract is not Current.
 
 ## Authority And Status Vocabulary
 

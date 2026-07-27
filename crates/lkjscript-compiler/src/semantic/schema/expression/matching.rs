@@ -17,7 +17,7 @@ pub(crate) struct MatchPatternField {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum MatchPatternExpression {
     Wildcard {},
     Binding {

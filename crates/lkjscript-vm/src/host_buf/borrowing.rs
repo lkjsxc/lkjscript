@@ -8,7 +8,7 @@ pub fn sys_read_into(
     offset: i64,
     requested: i64,
 ) -> Result<i64> {
-    let range = bulk_range(arena, buffer, offset, requested, "sys-read-into")?;
+    let range = bulk_range(arena, buffer, offset, requested, "read-into")?;
     let count = arena.mutate(buffer, |object| {
         let HeapObj::Buf(bytes) = object else {
             return Err(Error::msg("expected buf"));
@@ -29,7 +29,7 @@ pub fn sys_write_from(
     offset: i64,
     requested: i64,
 ) -> Result<i64> {
-    let range = bulk_range(arena, buffer, offset, requested, "sys-write-from")?;
+    let range = bulk_range(arena, buffer, offset, requested, "write-from")?;
     let source = as_buf(arena, buffer)?
         .get(range)
         .ok_or_else(|| Error::msg("sys-write-from range is invalid"))?;
@@ -43,7 +43,7 @@ pub fn sys_random_fill(
     offset: i64,
     requested: i64,
 ) -> Result<Value> {
-    let range = bulk_range(arena, buffer, offset, requested, "sys-random-fill")?;
+    let range = bulk_range(arena, buffer, offset, requested, "fill-random")?;
     arena.mutate(buffer, |object| {
         let HeapObj::Buf(bytes) = object else {
             return Err(Error::msg("expected buf"));
@@ -58,7 +58,7 @@ pub fn sys_random_fill(
 }
 
 pub fn sys_sha256(arena: &mut Arena, buffer: Value, offset: i64, requested: i64) -> Result<Value> {
-    let range = bulk_range(arena, buffer, offset, requested, "sys-sha256")?;
+    let range = bulk_range(arena, buffer, offset, requested, "sha256")?;
     let source = as_buf(arena, buffer)?
         .get(range)
         .ok_or_else(|| Error::msg("sys-sha256 range is invalid"))?;
@@ -72,7 +72,7 @@ pub fn sys_tty_get(
     handle: Value,
     buffer: Value,
 ) -> Result<Value> {
-    let raw = handles.raw_fd(handle, "sys-tty-get")?;
+    let raw = handles.raw_fd(handle, "get-terminal-state")?;
     arena.mutate(buffer, |object| {
         let HeapObj::Buf(state) = object else {
             return Err(Error::msg("expected buf"));
@@ -89,7 +89,7 @@ pub fn sys_tty_set(
     handle: Value,
     buffer: Value,
 ) -> Result<Value> {
-    let raw = handles.raw_fd(handle, "sys-tty-set")?;
+    let raw = handles.raw_fd(handle, "set-terminal-state")?;
     let state = as_buf(arena, buffer)?;
     lkjscript_sys::tty_set(raw, state)
         .map_err(|error| Error::msg(format!("sys-tty-set: {error}")))?;
@@ -97,7 +97,7 @@ pub fn sys_tty_set(
 }
 
 pub fn sys_poll(handles: &ResourceTable, handle: Value, timeout: i64) -> Result<i64> {
-    let raw = handles.raw_fd(handle, "sys-poll")?;
+    let raw = handles.raw_fd(handle, "poll-streams")?;
     let timeout =
         i32::try_from(timeout).map_err(|_| Error::msg("sys-poll timeout out of range"))?;
     if timeout < 0 {
@@ -113,7 +113,7 @@ pub fn stdin_handle() -> Value {
 }
 
 pub fn sys_isatty(handles: &ResourceTable, handle: Value) -> Result<Value> {
-    let raw = handles.raw_fd(handle, "sys-isatty")?;
+    let raw = handles.raw_fd(handle, "is-terminal")?;
     Ok(Value::from_bool(lkjscript_sys::is_tty(raw)))
 }
 

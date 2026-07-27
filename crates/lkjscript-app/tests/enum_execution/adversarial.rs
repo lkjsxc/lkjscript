@@ -7,16 +7,16 @@ use lkjscript_ir::{
 fn two_payload_variants() -> String {
     concat!(
         "",
-        "enum/\nname/\nChoice\n/name\nvariants/\n",
-        "variant/\nname/\nLeft\n/name\nfields/\n",
-        "variant-field/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/variant-field\n",
+        "enum/\nname/\nchoice\n/name\nvariants/\n",
+        "variant/\nname/\nleft\n/name\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/variant-field\n",
         "/fields\n/variant\n",
-        "variant/\nname/\nRight\n/name\nfields/\n",
-        "variant-field/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/variant-field\n",
+        "variant/\nname/\nright\n/name\nfields/\n",
+        "variant-field/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/variant-field\n",
         "/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nChoice/\n/Choice\n/sig\n",
-        "variant-value/\ntype/\nChoice/\n/Choice\n/type\n",
-        "variant/\nLeft\n/variant\nfields/\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nchoice/\n/choice\n/output\n/sig\n",
+        "variant-value/\ntype/\nchoice/\n/choice\n/type\n",
+        "variant/\nleft\n/variant\nfields/\n",
         "variant-field/\nname/\nvalue\n/name\n9\n/variant-field\n",
         "/fields\n/variant-value\n/main\n",
     )
@@ -25,7 +25,7 @@ fn two_payload_variants() -> String {
 
 #[test]
 fn enum_heap_preflight_rejects_before_partial_scalar_box_publication() {
-    let float_source = source().replace("I64", "F64").replace("42", "1.5");
+    let float_source = source().replace("i64", "f64").replace("42", "1.5");
     let compiled = compile_source(
         &float_source,
         "enum-float-limit.lkjscript",

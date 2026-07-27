@@ -24,20 +24,25 @@ fn compile_source_with_profile(
 }
 
 fn unit_main(body: &str) -> String {
-    format!("main/\nsig/\n->\nUnit\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\ndo/\n{body}\nunit\n/do\n/main\n")
 }
 
 fn stdio_unit_main(body: &str) -> String {
     format!(
-        "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n\
-         params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n\
+        "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n\
+         params/\nstdio\ncapability/\nstdio\n/capability\n/params\n\
          do/\n{body}\nunit\n/do\n/main\n"
     )
 }
 
 fn ownership_source(body: &str, result: &str) -> String {
-    let result = result.replace(' ', "\n");
-    format!("main/\nsig/\n->\n{result}\n/sig\n{body}\n/main\n")
+    let result = match result.split_once(' ') {
+        Some((constructor, inner)) => {
+            format!("{constructor}/\n{inner}\n/{constructor}")
+        }
+        None => result.to_string(),
+    };
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{result}\n/output\n/sig\n{body}\n/main\n")
 }
 
 mod affine_handles;

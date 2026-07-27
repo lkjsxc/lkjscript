@@ -7,31 +7,31 @@
 **Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
 explicit labels in this capsule and its authority; this capsule cannot promote a capability.
 
-- Lossless bulk bytes: bounded `Buf` UTF-8 conversion and offset/length-checked
-  file/socket partial-progress reads and writes are Current; legacy Str socket
-  operations remain only for old examples
-- Durable files and entropy: append/create-new/directory handles, sync,
-  truncate, same-filesystem rename, and Linux `getrandom` buffer fill are
-  Current; application framing/recovery policy remains in language code
+- Lossless bulk bytes: bounded transitional `buf` UTF-8 conversion and
+  offset/length-checked file partial-progress reads/writes remain Current. The
+  immutable `bytes` and full affine byte-vector migration remains accepted.
+- Durable files and entropy: typed `file-writer`, `file-appender`, and
+  `directory` runtime slots enforce exact sync/truncate/write access. Linux
+  `getrandom` fill remains Current.
 - SHA-256: fixed bounded-buffer digest is Current for verifier/integrity
-  consumers; HMAC, password KDF, encryption, and WebAuthn remain absent
-- SQLite: generic owned connection/statement handles, prepared operations,
-  exact bounded text/blob copies, and online backup are Current through the
-  Linux `libsqlite3.so.0` system library; schema and storage policy stay in
-  language consumers
-- Canonical resource names: `stdin-handle`, `drop`, `sys-read-byte`,
-  `sys-write-byte`, and `sys-isatty`; descriptor-era aliases are absent
-- Send behavior: successful `sys-send` reports its byte count and uses Linux
-  `MSG_NOSIGNAL` instead of risking process termination on a broken peer
+  consumers; HMAC, password KDF, encryption, and WebAuthn remain absent.
+- SQLite: `sqlite-connection` and `sqlite-statement` are statically and
+  dynamically disjoint; prepared operations, bounded text/blob copies, and
+  online backup use Linux `libsqlite3.so.0`.
+- Public names include `standard-input`, `drop`, `read-resource-byte`,
+  `write-resource-byte`, and `is-terminal`; `sys-*` names are internal stable
+  runtime identities.
+- Text socket operations are truthfully named `receive-string` and
+  `send-string`. Send reports its byte count and uses Linux `MSG_NOSIGNAL`.
 - SSA evaluator: independent of bytecode, VM, native, and host helpers; it
   covers exact scalar/control semantics, calls and recursion, SSA-converted
   local mutation, products, Option/Result, lists, strings, deterministic args,
   host-independent buffers, traps, exits, and explicit fuel/frame/allocation/
-  buffer/list bounds; console, filesystem, sockets, terminal, time, and handle
-  operations return explicit unsupported-evaluator outcomes
+  buffer/list bounds; console, filesystem, sockets, terminal, time, and typed
+  resource operations return explicit unsupported-evaluator outcomes
 - Callable baseline JIT: `lkjscript-jit` consumes only `VerifiedProgram`,
-  lowers scalar Unit/Bool/I64/F64 plus host-independent Str, legacy Buf,
-  Product, List, Option, Result, and monomorphic host-independent enum
+  lowers scalar `unit`/`bool`/`i64`/`f64` plus host-independent `string`,
+  transitional `buf`, product, list, option, result, and monomorphic host-independent enum
   semantics and direct recursive SCC groups to `lkjscript-native`, installs
   bounded owned non-Send code objects through
   `lkjscript-sys`, and actually invokes generated System V AMD64 entries;

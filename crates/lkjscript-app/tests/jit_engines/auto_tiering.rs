@@ -5,7 +5,7 @@ use lkjscript_vm::{run_chunk, run_chunk_auto};
 
 #[test]
 fn auto_group_reference_helper_remains_vm_entry_ineligible() {
-    let source = "def/\nname/\ntext\n/name\nfn/\nsig/\n->\nStr\n/sig\nparams/\n/params\nempty-str/\n/empty-str\n/fn\n/def\ndef/\nname/\nsize\n/name\nfn/\nsig/\n->\nI64\n/sig\nparams/\n/params\nstr-len/\ntext/\n/text\n/str-len\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\ndo/\nsize/\n/size\ntext/\n/text\nsize/\n/size\n/do\n/main\n";
+    let source = "def/\nname/\ntext\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nparams/\n/params\nempty-string/\n/empty-string\n/fn\n/def\ndef/\nname/\nsize\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\n/params\nstring-byte-length/\ntext/\n/text\n/string-byte-length\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\nsize/\n/size\ntext/\n/text\nsize/\n/size\n/do\n/main\n";
     let program = compile(source, "auto-reference-helper.lkjscript");
     let mut config = JitConfig::default();
     config.auto_threshold = 1;
@@ -34,9 +34,9 @@ fn auto_group_reference_helper_remains_vm_entry_ineligible() {
 #[test]
 fn auto_path_helper_remains_vm_only() {
     let source = concat!(
-        "def/\nname/\npath\n/name\nfn/\nsig/\n->\nPath\n/sig\nparams/\n/params\n",
-        "unwrap-ok/\npath-from-str/\nstr/\n/tmp/auto-path\n/str\n/path-from-str\n",
-        "/unwrap-ok\n/fn\n/def\nmain/\nsig/\n->\nPath\n/sig\npath/\n/path\n/main\n",
+        "def/\nname/\nmake-path\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\npath\n/output\n/sig\nparams/\n/params\n",
+        "unwrap-ok/\nconvert-string-to-path/\nstring-literal/\n/tmp/auto-path\n/string-literal\n/convert-string-to-path\n",
+        "/unwrap-ok\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\npath\n/output\n/sig\nmake-path/\n/make-path\n/main\n",
     );
     let program = compile(source, "auto-path.lkjscript");
     let mut config = JitConfig::default();
@@ -55,7 +55,7 @@ fn auto_path_helper_remains_vm_only() {
     let path = stats
         .functions
         .iter()
-        .find(|function| function.name() == "path")
+        .find(|function| function.name() == "make-path")
         .expect("Path helper tier record");
     assert_eq!(path.state(), TierState::VmOnly);
     assert!(!path.auto_entry_eligible());
@@ -93,7 +93,7 @@ fn auto_compiles_for_later_calls_and_suppresses_unsupported_retry() {
     assert!(step.native_entries() > 0);
     assert!(stats.vm_fallbacks >= 2);
 
-    let allocation = "def/\nname/\nallocate\n/name\nfn/\nsig/\n->\nStr\n/sig\nparams/\n/params\nempty-str/\n/empty-str\n/fn\n/def\nmain/\nsig/\n->\nStr\n/sig\ndo/\nallocate/\n/allocate\nallocate/\n/allocate\nallocate/\n/allocate\n/do\n/main\n";
+    let allocation = "def/\nname/\nallocate\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nparams/\n/params\nempty-string/\n/empty-string\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\ndo/\nallocate/\n/allocate\nallocate/\n/allocate\nallocate/\n/allocate\n/do\n/main\n";
     let program = compile(allocation, "auto-unsupported.lkjscript");
     let mut config = JitConfig::default();
     config.auto_threshold = 1;

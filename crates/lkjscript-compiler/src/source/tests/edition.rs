@@ -77,7 +77,7 @@ fn source_identity_changes_with_exact_bytes_and_logical_path() {
 
 #[test]
 fn exact_enum_declaration_shape_roundtrips_without_aliases() {
-    let declaration = "enum/\nname/\nChoice\n/name\nvariants/\nvariant/\nname/\nOnly\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n";
+    let declaration = "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\nonly\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n";
     let source = format!("{declaration}{}", unit_main("unit"));
     let tree = validate(&source, "src/main.lkjscript", &Limits::default())
         .expect("exact enum declaration");
@@ -91,12 +91,12 @@ fn exact_enum_declaration_shape_roundtrips_without_aliases() {
             .find(|item| item.kind() == DeclarationKind::Enum)
             .expect("enum declaration")
             .name(),
-        "Choice"
+        "choice"
     );
 
     for malformed in [
-        "enum/\nname/\nChoice\n/name\nvariants/\n/variants\n/enum\n",
-        "enum/\nname/\nChoice\n/name\nvariants/\nvariant/\nname/\nOnly\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\nI64\n/type\n/field\n/fields\n/variant\n/variants\n/enum\n",
+        "enum/\nname/\nchoice\n/name\nvariants/\n/variants\n/enum\n",
+        "enum/\nname/\nchoice\n/name\nvariants/\nvariant/\nname/\nonly\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\ni64\n/type\n/field\n/fields\n/variant\n/variants\n/enum\n",
     ] {
         let error = validate(malformed, "src/main.lkjscript", &Limits::default())
             .expect_err("empty variants and field aliases reject");
@@ -113,7 +113,7 @@ fn canonical_import_closure_loads_without_language_selection() -> std::io::Resul
     fs::write(
         &root,
         format!(
-            "imports/\nimport/\ndep.lkjscript#helper\n/import\n/imports\n{}",
+            "imports/\nimport/\nmodule/\ndep.lkjscript\n/module\ndeclarations/\nhelper\n/declarations\n/import\n/imports\n{}",
             unit_main("unit")
         ),
     )?;

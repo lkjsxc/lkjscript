@@ -93,7 +93,7 @@ impl Resolver<'_> {
             let expected = declared.ty.subst(&substitutions);
             if !Type::unify_assignable(&value.ty, &expected) {
                 return Err(self.error(format!(
-                    "variant-value {}.{} field {field_name}: value type {:?} not assignable to {:?}",
+                    "variant-value {}.{} field {field_name}: value type {} not assignable to {}",
                     definition.name, variant.name, value.ty, expected
                 )));
             }

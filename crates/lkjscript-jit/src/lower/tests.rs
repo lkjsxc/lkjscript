@@ -47,7 +47,7 @@ fn concrete_enum_layouts_are_injective_and_host_substitutions_reject() {
     };
     let host = SsaType::Enum {
         id,
-        arguments: vec![SsaType::Handle],
+        arguments: vec![SsaType::Resource(lkjscript_core::ResourceKind::FileReader)],
     };
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),

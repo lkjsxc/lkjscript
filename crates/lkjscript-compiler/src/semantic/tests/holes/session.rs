@@ -17,7 +17,7 @@ fn bounded_local_session_serves_current_contract_hole_context() {
         "profile": "sandbox",
         "root": root.to_string_lossy(),
         "operation": {
-            "kind": "hole_context",
+            "kind": "hole-context",
             "revision": source_revision,
             "node": hole.index,
         },
@@ -47,11 +47,11 @@ fn bounded_local_session_serves_current_contract_hole_context() {
     );
     assert_eq!(
         response["response"]["response"]["result"]["kind"],
-        "hole_context"
+        "hole-context"
     );
     assert_eq!(
         response["response"]["response"]["result"]["context"]["expected_type"]["canonical"],
-        "I64"
+        "i64"
     );
     assert!(
         response["response"]["response"]["charges"]["hole_search_work"]

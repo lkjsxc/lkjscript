@@ -15,7 +15,7 @@ impl Usefulness<'_> {
             Type::I64 => return Ok(None),
             _ => {
                 return Err(Error::msg(format!(
-                    "type {ty:?} has no closed match constructor space",
+                    "type {ty} has no closed match constructor space",
                 )))
             }
         }))

@@ -46,7 +46,7 @@ fn format_node(node: &SourceNode, output: &mut String, emit_trivia: bool) {
         }
         SyntaxKind::Unit => output.push_str("unit\n"),
         SyntaxKind::Str { value } => {
-            format_text("str", value, output);
+            format_text("string-literal", value, output);
             if emit_trivia {
                 format_trivia(&node.before_close_trivia, output);
             }
@@ -56,7 +56,7 @@ fn format_node(node: &SourceNode, output: &mut String, emit_trivia: bool) {
             output.push('\n');
         }
         SyntaxKind::Call { name } => {
-            if matches!(name.as_str(), "name" | "import") {
+            if matches!(name.as_str(), "name" | "module") {
                 if let [SourceNode {
                     kind: SyntaxKind::Str { value },
                     ..

@@ -5,7 +5,7 @@ fn semantic_source_match_and_enum_types_are_closed_and_exact() {
     let encoded = concat!(
         "{\"kind\":\"match\",\"scrutinee\":{\"kind\":\"i64\",\"value\":7},",
         "\"arms\":[{\"pattern\":{\"kind\":\"binding\",\"name\":\"x\"},",
-        "\"body\":{\"kind\":\"name_reference\",\"name\":\"x\"}}]}"
+        "\"body\":{\"kind\":\"name-reference\",\"name\":\"x\"}}]}"
     );
     let expression: Expression = serde_json::from_str(encoded).expect("decode closed match");
     let source = expression
@@ -19,9 +19,9 @@ fn semantic_source_match_and_enum_types_are_closed_and_exact() {
     .is_err());
 
     let enum_type = concat!(
-        "{\"kind\":\"variant_value\",\"value_type\":",
-        "{\"kind\":\"enum\",\"name\":\"Maybe\",\"arguments\":[{\"kind\":\"i64\"}]},",
-        "\"variant\":\"None\",\"fields\":[]}"
+        "{\"kind\":\"variant-value\",\"value_type\":",
+        "{\"kind\":\"enum\",\"name\":\"maybe\",\"arguments\":[{\"kind\":\"i64\"}]},",
+        "\"variant\":\"none\",\"fields\":[]}"
     );
     let expression: Expression = serde_json::from_str(enum_type).expect("decode enum type");
     let text = crate::source::format_node_source(
@@ -29,13 +29,13 @@ fn semantic_source_match_and_enum_types_are_closed_and_exact() {
             .to_source(crate::source::SourceSpan::zero())
             .expect("enum source"),
     );
-    assert!(text.contains("type/\nMaybe/\nI64\n/Maybe\n/type"), "{text}");
+    assert!(text.contains("type/\nmaybe/\ni64\n/maybe\n/type"), "{text}");
 }
 
 #[test]
 fn semantic_match_nodes_roundtrip_closed_pattern_kinds() {
     let source = concat!(
-        "main/\nsig/\n->\nI64\n/sig\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
         "match/\ntrue\narms/\n",
         "arm/\nbool-pattern/\nfalse\n/bool-pattern\n0\n/arm\n",
         "arm/\nwildcard/\n/wildcard\n1\n/arm\n",

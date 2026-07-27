@@ -3,7 +3,11 @@ use super::*;
 #[test]
 fn strict_codec_rejects_every_json_boundary() {
     let root = case_dir("codec").join("main.lkjscript");
-    std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write source");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write source");
     let valid =
         String::from_utf8(request(&root, "{\"kind\":\"snapshot\"}")).expect("request UTF-8");
     let duplicate = valid.replacen(
@@ -47,13 +51,13 @@ fn closed_nested_kinds_and_operations_reject_unknown_input() {
     for expression in [
         "{\"kind\":\"invented\"}",
         "{\"kind\":\"unit\",\"extra\":false}",
-        "{\"kind\":\"builtin_call\",\"operation\":\"invented\",\"arguments\":[]}",
+        "{\"kind\":\"builtin-call\",\"operation\":\"invented\",\"arguments\":[]}",
     ] {
         let operation = format!(
             concat!(
-                "{{\"kind\":\"apply_transaction\",\"mode\":\"preview\",",
+                "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
                 "\"base_revision\":\"r\",\"file_preconditions\":[],",
-                "\"operations\":[{{\"kind\":\"replace_expression\",",
+                "\"operations\":[{{\"kind\":\"replace-expression\",",
                 "\"declaration_key\":\"k\",\"entity_fingerprint\":\"f\",",
                 "\"node\":0,\"node_fingerprint\":\"n\",\"expression\":{expression}}}]}}"
             ),
@@ -70,7 +74,7 @@ fn closed_nested_kinds_and_operations_reject_unknown_input() {
 fn aggregate_operation_string_work_and_output_limits_fail_closed() {
     let root = case_dir("aggregate-limits").join("main.lkjscript");
     let rename = concat!(
-        "{\"kind\":\"rename_declaration\",\"declaration_key\":\"k\",",
+        "{\"kind\":\"rename-declaration\",\"declaration_key\":\"k\",",
         "\"entity_fingerprint\":\"f\",\"new_name\":\"n\"}",
     );
     let operations = std::iter::repeat_n(rename, crate::semantic::codec::MAX_OPERATIONS + 1)
@@ -78,7 +82,7 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
         .join(",");
     let operation = format!(
         concat!(
-            "{{\"kind\":\"apply_transaction\",\"mode\":\"preview\",",
+            "{{\"kind\":\"apply-transaction\",\"mode\":\"preview\",",
             "\"base_revision\":\"r\",\"file_preconditions\":[],",
             "\"operations\":[{operations}]}}",
         ),
@@ -144,7 +148,11 @@ fn aggregate_operation_string_work_and_output_limits_fail_closed() {
 #[test]
 fn all_core_profiles_are_closed_protocol_selections() {
     let root = case_dir("profiles").join("main.lkjscript");
-    std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write source");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write source");
     let default =
         String::from_utf8(request(&root, "{\"kind\":\"snapshot\"}")).expect("request UTF-8");
     for profile in [
@@ -172,7 +180,7 @@ fn snapshot_is_deterministic_and_unicode_is_preserved() {
     let root = case_dir("determinism").join("main.lkjscript");
     std::fs::write(
         &root,
-        "main/\nsig/\n->\nStr\n/sig\nstr/\nλ and \u{1f642}\n/str\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nstring-literal/\nλ and \u{1f642}\n/string-literal\n/main\n",
     )
     .expect("write Unicode source");
     let request = request(&root, "{\"kind\":\"snapshot\"}");

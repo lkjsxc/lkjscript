@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum FactSchema {
     Binding,
     Hir,
@@ -18,7 +18,7 @@ pub(crate) enum FactSchema {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum FactCertainty {
     Guaranteed,
     Conditional,
@@ -26,7 +26,7 @@ pub(crate) enum FactCertainty {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum RelationCardinality {
     Zero,
     One,
@@ -34,7 +34,7 @@ pub(crate) enum RelationCardinality {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ProducerStage {
     SourceResolution,
     Hir,
@@ -55,7 +55,7 @@ pub(crate) struct ProducerRecord {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum SemanticEffect {
     Allocates,
     ReadsMemory,
@@ -68,7 +68,7 @@ pub(crate) enum SemanticEffect {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum FactValue {
     StaticType { canonical: String },
     SemanticEffects { effects: Vec<SemanticEffect> },
@@ -78,7 +78,7 @@ pub(crate) enum FactValue {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum FactReference {
     Declaration { key: String },
     HirExpression { function: String, expression: u32 },
@@ -97,7 +97,7 @@ pub(crate) enum FactReference {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum UnavailableReason {
     NotProduced,
     NoExactSourceCorrelation,
@@ -109,7 +109,7 @@ pub(crate) enum UnavailableReason {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "availability", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "availability", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum FactRecord {
     Available {
         producer: ProducerRecord,

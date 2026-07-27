@@ -55,7 +55,7 @@ impl Resolver<'_> {
             (binding.kind.clone(), binding.ty.clone())
         };
         let expected = callable_arity(&callee_type)
-            .ok_or_else(|| self.error(format!("{name} is not a function ({callee_type:?})")))?;
+            .ok_or_else(|| self.error(format!("{name} is not a function ({callee_type})")))?;
         if expected != args.len() {
             return Err(self.diagnostic(AnalysisDiagnostic::CallArity {
                 name: name.to_string(),

@@ -5,50 +5,6 @@ use crate::source::{DeclarationKind, SourceNode, SyntaxKind, ValidatedSourceTree
 
 pub(crate) use super::diagnostic_records::{source_failure, stale};
 
-const STRUCTURAL_CALLS: &[&str] = &[
-    "def",
-    "main",
-    "imports",
-    "import",
-    "path",
-    "names",
-    "exports",
-    "product",
-    "trait",
-    "impl",
-    "name",
-    "fn",
-    "sig",
-    "params",
-    "forall",
-    "bounds",
-    "bound",
-    "type",
-    "fields",
-    "for",
-    "field",
-    "bind",
-    "let",
-    "var",
-    "set",
-    "if",
-    "while",
-    "loop",
-    "return",
-    "break",
-    "continue",
-    "trap",
-    "do",
-    "quote",
-    "move",
-    "borrow",
-    "borrow-mut",
-    "product-value",
-    "with-field",
-    "empty-list",
-    "none",
-];
-
 pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<DiagnosticRecord> {
     if !include_hir || crate::analyze::analyze_module_program(tree).is_ok() {
         return Vec::new();
@@ -81,9 +37,7 @@ pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<Diag
         let SyntaxKind::Call { name } = &node.kind else {
             continue;
         };
-        if STRUCTURAL_CALLS.contains(&name.as_str())
-            || crate::hir::Operation::from_name(name).is_some()
-        {
+        if registered_form(name) || crate::hir::Operation::from_name(name).is_some() {
             continue;
         }
         let index = u32::try_from(source_index).unwrap_or(u32::MAX);
@@ -146,6 +100,11 @@ pub(crate) fn collect(tree: &ValidatedSourceTree, include_hir: bool) -> Vec<Diag
         )
     });
     diagnostics
+}
+
+fn registered_form(name: &str) -> bool {
+    lkjscript_contracts::CONTEXTUAL_FORM_NAMES.contains(&name)
+        || lkjscript_contracts::TYPE_CONSTRUCTOR_NAMES.contains(&name)
 }
 
 fn collect_local_names(node: &SourceNode, known: &mut HashSet<String>) {

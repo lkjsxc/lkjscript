@@ -14,7 +14,7 @@ impl Evaluator<'_> {
                 Ok(EvalValue::I64(length))
             }),
             Op::StrRef => binary(&arguments, |text, index| {
-                let index = index_value(index, "str-ref")?;
+                let index = index_value(index, "string-byte-at")?;
                 let byte = as_str(text)?
                     .as_bytes()
                     .get(index)
@@ -29,8 +29,8 @@ impl Evaluator<'_> {
                 Ok(EvalValue::Str(result))
             }),
             Op::StrSlice => ternary(&arguments, |text, start, end| {
-                let start = index_value(start, "str-slice")?;
-                let end = index_value(end, "str-slice")?;
+                let start = index_value(start, "copy-string-byte-slice")?;
+                let end = index_value(end, "copy-string-byte-slice")?;
                 let bytes = as_str(text)?.as_bytes();
                 let slice = bytes
                     .get(start..end)

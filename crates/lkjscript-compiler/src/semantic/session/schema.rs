@@ -21,7 +21,7 @@ pub(super) struct SessionRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum SessionOperation {
     Execute { request: Request },
     Refresh,
@@ -39,7 +39,7 @@ pub(super) struct SessionResponse {
 }
 
 #[derive(Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub(super) enum SessionResult {
     Execute {
         response: Box<Response>,
@@ -119,7 +119,7 @@ impl From<&SourceUnitRecord> for SourceFingerprint {
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(super) enum SessionErrorCode {
     NotInitialized,
     StaleSessionRevision,

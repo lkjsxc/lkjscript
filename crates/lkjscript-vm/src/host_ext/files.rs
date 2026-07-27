@@ -4,29 +4,41 @@ impl ResourceTable {
     pub fn sys_open_read(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_read(path)
-            .map_err(|error| Error::msg(format!("sys-open-read: {error}")))?;
-        self.push(OwnedResource::File(file))
+            .map_err(|error| Error::msg(format!("open-file-reader: {error}")))?;
+        self.push(OwnedResource::File {
+            descriptor: file,
+            kind: ResourceKind::FileReader,
+        })
     }
 
     pub fn sys_open_write(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_write(path)
-            .map_err(|error| Error::msg(format!("sys-open-write: {error}")))?;
-        self.push(OwnedResource::File(file))
+            .map_err(|error| Error::msg(format!("open-file-writer: {error}")))?;
+        self.push(OwnedResource::File {
+            descriptor: file,
+            kind: ResourceKind::FileWriter,
+        })
     }
 
     pub fn sys_open_append(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_append(path)
-            .map_err(|error| Error::msg(format!("sys-open-append: {error}")))?;
-        self.push(OwnedResource::File(file))
+            .map_err(|error| Error::msg(format!("open-file-appender: {error}")))?;
+        self.push(OwnedResource::File {
+            descriptor: file,
+            kind: ResourceKind::FileAppender,
+        })
     }
 
     pub fn sys_open_create_new(&mut self, path: &[u8]) -> Result<Value> {
         self.ensure_capacity()?;
         let file = lkjscript_sys::open_create_new(path)
-            .map_err(|error| Error::msg(format!("sys-open-create-new: {error}")))?;
-        self.push(OwnedResource::File(file))
+            .map_err(|error| Error::msg(format!("create-file: {error}")))?;
+        self.push(OwnedResource::File {
+            descriptor: file,
+            kind: ResourceKind::FileWriter,
+        })
     }
 
     pub fn sys_open_dir(&mut self, path: &[u8]) -> Result<Value> {
@@ -39,7 +51,7 @@ impl ResourceTable {
     /// Files and directory handles may be synced; directories make a prior
     /// same-filesystem rename durable. Sockets and stale handles are rejected.
     pub fn sys_fsync(&self, handle: Value) -> Result<Value> {
-        let raw = self.sync_raw(handle, "sys-fsync")?;
+        let raw = self.sync_raw(handle, "sync-file")?;
         lkjscript_sys::fsync_fd(raw).map_err(|error| Error::msg(format!("sys-fsync: {error}")))?;
         Ok(Value::UNIT)
     }
@@ -50,7 +62,7 @@ impl ResourceTable {
         if length < 0 {
             return Err(Error::msg("sys-truncate length out of range"));
         }
-        let raw = self.file_raw(handle, "sys-truncate")?;
+        let raw = self.file_raw(handle, "truncate-file")?;
         lkjscript_sys::truncate_fd(raw, length)
             .map_err(|error| Error::msg(format!("sys-truncate: {error}")))?;
         Ok(Value::UNIT)

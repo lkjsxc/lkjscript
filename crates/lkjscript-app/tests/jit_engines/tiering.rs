@@ -128,8 +128,8 @@ fn proof_optimizing_engine_executes_fewer_generated_operations_without_downgrade
 fn forced_native_tiers_reject_path_entries_without_fallback() {
     let path = compile(
         concat!(
-            "main/\nsig/\n->\nPath\n/sig\nunwrap-ok/\npath-from-str/\n",
-            "str/\n/tmp/native-path\n/str\n/path-from-str\n/unwrap-ok\n/main\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\npath\n/output\n/sig\nunwrap-ok/\nconvert-string-to-path/\n",
+            "string-literal/\n/tmp/native-path\n/string-literal\n/convert-string-to-path\n/unwrap-ok\n/main\n",
         ),
         "native-path.lkjscript",
     );
@@ -153,8 +153,8 @@ fn forced_native_tiers_reject_path_entries_without_fallback() {
 fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() {
     let unsupported = compile(
         concat!(
-            "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
-            "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
+            "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+            "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
             "flush/\nstdio\n/flush\n/main\n"
         ),
         "optimizing-unsupported.lkjscript",

@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
-use lkjscript_core::CapabilityKind;
+use lkjscript_core::{CapabilityKind, ResourceKind};
 
 use crate::types::EnumId;
 
+mod display;
 mod model;
 mod parse;
 

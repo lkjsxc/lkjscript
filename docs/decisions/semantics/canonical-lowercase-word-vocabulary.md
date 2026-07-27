@@ -2,10 +2,12 @@
 
 ## Status
 
-**Accepted contract.** This is the binding destination for the single Current
-language contract. It becomes Current only after the compiler, complete source
-corpus, packages, Semantic Source, execution evidence, and documentation are
-migrated together. It does not define an edition or compatibility mode.
+**Accepted contract with the vocabulary cutover implemented.** Compiler,
+tracked source corpus, packages, Semantic Source discriminants, diagnostics,
+structured signatures/imports, string literal markers, and removed-spelling
+rejection use the typed lowercase registry. Promotion of this entire capsule to
+Current remains blocked by the atomic removal of transitional `buf`; no edition
+or compatibility mode exists.
 
 ## Identifier identity
 
@@ -71,7 +73,7 @@ Public resource calls use typed domain words such as `open-file-reader`,
 | `Buf` | `buf` during atomic data migration only |
 | `Path` | `path` |
 | `Symbol` | `symbol` |
-| `Handle` | `handle` during atomic resource migration only |
+| `Handle` / `handle` | exact typed resource kind |
 | `Capability` | `capability` |
 | `Owned` | `owned` |
 | `Ref` | `ref` |
@@ -81,8 +83,8 @@ Public resource calls use typed domain words such as `open-file-reader`,
 | `Option` | `option` |
 | `Result` | `result` |
 
-The implementation must not publish a Current state that retains transitional
-`buf` or `handle`. Current owned text becomes `string`; `str` is reserved for a
+The implementation must not publish this capsule as Current while transitional
+`buf` remains. Universal `handle` is already removed. Current owned text becomes `string`; `str` is reserved for a
 borrowed valid-UTF-8 view. Type parameters are lowercase names whose binder
 identity, not capitalization, distinguishes them from nominal types.
 

@@ -21,7 +21,12 @@ impl Resolver<'_> {
         let declared_type = parse_type_form(type_args)
             .map_err(|message| self.error(format!("var {name}: {message}")))?;
         if declared_type.contains_never() {
-            return Err(self.error(format!("var {name}: Never is not a storage-slot type")));
+            return Err(self.error(format!("var {name}: never is not a storage-slot type")));
+        }
+        if contains_resource_type(&declared_type) && !matches!(declared_type, Type::Resource(_)) {
+            return Err(self.error(format!(
+                "var {name}: resource-bearing aggregates cannot be stored"
+            )));
         }
         if matches!(declared_type, Type::Ref(_) | Type::RefMut(_)) {
             return Err(self.error(format!(
@@ -46,7 +51,7 @@ impl Resolver<'_> {
         let initial = self.resolve_expr(initial_ast)?;
         if initial.ty != declared_type {
             return Err(self.error(format!(
-                "var {name}: initializer type {:?} does not exactly equal {declared_type:?}",
+                "var {name}: initializer type {} does not exactly equal {declared_type}",
                 initial.ty
             )));
         }
@@ -124,7 +129,7 @@ impl Resolver<'_> {
         }
         if value.ty != target_type {
             return Err(self.error(format!(
-                "set target {target_name}: value type {:?} does not exactly equal {target_type:?}",
+                "set target {target_name}: value type {} does not exactly equal {target_type}",
                 value.ty
             )));
         }

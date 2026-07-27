@@ -12,12 +12,16 @@ fn tail_call_reuses_the_current_frame() {
         name: "callee".into(),
         arity: 1,
         locals: 1,
+        parameter_resources: Vec::new(),
+        return_resource: None,
         code: vec![Op::LoadLocal as u8, 0, Op::Return as u8],
     });
     chunk.protos.push(FunctionProto {
         name: "caller".into(),
         arity: 0,
         locals: 0,
+        parameter_resources: Vec::new(),
+        return_resource: None,
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     let chunk =

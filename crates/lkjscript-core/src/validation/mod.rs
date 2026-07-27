@@ -88,9 +88,46 @@ pub(super) enum Kind {
     Buf,
     Path,
     Capability(crate::CapabilityKind),
-    Handle,
+    Resource(crate::ResourceKind),
+    ResourceResult(crate::ResourceKind),
     Product(ProductId),
     Enum(EnumId, Option<VariantId>),
+}
+
+impl std::fmt::Display for Kind {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Any => "any",
+            Self::Unit => "unit",
+            Self::Bool => "bool",
+            Self::I64 => "i64",
+            Self::F64 => "f64",
+            Self::Str => "string",
+            Self::Symbol => "symbol",
+            Self::Proto(_) => "function-prototype",
+            Self::Closure(_) => "function",
+            Self::List => "list",
+            Self::Buf => "buf",
+            Self::Path => "path",
+            Self::Capability(_) => "capability",
+            Self::Resource(_) => "resource",
+            Self::ResourceResult(_) => "result resource",
+            Self::Product(_) => "product",
+            Self::Enum(_, _) => "enum",
+        };
+        formatter.write_str(name)?;
+        match self {
+            Self::Proto(id) | Self::Closure(id) => write!(formatter, " {id}"),
+            Self::Capability(kind) => write!(formatter, " {}", kind.as_str()),
+            Self::Resource(kind) | Self::ResourceResult(kind) => {
+                write!(formatter, " {}", kind.as_str())
+            }
+            Self::Product(id) => write!(formatter, " {}", id.raw()),
+            Self::Enum(_, Some(_)) => formatter.write_str(" variant"),
+            Self::Enum(_, None) => Ok(()),
+            _ => Ok(()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

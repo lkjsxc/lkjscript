@@ -10,15 +10,14 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 ## Initial Sound Slice
 
 **Current.** The first implementation slice is a complete safe island around
-`Owned Buf`:
+`byte-vector`:
 
-- `owned-buf-new` creates a fresh `Owned Buf` that cannot have a pre-existing
+- `new-byte-vector` creates a fresh `byte-vector` that cannot have a pre-existing
   alias;
 - whole local/parameter places only;
 - explicit `move` for ownership transfer;
-- `borrow` and `borrow-mut` create non-escaping `Ref Buf` and `RefMut Buf`;
-- owned-buffer read operations require `Ref Buf`, and writes require `RefMut
-  Buf`;
+- `borrow` and `borrow-mut` create non-escaping `byte-slice` and `byte-slice-mut`;
+- read operations require `byte-slice`, and writes require `byte-slice-mut`;
 - whole-program ownership analysis is charged against the deterministic
   `OWNERSHIP_ANALYSIS_MAX_EXPRESSION_NODES = 16_384` aggregate HIR-expression
   budget before place/loan analysis begins;
@@ -32,8 +31,8 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 - branch ownership states join exactly. Unsupported loop-carried moves/loans,
   reborrows, field/index places, return/storage of references, and partial moves
   are rejected;
-- all generic instantiations whose signature or substitution contains `Owned`,
-  `Ref`, or `RefMut` are rejected, including nested occurrences;
+- all generic instantiations whose signature or substitution contains `byte-vector`,
+  `byte-slice`, or `byte-slice-mut` are rejected, including nested occurrences;
 - SSA retains explicit place initialization/end, move, borrow, owner-transport,
   loan, and alias identities even though the VM representation remains the
   existing safe arena handle. Its public verifier uses bounded forward CFG
@@ -49,19 +48,18 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 The initial owned-buffer operations consume typed references directly; general
 `ref-read`/`ref-write` syntax is rejected until place projection is implemented.
-This slice does not silently make legacy `Buf`, `Handle`, product, or collection
-uses affine; those remain worker-local GC/capability values until migrated by a
-later breaking contract. It establishes a sound ownership path without
-modifying canonical Brainfuck source. Deterministic source `Drop`, resource
-RAII, named regions, arbitrary `Owned T`, and borrow-aware existing host
-operations remain **Accepted Targets**. Runtime session cleanup remains the
-Current final backstop and is not called language `Drop`.
+This slice does not silently make transitional `buf`, products, or collections
+affine. Exact typed resources are a separate accepted-contract foundation and
+cannot enter unsupported aggregates. Full byte-vector corpus migration,
+deterministic compiler-inserted resource cleanup, named regions, arbitrary
+owned types, and borrow-aware host operations remain **Accepted Targets**.
+Runtime session cleanup remains a safety backstop, not source-level `drop`.
 
 Native GC references are added as a separate ownership category rather than
 pretending they are lexical borrows.
 
-Current source accepts only exact `Owned Buf`, `Ref Buf`, and `RefMut Buf`.
-`Owned Buf` may occur in local annotations, parameters, and function/main
+Current source accepts only exact `byte-vector`, `byte-slice`, and `byte-slice-mut`.
+`byte-vector` may occur in local annotations, parameters, and function/main
 returns. References may occur only as function parameters or inferred local
 borrow bindings. Product fields and List/Option/Result elements reject direct
 or nested ownership/reference types. Generic ownership/reference
@@ -70,9 +68,9 @@ reference returns or user-call results, reborrows, projected places,
 closures/capture, partial moves, cross-block Borrow results, Move/Borrow in
 loop cycles, changed loop-carried owner/loan state, and unequal loop/branch
 ownership states are rejected.
-`RefMut` user-call forwarding is rejected in this slice. Semantic frame states
+`byte-slice-mut` user-call forwarding is rejected in this slice. Semantic frame states
 retain a reference through its consuming runtime call and omit a consumed
-`RefMut` from later safepoints; these bytecode-era frame facts are not native GC
+`byte-slice-mut` from later safepoints; these bytecode-era frame facts are not native GC
 stack maps. Same-block NLL ends a
 local loan after its last argument use; temporary argument loans end only after
 the complete call/runtime-operation expression. Runtime/frame cleanup and SSA

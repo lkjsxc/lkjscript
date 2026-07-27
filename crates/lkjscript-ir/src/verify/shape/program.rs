@@ -90,11 +90,11 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
 
 pub(crate) fn verify_trait_metadata(program: &Program) -> crate::Result<()> {
     let core = [
-        (TraitRole::Copy, "Copy"),
-        (TraitRole::Clone, "Clone"),
-        (TraitRole::Drop, "Drop"),
-        (TraitRole::Send, "Send"),
-        (TraitRole::Sync, "Sync"),
+        (TraitRole::Copy, "copy"),
+        (TraitRole::Clone, "clone"),
+        (TraitRole::Drop, "drop"),
+        (TraitRole::Send, "send"),
+        (TraitRole::Sync, "sync"),
     ];
     if program.traits.len() < core.len() {
         return fail("SSA trait metadata is missing compiler-owned core traits");

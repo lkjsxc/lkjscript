@@ -3,13 +3,18 @@ use serde::{Deserialize, Serialize};
 use super::{ClosedBuiltinOperation, SpanRecord};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum SemanticNodeKind {
     Import,
+    ImportModule,
+    ImportDeclarations,
+    ImportDeclaration,
     Main,
     FunctionDeclaration,
     Function,
     Signature,
+    SignatureInputs,
+    SignatureOutput,
     Parameters,
     TypeVariables,
     Bounds,
@@ -53,18 +58,21 @@ pub(crate) enum SemanticNodeKind {
     TypeF64,
     TypeString,
     TypeBuffer,
+    TypeBytes,
+    TypeByteVector,
+    TypeByteSlice,
+    TypeByteSliceMut,
+    TypePath,
+    TypeCapability,
+    CapabilityKind,
     TypeSymbol,
-    TypeHandle,
-    TypeOwned,
-    TypeRef,
-    TypeRefMut,
+    TypeResource,
     TypeProduct,
     TypeEnum,
     TypeList,
     TypeOption,
     TypeResult,
     TypeVariable,
-    ReturnArrow,
     Let,
     Bind,
     Var,
@@ -106,7 +114,7 @@ pub(crate) enum SemanticNodeKind {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum SemanticNodeValue {
     Bool {
         value: bool,
@@ -139,7 +147,7 @@ pub(crate) enum SemanticNodeValue {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum TriviaAttachment {
     Leading,
     BeforeClose,

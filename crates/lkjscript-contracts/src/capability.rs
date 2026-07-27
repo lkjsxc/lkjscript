@@ -26,14 +26,14 @@ impl CapabilityKind {
 
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Arguments => "Arguments",
-            Self::Clock => "Clock",
-            Self::Entropy => "Entropy",
-            Self::FileSystem => "FileSystem",
-            Self::Network => "Network",
-            Self::Sqlite => "Sqlite",
-            Self::Stdio => "Stdio",
-            Self::Terminal => "Terminal",
+            Self::Arguments => "arguments",
+            Self::Clock => "clock",
+            Self::Entropy => "entropy",
+            Self::FileSystem => "file-system",
+            Self::Network => "network",
+            Self::Sqlite => "sqlite",
+            Self::Stdio => "stdio",
+            Self::Terminal => "terminal",
         }
     }
 

@@ -178,7 +178,7 @@ mod tests {
         let mut heap = GcHeap::default();
         let path = heap
             .alloc(HeapObj::Path(b"/tmp/immutable".to_vec()))
-            .expect("Path");
+            .expect("path");
         let mut invoked = false;
         let result = heap.mutate(path, |_| {
             invoked = true;

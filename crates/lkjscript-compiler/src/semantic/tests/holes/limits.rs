@@ -48,7 +48,7 @@ fn strict_contract_rejects_stale_digest_unknown_fields_and_duplicate_identities(
     let context = context(&root);
     let operation = format!(
         concat!(
-            "{{\"kind\":\"hole_context\",\"revision\":{:?},",
+            "{{\"kind\":\"hole-context\",\"revision\":{:?},",
             "\"node\":{},\"invented\":true}}",
         ),
         context.hole.source_revision, context.hole.node

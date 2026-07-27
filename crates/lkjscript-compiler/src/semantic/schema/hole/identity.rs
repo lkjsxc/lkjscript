@@ -18,7 +18,7 @@ pub(crate) struct TypedHoleIdentity {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "availability", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "availability", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum ExpectedTypeFact {
     Available {
         canonical: String,
@@ -30,7 +30,7 @@ pub(crate) enum ExpectedTypeFact {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum TypeUnavailableReason {
     UnconstrainedLetInitializer,
     UnsupportedBuiltinInstantiation,
@@ -52,7 +52,7 @@ pub(crate) struct ScopeEntity {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ScopeEntityKind {
     Parameter,
     ImmutableLocal,
@@ -62,7 +62,7 @@ pub(crate) enum ScopeEntityKind {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum OwnershipAccess {
     Copy,
     Move,
@@ -102,14 +102,14 @@ pub(crate) struct OwnershipConstraint {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "availability", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "availability", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum ConstraintAvailability {
     Available { values: Vec<String> },
     Unavailable { reason: ConstraintUnavailableReason },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ConstraintUnavailableReason {
     NoCapabilityModel,
     NoExactSourceCorrelation,

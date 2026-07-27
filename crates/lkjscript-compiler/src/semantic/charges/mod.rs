@@ -109,7 +109,7 @@ impl ProtocolLimits {
             charges.hole_search_work,
             self.hole_search_work,
         )?;
-        self.check("legal_actions", charges.legal_actions, self.legal_actions)?;
+        self.check("legal-actions", charges.legal_actions, self.legal_actions)?;
         self.check("transactions", charges.transactions, self.transactions)?;
         self.check(
             "transaction_operations",

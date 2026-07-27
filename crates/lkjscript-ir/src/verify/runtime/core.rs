@@ -31,7 +31,7 @@ pub(super) fn core_signature(
         RuntimeOp::SameObject => {
             parameters.len() == 2
                 && parameters[0] == parameters[1]
-                && matches!(parameters[0], SsaType::Buf | SsaType::Handle)
+                && matches!(parameters[0], SsaType::Buf)
                 && result == &SsaType::Bool
         }
         RuntimeOp::ListEqual => {

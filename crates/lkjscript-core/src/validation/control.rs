@@ -18,8 +18,15 @@ pub(super) fn validate_control_flow(
         .collect();
     let mut states = vec![None; instructions.len()];
     let mut locals = vec![None; usize::from(proto.locals)];
-    for slot in locals.iter_mut().take(usize::from(proto.arity)) {
-        *slot = Some(Kind::Any);
+    for (index, slot) in locals.iter_mut().take(usize::from(proto.arity)).enumerate() {
+        *slot = Some(
+            proto
+                .parameter_resources
+                .get(index)
+                .copied()
+                .flatten()
+                .map_or(Kind::Any, Kind::Resource),
+        );
     }
     if is_main {
         for (slot, kind) in locals.iter_mut().zip(&chunk.required_capabilities) {
@@ -28,8 +35,14 @@ pub(super) fn validate_control_flow(
     }
     let globals = if is_main {
         vec![None; chunk.global_names.len()]
-    } else {
+    } else if chunk.global_prototypes.is_empty() {
         vec![Some(Kind::Any); chunk.global_names.len()]
+    } else {
+        chunk
+            .global_prototypes
+            .iter()
+            .map(|prototype| prototype.map_or(Some(Kind::Any), |index| Some(Kind::Closure(index))))
+            .collect()
     };
     states[0] = Some(State {
         stack: Vec::new(),
@@ -47,7 +60,7 @@ pub(super) fn validate_control_flow(
             .get(index)
             .and_then(Clone::clone)
             .ok_or_else(|| Error::msg("validator CFG state is missing"))?;
-        apply_instruction(chunk, proto, instruction, &mut state)?;
+        apply_instruction(chunk, proto, instruction, &mut state, is_main)?;
 
         let successors = successors(proto, instructions, &by_offset, index, instruction)?;
         for successor in successors {

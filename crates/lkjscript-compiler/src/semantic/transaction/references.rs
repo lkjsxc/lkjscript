@@ -144,7 +144,7 @@ fn rename_product_references(node: &mut SourceNode, old: &str, new: &str) {
     ) {
         for index in 0..node.children.len().saturating_sub(1) {
             let (left, right) = node.children.split_at_mut(index + 1);
-            if matches!(&left[index].kind, SyntaxKind::Symbol { name } if name == "Product") {
+            if matches!(&left[index].kind, SyntaxKind::Symbol { name } if name == "product") {
                 if let SyntaxKind::Symbol { name } = &mut right[0].kind {
                     if name == old {
                         *name = new.to_string();

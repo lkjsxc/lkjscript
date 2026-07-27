@@ -7,7 +7,11 @@ use crate::semantic::schema::ResponseResult;
 fn one_shot_typed_budget_prefix_is_deterministic_and_keeps_prior_events() {
     let directory = case_dir("ledger-prefix");
     let root = directory.join("main.lkjscript");
-    std::fs::write(&root, "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n").expect("write source");
+    std::fs::write(
+        &root,
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
+    )
+    .expect("write source");
     let input = request(&root, "{\"kind\":\"snapshot\"}");
 
     let mut measuring = BudgetLedger::default();

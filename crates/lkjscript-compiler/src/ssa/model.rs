@@ -73,7 +73,7 @@ pub(in crate::ssa) fn lower_type(
         Type::Ref(inner) => SsaType::Ref(Box::new(lower_type(inner, products)?)),
         Type::RefMut(inner) => SsaType::RefMut(Box::new(lower_type(inner, products)?)),
         Type::Symbol => SsaType::Symbol,
-        Type::Handle => SsaType::Handle,
+        Type::Resource(kind) => SsaType::Resource(*kind),
         Type::Product(name) => SsaType::Product(
             *products
                 .get(name)
@@ -95,5 +95,6 @@ pub(in crate::ssa) fn lower_type(
 }
 
 pub(in crate::ssa) fn is_owned_value(ty: &SsaType) -> bool {
-    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf) || ty == &SsaType::Handle
+    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
+        || matches!(ty, SsaType::Resource(_))
 }

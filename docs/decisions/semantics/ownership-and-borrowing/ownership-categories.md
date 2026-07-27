@@ -60,7 +60,7 @@ drop/ place /drop
 ```
 
 Candidate B is **Selected**. The punctuation and `SharedRef`/`ExclusiveRef`
-aliases are rejected and are not accepted syntax. `Ref` is shared and `RefMut`
+aliases are rejected and are not accepted syntax. `byte-slice` is shared and `byte-slice-mut`
 is exclusive; mutability is therefore visible in both type and operation.
 
 The first non-escaping slice infers every reference region and uses `Ref T` or
@@ -75,7 +75,7 @@ A place is not an arbitrary expression. Canonical place forms are a local name,
 must retain the owner and exact element layout.
 ## Places, Moves, And Initialization
 
-**Accepted Target overall; only the whole-local `Owned Buf` subset below is
+**Accepted Target overall; only the whole-local `byte-vector` subset below is
 Current.** HIR records a `PlaceId` and move path for every local, product field, indexed
 container element where statically representable, and dereferenced reference.
 A place has initialized, moved, shared-borrowed, or exclusively-borrowed state

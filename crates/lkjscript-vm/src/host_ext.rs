@@ -2,16 +2,22 @@
 
 use std::os::fd::RawFd;
 
-use lkjscript_core::{Error, GcHeap as Arena, HeapObj, Result, Value};
+use lkjscript_core::{Error, GcHeap as Arena, HeapObj, ResourceKind, Result, Value};
 use lkjscript_sys::OwnedFd;
 
 const STDIN_TOKEN: u32 = 1;
 const FIRST_OWNED_TOKEN: u32 = 16;
 
 enum OwnedResource {
-    File(OwnedFd),
+    File {
+        descriptor: OwnedFd,
+        kind: ResourceKind,
+    },
     Directory(OwnedFd),
-    Socket(OwnedFd),
+    Socket {
+        descriptor: OwnedFd,
+        kind: ResourceKind,
+    },
     SqliteConnection {
         connection: lkjscript_sys::SqliteConnection,
         live_statements: usize,

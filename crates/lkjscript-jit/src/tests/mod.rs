@@ -19,11 +19,11 @@ use super::{execute_forced, JitConfig};
 
 fn core_traits() -> Vec<TraitMetadata> {
     [
-        ("Copy", TraitRole::Copy),
-        ("Clone", TraitRole::Clone),
-        ("Drop", TraitRole::Drop),
-        ("Send", TraitRole::Send),
-        ("Sync", TraitRole::Sync),
+        ("copy", TraitRole::Copy),
+        ("clone", TraitRole::Clone),
+        ("drop", TraitRole::Drop),
+        ("send", TraitRole::Send),
+        ("sync", TraitRole::Sync),
     ]
     .into_iter()
     .enumerate()

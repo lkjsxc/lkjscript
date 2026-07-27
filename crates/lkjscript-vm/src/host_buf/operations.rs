@@ -1,7 +1,7 @@
 use super::*;
 
 pub fn buf_ref(arena: &Arena, value: Value, index: i64) -> Result<i64> {
-    let index = buffer_index(index, "buf-ref")?;
+    let index = buffer_index(index, "buf-byte-at")?;
     let byte = *as_buf(arena, value)?
         .get(index)
         .ok_or_else(|| Error::msg("buf-ref out of bounds"))?;
@@ -9,7 +9,7 @@ pub fn buf_ref(arena: &Arena, value: Value, index: i64) -> Result<i64> {
 }
 
 pub fn buf_set(arena: &mut Arena, value: Value, index: i64, byte: i64) -> Result<Value> {
-    let index = buffer_index(index, "buf-set")?;
+    let index = buffer_index(index, "buf-set-byte")?;
     let byte = u8::try_from(byte).map_err(|_| Error::msg("buf-set byte out of range"))?;
     arena.mutate(value, |object| {
         let HeapObj::Buf(buffer) = object else {
@@ -24,7 +24,7 @@ pub fn buf_set(arena: &mut Arena, value: Value, index: i64, byte: i64) -> Result
 }
 
 pub fn buf_get_u32(arena: &Arena, value: Value, index: i64) -> Result<i64> {
-    let index = buffer_index(index, "buf-get-u32")?;
+    let index = buffer_index(index, "buf-read-u32")?;
     let end = index
         .checked_add(4)
         .ok_or_else(|| Error::msg("buf-get-u32 index overflow"))?;
@@ -37,7 +37,7 @@ pub fn buf_get_u32(arena: &Arena, value: Value, index: i64) -> Result<i64> {
 }
 
 pub fn buf_set_u32(arena: &mut Arena, value: Value, index: i64, number: i64) -> Result<Value> {
-    let index = buffer_index(index, "buf-set-u32")?;
+    let index = buffer_index(index, "buf-write-u32")?;
     let end = index
         .checked_add(4)
         .ok_or_else(|| Error::msg("buf-set-u32 index overflow"))?;

@@ -58,10 +58,11 @@ impl JitHeapServices<'_> {
                         i64::try_from(bytes.len()).map_err(|_| NativeServiceError::Trap)?,
                     )),
                     HeapOperation::BufRef => {
-                        let index = index(as_i64(argument(1)?)?, "buf-ref").map_err(|message| {
-                            self.last_trap = Some(message);
-                            NativeServiceError::Trap
-                        })?;
+                        let index =
+                            index(as_i64(argument(1)?)?, "buf-byte-at").map_err(|message| {
+                                self.last_trap = Some(message);
+                                NativeServiceError::Trap
+                            })?;
                         let byte = bytes.get(index).copied().ok_or_else(|| {
                             self.last_trap = Some("buf-ref out of bounds".into());
                             NativeServiceError::Trap
@@ -70,7 +71,7 @@ impl JitHeapServices<'_> {
                     }
                     HeapOperation::BufGetU32 => {
                         let index =
-                            index(as_i64(argument(1)?)?, "buf-get-u32").map_err(|message| {
+                            index(as_i64(argument(1)?)?, "buf-read-u32").map_err(|message| {
                                 self.last_trap = Some(message);
                                 NativeServiceError::Trap
                             })?;
@@ -97,9 +98,9 @@ impl JitHeapServices<'_> {
                     })?;
                 let number = as_i64(argument(2)?)?;
                 let operation = if matches!(descriptor.operation(), HeapOperation::BufSet) {
-                    "buf-set"
+                    "buf-set-byte"
                 } else {
-                    "buf-set-u32"
+                    "buf-write-u32"
                 };
                 let index = index(as_i64(argument(1)?)?, operation).map_err(|message| {
                     self.last_trap = Some(message);

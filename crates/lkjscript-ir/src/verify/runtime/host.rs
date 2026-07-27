@@ -1,5 +1,6 @@
 use crate::verify::*;
 use crate::{RuntimeOp, SsaType};
+use lkjscript_contracts::ResourceKind;
 
 pub(super) fn host_signature(
     operation: RuntimeOp,
@@ -9,21 +10,58 @@ pub(super) fn host_signature(
     use lkjscript_contracts::CapabilityKind::{
         Clock, Entropy, FileSystem, Network, Sqlite, Stdio, Terminal,
     };
+    use ResourceKind::{
+        Directory, FileAppender, FileReader, FileWriter, InputStream, OutputStream, TcpListener,
+        TcpStream,
+    };
 
+    let resource = SsaType::Resource;
     let exact = |expected: &[SsaType], result_type: &SsaType| {
         parameters == expected && result == result_type
     };
+    let resource_input = |allowed: &[ResourceKind], tail: &[SsaType], result_type: &SsaType| {
+        let Some((SsaType::Resource(kind), rest)) = parameters.split_first() else {
+            return false;
+        };
+        allowed.contains(kind) && rest == tail && result == result_type
+    };
     let valid = match operation {
-        RuntimeOp::StdinHandle => exact(&[SsaType::Capability(Stdio)], &SsaType::Handle),
-        RuntimeOp::SysIsatty => exact(&[SsaType::Handle], &system_result(SsaType::Bool)),
-        RuntimeOp::SysClose => exact(&[SsaType::Handle], &system_result(SsaType::Unit)),
-        RuntimeOp::SysReadByte => exact(&[SsaType::Handle], &system_result(SsaType::I64)),
-        RuntimeOp::SysWriteByte => exact(
-            &[SsaType::Handle, SsaType::I64],
+        RuntimeOp::StdinHandle => exact(&[SsaType::Capability(Stdio)], &resource(InputStream)),
+        RuntimeOp::SysIsatty => exact(&[resource(InputStream)], &system_result(SsaType::Bool)),
+        RuntimeOp::SysClose => resource_input(
+            &[
+                OutputStream,
+                FileReader,
+                FileWriter,
+                FileAppender,
+                Directory,
+                TcpListener,
+                TcpStream,
+                ResourceKind::SqliteConnection,
+                ResourceKind::SqliteStatement,
+                ResourceKind::TerminalSession,
+            ],
+            &[],
             &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysReadInto | RuntimeOp::SysWriteFrom => exact(
-            &[SsaType::Handle, SsaType::Buf, SsaType::I64, SsaType::I64],
+        RuntimeOp::SysReadByte => resource_input(
+            &[InputStream, FileReader, TcpStream],
+            &[],
+            &system_result(SsaType::I64),
+        ),
+        RuntimeOp::SysWriteByte => resource_input(
+            &[OutputStream, FileWriter, FileAppender, TcpStream],
+            &[SsaType::I64],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysReadInto => resource_input(
+            &[InputStream, FileReader, TcpStream],
+            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &system_result(SsaType::I64),
+        ),
+        RuntimeOp::SysWriteFrom => resource_input(
+            &[OutputStream, FileWriter, FileAppender, TcpStream],
+            &[SsaType::Buf, SsaType::I64, SsaType::I64],
             &system_result(SsaType::I64),
         ),
         RuntimeOp::SysTtyGuardSave => exact(
@@ -34,17 +72,20 @@ pub(super) fn host_signature(
             &[SsaType::Capability(Terminal)],
             &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysOpenRead
-        | RuntimeOp::SysOpenWrite
-        | RuntimeOp::SysOpenAppend
-        | RuntimeOp::SysOpenCreateNew
-        | RuntimeOp::SysOpenDir => exact(
-            &[SsaType::Capability(FileSystem), SsaType::Path],
-            &system_result(SsaType::Handle),
+        RuntimeOp::SysOpenRead => file_open(FileReader, parameters, result),
+        RuntimeOp::SysOpenWrite | RuntimeOp::SysOpenCreateNew => {
+            file_open(FileWriter, parameters, result)
+        }
+        RuntimeOp::SysOpenAppend => file_open(FileAppender, parameters, result),
+        RuntimeOp::SysOpenDir => file_open(Directory, parameters, result),
+        RuntimeOp::SysFsync => resource_input(
+            &[FileWriter, FileAppender, Directory],
+            &[],
+            &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysFsync => exact(&[SsaType::Handle], &system_result(SsaType::Unit)),
-        RuntimeOp::SysTruncate => exact(
-            &[SsaType::Handle, SsaType::I64],
+        RuntimeOp::SysTruncate => resource_input(
+            &[FileWriter, FileAppender],
+            &[SsaType::I64],
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysRename => exact(
@@ -70,73 +111,119 @@ pub(super) fn host_signature(
         ),
         RuntimeOp::SysSqliteOpen => exact(
             &[SsaType::Capability(Sqlite), SsaType::Path, SsaType::I64],
-            &system_result(SsaType::Handle),
+            &system_result(resource(ResourceKind::SqliteConnection)),
         ),
-        RuntimeOp::SysSqliteClose
-        | RuntimeOp::SysSqliteFinalize
+        RuntimeOp::SysSqliteClose => {
+            sqlite_one(ResourceKind::SqliteConnection, result, SsaType::Unit)
+        }
+        RuntimeOp::SysSqliteFinalize
         | RuntimeOp::SysSqliteReset
         | RuntimeOp::SysSqliteClearBindings => {
-            exact(&[SsaType::Handle], &system_result(SsaType::Unit))
+            sqlite_one(ResourceKind::SqliteStatement, result, SsaType::Unit)
         }
-        RuntimeOp::SysSqliteBusyTimeout | RuntimeOp::SysSqliteBindNull => exact(
-            &[SsaType::Handle, SsaType::I64],
-            &system_result(SsaType::Unit),
+        RuntimeOp::SysSqliteBusyTimeout => sqlite_tail(
+            ResourceKind::SqliteConnection,
+            &[SsaType::I64],
+            parameters,
+            result,
+            SsaType::Unit,
         ),
-        RuntimeOp::SysSqliteExec => exact(
-            &[SsaType::Handle, SsaType::Str],
-            &system_result(SsaType::Unit),
+        RuntimeOp::SysSqliteBindNull => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64],
+            parameters,
+            result,
+            SsaType::Unit,
         ),
-        RuntimeOp::SysSqlitePrepare => exact(
-            &[SsaType::Handle, SsaType::Str],
-            &system_result(SsaType::Handle),
+        RuntimeOp::SysSqliteExec => sqlite_tail(
+            ResourceKind::SqliteConnection,
+            &[SsaType::Str],
+            parameters,
+            result,
+            SsaType::Unit,
         ),
-        RuntimeOp::SysSqliteBindI64 => exact(
-            &[SsaType::Handle, SsaType::I64, SsaType::I64],
-            &system_result(SsaType::Unit),
+        RuntimeOp::SysSqlitePrepare => sqlite_tail(
+            ResourceKind::SqliteConnection,
+            &[SsaType::Str],
+            parameters,
+            result,
+            resource(ResourceKind::SqliteStatement),
         ),
-        RuntimeOp::SysSqliteBindF64 => exact(
-            &[SsaType::Handle, SsaType::I64, SsaType::F64],
-            &system_result(SsaType::Unit),
+        RuntimeOp::SysSqliteBindI64 => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64, SsaType::I64],
+            parameters,
+            result,
+            SsaType::Unit,
         ),
-        RuntimeOp::SysSqliteBindText => exact(
-            &[SsaType::Handle, SsaType::I64, SsaType::Str],
-            &system_result(SsaType::Unit),
+        RuntimeOp::SysSqliteBindF64 => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64, SsaType::F64],
+            parameters,
+            result,
+            SsaType::Unit,
         ),
-        RuntimeOp::SysSqliteBindBytes => exact(
-            &[SsaType::Handle, SsaType::I64, SsaType::Buf],
-            &system_result(SsaType::Unit),
+        RuntimeOp::SysSqliteBindText => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64, SsaType::Str],
+            parameters,
+            result,
+            SsaType::Unit,
         ),
-        RuntimeOp::SysSqliteStep
-        | RuntimeOp::SysSqliteColumnCount
-        | RuntimeOp::SysSqliteChanges
+        RuntimeOp::SysSqliteBindBytes => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64, SsaType::Buf],
+            parameters,
+            result,
+            SsaType::Unit,
+        ),
+        RuntimeOp::SysSqliteStep | RuntimeOp::SysSqliteColumnCount => {
+            sqlite_one(ResourceKind::SqliteStatement, result, SsaType::I64)
+        }
+        RuntimeOp::SysSqliteChanges
         | RuntimeOp::SysSqliteLastInsertRowid
         | RuntimeOp::SysSqliteExtendedResultCode => {
-            exact(&[SsaType::Handle], &system_result(SsaType::I64))
+            sqlite_one(ResourceKind::SqliteConnection, result, SsaType::I64)
         }
-        RuntimeOp::SysSqliteColumnType => exact(
-            &[SsaType::Handle, SsaType::I64],
-            &system_result(SsaType::I64),
+        RuntimeOp::SysSqliteColumnType => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64],
+            parameters,
+            result,
+            SsaType::I64,
         ),
-        RuntimeOp::SysSqliteColumnI64 => exact(
-            &[SsaType::Handle, SsaType::I64],
-            &system_result(crate::prelude_contract::option(SsaType::I64)),
+        RuntimeOp::SysSqliteColumnI64 => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64],
+            parameters,
+            result,
+            crate::prelude_contract::option(SsaType::I64),
         ),
-        RuntimeOp::SysSqliteColumnF64 => exact(
-            &[SsaType::Handle, SsaType::I64],
-            &system_result(crate::prelude_contract::option(SsaType::F64)),
+        RuntimeOp::SysSqliteColumnF64 => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64],
+            parameters,
+            result,
+            crate::prelude_contract::option(SsaType::F64),
         ),
-        RuntimeOp::SysSqliteColumnText => exact(
-            &[SsaType::Handle, SsaType::I64],
-            &system_result(crate::prelude_contract::option(SsaType::Str)),
+        RuntimeOp::SysSqliteColumnText => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64],
+            parameters,
+            result,
+            crate::prelude_contract::option(SsaType::Str),
         ),
-        RuntimeOp::SysSqliteColumnBytes => exact(
-            &[SsaType::Handle, SsaType::I64],
-            &system_result(crate::prelude_contract::option(SsaType::Buf)),
+        RuntimeOp::SysSqliteColumnBytes => sqlite_tail(
+            ResourceKind::SqliteStatement,
+            &[SsaType::I64],
+            parameters,
+            result,
+            crate::prelude_contract::option(SsaType::Buf),
         ),
         RuntimeOp::SysSqliteBackup => exact(
             &[
                 SsaType::Capability(Sqlite),
-                SsaType::Handle,
+                resource(ResourceKind::SqliteConnection),
                 SsaType::Path,
                 SsaType::I64,
             ],
@@ -153,27 +240,56 @@ pub(super) fn host_signature(
         RuntimeOp::SysNowMs => exact(&[SsaType::Capability(Clock)], &system_result(SsaType::I64)),
         RuntimeOp::SysSocket => exact(
             &[SsaType::Capability(Network)],
-            &system_result(SsaType::Handle),
+            &system_result(resource(TcpListener)),
         ),
         RuntimeOp::SysBind | RuntimeOp::SysListen => exact(
-            &[SsaType::Handle, SsaType::I64],
+            &[resource(TcpListener), SsaType::I64],
             &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysAccept => exact(&[SsaType::Handle], &system_result(SsaType::Handle)),
-        RuntimeOp::SysRecv => exact(&[SsaType::Handle], &system_result(SsaType::Str)),
+        RuntimeOp::SysAccept => exact(
+            &[resource(TcpListener)],
+            &system_result(resource(TcpStream)),
+        ),
+        RuntimeOp::SysRecv => exact(&[resource(TcpStream)], &system_result(SsaType::Str)),
         RuntimeOp::SysSend => exact(
-            &[SsaType::Handle, SsaType::Str],
+            &[resource(TcpStream), SsaType::Str],
             &system_result(SsaType::I64),
         ),
-        RuntimeOp::SysPoll => exact(
-            &[SsaType::Handle, SsaType::I64],
+        RuntimeOp::SysPoll => resource_input(
+            &[InputStream, FileReader, TcpListener, TcpStream],
+            &[SsaType::I64],
             &system_result(SsaType::I64),
         ),
         RuntimeOp::SysTtyGet | RuntimeOp::SysTtySet => exact(
-            &[SsaType::Handle, SsaType::Buf],
+            &[resource(InputStream), SsaType::Buf],
             &system_result(SsaType::Unit),
         ),
         _ => return None,
     };
     Some(valid)
+}
+
+fn file_open(kind: ResourceKind, parameters: &[SsaType], result: &SsaType) -> bool {
+    parameters
+        == [
+            SsaType::Capability(lkjscript_contracts::CapabilityKind::FileSystem),
+            SsaType::Path,
+        ]
+        && result == &system_result(SsaType::Resource(kind))
+}
+
+fn sqlite_one(kind: ResourceKind, result: &SsaType, output: SsaType) -> bool {
+    sqlite_tail(kind, &[], &[SsaType::Resource(kind)], result, output)
+}
+
+fn sqlite_tail(
+    kind: ResourceKind,
+    tail: &[SsaType],
+    parameters: &[SsaType],
+    result: &SsaType,
+    output: SsaType,
+) -> bool {
+    parameters.first() == Some(&SsaType::Resource(kind))
+        && parameters.get(1..) == Some(tail)
+        && result == &system_result(output)
 }

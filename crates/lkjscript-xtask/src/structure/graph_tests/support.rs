@@ -91,11 +91,11 @@ pub fn fixture(root: &Path, revision: &str) -> Audit {
         ("docs/decision.md", "[source](../src/main.lkjscript)\n"),
         (
             "src/main.lkjscript",
-            "imports/\nimport/\nsrc/part.lkjscript#part\n/import\n/imports\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+            "imports/\nimport/\nmodule/\nsrc/part.lkjscript\n/module\ndeclarations/\npart\n/declarations\n/import\n/imports\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
         ),
         (
             "src/part.lkjscript",
-            "def/\nname/\npart\n/name\npublic\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nunit\n/fn\n/def\n",
+            "def/\nname/\npart\n/name\npublic\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nunit\n/fn\n/def\n",
         ),
     ];
     let mut files = Vec::new();

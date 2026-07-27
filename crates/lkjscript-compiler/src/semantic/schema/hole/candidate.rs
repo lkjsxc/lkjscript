@@ -4,7 +4,7 @@ use super::super::{Expression, SemanticEffect};
 use super::OwnershipAccess;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum CandidateCategory {
     ExactLiteral,
     VisibleBinding,
@@ -56,7 +56,7 @@ pub(crate) struct ConcreteSnippet {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum ExactSemanticEdit {
     ReplaceHole {
         declaration_key: String,
@@ -76,7 +76,7 @@ pub(crate) enum ExactSemanticEdit {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum InclusionReason {
     ExactTypeAndConstraints,
     ExactTypeRequiresMove,
@@ -105,7 +105,7 @@ pub(crate) struct OmittedCategory {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum BlockerCode {
     ExpectedTypeUnavailable,
     CandidateBudgetExhausted,

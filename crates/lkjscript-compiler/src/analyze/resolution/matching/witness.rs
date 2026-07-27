@@ -17,9 +17,9 @@ pub(super) fn render(witness: &Witness) -> String {
 
 fn canonical_type(ty: &Type) -> String {
     match ty {
-        Type::Bool => "Bool".into(),
-        Type::I64 => "I64".into(),
-        Type::Product(_) => "Product".into(),
+        Type::Bool => "bool".into(),
+        Type::I64 => "i64".into(),
+        Type::Product(_) => "product".into(),
         Type::Enum { id, arguments, .. } => format!(
             "Enum#{}<{}>",
             hex(id.bytes()),
@@ -29,7 +29,7 @@ fn canonical_type(ty: &Type) -> String {
                 .collect::<Vec<_>>()
                 .join(","),
         ),
-        other => format!("{other:?}"),
+        other => other.to_string(),
     }
 }
 

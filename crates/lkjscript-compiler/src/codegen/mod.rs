@@ -7,8 +7,9 @@ use lkjscript_core::{
     EnumFieldMetadata as BytecodeEnumFieldMetadata, EnumFieldRef, EnumId as BytecodeEnumId,
     EnumMetadata as BytecodeEnumMetadata, EnumVariantMetadata as BytecodeEnumVariantMetadata,
     EnumVariantRef, Error, FunctionProto, Op, ProductFieldRef, ProductId as BytecodeProductId,
-    ProductMetadata as BytecodeProductMetadata, Result, RuntimeLayoutId as BytecodeLayoutId,
-    VariantFieldId as BytecodeVariantFieldId, VariantId as BytecodeVariantId,
+    ProductMetadata as BytecodeProductMetadata, ResourceReturnKind, Result,
+    RuntimeLayoutId as BytecodeLayoutId, VariantFieldId as BytecodeVariantFieldId,
+    VariantId as BytecodeVariantId,
 };
 use lkjscript_ir::{
     BlockId, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget,

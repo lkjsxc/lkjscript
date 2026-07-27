@@ -4,10 +4,10 @@ use crate::operation::*;
 pub(in crate::operation) fn variant_signature(operation: Operation) -> Type {
     match operation {
         Operation::Ok => {
-            let success = Type::Param("T".into());
-            let failure = Type::Param("E".into());
+            let success = Type::Param("t".into());
+            let failure = Type::Param("e".into());
             forall(
-                &["T", "E"],
+                &["t", "e"],
                 function(
                     vec![success.clone()],
                     crate::types::result_type(success, failure),
@@ -15,10 +15,10 @@ pub(in crate::operation) fn variant_signature(operation: Operation) -> Type {
             )
         }
         Operation::Err => {
-            let success = Type::Param("T".into());
-            let failure = Type::Param("E".into());
+            let success = Type::Param("t".into());
+            let failure = Type::Param("e".into());
             forall(
-                &["T", "E"],
+                &["t", "e"],
                 function(
                     vec![failure.clone()],
                     crate::types::result_type(success, failure),
@@ -27,34 +27,34 @@ pub(in crate::operation) fn variant_signature(operation: Operation) -> Type {
         }
         Operation::IsOk => {
             let result = generic_result();
-            forall(&["T", "E"], function(vec![result], Type::Bool))
+            forall(&["t", "e"], function(vec![result], Type::Bool))
         }
         Operation::UnwrapOk => {
             let result = generic_result();
-            forall(&["T", "E"], function(vec![result], Type::Param("T".into())))
+            forall(&["t", "e"], function(vec![result], Type::Param("t".into())))
         }
         Operation::UnwrapErr => {
             let result = generic_result();
-            forall(&["T", "E"], function(vec![result], Type::Param("E".into())))
+            forall(&["t", "e"], function(vec![result], Type::Param("e".into())))
         }
         Operation::Some => {
-            let value = Type::Param("T".into());
+            let value = Type::Param("t".into());
             forall(
-                &["T"],
+                &["t"],
                 function(vec![value.clone()], crate::types::option_type(value)),
             )
         }
         Operation::IsSome => {
-            let value = Type::Param("T".into());
+            let value = Type::Param("t".into());
             forall(
-                &["T"],
+                &["t"],
                 function(vec![crate::types::option_type(value)], Type::Bool),
             )
         }
         Operation::UnwrapSome => {
-            let value = Type::Param("T".into());
+            let value = Type::Param("t".into());
             forall(
-                &["T"],
+                &["t"],
                 function(vec![crate::types::option_type(value.clone())], value),
             )
         }

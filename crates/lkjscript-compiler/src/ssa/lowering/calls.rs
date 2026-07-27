@@ -110,7 +110,7 @@ impl FunctionBuilder<'_> {
             }] = args
             else {
                 return Err(Error::msg(
-                    "resource close lowering requires one direct Handle local",
+                    "resource close lowering requires one direct typed resource local",
                 ));
             };
             self.env.remove(&reference.binding);

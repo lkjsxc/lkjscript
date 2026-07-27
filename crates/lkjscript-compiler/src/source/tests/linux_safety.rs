@@ -17,7 +17,7 @@ fn loader_rejects_symlink_import_escape() -> std::io::Result<()> {
     fs::write(
         &entry,
         format!(
-            "imports/\nimport/\nescaped.lkjscript#escaped\n/import\n/imports\n{}",
+            "imports/\nimport/\nmodule/\nescaped.lkjscript\n/module\ndeclarations/\nescaped\n/declarations\n/import\n/imports\n{}",
             unit_main("unit")
         ),
     )?;

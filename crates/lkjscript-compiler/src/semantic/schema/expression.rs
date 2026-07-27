@@ -9,7 +9,7 @@ use super::{ClosedBuiltinOperation, TypeExpression};
 use crate::source::{SourceNode, SourceSpan};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum Expression {
     Unit {},
     Bool {

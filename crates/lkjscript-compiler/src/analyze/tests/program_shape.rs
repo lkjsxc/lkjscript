@@ -4,21 +4,21 @@ use super::*;
 fn explicit_main_is_unique_root_only_and_exactly_typed() {
     assert!(analysis_error("").contains("exactly one main"));
     let duplicate =
-        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     assert!(analysis_error(duplicate).contains("duplicate main"));
-    let mismatch = main_source("I64", "unit");
+    let mismatch = main_source("i64", "unit");
     assert!(analysis_error(&mismatch).contains("does not exactly equal"));
-    let parameter = "main/\nsig/\nI64\n->\nI64\n/sig\n1\n/main\n";
+    let parameter = "main/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\n1\n/main\n";
     assert!(analysis_error(parameter).contains("requires params"));
 
     let ast = parsed_program(&[
         (
             "lib.lkjscript",
-            "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
         ),
         (
             "root.lkjscript",
-            "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
         ),
     ])
     .expect("parse imported main");
@@ -31,13 +31,13 @@ fn explicit_main_is_unique_root_only_and_exactly_typed() {
 #[test]
 fn top_level_do_and_runtime_value_definitions_are_removed() {
     assert!(analysis_error("do/\nunit\n/do\n").contains("top-level do"));
-    let value = "def/\nname/\nx\n/name\ntype/\nI64\n/type\n1\n/def\nmain/\nsig/\n->\nUnit\n/sig\nunit\n/main\n";
+    let value = "def/\nname/\nx\n/name\ntype/\ni64\n/type\n1\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     assert!(analysis_error(value).contains("malformed top-level def declaration shape"));
 }
 
 #[test]
 fn main_and_function_are_explicit_hir_nodes() {
-    let source = "def/\nname/\nanswer\n/name\nfn/\nsig/\n->\nI64\n/sig\nparams/\n/params\n42\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nanswer/\n/answer\n/main\n";
+    let source = "def/\nname/\nanswer\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\n/params\n42\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nanswer/\n/answer\n/main\n";
     let program = analyze_one(source).expect("analyze explicit callable program");
     assert_eq!(program.functions.len(), 1);
     assert_eq!(program.main.return_type, Type::I64);
@@ -58,8 +58,8 @@ fn main_and_function_are_explicit_hir_nodes() {
 #[test]
 fn mutable_local_has_stable_binding_and_slot_and_set_resolves_nearest() {
     let source = main_source(
-        "I64",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\n1\nvar/\nname/\nx\n/name\ntype/\nI64\n/type\nx\ndo/\nset/\nx\n2\n/set\nx\n/do\n/var\n/var",
+        "i64",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\n1\nvar/\nname/\nx\n/name\ntype/\ni64\n/type\nx\ndo/\nset/\nx\n2\n/set\nx\n/do\n/var\n/var",
     );
     let program = analyze_one(&source).expect("analyze nested vars");
     let ExprKind::MutableLocal {
@@ -107,37 +107,37 @@ fn mutable_local_has_stable_binding_and_slot_and_set_resolves_nearest() {
 #[test]
 fn var_initializer_set_type_and_binding_kinds_are_checked() {
     let self_ref = main_source(
-        "I64",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\nx\nx\n/var",
+        "i64",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\nx\nx\n/var",
     );
     assert!(analysis_error(&self_ref).contains("unknown symbol x"));
     let wrong_initial = main_source(
-        "Unit",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\n1.0\nunit\n/var",
+        "unit",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\n1.0\nunit\n/var",
     );
     assert!(analysis_error(&wrong_initial).contains("exactly equal"));
     let wrong_set = main_source(
-        "Unit",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\n1\nset/\nx\n1.0\n/set\n/var",
+        "unit",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\n1\nset/\nx\n1.0\n/set\n/var",
     );
     assert!(analysis_error(&wrong_set).contains("exactly equal"));
-    let immutable = main_source("Unit", "let/\nbind/\nx\n1\n/bind\nset/\nx\n2\n/set\n/let");
+    let immutable = main_source("unit", "let/\nbind/\nx\n1\n/bind\nset/\nx\n2\n/set\n/let");
     assert!(analysis_error(&immutable).contains("not a function-local mutable var"));
 }
 
 #[test]
 fn resolution_never_crosses_a_function_boundary() {
-    let source = "def/\nname/\nmutate\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\nset/\nstate\n1\n/set\n/fn\n/def\nmain/\nsig/\n->\nUnit\n/sig\nvar/\nname/\nstate\n/name\ntype/\nI64\n/type\n0\nmutate/\n/mutate\n/var\n/main\n";
+    let source = "def/\nname/\nmutate\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\nset/\nstate\n1\n/set\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nvar/\nname/\nstate\n/name\ntype/\ni64\n/type\n0\nmutate/\n/mutate\n/var\n/main\n";
     assert!(analysis_error(source).contains("unknown set target state"));
 }
 
 #[test]
 fn operation_identity_and_local_mutation_reach_bytecode() {
     let source = concat!(
-        "main/\nsig/\nCapability/\nArguments\n/Capability\n->\nI64\n/sig\n",
-        "params/\narguments\nCapability/\nArguments\n/Capability\n/params\n",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\n",
-        "argc/\narguments\n/argc\ndo/\nset/\nx\n+/\nx\n2\n/+\n/set\nx\n/do\n/var\n/main\n"
+        "main/\nsig/\ninputs/\ncapability/\narguments\n/capability\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "params/\narguments\ncapability/\narguments\n/capability\n/params\n",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\n",
+        "argument-count/\narguments\n/argument-count\ndo/\nset/\nx\nadd/\nx\n2\n/add\n/set\nx\n/do\n/var\n/main\n"
     );
     let program = analyze_one(source).expect("analyze operation and set");
     let chunk = compile_hir(&program).expect("lower operation and set through SSA");

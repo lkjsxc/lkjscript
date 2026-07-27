@@ -9,22 +9,22 @@ use lkjscript_vm::run_chunk;
 fn enum_match_source() -> String {
     concat!(
         "",
-        "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
-        "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
-        "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nI64\n/sig\nmatch/\n",
-        "variant-value/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nSome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
-        "arms/\narm/\nvariant-pattern/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nSome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
-        "arm/\nvariant-pattern/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nNone\n/variant\nfields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nnone\n/variant\nfields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
     )
     .into()
 }
 
 fn single_evaluation_source() -> String {
     concat!(
-        "main/\nsig/\n->\nI64\n/sig\n",
-        "var/\nname/\ncounter\n/name\ntype/\nI64\n/type\n0\n",
-        "match/\ndo/\nset/\ncounter\n+/\ncounter\n1\n/+\n/set\ncounter\n/do\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "var/\nname/\ncounter\n/name\ntype/\ni64\n/type\n0\n",
+        "match/\ndo/\nset/\ncounter\nadd/\ncounter\n1\n/add\n/set\ncounter\n/do\n",
         "arms/\narm/\ni64-pattern/\n1\n/i64-pattern\ncounter\n/arm\n",
         "arm/\nbinding/\nname/\nother\n/name\n/binding\n99\n/arm\n",
         "/arms\n/match\n/var\n/main\n",

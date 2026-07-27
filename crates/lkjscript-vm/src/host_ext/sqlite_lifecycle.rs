@@ -24,16 +24,14 @@ impl ResourceTable {
     }
 
     pub fn sqlite_close(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "sys-sqlite-close")?;
+        let index = self.owned_index(handle, "close-sqlite")?;
         match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::SqliteConnection {
                 live_statements, ..
             }) if *live_statements > 0 => Err(Error::msg(
                 "sys-sqlite-close: live statements must be finalized",
             )),
-            Some(OwnedResource::SqliteConnection { .. }) => {
-                self.close_slot(index, "sys-sqlite-close")
-            }
+            Some(OwnedResource::SqliteConnection { .. }) => self.close_slot(index, "close-sqlite"),
             Some(_) => Err(Error::msg(
                 "sys-sqlite-close: handle is not a SQLite connection",
             )),
@@ -42,14 +40,14 @@ impl ResourceTable {
     }
 
     pub fn sqlite_busy_timeout(&self, handle: Value, milliseconds: i64) -> Result<Value> {
-        self.sqlite_connection(handle, "sys-sqlite-busy-timeout")?
+        self.sqlite_connection(handle, "set-sqlite-busy-timeout")?
             .busy_timeout(milliseconds)
             .map_err(|error| Error::msg(format!("sys-sqlite-busy-timeout: {error}")))?;
         Ok(Value::UNIT)
     }
 
     pub fn sqlite_exec(&self, handle: Value, sql: &str) -> Result<Value> {
-        self.sqlite_connection(handle, "sys-sqlite-exec")?
+        self.sqlite_connection(handle, "execute-sqlite")?
             .exec(sql)
             .map_err(|error| Error::msg(format!("sys-sqlite-exec: {error}")))?;
         Ok(Value::UNIT)
@@ -57,18 +55,18 @@ impl ResourceTable {
 
     pub fn sqlite_prepare(&mut self, handle: Value, sql: &str) -> Result<Value> {
         self.ensure_capacity()?;
-        let parent = self.owned_index(handle, "sys-sqlite-prepare")?;
+        let parent = self.owned_index(handle, "prepare-sqlite")?;
         let statement = self
-            .sqlite_connection_at(parent, "sys-sqlite-prepare")?
+            .sqlite_connection_at(parent, "prepare-sqlite")?
             .prepare(sql)
             .map_err(|error| Error::msg(format!("sys-sqlite-prepare: {error}")))?;
-        let live_statements = self.sqlite_live_statements_at_mut(parent, "sys-sqlite-prepare")?;
+        let live_statements = self.sqlite_live_statements_at_mut(parent, "prepare-sqlite")?;
         *live_statements = live_statements.saturating_add(1);
         self.push(OwnedResource::SqliteStatement { statement, parent })
     }
 
     pub fn sqlite_finalize(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "sys-sqlite-finalize")?;
+        let index = self.owned_index(handle, "finalize-sqlite-statement")?;
         let parent = match self.slots.get(index).and_then(Option::as_ref) {
             Some(OwnedResource::SqliteStatement { parent, .. }) => *parent,
             Some(_) => {
@@ -83,7 +81,8 @@ impl ResourceTable {
             .get_mut(index)
             .and_then(Option::take)
             .ok_or_else(|| Error::msg("sys-sqlite-finalize: stale or unknown handle"))?;
-        let live_statements = self.sqlite_live_statements_at_mut(parent, "sys-sqlite-finalize")?;
+        let live_statements =
+            self.sqlite_live_statements_at_mut(parent, "finalize-sqlite-statement")?;
         *live_statements = live_statements.saturating_sub(1);
         Ok(Value::UNIT)
     }

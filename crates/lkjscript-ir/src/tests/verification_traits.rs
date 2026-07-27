@@ -106,7 +106,7 @@ fn verifier_accepts_canonical_marker_witness_and_rejects_malformed_trait_facts()
 
     let mut wrong_substitution = bounded_call_program();
     mutate_instantiation(&mut wrong_substitution, &mut |instantiation| {
-        instantiation.substitutions[0].parameter = "U".into();
+        instantiation.substitutions[0].parameter = "u".into();
     });
     assert!(verify(wrong_substitution).is_err());
 

@@ -75,7 +75,7 @@ pub(super) fn expect_pop(
         proto,
         instruction.op(),
         instruction.offset(),
-        &format!("operation category mismatch: expected {expected:?}, got {actual:?}"),
+        &format!("operation category mismatch: expected {expected}, got {actual}"),
     ))
 }
 
@@ -93,7 +93,7 @@ pub(super) fn expect_product(
         instruction.op(),
         instruction.offset(),
         &format!(
-            "product operation category or identity mismatch: expected ProductId {}, got {actual:?}",
+            "product operation category or identity mismatch: expected product {}, got {actual}",
             expected.raw()
         ),
     ))
@@ -111,7 +111,7 @@ pub(super) fn expect_numeric(
             proto,
             instruction.op(),
             instruction.offset(),
-            &format!("numeric operation category mismatch: got {actual:?}"),
+            &format!("numeric operation category mismatch: got {actual}"),
         ))
     }
 }
@@ -129,6 +129,10 @@ pub(super) fn expect_two_numeric(
 
 pub(super) const fn result_kind() -> Kind {
     Kind::Enum(crate::EnumId::new(crate::RESULT_ID), None)
+}
+
+pub(super) const fn resource_result_kind(kind: crate::ResourceKind) -> Kind {
+    Kind::ResourceResult(kind)
 }
 
 pub(super) const fn option_kind() -> Kind {

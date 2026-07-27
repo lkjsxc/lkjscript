@@ -4,17 +4,17 @@ use lkjscript_contracts::{current_contracts, ContractSet};
 
 const SEMANTIC_OPERATIONS: &[&str] = &[
     "snapshot",
-    "read_entity",
-    "query_node",
-    "hole_context",
-    "legal_actions",
+    "read-entity",
+    "query-node",
+    "hole-context",
+    "legal-actions",
     "diagnostics",
-    "apply_transaction",
+    "apply-transaction",
 ];
 const LANGUAGE_FORMS: &[&str] = &[
     "generic-enum",
     "exhaustive-match",
-    "Never",
+    "never",
     "return",
     "loop",
     "while",

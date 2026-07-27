@@ -7,9 +7,9 @@ fn published_transaction_advances_session_revision() {
     std::fs::write(
         &root,
         concat!(
-            "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+            "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
             "params/\n/params\nunit\n/fn\n/def\n",
-            "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
         ),
     )
     .expect("write transaction source");
@@ -39,12 +39,12 @@ fn published_transaction_advances_session_revision() {
         })
         .collect::<Vec<_>>();
     let transaction = serde_json::json!({
-        "kind": "apply_transaction",
+        "kind": "apply-transaction",
         "mode": "publish",
         "base_revision": source_revision,
         "file_preconditions": preconditions,
         "operations": [{
-            "kind": "rename_declaration",
+            "kind": "rename-declaration",
             "declaration_key": declaration["key"],
             "entity_fingerprint": declaration["fingerprint"],
             "new_name": "g",
@@ -56,7 +56,7 @@ fn published_transaction_advances_session_revision() {
     assert_eq!(published["revision"], 2);
     assert_eq!(
         published["response"]["response"]["result"]["kind"],
-        "apply_transaction"
+        "apply-transaction"
     );
     let updated = std::fs::read_to_string(root).expect("published source");
     assert!(updated.contains("name/\ng\n/name"));

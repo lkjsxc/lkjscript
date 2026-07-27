@@ -24,9 +24,9 @@ and match transaction expressions, and match-arm expected/scope facts. Version
 Unknown kinds, fields, operations, versions, duplicates, and trailing input
 fail. Inferred facts remain derived authority.
 
-The bounded one-shot `snapshot`, `read_entity`, `query_node`, `diagnostics`,
-`hole_context`, `legal_actions`, atomic `rename`, `replace_expression`,
-`insert_hole`, `fill_hole`, `refine_hole`, and structurally legal `delete_hole`
+The bounded one-shot `snapshot`, `read-entity`, `query-node`, `diagnostics`,
+`hole-context`, `legal-actions`, atomic `rename`, `replace-expression`,
+`insert-hole`, `fill-hole`, `refine-hole`, and structurally legal `delete-hole`
 operations emit the canonical contract. Hole context comes from the pinned parsed tree and a bounded
 checker-valid completion; unavailable expected, capability, ownership-correlation,
 qualification, and the removed legacy source contract control facts are explicit rather than invented.

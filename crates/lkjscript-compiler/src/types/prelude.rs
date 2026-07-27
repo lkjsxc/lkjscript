@@ -6,11 +6,11 @@ use lkjscript_core::{
 
 pub fn prelude_type(kind: PreludeEnum, arguments: Vec<Type>) -> Type {
     let (id, name) = match kind {
-        PreludeEnum::Option => (OPTION_ID, "Option"),
-        PreludeEnum::Result => (RESULT_ID, "Result"),
-        PreludeEnum::NumericError => (NUMERIC_ERROR_ID, "NumericError"),
-        PreludeEnum::Utf8Error => (UTF8_ERROR_ID, "Utf8Error"),
-        PreludeEnum::SystemError => (SYSTEM_ERROR_ID, "SystemError"),
+        PreludeEnum::Option => (OPTION_ID, "option"),
+        PreludeEnum::Result => (RESULT_ID, "result"),
+        PreludeEnum::NumericError => (NUMERIC_ERROR_ID, "numeric-error"),
+        PreludeEnum::Utf8Error => (UTF8_ERROR_ID, "utf8-error"),
+        PreludeEnum::SystemError => (SYSTEM_ERROR_ID, "system-error"),
     };
     Type::Enum {
         id: EnumId::new(id),

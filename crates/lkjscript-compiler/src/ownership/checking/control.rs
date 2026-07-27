@@ -13,7 +13,7 @@ pub(in crate::ownership) fn check_control_expr(
             for argument in args {
                 if is_owned(&argument.ty) && !matches!(argument.kind, ExprKind::Move { .. }) {
                     return Err(Error::msg(
-                        "Owned Buf call arguments require explicit move of a whole local place",
+                        "byte-vector call arguments require explicit move of a whole local place",
                     ));
                 }
             }
@@ -149,17 +149,21 @@ fn consume_resource(
 ) -> Result<()> {
     let [Expr {
         kind: ExprKind::Load(reference),
-        ty: Type::Handle,
+        ty: Type::Resource(_),
         ..
     }] = arguments
     else {
-        return Err(Error::msg("drop expects one direct affine Handle local"));
+        return Err(Error::msg(
+            "drop expects one direct affine typed resource local",
+        ));
     };
     let place = places
         .get(&reference.binding)
-        .ok_or_else(|| Error::msg("drop Handle has no ownership place"))?;
+        .ok_or_else(|| Error::msg("drop resource has no ownership place"))?;
     if state.initialized.get(place) != Some(&true) {
-        return Err(Error::msg("affine Handle was already moved or dropped"));
+        return Err(Error::msg(
+            "affine typed resource was already moved or dropped",
+        ));
     }
     state.initialized.insert(*place, false);
     Ok(())

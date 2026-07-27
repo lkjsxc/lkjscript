@@ -23,11 +23,11 @@ pub(crate) fn query(
     })?;
     let revision = tree.revision().to_hex();
     let literal_type = match node.kind() {
-        NodeKind::I64Literal => Some("I64"),
-        NodeKind::F64Literal => Some("F64"),
-        NodeKind::BoolLiteral => Some("Bool"),
-        NodeKind::UnitLiteral => Some("Unit"),
-        NodeKind::StringLiteral => Some("Str"),
+        NodeKind::I64Literal => Some("i64"),
+        NodeKind::F64Literal => Some("f64"),
+        NodeKind::BoolLiteral => Some("bool"),
+        NodeKind::UnitLiteral => Some("unit"),
+        NodeKind::StringLiteral => Some("string"),
         NodeKind::Symbol | NodeKind::Call => None,
     };
     let static_type = literal_type.map_or_else(

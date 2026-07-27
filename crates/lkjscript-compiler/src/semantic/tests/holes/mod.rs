@@ -13,9 +13,9 @@ use crate::semantic::schema::{
 pub(super) fn function_source(body: &str) -> String {
     format!(
         concat!(
-            "def/\nname/\nf\n/name\nfn/\nsig/\nI64\nI64\n->\nI64\n/sig\n",
-            "params/\nx\nI64\ny\nI64\n/params\n{body}/fn\n/def\n",
-            "main/\nsig/\n->\nI64\n/sig\nf/\n0\n1\n/f\n/main\n",
+            "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\ni64\ni64\n/inputs\noutput/\ni64\n/output\n/sig\n",
+            "params/\nx\ni64\ny\ni64\n/params\n{body}/fn\n/def\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nf/\n0\n1\n/f\n/main\n",
         ),
         body = body
     )
@@ -23,7 +23,7 @@ pub(super) fn function_source(body: &str) -> String {
 
 pub(super) fn hole(identity: &str, goal: Option<&str>) -> String {
     let goal = goal.map_or_else(String::new, |goal| {
-        format!("goal/\nstr/\n{goal}\n/str\n/goal\n")
+        format!("goal/\nstring-literal/\n{goal}\n/string-literal\n/goal\n")
     });
     format!("hole/\nname/\n{identity}\n/name\n{goal}/hole\n")
 }
@@ -47,7 +47,7 @@ pub(super) fn context(root: &std::path::Path) -> HoleContextResult {
         .find(|node| node.kind == crate::semantic::schema::SemanticNodeKind::TypedHole)
         .expect("typed-hole node");
     let operation = format!(
-        "{{\"kind\":\"hole_context\",\"revision\":{revision:?},\"node\":{}}}",
+        "{{\"kind\":\"hole-context\",\"revision\":{revision:?},\"node\":{}}}",
         node.index,
     );
     let encoded = crate::semantic::execute(&request(root, &operation)).expect("hole context");
@@ -65,7 +65,7 @@ pub(super) fn actions(root: &std::path::Path) -> LegalActionsResult {
         .find(|node| node.kind == crate::semantic::schema::SemanticNodeKind::TypedHole)
         .expect("typed-hole node");
     let operation = format!(
-        "{{\"kind\":\"legal_actions\",\"revision\":{revision:?},\"node\":{}}}",
+        "{{\"kind\":\"legal-actions\",\"revision\":{revision:?},\"node\":{}}}",
         node.index,
     );
     let encoded = crate::semantic::execute(&request(root, &operation)).expect("legal actions");

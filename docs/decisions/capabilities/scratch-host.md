@@ -32,8 +32,8 @@ a self-owned, eventually JIT-fast stack.
 Keep as **language/VM core** (JIT-friendly, not “OS features”):
 
 - arithmetic / compare / logic
-- `cons` / `car` / `cdr` / `empty-list?`
-- string ops (`str-len`, `str-ref`, `str-append`, `str-slice`, `str-from-byte`)
+- `list-prepend` / `list-first` / `list-rest` / `is-empty-list`
+- string ops (`string-byte-length`, `string-byte-at`, `append-string`, `copy-string-byte-slice`, `convert-byte-to-string`)
 - `print` / control (`if`, `while`, `call`, …)
 
 **Fat host ops to migrate later** (ranked):
@@ -41,8 +41,8 @@ Keep as **language/VM core** (JIT-friendly, not “OS features”):
 1. ~~Terminal policy~~ — done in `.lkjscript`
 2. ~~Sockets~~ — done in `.lkjscript`
 3. ~~Filesystem~~ — done in `.lkjscript`
-4. ~~Time~~ — done in `.lkjscript` (`wait-ms` / `now-ms` on `sys-wait-ms` / `sys-now-ms`)
-5. Bulk stdout: `write-str` / `flush` **intentionally kept** as thin byte-pump intrinsics
+4. ~~Time~~ — done in `.lkjscript` (`wait-ms` / `now-ms` on `wait-milliseconds` / `current-time-milliseconds`)
+5. Bulk stdout: `write-string` / `flush` **intentionally kept** as thin byte-pump intrinsics
 
 ## This sprint
 
@@ -51,7 +51,7 @@ Time demotion: Rust `Instant` / `thread::sleep` removed from the VM time path.
 Script wrappers live in `src/std/io/wait-ms.lkjscript` and `now-ms.lkjscript`.
 
 Demotion backlog for OS feature opcodes is complete aside from intentional thin
-`write-str` / `flush`.
+`write-string` / `flush`.
 
 ## Consequences
 
@@ -65,7 +65,7 @@ Demotion backlog for OS feature opcodes is complete aside from intentional thin
 
 - Growing a Rust TUI / networking framework beside the language
 - Adding crates.io deps for convenience without an ADR
-- Turning `write-str` into per-byte `.lkjscript` loops
+- Turning `write-string` into per-byte `.lkjscript` loops
 
 
 ## Multi-OS note

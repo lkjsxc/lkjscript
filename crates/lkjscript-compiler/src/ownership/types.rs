@@ -53,7 +53,7 @@ pub(in crate::ownership) fn is_owned(ty: &Type) -> bool {
 }
 
 pub(in crate::ownership) fn is_affine_resource(ty: &Type) -> bool {
-    ty == &Type::Handle
+    matches!(ty, Type::Resource(_))
 }
 
 pub(in crate::ownership) fn is_ref(ty: &Type) -> bool {

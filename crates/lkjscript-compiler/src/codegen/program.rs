@@ -35,6 +35,7 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
         let prototype = u32::try_from(prototypes.len())
             .map_err(|_| Error::msg("too many SSA functions for bytecode prototypes"))?;
         prototypes.insert(function.id, prototype);
+        chunk.global_prototypes.push(Some(prototype));
     }
 
     let mut links = Vec::with_capacity(program.functions.len());
@@ -98,6 +99,8 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     let (main_proto, main_link) = compile_function(&mut chunk, &globals, main, code_base, None)?;
     chunk.main.locals = main_proto.locals;
     chunk.main.arity = main_proto.arity;
+    chunk.main.parameter_resources = main_proto.parameter_resources;
+    chunk.main.return_resource = main_proto.return_resource;
     chunk.main.code.extend(main_proto.code);
     links.push(main_link);
     links.sort_by_key(|link| link.function);

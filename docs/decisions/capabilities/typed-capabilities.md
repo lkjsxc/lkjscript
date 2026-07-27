@@ -5,118 +5,85 @@
 ## Status
 
 **Current.** Host-provider authority is represented by closed, unforgeable,
-first-class capability values. A package declares the exact capability union it
-may grant to its targets. A target receives only the capability parameters in
-its `main` declaration.
+first-class capability values. Packages declare the exact capability union
+available to targets.
 
-## Closed Capability Set
+## Closed Set
 
-The Current capability kinds are:
+The source kinds are `arguments`, `clock`, `entropy`, `file-system`, `network`,
+`sqlite`, `stdio`, and `terminal`. A type is structural:
 
-- `Arguments`
-- `Clock`
-- `Entropy`
-- `FileSystem`
-- `Network`
-- `Sqlite`
-- `Stdio`
-- `Terminal`
+```text
+capability/
+file-system
+/capability
+```
 
-Their stable source type is `Capability/ Kind /Capability`. Capability kinds are
-sorted by the spelling above wherever order is canonical.
+Capability kinds are unique and sorted wherever order is canonical.
 
 ## Value Semantics
 
-A capability value is immutable, copyable, and unforgeable. It has no source
-constructor, literal, integer conversion, equality operation, object identity,
-or `drop` operation. It may be named, passed, returned, or stored like another
-copy value. Possession delegates exactly one provider authority.
+A capability is immutable, copyable, process-local, and unforgeable. It has no
+source constructor, literal, integer conversion, equality, object identity, or
+`drop`. Possession delegates exactly one provider authority.
 
-A capability-bearing `main` declares `sig/`, then `params/`, then its body. The
-signature and parameter types must agree exactly. Capability kinds must be
-unique and sorted. A pure zero-parameter `main` omits `params/`; no omitted
-parameter is inferred.
+A capability-bearing main uses a structured signature:
 
 ```text
 main/
 sig/
-Capability/
-Arguments
-/Capability
-Capability/
-Stdio
-/Capability
-->
-Unit
+inputs/
+capability/
+arguments
+/capability
+capability/
+stdio
+/capability
+/inputs
+output/
+unit
+/output
 /sig
 params/
 arguments
-Capability/
-Arguments
-/Capability
+capability/
+arguments
+/capability
 stdio
-Capability/
-Stdio
-/Capability
+capability/
+stdio
+/capability
 /params
 ...
 /main
 ```
 
-Ordinary functions use the existing exact `sig/` and `params/` representation.
-There is no ambient capability lookup and no implicit parameter insertion.
+No omitted parameter is inferred and no ambient lookup exists.
 
 ## Authority-Bearing Operations
 
-Provider acquisition and ambient host services require an exact capability as
-argument zero:
+- `arguments`: `argument-count`, `argument-at`
+- `clock`: `current-time-milliseconds`, `wait-milliseconds`
+- `entropy`: `fill-random`
+- `file-system`: `open-file-reader`, `open-file-writer`,
+  `open-file-appender`, `create-file`, `open-directory`, `does-path-exist`,
+  `rename-path`
+- `network`: `open-tcp-socket`
+- `sqlite`: `open-sqlite`, `backup-sqlite`
+- `stdio`: `print`, `flush`, `read-byte`, `write-byte`, `write-string`,
+  `standard-input`
+- `terminal`: `save-terminal-guard`, `clear-terminal-guard`
 
-- `Arguments`: `argc`, `arg`
-- `Clock`: `sys-now-ms`, `sys-wait-ms`
-- `Entropy`: `sys-random-fill`
-- `FileSystem`: `sys-open-read`, `sys-open-write`, `sys-open-append`,
-  `sys-open-create-new`, `sys-open-dir`, `sys-path-exists`, `sys-rename`
-- `Network`: `sys-socket`
-- `Sqlite`: `sys-sqlite-open`, `sys-sqlite-backup`
-- `Stdio`: `print`, `flush`, `read-byte`, `write-byte`, `write-str`,
-  `stdin-handle`
-- `Terminal`: `sys-tty-guard-save`, `sys-tty-guard-clear`
-
-Operations on an already acquired `Handle` do not redundantly require a
-provider capability. `sys-sha256` is deterministic computation, and structured
-`exit` is language control; neither receives a capability.
+Operations on a typed acquired resource do not redundantly accept a provider
+capability. `sha256` is deterministic computation; `exit` is language control.
 
 ## Package And Execution Contract
 
-`lkjscript.package.json` contains a sorted, unique subset of the closed kinds.
-Compilation computes every target's exact `main` requirements. A requirement
-absent from the package is a package error. Extra package declarations are not
-injected into the target.
+The package manifest contains a sorted unique subset of capability kinds.
+Compilation computes each target's exact requirements. Missing declarations
+are errors; extras are not injected. Bytecode records exact requirements and
+main arity. Execution validates supplied kinds before source effects.
+Capabilities are never serialized into source, locks, images, or caches.
 
-Bytecode records the sorted exact requirements and main arity. VM and native
-entry validate supplied values before any source effect. Missing, duplicate,
-extra, or wrong-kind grants fail closed. Capability values are process-local
-and are never serialized into source, package locks, native images, or caches.
-
-All language, HIR, verified-SSA, bytecode, package, runtime-call, and native
-artifact identities include this contract. Stale identities are rejected; no
-numbered schema, zero-argument alias, or compatibility decoder remains.
-
-## Resource And Backend Rules
-
-Capability checking is allocation-free and bounded by the closed eight-kind
-set. It does not weaken fuel, deadline, heap, handle, root, executable-memory,
-or proof limits. A forced tier either validates and enters generated code with
-zero fallback or rejects before source effects. Auto tiering may execute a
-capability-bearing function only in a tier that implements the exact type and
-operation contract.
-
-## Rejected
-
-- ambient process authority;
-- string capability names in source types;
-- forgeable integer tokens;
-- inferred or silently injected parameters;
-- wildcard package grants;
-- granting package declarations not requested by the selected target;
-- retaining old host-operation arities as aliases.
+No numbered schema, zero-argument alias, old host spelling, compatibility
+decoder, wildcard grant, or inferred provider remains.

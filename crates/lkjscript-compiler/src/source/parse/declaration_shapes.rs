@@ -37,7 +37,7 @@ pub(super) fn valid_function(children: &[SourceNode]) -> bool {
             _
         ]) if signature == "sig"
             && parameters == "params"
-            && signature_children.iter().any(is_return_arrow)
+            && valid_signature(signature_children)
     )
 }
 
@@ -137,8 +137,11 @@ fn valid_bound(node: &SourceNode) -> bool {
     )
 }
 
-fn is_return_arrow(node: &SourceNode) -> bool {
-    matches!(&node.kind, SyntaxKind::Symbol { name } if name == "->")
+pub(super) fn valid_signature(children: &[SourceNode]) -> bool {
+    matches!(children,
+        [SourceNode { kind: SyntaxKind::Call { name: inputs }, .. },
+         SourceNode { kind: SyntaxKind::Call { name: output }, children, .. }]
+            if inputs == "inputs" && output == "output" && children.len() == 1)
 }
 
 fn named_form(node: &SourceNode) -> bool {
@@ -158,6 +161,7 @@ pub(super) fn valid_name(children: &[SourceNode]) -> bool {
         [SourceNode {
             kind: SyntaxKind::Str { value },
             ..
-        }] if !value.is_empty()
+        }] if super::names::is_source_identifier(value)
+            && lkjscript_contracts::removed_spelling(value).is_none()
     )
 }

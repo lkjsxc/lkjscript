@@ -8,7 +8,7 @@ collections, static method dispatch, and future self-hosting.
 
 The bounded **Initial Coherent Slice** below is **Current**: declaration-only
 marker traits, exact nominal-product impls, generic marker bounds, structural
-`Copy`/`Send`/`Sync` facts, and verified erased witness identities. Trait
+`copy`/`send`/`sync` facts, and verified erased witness identities. Trait
 methods, associated types/values, generic or blanket impls, package orphan
 rules, specialization, dynamic dispatch, and native monomorphization remain an
 **Accepted Target** or **Deferred** as identified below.

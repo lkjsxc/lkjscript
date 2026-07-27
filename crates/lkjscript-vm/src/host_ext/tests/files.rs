@@ -53,6 +53,12 @@ fn durable_file_capabilities_check_kind_staleness_and_effects(
     fs::create_dir(&directory)?;
 
     let mut table = ResourceTable::default();
+    let reader = table.sys_open_read(file.0.as_os_str().as_bytes())?;
+    assert!(table.write_byte(reader, b'z'.into()).is_err());
+    assert!(table.sys_fsync(reader).is_err());
+    assert!(table.sys_truncate(reader, 0).is_err());
+    table.close(reader)?;
+
     let append = table.sys_open_append(file.0.as_os_str().as_bytes())?;
     table.write_byte(append, b'y'.into())?;
     table.sys_fsync(append)?;

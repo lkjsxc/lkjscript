@@ -7,10 +7,10 @@ fn verifier_rejects_generic_ownership_substitution() {
         id: FunctionId::new(1),
         name: "generic-id".into(),
         signature: Signature {
-            type_parameters: vec!["T".into()],
+            type_parameters: vec!["t".into()],
             bounds: Vec::new(),
-            parameters: vec![SsaType::TypeParameter("T".into())],
-            result: Box::new(SsaType::TypeParameter("T".into())),
+            parameters: vec![SsaType::TypeParameter("t".into())],
+            result: Box::new(SsaType::TypeParameter("t".into())),
         },
         places: Vec::new(),
         effects: EffectSet::PURE,
@@ -19,7 +19,7 @@ fn verifier_rejects_generic_ownership_substitution() {
             id: BlockId::new(0),
             parameters: vec![BlockParameter {
                 id: ValueId::new(0),
-                ty: SsaType::TypeParameter("T".into()),
+                ty: SsaType::TypeParameter("t".into()),
                 owner_place: None,
                 origin: Origin::SYNTHETIC,
             }],
@@ -63,7 +63,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                         signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
                         instantiation: Some(GenericInstantiation {
                             substitutions: vec![TypeSubstitution {
-                                parameter: "T".into(),
+                                parameter: "t".into(),
                                 ty: owned_buf_type(),
                             }],
                             witnesses: Vec::new(),
@@ -126,7 +126,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                         ),
                         instantiation: Some(GenericInstantiation {
                             substitutions: vec![TypeSubstitution {
-                                parameter: "T".into(),
+                                parameter: "t".into(),
                                 ty: reference.clone(),
                             }],
                             witnesses: Vec::new(),

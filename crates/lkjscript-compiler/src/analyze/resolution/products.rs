@@ -50,7 +50,7 @@ impl Resolver<'_> {
             let value = self.resolve_expr(value_expression)?;
             if !Type::unify_assignable(&value.ty, &declared.ty) {
                 return Err(self.error(format!(
-                    "product-value {product_name} field {field_name}: value type {:?} not assignable to {:?}",
+                    "product-value {product_name} field {field_name}: value type {} not assignable to {}",
                     value.ty, declared.ty
                 )));
             }
@@ -140,7 +140,7 @@ impl Resolver<'_> {
         let replacement = self.resolve_expr(replacement_expression)?;
         if !Type::unify_assignable(&replacement.ty, &field.ty) {
             return Err(self.error(format!(
-                "with-field {}.{field_name}: replacement type {:?} not assignable to {:?}",
+                "with-field {}.{field_name}: replacement type {} not assignable to {}",
                 product.name, replacement.ty, field.ty
             )));
         }

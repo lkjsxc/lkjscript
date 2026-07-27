@@ -4,7 +4,7 @@ use lkjscript_ir::{evaluate, verify, EvalConfig, EvalOutcome, EvalValue, Instruc
 fn bool_match(scrutinee: &str, arms: &str) -> String {
     format!(
         concat!(
-            "main/\nsig/\n->\nI64\n/sig\n",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
             "match/\n{}\narms/\n{}\n/arms\n/match\n/main\n",
         ),
         scrutinee, arms,
@@ -54,7 +54,7 @@ fn rejects_nonexhaustive_and_source_order_useless_arms() {
     .expect_err("missing true arm")
     .to_string();
     assert!(
-        error.contains("canonical typed witness: Bool::true"),
+        error.contains("canonical typed witness: bool::true"),
         "{error}"
     );
 
@@ -72,13 +72,13 @@ fn rejects_nonexhaustive_and_source_order_useless_arms() {
 fn enum_match_source() -> String {
     concat!(
         "",
-        "enum/\nname/\nMaybe\n/name\nforall/\nT\n/forall\nvariants/\n",
-        "variant/\nname/\nNone\n/name\nfields/\n/fields\n/variant\n",
-        "variant/\nname/\nSome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nT\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
-        "main/\nsig/\n->\nI64\n/sig\nmatch/\n",
-        "variant-value/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nSome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
-        "arms/\narm/\nvariant-pattern/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nSome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
-        "arm/\nvariant-pattern/\ntype/\nMaybe/\nI64\n/Maybe\n/type\nvariant/\nNone\n/variant\nfields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nnone\n/variant\nfields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
     ).into()
 }
 
@@ -138,7 +138,7 @@ fn enum_variant_binding_has_instantiated_field_type() {
 #[test]
 fn forged_prelude_layout_identity_is_rejected_by_ssa_verification() {
     let compiled = compile_source(
-        "main/\nsig/\n->\nUnit\n/sig\nunit\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n",
         "forged-prelude.lkjscript",
         &Limits::default(),
     )

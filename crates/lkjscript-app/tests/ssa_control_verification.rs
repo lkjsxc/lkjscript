@@ -4,10 +4,10 @@ use lkjscript_compiler::compile_source;
 use lkjscript_core::Limits;
 use lkjscript_ir::{verify, BlockId, Terminator, ValueId};
 
-const SIMPLE: &str = "main/\nsig/\n->\nI64\n/sig\n1\n/main\n";
+const SIMPLE: &str = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n1\n/main\n";
 const LOOP: &str =
-    "main/\nsig/\n->\nI64\n/sig\nloop/\ntype/\nI64\n/type\nbreak/\n3\n/break\n/loop\n/main\n";
-const TWO_TRAPS: &str = "def/\nname/\nf\n/name\nfn/\nsig/\nBool\n->\nI64\n/sig\nparams/\nx\nBool\n/params\nif/\nx\ntrap/\nstr/\na\n/str\n/trap\ntrap/\nstr/\nb\n/str\n/trap\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nf/\ntrue\n/f\n/main\n";
+    "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nloop/\ntype/\ni64\n/type\nbreak/\n3\n/break\n/loop\n/main\n";
+const TWO_TRAPS: &str = "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\nbool\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nx\nbool\n/params\nif/\nx\ntrap/\nstring-literal/\na\n/string-literal\n/trap\ntrap/\nstring-literal/\nb\n/string-literal\n/trap\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nf/\ntrue\n/f\n/main\n";
 
 #[test]
 fn forged_trap_operand_type_fails_closed() {

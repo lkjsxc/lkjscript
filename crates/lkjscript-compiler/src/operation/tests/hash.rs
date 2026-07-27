@@ -3,10 +3,7 @@ use super::*;
 #[test]
 fn sha256_has_an_exact_signature_and_memory_effects() {
     let result_buf = crate::types::result_type(Type::Buf, crate::types::system_error_type());
-    assert_eq!(
-        Operation::from_name("sys-sha256"),
-        Some(Operation::SysSha256)
-    );
+    assert_eq!(Operation::from_name("sha256"), Some(Operation::SysSha256));
     assert_eq!(
         Operation::SysSha256.resolve_types(&[Type::Buf, Type::I64, Type::I64]),
         Ok((

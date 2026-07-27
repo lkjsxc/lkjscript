@@ -30,13 +30,28 @@ pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut Has
 
 pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
     match ty {
-        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => true,
+        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) | Type::Resource(_) => true,
         Type::List(inner) => contains_ownership_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
         Type::Fn { params, ret } => {
             params.iter().any(contains_ownership_type) || contains_ownership_type(ret)
         }
         Type::Forall { body, .. } => contains_ownership_type(body),
+        _ => false,
+    }
+}
+
+pub(in crate::analyze) fn contains_resource_type(ty: &Type) -> bool {
+    match ty {
+        Type::Resource(_) => true,
+        Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
+            contains_resource_type(inner)
+        }
+        Type::Enum { arguments, .. } => arguments.iter().any(contains_resource_type),
+        Type::Fn { params, ret } => {
+            params.iter().any(contains_resource_type) || contains_resource_type(ret)
+        }
+        Type::Forall { body, .. } => contains_resource_type(body),
         _ => false,
     }
 }

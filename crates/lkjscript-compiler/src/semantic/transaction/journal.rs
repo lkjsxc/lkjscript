@@ -20,7 +20,7 @@ pub(super) struct Journal {
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(super) enum JournalState {
     Prepared,
     Committed,

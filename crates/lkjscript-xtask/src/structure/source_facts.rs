@@ -106,26 +106,41 @@ fn declarations(path: &str, text: &str, unit: &str, nodes: &mut Vec<Node>, edges
 fn imports(path: &str, text: &str, unit: &str, tracked: &BTreeSet<&str>, edges: &mut Vec<Edge>) {
     let lines: Vec<_> = text.lines().collect();
     let mut index = 0;
-    while index + 2 < lines.len() {
-        if lines[index].trim() == "import/" && lines[index + 2].trim() == "/import" {
-            let encoded = lines[index + 1].trim();
-            let spec = encoded.split_once('#').map(|(path, _)| path).unwrap_or("");
-            if let Some(target) = resolve_import(spec) {
-                if tracked.contains(target.as_str()) {
-                    edge(
-                        edges,
-                        unit,
-                        &format!("source-unit:{target}"),
-                        "imports",
-                        &format!("{path}:{}-{}", index + 1, index + 3),
-                        "inferred",
-                    );
-                }
-            }
-            index += 3;
-        } else {
+    while index + 6 < lines.len() {
+        if lines[index].trim() != "import/" || lines[index + 1].trim() != "module/" {
             index += 1;
+            continue;
         }
+        let spec = lines[index + 2].trim();
+        if lines[index + 3].trim() != "/module" || lines[index + 4].trim() != "declarations/" {
+            index += 1;
+            continue;
+        }
+        let Some(close) = lines[index + 5..]
+            .iter()
+            .position(|line| line.trim() == "/declarations")
+            .map(|offset| index + 5 + offset)
+        else {
+            index += 1;
+            continue;
+        };
+        if lines.get(close + 1).map(|line| line.trim()) != Some("/import") {
+            index += 1;
+            continue;
+        }
+        if let Some(target) = resolve_import(spec) {
+            if tracked.contains(target.as_str()) {
+                edge(
+                    edges,
+                    unit,
+                    &format!("source-unit:{target}"),
+                    "imports",
+                    &format!("{path}:{}-{}", index + 1, close + 2),
+                    "inferred",
+                );
+            }
+        }
+        index = close + 2;
     }
 }
 

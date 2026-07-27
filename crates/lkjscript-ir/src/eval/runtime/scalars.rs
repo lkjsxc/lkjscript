@@ -17,7 +17,6 @@ impl Evaluator<'_> {
             Op::SameObject => binary(&arguments, |left, right| {
                 let same = match (left, right) {
                     (EvalValue::Buf(left), EvalValue::Buf(right)) => left.id == right.id,
-                    (EvalValue::Handle(left), EvalValue::Handle(right)) => left == right,
                     _ => return Err(Flow::Trap("same-object category mismatch".into())),
                 };
                 Ok(EvalValue::Bool(same))

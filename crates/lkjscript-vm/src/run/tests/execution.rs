@@ -7,13 +7,13 @@ fn add_result_ok_test(chunk: &mut Chunk) {
     let err = lkjscript_core::VariantId::new(lkjscript_core::RESULT_ERR_ID);
     chunk.enums.push(lkjscript_core::EnumMetadata {
         id: enum_id,
-        name: "Result".into(),
+        name: "result".into(),
         type_parameter_count: 2,
         layout,
         variants: vec![
             lkjscript_core::EnumVariantMetadata {
                 id: ok,
-                name: "Ok".into(),
+                name: "ok".into(),
                 physical_tag: 0,
                 fields: vec![lkjscript_core::EnumFieldMetadata {
                     id: lkjscript_core::VariantFieldId::new(lkjscript_core::RESULT_OK_VALUE_ID),
@@ -23,7 +23,7 @@ fn add_result_ok_test(chunk: &mut Chunk) {
             },
             lkjscript_core::EnumVariantMetadata {
                 id: err,
-                name: "Err".into(),
+                name: "err".into(),
                 physical_tag: 1,
                 fields: vec![lkjscript_core::EnumFieldMetadata {
                     id: lkjscript_core::VariantFieldId::new(lkjscript_core::RESULT_ERR_ERROR_ID),

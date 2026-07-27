@@ -67,6 +67,23 @@ pub(super) fn apply(
         Op::StoreGlobal => {
             let slot = instruction_operand(proto, instruction)?;
             let value = top(state, proto, instruction)?;
+            if let Some(expected) = chunk.global_prototypes.get(slot).copied().flatten() {
+                if value != Kind::Closure(expected) {
+                    return Err(instruction_error(
+                        proto,
+                        op,
+                        instruction.offset(),
+                        "global closure does not match declared prototype metadata",
+                    ));
+                }
+            } else if matches!(value, Kind::Resource(_) | Kind::ResourceResult(_)) {
+                return Err(instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "typed resources cannot be stored in bytecode globals",
+                ));
+            }
             let target = state.globals.get_mut(slot).ok_or_else(|| {
                 instruction_error(
                     proto,
@@ -91,7 +108,9 @@ pub(super) fn apply(
                 proto,
                 instruction,
             )?;
-            state.stack.push(Kind::Handle);
+            state
+                .stack
+                .push(Kind::Resource(crate::ResourceKind::InputStream));
         }
         Op::False | Op::True => state.stack.push(Kind::Bool),
         Op::Unit => state.stack.push(Kind::Unit),

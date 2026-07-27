@@ -5,7 +5,7 @@ use lkjscript_vm::run_chunk;
 
 #[test]
 fn i64_multiblock_loop_and_direct_call_match_vm() {
-    let source = "def/\nname/\nadd-if-even\n/name\nfn/\nsig/\nI64\nI64\n->\nI64\n/sig\nparams/\nacc\nI64\ni\nI64\n/params\nif/\nequal-value/\nbit-and/\ni\n1\n/bit-and\n0\n/equal-value\n+/\nacc\ni\n/+\nacc\n/if\n/fn\n/def\nmain/\nsig/\n->\nI64\n/sig\nvar/\nname/\ni\n/name\ntype/\nI64\n/type\n0\nvar/\nname/\nacc\n/name\ntype/\nI64\n/type\n0\ndo/\nwhile/\nlt/\ni\n100\n/lt\ndo/\nset/\nacc\nadd-if-even/\nacc\ni\n/add-if-even\n/set\nset/\ni\n+/\ni\n1\n/+\n/set\n/do\n/while\nacc\n/do\n/var\n/var\n/main\n";
+    let source = "def/\nname/\nadd-if-even\n/name\nfn/\nsig/\ninputs/\ni64\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nacc\ni64\ni\ni64\n/params\nif/\nequal-value/\nbit-and/\ni\n1\n/bit-and\n0\n/equal-value\nadd/\nacc\ni\n/add\nacc\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\ni\n/name\ntype/\ni64\n/type\n0\nvar/\nname/\nacc\n/name\ntype/\ni64\n/type\n0\ndo/\nwhile/\nless-than/\ni\n100\n/less-than\ndo/\nset/\nacc\nadd-if-even/\nacc\ni\n/add-if-even\n/set\nset/\ni\nadd/\ni\n1\n/add\n/set\n/do\n/while\nacc\n/do\n/var\n/var\n/main\n";
     let program = compile(source, "i64-cfg.lkjscript");
     let vm = execution(run_chunk(
         program.bytecode(),
@@ -21,14 +21,16 @@ fn i64_multiblock_loop_and_direct_call_match_vm() {
 #[test]
 fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
     for (name, expression) in [
-        ("overflow.lkjscript", "+/\n9223372036854775807\n1\n/+"),
-        ("divide-zero.lkjscript", "div/\n1\n0\n/div"),
+        ("overflow.lkjscript", "add/\n9223372036854775807\n1\n/add"),
+        ("divide-zero.lkjscript", "divide/\n1\n0\n/divide"),
         (
             "divide-overflow.lkjscript",
-            "div/\n-9223372036854775808\n-1\n/div",
+            "divide/\n-9223372036854775808\n-1\n/divide",
         ),
     ] {
-        let source = format!("main/\nsig/\n->\nI64\n/sig\n{expression}\n/main\n");
+        let source = format!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n{expression}\n/main\n"
+        );
         let program = compile(&source, name);
         assert_eq!(
             execution(run_chunk(
@@ -52,14 +54,14 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
     for (name, operation, left, right, expected_trap) in [
         (
             "duplicate-overflow.lkjscript",
-            "+",
+            "add",
             "9223372036854775807",
             "1",
             "checked I64 overflow",
         ),
         (
             "duplicate-division.lkjscript",
-            "div",
+            "divide",
             "1",
             "0",
             "div: I64 division by zero",
@@ -67,7 +69,7 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
     ] {
         let expression = format!("{operation}/\nz\none\n/{operation}");
         let source = format!(
-            "main/\nsig/\n->\nI64\n/sig\nlet/\nbind/\nz\n{left}\n/bind\nlet/\nbind/\none\n{right}\n/bind\nlet/\nbind/\nfirst\n{expression}\n/bind\nlet/\nbind/\nsecond\n{expression}\n/bind\nsecond\n/let\n/let\n/let\n/let\n/main\n"
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nz\n{left}\n/bind\nlet/\nbind/\none\n{right}\n/bind\nlet/\nbind/\nfirst\n{expression}\n/bind\nlet/\nbind/\nsecond\n{expression}\n/bind\nsecond\n/let\n/let\n/let\n/let\n/main\n"
         );
         let program = compile(&source, name);
         let baseline = execute_forced(
@@ -95,7 +97,8 @@ fn checked_i64_traps_exit_and_explicit_trap_remain_structured() {
         assert_eq!(optimized.stats.checked_i64_rewrites, 1);
     }
 
-    let exit = "main/\nsig/\n->\nUnit\n/sig\nexit/\n17\n/exit\n/main\n";
+    let exit =
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nexit/\n17\n/exit\n/main\n";
     assert_eq!(
         execution(forced(exit, "exit.lkjscript").outcome),
         Scalar::Exited(17)
@@ -120,25 +123,27 @@ fn f64_bits_ieee_comparisons_and_mixed_conversion_are_exact() {
     let cases = [
         (
             "signed-zero.lkjscript",
-            "Bool",
-            "f64-bits-equal/\n0.0\n-0.0\n/f64-bits-equal",
+            "bool",
+            "equal-f64-bits/\n0.0\n-0.0\n/equal-f64-bits",
             Scalar::Bool(false),
         ),
         (
             "nan-order.lkjscript",
-            "Bool",
-            "lt/\ndiv/\n0.0\n0.0\n/div\n1.0\n/lt",
+            "bool",
+            "less-than/\ndivide/\n0.0\n0.0\n/divide\n1.0\n/less-than",
             Scalar::Bool(false),
         ),
         (
             "mixed.lkjscript",
-            "F64",
-            "+/\nf64-from-i64-rounded/\n9007199254740993\n/f64-from-i64-rounded\n0.5\n/+",
+            "f64",
+            "add/\nconvert-i64-to-f64-rounded/\n9007199254740993\n/convert-i64-to-f64-rounded\n0.5\n/add",
             Scalar::F64((9_007_199_254_740_993_i64 as f64 + 0.5).to_bits()),
         ),
     ];
     for (name, ty, expression, expected) in cases {
-        let source = format!("main/\nsig/\n->\n{ty}\n/sig\n{expression}\n/main\n");
+        let source = format!(
+            "main/\nsig/\ninputs/\n/inputs\noutput/\n{ty}\n/output\n/sig\n{expression}\n/main\n"
+        );
         let program = compile(&source, name);
         let vm = execution(run_chunk(
             program.bytecode(),

@@ -72,10 +72,10 @@ fn main_arity_global_initialization_and_static_operation_categories_are_checked(
     assert!(error(global).contains("global is not definitely initialized"));
 
     for (operation, category) in [
-        (Op::Car, "List"),
-        (Op::BufLen, "Buf"),
-        (Op::SysClose, "Handle"),
-        (Op::BufToStr, "Buf"),
+        (Op::Car, "list"),
+        (Op::BufLen, "buf"),
+        (Op::SysClose, "typed resource"),
+        (Op::BufToStr, "buf"),
     ] {
         let mut chunk = unit_chunk();
         chunk.main.code = vec![Op::Unit as u8, operation as u8, Op::Return as u8];

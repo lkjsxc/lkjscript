@@ -39,7 +39,7 @@ fn analysis_error(source: &str) -> String {
 }
 
 fn main_source(return_type: &str, body: &str) -> String {
-    format!("main/\nsig/\n->\n{return_type}\n/sig\n{body}\n/main\n")
+    format!("main/\nsig/\ninputs/\n/inputs\noutput/\n{return_type}\n/output\n/sig\n{body}\n/main\n")
 }
 
 fn function_source(
@@ -74,19 +74,19 @@ fn summary(program: &crate::hir::Program, name: &str) -> EffectSet {
         .summary
 }
 
-const POINT_PRODUCT: &str = "product/\nname/\nPoint\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\nI64\n/type\n/field\nfield/\nname/\ny\n/name\ntype/\nI64\n/type\n/field\n/fields\n/product\n";
+const POINT_PRODUCT: &str = "product/\nname/\npoint\n/name\nfields/\nfield/\nname/\nx\n/name\ntype/\ni64\n/type\n/field\nfield/\nname/\ny\n/name\ntype/\ni64\n/type\n/field\n/fields\n/product\n";
 
 fn marker_trait(name: &str) -> String {
     format!("trait/\nname/\n{name}\n/name\n/trait\n")
 }
 
 fn marker_impl(trait_name: &str, product_name: &str) -> String {
-    format!("impl/\ntrait/\n{trait_name}\n/trait\nfor/\nProduct\n{product_name}\n/for\n/impl\n")
+    format!("impl/\ntrait/\n{trait_name}\n/trait\nfor/\nproduct\n{product_name}\n/for\n/impl\n")
 }
 
 fn bounded_identity(name: &str, trait_name: &str) -> String {
     format!(
-        "def/\nname/\n{name}\n/name\nfn/\nforall/\nT\n/forall\nbounds/\nbound/\nT\n{trait_name}\n/bound\n/bounds\nsig/\nT\n->\nT\n/sig\nparams/\nvalue\nT\n/params\nvalue\n/fn\n/def\n"
+        "def/\nname/\n{name}\n/name\nfn/\nforall/\nt\n/forall\nbounds/\nbound/\nt\n{trait_name}\n/bound\n/bounds\nsig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\nparams/\nvalue\nt\n/params\nvalue\n/fn\n/def\n"
     )
 }
 

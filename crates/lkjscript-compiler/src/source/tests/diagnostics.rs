@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn exact_utf8_byte_line_column_spans_are_retained() {
-    let source = unit_main("str/\néλ\n/str");
+    let source = unit_main("string-literal/\néλ\n/string-literal");
     let tree = validate(&source, "src/utf8.lkjscript", &Limits::default()).expect("validate");
     let string = tree
         .nodes()
@@ -10,14 +10,35 @@ fn exact_utf8_byte_line_column_spans_are_retained() {
         .find(|node| node.kind() == NodeKind::StringLiteral)
         .expect("string node");
     let span = string.span();
-    let start = source.find("str/\n").expect("string open");
-    let end = source.find("\n/str").expect("string close") + "\n/str".len();
+    let start = source.find("string-literal/\n").expect("string open");
+    let end = source.find("\n/string-literal").expect("string close") + "\n/string-literal".len();
     assert_eq!(span.start().byte() as usize, start);
     assert_eq!(span.end().byte() as usize, end);
-    assert_eq!(span.start().line(), 6);
+    assert_eq!(span.start().line(), 9);
     assert_eq!(span.start().column(), 1);
-    assert_eq!(span.end().line(), 8);
-    assert_eq!(span.end().column(), 5);
+    assert_eq!(span.end().line(), 11);
+    assert_eq!(span.end().column(), 16);
+}
+
+#[test]
+fn every_removed_spelling_has_a_deterministic_replacement_diagnostic() {
+    for removed in lkjscript_contracts::REMOVED_SPELLINGS {
+        let expression = if removed.old == "->" {
+            removed.old.to_string()
+        } else {
+            format!("{}/\n/{}", removed.old, removed.old)
+        };
+        let source = unit_main(&expression);
+        let error = validate(&source, "removed.lkjscript", &Limits::default())
+            .expect_err("removed spelling must be rejected");
+        let message = error.to_string();
+        assert!(message.contains(removed.old), "{}: {message}", removed.old);
+        assert!(
+            message.contains(removed.replacement),
+            "{}: {message}",
+            removed.old
+        );
+    }
 }
 
 #[test]
@@ -121,7 +142,7 @@ fn equal_names_in_distinct_modules_are_valid_source_identities() {
     fs::write(
         &root,
         format!(
-            "imports/\nimport/\na.lkjscript#same\n/import\nimport/\nb.lkjscript#same\n/import\n/imports\n{}",
+            "imports/\nimport/\nmodule/\na.lkjscript\n/module\ndeclarations/\nsame\n/declarations\n/import\nimport/\nmodule/\nb.lkjscript\n/module\ndeclarations/\nsame\n/declarations\n/import\n/imports\n{}",
             unit_main("unit")
         ),
     )

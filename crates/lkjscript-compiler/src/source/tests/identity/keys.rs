@@ -102,19 +102,16 @@ fn declaration_names_must_be_spellable_source_identifiers_before_keying() {
     for source in sources {
         let error = validate(&source, "src/name.lkjscript", &Limits::default())
             .expect_err("uncallable declaration name");
-        assert_eq!(error.code(), "LKJ-DECL-NAME");
-        assert!(error
-            .message()
-            .contains("not a spellable source identifier"));
+        assert_eq!(error.code(), "LKJ-SRC-SYNTAX");
     }
 
     let callable = validate(
-        &named_def("callable=name"),
+        &named_def("callable-name"),
         "src/name.lkjscript",
         &Limits::default(),
     )
     .expect("spellable equals name");
-    assert_eq!(callable.declarations()[0].name(), "callable=name");
+    assert_eq!(callable.declarations()[0].name(), "callable-name");
 }
 
 #[test]

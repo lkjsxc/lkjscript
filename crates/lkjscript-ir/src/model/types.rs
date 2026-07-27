@@ -46,7 +46,7 @@ pub enum SsaType {
     Owned(Box<SsaType>),
     Ref(Box<SsaType>),
     RefMut(Box<SsaType>),
-    Handle,
+    Resource(lkjscript_contracts::ResourceKind),
     Product(ProductId),
     Enum { id: EnumId, arguments: Vec<SsaType> },
     List(Box<SsaType>),

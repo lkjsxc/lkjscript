@@ -26,7 +26,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysReadInto as u8 => {
-            vm.ensure_host_deadline_support("sys-read-into", false)?;
+            vm.ensure_host_deadline_support("read-into", false)?;
             let requested = vm.pop()?;
             let offset = vm.pop()?;
             let requested = vm.as_i64(requested)?;
@@ -45,7 +45,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysRandomFill as u8 => {
-            vm.ensure_host_deadline_support("sys-random-fill", false)?;
+            vm.ensure_host_deadline_support("fill-random", false)?;
             let requested = vm.pop()?;
             let offset = vm.pop()?;
             let requested = vm.as_i64(requested)?;
@@ -67,7 +67,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             Ok(true)
         }
         x if x == Op::SysWriteFrom as u8 => {
-            vm.ensure_host_deadline_support("sys-write-from", false)?;
+            vm.ensure_host_deadline_support("write-from", false)?;
             let requested = vm.pop()?;
             let offset = vm.pop()?;
             let requested = vm.as_i64(requested)?;

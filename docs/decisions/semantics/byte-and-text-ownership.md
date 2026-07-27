@@ -2,10 +2,13 @@
 
 ## Status
 
-**Accepted contract.** Individual representations become Current only with
-complete typing, lifetime, evaluator, VM, forced native, root, bounds, and
-cross-engine evidence. Current `Str`, `Buf`, and `Owned Buf` spellings are not
-aliases for this destination.
+**Accepted contract with an initial ownership foundation.** Owned text is
+spelled `string`; `string-literal/` replaces the old `str/` marker. Direct
+`byte-vector`, `byte-slice`, and `byte-slice-mut` spellings expose the existing
+whole-place affine slice. Immutable `bytes` is an explicit `PLACEHOLDER`
+rejection, ranged views and borrowed `str` are non-Current, and transitional
+`buf` remains outside the destination. No old spelling aliases a destination
+type.
 
 ## Immutable bytes
 

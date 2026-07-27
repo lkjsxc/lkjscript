@@ -4,48 +4,53 @@
 
 ## Status
 
-**Current.** Module and runtime pathname rules are implemented for the Current
-Linux x86-64 platform.
+**Current.** Module and Linux runtime pathname rules are implemented.
 
 ## Files And Modules
 
 Every source file ends in `.lkjscript` and is one module identified by its
-exact package-root-relative UTF-8 path. `.lkjml`, extensionless source, absolute
-module names, dot-relative names, parent components, malformed separators, and
-path or symlink escape are rejected before publication.
+exact package-root-relative UTF-8 path. `.lkjml`, extensionless source,
+absolute module names, dot-relative names, parent components, malformed
+separators, and path or symlink escape are rejected.
 
-Imported modules contain explicit declarations. An executable target resolves
-one root with exactly one `main`; its signature carries the exact sorted typed
-capability parameters required by its closed call graph. No imported module may
-provide another root entry.
+An executable target resolves one root with exactly one `main`. Its structured
+signature carries the exact sorted typed capability parameters required by its
+closed call graph. Imported modules cannot provide another root entry.
 
-One bounded `imports/` envelope contains sorted `import/` records of the form:
+One bounded `imports/` envelope contains sorted records:
 
 ```text
 import/
-src/std/fs/read-file.lkjscript#read-file
+module/
+src/std/fs/read-all.lkjscript
+/module
+declarations/
+read-all
+/declarations
 /import
 ```
 
-Each record names an exact module and sorted declaration set. Wildcards,
+Each record names one exact module and a sorted declaration set. Wildcards,
 ambient roots, environment lookup, installed fallback, private names,
 collisions, transitive visibility, cycles, and unresolved imports fail closed.
-Declarations are private unless they contain the explicit `public` field.
+Declarations are private unless they contain `public`.
 
-## Strings, Bytes, And Runtime Paths
+## Text, Byte Data, And Runtime Paths
 
-`Str`, `Buf`, and `Path` are disjoint. `Str` stores valid UTF-8. `Buf` is the
-Current bounded mutable byte value for file contents, sockets, entropy,
-SHA-256, and SQLite blobs. Runtime Linux `Path` stores immutable exact absolute
-pathname bytes; it is unrelated to UTF-8 module identity.
+`string`, transitional `buf`, and `path` are disjoint. `string` owns valid
+UTF-8. `path` stores immutable exact absolute Linux pathname bytes and is not
+text. Current `buf` remains the bounded mutable byte representation while the
+accepted `bytes` and affine `byte-vector` migration is incomplete; it is not an
+alias for either destination type.
 
-`path-from-str` and `path-from-buf` are the only constructors. They reject
-empty, relative, NUL-containing, and longer-than-4095-byte values.
-`path-to-buf` returns an exact independent copy; `path-to-str` performs strict
-UTF-8 validation. Filesystem and SQLite pathname operations accept only
-`Path`. No conversion normalizes, searches, consults ambient state, or decodes
-with replacement.
+`convert-string-to-path` and `convert-buf-to-path` are the Current constructors.
+They reject empty, relative, NUL-containing, and longer-than-4095-byte values.
+`convert-path-to-buf` returns an independent exact copy;
+`convert-path-to-string` performs strict UTF-8 validation. Filesystem and SQLite
+pathname operations accept only `path`. No conversion normalizes, searches,
+consults ambient state, or decodes with replacement.
 
-String operations continue to reject invalid UTF-8 boundaries rather than
-imply character indexing. Buffer offset/length checks and partial-progress
-counts remain exact.
+The ownership foundation exposes direct `byte-vector`, `byte-slice`, and
+`byte-slice-mut` spellings for the existing bounded whole-place affine slice.
+Immutable `bytes`, ranged views, and borrowed text `str` remain non-Current and
+must produce explicit PLACEHOLDER or rejection behavior until implemented.

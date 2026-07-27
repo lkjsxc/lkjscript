@@ -30,7 +30,7 @@ pub(in crate::operation) fn instantiate_result(
             )
         }
         Type::Fn { params, ret } => (params, *ret),
-        other => return Err(format!("{name} is not a function ({other:?})")),
+        other => return Err(format!("{name} is not a function ({other})")),
     };
     if parameters.len() != arguments.len() {
         return Err(format!(
@@ -42,7 +42,7 @@ pub(in crate::operation) fn instantiate_result(
     for (parameter, argument) in parameters.iter().zip(arguments) {
         if !Type::unify_assignable(argument, parameter) {
             return Err(format!(
-                "{name}: arg type {argument:?} not assignable to {parameter:?}"
+                "{name}: arg type {argument} not assignable to {parameter}"
             ));
         }
     }
@@ -61,7 +61,7 @@ pub(in crate::operation) fn bind_type_params(
             if let Some(previous) = substitutions.get(parameter) {
                 if previous != argument {
                     return Err(format!(
-                        "{name}: type parameter {parameter} conflict: {previous:?} vs {argument:?}"
+                        "{name}: type parameter {parameter} conflict: {previous} vs {argument}"
                     ));
                 }
             } else {
@@ -94,16 +94,8 @@ pub(in crate::operation) fn bind_type_params(
         }
         (pattern, argument) if Type::unify_assignable(argument, pattern) => Ok(()),
         (pattern, argument) => Err(format!(
-            "{name}: cannot instantiate {pattern:?} from {argument:?}"
+            "{name}: cannot instantiate {pattern} from {argument}"
         )),
-    }
-}
-
-pub(in crate::operation) fn callable_arity(ty: &Type) -> Option<usize> {
-    match ty {
-        Type::Fn { params, .. } => Some(params.len()),
-        Type::Forall { body, .. } => callable_arity(body),
-        _ => None,
     }
 }
 
@@ -126,7 +118,7 @@ pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
         | Type::Owned(_)
         | Type::Ref(_)
         | Type::RefMut(_)
-        | Type::Handle
+        | Type::Resource(_)
         | Type::Product(_)
         | Type::Enum { .. }
         | Type::Param(_)
@@ -155,5 +147,5 @@ pub(in crate::operation) fn forall(vars: &[&str], body: Type) -> Type {
 }
 
 pub(in crate::operation) fn generic_result() -> Type {
-    crate::types::result_type(Type::Param("T".into()), Type::Param("E".into()))
+    crate::types::result_type(Type::Param("t".into()), Type::Param("e".into()))
 }

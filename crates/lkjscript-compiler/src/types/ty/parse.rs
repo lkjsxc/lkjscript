@@ -1,77 +1,73 @@
 use super::*;
 
 pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
-    let Some(a) = atoms.get(i) else {
+    let Some(atom) = atoms.get(i) else {
         return Err("expected type".into());
     };
-    match a.as_str() {
-        "Any" => Err("Any is not a permitted type".into()),
-        "Never" => Ok((Type::Never, i + 1)),
-        "Unit" => Ok((Type::Unit, i + 1)),
-        "Nil" => Err("Nil was removed; use Unit, Option T, or List T".into()),
-        "Bool" => Ok((Type::Bool, i + 1)),
-        "I64" => Ok((Type::I64, i + 1)),
-        "F64" => Ok((Type::F64, i + 1)),
-        "NumericError" => Ok((crate::types::numeric_error_type(), i + 1)),
-        "Utf8Error" => Ok((crate::types::utf8_error_type(), i + 1)),
-        "SystemError" => Ok((crate::types::system_error_type(), i + 1)),
-        "I32" | "U32" | "U64" | "F32" | "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "Int"
-        | "Float" => Err(format!(
-            "unsupported numeric type {a}; use canonical I64 or F64"
+    match atom.as_str() {
+        "any" => Err("any is not a permitted type".into()),
+        "never" => Ok((Type::Never, i + 1)),
+        "unit" => Ok((Type::Unit, i + 1)),
+        "nil" => Err("nil was removed; use unit, option t, or list t".into()),
+        "bool" => Ok((Type::Bool, i + 1)),
+        "i64" => Ok((Type::I64, i + 1)),
+        "f64" => Ok((Type::F64, i + 1)),
+        "numeric-error" => Ok((crate::types::numeric_error_type(), i + 1)),
+        "utf8-error" => Ok((crate::types::utf8_error_type(), i + 1)),
+        "system-error" => Ok((crate::types::system_error_type(), i + 1)),
+        "i32" | "u32" | "u64" | "f32" | "int" | "float" => Err(format!(
+            "unsupported numeric type {atom}; use canonical i64 or f64"
         )),
-        "Str" => Ok((Type::Str, i + 1)),
-        "Buf" => Ok((Type::Buf, i + 1)),
-        "Path" => Ok((Type::Path, i + 1)),
-        "Capability" => {
+        "string" => Ok((Type::Str, i + 1)),
+        "buf" => Ok((Type::Buf, i + 1)),
+        "bytes" => Err("PLACEHOLDER: immutable bytes is reserved but not Current".into()),
+        "byte-vector" => Ok((Type::Owned(Box::new(Type::Buf)), i + 1)),
+        "byte-slice" => Ok((Type::Ref(Box::new(Type::Buf)), i + 1)),
+        "byte-slice-mut" => Ok((Type::RefMut(Box::new(Type::Buf)), i + 1)),
+        "path" => Ok((Type::Path, i + 1)),
+        "capability" => {
             let kind = atoms
                 .get(i + 1)
                 .and_then(|name| CapabilityKind::parse(name))
-                .ok_or_else(|| "Capability requires one closed capability kind".to_string())?;
+                .ok_or_else(|| "capability requires one closed capability kind".to_string())?;
             Ok((Type::Capability(kind), i + 2))
         }
-        "Owned" | "Ref" | "RefMut" => {
-            let (inner, next) = parse_one(atoms, i + 1)?;
-            if inner != Type::Buf {
-                return Err(format!(
-                    "{a} accepts only exact Buf in the initial ownership slice"
-                ));
-            }
-            let ty = match a.as_str() {
-                "Owned" => Type::Owned(Box::new(inner)),
-                "Ref" => Type::Ref(Box::new(inner)),
-                "RefMut" => Type::RefMut(Box::new(inner)),
-                _ => return Err("invalid ownership type".into()),
+        "owned" => Err("owned is removed; use byte-vector".into()),
+        "ref" => Err("ref is removed; use byte-slice".into()),
+        "ref-mut" => Err("ref-mut is removed; use byte-slice-mut".into()),
+        "symbol" => Ok((Type::Symbol, i + 1)),
+        "handle" => Err("handle is removed; use an exact typed resource kind".into()),
+        resource if ResourceKind::parse(resource).is_some() => {
+            let Some(kind) = ResourceKind::parse(resource) else {
+                unreachable!("resource parse guard")
             };
-            Ok((ty, next))
+            Ok((Type::Resource(kind), i + 1))
         }
-        "Symbol" => Ok((Type::Symbol, i + 1)),
-        "Handle" => Ok((Type::Handle, i + 1)),
-        "Product" => {
+        "product" => {
             let Some(name) = atoms.get(i + 1) else {
-                return Err("Product requires a declared product name".into());
+                return Err("product requires a declared product name".into());
             };
             if !is_product_type_name(name) {
                 return Err(format!("invalid product type name {name}"));
             }
             Ok((Type::Product(name.clone()), i + 2))
         }
-        "List" => {
+        "list" => {
             let (inner, next) = parse_one(atoms, i + 1)?;
             Ok((Type::List(Box::new(inner)), next))
         }
-        "Option" => {
+        "option" => {
             let (inner, next) = parse_one(atoms, i + 1)?;
             Ok((crate::types::option_type(inner), next))
         }
-        "Result" => {
-            let (ok, n1) = parse_one(atoms, i + 1)?;
-            let (err, n2) = parse_one(atoms, n1)?;
-            Ok((crate::types::result_type(ok, err), n2))
+        "result" => {
+            let (ok, next) = parse_one(atoms, i + 1)?;
+            let (error, end) = parse_one(atoms, next)?;
+            Ok((crate::types::result_type(ok, error), end))
         }
         other if is_numeric_width_name(other) => Err(format!(
-            "unsupported numeric type {other}; use canonical I64 or F64"
+            "unsupported numeric type {other}; use canonical i64 or f64"
         )),
-        // Type parameter: single uppercase letter or T, U, E, …
         other if is_type_param_name(other) => Ok((Type::Param(other.to_string()), i + 1)),
         other => Err(format!("unknown type {other}")),
     }
@@ -79,59 +75,17 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
 
 fn is_numeric_width_name(name: &str) -> bool {
     let mut bytes = name.bytes();
-    matches!(bytes.next(), Some(b'I' | b'U' | b'F' | b'i' | b'u' | b'f'))
+    matches!(bytes.next(), Some(b'i' | b'u' | b'f'))
         && bytes.clone().next().is_some()
         && bytes.all(|byte| byte.is_ascii_digit())
 }
 
-fn is_type_param_name(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-        && s.chars().all(|c| c.is_ascii_alphanumeric())
-        && !matches!(
-            s,
-            "Never"
-                | "Unit"
-                | "Bool"
-                | "I64"
-                | "F64"
-                | "NumericError"
-                | "Utf8Error"
-                | "SystemError"
-                | "Str"
-                | "Buf"
-                | "Path"
-                | "Capability"
-                | "Arguments"
-                | "Clock"
-                | "Entropy"
-                | "FileSystem"
-                | "Network"
-                | "Sqlite"
-                | "Stdio"
-                | "Terminal"
-                | "Owned"
-                | "Ref"
-                | "RefMut"
-                | "Symbol"
-                | "Handle"
-                | "List"
-                | "Option"
-                | "Result"
-                | "Product"
-                | "Int"
-                | "Float"
-                | "Any"
-        )
+fn is_type_param_name(name: &str) -> bool {
+    lkjscript_contracts::is_identifier(name)
+        && !lkjscript_contracts::RESERVED_WORDS.contains(&name)
+        && !lkjscript_contracts::BUILTIN_ERROR_NAMES.contains(&name)
 }
 
 fn is_product_type_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .chars()
-            .next()
-            .is_some_and(|character| character.is_ascii_uppercase())
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    lkjscript_contracts::is_identifier(name) || crate::source::module_names::is_internal_name(name)
 }

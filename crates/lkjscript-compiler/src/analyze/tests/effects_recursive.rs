@@ -2,23 +2,53 @@ use super::*;
 
 #[test]
 fn pure_leaf_and_direct_transitive_calls_remain_exact() {
-    let pure_leaf = function_source("pure-leaf", &[], "->\nI64", "", "7");
-    let pure_middle = function_source("pure-middle", &[], "->\nI64", "", "pure-leaf/\n/pure-leaf");
+    let pure_leaf = function_source(
+        "pure-leaf",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "7",
+    );
+    let pure_middle = function_source(
+        "pure-middle",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "pure-leaf/\n/pure-leaf",
+    );
     let source = format!(
         "{pure_leaf}{pure_middle}{}",
-        main_source("I64", "pure-middle/\n/pure-middle")
+        main_source("i64", "pure-middle/\n/pure-middle")
     );
     let program = analyze_one(&source).expect("analyze pure direct calls");
     assert_eq!(summary(&program, "pure-leaf"), EffectSet::PURE);
     assert_eq!(summary(&program, "pure-middle"), EffectSet::PURE);
     assert_eq!(program.main.body.effects, EffectSet::PURE);
 
-    let trap_leaf = function_source("trap-leaf", &[], "->\nI64", "", "div/\n8\n2\n/div");
-    let middle = function_source("middle", &[], "->\nI64", "", "trap-leaf/\n/trap-leaf");
-    let outer = function_source("outer", &[], "->\nI64", "", "middle/\n/middle");
+    let trap_leaf = function_source(
+        "trap-leaf",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "divide/\n8\n2\n/divide",
+    );
+    let middle = function_source(
+        "middle",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "trap-leaf/\n/trap-leaf",
+    );
+    let outer = function_source(
+        "outer",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "middle/\n/middle",
+    );
     let source = format!(
         "{trap_leaf}{middle}{outer}{}",
-        main_source("I64", "outer/\n/outer")
+        main_source("i64", "outer/\n/outer")
     );
     let program = analyze_one(&source).expect("analyze transitive direct effects");
     assert_eq!(summary(&program, "trap-leaf"), EffectSet::MAY_TRAP);
@@ -29,8 +59,14 @@ fn pure_leaf_and_direct_transitive_calls_remain_exact() {
 
 #[test]
 fn pure_direct_recursion_adds_only_divergence() {
-    let recurse = function_source("recurse", &[], "->\nUnit", "", "recurse/\n/recurse");
-    let source = format!("{recurse}{}", main_source("Unit", "recurse/\n/recurse"));
+    let recurse = function_source(
+        "recurse",
+        &[],
+        "inputs/\n/inputs\noutput/\nunit\n/output",
+        "",
+        "recurse/\n/recurse",
+    );
+    let source = format!("{recurse}{}", main_source("unit", "recurse/\n/recurse"));
     let program = analyze_one(&source).expect("analyze pure recursion");
     assert_eq!(summary(&program, "recurse"), EffectSet::MAY_DIVERGE);
     assert_eq!(program.functions[0].body.effects, EffectSet::MAY_DIVERGE);
@@ -42,11 +78,11 @@ fn effectful_recursion_retains_only_its_real_effects_and_divergence() {
     let recurse = function_source(
         "recurse",
         &[],
-        "->\nUnit",
+        "inputs/\n/inputs\noutput/\nunit\n/output",
         "",
-        "do/\ndiv/\n8\n2\n/div\nrecurse/\n/recurse\n/do",
+        "do/\ndivide/\n8\n2\n/divide\nrecurse/\n/recurse\n/do",
     );
-    let source = format!("{recurse}{}", main_source("Unit", "unit"));
+    let source = format!("{recurse}{}", main_source("unit", "unit"));
     let program = analyze_one(&source).expect("analyze effectful recursion");
     assert_eq!(
         summary(&program, "recurse"),
@@ -56,10 +92,28 @@ fn effectful_recursion_retains_only_its_real_effects_and_divergence() {
 
 #[test]
 fn mutual_recursion_and_declaration_order_have_identical_summaries() {
-    let a = function_source("a", &[], "->\nUnit", "", "b/\n/b");
-    let b = function_source("b", &[], "->\nUnit", "", "a/\n/a");
-    let caller = function_source("caller", &[], "->\nUnit", "", "a/\n/a");
-    let main = main_source("Unit", "caller/\n/caller");
+    let a = function_source(
+        "a",
+        &[],
+        "inputs/\n/inputs\noutput/\nunit\n/output",
+        "",
+        "b/\n/b",
+    );
+    let b = function_source(
+        "b",
+        &[],
+        "inputs/\n/inputs\noutput/\nunit\n/output",
+        "",
+        "a/\n/a",
+    );
+    let caller = function_source(
+        "caller",
+        &[],
+        "inputs/\n/inputs\noutput/\nunit\n/output",
+        "",
+        "a/\n/a",
+    );
+    let main = main_source("unit", "caller/\n/caller");
     let first = analyze_one(&format!("{a}{b}{caller}{main}"))
         .expect("analyze mutual recursion in first declaration order");
     let second = analyze_one(&format!("{b}{caller}{a}{main}"))

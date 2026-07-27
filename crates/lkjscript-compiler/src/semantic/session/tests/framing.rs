@@ -17,20 +17,20 @@ fn clean_eof_has_no_output() {
 #[test]
 fn framing_rejects_partial_and_oversized_input_before_payload_allocation() {
     let cases = [
-        (vec![0, 0, 0], "partial_header"),
+        (vec![0, 0, 0], "partial-header"),
         (
             {
                 let mut bytes = 2_u64.to_be_bytes().to_vec();
                 bytes.push(b'{');
                 bytes
             },
-            "partial_payload",
+            "partial-payload",
         ),
         (
             (MAX_SESSION_FRAME_BYTES + 1).to_be_bytes().to_vec(),
-            "frame_too_large",
+            "frame-too-large",
         ),
-        (u64::MAX.to_be_bytes().to_vec(), "frame_too_large"),
+        (u64::MAX.to_be_bytes().to_vec(), "frame-too-large"),
     ];
     for (bytes, code) in cases {
         let mut input = Cursor::new(bytes);
@@ -52,7 +52,7 @@ fn cumulative_input_is_checked_before_payload_read() {
     let error = session
         .serve(&mut input, &mut output)
         .expect_err("cumulative input must fail");
-    assert!(error.to_string().contains("frame_too_large"));
+    assert!(error.to_string().contains("frame-too-large"));
     assert!(output.is_empty());
 }
 
@@ -63,7 +63,7 @@ fn cumulative_output_is_reserved_before_write() {
     let mut output = Vec::new();
     let error = crate::semantic::session::framing::write_frame(&mut output, b"{}", &mut session)
         .expect_err("cumulative output must fail");
-    assert!(error.to_string().contains("frame_too_large"));
+    assert!(error.to_string().contains("frame-too-large"));
     assert!(output.is_empty());
 }
 
@@ -101,7 +101,7 @@ fn strict_session_envelope_rejects_malformed_duplicate_and_unknown_input() {
         let error = SemanticSession::new()
             .handle(invalid.as_bytes())
             .expect_err("strict session input must fail");
-        assert!(error.to_string().contains("invalid_json"));
+        assert!(error.to_string().contains("invalid-json"));
     }
     assert!(SemanticSession::new().handle(&[0xff]).is_err());
 }

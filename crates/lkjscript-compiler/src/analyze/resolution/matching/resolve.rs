@@ -19,7 +19,7 @@ impl Resolver<'_> {
             Type::Bool | Type::I64 | Type::Enum { .. } | Type::Product(_)
         ) {
             return Err(self.error(format!(
-                "type {:?} has no closed pattern space",
+                "type {} has no closed pattern space",
                 scrutinee_value.ty,
             )));
         }
@@ -31,7 +31,7 @@ impl Resolver<'_> {
         for body in &bodies {
             result_type = Type::join_control(&result_type, &body.ty).ok_or_else(|| {
                 self.error(format!(
-                    "reachable match arm types must be exactly equal: {:?} vs {:?}",
+                    "reachable match arm types must be exactly equal: {} vs {}",
                     result_type, body.ty
                 ))
             })?;

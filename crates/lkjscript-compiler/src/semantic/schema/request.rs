@@ -37,7 +37,7 @@ pub(crate) struct Request {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum OperationRequest {
     Snapshot {
         expected_repository_identity: Option<String>,
@@ -72,14 +72,14 @@ pub(crate) enum OperationRequest {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum AnalysisLevel {
     Source,
     Hir,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ApplyMode {
     Preview,
     Publish,
@@ -94,7 +94,7 @@ pub(crate) struct FilePrecondition {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) enum TransactionOperation {
     RenameDeclaration {
         declaration_key: String,

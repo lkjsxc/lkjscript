@@ -5,43 +5,55 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
     let allocation = function_source(
         "allocation",
         &[],
-        "->\nList\nI64",
+        "inputs/\n/inputs\noutput/\nlist/\ni64\n/list\n/output",
         "",
-        "cons/\n1\nempty-list/\nI64\n/empty-list\n/cons",
+        "list-prepend/\n1\nempty-list/\ni64\n/empty-list\n/list-prepend",
     );
-    let trapper = function_source("trapper", &[], "->\nI64", "", "div/\n8\n2\n/div");
+    let trapper = function_source(
+        "trapper",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "divide/\n8\n2\n/divide",
+    );
     let host = function_source(
         "host",
         &[],
-        "Capability/\nStdio\n/Capability\n->\nUnit",
-        "stdio\nCapability/\nStdio\n/Capability",
-        "print/\nstdio\nstr/\nhello\n/str\n/print",
+        "inputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
+        "stdio\ncapability/\nstdio\n/capability",
+        "print/\nstdio\nstring-literal/\nhello\n/string-literal\n/print",
     );
-    let outcome = function_source("outcome", &[], "->\nUnit", "", "exit/\n0\n/exit");
+    let outcome = function_source(
+        "outcome",
+        &[],
+        "inputs/\n/inputs\noutput/\nunit\n/output",
+        "",
+        "exit/\n0\n/exit",
+    );
     let mutation = function_source(
         "mutation",
         &[],
-        "->\nUnit",
+        "inputs/\n/inputs\noutput/\nunit\n/output",
         "",
-        "var/\nname/\nx\n/name\ntype/\nI64\n/type\n0\nset/\nx\n1\n/set\n/var",
+        "var/\nname/\nx\n/name\ntype/\ni64\n/type\n0\nset/\nx\n1\n/set\n/var",
     );
     let read = function_source(
         "memory-read",
         &[],
-        "Buf\n->\nI64",
-        "value\nBuf",
-        "buf-len/\nvalue\n/buf-len",
+        "inputs/\nbuf\n/inputs\noutput/\ni64\n/output",
+        "value\nbuf",
+        "buf-length/\nvalue\n/buf-length",
     );
     let write = function_source(
         "memory-write",
         &[],
-        "Buf\n->\nUnit",
-        "value\nBuf",
-        "buf-set/\nvalue\n0\n1\n/buf-set",
+        "inputs/\nbuf\n/inputs\noutput/\nunit\n/output",
+        "value\nbuf",
+        "buf-set-byte/\nvalue\n0\n1\n/buf-set-byte",
     );
     let source = format!(
         "{allocation}{trapper}{host}{outcome}{mutation}{read}{write}{}",
-        main_source("Unit", "unit")
+        main_source("unit", "unit")
     );
     let program = analyze_one(&source).expect("analyze direct effect categories");
     assert_eq!(
@@ -69,10 +81,16 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
 
 #[test]
 fn generic_direct_call_uses_canonical_binding_and_keeps_argument_effects() {
-    let identity = function_source("identity", &["T"], "T\n->\nT", "value\nT", "value");
+    let identity = function_source(
+        "identity",
+        &["t"],
+        "inputs/\nt\n/inputs\noutput/\nt\n/output",
+        "value\nt",
+        "value",
+    );
     let source = format!(
         "{identity}{}",
-        main_source("I64", "identity/\ndiv/\n8\n2\n/div\n/identity")
+        main_source("i64", "identity/\ndivide/\n8\n2\n/divide\n/identity")
     );
     let program = analyze_one(&source).expect("analyze generic direct call");
     let identity = &program.functions[0];
@@ -88,15 +106,21 @@ fn generic_direct_call_uses_canonical_binding_and_keeps_argument_effects() {
 
 #[test]
 fn indirect_local_call_is_conservative_and_loses_no_effect_bit() {
-    let leaf = function_source("leaf", &[], "->\nI64", "", "7");
+    let leaf = function_source(
+        "leaf",
+        &[],
+        "inputs/\n/inputs\noutput/\ni64\n/output",
+        "",
+        "7",
+    );
     let indirect = function_source(
         "indirect",
         &[],
-        "->\nI64",
+        "inputs/\n/inputs\noutput/\ni64\n/output",
         "",
         "let/\nbind/\nf\nleaf\n/bind\nf/\n/f\n/let",
     );
-    let source = format!("{leaf}{indirect}{}", main_source("Unit", "unit"));
+    let source = format!("{leaf}{indirect}{}", main_source("unit", "unit"));
     let program = analyze_one(&source).expect("analyze indirect local call");
     assert_eq!(summary(&program, "leaf"), EffectSet::PURE);
     assert_eq!(summary(&program, "indirect"), EffectSet::CONSERVATIVE_CALL);

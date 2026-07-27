@@ -5,11 +5,11 @@ use crate::semantic::schema::{FactRecord, ResponseResult};
 fn query_reports_only_correlated_compiler_facts() {
     let root = case_dir("query-facts").join("main.lkjscript");
     let source = concat!(
-        "def/\nname/\nf\n/name\nfn/\nsig/\n->\nUnit\n/sig\n",
+        "def/\nname/\nf\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\n",
         "params/\n/params\nunit\n/fn\n/def\n",
-        "def/\nname/\nshadow\n/name\nfn/\nsig/\n->\nUnit\n/sig\nparams/\n/params\n",
+        "def/\nname/\nshadow\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nparams/\n/params\n",
         "let/\nbind/\nf\nunit\n/bind\nf\n/let\n/fn\n/def\n",
-        "main/\nsig/\n->\nUnit\n/sig\nf/\n/f\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nf/\n/f\n/main\n",
     );
     std::fs::write(&root, source).expect("write query source");
     let snapshot = response(
@@ -37,7 +37,7 @@ fn query_reports_only_correlated_compiler_facts() {
         })
         .expect("global call node");
     let operation = format!(
-        "{{\"kind\":\"query_node\",\"revision\":\"{revision}\",\"node\":{}}}",
+        "{{\"kind\":\"query-node\",\"revision\":\"{revision}\",\"node\":{}}}",
         global_call.index
     );
     let queried =
@@ -100,7 +100,7 @@ fn query_reports_only_correlated_compiler_facts() {
         })
         .expect("local binding node");
     let operation = format!(
-        "{{\"kind\":\"query_node\",\"revision\":\"{revision}\",\"node\":{}}}",
+        "{{\"kind\":\"query-node\",\"revision\":\"{revision}\",\"node\":{}}}",
         local.index
     );
     let queried = response(

@@ -1,9 +1,9 @@
 use super::*;
 
 const STDIO_MAIN: &str = concat!(
-    "main/\nsig/\nCapability/\nStdio\n/Capability\n->\nUnit\n/sig\n",
-    "params/\nstdio\nCapability/\nStdio\n/Capability\n/params\n",
-    "print/\nstdio\nstr/\nhello\n/str\n/print\n/main\n"
+    "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+    "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
+    "print/\nstdio\nstring-literal/\nhello\n/string-literal\n/print\n/main\n"
 );
 
 #[test]
@@ -26,16 +26,16 @@ fn exact_main_capability_reaches_ssa_and_bytecode() {
 
 #[test]
 fn ambient_and_wrong_capability_calls_are_rejected() {
-    let ambient = unit_main("print/\nstr/\nhello\n/str\n/print");
+    let ambient = unit_main("print/\nstring-literal/\nhello\n/string-literal\n/print");
     let error = compile_source(&ambient, "ambient.lkjscript", &Limits::default())
         .expect_err("ambient print")
         .to_string();
     assert!(error.contains("expected 2 args, got 1"));
 
     let wrong = concat!(
-        "main/\nsig/\nCapability/\nArguments\n/Capability\n->\nUnit\n/sig\n",
-        "params/\narguments\nCapability/\nArguments\n/Capability\n/params\n",
-        "print/\narguments\nstr/\nhello\n/str\n/print\n/main\n"
+        "main/\nsig/\ninputs/\ncapability/\narguments\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+        "params/\narguments\ncapability/\narguments\n/capability\n/params\n",
+        "print/\narguments\nstring-literal/\nhello\n/string-literal\n/print\n/main\n"
     );
     let error = compile_source(wrong, "wrong-capability.lkjscript", &Limits::default())
         .expect_err("wrong capability")
@@ -46,21 +46,21 @@ fn ambient_and_wrong_capability_calls_are_rejected() {
 #[test]
 fn duplicate_unsorted_and_forged_capabilities_are_rejected() {
     let duplicate = STDIO_MAIN.replace(
-        "Capability/\nStdio\n/Capability\n->",
-        "Capability/\nStdio\n/Capability\nCapability/\nStdio\n/Capability\n->",
+        "inputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
+        "inputs/\ncapability/\nstdio\n/capability\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
     );
     assert!(compile_source(&duplicate, "duplicate.lkjscript", &Limits::default()).is_err());
 
     let unsorted = STDIO_MAIN
         .replace(
-            "Capability/\nStdio\n/Capability\n->",
-            "Capability/\nStdio\n/Capability\nCapability/\nArguments\n/Capability\n->",
+            "inputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output",
+            "inputs/\ncapability/\nstdio\n/capability\ncapability/\narguments\n/capability\n/inputs\noutput/\nunit\n/output",
         )
         .replace(
-            "params/\nstdio\nCapability/\nStdio\n/Capability",
+            "params/\nstdio\ncapability/\nstdio\n/capability",
             concat!(
-                "params/\nstdio\nCapability/\nStdio\n/Capability\n",
-                "arguments\nCapability/\nArguments\n/Capability"
+                "params/\nstdio\ncapability/\nstdio\n/capability\n",
+                "arguments\ncapability/\narguments\n/capability"
             ),
         );
     let error = compile_source(&unsorted, "unsorted.lkjscript", &Limits::default())

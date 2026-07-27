@@ -2,53 +2,57 @@ use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, Cont
 
 use super::{name, AGENT_PROTOCOL, DIAGNOSTICS, LANGUAGE, SEMANTIC_SOURCE, SOURCE};
 
+mod vocabulary;
+
 pub(super) fn language() -> ContractDescriptor {
-    descriptor(LANGUAGE).item(
-        ContractItem::new("semantic-forms", ContractItemKind::Rule)
-            .fact(fact(
-                "generic-enums",
-                "generic enums",
-                "nominal invariant algebraic data",
-            ))
-            .fact(fact(
-                "match",
-                "match",
-                "closed exhaustive usefulness-checked patterns",
-            ))
-            .fact(fact("never", "Never", "uninhabited join-only control type"))
-            .fact(fact(
-                "control",
-                "structured control",
-                "return loop while break continue",
-            ))
-            .fact(fact(
-                "numeric",
-                "numeric conversions",
-                "four explicit checked operations",
-            ))
-            .fact(fact("option", "Option", "generic enum Some(T)|None"))
-            .fact(fact("result", "Result", "generic enum Ok(T)|Err(E)"))
-            .fact(fact("errors", "typed errors", "closed nominal error enums"))
-            .fact(fact(
-                "effects",
-                "effects",
-                "compiler-derived and not authority",
-            ))
-            .fact(fact(
-                "ownership",
-                "ownership",
-                "type-derived move borrow and drop facts",
-            ))
-            .fact(fact(
-                "capabilities",
-                "capabilities",
-                "eight closed explicit unforgeable provider values",
-            ))
-            .fact(fact(
-                "paths",
-                "Path",
-                "opaque absolute byte-preserving Linux pathname value",
-            )),
+    vocabulary::extend(
+        descriptor(LANGUAGE).item(
+            ContractItem::new("semantic-forms", ContractItemKind::Rule)
+                .fact(fact(
+                    "generic-enums",
+                    "generic enums",
+                    "nominal invariant algebraic data",
+                ))
+                .fact(fact(
+                    "match",
+                    "match",
+                    "closed exhaustive usefulness-checked patterns",
+                ))
+                .fact(fact("never", "never", "uninhabited join-only control type"))
+                .fact(fact(
+                    "control",
+                    "structured control",
+                    "return loop while break continue",
+                ))
+                .fact(fact(
+                    "numeric",
+                    "numeric conversions",
+                    "four explicit checked operations",
+                ))
+                .fact(fact("option", "option", "generic enum some(t)|none"))
+                .fact(fact("result", "result", "generic enum ok(t)|err(e)"))
+                .fact(fact("errors", "typed errors", "closed nominal error enums"))
+                .fact(fact(
+                    "effects",
+                    "effects",
+                    "compiler-derived and not authority",
+                ))
+                .fact(fact(
+                    "ownership",
+                    "ownership",
+                    "type-derived move borrow and drop facts",
+                ))
+                .fact(fact(
+                    "capabilities",
+                    "capabilities",
+                    "eight closed explicit unforgeable provider values",
+                ))
+                .fact(fact(
+                    "paths",
+                    "path",
+                    "opaque absolute byte-preserving Linux pathname value",
+                )),
+        ),
     )
 }
 
@@ -61,7 +65,7 @@ pub(super) fn source(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "projection",
                     "projection",
-                    "marker-free line-oriented structural forms",
+                    "line-oriented slash-delimited structural forms",
                 ))
                 .fact(fact("language-selection", "language selection", "absent"))
                 .fact(fact(
@@ -70,9 +74,14 @@ pub(super) fn source(language: ContractDigest) -> ContractDescriptor {
                     "exact package-root-relative source path",
                 ))
                 .fact(fact(
+                    "signatures",
+                    "signatures",
+                    "structured inputs and output fields without arrow atoms",
+                ))
+                .fact(fact(
                     "imports",
                     "imports",
-                    "exact module paths and declaration name lists",
+                    "structured module path and sorted declaration children",
                 ))
                 .fact(fact(
                     "visibility",
@@ -126,28 +135,28 @@ pub(super) fn semantic_source(
                 .fact(fact("snapshot", "snapshot", "read exact semantic closure"))
                 .fact(fact(
                     "read-entity",
-                    "read_entity",
+                    "read-entity",
                     "read stable semantic entity",
                 ))
                 .fact(fact(
                     "query-node",
-                    "query_node",
+                    "query-node",
                     "query exact derived facts",
                 ))
                 .fact(fact(
                     "hole-context",
-                    "hole_context",
+                    "hole-context",
                     "read typed hole context",
                 ))
                 .fact(fact(
                     "legal-actions",
-                    "legal_actions",
+                    "legal-actions",
                     "bounded checker-valid actions",
                 ))
                 .fact(fact("diagnostics", "diagnostics", "structured diagnostics"))
                 .fact(fact(
                     "transaction",
-                    "apply_transaction",
+                    "apply-transaction",
                     "atomic checked publication",
                 )),
         )

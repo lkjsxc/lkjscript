@@ -18,7 +18,13 @@ impl Analyzer {
 
     pub(in crate::analyze) fn resolve_main(&mut self, pending: PendingMain<'_>) -> Result<Main> {
         if pending.return_type.contains_never() {
-            return Err(self.error(pending.origin, "Never is not a public main return payload"));
+            return Err(self.error(pending.origin, "never is not a public main return payload"));
+        }
+        if contains_resource_type(&pending.return_type) {
+            return Err(self.error(
+                pending.origin,
+                "typed resources cannot escape as a main result",
+            ));
         }
         let arity = u8::try_from(pending.param_names.len())
             .map_err(|_| self.error(pending.origin, "main has too many capability parameters"))?;
@@ -65,7 +71,7 @@ impl Analyzer {
             return Err(self.error(
                 pending.origin,
                 format!(
-                    "main body type {:?} does not exactly equal declared return {:?}",
+                    "main body type {} does not exactly equal declared return {}",
                     body.ty, pending.return_type
                 ),
             ));
@@ -94,7 +100,19 @@ impl Analyzer {
         {
             return Err(self.error(
                 origin,
-                "Never is not permitted in parameters or public return payloads",
+                "never is not permitted in parameters or public return payloads",
+            ));
+        }
+        if parsed
+            .signature_params
+            .iter()
+            .any(|ty| contains_resource_type(ty) && !matches!(ty, Type::Resource(_)))
+            || (contains_resource_type(&parsed.signature_return)
+                && !matches!(parsed.signature_return, Type::Resource(_)))
+        {
+            return Err(self.error(
+                origin,
+                "resource-bearing aggregates are unsupported function boundaries",
             ));
         }
         let arity = u8::try_from(parsed.param_names.len()).map_err(|_| {
@@ -154,7 +172,7 @@ impl Analyzer {
             return Err(self.error(
                 origin,
                 format!(
-                    "def {name}: body type {:?} not assignable to {:?}",
+                    "def {name}: body type {} not assignable to {}",
                     body.ty, parsed.signature_return
                 ),
             ));

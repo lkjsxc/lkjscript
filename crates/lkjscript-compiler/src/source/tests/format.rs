@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn formatter_is_structural_idempotent_and_handles_escape_zero_utf8_and_lf() {
-    let source = "main/\nsig/\n->\nF64\n/sig\ndo/\n;; attached to zero\n-0.0\nstr/\nλ\n\\/str\n/str\n\n/do\n/main\n;; trailing";
+    let source = "main/\nsig/\ninputs/\n/inputs\noutput/\nf64\n/output\n/sig\ndo/\n;; attached to zero\n-0.0\nstring-literal/\nλ\n\\/str\n/string-literal\n\n/do\n/main\n;; trailing";
     let first = validate(source, "src/format.lkjscript", &Limits::default()).expect("parse");
     let formatted = first.format_single_source().expect("one source");
     assert!(formatted.ends_with('\n'));
