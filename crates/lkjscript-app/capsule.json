@@ -13,7 +13,8 @@
     "semantic stdio session",
     "integration execution",
     "memory inventory",
-    "memory tracing ratchet"
+    "memory tracing ratchet",
+    "runtime topology and scheduler observation"
   ],
   "facade": [
     "crates/lkjscript-app/src/main.rs"
@@ -25,6 +26,8 @@
     "ir",
     "jit",
     "native",
+    "resource",
+    "sys",
     "vm"
   ],
   "forbidden_dependencies": [
@@ -40,6 +43,7 @@
     "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/modules-and-packages.md",
+    "docs/decisions/platform/semantic-resource-plane.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
   ],
   "unsafe_boundary": {
@@ -68,7 +72,10 @@
       "lkjscript package",
       "lkjscript memory inventory",
       "lkjscript memory traced",
-      "lkjscript semantic serve --stdio"
+      "lkjscript semantic serve --stdio",
+      "lkjscript runtime topology",
+      "lkjscript runtime host-scheduler",
+      "lkjscript runtime plan"
     ],
     "invariants": [
       "run and disasm require an exact local package lock",

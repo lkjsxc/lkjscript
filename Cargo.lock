@@ -18,6 +18,8 @@ dependencies = [
  "lkjscript-ir",
  "lkjscript-jit",
  "lkjscript-native",
+ "lkjscript-resource",
+ "lkjscript-sys",
  "lkjscript-vm",
 ]
 

@@ -13,6 +13,11 @@ pub fn print() {
     println!("  lkjscript memory inventory [--json]");
     println!("  lkjscript memory explain <identity>");
     println!("  lkjscript memory traced [--json]");
+    println!("  lkjscript runtime topology [--json]");
+    println!("  lkjscript runtime topology explain <snapshot|cpu:N|cache:LEVEL:ID|numa:N>");
+    println!("  lkjscript runtime host-scheduler [--json]");
+    println!("  lkjscript runtime plan [--json] [--parallelism N] [--tasks N]");
+    println!("                           [--policy NAME] [--affinity MODE]");
     println!("  lkjscript disasm [--resource-profile NAME] <file.lkjscript>");
     println!("  lkjscript semantic describe");
     println!("  lkjscript semantic [-] < request.json");

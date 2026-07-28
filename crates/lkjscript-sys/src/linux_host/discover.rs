@@ -78,7 +78,7 @@ fn validate_scheduler_sets(
 
 fn digest(snapshot: &LinuxHostSnapshot) -> [u8; 32] {
     let bytes = format!(
-        "lkjscript.linux-host.v1\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
+        "lkjscript.linux-host\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}",
         snapshot.topology,
         snapshot.cpus,
         snapshot.caches,

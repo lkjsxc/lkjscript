@@ -13,6 +13,7 @@ mod metrics_jit_island;
 mod metrics_json;
 mod output;
 mod package;
+mod runtime;
 mod semantic;
 
 use std::env;
@@ -41,6 +42,7 @@ fn real_main() -> Result<ExitCode, String> {
         Some("disasm") => disasm::command(&args),
         Some("package") => package::command(&args),
         Some("memory") => memory::command(&args),
+        Some("runtime") => runtime::command(&args),
         Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),
     }

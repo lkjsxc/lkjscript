@@ -57,6 +57,47 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
 }
 
 #[test]
+fn runtime_topology_scheduler_and_plan_are_exact_public_evidence() {
+    let binary = env!("CARGO_BIN_EXE_lkjscript");
+    for (operation, schema) in [
+        (
+            &["runtime", "topology", "--json"][..],
+            "lkjscript.runtime-topology",
+        ),
+        (
+            &["runtime", "host-scheduler", "--json"][..],
+            "lkjscript.host-scheduler",
+        ),
+        (
+            &[
+                "runtime",
+                "plan",
+                "--json",
+                "--parallelism",
+                "2",
+                "--tasks",
+                "4",
+            ][..],
+            "lkjscript.execution-resource-plan",
+        ),
+    ] {
+        let output = Command::new(binary)
+            .args(operation)
+            .output()
+            .expect("run runtime evidence command");
+        assert!(output.status.success(), "stderr={:?}", output.stderr);
+        assert!(output.stderr.is_empty());
+        let json = String::from_utf8(output.stdout).expect("runtime JSON is UTF-8");
+        assert!(json.contains(&format!("\"schema\":\"{schema}\"")));
+        assert!(json.contains(&format!(
+            "\"contract\":\"{}\"",
+            lkjscript_contracts::SEMANTIC_RESOURCE_PLANE_DIGEST
+        )));
+        assert!(json.contains("\"snapshot\":"));
+    }
+}
+
+#[test]
 fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");
     let inventory = Command::new(binary)
