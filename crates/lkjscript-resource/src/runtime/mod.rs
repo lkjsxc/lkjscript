@@ -9,7 +9,7 @@ mod worker;
 use worker::{validate_config, worker_loop};
 
 pub trait TaskExecutor: Sync {
-    type Output: Clone + Send;
+    type Output: Send;
     type Error: Clone + Send;
 
     fn execute(&self, task: TaskId) -> Result<Self::Output, Self::Error>;
@@ -147,16 +147,13 @@ impl ScopedRuntime {
             }
             Ok(())
         })?;
+        let shared = Arc::try_unwrap(shared).map_err(|_| {
+            ResourceError::new("runtime-live-share", "worker retained runtime state")
+        })?;
         let control = shared
             .control
-            .lock()
+            .into_inner()
             .map_err(|_| ResourceError::new("poison", "runtime control poisoned"))?;
-        let failures: Vec<_> = control
-            .failures
-            .iter()
-            .map(|(task, detail)| (*task, detail.clone()))
-            .collect();
-        let selected_failure = failures.first().cloned();
         let cancelled = graph
             .tasks()
             .iter()
@@ -173,12 +170,10 @@ impl ScopedRuntime {
                 "exactly-once or live-worker invariant failed",
             ));
         }
+        let failures: Vec<_> = control.failures.into_iter().collect();
+        let selected_failure = failures.first().cloned();
         Ok(RuntimeReport {
-            outputs: control
-                .outputs
-                .iter()
-                .map(|(task, output)| (*task, output.clone()))
-                .collect(),
+            outputs: control.outputs.into_iter().collect(),
             failures,
             selected_failure,
             cancelled,

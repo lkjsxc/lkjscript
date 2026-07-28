@@ -1,7 +1,7 @@
 use crate::optimize::*;
 use crate::{
-    EffectSet, FailureBehavior, Instruction, InstructionKind, Program, RuntimeOp, Safepoint,
-    SsaType,
+    EffectSet, FailureBehavior, Function, Instruction, InstructionKind, Program, RuntimeOp,
+    Safepoint, SsaType,
 };
 
 pub(crate) fn discover_edits(
@@ -19,23 +19,43 @@ pub(crate) fn discover_edits(
             .functions
             .get(function_index)
             .ok_or_else(|| input_index_error("discovery function index is incomplete"))?;
-        for block in &function.blocks {
-            if !index.dominance.is_reachable(block.id) {
-                continue;
-            }
-            for (instruction_index, instruction) in block.instructions.iter().enumerate() {
-                budget.charge(1)?;
-                let edit = match discovery_identity_edit(index, instruction, budget)? {
-                    Some(edit) => Some(edit),
-                    None => {
-                        discovery_gvn_edit(index, block.id, instruction_index, instruction, budget)?
-                    }
-                };
-                builder.push(function.id, block.id, instruction.id, edit, budget)?;
-            }
-        }
+        discover_function_into(function, index, &mut builder, budget)?;
     }
     Ok(builder.finish())
+}
+
+pub(crate) fn discover_function_edits(
+    function: &Function,
+    index: &DiscoveryFunctionIndexes<'_>,
+    budget: &mut Budget,
+) -> Result<Vec<OptimizationCertificateRecord>, OptimizationError> {
+    let mut builder = CertificateBuilder::fragment();
+    discover_function_into(function, index, &mut builder, budget)?;
+    Ok(builder.finish())
+}
+
+fn discover_function_into(
+    function: &Function,
+    index: &DiscoveryFunctionIndexes<'_>,
+    builder: &mut CertificateBuilder,
+    budget: &mut Budget,
+) -> Result<(), OptimizationError> {
+    for block in &function.blocks {
+        if !index.dominance.is_reachable(block.id) {
+            continue;
+        }
+        for (instruction_index, instruction) in block.instructions.iter().enumerate() {
+            budget.charge(1)?;
+            let edit = match discovery_identity_edit(index, instruction, budget)? {
+                Some(edit) => Some(edit),
+                None => {
+                    discovery_gvn_edit(index, block.id, instruction_index, instruction, budget)?
+                }
+            };
+            builder.push(function.id, block.id, instruction.id, edit, budget)?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn discovery_identity_edit(

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::optimize::*;
 use crate::{
-    BlockId, Constant, Instruction, InstructionKind, Program, RuntimeOp, Signature, SsaType,
-    ValueId,
+    BlockId, Constant, Function, Instruction, InstructionKind, Program, RuntimeOp, Signature,
+    SsaType, ValueId,
 };
 
 #[derive(Clone, Copy)]
@@ -47,82 +47,92 @@ impl<'a> DiscoveryIndexes<'a> {
         budget: &mut Budget,
     ) -> Result<Self, OptimizationError> {
         budget.charge(shape.functions)?;
-        let mut functions = Vec::with_capacity(program.functions.len());
-        for function in &program.functions {
-            let value_count = function.blocks.iter().try_fold(0_usize, |total, block| {
-                total
-                    .checked_add(block.parameters.len())
-                    .and_then(|value| value.checked_add(block.instructions.len()))
-                    .ok_or_else(budget_error)
-            })?;
-            budget.charge((value_count as u64).saturating_mul(2))?;
-            let mut definitions = vec![None; value_count];
-            let mut constants_i64 = vec![None; value_count];
-            for block in &function.blocks {
-                for parameter in &block.parameters {
-                    discovery_insert_definition(
-                        &mut definitions,
-                        parameter.id,
-                        DiscoveryDefinition {
-                            block: block.id,
-                            instruction_index: None,
-                            ty: &parameter.ty,
-                            instruction: None,
-                        },
-                    )?;
-                }
-                for (instruction_index, instruction) in block.instructions.iter().enumerate() {
-                    discovery_insert_definition(
-                        &mut definitions,
-                        instruction.id,
-                        DiscoveryDefinition {
-                            block: block.id,
-                            instruction_index: Some(instruction_index),
-                            ty: &instruction.ty,
-                            instruction: Some(instruction),
-                        },
-                    )?;
-                    if let InstructionKind::Constant(Constant::I64(value)) = instruction.kind {
-                        let slot = instruction
-                            .id
-                            .index()
-                            .and_then(|index| constants_i64.get_mut(index));
-                        if let Some(slot) = slot {
-                            *slot = Some(value);
-                        }
-                    }
-                    budget.charge(1)?;
-                }
-            }
-            let dominance = DiscoveryDominance::compute(function, budget)?;
-            let mut indexes = DiscoveryFunctionIndexes {
-                definitions,
-                constants_i64,
-                expressions: HashMap::with_capacity(value_count),
-                dominance,
-            };
-            for block in &function.blocks {
-                if !indexes.dominance.is_reachable(block.id) {
-                    continue;
-                }
-                for (instruction_index, instruction) in block.instructions.iter().enumerate() {
-                    if let Some(key) = discovery_expression_key(&indexes, instruction, budget)? {
-                        budget.charge(1)?;
-                        indexes
-                            .expressions
-                            .entry(key)
-                            .or_default()
-                            .push(DiscoveryPosition {
-                                block: block.id,
-                                instruction_index,
-                                value: instruction.id,
-                            });
-                    }
-                }
-            }
-            functions.push(indexes);
-        }
+        let functions = program
+            .functions
+            .iter()
+            .map(|function| DiscoveryFunctionIndexes::build(function, budget))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Self { functions })
+    }
+}
+
+impl<'a> DiscoveryFunctionIndexes<'a> {
+    pub(crate) fn build(
+        function: &'a Function,
+        budget: &mut Budget,
+    ) -> Result<Self, OptimizationError> {
+        let value_count = function.blocks.iter().try_fold(0_usize, |total, block| {
+            total
+                .checked_add(block.parameters.len())
+                .and_then(|value| value.checked_add(block.instructions.len()))
+                .ok_or_else(budget_error)
+        })?;
+        budget.charge((value_count as u64).saturating_mul(2))?;
+        let mut definitions = vec![None; value_count];
+        let mut constants_i64 = vec![None; value_count];
+        for block in &function.blocks {
+            for parameter in &block.parameters {
+                discovery_insert_definition(
+                    &mut definitions,
+                    parameter.id,
+                    DiscoveryDefinition {
+                        block: block.id,
+                        instruction_index: None,
+                        ty: &parameter.ty,
+                        instruction: None,
+                    },
+                )?;
+            }
+            for (instruction_index, instruction) in block.instructions.iter().enumerate() {
+                discovery_insert_definition(
+                    &mut definitions,
+                    instruction.id,
+                    DiscoveryDefinition {
+                        block: block.id,
+                        instruction_index: Some(instruction_index),
+                        ty: &instruction.ty,
+                        instruction: Some(instruction),
+                    },
+                )?;
+                if let InstructionKind::Constant(Constant::I64(value)) = instruction.kind {
+                    if let Some(slot) = instruction
+                        .id
+                        .index()
+                        .and_then(|index| constants_i64.get_mut(index))
+                    {
+                        *slot = Some(value);
+                    }
+                }
+                budget.charge(1)?;
+            }
+        }
+        let dominance = DiscoveryDominance::compute(function, budget)?;
+        let mut indexes = Self {
+            definitions,
+            constants_i64,
+            expressions: HashMap::with_capacity(value_count),
+            dominance,
+        };
+        for block in &function.blocks {
+            if !indexes.dominance.is_reachable(block.id) {
+                continue;
+            }
+            for (instruction_index, instruction) in block.instructions.iter().enumerate() {
+                if let Some(key) = discovery_expression_key(&indexes, instruction, budget)? {
+                    budget.charge(1)?;
+                    indexes
+                        .expressions
+                        .entry(key)
+                        .or_default()
+                        .push(DiscoveryPosition {
+                            block: block.id,
+                            instruction_index,
+                            value: instruction.id,
+                        });
+                }
+            }
+        }
+        Ok(indexes)
     }
 }
 

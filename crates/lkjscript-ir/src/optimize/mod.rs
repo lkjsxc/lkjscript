@@ -9,6 +9,7 @@ mod equality_ownership;
 mod model;
 mod passes;
 mod reconstruct;
+mod scheduled;
 mod shape;
 
 pub use api::{optimize, verify_optimization};
@@ -27,4 +28,7 @@ pub use passes::{
     unreachable_blocks,
 };
 pub(crate) use reconstruct::*;
+pub use scheduled::{
+    optimize_scheduled, optimize_scheduled_with_binder, ScheduledOptimizationReport,
+};
 pub(crate) use shape::*;

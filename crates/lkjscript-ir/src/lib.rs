@@ -32,10 +32,11 @@ pub use model::{
 };
 pub use optimize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,
-    effect_aware_dce, empty_block_forwarding, normalize_baseline, optimize, simplify_branches,
-    unreachable_blocks, verify_optimization, OptimizationCertificate,
-    OptimizationCertificateRecord, OptimizationEditKind, OptimizationError,
-    OptimizationFailureCode, OptimizationLimits, OptimizationStats, VerifiedOptimizedProgram,
+    effect_aware_dce, empty_block_forwarding, normalize_baseline, optimize, optimize_scheduled,
+    optimize_scheduled_with_binder, simplify_branches, unreachable_blocks, verify_optimization,
+    OptimizationCertificate, OptimizationCertificateRecord, OptimizationEditKind,
+    OptimizationError, OptimizationFailureCode, OptimizationLimits, OptimizationStats,
+    ScheduledOptimizationReport, VerifiedOptimizedProgram,
 };
 pub use verify::{
     verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,

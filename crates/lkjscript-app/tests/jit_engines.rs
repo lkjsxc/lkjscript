@@ -18,6 +18,8 @@ mod resource_island;
 mod resource_limits;
 #[path = "jit_engines/scalar_semantics.rs"]
 mod scalar_semantics;
+#[path = "jit_engines/scheduled_discovery.rs"]
+mod scheduled_discovery;
 #[path = "jit_engines/tiering.rs"]
 mod tiering;
 #[path = "jit_engines/unique_island/mod.rs"]

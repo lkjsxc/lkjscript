@@ -18,9 +18,9 @@ use lkjscript_core::{
     UniqueStoreLimits, Value, MAX_BUFFER_BYTES, MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_ir::{
-    optimize, BytecodeLinkMetadata, OptimizationCertificate, OptimizationFailureCode,
-    OptimizationLimits, OptimizationStats, Signature as IrSignature, SsaType,
-    VerifiedOptimizedProgram, VerifiedProgram,
+    optimize, optimize_scheduled, BytecodeLinkMetadata, OptimizationCertificate,
+    OptimizationFailureCode, OptimizationLimits, OptimizationStats, Signature as IrSignature,
+    SsaType, VerifiedOptimizedProgram, VerifiedProgram,
 };
 use lkjscript_native::{
     BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation, HeapRuntimeSite,
@@ -43,6 +43,7 @@ mod error;
 mod execute;
 mod heap;
 mod island;
+mod resource_plan;
 mod scalar;
 mod session;
 mod stats;

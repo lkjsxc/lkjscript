@@ -9,6 +9,7 @@ publish.workspace = true
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-native = { path = "../lkjscript-native" }
+lkjscript-resource = { path = "../lkjscript-resource" }
 lkjscript-sys = { path = "../lkjscript-sys" }
 
 [lints]

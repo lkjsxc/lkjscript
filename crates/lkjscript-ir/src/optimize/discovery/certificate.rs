@@ -20,6 +20,13 @@ impl CertificateBuilder {
         })
     }
 
+    pub(crate) fn fragment() -> Self {
+        Self {
+            records: Vec::new(),
+            bytes_estimate: 0,
+        }
+    }
+
     pub(crate) fn push(
         &mut self,
         function: FunctionId,

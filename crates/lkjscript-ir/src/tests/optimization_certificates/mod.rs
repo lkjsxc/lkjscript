@@ -1,6 +1,8 @@
 use super::fixtures::*;
 use crate::*;
 
+mod scheduled;
+
 #[test]
 fn proof_optimization_is_deterministic_and_evaluator_equivalent() {
     let input = verify(optimizable_checked_program()).expect("verify optimization input");

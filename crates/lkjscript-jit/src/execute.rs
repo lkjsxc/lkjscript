@@ -58,7 +58,21 @@ pub fn execute_optimizing_with_capabilities(
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     let started = Instant::now();
-    let optimized = optimize(program, config.optimization_limits).map_err(optimization_error)?;
+    let optimized = if config.proof_discovery_workers > 1 {
+        let plan = crate::resource_plan::proof_discovery_plan(config.proof_discovery_workers)
+            .map_err(|error| {
+                EngineError::new(
+                    FailureCode::CertificateVerification,
+                    Some(program.program().main),
+                    format!("scheduled proof discovery plan: {error}"),
+                )
+            })?;
+        optimize_scheduled(program, config.optimization_limits, &plan)
+            .map_err(optimization_error)?
+            .into_optimized()
+    } else {
+        optimize(program, config.optimization_limits).map_err(optimization_error)?
+    };
     let optimization_time = started.elapsed();
     if optimization_time > config.max_object_compile_time
         || optimization_time > config.max_total_compile_time
