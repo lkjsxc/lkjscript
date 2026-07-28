@@ -101,7 +101,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
 - Linux x86-64 baseline acceptance requires real synchronous native calls. The
   forced proof JIT accepts only proof-checked optimized SSA and has no VM
-  fallback.
+  fallback. A focused scalar group with direct calls, loops, bool, i64, and f64
+  proves both forced tiers have nonzero generated entries, zero fallback, no
+  collector-capable runtime call, empty exact root maps, and zero allocation,
+  collection, root, and barrier counters. VM scalar boxing remains separate, so
+  this is not the full value-island capability.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
