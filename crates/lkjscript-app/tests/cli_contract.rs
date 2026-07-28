@@ -80,4 +80,16 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     let text = String::from_utf8(explain.stdout).expect("explanation is UTF-8");
     assert!(text.contains("memory-identity=byte-vector"));
     assert!(text.contains("current compiler island; deterministic storage accepted"));
+
+    let traced = Command::new(binary)
+        .args(["memory", "traced", "--json"])
+        .output()
+        .expect("run memory tracing ratchet");
+    assert!(traced.status.success());
+    assert!(traced.stderr.is_empty());
+    let json = String::from_utf8(traced.stdout).expect("tracing ratchet is UTF-8");
+    assert!(json.contains("\"schema\":\"lkjscript.memory-tracing-ratchet\""));
+    assert!(json.contains("\"identity\":\"buf\",\"heap_variant\":\"Buf\""));
+    assert!(json.contains("\"identity\":\"symbol\",\"heap_variant\":\"Symbol\""));
+    assert_eq!(json.matches("\"heap_variant\":").count(), 11);
 }

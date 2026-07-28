@@ -34,6 +34,7 @@ cargo run --locked -p lkjscript-app -- run src/examples/lkjedit/main.lkjscript p
 cargo run --locked -p lkjscript-app -- run src/examples/http/hello.lkjscript
 cargo run --locked -p lkjscript-app -- disasm src/examples/hello/main.lkjscript
 cargo run --locked -p lkjscript-app -- memory inventory --json
+cargo run --locked -p lkjscript-app -- memory traced --json
 cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
 

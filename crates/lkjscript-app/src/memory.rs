@@ -4,6 +4,8 @@ use lkjscript_contracts::{
     current_contracts, memory_obligations, ContractDigest, MemoryObligation, MEMORY_OBLIGATIONS,
 };
 
+mod traced;
+
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let contracts = current_contracts().map_err(|error| error.to_string())?;
     let contract = contracts
@@ -23,10 +25,14 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
                 .ok_or_else(|| format!("unknown memory identity: {identity}"))?;
             print_record(record);
         }
+        [_, operation] if operation == "traced" => traced::print(contract, false),
+        [_, operation, flag] if operation == "traced" && flag == "--json" => {
+            traced::print(contract, true);
+        }
         _ => {
             return Err(concat!(
-                "memory command is exactly: memory inventory [--json] or ",
-                "memory explain <identity>"
+                "memory command is exactly: memory inventory [--json], ",
+                "memory explain <identity>, or memory traced [--json]"
             )
             .to_string());
         }

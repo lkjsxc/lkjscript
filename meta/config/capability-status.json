@@ -78,6 +78,15 @@
       "authority": "docs/decisions/memory/authoritative-memory-plan.md",
       "evidence": "docs/decisions/memory/authoritative-memory-plan.md",
       "claimants": ["docs/decisions/memory/authoritative-memory-plan.md","docs/operations/agent-handoff.md"] },
+    { "id": "memory-tracing-ratchet", "status": "current",
+      "interface": "LKJ-MEMORY-TRACING-RATCHET and memory traced",
+      "authority": "docs/decisions/memory/tracing-ratchet.md",
+      "evidence": "crates/lkjscript-xtask/src/tracing_ratchet.rs",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/decisions/memory/tracing-ratchet.md",
+        "docs/operations/agent-handoff.md"
+      ] },
     { "id": "modules-and-packages", "status": "current",
       "interface": "exact modules and content-addressed local package lock",
       "authority": "docs/decisions/platform/modules-and-packages.md",

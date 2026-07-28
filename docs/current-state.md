@@ -11,6 +11,7 @@
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
+<!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->
@@ -111,6 +112,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   deterministic candidates; it is derived evidence, not semantic authority.
   Executable programs retain an independently recomputed direct-affine SSA
   inventory for byte-vector owners/loans and typed resources.
+- `LKJ-MEMORY-TRACING-RATCHET` fails when the exact eleven registered
+  `HeapObj` families change without an accepted registry update. `lkjscript
+  memory traced [--json]` exposes the same sorted Current set. This intermediate
+  gate does not claim that the runtime collector is removed.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected ledger spans compiler phases; one request-owned ledger
   across every compiler/runtime authority remains an accepted target.

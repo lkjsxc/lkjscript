@@ -2,8 +2,11 @@
 
 ## Status
 
-**Accepted contract; this is an intermediate migration gate, not the final
-no-tracing-collector gate.**
+<!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
+
+**Current intermediate migration gate; it is not the final
+no-tracing-collector gate.** `check-sources` verifies the exact registry and
+`lkjscript memory traced [--json]` exposes it.
 
 ## Rule
 

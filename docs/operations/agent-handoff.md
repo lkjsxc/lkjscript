@@ -19,6 +19,7 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=typed-holes status=current -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
+<!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
 <!-- LKJ-STATUS id=memory-plan status=accepted-contract -->
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
@@ -29,7 +30,8 @@ Repository topology and graph/context, bounded task state, exact modules and
 packages, canonical Semantic Source and local sessions, explicit capabilities,
 generic ADTs and structured control, validated VM, callable baseline JIT, and
 forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
-and explain commands are Current descriptive evidence.
+and explain commands are Current descriptive evidence. The machine tracing
+ratchet and `memory traced` expose the exact eleven allowed `HeapObj` families.
 
 The authoritative memory plan, deterministic whole-place drop,
 generation-safe resource table, and first collector-free value island are

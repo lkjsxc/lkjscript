@@ -12,7 +12,8 @@
     "package lock CLI",
     "semantic stdio session",
     "integration execution",
-    "memory inventory"
+    "memory inventory",
+    "memory tracing ratchet"
   ],
   "facade": [
     "crates/lkjscript-app/src/main.rs"
@@ -66,6 +67,7 @@
       "lkjscript describe",
       "lkjscript package",
       "lkjscript memory inventory",
+      "lkjscript memory traced",
       "lkjscript semantic serve --stdio"
     ],
     "invariants": [
