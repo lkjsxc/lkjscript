@@ -48,6 +48,7 @@ name = "lkjscript-ir"
 version = "0.1.0"
 dependencies = [
  "lkjscript-contracts",
+ "lkjscript-core",
 ]
 
 [[package]]

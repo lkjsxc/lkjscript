@@ -105,8 +105,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   checked 12-bit-slot, 20-bit-generation guest tokens. It reserves before host
   acquisition, reuses slots without reviving stale tokens, protects SQLite
   parents, installs borrowed standard input in the table, invalidates before
-  explicit close, and performs exact reverse emergency cleanup. Compiler
-  all-outcome cleanup and native resource execution remain incomplete.
+  explicit close, and performs exact reverse emergency cleanup.
+- Each evaluator execution owns one core resource table with exact fake lifecycle
+  providers for all eleven kinds. It performs no ambient host I/O; resource-operation dispatch remains incomplete.
 - Core provides a bounded deterministic unique store with opaque store-scoped,
   generation-bearing typed keys for byte-vector, dynamic bytes, and path
   layouts. It is not yet integrated into source execution or native tiers.
@@ -116,8 +117,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - One validated source tree feeds module resolution, typed HIR, ownership and
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
 - Linux x86-64 baseline acceptance requires real synchronous native calls. The
-  forced proof JIT accepts only proof-checked optimized SSA and has no VM
-  fallback.
+  forced proof JIT accepts only proof-checked optimized SSA and has no VM fallback.
 - The reference VM uses a safe closed 16-byte value with complete inline i64
   and exact-bit f64 payloads. Scalar constants, stack/locals, operations,
   conversions, calls, returns, host adapters, and JIT transitions allocate no
@@ -166,8 +166,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
 - complete typed-resource compiler-inserted exactly-once cleanup, evaluator
-  providers, bounded structured cleanup-failure attachment, and forced native
-  host execution;
+  resource-operation dispatch, bounded structured cleanup-failure attachment,
+  and forced native host execution;
 - immutable `bytes`, full affine `byte-vector` corpus migration, ranged lexical
   byte slices, borrowed `str`, and removal of transitional `buf` after complete
   cross-engine replacement;

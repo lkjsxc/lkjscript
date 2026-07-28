@@ -4,9 +4,10 @@
 
 **Accepted contract with implemented foundation.** Universal source `handle` is
 removed. Exact kinds now cross source typing, HIR, verified SSA, bytecode
-validation, and VM resource-kind checks. The complete capability remains
-non-Current until provider/state facts, reusable generations, exactly-once
-cleanup, evaluator providers, forced native host execution, malformed-input,
+validation, and VM resource-kind checks. Core, VM, and evaluator lifecycle
+foundations now enforce provider/state facts and reusable generations. The
+complete capability remains non-Current until exactly-once cleanup, evaluator
+resource-operation dispatch, forced native host execution, malformed-input,
 and acceptance coverage are complete. An opaque runtime token alone does not
 qualify.
 

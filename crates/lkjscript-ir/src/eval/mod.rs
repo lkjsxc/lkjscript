@@ -7,6 +7,9 @@ use crate::{
     RuntimeLayoutId, RuntimeOp, StructuredOutcome, Terminator, ValueId, VariantId, VerifiedProgram,
 };
 
+pub use config::EvalConfig;
+pub use resources::EvalResource;
+
 #[derive(Clone)]
 pub struct EvalBuffer {
     id: u64,
@@ -41,6 +44,7 @@ pub enum EvalValue {
     Buf(EvalBuffer),
     Path(Vec<u8>),
     Capability(lkjscript_contracts::CapabilityKind),
+    Resource(EvalResource),
     Product(ProductId, Vec<Self>),
     Enum {
         enum_id: EnumId,
@@ -66,6 +70,7 @@ impl PartialEq for EvalValue {
             (Self::Buf(left), Self::Buf(right)) => left == right,
             (Self::Path(left), Self::Path(right)) => left == right,
             (Self::Capability(left), Self::Capability(right)) => left == right,
+            (Self::Resource(_), Self::Resource(_)) => false,
             (Self::Product(left_id, left), Self::Product(right_id, right)) => {
                 left_id == right_id && left == right
             }
@@ -103,36 +108,15 @@ pub enum EvalOutcome {
     HostFailure(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EvalConfig {
-    pub fuel: u64,
-    pub max_frames: usize,
-    pub max_allocations: u64,
-    pub max_logical_aggregate_constructions: u64,
-    pub max_heap_bytes: usize,
-    pub max_buffer_bytes: usize,
-    pub max_list_equal_steps: usize,
-    pub args: Vec<String>,
-    pub capabilities: Vec<lkjscript_contracts::CapabilityKind>,
-}
-
-impl Default for EvalConfig {
-    fn default() -> Self {
-        Self {
-            fuel: 1_000_000,
-            max_frames: 1_024,
-            max_allocations: 1_000_000,
-            max_logical_aggregate_constructions: 1_000_000,
-            max_heap_bytes: usize::MAX,
-            max_buffer_bytes: 1_000_000,
-            max_list_equal_steps: 1_000_000,
-            args: Vec::new(),
-            capabilities: Vec::new(),
-        }
-    }
-}
-
 pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
+    let arguments = match capabilities::main_arguments(program, config) {
+        Ok(arguments) => arguments,
+        Err(message) => return EvalOutcome::HostFailure(message),
+    };
+    let resources = match resources::EvalResources::new(config.max_resources) {
+        Ok(resources) => resources,
+        Err(message) => return EvalOutcome::HostFailure(message),
+    };
     let mut evaluator = Evaluator {
         program,
         config,
@@ -141,15 +125,13 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         logical_aggregate_constructions: 0,
         heap_bytes: 0,
         next_buffer_id: 1,
+        resources,
     };
-    let arguments = match capabilities::main_arguments(program, config) {
-        Ok(arguments) => arguments,
-        Err(message) => return EvalOutcome::HostFailure(message),
-    };
-    match evaluator.call(program.program().main, arguments, 0) {
+    let primary = match evaluator.call(program.program().main, arguments, 0) {
         Ok(value) => EvalOutcome::Returned(value),
         Err(flow) => flow.outcome(),
-    }
+    };
+    resources::finish_evaluation(&mut evaluator.resources, primary)
 }
 
 pub(crate) struct Evaluator<'a> {
@@ -160,6 +142,7 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) logical_aggregate_constructions: u64,
     pub(crate) heap_bytes: usize,
     pub(crate) next_buffer_id: u64,
+    pub(crate) resources: resources::EvalResources,
 }
 
 #[derive(Debug)]
@@ -189,9 +172,11 @@ mod allocation;
 #[cfg(test)]
 mod boundary_tests;
 mod capabilities;
+mod config;
 mod control;
 mod instruction;
 mod numeric_conversion;
+mod resources;
 mod runtime;
 mod values;
 

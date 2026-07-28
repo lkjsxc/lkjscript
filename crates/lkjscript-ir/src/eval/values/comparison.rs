@@ -29,6 +29,9 @@ pub(crate) fn value_equal(left: &EvalValue, right: &EvalValue) -> std::result::R
         (EvalValue::Str(left), EvalValue::Str(right))
         | (EvalValue::Symbol(left), EvalValue::Symbol(right)) => Ok(left == right),
         (EvalValue::Path(left), EvalValue::Path(right)) => Ok(left == right),
+        (EvalValue::Resource(_), _) | (_, EvalValue::Resource(_)) => Err(Flow::Trap(
+            "typed resources cannot be compared as values".into(),
+        )),
         (
             EvalValue::Enum {
                 enum_id: left_enum,

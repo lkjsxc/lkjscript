@@ -4,12 +4,13 @@
 
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 
-**Accepted end-to-end contract with Current core and VM foundations.** The
-host-independent core table and reference VM implement all eleven kinds,
-reusable nonwrapping slots, provider/scope binding, stale-key rejection,
-reservations, invalidating close, reverse emergency cleanup, and exact
-obligations. Capability promotion remains blocked by compiler cleanup on every
-outcome and generated native resource execution.
+**Accepted end-to-end contract with Current core, VM, and evaluator lifecycle
+foundations.** The host-independent core table and both interpreter foundations
+cover all eleven kinds, reusable nonwrapping slots, provider/scope binding,
+stale-key rejection, reservations, invalidating close, reverse emergency
+cleanup, and exact obligations. The evaluator uses deterministic fake owners;
+its resource-operation dispatch remains absent. Capability promotion remains
+blocked by compiler cleanup on every outcome and generated native execution.
 
 ## Key And Slot
 
@@ -33,8 +34,9 @@ records the exact capability provider. Filesystem, network, process, SQLite,
 and terminal resources cannot cross provider domains.
 
 Dispatch is a closed kind table, never a source string lookup. The VM derives
-stable provider identities from the exact filesystem, network, SQLite, and
-standard-I/O capability origins and creates one scope identity per execution.
+stable provider identities from exact capability origins. The evaluator
+lifecycle harness derives the same identities for fake providers and creates a
+fresh abstract scope per execution without performing ambient host I/O.
 
 ## Ownership
 
@@ -48,9 +50,10 @@ the same verified per-kind glue.
 
 Ordinary successful execution will reach teardown with zero guest-owned
 resource obligations once compiler all-outcome cleanup is implemented. Current
-VM teardown records that unmet ordinary invariant distinctly, observes exact
-emergency obligations, and runs the core table's reverse owned cleanup before
-removing borrowed standard input. It is a safety net, not normal semantics.
+VM and evaluator teardown record that unmet ordinary invariant distinctly,
+observe exact emergency obligations, and run the core table's reverse owned
+cleanup before removing borrowed standard streams. It is a safety net, not
+normal semantics.
 
 ## Failure
 
@@ -69,8 +72,9 @@ operations reject preflight rather than falling back to VM or tracing.
 
 ## Verification
 
-Core and VM tests cover all kinds, wrong-kind access before effects, provider
-and scope mismatch, borrowed standard input, explicit close, reuse, stale
-generations, generation exhaustion, failed acquisition, SQLite parent/child
-protection, reverse cleanup order, and emergency teardown distinction. Compiler
-all-outcome cleanup and generated native resource support remain absent.
+Core, VM, and evaluator lifecycle tests cover all kinds, wrong-kind access
+before effects, provider and scope mismatch, borrowed standard streams,
+explicit close, reuse, stale generations, failed acquisition, SQLite
+parent/child protection, reverse cleanup order, and emergency teardown
+reporting. Evaluator resource operations, compiler all-outcome cleanup, and
+generated native resource support remain absent.

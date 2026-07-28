@@ -74,9 +74,10 @@ source terminator paths and records explicit typed-resource close; conditional
 flags, implicit resource close, instruction-originated all-outcome routing, and
 physical byte release remain incomplete. VM resources use the core table through
 reusable generation-bearing guest tokens, exact providers, one execution scope,
-reservations, invalidating close, and reverse emergency cleanup. Structured
-provider-close failure attachment, evaluator providers, and native execution
-remain absent.
+reservations, invalidating close, and reverse emergency cleanup. Evaluator
+executions own the same table with deterministic fake lifecycle providers and no
+ambient host I/O. Structured provider-close failure attachment, evaluator
+resource-operation dispatch, and native execution remain absent.
 
 ## Current Non-Memory Boundaries
 
@@ -96,8 +97,9 @@ remain absent.
 
 1. Complete conditional and instruction-originated all-outcome cleanup plus
    executable byte/resource glue beyond the Current static/dead SSA spine.
-2. Extend resource cleanup and host execution through evaluator and forced
-   native tiers with bounded structured cleanup-failure attachment.
+2. Add resource-operation dispatch to the evaluator and extend resource host
+   execution through forced native tiers with bounded cleanup-failure
+   attachment.
 3. Integrate deterministic generation-safe unique storage into every engine.
 4. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
 5. Execute and verify the remaining exact island types through evaluator, VM,

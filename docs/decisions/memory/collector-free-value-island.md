@@ -32,8 +32,10 @@ proof JIT cannot use tracing or fall back after eligibility succeeds.
 ## Execution Domains
 
 The independent evaluator uses abstract deterministic owners and fake providers.
-The VM uses typed scalar slots, unique storage, resource slots, and explicit
-cleanup. Native tiers consume the same memory-verified SSA and closed runtime
+Each evaluator execution owns the core generation-safe resource table, but
+resource-operation dispatch and compiler-inserted cleanup remain absent. The VM
+uses typed scalar slots, unique storage, resource slots, and explicit cleanup.
+Native tiers consume the same memory-verified SSA and closed runtime
 call table. Island native frames contain owners, loans, flags, resources,
 budgets, deadlines, outcomes, and transitions, but no collector root map or
 collection poll.
