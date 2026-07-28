@@ -37,10 +37,10 @@ ratchet and `memory traced` expose the exact nine allowed `HeapObj` families.
 
 The authoritative pre-backend HIR memory plan is Current. The verified
 whole-place drop spine and generation-safe resource tables remain foundations
-for Accepted Contracts. The first exact byte-vector execution family is Current
-in the evaluator and reference VM and remains fail-closed in native tiers. The whole runtime still uses a tracing
-collector for structural values; collector-free deterministic memory is not
-Current.
+for Accepted Contracts. Exact byte-vector, byte-slice, and immutable-bytes
+subsets execute through evaluator, VM, forced baseline, and forced proof tiers
+without collector interaction or fallback. The whole runtime still traces
+structural values; collector-free deterministic memory is not Current.
 
 ## Product Intent
 
@@ -62,20 +62,21 @@ Current.
 The stable-index non-moving `GcHeap` still traces explicit legacy-traced
 reference values, exact roots, and generated native stack maps. Complete i64
 and exact-bit f64 values are inline and never collector allocated. `buf` remains
-a traced mutable object, `bytes` uses static or deterministic unique storage in
-the evaluator/VM with native fail-closed rejection, and `path` remains a traced
-byte object.
+a traced mutable object. Exact `bytes` uses static or deterministic unique
+storage in all four engines. Source `path` remains traced; core unique storage
+only establishes its fail-closed migration foundation.
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
 byte loans, and direct typed resources. Only the opaque memory-verified HIR
-wrapper enters SSA lowering. The verified static/dead SSA drop spine carries closed glue identities,
-explicit loan-end/drop events, and rejects active-owner `place-end`. Exact
-byte-vector execution uses an execution-owned `UniqueStore` in the evaluator,
-VM, and forced native tiers. Static/dead owned-resource exits now
-receive exact implicit glue; evaluator fake owners and VM bytecode execute it
-through their core tables, while explicit close suppresses it. Conditional and
-instruction-originated resource cleanup remain incomplete. VM resources use
+wrapper enters SSA lowering. The verified static/dead SSA drop spine carries
+closed glue identities, explicit loan-end/drop events, and rejects active-owner
+`place-end`. Exact byte-vector, slice, checked little-endian u32, and bytes
+operations use bounded unique services in evaluator, VM, and forced native
+execution. Static/dead owned-resource exits receive exact implicit glue;
+evaluator fake owners and VM bytecode execute it through their core tables,
+while explicit close suppresses it. Conditional and instruction-originated
+resource cleanup remain incomplete. VM resources use
 reusable generation-bearing guest tokens, exact providers, one execution scope,
 reservations, invalidating close, and reverse emergency cleanup. Structured
 provider-close failure attachment, evaluator resource-operation dispatch, and
@@ -97,18 +98,20 @@ native owned-resource execution remain absent.
 
 ## Accepted Next Sequence
 
-1. Complete conditional and instruction-originated all-outcome cleanup plus
-   executable byte/resource glue beyond the Current static/dead SSA spine.
-2. Add resource-operation dispatch to the evaluator and extend resource host
-   execution through forced native tiers with bounded cleanup-failure
-   attachment.
-3. Integrate deterministic generation-safe unique storage into every engine.
-4. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
-5. Execute and verify the remaining exact island types through evaluator, VM,
-   forced baseline, and forced proof tiers with zero collector interaction and
-   fallback; scalar execution already satisfies this boundary.
-6. Expose compiler-derived plans, owners, loans, storage, and cleanup to agents.
-7. Ratchet remaining structural traced families downward.
+1. Complete conditional and instruction-originated all-outcome cleanup with
+   bounded cleanup-failure attachment.
+2. Add evaluator resource-operation dispatch and forced-native owned-resource
+   execution beyond borrowed standard input.
+3. Verify whole-aggregate affine transfer/drop for ownership-bearing products
+   and the `result path system-error` envelope.
+4. Migrate path and host byte boundaries, then remove transitional `buf`
+   atomically without aliases.
+5. Implement ordinary/sealed regions, pools, weak links, and an evidence-based
+   immutable-sharing policy.
+6. Integrate memory-plan identity into verified artifacts and expose complete
+   compiler-derived ownership evidence to agents.
+7. Ratchet all remaining structural traced families downward and remove
+   `GcHeap` only after the registry reaches zero.
 
 This order is an implementation contract, not a Current capability claim.
 
