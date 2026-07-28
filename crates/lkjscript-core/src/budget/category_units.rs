@@ -10,7 +10,10 @@ impl ResourceCategory {
             | Self::SemanticSessionInputBytes
             | Self::SemanticSessionOutputBytes
             | Self::SemanticSessionRetainedBytes
-            | Self::StagedPublicationBytes => "bytes",
+            | Self::StagedPublicationBytes
+            | Self::TaskDescriptorBytes
+            | Self::TaskResultBytes
+            | Self::WorkerScratchBytes => "bytes",
             Self::ParserWork
             | Self::ValidationWork
             | Self::PathWork
@@ -19,7 +22,8 @@ impl ResourceCategory {
             | Self::EnumRecursionWork
             | Self::UsefulnessSpecializationWork
             | Self::HoleSearchWork
-            | Self::SemanticSessionLifetimeFuel => "work-units",
+            | Self::SemanticSessionLifetimeFuel
+            | Self::SchedulerWork => "work-units",
             Self::LogicalAggregateConstructions => "semantic-events",
             _ => "records",
         }

@@ -154,4 +154,6 @@ impl fmt::Display for InvalidCeiling {
 impl std::error::Error for InvalidCeiling {}
 
 #[cfg(test)]
+mod scheduler_tests;
+#[cfg(test)]
 mod tests;

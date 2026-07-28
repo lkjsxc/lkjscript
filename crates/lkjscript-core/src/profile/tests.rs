@@ -76,7 +76,7 @@ fn profile_identity_is_content_addressed_and_stable() {
     assert_eq!(first.implementation_maxima_sha256.len(), 32);
     assert_eq!(first.ceilings_sha256.len(), 32);
     assert_eq!(first.host_lowered_ceilings_sha256, None);
-    assert_eq!(ResourceCategory::ALL.len(), 54);
+    assert_eq!(ResourceCategory::ALL.len(), 72);
     assert_eq!(
         ResourceCategory::ALL[24].as_str(),
         "protocol_response_bytes"
@@ -85,6 +85,11 @@ fn profile_identity_is_content_addressed_and_stable() {
     assert_eq!(
         ResourceCategory::ALL[53].as_str(),
         "logical_aggregate_constructions"
+    );
+    assert_eq!(ResourceCategory::ALL[54], ResourceCategory::WorkerThreads);
+    assert_eq!(
+        ResourceCategory::ALL[71],
+        ResourceCategory::DecisionTraceRecords
     );
 }
 

@@ -52,7 +52,7 @@ fn fact(id: &str, name_value: &str, value: &str) -> ContractFact {
     ContractFact::required(id, name_value, value)
 }
 
-const RESOURCE_CATEGORY_NAMES: [&str; 54] = [
+const RESOURCE_CATEGORY_NAMES: [&str; 72] = [
     "source-bytes",
     "source-units",
     "import-edges",
@@ -107,4 +107,60 @@ const RESOURCE_CATEGORY_NAMES: [&str; 54] = [
     "staged-publication-bytes",
     "staged-publication-nodes",
     "logical-aggregate-constructions",
+    "worker-threads",
+    "worker-groups",
+    "task-classes",
+    "task-instances",
+    "task-dependencies",
+    "task-access-records",
+    "task-scope-children",
+    "ready-queue-entries",
+    "task-descriptor-bytes",
+    "task-result-bytes",
+    "worker-scratch-bytes",
+    "scheduler-work",
+    "scheduler-decisions",
+    "scheduler-steals",
+    "scheduler-migrations",
+    "scheduler-wakeups",
+    "remote-release-records",
+    "decision-trace-records",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scheduler_resource_descriptor_names_and_order_are_exact() {
+        let expected = [
+            "worker-threads",
+            "worker-groups",
+            "task-classes",
+            "task-instances",
+            "task-dependencies",
+            "task-access-records",
+            "task-scope-children",
+            "ready-queue-entries",
+            "task-descriptor-bytes",
+            "task-result-bytes",
+            "worker-scratch-bytes",
+            "scheduler-work",
+            "scheduler-decisions",
+            "scheduler-steals",
+            "scheduler-migrations",
+            "scheduler-wakeups",
+            "remote-release-records",
+            "decision-trace-records",
+        ];
+        assert_eq!(&RESOURCE_CATEGORY_NAMES[54..], expected);
+        let descriptor = resource_categories();
+        let facts = &descriptor.items[0].facts[54..];
+        assert_eq!(facts.len(), expected.len());
+        for (index, (fact, name)) in facts.iter().zip(expected).enumerate() {
+            assert_eq!(fact.stable_id, format!("category-{:02}", index + 54));
+            assert_eq!(fact.name, name);
+            assert_eq!(fact.value, "checked monotonic count");
+        }
+    }
+}
