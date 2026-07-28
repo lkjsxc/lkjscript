@@ -1,13 +1,13 @@
 {
-  "commit": "52ddc5cbe3d95e455cd78afbab411a7a93c51596",
+  "commit": "3efc63a06f6908abea0ab4a994a32cf898590838",
   "records": [
     {
       "certificate-bytes": 164,
       "certificate-records": 4,
       "native-entries": 10001,
-      "p50-ns": 1029064,
-      "p95-ns": 1053521,
-      "p99-ns": 1078127,
+      "p50-ns": 1106901,
+      "p95-ns": 1154500,
+      "p99-ns": 1156144,
       "proof-workers": 1,
       "samples": 30,
       "vm-fallbacks": 0
@@ -16,9 +16,9 @@
       "certificate-bytes": 164,
       "certificate-records": 4,
       "native-entries": 10001,
-      "p50-ns": 1112261,
-      "p95-ns": 1154871,
-      "p99-ns": 1229762,
+      "p50-ns": 1130044,
+      "p95-ns": 1235944,
+      "p99-ns": 1243738,
       "proof-workers": 2,
       "samples": 30,
       "vm-fallbacks": 0
@@ -27,15 +27,15 @@
       "certificate-bytes": 164,
       "certificate-records": 4,
       "native-entries": 10001,
-      "p50-ns": 1127890,
-      "p95-ns": 1158238,
-      "p99-ns": 1178185,
+      "p50-ns": 1141496,
+      "p95-ns": 1267884,
+      "p99-ns": 1349087,
       "proof-workers": 4,
       "samples": 30,
       "vm-fallbacks": 0
     }
   ],
   "schema": "lkjscript.proof-discovery-measurement.v1",
-  "source_tsv_sha256": "fc66b11861d252139790a9a1e84dedc69cc9ac963fa11ab941e85cc0924d6f3e",
+  "source_tsv_sha256": "933bcc71897094f74051fb5bd683385c3358e5d78cb480e104cf4a104ea7e4bb",
   "warmup_samples": 3
 }

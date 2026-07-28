@@ -175,7 +175,8 @@
       "transfers": 11520
     }
   },
-  "proof_tsv_sha256": "fc66b11861d252139790a9a1e84dedc69cc9ac963fa11ab941e85cc0924d6f3e",
+  "proof_measurement_commit": "3efc63a06f6908abea0ab4a994a32cf898590838",
+  "proof_tsv_sha256": "933bcc71897094f74051fb5bd683385c3358e5d78cb480e104cf4a104ea7e4bb",
   "raw_tsv_sha256": {
     "cpu-pinned": "1f5f829443bad459cccf61eabb3517e674828ae0cc972d0b9294eea94ddd479f",
     "interference": "866b6ca5ab2423e678a698289be55b727dddf87a7f1eef54592cba2773f3bfe0",

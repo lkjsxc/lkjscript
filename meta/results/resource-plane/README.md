@@ -4,8 +4,9 @@
 
 This retained evidence compares every complete scheduler policy and affinity mode
 at commit `52ddc5cbe3d95e455cd78afbab411a7a93c51596` on one Linux x86-64 host.
-It also measures forced proof-edit discovery, owner transfers, false sharing,
-and a declared interference case. The evidence does not grant Linux scheduling
+Corrected one-task-per-function proof discovery was measured at commit
+`3efc63a06f6908abea0ab4a994a32cf898590838`. The suite also measures owner
+transfers, false sharing, and a declared interference case. The evidence does not grant Linux scheduling
 authority to lkjscript: Linux still schedules all worker threads system-wide.
 
 ## Protocol
@@ -76,9 +77,9 @@ certificates, 10,001 optimizing native entries, and zero VM fallbacks:
 
 | workers | p50 ns | p95 ns | p99 ns |
 | ---: | ---: | ---: | ---: |
-| 1 | 1,029,064 | 1,053,521 | 1,078,127 |
-| 2 | 1,112,261 | 1,154,871 | 1,229,762 |
-| 4 | 1,127,890 | 1,158,238 | 1,178,185 |
+| 1 | 1,106,901 | 1,154,500 | 1,156,144 |
+| 2 | 1,130,044 | 1,235,944 | 1,243,738 |
+| 4 | 1,141,496 | 1,267,884 | 1,349,087 |
 
 Therefore proof-edit discovery remains sequential by default. Forced
 multi-worker discovery remains available and uses deterministic static
@@ -113,8 +114,9 @@ cargo run --locked -p lkjscript-xtask -- quiet verify
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
 ```
 
-The first five benchmark commands ran at the retained measurement commit. The
-canonical local and Docker gates passed on the integrated implementation; full
+The policy and interference commands ran at the policy measurement commit; the
+proof command ran at its corrected implementation commit. The canonical local
+and Docker gates passed on the integrated implementation; full
 runtime acceptance used the command list in
 `docs/operations/verification/current-local-gates.md`.
 
@@ -133,4 +135,4 @@ output checksum; owner-transfer records show 256 transfers, 256 remote releases,
 - CPU pinned: `1f5f829443bad459cccf61eabb3517e674828ae0cc972d0b9294eea94ddd479f`
 - LLC masked: `b2d21f00c0eae215786396d7ee99dc54181594b8afc2f2ffe0cc85816a66d12b`
 - interference: `866b6ca5ab2423e678a698289be55b727dddf87a7f1eef54592cba2773f3bfe0`
-- proof discovery: `fc66b11861d252139790a9a1e84dedc69cc9ac963fa11ab941e85cc0924d6f3e`
+- proof discovery: `933bcc71897094f74051fb5bd683385c3358e5d78cb480e104cf4a104ea7e4bb`

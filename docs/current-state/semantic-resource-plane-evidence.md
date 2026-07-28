@@ -39,10 +39,10 @@ Accepted Target in the semantic resource plane contract.
 
 ## Measured Selection
 
-All six runtime policies, three affinity modes, six workloads, and forced proof
-worker counts were measured at commit
-`52ddc5cbe3d95e455cd78afbab411a7a93c51596`. Owner compute had the best median
-normalized parallel p50 and is the runtime default. Kernel-managed placement is
+All six runtime policies, three affinity modes, and six workloads were measured
+at commit `52ddc5cbe3d95e455cd78afbab411a7a93c51596`. Corrected per-function proof
+worker counts were measured at `3efc63a06f6908abea0ab4a994a32cf898590838`.
+Owner compute had the best median normalized parallel p50 and is the runtime default. Kernel-managed placement is
 the default because Linux retains placement authority and CPU pinning was highly
 sensitive to a declared interference probe. Sequential proof discovery was
 faster than 2- and 4-worker discovery on the retained one-function fixture.
