@@ -2,10 +2,14 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
-use crate::runtime_support::enqueue_many;
-use crate::{CpuSet, ResourceError, ResourceResult, TaskId, VerifiedTaskGraph, WorkerId};
+use crate::{
+    CpuSet, ResourceError, ResourceResult, SchedulePolicy, TaskId, VerifiedTaskGraph,
+    WorkerGroupId, WorkerId,
+};
 
+mod model;
 mod worker;
+pub use model::{RuntimeConfig, RuntimeMetrics, RuntimeReport, WorkerDescriptor};
 use worker::{validate_config, worker_loop};
 
 pub trait TaskExecutor: Sync {
@@ -14,11 +18,9 @@ pub trait TaskExecutor: Sync {
 
     fn execute(&self, task: TaskId, worker: WorkerId) -> Result<Self::Output, Self::Error>;
 }
-
 pub trait WorkerBinder: Sync {
     fn bind(&self, worker: WorkerId, allowed: &CpuSet) -> ResourceResult<()>;
 }
-
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoopWorkerBinder;
 impl WorkerBinder for NoopWorkerBinder {
@@ -26,39 +28,6 @@ impl WorkerBinder for NoopWorkerBinder {
         Ok(())
     }
 }
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorkerDescriptor {
-    pub id: WorkerId,
-    pub allowed: CpuSet,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RuntimeConfig {
-    pub workers: Vec<WorkerDescriptor>,
-    pub queue_capacity: usize,
-    pub spin_limit: usize,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RuntimeMetrics {
-    pub executed: u64,
-    pub steals: u64,
-    pub spins: u64,
-    pub parks: u64,
-    pub queue_high_water: usize,
-    pub active_workers: usize,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RuntimeReport<O, E> {
-    pub outputs: Vec<(TaskId, O)>,
-    pub failures: Vec<(TaskId, E)>,
-    pub selected_failure: Option<(TaskId, E)>,
-    pub cancelled: Vec<TaskId>,
-    pub metrics: RuntimeMetrics,
-}
-
 pub(crate) struct Control<O, E> {
     pub(crate) dependencies: BTreeMap<TaskId, usize>,
     pub(crate) successors: BTreeMap<TaskId, Vec<TaskId>>,
@@ -76,6 +45,11 @@ pub(crate) struct Shared<O, E> {
     pub(crate) control: Mutex<Control<O, E>>,
     pub(crate) wake: Condvar,
     pub(crate) queue_capacity: usize,
+    pub(crate) policy: SchedulePolicy,
+    pub(crate) worker_masks: Vec<CpuSet>,
+    pub(crate) worker_groups: Vec<WorkerGroupId>,
+    pub(crate) worker_numa: Vec<Option<u32>>,
+    pub(crate) preferred: BTreeMap<TaskId, usize>,
 }
 
 pub struct ScopedRuntime;
@@ -117,6 +91,29 @@ impl ScopedRuntime {
             }),
             wake: Condvar::new(),
             queue_capacity: config.queue_capacity,
+            policy: config.policy,
+            worker_masks: config
+                .workers
+                .iter()
+                .map(|worker| worker.allowed.clone())
+                .collect(),
+            worker_groups: config.workers.iter().map(|worker| worker.group).collect(),
+            worker_numa: config
+                .workers
+                .iter()
+                .map(|worker| worker.numa_node)
+                .collect(),
+            preferred: graph
+                .tasks()
+                .iter()
+                .map(|task| {
+                    let slot = match config.policy {
+                        SchedulePolicy::OwnerCompute => task.result_owner.slot,
+                        _ => task.id.slot,
+                    };
+                    (task.id, slot as usize % config.workers.len())
+                })
+                .collect(),
         });
         let roots: Vec<_> = graph
             .tasks()
@@ -124,7 +121,7 @@ impl ScopedRuntime {
             .filter(|task| task.dependencies.is_empty())
             .map(|task| task.id)
             .collect();
-        enqueue_many(&shared, 0, &roots)?;
+        crate::runtime_support::enqueue_ready(&shared, 0, &roots)?;
         thread::scope(|scope| -> ResourceResult<()> {
             let mut handles = Vec::new();
             for (index, descriptor) in config.workers.iter().enumerate() {

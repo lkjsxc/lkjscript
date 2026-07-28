@@ -65,10 +65,13 @@ pub fn optimize_scheduled_with_binder<B: WorkerBinder>(
             .map(|worker| WorkerDescriptor {
                 id: worker.worker,
                 allowed: worker.exact_mask.clone(),
+                group: worker.group,
+                numa_node: None,
             })
             .collect(),
         queue_capacity: ranges.len().max(1),
         spin_limit: 64,
+        policy: lkjscript_resource::SchedulePolicy::StaticPartition,
     };
     let report =
         ScopedRuntime::run(&task_graph, config, &executor, binder).map_err(resource_error)?;

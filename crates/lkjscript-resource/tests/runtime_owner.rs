@@ -64,11 +64,14 @@ fn config(workers: usize, capacity: usize) -> ResourceResult<RuntimeConfig> {
                 Ok(WorkerDescriptor {
                     id: WorkerId::new(slot as u32, 1),
                     allowed: cpus(&[slot as u32])?,
+                    group: WorkerGroupId::new(0, 1),
+                    numa_node: Some(0),
                 })
             })
             .collect::<ResourceResult<Vec<_>>>()?,
         queue_capacity: capacity,
         spin_limit: 0,
+        policy: SchedulePolicy::GlobalFifo,
     })
 }
 

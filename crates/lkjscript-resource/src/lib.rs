@@ -36,8 +36,8 @@ pub use runtime::{
 };
 pub use scheduler::{
     GlobalFifo, HierarchicalLocality, LocalWorkStealing, OwnerCompute, ReferenceReport,
-    ReferenceScheduler, SchedulingPolicy, SchedulingTrace, Sequential, StaticPartition, TaskState,
-    TraceEvent,
+    ReferenceScheduler, SchedulePolicy, SchedulingPolicy, SchedulingTrace, Sequential,
+    StaticPartition, TaskState, TraceEvent,
 };
 pub use topology::{
     CacheDomain, FactCertainty, FactSource, HardwareTopology, HostSchedulerRecord, Locality,

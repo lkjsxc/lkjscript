@@ -20,6 +20,30 @@ pub enum TaskState {
     Retired,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SchedulePolicy {
+    Sequential,
+    StaticPartition,
+    GlobalFifo,
+    #[default]
+    LocalWorkStealing,
+    HierarchicalLocality,
+    OwnerCompute,
+}
+
+impl SchedulePolicy {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Sequential => "sequential",
+            Self::StaticPartition => "static-partition",
+            Self::GlobalFifo => "global-fifo",
+            Self::LocalWorkStealing => "local-work-stealing",
+            Self::HierarchicalLocality => "hierarchical-locality",
+            Self::OwnerCompute => "owner-compute",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TraceEvent {
     pub task: TaskId,
@@ -104,5 +128,18 @@ policy!(OwnerCompute, |g: &VerifiedTaskGraph,
         .map_or(0, |node| node.result_owner.slot);
     (owner as u64, task)
 });
+
+impl SchedulingPolicy for SchedulePolicy {
+    fn rank(&self, graph: &VerifiedTaskGraph, task: TaskId, workers: usize) -> (u64, TaskId) {
+        match self {
+            Self::Sequential => Sequential.rank(graph, task, workers),
+            Self::StaticPartition => StaticPartition.rank(graph, task, workers),
+            Self::GlobalFifo => GlobalFifo.rank(graph, task, workers),
+            Self::LocalWorkStealing => LocalWorkStealing.rank(graph, task, workers),
+            Self::HierarchicalLocality => HierarchicalLocality.rank(graph, task, workers),
+            Self::OwnerCompute => OwnerCompute.rank(graph, task, workers),
+        }
+    }
+}
 
 pub struct ReferenceScheduler;

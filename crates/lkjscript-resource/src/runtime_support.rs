@@ -25,24 +25,64 @@ pub(crate) fn update_active<O, E>(shared: &Shared<O, E>, entering: bool) -> Reso
 pub(crate) fn take_task<O, E>(
     shared: &Shared<O, E>,
     worker: usize,
-) -> ResourceResult<Option<(TaskId, bool)>> {
+) -> ResourceResult<Option<(TaskId, Option<usize>)>> {
     let mut local = shared.queues[worker]
         .lock()
         .map_err(|_| ResourceError::new("poison", "worker queue poisoned"))?;
     if let Some(task) = local.pop_front() {
-        return Ok(Some((task, false)));
+        return Ok(Some((task, None)));
     }
     drop(local);
-    for offset in 1..shared.queues.len() {
-        let victim = (worker + offset) % shared.queues.len();
+    if matches!(
+        shared.policy,
+        crate::SchedulePolicy::Sequential | crate::SchedulePolicy::StaticPartition
+    ) {
+        return Ok(None);
+    }
+    let mut victims: Vec<_> = (0..shared.queues.len())
+        .filter(|victim| *victim != worker)
+        .collect();
+    if shared.policy == crate::SchedulePolicy::HierarchicalLocality {
+        victims.sort_by_key(|victim| {
+            let overlap = shared.worker_masks[worker]
+                .as_slice()
+                .iter()
+                .any(|cpu| shared.worker_masks[*victim].contains(*cpu));
+            (!overlap, *victim)
+        });
+    } else {
+        victims.sort_by_key(|victim| (victim + shared.queues.len() - worker) % shared.queues.len());
+    }
+    for victim in victims {
         let mut queue = shared.queues[victim]
             .lock()
             .map_err(|_| ResourceError::new("poison", "victim queue poisoned"))?;
         if let Some(task) = queue.pop_back() {
-            return Ok(Some((task, true)));
+            return Ok(Some((task, Some(victim))));
         }
     }
     Ok(None)
+}
+
+pub(crate) fn enqueue_ready<O, E>(
+    shared: &Shared<O, E>,
+    current: usize,
+    tasks: &[TaskId],
+) -> ResourceResult<()> {
+    for task in tasks {
+        let worker = match shared.policy {
+            crate::SchedulePolicy::Sequential | crate::SchedulePolicy::GlobalFifo => 0,
+            crate::SchedulePolicy::StaticPartition | crate::SchedulePolicy::OwnerCompute => {
+                shared.preferred.get(task).copied().unwrap_or(current)
+            }
+            crate::SchedulePolicy::LocalWorkStealing
+            | crate::SchedulePolicy::HierarchicalLocality => {
+                shared.preferred.get(task).copied().unwrap_or(current)
+            }
+        };
+        enqueue_many(shared, worker, &[*task])?;
+    }
+    Ok(())
 }
 
 pub(crate) fn enqueue_many<O, E>(

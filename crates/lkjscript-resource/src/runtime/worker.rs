@@ -2,11 +2,16 @@ use std::collections::BTreeSet;
 use std::thread;
 
 use super::{RuntimeConfig, Shared, TaskExecutor, WorkerBinder, WorkerDescriptor};
-use crate::runtime_support::{complete_task, enqueue_many, lock_control, take_task, update_active};
+use crate::runtime_support::{
+    complete_task, enqueue_ready, lock_control, take_task, update_active,
+};
 use crate::{ResourceError, ResourceResult};
 
 pub(super) fn validate_config(config: &RuntimeConfig) -> ResourceResult<()> {
-    if config.workers.is_empty() || config.queue_capacity == 0 {
+    if config.workers.is_empty()
+        || config.queue_capacity == 0
+        || config.policy == crate::SchedulePolicy::Sequential && config.workers.len() != 1
+    {
         return Err(ResourceError::new(
             "runtime-config",
             "workers and queue capacity required",
@@ -51,7 +56,7 @@ fn worker_tasks<E: TaskExecutor>(
     let mut spins = 0;
     let mut seen_epoch = 0;
     loop {
-        if let Some((task, stolen)) = take_task(shared, index)? {
+        if let Some((task, victim)) = take_task(shared, index)? {
             spins = 0;
             {
                 let mut control = lock_control(shared)?;
@@ -62,13 +67,27 @@ fn worker_tasks<E: TaskExecutor>(
                     return Err(ResourceError::new("exactly-once", "task dequeued twice"));
                 }
                 control.metrics.executed = control.metrics.executed.saturating_add(1);
-                if stolen {
+                if let Some(victim) = victim {
                     control.metrics.steals = control.metrics.steals.saturating_add(1);
+                    if shared.worker_groups[index] == shared.worker_groups[victim] {
+                        control.metrics.same_group_steals =
+                            control.metrics.same_group_steals.saturating_add(1);
+                    } else {
+                        control.metrics.cross_group_steals =
+                            control.metrics.cross_group_steals.saturating_add(1);
+                    }
+                    if matches!(
+                        (shared.worker_numa[index], shared.worker_numa[victim]),
+                        (Some(left), Some(right)) if left != right
+                    ) {
+                        control.metrics.cross_numa_steals =
+                            control.metrics.cross_numa_steals.saturating_add(1);
+                    }
                 }
             }
             let ready = complete_task(shared, task, executor.execute(task, worker))?;
             if !ready.is_empty() {
-                enqueue_many(shared, index, &ready)?;
+                enqueue_ready(shared, index, &ready)?;
             }
             continue;
         }
