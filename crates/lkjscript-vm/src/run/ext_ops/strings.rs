@@ -5,7 +5,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         x if x == Op::StrLen as u8 => {
             let v = vm.pop()?;
             let number = crate::host_ext::str_len(&vm.arena, v)?;
-            let value = vm.make_i64(number)?;
+            let value = Value::from_i64(number);
             vm.push(value);
             Ok(true)
         }
@@ -14,7 +14,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let string = vm.pop()?;
             let index = vm.as_i64(index)?;
             let number = crate::host_ext::str_ref(&vm.arena, string, index)?;
-            let value = vm.make_i64(number)?;
+            let value = Value::from_i64(number);
             vm.push(value);
             Ok(true)
         }

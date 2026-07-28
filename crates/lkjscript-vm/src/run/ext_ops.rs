@@ -20,7 +20,7 @@ fn push_i64_result<J: RuntimeTier>(
     kind: lkjscript_core::SystemErrorKind,
     result: Result<i64>,
 ) {
-    let result = result.and_then(|number| vm.make_i64(number));
+    let result = result.map(Value::from_i64);
     push_language_result(vm, kind, result);
 }
 

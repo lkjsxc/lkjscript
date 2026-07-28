@@ -2,14 +2,14 @@ use super::{allocation::estimated_object_bytes, GcHeap, GcStats};
 use crate::Value;
 
 impl GcHeap {
-    /// Mark/sweep from exact roots. Invalid/category checking belongs to the
-    /// typed VM/JIT adapters; unknown heap words simply do not retain storage.
+    /// Mark/sweep from exact roots. Only explicit legacy-traced values retain
+    /// storage; every other value category is ignored by the collector.
     pub fn collect(&mut self, roots: &[Value]) {
         let count = self.objs.len();
         let mut marked = vec![false; count];
         let mut pending = roots.to_vec();
         while let Some(value) = pending.pop() {
-            if let Some(index) = value.as_heap() {
+            if let Some(index) = value.as_legacy_traced() {
                 let index = index as usize;
                 if index < count && !marked[index] {
                     marked[index] = true;

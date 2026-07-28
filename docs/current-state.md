@@ -28,6 +28,7 @@
 <!-- LKJ-STATUS id=typed-holes status=current -->
 <!-- LKJ-STATUS id=typed-capabilities status=current -->
 <!-- LKJ-STATUS id=typed-resources status=accepted-contract -->
+<!-- LKJ-STATUS id=typed-vm-scalars status=current -->
 
 This file is the concise Current authority. Historical source generations,
 protocol experiments, candidate resource profiles, rejected performance
@@ -109,11 +110,14 @@ Git history. They do not provide aliases or acceptance fallbacks.
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
 - Linux x86-64 baseline acceptance requires real synchronous native calls. The
   forced proof JIT accepts only proof-checked optimized SSA and has no VM
-  fallback. A focused scalar group with direct calls, loops, bool, i64, and f64
-  proves both forced tiers have nonzero generated entries, zero fallback, no
-  collector-capable runtime call, empty exact root maps, and zero allocation,
-  collection, root, and barrier counters. VM scalar boxing remains separate, so
-  this is not the full value-island capability.
+  fallback.
+- The reference VM uses a safe closed 16-byte value with complete inline i64
+  and exact-bit f64 payloads. Scalar constants, stack/locals, operations,
+  conversions, calls, returns, host adapters, and JIT transitions allocate no
+  traced scalar objects. A focused scalar group with direct calls, loops, bool,
+  i64, and f64 proves both forced tiers have nonzero generated entries, zero
+  fallback, no collector-capable runtime call, empty exact root maps, and zero
+  allocation, collection, root, and barrier counters.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
@@ -127,8 +131,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   constant, and call. Separate exhaustive producer and verifier traversals run
   before an opaque checked-HIR wrapper can enter SSA. The direct-affine SSA
   inventory remains independently recomputed derived evidence.
-- `LKJ-MEMORY-TRACING-RATCHET` fails when the exact eleven registered
-  `HeapObj` families change without an accepted registry update. `lkjscript
+- `LKJ-MEMORY-TRACING-RATCHET` fails when the exact nine registered `HeapObj`
+  families change without an accepted registry update. `lkjscript
   memory traced [--json]` exposes the same sorted Current set. This intermediate
   gate does not claim that the runtime collector is removed.
 - Resource categories and profiles use full category/profile/maxima/ceiling

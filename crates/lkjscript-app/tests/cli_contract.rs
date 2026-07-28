@@ -91,5 +91,5 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     assert!(json.contains("\"schema\":\"lkjscript.memory-tracing-ratchet\""));
     assert!(json.contains("\"identity\":\"buf\",\"heap_variant\":\"Buf\""));
     assert!(json.contains("\"identity\":\"symbol\",\"heap_variant\":\"Symbol\""));
-    assert_eq!(json.matches("\"heap_variant\":").count(), 11);
+    assert_eq!(json.matches("\"heap_variant\":").count(), 9);
 }

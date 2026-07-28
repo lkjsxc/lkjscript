@@ -98,16 +98,10 @@ pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedVa
         NativeValue::Bool(value) => {
             OwnedValue::from_vm_snapshot(Value::from_bool(value), Vec::new())
         }
-        NativeValue::I64(value) => match Value::from_small_i64(value) {
-            Some(value) => OwnedValue::from_vm_snapshot(value, Vec::new()),
-            None => {
-                OwnedValue::from_vm_snapshot(Value::from_heap(0), vec![Some(HeapObj::Int(value))])
-            }
-        },
-        NativeValue::F64Bits(bits) => OwnedValue::from_vm_snapshot(
-            Value::from_heap(0),
-            vec![Some(HeapObj::Float(f64::from_bits(bits)))],
-        ),
+        NativeValue::I64(value) => OwnedValue::from_vm_snapshot(Value::from_i64(value), Vec::new()),
+        NativeValue::F64Bits(bits) => {
+            OwnedValue::from_vm_snapshot(Value::from_f64_bits(bits), Vec::new())
+        }
         NativeValue::Reference(_) => Err(lkjscript_core::Error::msg(
             "scalar JIT cannot return a native reference",
         )),
@@ -121,5 +115,31 @@ pub fn native_type(ty: &SsaType) -> Option<ValueType> {
         SsaType::I64 => Some(ValueType::I64),
         SsaType::F64 => Some(ValueType::F64),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detached_native_scalars_retain_exact_payload_without_snapshot_objects() {
+        for value in [i64::MIN, -1, 0, 1, i64::MAX] {
+            let owned = owned_scalar(NativeValue::I64(value)).expect("owned I64");
+            assert_eq!(owned.as_i64(), Some(value));
+            assert_eq!(owned.snapshot_object_count(), 0);
+        }
+        for bits in [
+            0_u64,
+            1_u64 << 63,
+            0x7ff0_0000_0000_0000,
+            0x7ff8_0000_0000_0042,
+            0xfff8_dead_beef_cafe,
+        ] {
+            let owned = owned_scalar(NativeValue::F64Bits(bits)).expect("owned F64");
+            assert_eq!(owned.as_f64_bits(), Some(bits));
+            assert_eq!(owned.snapshot_object_count(), 0);
+        }
     }
 }

@@ -21,7 +21,7 @@ canonical source -> typed HIR -> VerifiedProgram SSA
 The adapter consumes only `VerifiedProgram`. It does not read source syntax,
 HIR, or bytecode. One installed group contains the requested function and its complete reachable
 direct-call SCC closure. Compatible generated callers use direct relocated
-native calls and unboxed I64/F64/Bool/Unit values. Forced reference results are
+native calls and exact I64/F64/Bool/Unit values. Forced reference results are
 marshaled as owned `GcHeap` snapshots; auto does not transfer references.
 
 Current generated coverage is Unit, Bool, I64, F64, Str, legacy Buf, nominal

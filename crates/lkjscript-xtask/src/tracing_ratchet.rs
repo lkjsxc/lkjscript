@@ -81,8 +81,16 @@ mod tests {
 
     #[test]
     fn parser_retains_only_enum_variants() {
-        let source = "pub enum HeapObj {\n    Int(i64),\n    Pair {\n        car: Value,\n    },\n}\n\nimpl HeapObj {}";
-        assert_eq!(heap_variants(source), Ok(vec!["Int".into(), "Pair".into()]));
+        let source = concat!(
+            "pub enum HeapObj {\n",
+            "    Builtin(u16),\n",
+            "    Pair {\n        car: Value,\n    },\n",
+            "}\n\nimpl HeapObj {}",
+        );
+        assert_eq!(
+            heap_variants(source),
+            Ok(vec!["Builtin".into(), "Pair".into()])
+        );
     }
 
     #[test]

@@ -46,7 +46,7 @@ fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let descriptor = vm.read_u16()? as usize;
     let field_ref = product_field_ref(vm, descriptor)?;
     let value = vm.pop()?;
-    if value.as_heap().is_none() {
+    if value.as_legacy_traced().is_none() {
         return Err(Error::msg("product field access expects Product"));
     }
     let field = match vm.arena.get(value)? {
@@ -68,7 +68,7 @@ fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let field_ref = product_field_ref(vm, descriptor)?;
     let replacement = vm.pop()?;
     let value = vm.pop()?;
-    if value.as_heap().is_none() {
+    if value.as_legacy_traced().is_none() {
         return Err(Error::msg("product field replacement expects Product"));
     }
     let mut fields = match vm.arena.get(value)? {

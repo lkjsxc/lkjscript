@@ -19,9 +19,7 @@ pub(in crate::run) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Re
         }
         Some(Op::F64FromI64Rounded) => {
             let input = pop_i64(vm)?;
-            let value = vm
-                .arena
-                .alloc(HeapObj::Float(lkjscript_core::f64_from_i64_rounded(input)))?;
+            let value = Value::from_f64_bits(lkjscript_core::f64_from_i64_rounded(input).to_bits());
             vm.push(value);
             Ok(())
         }
@@ -47,10 +45,8 @@ fn pop_i64<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<i64> {
 
 fn pop_f64<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<f64> {
     let value = vm.pop()?;
-    match vm.arena.get(value)? {
-        HeapObj::Float(value) => Ok(*value),
-        _ => Err(Error::msg("F64-to-I64 conversion expects F64")),
-    }
+    vm.as_f64(value)
+        .map_err(|_| Error::msg("F64-to-I64 conversion expects F64"))
 }
 
 fn push_f64_result<J: RuntimeTier>(
@@ -59,7 +55,7 @@ fn push_f64_result<J: RuntimeTier>(
 ) -> Result<()> {
     let result = match result {
         Ok(value) => {
-            let value = vm.arena.alloc(HeapObj::Float(value))?;
+            let value = Value::from_f64_bits(value.to_bits());
             result_value(vm, 0, value)?
         }
         Err(error) => error_result(vm, error)?,
@@ -74,7 +70,7 @@ fn push_i64_result<J: RuntimeTier>(
 ) -> Result<()> {
     let result = match result {
         Ok(value) => {
-            let value = vm.make_i64(value)?;
+            let value = Value::from_i64(value);
             result_value(vm, 0, value)?
         }
         Err(error) => error_result(vm, error)?,

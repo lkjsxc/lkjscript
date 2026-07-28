@@ -12,13 +12,13 @@ next repairs.
 ## Current Shape
 
 - Dense bytecode with contiguous value and frame stacks.
-- Tagged `u64` immediates for `unit`, typed empty lists, `option` none,
-  booleans, signed 61-bit integers, heap references, and opaque resource tokens; all-zero
-  is private invalid/uninitialized state, not a language value.
-- Arena objects for wide `i64` values, `f64` values, strings, symbols, pairs,
-  closures, buffers, `option` some wrappers, language `result` wrappers, immutable
-  nominal products, and boxed enums storing validated layout identity, physical
-  tag, and only the active initialized payload.
+- Safe closed 16-byte `Value` records with a 64-bit payload and explicit
+  metadata for private invalid storage, unit, bool, complete i64, exact-bit f64,
+  typed empty lists, capabilities, resources, legacy-traced references, and
+  opaque unique keys.
+- Arena objects for strings, symbols, pairs, closures, buffers, `option` and
+  language `result` wrappers, immutable nominal products, and boxed enums storing
+  validated layout identity, physical tag, and only active initialized payload.
 - `i64`-preserving constants, checked `i64` arithmetic, IEEE `f64` arithmetic,
   exact value/object/`f64`-bit equality, structural list equality
   bounded to 1,000,000 pair nodes, immutable product construction/access/update,
@@ -93,8 +93,8 @@ The numeric representation and behavior are specified by
 
 Typed SSA and callable native execution consume the compiler's same verified
 semantic program and structured outcome/resource configuration. The Linux
-x86-64 allocation-free scalar subset uses exact VM/native boxing only at VM
-entries and returns; compatible native calls remain unboxed. Forced mode
+x86-64 scalar subset transfers complete i64 values and exact f64 bits directly
+at VM entries, calls, and returns without scalar heap allocation. Forced mode
 compiles before main effects and never falls back. Auto observes bounded
 function entries and uses installed code only on later calls. The complete
 subset and unsupported reference/allocation/host boundary are in

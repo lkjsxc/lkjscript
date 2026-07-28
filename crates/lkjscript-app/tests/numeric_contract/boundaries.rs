@@ -1,4 +1,4 @@
-use super::support::{assert_scalar, program, Expected};
+use super::support::{assert_allocation_free_scalar, assert_scalar, program, Expected};
 use super::*;
 
 #[test]
@@ -16,7 +16,7 @@ fn rounded_i64_boundaries_preserve_exact_f64_bits_on_four_engines() {
     for (value, bits) in cases {
         let expression =
             format!("convert-i64-to-f64-rounded/\n{value}\n/convert-i64-to-f64-rounded");
-        assert_scalar(&program("f64", &expression), Expected::F64(bits));
+        assert_allocation_free_scalar(&program("f64", &expression), Expected::F64(bits));
     }
 }
 

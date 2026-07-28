@@ -46,15 +46,7 @@ fn bulk_file_io_is_bounded_exact_and_reports_progress() -> std::io::Result<()> {
         MAX_BULK_IO_BYTES as i64 + 1,
     )
     .is_err());
-    assert!(sys_read_into(
-        &mut arena,
-        &handles,
-        Value::from_small_i64(1).expect("integer"),
-        buffer,
-        0,
-        0,
-    )
-    .is_err());
+    assert!(sys_read_into(&mut arena, &handles, Value::from_i64(1), buffer, 0, 0,).is_err());
     handles.close(input_handle).expect("close input");
     assert!(sys_read_into(&mut arena, &handles, input_handle, buffer, 0, 0).is_err());
 

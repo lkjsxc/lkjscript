@@ -29,42 +29,29 @@ impl GcHeap {
         self.publish_with_layout(object, None)
     }
 
-    /// Check the complete generated enum publication before any scalar box or
-    /// enum object is published. The caller executes synchronously after this
-    /// check, so the exact aggregate reservation cannot be consumed elsewhere.
+    /// Check one complete generated enum publication. The caller executes
+    /// synchronously after this check, so the exact aggregate reservation
+    /// cannot be consumed elsewhere.
     #[doc(hidden)]
-    pub fn preflight_enum_allocations(
+    pub fn preflight_enum_allocation(
         &self,
-        scalar_boxes: usize,
         active_fields: usize,
     ) -> std::result::Result<(), GcLimit> {
-        let allocation_count = scalar_boxes.checked_add(1).ok_or(GcLimit::Allocations)?;
-        let allocation_count_u64 =
-            u64::try_from(allocation_count).map_err(|_| GcLimit::Allocations)?;
         if self
             .stats
             .allocations
-            .checked_add(allocation_count_u64)
+            .checked_add(1)
             .is_none_or(|total| total > self.config.max_allocations)
         {
             return Err(GcLimit::Allocations);
         }
-        let final_index = self
-            .objs
-            .len()
-            .checked_add(allocation_count)
-            .and_then(|length| length.checked_sub(1))
-            .ok_or(GcLimit::Allocations)?;
-        if !stable_index_available(final_index) {
+        if !stable_index_available(self.objs.len()) {
             return Err(GcLimit::Allocations);
         }
-        let base_bytes = std::mem::size_of::<HeapObj>()
-            .checked_mul(allocation_count)
-            .ok_or(GcLimit::HeapBytes)?;
         let payload_bytes = std::mem::size_of::<Value>()
             .checked_mul(active_fields)
             .ok_or(GcLimit::HeapBytes)?;
-        let added = base_bytes
+        let added = std::mem::size_of::<HeapObj>()
             .checked_add(payload_bytes)
             .ok_or(GcLimit::HeapBytes)?;
         if self
@@ -152,7 +139,7 @@ impl GcHeap {
         // to prevent a swept stale handle from resolving to a later object.
         self.objs.push(Some(object));
         self.layout_tags.push(layout);
-        Ok(Value::from_heap(index))
+        Ok(Value::from_legacy_traced(index))
     }
 }
 
@@ -177,7 +164,7 @@ pub(super) fn estimated_object_bytes(object: &HeapObj) -> usize {
     let base = std::mem::size_of::<HeapObj>();
     let dynamic = match object {
         HeapObj::Str(text) | HeapObj::Symbol(text) => text.capacity(),
-        HeapObj::Pair { .. } | HeapObj::Int(_) | HeapObj::Float(_) | HeapObj::Builtin(_) => 0,
+        HeapObj::Pair { .. } | HeapObj::Builtin(_) => 0,
         HeapObj::Closure { captures, .. } => captures
             .capacity()
             .saturating_mul(std::mem::size_of::<Value>()),

@@ -29,15 +29,21 @@ fn boxed_enum_traces_only_active_initialized_payload() {
 }
 
 #[test]
-fn enum_preflight_reserves_complete_scalar_box_and_object_count() {
-    let heap = GcHeap::new(GcConfig {
-        max_allocations: 2,
+fn enum_preflight_reserves_exactly_one_object() {
+    let allowed = GcHeap::new(GcConfig {
+        max_allocations: 1,
         ..GcConfig::default()
     });
-    assert_eq!(heap.preflight_enum_allocations(1, 1), Ok(()));
+    assert_eq!(allowed.preflight_enum_allocation(1), Ok(()));
+    assert_eq!(allowed.total_allocations(), 0);
+
+    let denied = GcHeap::new(GcConfig {
+        max_allocations: 0,
+        ..GcConfig::default()
+    });
     assert_eq!(
-        heap.preflight_enum_allocations(2, 1),
+        denied.preflight_enum_allocation(1),
         Err(GcLimit::Allocations)
     );
-    assert_eq!(heap.total_allocations(), 0);
+    assert_eq!(denied.total_allocations(), 0);
 }

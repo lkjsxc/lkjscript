@@ -28,7 +28,7 @@ fn concrete_generic_enum_layouts_reject_cross_handles() {
         .expect("first generic enum layout allocation");
     let reference = lkjscript_native::NativeReference::new(
         second,
-        u64::from(value.as_heap().expect("heap handle")) + 1,
+        u64::from(value.as_legacy_traced().expect("heap handle")) + 1,
     );
     assert_eq!(
         super::native_reference_value(&heap, reference),

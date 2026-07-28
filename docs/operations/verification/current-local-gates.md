@@ -68,8 +68,9 @@ an ownership/reference support rejection.
 
 Workspace tests include focused numeric and explicit-equality
 parser/type/HIR/SSA/bytecode/VM/host boundaries, removed equality vocabulary
-and opcodes, and compiled source-to-VM execution across immediate and boxed I64
-values. Typed-SSA tests directly cover malformed IDs, use-before-definition,
+and opcodes, and compiled source-to-VM execution across complete inline I64 and
+exact-bit F64 values with zero scalar heap allocation. Typed-SSA tests directly
+cover malformed IDs, use-before-definition,
 dominance/edge/loop/effect failures; deterministic isolated and combined
 passes; exact bounded evaluation of scalar/control/calls/recursion/local
 mutation/products/Option/Result/lists/strings/buffers/traps/exits; explicit

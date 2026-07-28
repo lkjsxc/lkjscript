@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn object_identity_is_limited_to_buffers_and_handles() {
+fn object_identity_is_limited_to_buffers_and_resources() {
     let mut vm = test_vm();
     let buffer = test_alloc(&mut vm, HeapObj::Buf(vec![1, 2, 3]));
     let clone = test_alloc(&mut vm, HeapObj::Buf(vec![1, 2, 3]));
@@ -10,14 +10,14 @@ fn object_identity_is_limited_to_buffers_and_handles() {
     assert!(compare(
         &mut vm,
         Op::SameObject,
-        Value::from_handle(7),
-        Value::from_handle(7)
+        Value::from_resource(7),
+        Value::from_resource(7)
     ));
     assert!(!compare(
         &mut vm,
         Op::SameObject,
-        Value::from_handle(7),
-        Value::from_handle(8)
+        Value::from_resource(7),
+        Value::from_resource(8)
     ));
 
     let integer = test_i64(&mut vm, 1);

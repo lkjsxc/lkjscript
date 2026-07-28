@@ -62,6 +62,41 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
     }
 }
 
+pub(super) fn assert_allocation_free_scalar(source: &str, expected: Expected) {
+    let program = compile_source(source, "inline-scalar.lkjscript", &Limits::default())
+        .expect("compile inline scalar");
+    let eval_config = EvalConfig {
+        max_allocations: 0,
+        ..EvalConfig::default()
+    };
+    assert_eval(evaluate_ssa(program.ssa(), &eval_config), expected);
+    let execution = ExecutionConfig {
+        max_allocations: 0,
+        ..ExecutionConfig::default()
+    };
+    assert_owned(
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &execution,
+        ),
+        expected,
+    );
+    for result in [
+        execute_forced(program.ssa(), &execution, JitConfig::default())
+            .expect("forced baseline inline scalar"),
+        execute_optimizing(program.ssa(), &execution, JitConfig::default())
+            .expect("forced proof inline scalar"),
+    ] {
+        assert_owned(result.outcome, expected);
+        assert!(result.stats.native_entries > 0);
+        assert_eq!(result.stats.vm_fallbacks, 0);
+        assert_eq!(result.stats.allocations, 0);
+        assert_eq!(result.stats.runtime_heap_attempts, 0);
+        assert_eq!(result.stats.runtime_heap_successes, 0);
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum Expected {
     Bool(bool),
@@ -91,6 +126,7 @@ fn assert_owned(outcome: ExecutionOutcome, expected: Expected) {
     match expected {
         Expected::Bool(expected) => assert_eq!(actual.as_bool(), Some(expected)),
         Expected::I64(expected) => assert_eq!(actual.as_i64(), Some(expected)),
-        Expected::F64(expected) => assert_eq!(actual.as_f64().map(f64::to_bits), Some(expected)),
+        Expected::F64(expected) => assert_eq!(actual.as_f64_bits(), Some(expected)),
     }
+    assert_eq!(actual.snapshot_object_count(), 0);
 }

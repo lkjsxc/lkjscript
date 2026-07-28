@@ -156,7 +156,7 @@ benefit is possible before OSR; Brainfuck Mandelbrot interpreted by lkjscript
 is the principal long-running-loop acceptance workload.
 ## Native ABI And Representations
 
-Statically known native values do not use the universal tagged VM `Value` in
+Statically known native values do not use the universal closed VM `Value` in
 hot paths:
 
 - I64: native 64-bit integer;
@@ -168,7 +168,8 @@ hot paths:
 - Option: a proven typed niche or explicit tag;
 - heap references: typed references visible to precise stack maps.
 
-Explicit adapters own VM/native and runtime/native transitions. Native callers
-call compiled callees directly without repeated boxing where compatible. Host
+Explicit adapters own VM/native and runtime/native transitions and preserve
+scalar categories and bits without collector allocation. Native callers call
+compiled callees directly where compatible. Host
 operations use a small versioned runtime ABI rather than embedding Rust
 implementation details in generated code.

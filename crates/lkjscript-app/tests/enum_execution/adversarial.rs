@@ -24,7 +24,7 @@ fn two_payload_variants() -> String {
 }
 
 #[test]
-fn enum_heap_preflight_rejects_before_partial_scalar_box_publication() {
+fn enum_heap_preflight_rejects_before_object_publication() {
     let float_source = source().replace("i64", "f64").replace("42", "1.5");
     let compiled = compile_source(
         &float_source,
@@ -33,7 +33,7 @@ fn enum_heap_preflight_rejects_before_partial_scalar_box_publication() {
     )
     .expect("compile F64 enum");
     let execution = ExecutionConfig {
-        max_allocations: 1,
+        max_allocations: 0,
         ..ExecutionConfig::default()
     };
     for result in [

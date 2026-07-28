@@ -26,11 +26,12 @@ The set may decrease in an ordinary accepted migration. It may increase only
 through an explicit accepted architectural reversal with retained evidence and
 a changed ratchet contract. Analysis failure is never such a reversal.
 
-## Initial Migration
+## Current Migration
 
-The first island removes scalar boxes, transitional buffers, byte values, and
-paths from the allowed set. Structural values remain exact registered legacy
-families. Collector infrastructure remains available only to those families.
+Complete-range i64 and exact-bit f64 scalar families have left the allowed set.
+Transitional buffers, paths, and structural values remain exact registered
+legacy families. Collector infrastructure remains available only to those
+families, and the complete collector-free value island is not yet Current.
 
 ## Final Gate
 

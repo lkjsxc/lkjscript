@@ -58,4 +58,4 @@ pub use unique::{
     UniqueStoreStats,
 };
 pub use validation::{validate_chunk, ValidatedChunk};
-pub use value::{CapabilityKind, HeapObj, ResourceKind, Value, MAX_SMALL_I64, MIN_SMALL_I64};
+pub use value::{CapabilityKind, HeapObj, ResourceKind, Value};

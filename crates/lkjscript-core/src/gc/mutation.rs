@@ -13,7 +13,7 @@ impl GcHeap {
         mutation: impl FnOnce(&mut HeapObj) -> Result<T>,
     ) -> Result<T> {
         let index = value
-            .as_heap()
+            .as_legacy_traced()
             .ok_or_else(|| Error::msg("expected heap value"))? as usize;
         let source = self
             .objs
@@ -84,9 +84,7 @@ impl GcHeap {
 
 fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
     match (old, new) {
-        (HeapObj::Int(_), HeapObj::Int(_))
-        | (HeapObj::Float(_), HeapObj::Float(_))
-        | (HeapObj::Str(_), HeapObj::Str(_))
+        (HeapObj::Str(_), HeapObj::Str(_))
         | (HeapObj::Symbol(_), HeapObj::Symbol(_))
         | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
         | (HeapObj::Closure { .. }, HeapObj::Closure { .. })
@@ -130,8 +128,6 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
         clone
     }
     match object {
-        HeapObj::Int(value) => HeapObj::Int(*value),
-        HeapObj::Float(value) => HeapObj::Float(*value),
         HeapObj::Str(text) => HeapObj::Str(clone_string(text, text.capacity())),
         HeapObj::Symbol(text) => HeapObj::Symbol(clone_string(text, text.capacity())),
         HeapObj::Pair { car, cdr } => HeapObj::Pair {

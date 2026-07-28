@@ -80,7 +80,7 @@ maintenance. Maturity alone neither adopts nor rejects a backend.
 ## VM Portfolio Experiment
 
 A validated typed-register or typed-slot VM may replace or supplement the
-Current tagged stack VM only after a complete candidate exists. It must provide
+Current closed-value stack VM only after a complete candidate exists. It must provide
 raw full-range integer slots, exact floating bits, reference/capability slots,
 typed block/register metadata, deterministic validation/metering, and direct
 lowering from semantic SSA. Stack, register, and hybrid candidates are compared

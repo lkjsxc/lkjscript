@@ -50,21 +50,12 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         self.stack.push(value);
     }
 
-    pub(crate) fn make_i64(&mut self, number: i64) -> Result<Value> {
-        match Value::from_small_i64(number) {
-            Some(value) => Ok(value),
-            None => self.arena.alloc(HeapObj::Int(number)),
-        }
+    pub(crate) fn as_i64(&self, value: Value) -> Result<i64> {
+        value.as_i64().ok_or_else(|| Error::msg("expected I64"))
     }
 
-    pub(crate) fn as_i64(&self, value: Value) -> Result<i64> {
-        if let Some(number) = value.as_small_i64() {
-            return Ok(number);
-        }
-        match value.as_heap().and_then(|_| self.arena.get(value).ok()) {
-            Some(HeapObj::Int(number)) => Ok(*number),
-            _ => Err(Error::msg("expected I64")),
-        }
+    pub(crate) fn as_f64(&self, value: Value) -> Result<f64> {
+        value.as_f64().ok_or_else(|| Error::msg("expected F64"))
     }
 
     pub(crate) fn pop(&mut self) -> Result<Value> {
@@ -116,11 +107,11 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             .get(id)
             .ok_or_else(|| Error::msg("bad const"))?
         {
-            Constant::I64(number) => self.make_i64(*number),
-            Constant::F64(number) => self.arena.alloc(HeapObj::Float(*number)),
+            Constant::I64(number) => Ok(Value::from_i64(*number)),
+            Constant::F64(number) => Ok(Value::from_f64_bits(number.to_bits())),
             Constant::Str(text) => self.arena.alloc(HeapObj::Str(text.clone())),
             Constant::Symbol(symbol) => self.arena.alloc(HeapObj::Symbol(symbol.clone())),
-            Constant::Proto(proto) => self.make_i64(i64::from(*proto)),
+            Constant::Proto(proto) => Ok(Value::from_i64(i64::from(*proto))),
         }
     }
 }

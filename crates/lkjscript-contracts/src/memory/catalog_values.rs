@@ -1,5 +1,5 @@
 use super::templates::{borrowed, inline, traced};
-use super::templates_scalar::mixed_scalar;
+use super::templates_scalar::inline_scalar;
 use super::templates_special::{affine_buffer, inert_value};
 use super::MemoryObligation;
 
@@ -58,15 +58,15 @@ pub(super) const VALUES: &[MemoryObligation] = &[
         "main grants and explicit parameters",
         "capability confinement and malformed bytecode suites",
     ),
-    mixed_scalar(
+    inline_scalar(
         "f64",
-        "native/evaluator bits; VM immediate NaN payload or HeapObj::Float",
+        "exact IEEE-754 bits in typed evaluator, VM, and native values",
         "constants and numeric operations",
         "numeric differential and conversion suites",
     ),
-    mixed_scalar(
+    inline_scalar(
         "i64",
-        "native/evaluator i64; VM tagged small integer or HeapObj::Int",
+        "complete signed bits in typed evaluator, VM, and native values",
         "constants and numeric operations",
         "complete range and native scalar suites",
     ),

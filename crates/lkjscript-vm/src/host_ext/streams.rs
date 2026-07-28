@@ -41,7 +41,7 @@ impl ResourceTable {
 
     pub fn read_byte(&mut self, handle: Value) -> Result<i64> {
         let mut buffer = [0_u8; 1];
-        let count = if handle.as_handle() == Some(STDIN_TOKEN) {
+        let count = if handle.as_resource() == Some(STDIN_TOKEN) {
             lkjscript_sys::read_fd(lkjscript_sys::STDIN_FD, &mut buffer)
                 .map_err(|error| Error::msg(format!("sys-read-byte: {error}")))?
         } else {

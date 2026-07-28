@@ -36,7 +36,7 @@ impl Drop for TempFile {
 #[test]
 fn polling_rejects_invalid_handles_and_timeouts() {
     let handles = ResourceTable::default();
-    let integer = Value::from_small_i64(1).expect("small integer");
+    let integer = Value::from_i64(1);
     assert!(sys_poll(&handles, integer, 0).is_err());
     assert!(sys_poll(&handles, ResourceTable::stdin_handle(), -1).is_err());
 }
@@ -81,7 +81,7 @@ fn buffers_convert_exact_utf8_without_replacement() {
                 *physical_tag,
                 lkjscript_core::Utf8ErrorKind::MissingContinuation.physical_tag()
             );
-            assert_eq!(active_payload[0].as_small_i64(), Some(0));
+            assert_eq!(active_payload[0].as_i64(), Some(0));
         }
         other => panic!("malformed Utf8Error: {other:?}"),
     }

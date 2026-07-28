@@ -19,8 +19,8 @@ pub fn outcome(outcome: &ExecutionOutcome) -> String {
                 ("f64-bits", format!("0x{:016x}", value.to_bits()))
             } else if let Some(value) = value.as_str() {
                 ("str-or-symbol", value.to_string())
-            } else if let Some(value) = value.as_handle() {
-                ("handle", value.to_string())
+            } else if let Some(value) = value.as_resource() {
+                ("resource", value.to_string())
             } else if let Some(value) = value.product_id() {
                 ("product", value.raw().to_string())
             } else {

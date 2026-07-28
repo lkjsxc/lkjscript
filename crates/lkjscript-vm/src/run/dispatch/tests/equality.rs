@@ -18,16 +18,16 @@ fn value_equality_is_exact_and_category_checked() {
     let wide_right = test_i64(&mut vm, i64::MAX);
     assert!(compare(&mut vm, Op::EqualValue, wide_left, wide_right));
 
-    let positive_zero = test_alloc(&mut vm, HeapObj::Float(0.0));
-    let negative_zero = test_alloc(&mut vm, HeapObj::Float(-0.0));
+    let positive_zero = Value::from_f64_bits(0.0_f64.to_bits());
+    let negative_zero = Value::from_f64_bits((-0.0_f64).to_bits());
     assert!(compare(
         &mut vm,
         Op::EqualValue,
         positive_zero,
         negative_zero
     ));
-    let nan_left = test_alloc(&mut vm, HeapObj::Float(f64::NAN));
-    let nan_right = test_alloc(&mut vm, HeapObj::Float(f64::NAN));
+    let nan_left = Value::from_f64_bits(f64::NAN.to_bits());
+    let nan_right = Value::from_f64_bits(f64::NAN.to_bits());
     assert!(!compare(&mut vm, Op::EqualValue, nan_left, nan_right));
 
     let text_left = test_alloc(&mut vm, HeapObj::Str("same".into()));
@@ -98,8 +98,8 @@ fn generic_option_and_result_value_equality_is_structural() {
 #[test]
 fn f64_bit_equality_distinguishes_signed_zero_and_accepts_equal_nan_bits() {
     let mut vm = test_vm();
-    let positive_zero = test_alloc(&mut vm, HeapObj::Float(0.0));
-    let negative_zero = test_alloc(&mut vm, HeapObj::Float(-0.0));
+    let positive_zero = Value::from_f64_bits(0.0_f64.to_bits());
+    let negative_zero = Value::from_f64_bits((-0.0_f64).to_bits());
     assert!(!compare(
         &mut vm,
         Op::F64BitsEqual,
@@ -107,12 +107,9 @@ fn f64_bit_equality_distinguishes_signed_zero_and_accepts_equal_nan_bits() {
         negative_zero
     ));
     let bits = 0x7ff8_0000_0000_0042_u64;
-    let nan_left = test_alloc(&mut vm, HeapObj::Float(f64::from_bits(bits)));
-    let nan_right = test_alloc(&mut vm, HeapObj::Float(f64::from_bits(bits)));
+    let nan_left = Value::from_f64_bits(bits);
+    let nan_right = Value::from_f64_bits(bits);
     assert!(compare(&mut vm, Op::F64BitsEqual, nan_left, nan_right));
-    let different_nan = test_alloc(
-        &mut vm,
-        HeapObj::Float(f64::from_bits(bits.wrapping_add(1))),
-    );
+    let different_nan = Value::from_f64_bits(bits.wrapping_add(1));
     assert!(!compare(&mut vm, Op::F64BitsEqual, nan_left, different_nan));
 }

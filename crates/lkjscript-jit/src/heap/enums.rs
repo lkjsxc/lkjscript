@@ -92,16 +92,8 @@ impl JitHeapServices<'_> {
     }
 
     fn preflight_enum_heap(&mut self, arguments: &[NativeValue]) -> Result<(), NativeServiceError> {
-        let scalar_boxes = arguments
-            .iter()
-            .filter(|value| match value {
-                NativeValue::F64Bits(_) => true,
-                NativeValue::I64(value) => Value::from_small_i64(*value).is_none(),
-                _ => false,
-            })
-            .count();
         self.heap
-            .preflight_enum_allocations(scalar_boxes, arguments.len())
+            .preflight_enum_allocation(arguments.len())
             .map_err(|limit| {
                 self.last_resource = Some(match limit {
                     GcLimit::Allocations => ResourceLimitKind::Allocations,

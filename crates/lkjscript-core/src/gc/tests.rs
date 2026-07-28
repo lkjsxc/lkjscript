@@ -88,7 +88,7 @@ fn swept_same_layout_handle_is_never_reused() {
     let current = heap
         .try_alloc_with_layout(HeapObj::Buf(vec![2]), 77)
         .expect("second typed allocation");
-    assert_ne!(stale.as_heap(), current.as_heap());
+    assert_ne!(stale.as_legacy_traced(), current.as_legacy_traced());
     assert!(heap.get(stale).is_err());
     assert!(matches!(heap.get(current), Ok(HeapObj::Buf(bytes)) if bytes == &[2]));
 }

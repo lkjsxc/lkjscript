@@ -2,7 +2,7 @@ use super::*;
 
 impl ResourceTable {
     pub(crate) fn raw_fd(&self, handle: Value, operation: &str) -> Result<RawFd> {
-        if handle.as_handle() == Some(STDIN_TOKEN) {
+        if handle.as_resource() == Some(STDIN_TOKEN) {
             return Ok(lkjscript_sys::STDIN_FD);
         }
         let index = self.owned_index(handle, operation)?;
@@ -150,7 +150,7 @@ impl ResourceTable {
 
     pub(crate) fn owned_index(&self, handle: Value, operation: &str) -> Result<usize> {
         let token = handle
-            .as_handle()
+            .as_resource()
             .ok_or_else(|| Error::msg(format!("{operation}: expected typed resource")))?;
         let index = token
             .checked_sub(FIRST_OWNED_TOKEN)
@@ -166,7 +166,7 @@ impl ResourceTable {
             .checked_add(index)
             .ok_or_else(|| Error::msg("resource handle token exhausted"))?;
         self.slots.push(Some(handle));
-        Ok(Value::from_handle(token))
+        Ok(Value::from_resource(token))
     }
 
     pub(crate) fn ensure_capacity(&mut self) -> Result<()> {

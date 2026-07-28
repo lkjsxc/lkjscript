@@ -7,7 +7,7 @@ seam under the runtime-JIT-first plan.
 
 ## Status
 
-Dense Rust bytecode lowered from verified normalized typed SSA, tagged values,
+Dense Rust bytecode lowered from verified normalized typed SSA, closed typed values,
 precise mark-sweep, whole-chunk validation, structured process-safe outcomes,
 configured VM resource limits, bounded function-entry hotness, callable
 host-independent Linux x86-64 baseline code objects, and the forced first
@@ -103,10 +103,10 @@ loop-header OSR. Compiling only for a later call is not OSR.
 
 ## Consequences
 
-- Interpreter dispatch and tagged representation remain measurable VM hot paths.
+- Interpreter dispatch and the closed 16-byte value representation remain VM hot paths.
 - Runtime semantics and process outcomes must be normalized before native calls.
 - Public chunks need validation before arbitrary construction is supported.
-- Tagged `Value` remains a reference-VM representation, not the typed native ABI.
+- Closed `Value` remains a reference-VM representation, not the typed native ABI.
 - Current scalar native frames have exact empty reference stack maps; nonempty
   maps remain required before allocation-capable code executes.
 - VM/native transitions preserve traps, roots, handles, metering, deadlines,

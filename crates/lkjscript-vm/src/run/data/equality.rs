@@ -1,16 +1,7 @@
 use super::*;
 
-fn maybe_i64(arena: &lkjscript_core::GcHeap, value: Value) -> Result<Option<i64>> {
-    if let Some(number) = value.as_small_i64() {
-        return Ok(Some(number));
-    }
-    let Some(_) = value.as_heap() else {
-        return Ok(None);
-    };
-    match arena.get(value)? {
-        HeapObj::Int(number) => Ok(Some(*number)),
-        _ => Ok(None),
-    }
+fn maybe_i64(value: Value) -> Option<i64> {
+    value.as_i64()
 }
 
 fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Result<bool> {
@@ -36,8 +27,8 @@ fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Res
                 _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
         }
-        let left_i64 = maybe_i64(arena, left)?;
-        let right_i64 = maybe_i64(arena, right)?;
+        let left_i64 = maybe_i64(left);
+        let right_i64 = maybe_i64(right);
         if left_i64.is_some() || right_i64.is_some() {
             match (left_i64, right_i64) {
                 (Some(left), Some(right)) if left == right => continue,
@@ -45,9 +36,16 @@ fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Res
                 _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
         }
+        let left_f64 = left.as_f64();
+        let right_f64 = right.as_f64();
+        if left_f64.is_some() || right_f64.is_some() {
+            match (left_f64, right_f64) {
+                (Some(left), Some(right)) if left == right => continue,
+                (Some(_), Some(_)) => return Ok(false),
+                _ => return Err(Error::msg("equal-value runtime type mismatch")),
+            }
+        }
         match (arena.get(left)?, arena.get(right)?) {
-            (HeapObj::Float(left), HeapObj::Float(right)) if left == right => {}
-            (HeapObj::Float(_), HeapObj::Float(_)) => return Ok(false),
             (HeapObj::Str(left), HeapObj::Str(right)) if left == right => {}
             (HeapObj::Str(_), HeapObj::Str(_)) => return Ok(false),
             (HeapObj::Symbol(left), HeapObj::Symbol(right)) if left == right => {}
@@ -105,14 +103,14 @@ pub(crate) fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 pub(crate) fn same_object<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
-    let equal = match (left.as_handle(), right.as_handle()) {
+    let equal = match (left.as_resource(), right.as_resource()) {
         (Some(left), Some(right)) => left == right,
         (Some(_), None) | (None, Some(_)) => {
             return Err(Error::msg("same-object runtime type mismatch"));
         }
         (None, None) => match (vm.arena.get(left)?, vm.arena.get(right)?) {
-            (HeapObj::Buf(_), HeapObj::Buf(_)) => left.raw() == right.raw(),
-            _ => return Err(Error::msg("same-object expects Buf or Handle")),
+            (HeapObj::Buf(_), HeapObj::Buf(_)) => left == right,
+            _ => return Err(Error::msg("same-object expects Buf or Resource")),
         },
     };
     vm.push(Value::from_bool(equal));
@@ -169,14 +167,12 @@ pub(crate) fn list_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 pub(crate) fn f64_bits_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
-    let right = match vm.arena.get(right)? {
-        HeapObj::Float(number) => number.to_bits(),
-        _ => return Err(Error::msg("f64-bits-equal expects F64")),
-    };
-    let left = match vm.arena.get(left)? {
-        HeapObj::Float(number) => number.to_bits(),
-        _ => return Err(Error::msg("f64-bits-equal expects F64")),
-    };
+    let right = right
+        .as_f64_bits()
+        .ok_or_else(|| Error::msg("f64-bits-equal expects F64"))?;
+    let left = left
+        .as_f64_bits()
+        .ok_or_else(|| Error::msg("f64-bits-equal expects F64"))?;
     vm.push(Value::from_bool(left == right));
     Ok(())
 }

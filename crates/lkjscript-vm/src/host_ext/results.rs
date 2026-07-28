@@ -76,10 +76,7 @@ pub fn system_utf8_error(arena: &mut Arena, error: lkjscript_core::Utf8Failure) 
 fn utf8_error(arena: &mut Arena, error: lkjscript_core::Utf8Failure) -> Result<Value> {
     let offset =
         i64::try_from(error.offset).map_err(|_| Error::msg("UTF-8 error offset exceeds I64"))?;
-    let offset = match Value::from_small_i64(offset) {
-        Some(value) => value,
-        None => arena.alloc(HeapObj::Int(offset))?,
-    };
+    let offset = Value::from_i64(offset);
     enum_value(
         arena,
         lkjscript_core::UTF8_ERROR_LAYOUT,

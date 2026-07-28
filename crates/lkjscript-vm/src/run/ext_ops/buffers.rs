@@ -95,7 +95,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         x if x == Op::BufLen as u8 => {
             let v = vm.pop()?;
             let length = crate::host_buf::buf_len(&vm.arena, v)?;
-            let value = vm.make_i64(length)?;
+            let value = Value::from_i64(length);
             vm.push(value);
             Ok(true)
         }
@@ -104,7 +104,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let buffer = vm.pop()?;
             let index = vm.as_i64(index)?;
             let byte = crate::host_buf::buf_ref(&vm.arena, buffer, index)?;
-            let value = vm.make_i64(byte)?;
+            let value = Value::from_i64(byte);
             vm.push(value);
             Ok(true)
         }
@@ -123,7 +123,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let buffer = vm.pop()?;
             let index = vm.as_i64(index)?;
             let number = crate::host_buf::buf_get_u32(&vm.arena, buffer, index)?;
-            let value = vm.make_i64(number)?;
+            let value = Value::from_i64(number);
             vm.push(value);
             Ok(true)
         }

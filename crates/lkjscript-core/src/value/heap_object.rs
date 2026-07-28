@@ -3,8 +3,6 @@ use crate::ProductId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeapObj {
-    Int(i64),
-    Float(f64),
     Str(String),
     Symbol(String),
     Pair {

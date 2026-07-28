@@ -105,6 +105,13 @@ stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
 
+Focused scalar tests cover the safe closed 16-byte `Value`, complete-range i64,
+exact f64 payloads including NaNs and signed zero, inline constants/locals/calls/
+returns, VM/native and detached-return transitions, SQLite f64 binding, zero
+scalar heap allocation through evaluator/VM/baseline/proof fixtures, synchronous
+generated entry, and zero forced fallback. Gc tests prove that only explicit
+legacy-traced values retain objects.
+
 Focused enum tests cover exact Schema declaration nodes and roundtrip,
 stable nominal/member/layout identities, source order, generic substitutions,
 invariance, duplicate/empty/malformed rejection, nested ownership rejection,

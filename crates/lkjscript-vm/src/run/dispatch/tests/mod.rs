@@ -26,8 +26,8 @@ fn compare(vm: &mut Vm<'_, NullJit>, op: Op, left: Value, right: Value) -> bool 
         .expect("Bool result")
 }
 
-fn test_i64(vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
-    vm.make_i64(number).expect("test I64 allocation")
+fn test_i64(_vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
+    Value::from_i64(number)
 }
 
 fn test_alloc(vm: &mut Vm<'_, NullJit>, object: HeapObj) -> Value {

@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn integer_and_borrowed_handles_cannot_be_closed() {
     let mut table = ResourceTable::default();
-    let integer = Value::from_small_i64(16).expect("16 is an immediate I64");
+    let integer = Value::from_i64(16);
     assert!(table.close(integer).is_err());
     assert!(table.close(ResourceTable::stdin_handle()).is_err());
 }

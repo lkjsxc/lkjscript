@@ -2,33 +2,44 @@
 
 ## Status
 
-**Accepted contract; Current VM may still box wide i64 and f64 values in
-`GcHeap`.** Native scalar execution does not by itself satisfy VM acceptance.
+<!-- LKJ-STATUS id=typed-vm-scalars status=current -->
+
+**Current.** Evaluator, VM, baseline JIT, and proof JIT scalar fixtures retain
+complete-range i64 and exact-bit f64 values without scalar heap allocation.
 
 ## Decision
 
 Validated bytecode supplies the static type of each constant, stack slot, local,
-argument, block transfer, call, and result. The VM uses that authority to store:
+argument, block transfer, call, and result. The VM uses one safe closed `Value`
+with a 64-bit payload and explicit metadata. Its 16-byte representation has
+distinct categories for invalid storage, unit, bool, i64, f64, empty list,
+capability, resource, legacy-traced reference, and opaque unique key.
 
-- i64 as raw signed 64-bit bits;
-- f64 as raw IEEE-754 64-bit bits;
-- bool and unit inline;
-- references and affine keys in separately typed forms.
-
-A physically copyable Rust word does not make an affine source value copyable.
-Bytecode ownership verification governs semantic copying.
+I64 stores its two's-complement bits. F64 stores its IEEE-754 bits. Resource,
+legacy-traced, and opaque-key payloads cannot be reinterpreted as scalars. A
+physically copyable Rust value does not make an affine source value copyable;
+bytecode ownership verification still governs semantic copying.
 
 ## Exactness
 
-All signed i64 values, including minimum and maximum, remain unboxed. F64
-preserves NaN payloads, signed zero, infinities, constants, locals, calls,
-returns, evaluator conversion, and VM/native transitions bit-for-bit.
+All signed i64 values, including minimum and maximum, remain inline. F64
+preserves every NaN payload, signed zero, infinity, constant, local, call,
+return, evaluator conversion, and VM/native transition bit-for-bit.
 
-## Removal
+## Collector Boundary
 
-After every Current VM path uses typed scalar slots, delete `HeapObj::Int` and
-`HeapObj::Float`, their allocation sites, trace classifications, returned
-snapshot cases, and compatibility tests. Scalar metrics record inline
-operations and avoided collector allocations.
+`HeapObj` has no integer or floating family. Constants, numeric operations,
+conversions, host adapters, VM/native transitions, detached returns, generated
+heap services, and aggregate payload conversion create inline scalars. Only the
+explicit legacy-traced metadata category can retain a `GcHeap` object.
 
-Malformed bytecode with incompatible slot types rejects before effects.
+Malformed bytecode with incompatible slot types rejects before effects. The
+opaque unique-key category is implemented storage, not a claim that reusable
+generation-safe resource slots or the complete collector-free island are
+Current.
+
+## Evidence
+
+Focused core, VM, evaluator, baseline, proof, application, SQLite, equality,
+and ownership tests cover complete i64 range, exact f64 bits, zero scalar heap
+allocation, synchronous generated entry, and zero forced fallback.

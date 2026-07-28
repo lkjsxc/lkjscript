@@ -17,15 +17,16 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if let Some(b) = v.as_bool() {
         return Ok(b.to_string());
     }
-    if let Some(n) = v.as_small_i64() {
-        return Ok(n.to_string());
+    if let Some(number) = v.as_i64() {
+        return Ok(number.to_string());
     }
-    if let Some(h) = v.as_handle() {
-        return Ok(format!("handle#{h}"));
+    if let Some(number) = v.as_f64() {
+        return Ok(number.to_string());
+    }
+    if let Some(resource) = v.as_resource() {
+        return Ok(format!("resource#{resource}"));
     }
     match arena.get(v)? {
-        HeapObj::Int(number) => Ok(number.to_string()),
-        HeapObj::Float(f) => Ok(format!("{f}")),
         HeapObj::Str(s) => Ok(s.clone()),
         HeapObj::Symbol(s) => Ok(s.clone()),
         HeapObj::Pair { car, cdr } => {

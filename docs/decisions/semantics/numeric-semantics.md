@@ -67,14 +67,15 @@ specified by [Explicit Equality Families](equality-families.md).
 
 ## Representation
 
-The VM keeps its tagged immediate fast path for I64 values in the signed 61-bit
-payload range and stores other I64 values in a distinct heap integer object.
-This is an implementation detail: both forms are one language type and every
-I64 consumer must accept both. Bytecode constants preserve I64 values as I64.
-No integer operation or literal is routed through F64.
+The VM stores every I64 value inline as its complete two's-complement 64-bit
+payload in an explicitly typed `Value`. Bytecode constants preserve I64 values
+as I64; no integer operation or literal is routed through F64.
 
-F64 values are heap objects and never collapse into immediate I64 values.
-Garbage collection traces both numeric object kinds as leaf objects.
+The VM stores every F64 value inline as its complete IEEE-754 bit pattern in a
+distinct `Value` category. Numeric values never allocate collector objects and
+cannot be interpreted as legacy-traced references. Constants, locals, calls,
+returns, host adapters, and VM/native transitions preserve the category and
+payload.
 
 ## Host Boundaries
 
@@ -90,7 +91,7 @@ Implicit truncation, wrapping, saturation, and float coercion are forbidden.
 
 Focused conformance covers:
 
-- `I64::MIN`, `I64::MAX`, immediate/boxed boundaries, and values around `2^53`;
+- `I64::MIN`, `I64::MAX`, complete inline boundaries, and values around `2^53`;
 - literal overflow and every rejected numeric spelling;
 - checked add, subtract, multiply, divide, zero divide, and `MIN / -1`;
 - mixed arithmetic, integral F64 identity, signed zero, infinity, and NaN;
@@ -107,7 +108,7 @@ Focused conformance covers:
 - **A small-integer-only public type:** contradicts the `i64` name and host ABI.
 - **Approximate F64 equality:** is scale-dependent and not IEEE equality.
 - **Unimplemented advertised widths and casts:** typechecks code that cannot run.
-- **Always-boxed I64:** makes common counters, indices, and bytecode constants
-  allocate without a correctness benefit.
+- **Boxed numeric scalars:** add collector interaction without a correctness
+  benefit and obscure exact scalar allocation evidence.
 - **Wrapping overflow by default:** hides arithmetic failure and blocks a later
   explicit wrapping-operation surface.

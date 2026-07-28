@@ -40,8 +40,8 @@ engine-selection, and rejection contract is
 [Runtime JIT Instead of Offline PGO](../../decisions/jit/runtime-jit-instead-of-offline-pgo.md).
 ## Current Interpreter
 
-The VM uses dense bytecode, contiguous stacks, tagged small I64 values, boxed
-wide I64/F64 values, precise non-moving mark-sweep collection, and
+The VM uses dense bytecode, contiguous stacks, complete inline I64 and exact-bit
+F64 values, precise non-moving mark-sweep collection for structural values, and
 return-adjacent frame reuse. Source is compiled on every CLI invocation. Host
 effects block synchronously. Linux x86-64 now has a callable scalar baseline
 compiler, bounded code objects, explicit engines, and a retained scalar

@@ -9,7 +9,7 @@ fn bin_bits<J: RuntimeTier>(vm: &mut Vm<'_, J>, f: fn(i64, i64) -> i64) -> Resul
     let left = vm
         .as_i64(left)
         .map_err(|_| Error::msg("bit op expects I64"))?;
-    let result = vm.make_i64(f(left, right))?;
+    let result = Value::from_i64(f(left, right));
     vm.push(result);
     Ok(())
 }
@@ -62,7 +62,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
 
 // Exact I64 and IEEE-754 F64 helpers for the VM.
 
-use lkjscript_core::{Error, HeapObj, Result, Value};
+use lkjscript_core::{Error, Result, Value};
 
 use crate::run::{RuntimeTier, Vm};
 
@@ -88,21 +88,20 @@ pub enum Ordering {
     GreaterEqual,
 }
 
-fn number<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Number> {
-    if let Some(number) = value.as_small_i64() {
+fn number<J: RuntimeTier>(_vm: &Vm<'_, J>, value: Value) -> Result<Number> {
+    if let Some(number) = value.as_i64() {
         return Ok(Number::I64(number));
     }
-    match vm.arena.get(value)? {
-        HeapObj::Int(number) => Ok(Number::I64(*number)),
-        HeapObj::Float(number) => Ok(Number::F64(*number)),
-        _ => Err(Error::msg("expected I64 or F64")),
+    if let Some(number) = value.as_f64() {
+        return Ok(Number::F64(number));
     }
+    Err(Error::msg("expected I64 or F64"))
 }
 
 fn push_number<J: RuntimeTier>(vm: &mut Vm<'_, J>, number: Number) -> Result<()> {
     let value = match number {
-        Number::I64(number) => vm.make_i64(number)?,
-        Number::F64(number) => vm.arena.alloc(HeapObj::Float(number))?,
+        Number::I64(number) => Value::from_i64(number),
+        Number::F64(number) => Value::from_f64_bits(number.to_bits()),
     };
     vm.push(value);
     Ok(())

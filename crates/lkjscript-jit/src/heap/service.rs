@@ -101,13 +101,8 @@ impl<'a> JitHeapServices<'a> {
         match value {
             NativeValue::Unit => Ok(Value::UNIT),
             NativeValue::Bool(value) => Ok(Value::from_bool(value)),
-            NativeValue::I64(value) => match Value::from_small_i64(value) {
-                Some(value) => Ok(value),
-                None => self.allocate(HeapObj::Int(value), scalar_box_layout(1)),
-            },
-            NativeValue::F64Bits(bits) => {
-                self.allocate(HeapObj::Float(f64::from_bits(bits)), scalar_box_layout(2))
-            }
+            NativeValue::I64(value) => Ok(Value::from_i64(value)),
+            NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
             NativeValue::Reference(reference) => native_reference_value(self.heap, reference)
                 .map_err(|message| {
                     self.last_trap = Some(message);
@@ -127,24 +122,17 @@ impl<'a> JitHeapServices<'a> {
                 self.last_trap = Some("heap operation produced non-Bool".into());
                 NativeServiceError::Trap
             }),
-            ValueType::I64 => {
-                let number = if let Some(number) = value.as_small_i64() {
-                    Some(number)
-                } else {
-                    match self.heap.get(value) {
-                        Ok(HeapObj::Int(number)) => Some(*number),
-                        _ => None,
-                    }
-                };
-                number.map(NativeValue::I64).ok_or_else(|| {
-                    self.last_trap = Some("heap operation produced non-I64".into());
+            ValueType::I64 => value.as_i64().map(NativeValue::I64).ok_or_else(|| {
+                self.last_trap = Some("heap operation produced non-I64".into());
+                NativeServiceError::Trap
+            }),
+            ValueType::F64 => value
+                .as_f64_bits()
+                .map(NativeValue::F64Bits)
+                .ok_or_else(|| {
+                    self.last_trap = Some("heap operation produced non-F64".into());
                     NativeServiceError::Trap
-                })
-            }
-            ValueType::F64 => match self.heap.get(value) {
-                Ok(HeapObj::Float(number)) => Ok(NativeValue::F64Bits(number.to_bits())),
-                _ => self.trap("heap operation produced non-F64"),
-            },
+                }),
             ValueType::Reference(reference_type) => {
                 reference_native_value(self.heap, value, reference_type).map_err(|message| {
                     self.last_trap = Some(message);

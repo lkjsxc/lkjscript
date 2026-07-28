@@ -57,7 +57,7 @@ impl ResourceTable {
         self.limit_exceeded
     }
     pub fn stdin_handle() -> Value {
-        Value::from_handle(STDIN_TOKEN)
+        Value::from_resource(STDIN_TOKEN)
     }
 }
 

@@ -48,8 +48,8 @@ pub fn str_from_i64(arena: &mut Arena, number: i64) -> Result<Value> {
 }
 
 pub fn str_from_f64(arena: &mut Arena, number: Value) -> Result<Value> {
-    let HeapObj::Float(number) = arena.get(number)? else {
-        return Err(Error::msg("str-from-f64 expects F64"));
-    };
+    let number = number
+        .as_f64()
+        .ok_or_else(|| Error::msg("str-from-f64 expects F64"))?;
     arena.alloc(HeapObj::Str(number.to_string()))
 }

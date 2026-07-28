@@ -163,6 +163,15 @@
       "interface": "implemented exact-kind typing and VM checks; cleanup/native completion pending",
       "authority": "docs/decisions/capabilities/typed-affine-resources.md",
       "evidence": "docs/decisions/capabilities/typed-affine-resources.md",
-      "claimants": ["docs/current-state.md"] }
+      "claimants": ["docs/current-state.md"] },
+    { "id": "typed-vm-scalars", "status": "current",
+      "interface": "complete-range inline i64 and exact-bit f64 VM values",
+      "authority": "docs/decisions/memory/typed-vm-scalars.md",
+      "evidence": "docs/operations/verification.md",
+      "claimants": [
+        "docs/current-state.md",
+        "docs/decisions/memory/typed-vm-scalars.md",
+        "docs/operations/agent-handoff.md"
+      ] }
   ]
 }

@@ -136,7 +136,7 @@ rather than exposing raw tagged-value or closure identity.
 
 The complete cutover covers:
 
-- Unit, Bool, immediate/boxed I64, IEEE F64, Str, and Symbol value equality;
+- Unit, Bool, complete inline I64, exact-bit inline F64, Str, and Symbol value equality;
 - recursive Option and Result value equality;
 - Str/Symbol category separation;
 - same/different Buf and Handle identity;

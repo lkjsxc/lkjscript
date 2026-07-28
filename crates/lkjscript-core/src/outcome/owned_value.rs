@@ -27,7 +27,7 @@ impl OwnedValue {
         let mut pending = vec![root];
         let mut visited = vec![false; heap.len()];
         while let Some(value) = pending.pop() {
-            let Some(index) = value.as_heap() else {
+            let Some(index) = value.as_legacy_traced() else {
                 continue;
             };
             let index = usize::try_from(index)
@@ -60,20 +60,15 @@ impl OwnedValue {
     }
 
     pub fn as_i64(&self) -> Option<i64> {
-        if let Some(number) = self.root.as_small_i64() {
-            return Some(number);
-        }
-        match self.object()? {
-            HeapObj::Int(number) => Some(*number),
-            _ => None,
-        }
+        self.root.as_i64()
     }
 
     pub fn as_f64(&self) -> Option<f64> {
-        match self.object()? {
-            HeapObj::Float(number) => Some(*number),
-            _ => None,
-        }
+        self.root.as_f64()
+    }
+
+    pub fn as_f64_bits(&self) -> Option<u64> {
+        self.root.as_f64_bits()
     }
 
     pub fn as_str(&self) -> Option<&str> {
@@ -90,8 +85,8 @@ impl OwnedValue {
         }
     }
 
-    pub fn as_handle(&self) -> Option<u32> {
-        self.root.as_handle()
+    pub fn as_resource(&self) -> Option<u32> {
+        self.root.as_resource()
     }
 
     pub fn enum_identity(&self) -> Option<(RuntimeLayoutId, u16)> {
@@ -133,19 +128,12 @@ impl OwnedValue {
     }
 
     fn object(&self) -> Option<&HeapObj> {
-        let index = usize::try_from(self.root.as_heap()?).ok()?;
+        let index = usize::try_from(self.root.as_legacy_traced()?).ok()?;
         self.heap.get(index)?.as_ref()
     }
 
     fn value_i64(&self, value: Value) -> Option<i64> {
-        if let Some(number) = value.as_small_i64() {
-            return Some(number);
-        }
-        let index = usize::try_from(value.as_heap()?).ok()?;
-        match self.heap.get(index)?.as_ref()? {
-            HeapObj::Int(number) => Some(*number),
-            _ => None,
-        }
+        value.as_i64()
     }
 }
 
@@ -169,8 +157,8 @@ impl fmt::Debug for OwnedValue {
         if let Some(value) = self.as_str() {
             return value.fmt(formatter);
         }
-        if let Some(value) = self.as_handle() {
-            return write!(formatter, "handle#{value}");
+        if let Some(value) = self.as_resource() {
+            return write!(formatter, "resource#{value}");
         }
         match self.object() {
             Some(HeapObj::Pair { .. }) => formatter.write_str("#<owned-pair>"),
@@ -184,10 +172,8 @@ impl fmt::Debug for OwnedValue {
             Some(HeapObj::Enum { physical_tag, .. }) => {
                 write!(formatter, "#<owned-enum:{physical_tag}>")
             }
-            Some(HeapObj::Int(_) | HeapObj::Float(_) | HeapObj::Str(_) | HeapObj::Symbol(_)) => {
-                formatter.write_str("#<owned-value>")
-            }
-            None => formatter.write_str("#<invalid-owned-value>"),
+            Some(HeapObj::Str(_) | HeapObj::Symbol(_)) => formatter.write_str("#<owned-value>"),
+            None => self.root.fmt(formatter),
         }
     }
 }

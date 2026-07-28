@@ -1,11 +1,5 @@
 use crate::*;
 
-pub(crate) fn scalar_box_layout(discriminator: u32) -> ReferenceType {
-    ReferenceType::Product(lkjscript_native::LayoutIdentity::new(
-        u32::MAX - discriminator,
-    ))
-}
-
 pub(crate) fn reference_layout_key(reference_type: ReferenceType) -> u64 {
     match reference_type {
         ReferenceType::Buf => 1_u64 << 56,
@@ -29,7 +23,7 @@ pub(crate) fn native_reference_value(
         };
     }
     let index = u32::try_from(word - 1).map_err(|_| "native heap handle out of range")?;
-    let value = Value::from_heap(index);
+    let value = Value::from_legacy_traced(index);
     if heap.layout_of(value) != Some(reference_layout_key(reference_type)) {
         return Err("native heap handle layout mismatch".into());
     }
@@ -61,7 +55,9 @@ pub(crate) fn reference_native_value(
             lkjscript_native::NativeReference::new(reference_type, 0),
         ));
     }
-    let index = value.as_heap().ok_or("expected heap reference result")?;
+    let index = value
+        .as_legacy_traced()
+        .ok_or("expected heap reference result")?;
     let reference = lkjscript_native::NativeReference::new(reference_type, u64::from(index) + 1);
     native_reference_value(heap, reference)?;
     Ok(NativeValue::Reference(reference))
@@ -103,18 +99,35 @@ pub(crate) fn list_values_equal(
 }
 
 pub(crate) fn value_equal(heap: &GcHeap, left: Value, right: Value) -> Result<bool, String> {
+    if left.is_unit() || right.is_unit() {
+        return if left.is_unit() && right.is_unit() {
+            Ok(true)
+        } else {
+            Err("equal-value category mismatch".into())
+        };
+    }
+    if left.as_bool().is_some() || right.as_bool().is_some() {
+        return match (left.as_bool(), right.as_bool()) {
+            (Some(left), Some(right)) => Ok(left == right),
+            _ => Err("equal-value category mismatch".into()),
+        };
+    }
+    if left.as_i64().is_some() || right.as_i64().is_some() {
+        return match (left.as_i64(), right.as_i64()) {
+            (Some(left), Some(right)) => Ok(left == right),
+            _ => Err("equal-value category mismatch".into()),
+        };
+    }
+    if left.as_f64().is_some() || right.as_f64().is_some() {
+        return match (left.as_f64(), right.as_f64()) {
+            (Some(left), Some(right)) => Ok(left == right),
+            _ => Err("equal-value category mismatch".into()),
+        };
+    }
     if left == right {
         return Ok(true);
     }
-    if let (Some(left), Some(right)) = (left.as_bool(), right.as_bool()) {
-        return Ok(left == right);
-    }
-    if let (Some(left), Some(right)) = (left.as_small_i64(), right.as_small_i64()) {
-        return Ok(left == right);
-    }
     match (heap.get(left), heap.get(right)) {
-        (Ok(HeapObj::Int(left)), Ok(HeapObj::Int(right))) => Ok(left == right),
-        (Ok(HeapObj::Float(left)), Ok(HeapObj::Float(right))) => Ok(left == right),
         (Ok(HeapObj::Str(left)), Ok(HeapObj::Str(right))) => Ok(left == right),
         (
             Ok(HeapObj::Enum {

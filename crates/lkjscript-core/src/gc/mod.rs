@@ -6,6 +6,8 @@ mod collection;
 mod enum_tests;
 mod model;
 mod mutation;
+#[cfg(test)]
+mod root_tests;
 mod snapshot;
 
 pub use model::{GcConfig, GcHeap, GcLimit, GcStats};

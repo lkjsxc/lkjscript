@@ -33,7 +33,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
             vm.wait_for_stdin()?;
             let number = read_byte()?;
-            let value = vm.make_i64(number)?;
+            let value = Value::from_i64(number);
             vm.push(value);
             Ok(())
         }

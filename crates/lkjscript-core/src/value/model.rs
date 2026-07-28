@@ -1,140 +1,183 @@
-//! Tagged values and heap object kinds.
+//! Closed typed runtime values.
 
 use std::fmt;
 
 use super::CapabilityKind;
 
-/// Low 3 bits are the tag; payload lives in the upper bits or as a heap index.
-#[derive(Clone, Copy, PartialEq)]
-pub struct Value(u64);
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+enum ValueKind {
+    Invalid,
+    Unit,
+    Bool,
+    I64,
+    F64,
+    EmptyList,
+    Capability,
+    Resource,
+    LegacyTraced,
+    OpaqueUniqueKey,
+}
 
-const TAG_MASK: u64 = 0b111;
-const TAG_INVALID: u64 = 0;
-const TAG_BOOL: u64 = 1;
-const TAG_INT: u64 = 2;
-const TAG_HEAP: u64 = 3;
-const TAG_HANDLE: u64 = 4;
-const TAG_UNIT: u64 = 5;
-const TAG_EMPTY_LIST: u64 = 6;
-const TAG_CAPABILITY: u64 = 7;
-
-pub const MIN_SMALL_I64: i64 = -(1_i64 << 60);
-pub const MAX_SMALL_I64: i64 = (1_i64 << 60) - 1;
+/// Safe closed value storage with one exact payload and an explicit category.
+///
+/// The C layout is intentionally 16 bytes on supported targets: an eight-byte
+/// payload followed by closed metadata and padding. Private fields prevent one
+/// category from being reinterpreted as another.
+#[derive(Clone, Copy, Eq, PartialEq)]
+#[repr(C)]
+pub struct Value {
+    payload: u64,
+    kind: ValueKind,
+}
 
 impl Value {
-    pub const INVALID: Self = Self(TAG_INVALID);
-    pub const UNIT: Self = Self(TAG_UNIT);
-    pub const EMPTY_LIST: Self = Self(TAG_EMPTY_LIST);
-    pub const FALSE: Self = Self(TAG_BOOL);
-    pub const TRUE: Self = Self((1 << 3) | TAG_BOOL);
+    pub const INVALID: Self = Self::new(ValueKind::Invalid, 0);
+    pub const UNIT: Self = Self::new(ValueKind::Unit, 0);
+    pub const EMPTY_LIST: Self = Self::new(ValueKind::EmptyList, 0);
+    pub const FALSE: Self = Self::new(ValueKind::Bool, 0);
+    pub const TRUE: Self = Self::new(ValueKind::Bool, 1);
 
-    pub fn from_bool(b: bool) -> Self {
-        if b {
+    const fn new(kind: ValueKind, payload: u64) -> Self {
+        Self { payload, kind }
+    }
+
+    pub const fn from_bool(value: bool) -> Self {
+        if value {
             Self::TRUE
         } else {
             Self::FALSE
         }
     }
 
-    pub fn from_small_i64(number: i64) -> Option<Self> {
-        if !(MIN_SMALL_I64..=MAX_SMALL_I64).contains(&number) {
-            return None;
-        }
-        Some(Self(((number as u64) << 3) | TAG_INT))
+    pub const fn from_i64(value: i64) -> Self {
+        Self::new(ValueKind::I64, value as u64)
     }
 
-    pub fn from_heap(index: u32) -> Self {
-        Self(((index as u64) << 3) | TAG_HEAP)
+    pub const fn from_f64_bits(bits: u64) -> Self {
+        Self::new(ValueKind::F64, bits)
     }
 
-    pub fn from_handle(index: u32) -> Self {
-        Self(((index as u64) << 3) | TAG_HANDLE)
+    pub const fn from_legacy_traced(index: u32) -> Self {
+        Self::new(ValueKind::LegacyTraced, index as u64)
+    }
+
+    pub const fn from_resource(index: u32) -> Self {
+        Self::new(ValueKind::Resource, index as u64)
     }
 
     pub const fn from_capability(kind: CapabilityKind) -> Self {
-        Self(((kind as u64) << 3) | TAG_CAPABILITY)
+        Self::new(ValueKind::Capability, kind as u64)
     }
 
-    pub fn is_invalid(self) -> bool {
-        self.0 == TAG_INVALID
+    /// Runtime-only storage for identities minted by an external uniqueness
+    /// authority. This category has no source constructor.
+    #[doc(hidden)]
+    pub const fn from_opaque_unique_key(key: u64) -> Self {
+        Self::new(ValueKind::OpaqueUniqueKey, key)
     }
 
-    pub fn is_unit(self) -> bool {
-        self.0 == TAG_UNIT
+    pub const fn is_invalid(self) -> bool {
+        matches!(self.kind, ValueKind::Invalid)
     }
 
-    pub fn is_empty_list(self) -> bool {
-        self.0 == TAG_EMPTY_LIST
+    pub const fn is_unit(self) -> bool {
+        matches!(self.kind, ValueKind::Unit)
     }
 
-    pub fn as_bool(self) -> Option<bool> {
-        if self.0 & TAG_MASK != TAG_BOOL {
-            return None;
+    pub const fn is_empty_list(self) -> bool {
+        matches!(self.kind, ValueKind::EmptyList)
+    }
+
+    pub const fn as_bool(self) -> Option<bool> {
+        match self.kind {
+            ValueKind::Bool => Some(self.payload != 0),
+            _ => None,
         }
-        Some(self.0 >> 3 != 0)
     }
 
-    pub fn as_small_i64(self) -> Option<i64> {
-        if self.0 & TAG_MASK != TAG_INT {
-            return None;
+    pub const fn as_i64(self) -> Option<i64> {
+        match self.kind {
+            ValueKind::I64 => Some(self.payload as i64),
+            _ => None,
         }
-        Some((self.0 as i64) >> 3)
     }
 
-    pub fn as_heap(self) -> Option<u32> {
-        if self.0 & TAG_MASK != TAG_HEAP {
-            return None;
+    pub const fn as_f64_bits(self) -> Option<u64> {
+        match self.kind {
+            ValueKind::F64 => Some(self.payload),
+            _ => None,
         }
-        Some((self.0 >> 3) as u32)
     }
 
-    pub fn as_handle(self) -> Option<u32> {
-        if self.0 & TAG_MASK != TAG_HANDLE {
-            return None;
+    pub fn as_f64(self) -> Option<f64> {
+        self.as_f64_bits().map(f64::from_bits)
+    }
+
+    pub const fn as_legacy_traced(self) -> Option<u32> {
+        match self.kind {
+            ValueKind::LegacyTraced => Some(self.payload as u32),
+            _ => None,
         }
-        Some((self.0 >> 3) as u32)
+    }
+
+    pub const fn as_resource(self) -> Option<u32> {
+        match self.kind {
+            ValueKind::Resource => Some(self.payload as u32),
+            _ => None,
+        }
     }
 
     pub fn as_capability(self) -> Option<CapabilityKind> {
-        if self.0 & TAG_MASK != TAG_CAPABILITY {
-            return None;
+        match self.kind {
+            ValueKind::Capability => u8::try_from(self.payload)
+                .ok()
+                .and_then(CapabilityKind::from_tag),
+            _ => None,
         }
-        u8::try_from(self.0 >> 3)
-            .ok()
-            .and_then(CapabilityKind::from_tag)
     }
 
-    pub fn raw(self) -> u64 {
-        self.0
+    #[doc(hidden)]
+    pub const fn as_opaque_unique_key(self) -> Option<u64> {
+        match self.kind {
+            ValueKind::OpaqueUniqueKey => Some(self.payload),
+            _ => None,
+        }
     }
 }
 
 impl fmt::Debug for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_invalid() {
-            return write!(f, "#<invalid>");
+            return formatter.write_str("#<invalid>");
         }
         if self.is_unit() {
-            return write!(f, "unit");
+            return formatter.write_str("unit");
         }
         if self.is_empty_list() {
-            return write!(f, "empty-list");
+            return formatter.write_str("empty-list");
         }
-        if let Some(b) = self.as_bool() {
-            return write!(f, "{b}");
+        if let Some(value) = self.as_bool() {
+            return value.fmt(formatter);
         }
-        if let Some(n) = self.as_small_i64() {
-            return write!(f, "{n}");
+        if let Some(value) = self.as_i64() {
+            return value.fmt(formatter);
         }
-        if let Some(h) = self.as_handle() {
-            return write!(f, "handle#{h}");
+        if let Some(value) = self.as_f64() {
+            return value.fmt(formatter);
+        }
+        if let Some(index) = self.as_resource() {
+            return write!(formatter, "resource#{index}");
         }
         if let Some(kind) = self.as_capability() {
-            return write!(f, "capability#{}", kind.as_str());
+            return write!(formatter, "capability#{}", kind.as_str());
         }
-        if let Some(i) = self.as_heap() {
-            return write!(f, "heap#{i}");
+        if let Some(index) = self.as_legacy_traced() {
+            return write!(formatter, "legacy-traced#{index}");
         }
-        write!(f, "value({:x})", self.0)
+        if let Some(key) = self.as_opaque_unique_key() {
+            return write!(formatter, "opaque-unique#{key}");
+        }
+        formatter.write_str("#<invalid-value-category>")
     }
 }

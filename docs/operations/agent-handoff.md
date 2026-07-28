@@ -26,13 +26,14 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
+<!-- LKJ-STATUS id=typed-vm-scalars status=current -->
 
 Repository topology and graph/context, bounded task state, exact modules and
 packages, canonical Semantic Source and local sessions, explicit capabilities,
 generic ADTs and structured control, validated VM, callable baseline JIT, and
 forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
 and explain commands are Current descriptive evidence. The machine tracing
-ratchet and `memory traced` expose the exact eleven allowed `HeapObj` families.
+ratchet and `memory traced` expose the exact nine allowed `HeapObj` families.
 
 The authoritative pre-backend HIR memory plan is Current. Deterministic
 whole-place drop, generation-safe resource tables, and the first collector-free
@@ -57,10 +58,11 @@ Current.
 
 ## Current Memory Foundation
 
-The stable-index non-moving `GcHeap` still traces reference values, exact roots,
-and generated native stack maps. Wide VM i64/f64 values may be heap boxed.
-`buf` remains a traced mutable object, `bytes` is a source `PLACEHOLDER`, and
-`path` remains a traced byte object.
+The stable-index non-moving `GcHeap` still traces explicit legacy-traced
+reference values, exact roots, and generated native stack maps. Complete i64
+and exact-bit f64 values are inline and never collector allocated. `buf` remains
+a traced mutable object, `bytes` is a source `PLACEHOLDER`, and `path` remains a
+traced byte object.
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
@@ -91,11 +93,11 @@ cleanup edges.
 2. Integrate the reusable generation-bearing resource table into VM and native.
 3. Integrate deterministic unique storage into evaluator, VM, and native.
 4. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
-5. Unbox complete i64 and exact-bit f64 in typed VM slots.
-6. Execute and verify the exact island through evaluator, VM, forced baseline,
-   and forced proof tiers with zero collector interaction and fallback.
-7. Expose compiler-derived plans, owners, loans, storage, and cleanup to agents.
-8. Ratchet remaining structural traced families downward.
+5. Execute and verify the remaining exact island types through evaluator, VM,
+   forced baseline, and forced proof tiers with zero collector interaction and
+   fallback; scalar execution already satisfies this boundary.
+6. Expose compiler-derived plans, owners, loans, storage, and cleanup to agents.
+7. Ratchet remaining structural traced families downward.
 
 This order is an implementation contract, not a Current capability claim.
 

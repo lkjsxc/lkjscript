@@ -116,8 +116,8 @@ absolute jump targets. Semantic-core changes continue as complete HIR-to-VM
 vertical slices.
 ## Runtime Representations
 
-The reference VM retains compact tagged values for cold execution and
-conformance. Typed SSA/native hot paths do not carry universal `Value` when a
+The reference VM retains safe closed payload-plus-metadata values for cold
+execution and conformance. Typed SSA/native hot paths do not carry universal `Value` when a
 static representation exists:
 
 - I64 and F64 use native scalar registers;
@@ -129,8 +129,9 @@ static representation exists:
 - heap references remain typed and visible in precise stack maps.
 
 Dynamic dispatch and runtime type tests remain only when an explicit dynamic
-interface requires them. VM/native adapters own boxing and unboxing; compatible
-native callers call compiled callees directly.
+interface requires them. VM/native adapters convert exact scalar categories and
+bits without collector allocation; compatible native callers call compiled
+callees directly.
 ## Native Code Object Priority
 
 The required called-code experiment selected the

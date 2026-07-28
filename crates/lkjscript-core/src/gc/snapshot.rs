@@ -4,7 +4,7 @@ use crate::{Error, HeapObj, OwnedValue, Result, Value};
 impl GcHeap {
     pub fn get(&self, value: Value) -> Result<&HeapObj> {
         let index = value
-            .as_heap()
+            .as_legacy_traced()
             .ok_or_else(|| Error::msg("expected heap value"))? as usize;
         self.objs
             .get(index)
@@ -19,7 +19,7 @@ impl GcHeap {
 
     #[must_use]
     pub fn layout_of(&self, value: Value) -> Option<u64> {
-        let index = value.as_heap()? as usize;
+        let index = value.as_legacy_traced()? as usize;
         self.objs.get(index)?.as_ref()?;
         self.layout_tags.get(index).copied().flatten()
     }
@@ -47,7 +47,7 @@ impl GcHeap {
         let mut marked = vec![false; self.objs.len()];
         let mut pending = roots.to_vec();
         while let Some(value) = pending.pop() {
-            let Some(index) = value.as_heap().map(|index| index as usize) else {
+            let Some(index) = value.as_legacy_traced().map(|index| index as usize) else {
                 continue;
             };
             if index >= self.objs.len() || marked[index] {

@@ -71,7 +71,7 @@ fn system_utf8_errors_preserve_both_closed_variant_identities() {
         } => {
             assert_eq!(layout.bytes(), lkjscript_core::UTF8_ERROR_LAYOUT);
             assert_eq!(*physical_tag, kind.physical_tag());
-            assert_eq!(active_payload[0].as_small_i64(), Some(2));
+            assert_eq!(active_payload[0].as_i64(), Some(2));
         }
         other => panic!("malformed Utf8Error: {other:?}"),
     }
@@ -81,7 +81,7 @@ fn system_utf8_errors_preserve_both_closed_variant_identities() {
 fn option_constructors_use_generic_enum_layout_and_tags() {
     let mut arena = Arena::default();
     let none = option_none(&mut arena).expect("none allocation");
-    let payload = Value::from_small_i64(7).expect("7 is an immediate I64");
+    let payload = Value::from_i64(7);
     let some = option_some(&mut arena, payload).expect("some allocation");
     for (value, tag, fields) in [(none, 1, 0), (some, 0, 1)] {
         match arena.get(value).expect("Option value") {
@@ -104,11 +104,9 @@ fn numeric_string_conversions_are_type_strict_and_exact() {
     let text = str_from_i64(&mut arena, i64::MIN).expect("integer string allocation");
     assert_eq!(as_str(&arena, text).ok(), Some("-9223372036854775808"));
 
-    let integer = Value::from_small_i64(2).expect("2 is an immediate I64");
+    let integer = Value::from_i64(2);
     assert!(str_from_f64(&mut arena, integer).is_err());
-    let float = arena
-        .alloc(HeapObj::Float(2.0))
-        .expect("test float allocation");
+    let float = Value::from_f64_bits(2.0_f64.to_bits());
     let text = str_from_f64(&mut arena, float).expect("format F64");
     assert_eq!(as_str(&arena, text).ok(), Some("2"));
 }

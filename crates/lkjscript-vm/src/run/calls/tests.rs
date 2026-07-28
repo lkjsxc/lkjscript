@@ -38,7 +38,7 @@ fn tail_call_reuses_the_current_frame() {
         stack_base: 0,
         locals_base: 0,
     });
-    let argument = vm.make_i64(42).expect("test argument");
+    let argument = Value::from_i64(42);
     vm.push(argument);
     let callee = vm
         .arena

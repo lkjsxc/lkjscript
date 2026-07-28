@@ -23,7 +23,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             vm.require_capability(lkjscript_core::CapabilityKind::Arguments)?;
             let count = i64::try_from(vm.inputs.arguments.len())
                 .map_err(|_| lkjscript_core::Error::msg("argc out of range"))?;
-            let value = vm.make_i64(count)?;
+            let value = Value::from_i64(count);
             vm.push(value);
             Ok(true)
         }

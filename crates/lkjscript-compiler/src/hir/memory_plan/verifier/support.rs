@@ -31,8 +31,6 @@ pub(super) fn result_mode(ty: &Type) -> MemoryResultMode {
 
 pub(super) fn legacy_family(ty: &MemoryType) -> Option<&'static str> {
     match ty {
-        MemoryType::I64 => Some("i64"),
-        MemoryType::F64 => Some("f64"),
         MemoryType::String => Some("string"),
         MemoryType::Buffer | MemoryType::ByteVector => Some("buf"),
         MemoryType::Path => Some("path"),

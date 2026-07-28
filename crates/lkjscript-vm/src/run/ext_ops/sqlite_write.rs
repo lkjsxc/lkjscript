@@ -99,14 +99,9 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         x if x == Op::SysSqliteBindF64 as u8 => {
             vm.ensure_host_deadline_support("bind-sqlite-f64", false)?;
             let value = vm.pop()?;
-            let value = match vm.arena.get(value)? {
-                HeapObj::Float(value) => *value,
-                _ => {
-                    return Err(lkjscript_core::Error::msg(
-                        "sys-sqlite-bind-f64: expected F64",
-                    ))
-                }
-            };
+            let value = vm
+                .as_f64(value)
+                .map_err(|_| lkjscript_core::Error::msg("sys-sqlite-bind-f64: expected F64"))?;
             let index = vm.pop()?;
             let index = vm.as_i64(index)?;
             let handle = vm.pop()?;

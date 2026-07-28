@@ -27,14 +27,6 @@ pub const LEGACY_TRACED_FAMILIES: &[LegacyTracedFamily] = &[
         heap_variant: "Enum",
     },
     LegacyTracedFamily {
-        identity: "f64",
-        heap_variant: "Float",
-    },
-    LegacyTracedFamily {
-        identity: "i64",
-        heap_variant: "Int",
-    },
-    LegacyTracedFamily {
         identity: "pair",
         heap_variant: "Pair",
     },

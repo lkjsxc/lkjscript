@@ -36,7 +36,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                     .iter()
                     .copied()
                     .zip(argument_values)
-                    .map(|(ty, value)| unbox_native(vm, ty, value))
+                    .map(|(ty, value)| native_from_value(ty, value))
                     .collect::<Result<Vec<_>>>()?;
                 let mut execution = vm.config.clone();
                 execution.instruction_fuel = vm.fuel_remaining;
@@ -52,7 +52,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                         match invocation.outcome {
                             ScalarInvocationOutcome::Returned(value) => {
                                 vm.stack.truncate(args_start);
-                                let value = box_native(vm, value)?;
+                                let value = value_from_native(value)?;
                                 vm.push(value);
                                 return Ok(());
                             }
@@ -124,25 +124,21 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
     }
 }
 
-fn unbox_native<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    ty: ValueType,
-    value: Value,
-) -> Result<NativeValue> {
+fn native_from_value(ty: ValueType, value: Value) -> Result<NativeValue> {
     match ty {
         ValueType::Unit if value.is_unit() => Ok(NativeValue::Unit),
         ValueType::Bool => value
             .as_bool()
             .map(NativeValue::Bool)
             .ok_or_else(|| Error::msg("native boundary expected Bool")),
-        ValueType::I64 => vm
-            .as_i64(value)
+        ValueType::I64 => value
+            .as_i64()
             .map(NativeValue::I64)
-            .map_err(|_| Error::msg("native boundary expected I64")),
-        ValueType::F64 => match vm.arena.get(value) {
-            Ok(HeapObj::Float(number)) => Ok(NativeValue::F64Bits(number.to_bits())),
-            _ => Err(Error::msg("native boundary expected F64")),
-        },
+            .ok_or_else(|| Error::msg("native boundary expected I64")),
+        ValueType::F64 => value
+            .as_f64_bits()
+            .map(NativeValue::F64Bits)
+            .ok_or_else(|| Error::msg("native boundary expected F64")),
         ValueType::Unit => Err(Error::msg("native boundary expected Unit")),
         ValueType::Reference(_) => Err(Error::msg(
             "VM/native reference transfer is not enabled in the scalar tier",
@@ -150,12 +146,12 @@ fn unbox_native<J: RuntimeTier>(
     }
 }
 
-fn box_native<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: NativeValue) -> Result<Value> {
+fn value_from_native(value: NativeValue) -> Result<Value> {
     match value {
         NativeValue::Unit => Ok(Value::UNIT),
         NativeValue::Bool(value) => Ok(Value::from_bool(value)),
-        NativeValue::I64(value) => vm.make_i64(value),
-        NativeValue::F64Bits(bits) => vm.arena.alloc(HeapObj::Float(f64::from_bits(bits))),
+        NativeValue::I64(value) => Ok(Value::from_i64(value)),
+        NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
         NativeValue::Reference(_) => {
             unreachable!("scalar tier returned an ineligible native reference")
         }

@@ -15,7 +15,7 @@ fn memory_mode(
         family,
         glue,
     ) = match ty {
-        Type::Never | Type::Unit | Type::Bool | Type::Capability(_) => (
+        Type::Never | Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Capability(_) => (
             MemoryMultiplicity::Copy,
             MemoryAliasing::Unique,
             MemoryStorage::Inline,
@@ -26,8 +26,6 @@ fn memory_mode(
             None,
             None,
         ),
-        Type::I64 => legacy_value("i64", MemoryMultiplicity::Copy),
-        Type::F64 => legacy_value("f64", MemoryMultiplicity::Copy),
         Type::Str => legacy_value("string", MemoryMultiplicity::ImmutableValue),
         Type::Buf => (
             MemoryMultiplicity::Copy,

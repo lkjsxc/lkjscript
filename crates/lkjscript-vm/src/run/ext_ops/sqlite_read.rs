@@ -25,7 +25,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                     .sqlite_column_i64(handle, index)
                     .and_then(|value| match value {
                         Some(value) => {
-                            let value = vm.make_i64(value)?;
+                            let value = Value::from_i64(value);
                             crate::host_ext::option_some(&mut vm.arena, value)
                         }
                         None => crate::host_ext::option_none(&mut vm.arena),
@@ -42,7 +42,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                     .sqlite_column_f64(handle, index)
                     .and_then(|value| match value {
                         Some(value) => {
-                            let value = vm.arena.alloc(HeapObj::Float(value))?;
+                            let value = Value::from_f64_bits(value.to_bits());
                             crate::host_ext::option_some(&mut vm.arena, value)
                         }
                         None => crate::host_ext::option_none(&mut vm.arena),
