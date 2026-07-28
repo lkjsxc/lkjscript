@@ -18,8 +18,8 @@ use lkjscript_ir::{
 
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
 use crate::memory_plan::{
-    HirMemoryPlan, MemoryDropGlueKind, MemoryExpressionId, MemoryFunctionId, MemoryObligationKind,
-    MemorySubject, MemoryVerifiedHir,
+    HirMemoryPlan, MemoryDropClass, MemoryDropGlueKind, MemoryExpressionId, MemoryFunctionId,
+    MemoryObligationKind, MemorySubject, MemoryVerifiedHir,
 };
 use crate::types::Type;
 

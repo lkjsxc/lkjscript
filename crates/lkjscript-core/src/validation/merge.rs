@@ -45,7 +45,10 @@ pub(super) fn merge_state(
             proto,
             predecessor.op(),
             predecessor.offset(),
-            "incompatible unique-place ownership state at CFG join",
+            &format!(
+                "incompatible unique-place ownership state at CFG join: {:?} versus {:?}",
+                current.unique_places, incoming.unique_places
+            ),
         ));
     }
     Ok(changed)
@@ -70,7 +73,9 @@ fn merge_slot(
                     proto,
                     predecessor.op(),
                     predecessor.offset(),
-                    &format!("incompatible {category} categories at CFG join"),
+                    &format!(
+                        "incompatible {category} categories at CFG join: {left:?} versus {right:?}",
+                    ),
                 )
             })?;
             if Some(merged) == *existing {
@@ -89,6 +94,28 @@ fn merge_kind(left: Kind, right: Kind) -> Option<Kind> {
     } else if left == Kind::Any || right == Kind::Any {
         Some(Kind::Any)
     } else {
-        None
+        match (left, right) {
+            (Kind::ByteVector(_), Kind::ByteVector(_)) => Some(Kind::ByteVector(u32::MAX)),
+            (Kind::Bytes(_), Kind::Bytes(_)) => Some(Kind::Bytes(u32::MAX)),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_phi_merges_distinct_owner_origins_without_erasing_layout() {
+        assert_eq!(
+            merge_kind(Kind::ByteVector(3), Kind::ByteVector(9)),
+            Some(Kind::ByteVector(u32::MAX))
+        );
+        assert_eq!(
+            merge_kind(Kind::Bytes(4), Kind::Bytes(10)),
+            Some(Kind::Bytes(u32::MAX))
+        );
+        assert_eq!(merge_kind(Kind::ByteVector(3), Kind::Bytes(3)), None);
     }
 }

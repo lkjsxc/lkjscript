@@ -55,6 +55,40 @@ fn initial_owned_buf_slice_accepts_nll_mutation_move_and_return() {
     )
     .expect("equal branch move states must join");
 
+    let conditional_owner = conditional_cleanup_source();
+    let conditional = compile_source(
+        &conditional_owner,
+        "owned-conditional-cleanup.lkjscript",
+        &Limits::default(),
+    )
+    .expect("branch-specific whole-place cleanup must compile");
+    assert!(conditional
+        .memory_plan()
+        .obligations
+        .iter()
+        .any(|obligation| {
+            obligation.drop_class == Some(crate::memory_plan::MemoryDropClass::Conditional)
+        }));
+    let implicit_drops = conditional
+        .ssa()
+        .program()
+        .functions
+        .iter()
+        .flat_map(|function| &function.blocks)
+        .flat_map(|block| &block.instructions)
+        .filter(|instruction| {
+            matches!(
+                instruction.kind,
+                lkjscript_ir::InstructionKind::Drop {
+                    glue: lkjscript_ir::DropGlueIdentity::ByteVector,
+                    kind: lkjscript_ir::DropEventKind::ImplicitCleanup,
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(implicit_drops, 2);
+
     let branch_local_result = ownership_source(
         "if/\ntrue\nlet/\nbind/\na\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nmove/\na\n/move\n/let\nlet/\nbind/\nb\nnew-byte-vector/\n2\n/new-byte-vector\n/bind\nmove/\nb\n/move\n/let\n/if",
         "byte-vector",
@@ -73,6 +107,19 @@ fn initial_owned_buf_slice_accepts_nll_mutation_move_and_return() {
         &Limits::default(),
     )
     .expect("branch simplification must clear a stale loop-header marker");
+}
+
+fn conditional_cleanup_source() -> String {
+    concat!(
+        "def/\nname/\nselect-bytes\n/name\npublic\nfn/\n",
+        "sig/\ninputs/\nbool\n/inputs\noutput/\nbyte-vector\n/output\n/sig\n",
+        "params/\nflag\nbool\n/params\nlet/\nbind/\nb\nnew-byte-vector/\n1\n",
+        "/new-byte-vector\n/bind\nlet/\nbind/\nc\nnew-byte-vector/\n2\n/new-byte-vector\n",
+        "/bind\nif/\nflag\nmove/\nb\n/move\nmove/\nc\n/move\n/if\n/let\n/let\n",
+        "/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\n",
+        "output/\nbyte-vector\n/output\n/sig\nselect-bytes/\ntrue\n/select-bytes\n/main\n"
+    )
+    .to_owned()
 }
 
 #[test]

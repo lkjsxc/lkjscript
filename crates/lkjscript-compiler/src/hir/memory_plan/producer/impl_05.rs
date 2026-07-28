@@ -16,6 +16,8 @@ impl<'a> Producer<'a> {
             entry,
             kind,
             drop_glue,
+            drop_class: (!matches!(kind, MemoryObligationKind::EndBorrow))
+                .then_some(MemoryDropClass::Static),
         });
         Ok(())
     }

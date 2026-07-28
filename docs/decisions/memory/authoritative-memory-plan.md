@@ -25,7 +25,7 @@ legacy tracing because analysis failed.
 
 `MemoryPlanId` is content-addressed by the plan schema, source and HIR identity,
 function signatures, use/escape facts, value plans, borrow scopes, drop
-obligations, and drop glue. Canonical encoding is ordered by dense semantic
+obligations, whole-place drop classes, and drop glue. Canonical encoding is ordered by dense semantic
 identity and never by map iteration, address, time, thread, or process state.
 
 `ExecutableProgram` retains the exact ID and opaque verified plan authority gates
@@ -106,14 +106,17 @@ storage-axis eligibility, drop-glue/type agreement, allocation-failure facts,
 and exact legacy-tracing registration. Producer failure or verifier mismatch is
 a compile error and never selects tracing.
 
-The plan now drives a verified static/dead SSA drop spine. Exact closed glue
-identities reach affine place metadata and explicit loan-end/drop events;
-`place-end` rejects an available owner. Byte-vector and owned typed-resource cleanup is elaborated on normal lexical
+The plan now drives a verified static/dead/conditional SSA drop spine. Exact
+closed glue identities and independently recomputed whole-place classes reach
+affine place metadata and explicit loan-end/drop events; `place-end` rejects an
+available owner. Byte-vector and owned typed-resource cleanup is elaborated on normal lexical
 and source-level structured terminator paths. Explicit typed-resource close
 receives a matching resource-drop event and suppresses implicit close. Borrowed
 standard input never receives guest-owned glue.
 
-Conditional flags, instruction-originated all-outcome resource cleanup, and
-bounded cleanup-failure attachment remain governed by
-[Deterministic Drop](deterministic-drop.md) and are not Current. The diagnostic
-SSA inventory remains derived evidence and cannot override the plan.
+Conditional cleanup is emitted on the exact live predecessor and ends the place
+on both edges; the verifier and bytecode unique-owner phi checks reject forged
+mismatches. Instruction-originated all-outcome resource cleanup remains
+governed by [Deterministic Drop](deterministic-drop.md) and is not Current.
+Bounded cleanup-failure attachment is Current. The diagnostic SSA inventory
+remains derived evidence and cannot override the plan.

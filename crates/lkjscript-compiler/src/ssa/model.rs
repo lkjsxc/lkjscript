@@ -106,6 +106,7 @@ pub(in crate::ssa) struct CleanupPlan {
     pub(in crate::ssa) next_expression: u32,
     pub(in crate::ssa) loan_ends: BTreeMap<u32, Vec<SsaLoanId>>,
     pub(in crate::ssa) place_glues: BTreeMap<SsaPlaceId, DropGlueIdentity>,
+    pub(in crate::ssa) place_drop_classes: BTreeMap<SsaPlaceId, MemoryDropClass>,
 }
 
 #[derive(Clone, Copy)]
@@ -127,6 +128,7 @@ impl CleanupPlan {
                 .push(SsaLoanId::new(loan.loan));
         }
         let mut place_glues = BTreeMap::new();
+        let mut place_drop_classes = BTreeMap::new();
         for obligation in plan
             .obligations
             .iter()
@@ -150,7 +152,16 @@ impl CleanupPlan {
                 MemoryDropGlueKind::Bytes => DropGlueIdentity::Bytes,
                 MemoryDropGlueKind::Resource(kind) => DropGlueIdentity::Resource(kind),
             };
-            if place_glues.insert(SsaPlaceId::new(place), glue).is_some() {
+            let place = SsaPlaceId::new(place);
+            let drop_class = obligation
+                .drop_class
+                .ok_or_else(|| Error::msg("HIR place obligation lost its drop class"))?;
+            if drop_class == MemoryDropClass::Open {
+                return Err(Error::msg("open HIR drop class reached SSA lowering"));
+            }
+            if place_glues.insert(place, glue).is_some()
+                || place_drop_classes.insert(place, drop_class).is_some()
+            {
                 return Err(Error::msg(
                     "HIR memory plan duplicates a place drop obligation",
                 ));
@@ -160,6 +171,7 @@ impl CleanupPlan {
             next_expression: function_plan.body.raw(),
             loan_ends,
             place_glues,
+            place_drop_classes,
         })
     }
 

@@ -5,17 +5,19 @@ use lkjscript_core::{Error, ResourceKind, Result};
 use crate::hir::{self, BindingId, Type};
 
 use super::{
-    compute_plan_id, HirMemoryPlan, MemoryDropGlueId, MemoryDropGlueKind, MemoryEscape,
-    MemoryFunctionId, MemoryParameterMode, MemoryStorage, MemorySubject, MemoryType,
-    HIR_MEMORY_PLAN_SCHEMA, MAX_MEMORY_PLAN_VERIFIER_STEPS,
+    compute_plan_id, HirMemoryPlan, MemoryDropClass, MemoryDropGlueId, MemoryDropGlueKind,
+    MemoryEscape, MemoryFunctionId, MemoryObligationKind, MemoryParameterMode, MemoryStorage,
+    MemorySubject, MemoryType, HIR_MEMORY_PLAN_SCHEMA, MAX_MEMORY_PLAN_VERIFIER_STEPS,
 };
 
 mod check;
+mod drop_class;
 mod support;
 mod walk;
 mod walk_support;
 
 use check::*;
+use drop_class::*;
 use support::*;
 use walk::*;
 use walk_support::*;
@@ -34,6 +36,7 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
     verify_entries(plan)?;
     verify_legacy_registration(plan)?;
     verify_drop_glues(plan)?;
+    verify_drop_classes(program, plan)?;
     verify_calls(program, plan, &facts)?;
     let steps = facts
         .steps

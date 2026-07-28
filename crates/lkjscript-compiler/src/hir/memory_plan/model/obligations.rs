@@ -25,6 +25,14 @@ pub struct MemoryDropGluePlan {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MemoryDropClass {
+    Static,
+    Dead,
+    Conditional,
+    Open,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryObligationKind {
     DropValue,
     DropResource(ResourceKind),
@@ -38,6 +46,7 @@ pub struct MemoryObligation {
     pub entry: MemoryEntryId,
     pub kind: MemoryObligationKind,
     pub drop_glue: Option<MemoryDropGlueId>,
+    pub drop_class: Option<MemoryDropClass>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -4,10 +4,10 @@
 
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
-**Accepted contract with verified static/dead whole-place cleanup for exact
-byte owners and owned typed resources. Bounded structured cleanup attachments
-are Current in the core outcome model and evaluator/VM teardown. Full promotion
-still requires conditional owners and every instruction-originated outcome.**
+**Accepted contract with verified static, dead, and conditional whole-place
+cleanup for exact byte owners and owned typed resources. Bounded structured
+cleanup attachments are Current in the core outcome model and evaluator/VM
+teardown. Full promotion still requires every instruction-originated outcome.**
 Aggregate partial moves remain out of scope.
 
 The implemented spine gives each direct affine SSA place an exact closed drop
@@ -23,9 +23,11 @@ VM. Borrowed standard input is rejected as a guest-owned obligation.
 Forced native byte-vector execution performs exact explicit drop and invocation
 teardown release, including instruction-originated trap and resource-limit
 cleanup, and proves zero final owners/loans. Native owned-resource glue remains
-fail-closed at whole-group preflight. Conditional flags and typed-resource
+fail-closed at whole-group preflight. Branch-specific conditional cleanup is
+Current when each reachable edge proves a whole-place move, explicit close, or
+live owner; it inserts no flag when edge facts decide statically. Typed-resource
 cleanup after instruction-originated trap, deadline, resource-limit, host
-failure, or propagated callee outcome are not Current. Core, evaluator, and VM
+failure, or propagated callee outcome is not Current. Core, evaluator, and VM
 retain bounded ordered cleanup records without replacing the primary outcome;
 deterministic injected provider and borrowed-stream failures cover truncation
 and attachment. Current safe sys owners still expose close through infallible
@@ -52,10 +54,12 @@ potential drop:
 - `conditional`: wholly initialized or wholly uninitialized;
 - `open`: partly initialized.
 
-Static drops need no flag. Dead drops disappear. Conditional drops use an
-internal typed boolean only when CFG facts cannot decide statically. Open drops
-are a structured compile error in this slice. Resource-bearing or affine
-aggregate fields remain rejected.
+Static drops need no flag. Dead drops disappear. Conditional drops execute on
+the exact live predecessor and both predecessors end the place when CFG facts
+decide statically. An internal typed boolean is reserved only for a future
+shape whose CFG facts cannot decide at an edge; no such shape is Current. Open
+drops are a structured compile error. Resource-bearing or affine aggregate
+fields remain rejected.
 
 ## SSA Events
 

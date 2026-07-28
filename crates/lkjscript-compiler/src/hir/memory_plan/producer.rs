@@ -10,15 +10,15 @@ use super::{
     compute_plan_id, FunctionMemoryPlan, FunctionMemorySignature, HirMemoryPlan, MemoryAliasing,
     MemoryAllocationFailure, MemoryBindingStorage, MemoryBorrowKind, MemoryCallId, MemoryCallPlan,
     MemoryCallTarget, MemoryConstantId, MemoryConstantPlan, MemoryConstantValue, MemoryContention,
-    MemoryDestruction, MemoryDropGlueId, MemoryDropGlueKind, MemoryDropGluePlan, MemoryEntryId,
-    MemoryEscape, MemoryExpressionId, MemoryExpressionKind, MemoryFunctionId, MemoryIdentity,
-    MemoryLoanPlan, MemoryMode, MemoryMultiplicity, MemoryObligation, MemoryObligationId,
-    MemoryObligationKind, MemoryOrigin, MemoryParameterMode, MemoryPlanEntry, MemoryPlanId,
-    MemoryPlanWork, MemoryPortability, MemoryResultMode, MemoryStorage, MemorySubject, MemoryType,
-    MemoryUse, MemoryUseId, MemoryUseKind, HIR_MEMORY_PLAN_SCHEMA, MAX_MEMORY_PLAN_CALLS,
-    MAX_MEMORY_PLAN_CONSTANTS, MAX_MEMORY_PLAN_ENTRIES, MAX_MEMORY_PLAN_EXPRESSIONS,
-    MAX_MEMORY_PLAN_FUNCTIONS, MAX_MEMORY_PLAN_LOANS, MAX_MEMORY_PLAN_OBLIGATIONS,
-    MAX_MEMORY_PLAN_USES,
+    MemoryDestruction, MemoryDropClass, MemoryDropGlueId, MemoryDropGlueKind, MemoryDropGluePlan,
+    MemoryEntryId, MemoryEscape, MemoryExpressionId, MemoryExpressionKind, MemoryFunctionId,
+    MemoryIdentity, MemoryLoanPlan, MemoryMode, MemoryMultiplicity, MemoryObligation,
+    MemoryObligationId, MemoryObligationKind, MemoryOrigin, MemoryParameterMode, MemoryPlanEntry,
+    MemoryPlanId, MemoryPlanWork, MemoryPortability, MemoryResultMode, MemoryStorage,
+    MemorySubject, MemoryType, MemoryUse, MemoryUseId, MemoryUseKind, HIR_MEMORY_PLAN_SCHEMA,
+    MAX_MEMORY_PLAN_CALLS, MAX_MEMORY_PLAN_CONSTANTS, MAX_MEMORY_PLAN_ENTRIES,
+    MAX_MEMORY_PLAN_EXPRESSIONS, MAX_MEMORY_PLAN_FUNCTIONS, MAX_MEMORY_PLAN_LOANS,
+    MAX_MEMORY_PLAN_OBLIGATIONS, MAX_MEMORY_PLAN_USES,
 };
 
 pub(super) fn derive(program: &hir::Program) -> Result<HirMemoryPlan> {
@@ -53,3 +53,4 @@ include!("producer/helpers_00.rs");
 include!("producer/helpers_01.rs");
 include!("producer/helpers_02.rs");
 include!("producer/helpers_03.rs");
+include!("producer/helpers_04.rs");

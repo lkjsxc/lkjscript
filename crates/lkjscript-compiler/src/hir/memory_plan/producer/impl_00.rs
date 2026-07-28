@@ -48,6 +48,7 @@ impl<'a> Producer<'a> {
         );
         self.build_main(main_id)?;
         self.finish_loans()?;
+        self.finish_drop_classes()?;
         let mut plan = HirMemoryPlan {
             schema: HIR_MEMORY_PLAN_SCHEMA,
             id: MemoryPlanId::from_bytes([0; 32]),

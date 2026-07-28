@@ -7,12 +7,12 @@ impl FunctionBuilder<'_> {
         expression_origin: hir::SourceId,
         incoming_env: BTreeMap<BindingId, ValueId>,
         incoming_slots: BTreeMap<BindingId, u16>,
-        then_result: (
+        mut then_result: (
             Option<ValueId>,
             Option<BlockId>,
             BTreeMap<BindingId, ValueId>,
         ),
-        else_result: (
+        mut else_result: (
             Option<ValueId>,
             Option<BlockId>,
             BTreeMap<BindingId, ValueId>,
@@ -38,6 +38,44 @@ impl FunctionBuilder<'_> {
                 Ok(Some(value))
             }
             (Some(then_value), Some(else_value)) => {
+                let conditional: Vec<_> = incoming_env
+                    .keys()
+                    .copied()
+                    .filter(|binding| {
+                        then_result.2.contains_key(binding) != else_result.2.contains_key(binding)
+                    })
+                    .collect();
+                for binding in conditional {
+                    if then_result.2.contains_key(&binding) {
+                        self.verify_conditional_absent_branch(binding, else_result.1, else_value)?;
+                        self.current = else_result.1;
+                        self.env = else_result.2.clone();
+                        self.end_conditional_branch_place(binding, expression_origin)?;
+                        else_result.1 = self.current;
+                        else_result.2 = self.env.clone();
+
+                        self.current = then_result.1;
+                        self.env = then_result.2.clone();
+                        self.drop_conditional_branch_owner(binding, expression_origin)?;
+                        self.end_conditional_branch_place(binding, expression_origin)?;
+                        then_result.1 = self.current;
+                        then_result.2 = self.env.clone();
+                    } else {
+                        self.verify_conditional_absent_branch(binding, then_result.1, then_value)?;
+                        self.current = then_result.1;
+                        self.env = then_result.2.clone();
+                        self.end_conditional_branch_place(binding, expression_origin)?;
+                        then_result.1 = self.current;
+                        then_result.2 = self.env.clone();
+
+                        self.current = else_result.1;
+                        self.env = else_result.2.clone();
+                        self.drop_conditional_branch_owner(binding, expression_origin)?;
+                        self.end_conditional_branch_place(binding, expression_origin)?;
+                        else_result.1 = self.current;
+                        else_result.2 = self.env.clone();
+                    }
+                }
                 let merge =
                     self.new_block(origin(expression_origin.raw(), self.next_position), false)?;
                 let result = self.add_block_parameter(

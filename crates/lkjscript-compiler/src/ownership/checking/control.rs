@@ -80,9 +80,7 @@ pub(in crate::ownership) fn check_control_expr(
                 (true, true) => {}
                 (false, false) if left == right => *state = left,
                 (false, false) => {
-                    return Err(Error::msg(
-                        "ownership and loan state must match exactly at reachable branch join",
-                    ));
+                    *state = merge_conditional_cleanup(left, right, places, future)?;
                 }
             }
         }

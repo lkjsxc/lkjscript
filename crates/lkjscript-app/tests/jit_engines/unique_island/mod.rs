@@ -6,6 +6,7 @@ use lkjscript_native::RuntimeCallSlot;
 use lkjscript_vm::run_chunk;
 
 mod bytes;
+mod conditional;
 mod support;
 mod word;
 use support::*;

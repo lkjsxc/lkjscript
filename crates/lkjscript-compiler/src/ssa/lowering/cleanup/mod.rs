@@ -1,5 +1,7 @@
 use crate::ssa::*;
 
+mod conditional;
+
 impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn begin_memory_expression(&mut self) -> Result<MemoryExpressionId> {
         self.cleanup.begin_expression()
@@ -89,6 +91,9 @@ impl FunctionBuilder<'_> {
         binding: BindingId,
         expression_origin: hir::SourceId,
     ) -> Result<()> {
+        if !self.active_place_bindings.contains(&binding) {
+            return Ok(());
+        }
         let Some(place) = self.owned_place_for_binding(binding)? else {
             return Ok(());
         };

@@ -54,6 +54,7 @@ impl FunctionBuilder<'_> {
             (false, false) => incoming_active_places,
         };
 
+        self.active_place_bindings = merged_active_places;
         let result_type = if expression.ty == Type::Never {
             SsaType::Unit
         } else {
@@ -67,7 +68,6 @@ impl FunctionBuilder<'_> {
             (then_value, then_end, then_env),
             (else_value, else_end, else_env),
         )?;
-        self.active_place_bindings = merged_active_places;
         Ok(result)
     }
 

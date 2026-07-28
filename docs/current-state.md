@@ -84,19 +84,22 @@ Git history. They do not provide aliases or acceptance fallbacks.
   `main`, or enter unsupported aggregates.
 - Exact drop glue for deterministic `byte-vector` and all eleven resource kinds
   reaches affine SSA place metadata. Verified SSA has explicit loan-end and
-  whole-place-drop events, rejects owner-erasing `place-end`, proves static/dead
-  discharge at explicit terminators, and pairs explicit `drop`, SQLite close,
+  whole-place-drop events, rejects owner-erasing `place-end`, proves
+  static/dead/conditional discharge at joins and explicit terminators, and
+  pairs explicit `drop`, SQLite close,
   and SQLite finalize with exact resource-drop events.
 - Byte-vector and owned typed-resource cleanup is elaborated on normal lexical
   and source-level return, break, continue, trap, and exit paths. Explicit close
   suppresses implicit resource glue; evaluator fake owners and reference-VM
   bytecode use their core tables, while borrowed standard input is never closed.
   Forced native byte-vector execution additionally releases outstanding bytes
-  after instruction-originated failure. Core, evaluator, and VM teardown now
-  retain bounded ordered cleanup failures without replacing the primary outcome.
-  Conditional owners, instruction-originated resource cleanup, and native
-  owned-resource execution remain accepted-contract work, so deterministic drop
-  and typed resources are not complete Current capabilities.
+  after instruction-originated failure. Statically decidable conditional byte
+  owners execute through all four engines without fallback; conditional typed
+  resources execute explicit/implicit close in the VM. Core, evaluator, and VM
+  teardown retain bounded ordered cleanup failures without replacing the primary
+  outcome. Instruction-originated resource cleanup and native owned-resource
+  execution remain accepted-contract work, so deterministic drop and typed
+  resources are not complete Current capabilities.
 - The VM uses checked generation-bearing core resource-table tokens; evaluator
   executions use exact fake lifecycle providers without ambient host I/O. Forced
   baseline and proof JIT support only `standard-input`, installing or reusing a
@@ -147,7 +150,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected ledger spans compiler phases; one request-owned ledger
   across every compiler/runtime authority remains an accepted target.
-
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.
@@ -165,9 +167,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 ## Accepted targets not claimed Current
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
-- conditional and instruction-originated typed-resource cleanup, evaluator
-  resource-operation dispatch, and forced native owned-resource execution beyond
-  borrowed `standard-input`;
+- instruction-originated typed-resource cleanup, evaluator resource-operation
+  dispatch, and forced native owned-resource execution beyond borrowed
+  `standard-input`;
 - full affine `byte-vector` corpus migration, ranged lexical byte slices,
   borrowed `str`, and removal of transitional `buf`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
