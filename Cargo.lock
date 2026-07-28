@@ -82,7 +82,9 @@ dependencies = [
 name = "lkjscript-sys"
 version = "0.1.0"
 dependencies = [
+ "lkjscript-contracts",
  "lkjscript-native",
+ "lkjscript-resource",
 ]
 
 [[package]]

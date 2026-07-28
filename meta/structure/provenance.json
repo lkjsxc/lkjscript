@@ -5,7 +5,7 @@
     {
       "path": "Cargo.lock",
       "class": "generated-mutable",
-      "sha256": "f3ed3dbaba0657570c883cae9b9040446ed149a65502650b7b4e22bb3cb2d68b",
+      "sha256": "31f863cab1f3731c09597315f02647cd459c5f9716a2b528863d637adc8c9eaa",
       "generator": "cargo 1.96.0 lockfile v4; Cargo.toml workspace dependency resolution"
     },
     {

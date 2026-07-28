@@ -8,6 +8,7 @@
 pub mod executable;
 mod fd;
 mod file;
+mod linux_host;
 mod native_path;
 mod poll;
 mod random;
@@ -20,6 +21,12 @@ pub use fd::{close_fd, FdError, OwnedFd};
 pub use file::{
     fsync_fd, open_append, open_create_new, open_dir, open_read, open_write, path_exists, read_fd,
     rename_path, truncate_fd, write_fd,
+};
+pub use linux_host::{
+    current_process_affinity, current_thread_affinity, discover_linux_host, discover_linux_host_at,
+    AffinityGuard, CacheKind, ConfigValue, Evidence, HostSchedulerObservation,
+    LinuxCacheObservation, LinuxCpuObservation, LinuxFactSource, LinuxHostError, LinuxHostSnapshot,
+    LinuxNumaObservation, LinuxWorkerBinder, SchedExtState, SchedulerPolicy,
 };
 pub use poll::{poll_fd, PollError};
 pub use random::random_fill;
