@@ -195,5 +195,5 @@ impl Evaluator<'_> {
     }
 }
 
-include!("instruction/constants.rs");
-include!("instruction/resource_drop.rs");
+include!("constants.rs");
+include!("resource_drop.rs");
