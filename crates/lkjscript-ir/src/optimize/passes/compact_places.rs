@@ -44,6 +44,8 @@ pub(crate) fn compact_places(program: &mut Program) -> crate::Result<()> {
                 match instruction.kind {
                     InstructionKind::PlaceInit { place, .. }
                     | InstructionKind::PlaceEnd { place }
+                    | InstructionKind::EndBorrow { place, .. }
+                    | InstructionKind::Drop { place, .. }
                     | InstructionKind::Move { place, .. }
                     | InstructionKind::Borrow { place, .. } => {
                         referenced.insert(place);
@@ -81,6 +83,8 @@ pub(crate) fn compact_places(program: &mut Program) -> crate::Result<()> {
                 match &mut instruction.kind {
                     InstructionKind::PlaceInit { place, .. }
                     | InstructionKind::PlaceEnd { place }
+                    | InstructionKind::EndBorrow { place, .. }
+                    | InstructionKind::Drop { place, .. }
                     | InstructionKind::Move { place, .. }
                     | InstructionKind::Borrow { place, .. } => {
                         *place = mapped_place(&mapping, *place)?;

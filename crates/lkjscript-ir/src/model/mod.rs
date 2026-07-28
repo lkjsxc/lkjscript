@@ -2,6 +2,7 @@ mod constant;
 mod error;
 mod ids;
 mod instruction;
+mod instruction_operands;
 mod memory;
 mod metadata;
 mod program;
@@ -20,9 +21,9 @@ pub use instruction::{
     InstructionKind, InstructionMetadata, Safepoint,
 };
 pub use memory::{
-    MemoryAliasing, MemoryContention, MemoryDestruction, MemoryIdentity, MemoryLocality,
-    MemoryMode, MemoryMultiplicity, MemoryObligationSubject, MemoryPortability, MemoryStorage,
-    SsaMemoryInventory, SsaMemoryObligation,
+    DropEventKind, DropGlueIdentity, MemoryAliasing, MemoryContention, MemoryDestruction,
+    MemoryIdentity, MemoryLocality, MemoryMode, MemoryMultiplicity, MemoryObligationSubject,
+    MemoryPortability, MemoryStorage, SsaMemoryInventory, SsaMemoryObligation,
 };
 pub use metadata::{
     EffectSet, EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, ProductField,

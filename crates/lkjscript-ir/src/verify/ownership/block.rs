@@ -16,7 +16,6 @@ pub(crate) fn process_ownership_block(
     for (index, instruction) in block.instructions.iter().enumerate() {
         charge_ownership_work(work, 1)?;
         expire_unplaced_affine(&mut state, &last_use, index);
-        expire_loans(&mut live_loans, &last_use, index);
         verify_frame_affine_available(
             function,
             instruction.metadata.frame_state.as_ref(),
@@ -24,7 +23,21 @@ pub(crate) fn process_ownership_block(
             types,
         )?;
         for operand in instruction.kind.operands() {
-            if is_affine(value_type(types, operand)?) && !state.affine.contains_key(&operand) {
+            let pending_drop_operand =
+                matches!(
+                    instruction.kind,
+                    InstructionKind::Drop {
+                        kind: crate::DropEventKind::ExplicitClose,
+                        ..
+                    }
+                ) && state.pending_drops.values().any(|value| *value == operand);
+            let ended_borrow_operand =
+                matches!(instruction.kind, InstructionKind::EndBorrow { .. });
+            if is_affine(value_type(types, operand)?)
+                && !state.affine.contains_key(&operand)
+                && !pending_drop_operand
+                && !ended_borrow_operand
+            {
                 return fail(format!(
                     "SSA reuses unavailable affine ValueId {} in instruction {} {:?} after move or transfer",
                     operand.raw(),
@@ -39,10 +52,21 @@ pub(crate) fn process_ownership_block(
 
     let terminator_index = block.instructions.len();
     expire_unplaced_affine(&mut state, &last_use, terminator_index);
-    expire_loans(&mut live_loans, &last_use, terminator_index);
     verify_frame_affine_available(function, block.metadata.frame_state.as_ref(), &state, types)?;
     if live_loans.values().any(|loans| !loans.is_empty()) {
-        return fail("SSA live loan reaches a block terminator in the current ownership slice");
+        return fail("SSA live loan reaches a block terminator without EndBorrow");
+    }
+    let terminal = !matches!(
+        block.terminator,
+        Terminator::Branch { .. } | Terminator::ConditionalBranch { .. }
+    );
+    let incomplete = !state.pending_drops.is_empty()
+        || state
+            .owners
+            .values()
+            .any(|value| value_type(types, *value).is_ok_and(is_owned_buf));
+    if terminal && !matches!(block.terminator, Terminator::Return(_)) && incomplete {
+        return fail("SSA structured terminator has incomplete whole-place cleanup");
     }
 
     match &block.terminator {
@@ -89,6 +113,14 @@ pub(crate) fn process_ownership_block(
                         return fail("SSA affine return lacks explicit Move transfer provenance");
                     }
                 }
+            }
+            if !state.pending_drops.is_empty()
+                || state
+                    .owners
+                    .values()
+                    .any(|owner| value_type(types, *owner).is_ok_and(is_owned_buf))
+            {
+                return fail("SSA Return has incomplete whole-place cleanup");
             }
             Ok(Vec::new())
         }

@@ -55,7 +55,23 @@ fn affine_handle_cleanup_reaches_verified_ssa() {
     let source = handle_main(cleanup());
     let program = compile_source(&source, "handle-drop.lkjscript", &Limits::default())
         .expect("explicit drop");
-    assert!(!program.ssa().program().functions.is_empty());
+    assert!(program
+        .ssa()
+        .program()
+        .functions
+        .iter()
+        .flat_map(|function| &function.blocks)
+        .flat_map(|block| &block.instructions)
+        .any(|instruction| matches!(
+            instruction.kind,
+            lkjscript_ir::InstructionKind::Drop {
+                glue: lkjscript_ir::DropGlueIdentity::Resource(
+                    lkjscript_core::ResourceKind::FileReader
+                ),
+                kind: lkjscript_ir::DropEventKind::ExplicitClose,
+                ..
+            }
+        )));
 }
 
 #[test]

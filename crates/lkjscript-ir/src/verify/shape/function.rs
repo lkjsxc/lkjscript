@@ -52,6 +52,12 @@ pub(crate) fn verify_function(program: &Program, function: &Function) -> crate::
             return fail("SSA places must have dense IDs and unique binding identities");
         }
         verify_type(program, &place.ty, &type_parameters)?;
+        if place.drop_glue.is_some() && place.drop_glue != expected_drop_glue(&place.ty) {
+            return fail("SSA place has a mismatched closed drop-glue identity");
+        }
+        if is_owned_buf(&place.ty) && place.drop_glue.is_none() {
+            return fail("SSA byte-vector place is missing its drop-glue obligation");
+        }
     }
     verify_type(program, &function.signature.result, &type_parameters)?;
     if matches!(

@@ -34,6 +34,8 @@ pub(super) fn preflight_function(
                 InstructionKind::Copy(_) => {}
                 InstructionKind::PlaceInit { .. }
                 | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::EndBorrow { .. }
+                | InstructionKind::Drop { .. }
                 | InstructionKind::Move { .. }
                 | InstructionKind::Borrow { .. } => {
                     return unsupported_operation(

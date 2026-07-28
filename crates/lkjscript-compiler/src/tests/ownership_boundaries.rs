@@ -62,7 +62,11 @@ fn memory_inventory_retains_verified_owner_and_loan_modes() {
     assert_eq!(obligations.len(), 2);
     assert!(obligations.iter().any(|obligation| {
         obligation.mode.storage == lkjscript_ir::MemoryStorage::TransitionalTracedBuffer
-            && obligation.mode.destruction == lkjscript_ir::MemoryDestruction::CompilerFactOnly
+            && obligation.mode.destruction
+                == lkjscript_ir::MemoryDestruction::DropGlue(
+                    lkjscript_ir::DropGlueIdentity::LegacyTracedByteVector,
+                )
+            && obligation.drop_glue == Some(lkjscript_ir::DropGlueIdentity::LegacyTracedByteVector)
     }));
     assert!(obligations.iter().any(|obligation| {
         obligation.mode.aliasing == lkjscript_ir::MemoryAliasing::BorrowedShared

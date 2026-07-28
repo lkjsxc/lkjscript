@@ -37,21 +37,6 @@ pub(crate) fn expire_unplaced_affine(
     });
 }
 
-pub(crate) fn expire_loans(
-    live: &mut BTreeMap<crate::PlaceId, Vec<LiveLoan>>,
-    last_use: &BTreeMap<ValueId, usize>,
-    position: usize,
-) {
-    for loans in live.values_mut() {
-        loans.retain(|loan| {
-            last_use
-                .get(&loan.value)
-                .is_some_and(|last| *last >= position)
-        });
-    }
-    live.retain(|_, loans| !loans.is_empty());
-}
-
 pub(crate) fn verify_frame_affine_available(
     function: &Function,
     frame: Option<&crate::FrameState>,
@@ -66,12 +51,17 @@ pub(crate) fn verify_frame_affine_available(
         if !is_owned_value(value_type(types, local.value)?) {
             continue;
         }
-        let place = function
+        let Some(place) = function
             .places
             .iter()
             .find(|place| place.binding == local.binding)
-            .ok_or_else(|| IrError::new("SSA frame Owned local has no exact PlaceId"))?;
-        if state.owners.get(&place.id) != Some(&local.value) {
+        else {
+            if matches!(value_type(types, local.value)?, SsaType::Resource(_)) {
+                continue;
+            }
+            return Err(IrError::new("SSA frame Owned local has no exact PlaceId"));
+        };
+        if place.drop_glue.is_some() && state.owners.get(&place.id) != Some(&local.value) {
             return fail("SSA frame Owned local does not match its current place owner");
         }
     }
@@ -114,6 +104,7 @@ pub(crate) fn ownership_state_cells(state: &OwnershipState) -> crate::Result<usi
         .active_places
         .len()
         .checked_add(state.owners.len())
+        .and_then(|cells| cells.checked_add(state.pending_drops.len()))
         .and_then(|cells| cells.checked_add(state.affine.len()))
         .ok_or_else(|| IrError::new("SSA ownership state cell count overflow"))
 }

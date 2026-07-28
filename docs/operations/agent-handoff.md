@@ -67,12 +67,16 @@ traced byte object.
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
 byte loans, and direct typed resources. Only the opaque memory-verified HIR
-wrapper enters SSA lowering. `place-end` may still discard an active owner fact.
-VM resources now use the core table through reusable generation-bearing guest
-tokens, exact capability providers, one execution scope, reservations,
-invalidating close, and reverse emergency cleanup. Compiler cleanup edges,
-bounded structured provider-close failure attachment, evaluator providers, and
-native execution remain absent.
+wrapper enters SSA lowering. The verified static/dead SSA drop spine now carries
+closed glue identities, explicit loan-end/drop events, and rejects active-owner
+`place-end`. It elaborates legacy byte-vector cleanup on lexical and explicit
+source terminator paths and records explicit typed-resource close; conditional
+flags, implicit resource close, instruction-originated all-outcome routing, and
+physical byte release remain incomplete. VM resources use the core table through
+reusable generation-bearing guest tokens, exact providers, one execution scope,
+reservations, invalidating close, and reverse emergency cleanup. Structured
+provider-close failure attachment, evaluator providers, and native execution
+remain absent.
 
 ## Current Non-Memory Boundaries
 
@@ -90,7 +94,8 @@ native execution remain absent.
 
 ## Accepted Next Sequence
 
-1. Elaborate exact whole-place cleanup for byte owners and all typed resources.
+1. Complete conditional and instruction-originated all-outcome cleanup plus
+   executable byte/resource glue beyond the Current static/dead SSA spine.
 2. Extend resource cleanup and host execution through evaluator and forced
    native tiers with bounded structured cleanup-failure attachment.
 3. Integrate deterministic generation-safe unique storage into every engine.

@@ -14,6 +14,9 @@ pub struct PlaceMetadata {
     pub id: PlaceId,
     pub binding: BindingId,
     pub ty: SsaType,
+    /// `Some` is one exact owned whole-place cleanup obligation. `None` is a
+    /// borrowed resource parameter or a non-affine lexical place.
+    pub drop_glue: Option<DropGlueIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

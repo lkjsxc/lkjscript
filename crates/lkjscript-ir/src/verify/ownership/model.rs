@@ -36,6 +36,8 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> usize {
         | InstructionKind::FunctionRef(_) => 0,
         InstructionKind::Copy(_)
         | InstructionKind::PlaceInit { .. }
+        | InstructionKind::EndBorrow { .. }
+        | InstructionKind::Drop { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
         | InstructionKind::F64FromI64Exact { .. }
@@ -101,17 +103,20 @@ pub(crate) struct AffineFact {
 pub(crate) struct OwnershipState {
     pub(crate) active_places: BTreeSet<crate::PlaceId>,
     pub(crate) owners: BTreeMap<crate::PlaceId, ValueId>,
+    pub(crate) pending_drops: BTreeMap<crate::PlaceId, ValueId>,
     pub(crate) affine: BTreeMap<ValueId, AffineFact>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BorrowDefinition {
     pub(crate) block: BlockId,
+    pub(crate) place: crate::PlaceId,
     pub(crate) loan: crate::LoanId,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LiveLoan {
+    pub(crate) loan: crate::LoanId,
     pub(crate) kind: crate::BorrowKind,
     pub(crate) value: ValueId,
 }

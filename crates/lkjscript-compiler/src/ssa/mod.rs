@@ -6,17 +6,21 @@ use std::time::{Duration, Instant};
 use lkjscript_core::{BudgetLedger, Error, Result};
 use lkjscript_ir::{
     verify, BindingId as SsaBindingId, Block, BlockId, BlockMetadata, BlockParameter,
-    BorrowKind as SsaBorrowKind, CallTarget, Constant, EffectSet, EnumFieldMetadata,
-    EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, FailureBehavior, FrameLocal, FrameState,
-    Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
-    InstructionMetadata, LoanId as SsaLoanId, Origin, PlaceId as SsaPlaceId, PlaceMetadata,
-    ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint, Signature,
-    SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
-    TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VerifiedProgram,
+    BorrowKind as SsaBorrowKind, CallTarget, Constant, DropEventKind, DropGlueIdentity, EffectSet,
+    EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, FailureBehavior,
+    FrameLocal, FrameState, Function, FunctionId, GenericInstantiation, ImplId, ImplMetadata,
+    Instruction, InstructionKind, InstructionMetadata, LoanId as SsaLoanId, Origin,
+    PlaceId as SsaPlaceId, PlaceMetadata, ProductField, ProductId, ProductMetadata, Program,
+    RuntimeOp, Safepoint, Signature, SourceMetadata, SsaType, Terminator, TraitBound, TraitId,
+    TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
+    VerifiedProgram,
 };
 
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
-use crate::memory_plan::MemoryVerifiedHir;
+use crate::memory_plan::{
+    HirMemoryPlan, MemoryDropGlueKind, MemoryExpressionId, MemoryFunctionId, MemoryObligationKind,
+    MemorySubject, MemoryVerifiedHir,
+};
 use crate::types::Type;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -54,7 +58,7 @@ pub(crate) fn lower_program_with_metrics(
     let program = memory_verified.hir();
     let construction_started = Instant::now();
     crate::analyze::verify_match_plans(program)?;
-    let ssa = construct_program(program)?;
+    let ssa = construct_program(program, memory_verified.plan())?;
     let construction = construction_started.elapsed();
     let verification_started = Instant::now();
     let verified = verify(ssa).map_err(ir_error)?;
@@ -101,6 +105,7 @@ pub(in crate::ssa) struct LoopTarget {
     pub(in crate::ssa) header: BlockId,
     pub(in crate::ssa) exit: BlockId,
     pub(in crate::ssa) bindings: Vec<BindingId>,
+    pub(in crate::ssa) active_place_bindings: Vec<BindingId>,
 }
 
 pub(in crate::ssa) struct FunctionBuilder<'a> {
@@ -119,6 +124,9 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) next_position: u32,
     pub(in crate::ssa) value_types: Vec<SsaType>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
+    pub(in crate::ssa) cleanup: CleanupPlan,
+    pub(in crate::ssa) active_place_bindings: Vec<BindingId>,
+    pub(in crate::ssa) active_loans: BTreeMap<SsaLoanId, ActiveLoan>,
     pub(in crate::ssa) env: BTreeMap<BindingId, ValueId>,
     pub(in crate::ssa) slots: BTreeMap<BindingId, u16>,
     pub(in crate::ssa) loops: Vec<LoopTarget>,

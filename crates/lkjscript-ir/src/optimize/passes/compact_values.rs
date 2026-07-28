@@ -60,6 +60,8 @@ pub(crate) fn rewrite_function_values(
                 | InstructionKind::FunctionRef(_) => {}
                 InstructionKind::Copy(value)
                 | InstructionKind::PlaceInit { value, .. }
+                | InstructionKind::EndBorrow { value, .. }
+                | InstructionKind::Drop { value, .. }
                 | InstructionKind::Move { value, .. }
                 | InstructionKind::Borrow { value, .. }
                 | InstructionKind::F64FromI64Exact { value }

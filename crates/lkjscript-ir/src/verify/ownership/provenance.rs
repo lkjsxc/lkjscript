@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::verify::*;
-use crate::{Function, InstructionKind, IrError};
+use crate::{Function, InstructionKind};
 
 pub(crate) fn collect_ownership_provenance(
     function: &Function,
@@ -21,10 +21,7 @@ pub(crate) fn collect_ownership_provenance(
 
     for parameter in &entry.parameters {
         charge_ownership_work(&mut work, 1)?;
-        if is_owned_value(&parameter.ty) {
-            let place = parameter.owner_place.ok_or_else(|| {
-                IrError::new("SSA Owned entry parameter is missing exact place provenance")
-            })?;
+        if let Some(place) = parameter.owner_place {
             let declared = place_by_id(function, place)?;
             if declared.ty != parameter.ty || !proven_places.insert(place) {
                 return fail("SSA Owned entry parameter has duplicate or mismatched provenance");
@@ -39,7 +36,7 @@ pub(crate) fn collect_ownership_provenance(
                 InstructionKind::PlaceInit { place, .. } => {
                     proven_places.insert(place);
                 }
-                InstructionKind::Borrow { loan, .. } => {
+                InstructionKind::Borrow { place, loan, .. } => {
                     if !loan_ids.insert(loan) {
                         return fail("SSA has duplicate LoanId ownership facts");
                     }
@@ -47,6 +44,7 @@ pub(crate) fn collect_ownership_provenance(
                         instruction.id,
                         BorrowDefinition {
                             block: block.id,
+                            place,
                             loan,
                         },
                     );
@@ -56,7 +54,7 @@ pub(crate) fn collect_ownership_provenance(
         }
     }
     for place in &function.places {
-        if is_owned_value(&place.ty) && !proven_places.contains(&place.id) {
+        if place.drop_glue.is_some() && !proven_places.contains(&place.id) {
             return fail("SSA Owned local place is missing exact initialization provenance");
         }
     }

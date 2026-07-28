@@ -29,6 +29,8 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
                     instruction.kind,
                     InstructionKind::PlaceInit { .. }
                         | InstructionKind::PlaceEnd { .. }
+                        | InstructionKind::EndBorrow { .. }
+                        | InstructionKind::Drop { .. }
                         | InstructionKind::Move { .. }
                         | InstructionKind::Borrow { .. }
                 )
@@ -40,10 +42,7 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
 
     let mut initial = OwnershipState::default();
     for parameter in &entry.parameters {
-        if is_owned_value(&parameter.ty) {
-            let place = parameter.owner_place.ok_or_else(|| {
-                IrError::new("SSA Owned entry parameter is missing place provenance")
-            })?;
+        if let Some(place) = parameter.owner_place {
             initial.active_places.insert(place);
             initial.owners.insert(place, parameter.id);
             initial.affine.insert(

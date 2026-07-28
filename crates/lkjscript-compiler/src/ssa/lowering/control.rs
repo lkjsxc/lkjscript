@@ -16,6 +16,7 @@ impl FunctionBuilder<'_> {
         let else_block = self.new_block(branch_origin, false)?;
         let incoming_env = self.env.clone();
         let incoming_slots = self.slots.clone();
+        let incoming_active_places = self.active_place_bindings.clone();
         let then_env = self.add_environment_parameters(then_block, &incoming_env, branch_origin)?;
         let else_env = self.add_environment_parameters(else_block, &incoming_env, branch_origin)?;
         let incoming_arguments = Self::environment_arguments(&incoming_env);
@@ -33,27 +34,41 @@ impl FunctionBuilder<'_> {
         let then_value = self.lower_expr(then_branch)?;
         let then_end = self.current;
         let then_env = self.env.clone();
+        let then_active_places = self.active_place_bindings.clone();
 
         self.switch_to(else_block)?;
+        self.active_place_bindings = incoming_active_places.clone();
         self.env = else_env;
         self.slots = incoming_slots.clone();
         let else_value = self.lower_expr(else_branch)?;
         let else_end = self.current;
         let else_env = self.env.clone();
+        let else_active_places = self.active_place_bindings.clone();
+        let merged_active_places = match (then_value.is_some(), else_value.is_some()) {
+            (true, true) if then_active_places == else_active_places => then_active_places,
+            (true, true) => {
+                return Err(Error::msg("SSA branch cleanup states do not match exactly"));
+            }
+            (true, false) => then_active_places,
+            (false, true) => else_active_places,
+            (false, false) => incoming_active_places,
+        };
 
         let result_type = if expression.ty == Type::Never {
             SsaType::Unit
         } else {
             lower_type(&expression.ty, self.product_ids)?
         };
-        self.merge_branches(
+        let result = self.merge_branches(
             result_type,
             expression.origin,
             incoming_env,
             incoming_slots,
             (then_value, then_end, then_env),
             (else_value, else_end, else_env),
-        )
+        )?;
+        self.active_place_bindings = merged_active_places;
+        Ok(result)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -81,6 +96,7 @@ impl FunctionBuilder<'_> {
         };
         let incoming_env = self.env.clone();
         let incoming_slots = self.slots.clone();
+        let incoming_active_places = self.active_place_bindings.clone();
         let right_entry_env =
             self.add_environment_parameters(evaluate_right, &incoming_env, branch_origin)?;
         let skipped_entry_env =
@@ -100,14 +116,17 @@ impl FunctionBuilder<'_> {
         let right_value = self.lower_expr(right)?;
         let right_end = self.current;
         let right_env = self.env.clone();
+        let right_active_places = self.active_place_bindings.clone();
 
         self.switch_to(skip_right)?;
+        self.active_place_bindings = incoming_active_places.clone();
         self.env = skipped_entry_env;
         self.slots = incoming_slots.clone();
         let skipped_value =
             self.constant(SsaType::Bool, Constant::Bool(skipped), expression.origin)?;
         let skipped_end = self.current;
         let skipped_env = self.env.clone();
+        let skipped_active_places = self.active_place_bindings.clone();
 
         let (then_result, else_result) = if operation == Operation::And {
             (
@@ -120,13 +139,24 @@ impl FunctionBuilder<'_> {
                 (right_value, right_end, right_env),
             )
         };
-        self.merge_branches(
+        let result = self.merge_branches(
             SsaType::Bool,
             expression.origin,
             incoming_env,
             incoming_slots,
             then_result,
             else_result,
-        )
+        )?;
+        self.active_place_bindings = if right_value.is_some() {
+            if right_active_places != skipped_active_places {
+                return Err(Error::msg(
+                    "SSA short-circuit cleanup states do not match exactly",
+                ));
+            }
+            right_active_places
+        } else {
+            skipped_active_places
+        };
+        Ok(result)
     }
 }

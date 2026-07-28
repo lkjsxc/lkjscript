@@ -105,6 +105,32 @@ pub(crate) fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
         id: PlaceId::new(id),
         binding: crate::BindingId::new(binding),
         ty: owned_buf_type(),
+        drop_glue: Some(DropGlueIdentity::LegacyTracedByteVector),
+    }
+}
+
+pub(crate) fn drop_byte(id: u32, place: u32, value: u32) -> Instruction {
+    Instruction {
+        id: ValueId::new(id),
+        ty: SsaType::Unit,
+        kind: InstructionKind::Drop {
+            place: PlaceId::new(place),
+            value: ValueId::new(value),
+            glue: DropGlueIdentity::LegacyTracedByteVector,
+            kind: DropEventKind::ImplicitCleanup,
+        },
+        metadata: metadata(EffectSet::PURE),
+    }
+}
+
+pub(crate) fn place_end(id: u32, place: u32) -> Instruction {
+    Instruction {
+        id: ValueId::new(id),
+        ty: SsaType::Unit,
+        kind: InstructionKind::PlaceEnd {
+            place: PlaceId::new(place),
+        },
+        metadata: metadata(EffectSet::PURE),
     }
 }
 

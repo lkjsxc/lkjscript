@@ -8,14 +8,30 @@ fn initial_owned_buf_slice_accepts_nll_mutation_move_and_return() {
     );
     let program = compile_source(&source, "owned-valid.lkjscript", &Limits::default())
         .expect("valid Owned Buf safe island");
-    assert!(program
+    let instructions: Vec<_> = program
         .ssa()
         .program()
         .functions
         .iter()
         .flat_map(|function| &function.blocks)
         .flat_map(|block| &block.instructions)
-        .any(|instruction| matches!(instruction.kind, lkjscript_ir::InstructionKind::Move { .. })));
+        .collect();
+    let last_end = instructions
+        .iter()
+        .rposition(|instruction| {
+            matches!(
+                instruction.kind,
+                lkjscript_ir::InstructionKind::EndBorrow { .. }
+            )
+        })
+        .expect("verified loans have explicit end events");
+    let moved = instructions
+        .iter()
+        .rposition(|instruction| {
+            matches!(instruction.kind, lkjscript_ir::InstructionKind::Move { .. })
+        })
+        .expect("fixture transfers its owner");
+    assert!(last_end < moved, "borrow must end before owner move");
 
     let shared_pair = ownership_source(
         "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nlet/\nbind/\nr1\nborrow/\nb\n/borrow\n/bind\nbind/\nr2\nborrow/\nb\n/borrow\n/bind\ndo/\nbyte-slice-length/\nr1\n/byte-slice-length\nbyte-slice-length/\nr2\n/byte-slice-length\n/do\n/let\n/let",
@@ -57,6 +73,47 @@ fn initial_owned_buf_slice_accepts_nll_mutation_move_and_return() {
         &Limits::default(),
     )
     .expect("branch simplification must clear a stale loop-header marker");
+}
+
+#[test]
+fn static_byte_cleanup_covers_normal_and_explicit_trap_paths() {
+    let normal = ownership_source(
+        "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nunit\n/let",
+        "unit",
+    );
+    let program = compile_source(&normal, "drop-normal.lkjscript", &Limits::default())
+        .expect("static byte owner cleanup");
+    let main = program.ssa().program().functions.last().expect("main SSA");
+    assert!(main
+        .blocks
+        .iter()
+        .flat_map(|block| &block.instructions)
+        .any(|instruction| {
+            matches!(
+                instruction.kind,
+                lkjscript_ir::InstructionKind::Drop {
+                    glue: lkjscript_ir::DropGlueIdentity::LegacyTracedByteVector,
+                    kind: lkjscript_ir::DropEventKind::ImplicitCleanup,
+                    ..
+                }
+            )
+        }));
+
+    let trapped = ownership_source(
+        "let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\ntrap/\nstring-literal/\nstop\n/string-literal\n/trap\n/let",
+        "unit",
+    );
+    let program = compile_source(&trapped, "drop-trap.lkjscript", &Limits::default())
+        .expect("trap edge byte owner cleanup");
+    let main = program.ssa().program().functions.last().expect("main SSA");
+    let trap_block = main
+        .blocks
+        .iter()
+        .find(|block| matches!(block.terminator, lkjscript_ir::Terminator::Trap { .. }))
+        .expect("trap block");
+    assert!(trap_block.instructions.iter().any(|instruction| {
+        matches!(instruction.kind, lkjscript_ir::InstructionKind::Drop { .. })
+    }));
 }
 
 #[test]

@@ -43,6 +43,16 @@ pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
     is_owned_buf(ty) || matches!(ty, SsaType::Resource(_))
 }
 
+pub(crate) fn expected_drop_glue(ty: &SsaType) -> Option<crate::DropGlueIdentity> {
+    match ty {
+        SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf => {
+            Some(crate::DropGlueIdentity::LegacyTracedByteVector)
+        }
+        SsaType::Resource(kind) => Some(crate::DropGlueIdentity::Resource(*kind)),
+        _ => None,
+    }
+}
+
 pub(crate) fn is_affine(ty: &SsaType) -> bool {
     is_owned_value(ty) || matches!(ty, SsaType::RefMut(inner) if inner.as_ref() == &SsaType::Buf)
 }

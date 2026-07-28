@@ -89,6 +89,7 @@ impl FunctionBuilder<'_> {
         };
         let runtime = runtime_operation(operation)?;
         let signature = signature_from_type(resolved_signature, self.product_ids)?;
+        let consumed_resource = arguments.first().copied();
         let result = self.append(
             ty,
             InstructionKind::Runtime {
@@ -113,7 +114,9 @@ impl FunctionBuilder<'_> {
                     "resource close lowering requires one direct typed resource local",
                 ));
             };
-            self.env.remove(&reference.binding);
+            let value = consumed_resource
+                .ok_or_else(|| Error::msg("resource close lost its SSA operand"))?;
+            self.record_explicit_close(reference.binding, value, expression.origin)?;
         }
         Ok(Some(result))
     }

@@ -39,9 +39,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Language and source
 
-- `.lkjscript` is the only accepted source suffix.
-- Source is marker-free and has one exact contract digest. Unknown or removed
-  marker forms are ordinary syntax errors.
+- `.lkjscript` is the only accepted suffix. Source is marker-free with one exact
+  contract digest; unknown or removed marker forms are ordinary syntax errors.
 - All language-owned and user-defined names use exact lowercase ASCII
   kebab-case. Word operations, structured signatures/imports, and
   `string-literal/` are the only accepted source projections; removed spellings
@@ -49,17 +48,17 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Generic enums, exhaustive `match`, `never`, structured control, and explicit
   numeric conversions run through evaluator, VM, baseline JIT, and proof JIT
   where each engine supports the relevant operation set.
-- Source, declaration, node, revision, and Semantic Source identities frame the
-  full current source/semantic contract digest.
+- Source, declaration, node, revision, and Semantic Source identities frame the full
+  Current source/semantic contract digest.
 - Semantic Source requests, sessions, diagnostics, typed holes, transactions,
   and publications require stable schema names plus exact full contract
   digests. No generation-numbered envelope is accepted.
 - `capability/ kind /capability` values carry one of eight closed provider
   authorities. Capability-bearing main and library APIs pass them explicitly;
   provider acquisition and ambient host services have no zero-argument form.
-- Packages declare a sorted capability union. Each target receives only its
-  exact typed main requirements, validated before any source effect. Capability
-  values are unforgeable, copyable, process-local, and never serialized.
+- Packages declare a sorted capability union. Each target receives exact typed
+  main requirements before effects; capability values are unforgeable,
+  copyable, process-local, and never serialized.
 - Linux runtime pathnames use immutable byte-preserving `path` values. Explicit
   constructors reject empty, relative, NUL-containing, and oversized paths;
   observation is either exact bytes or strict UTF-8. Filesystem and SQLite
@@ -73,8 +72,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   `import/` records exact module paths and sorted declaration lists. Wildcards,
   transitive visibility, ambient root search, dot-relative paths, collisions,
   private names, and path/symlink escape are rejected.
-- Equal declaration spellings coexist in distinct module scopes. Qualification
-  occurs once before HIR; runtime metrics retain source-visible names.
+- Equal declaration spellings coexist in distinct module scopes; qualification
+  occurs once before HIR and runtime metrics retain source-visible names.
 - `lkjscript.package.json` and canonical `lkjscript.lock.json` bind exact
   modules, exports, local dependency hashes, targets, package content, and full
   language/source/module/package contract identities.
@@ -91,11 +90,18 @@ Git history. They do not provide aliases or acceptance fallbacks.
   flow through source typing, HIR, verified SSA, bytecode validation, and VM
   resource-kind checks. Resources cannot use value/object equality, escape from
   `main`, or enter unsupported aggregates.
-- Explicit `drop`, SQLite close, and SQLite finalize consume ownership through
-  HIR and verified SSA. Exactly-once compiler-inserted cleanup and generated
-  native host execution remain accepted-contract work, so typed resources are
-  not claimed Current as a complete capability.
-- The VM now projects the core resource table's provider/scope-bound keys into
+- Exact drop glue for legacy byte-vector and all eleven resource kinds now
+  reaches affine SSA place metadata. Verified SSA has explicit loan-end and
+  whole-place-drop events, rejects owner-erasing `place-end`, proves static/dead
+  discharge at explicit terminators, and pairs explicit `drop`, SQLite close,
+  and SQLite finalize with exact resource-drop events.
+- Legacy byte-vector cleanup is elaborated on normal lexical and source-level
+  return, break, continue, trap, and exit paths. Typed resources still require
+  move, return, or explicit close. Conditional flags, implicit resource close,
+  instruction-originated all-outcome routing, physical byte release, cleanup
+  failures, and generated native host execution remain accepted-contract work,
+  so deterministic drop and typed resources are not complete Current capabilities.
+- The VM projects the core resource table's provider/scope-bound keys into
   checked 12-bit-slot, 20-bit-generation guest tokens. It reserves before host
   acquisition, reuses slots without reviving stale tokens, protects SQLite
   parents, installs borrowed standard input in the table, invalidates before
@@ -122,7 +128,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
-- Metrics use schema `lkjscript.metrics` and the full metrics contract digest.
+- Metrics use `lkjscript.metrics` and the full metrics contract digest.
 - `lkjscript memory inventory` exposes 62 sorted memory-obligation records under
   `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
   exact roots, transitional ownership island, PLACEHOLDER `bytes`, and accepted
@@ -180,7 +186,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 The reserved immutable `bytes` parser path is explicitly reported as
 `PLACEHOLDER` until implemented. Other targets expose no inert endpoint.
-
 ## Verification authority
 
 The canonical local gate is:

@@ -102,6 +102,8 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
         | InstructionKind::FunctionRef(_) => 0,
         InstructionKind::Copy(_)
         | InstructionKind::PlaceInit { .. }
+        | InstructionKind::EndBorrow { .. }
+        | InstructionKind::Drop { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
         | InstructionKind::F64FromI64Exact { .. }

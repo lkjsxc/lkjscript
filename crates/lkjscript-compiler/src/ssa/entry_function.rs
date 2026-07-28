@@ -6,6 +6,7 @@ pub(super) fn construct(
     function_ids: &HashMap<BindingId, FunctionId>,
     function_effects: &HashMap<FunctionId, EffectSet>,
     main_id: FunctionId,
+    memory_plan: &HirMemoryPlan,
 ) -> Result<Function> {
     let signature = Signature::monomorphic(
         program
@@ -25,6 +26,7 @@ pub(super) fn construct(
         signature,
         effects(program.main.body.effects),
         origin(program.main.origin.raw(), 0),
+        CleanupPlan::new(memory_plan, MemoryFunctionId::new(main_id.raw()))?,
     );
     let entry = builder.new_block(origin(program.main.origin.raw(), 0), false)?;
     builder.entry = entry;
@@ -44,14 +46,23 @@ pub(super) fn construct(
         .enumerate()
     {
         builder.register_place(place, binding, ty.clone())?;
-        let parameter =
-            builder.add_block_parameter(entry, ty, None, origin(program.main.origin.raw(), 0))?;
+        let owner_place = builder.owned_place_for_binding(binding)?;
+        let parameter = builder.add_block_parameter(
+            entry,
+            ty,
+            owner_place,
+            origin(program.main.origin.raw(), 0),
+        )?;
         builder.env.insert(binding, parameter);
+        if owner_place.is_some() {
+            builder.mark_entry_owner(binding);
+        }
         let slot =
             u16::try_from(index).map_err(|_| Error::msg("SSA main parameter slot exceeds u16"))?;
         builder.slots.insert(binding, slot);
     }
     if let Some(result) = builder.lower_expr(&program.main.body)? {
+        builder.cleanup_all_places(program.main.origin)?;
         builder.terminate(Terminator::Return(result))?;
     }
     builder.finish()

@@ -17,6 +17,7 @@ pub(crate) fn collect_values(
                 let declared = place_by_id(function, place)?;
                 if !is_owned_value(&parameter.ty)
                     || declared.ty != parameter.ty
+                    || declared.drop_glue.is_none()
                     || !owner_places.insert(place)
                 {
                     return fail(

@@ -4,6 +4,13 @@ use crate::ssa::*;
 
 impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_expr(&mut self, expression: &Expr) -> Result<Option<ValueId>> {
+        let memory_expression = self.begin_memory_expression()?;
+        let result = self.lower_expr_inner(expression)?;
+        self.finish_memory_expression(memory_expression, expression.origin)?;
+        Ok(result)
+    }
+
+    fn lower_expr_inner(&mut self, expression: &Expr) -> Result<Option<ValueId>> {
         // Never controls paths; this local branch never emits an SSA value.
         let ty = if expression.ty == Type::Never {
             SsaType::Unit
@@ -89,7 +96,9 @@ impl FunctionBuilder<'_> {
             } => return self.lower_loop(*loop_id, result_type, body, expression),
             ExprKind::Return { value } => return self.lower_return(value),
             ExprKind::Break { loop_id, value } => return self.lower_break(*loop_id, value),
-            ExprKind::Continue { loop_id } => return self.lower_continue(*loop_id),
+            ExprKind::Continue { loop_id } => {
+                return self.lower_continue(*loop_id, expression.origin);
+            }
             ExprKind::Trap { value } => return self.lower_trap(value),
             ExprKind::Exit { code } => return self.lower_exit(code),
             ExprKind::Let { bindings, body } => return self.lower_let(bindings, body),

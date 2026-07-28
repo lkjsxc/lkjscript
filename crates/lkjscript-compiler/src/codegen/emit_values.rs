@@ -41,7 +41,10 @@ impl Emitter<'_> {
             InstructionKind::Copy(value)
             | InstructionKind::Move { value, .. }
             | InstructionKind::Borrow { value, .. } => self.load(*value)?,
-            InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
+            InstructionKind::PlaceInit { .. }
+            | InstructionKind::PlaceEnd { .. }
+            | InstructionKind::EndBorrow { .. }
+            | InstructionKind::Drop { .. } => {
                 self.proto.emit(Op::Unit);
             }
             InstructionKind::FunctionRef(function) => {

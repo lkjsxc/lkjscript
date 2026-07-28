@@ -27,6 +27,8 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
                         instruction.kind,
                         InstructionKind::PlaceInit { .. }
                             | InstructionKind::PlaceEnd { .. }
+                            | InstructionKind::EndBorrow { .. }
+                            | InstructionKind::Drop { .. }
                             | InstructionKind::Move { .. }
                             | InstructionKind::Borrow { .. }
                     )
@@ -55,6 +57,8 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
                         instruction.kind,
                         InstructionKind::PlaceInit { .. }
                             | InstructionKind::PlaceEnd { .. }
+                            | InstructionKind::EndBorrow { .. }
+                            | InstructionKind::Drop { .. }
                             | InstructionKind::Move { .. }
                             | InstructionKind::Borrow { .. }
                     )

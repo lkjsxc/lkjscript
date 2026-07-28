@@ -35,6 +35,7 @@ impl FunctionBuilder<'_> {
                 header,
                 exit,
                 bindings,
+                active_place_bindings: self.active_place_bindings.clone(),
             },
             header_env,
             exit_env,
@@ -54,6 +55,7 @@ impl FunctionBuilder<'_> {
             .map(|parameter| parameter.id)
             .ok_or_else(|| Error::msg("typed loop exit lost result parameter"))?;
         self.switch_to(target.exit)?;
+        self.active_place_bindings = target.active_place_bindings.clone();
         self.env = exit_env;
         self.slots = incoming_slots;
         Ok(Some(result))

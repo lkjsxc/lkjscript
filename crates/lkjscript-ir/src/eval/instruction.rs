@@ -12,9 +12,10 @@ impl Evaluator<'_> {
             InstructionKind::Copy(source)
             | InstructionKind::Move { value: source, .. }
             | InstructionKind::Borrow { value: source, .. } => value(values, *source).cloned(),
-            InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
-                Ok(EvalValue::Unit)
-            }
+            InstructionKind::PlaceInit { .. }
+            | InstructionKind::PlaceEnd { .. }
+            | InstructionKind::EndBorrow { .. }
+            | InstructionKind::Drop { .. } => Ok(EvalValue::Unit),
             InstructionKind::FunctionRef(function) => Ok(EvalValue::Function(*function)),
             InstructionKind::Runtime {
                 operation,

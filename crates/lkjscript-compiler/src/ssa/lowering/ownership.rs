@@ -36,11 +36,13 @@ impl FunctionBuilder<'_> {
         let Some(value) = self.lower_load(binding, expression)? else {
             return Ok(None);
         };
+        let place = SsaPlaceId::new(place.raw());
+        let loan = SsaLoanId::new(loan.raw());
         let value = self.append(
             ty,
             InstructionKind::Borrow {
-                place: SsaPlaceId::new(place.raw()),
-                loan: SsaLoanId::new(loan.raw()),
+                place,
+                loan,
                 kind: match kind {
                     hir::BorrowKind::Shared => SsaBorrowKind::Shared,
                     hir::BorrowKind::Mutable => SsaBorrowKind::Mutable,
@@ -50,6 +52,7 @@ impl FunctionBuilder<'_> {
             EffectSet::PURE,
             expression.origin,
         )?;
+        self.record_active_loan(loan, place, value)?;
         Ok(Some(value))
     }
 }

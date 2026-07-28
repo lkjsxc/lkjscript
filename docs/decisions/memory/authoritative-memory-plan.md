@@ -106,9 +106,15 @@ storage-axis eligibility, drop-glue/type agreement, allocation-failure facts,
 and exact legacy-tracing registration. Producer failure or verifier mismatch is
 a compile error and never selects tracing.
 
-The Current plan does not promote SSA drop elaboration: `place-end` can still
-retire the Current compiler fact, and runtime cleanup is not yet explicit on all
-edges. Rejecting active-owner `place-end`, explicit end-borrow/drop events,
-all-outcome cleanup routing, and physical deterministic byte backing release
-remain governed by [Deterministic Drop](deterministic-drop.md). The diagnostic
-SSA inventory is derived evidence and cannot override the plan.
+The plan now drives a verified static/dead SSA drop spine. Exact closed glue
+identities reach affine place metadata and explicit loan-end/drop events;
+`place-end` rejects an available owner. Legacy byte-vector cleanup is elaborated
+on normal lexical and source-level structured terminator paths, while explicit
+typed-resource close receives a matching resource-drop event. Active resources
+without move, return, or explicit close remain rejected.
+
+Conditional flags, implicit resource close, instruction-originated all-outcome
+cleanup routing, cleanup-failure aggregation, and physical deterministic byte
+backing release remain governed by [Deterministic Drop](deterministic-drop.md)
+and are not Current. The diagnostic SSA inventory remains derived evidence and
+cannot override the plan.

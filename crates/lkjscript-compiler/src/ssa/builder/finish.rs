@@ -9,6 +9,11 @@ impl FunctionBuilder<'_> {
     }
 
     pub(in crate::ssa) fn finish(self) -> Result<Function> {
+        if !self.cleanup.loan_ends.is_empty() || !self.active_loans.is_empty() {
+            return Err(Error::msg(
+                "SSA lowering did not discharge every authoritative HIR loan",
+            ));
+        }
         let blocks = self
             .blocks
             .into_iter()

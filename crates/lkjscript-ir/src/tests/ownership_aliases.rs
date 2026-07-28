@@ -34,3 +34,29 @@ fn ownership_cfg_rejects_duplicate_calls_aliases_and_missing_provenance() {
     let missing_local = missing_local_provenance();
     assert!(verify(ownership_program(missing_local)).is_err());
 }
+
+#[test]
+fn forged_drop_glue_and_owner_erasing_place_end_are_rejected() {
+    let valid = ownership_program(ownership_callee());
+    verify(valid.clone()).expect("fixture has complete explicit cleanup events");
+
+    let mut wrong_glue = valid.clone();
+    let InstructionKind::Drop { glue, .. } =
+        &mut wrong_glue.functions[1].blocks[0].instructions[0].kind
+    else {
+        panic!("expected drop event");
+    };
+    *glue = DropGlueIdentity::Resource(lkjscript_contracts::ResourceKind::FileReader);
+    let error = verify(wrong_glue).expect_err("forged drop glue must fail");
+    assert!(
+        error.to_string().contains("drop-glue") || error.to_string().contains("implicit Drop"),
+        "{error}"
+    );
+
+    let mut erased = valid;
+    erased.functions[1].blocks[0].instructions[0].kind = InstructionKind::PlaceEnd {
+        place: PlaceId::new(1),
+    };
+    let error = verify(erased).expect_err("place-end cannot erase an owner");
+    assert!(error.to_string().contains("cannot erase"), "{error}");
+}

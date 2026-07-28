@@ -19,12 +19,16 @@ on every structured edge, resource state/provider proofs, and generated native
 host execution remain **Accepted Targets**, so the complete typed-resource
 contract is not Current.
 
-`ExecutableProgram` now retains the complete independently verified pre-backend
-HIR memory plan and an independently recomputed SSA inventory for this direct
-affine slice. The plan records every current HIR result, exact call signature,
-owner/place/loan, storage axis, tracing registration, and drop obligation. The
-SSA inventory remains derived evidence. Explicit cleanup and deterministic
-storage remain governed by the [collector-free memory contract](../memory/collector-free-deterministic-memory.md)
+`ExecutableProgram` retains the complete independently verified pre-backend HIR
+memory plan and an independently recomputed SSA inventory for this direct affine
+slice. The plan records every Current HIR result, exact call signature,
+owner/place/loan, storage axis, tracing registration, and drop obligation. It
+now drives closed affine-place glue metadata plus explicit verified SSA
+loan-end/drop events. Static/dead legacy byte-vector places are elaborated at
+normal lexical and explicit source terminators; active typed resources still
+require move, return, or explicit close. Conditional and instruction-originated
+all-outcome cleanup, physical byte release, and deterministic storage remain
+governed by the [collector-free memory contract](../memory/collector-free-deterministic-memory.md)
 and are not Current.
 
 ## Authority And Status Vocabulary

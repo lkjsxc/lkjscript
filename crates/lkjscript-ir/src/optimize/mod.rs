@@ -5,6 +5,7 @@ mod discovery;
 mod equality;
 mod equality_enums;
 mod equality_numeric;
+mod equality_ownership;
 mod model;
 mod passes;
 mod reconstruct;

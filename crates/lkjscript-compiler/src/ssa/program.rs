@@ -1,6 +1,9 @@
 use crate::ssa::*;
 
-pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Program> {
+pub(in crate::ssa) fn construct_program(
+    program: &hir::Program,
+    memory_plan: &HirMemoryPlan,
+) -> Result<Program> {
     let product_ids: HashMap<String, ProductId> = program
         .products
         .iter()
@@ -61,6 +64,7 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
             signature,
             effects(function.summary),
             origin(function.origin.raw(), 0),
+            CleanupPlan::new(memory_plan, MemoryFunctionId::new(id.raw()))?,
         );
         let entry = builder.new_block(origin(function.origin.raw(), 0), false)?;
         builder.entry = entry;
@@ -82,7 +86,9 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
             .enumerate()
         {
             builder.register_place(place, binding_id, ty.clone())?;
-            let owner_place = is_owned_value(&ty).then_some(SsaPlaceId::new(place.raw()));
+            let owner_place = builder
+                .owned_place_for_binding(binding_id)?
+                .filter(|_| is_owned_value(&ty));
             let parameter = builder.add_block_parameter(
                 entry,
                 ty,
@@ -90,12 +96,16 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
                 origin(function.origin.raw(), 0),
             )?;
             builder.env.insert(binding_id, parameter);
+            if owner_place.is_some() {
+                builder.mark_entry_owner(binding_id);
+            }
             let slot =
                 u16::try_from(index).map_err(|_| Error::msg("SSA parameter slot exceeds u16"))?;
             builder.slots.insert(binding_id, slot);
         }
         let body = builder.lower_expr(&function.body)?;
         if let Some(result) = body {
+            builder.cleanup_all_places(function.origin)?;
             builder.terminate(Terminator::Return(result))?;
         }
         functions.push(builder.finish()?);
@@ -110,6 +120,7 @@ pub(in crate::ssa) fn construct_program(program: &hir::Program) -> Result<Progra
         &function_ids,
         &function_effects,
         main_id,
+        memory_plan,
     )?);
 
     Ok(Program {

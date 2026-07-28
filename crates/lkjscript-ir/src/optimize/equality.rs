@@ -56,48 +56,6 @@ pub(crate) fn exact_instruction_kind_equal(
             exact_constant_equal(left, right)
         }
         (InstructionKind::Copy(left), InstructionKind::Copy(right)) => left == right,
-        (
-            InstructionKind::PlaceInit {
-                place: left_place,
-                value: left_value,
-            },
-            InstructionKind::PlaceInit {
-                place: right_place,
-                value: right_value,
-            },
-        ) => left_place == right_place && left_value == right_value,
-        (InstructionKind::PlaceEnd { place: left }, InstructionKind::PlaceEnd { place: right }) => {
-            left == right
-        }
-        (
-            InstructionKind::Move {
-                place: left_place,
-                value: left_value,
-            },
-            InstructionKind::Move {
-                place: right_place,
-                value: right_value,
-            },
-        ) => left_place == right_place && left_value == right_value,
-        (
-            InstructionKind::Borrow {
-                place: left_place,
-                loan: left_loan,
-                kind: left_kind,
-                value: left_value,
-            },
-            InstructionKind::Borrow {
-                place: right_place,
-                loan: right_loan,
-                kind: right_kind,
-                value: right_value,
-            },
-        ) => {
-            left_place == right_place
-                && left_loan == right_loan
-                && left_kind == right_kind
-                && left_value == right_value
-        }
         (InstructionKind::FunctionRef(left), InstructionKind::FunctionRef(right)) => left == right,
         (
             InstructionKind::Runtime {
@@ -178,7 +136,8 @@ pub(crate) fn exact_instruction_kind_equal(
                 && left_replacement == right_replacement
         }
         _ => {
-            exact_numeric_instruction_kind_equal(left, right)
+            super::equality_ownership::exact_ownership_instruction_kind_equal(left, right)
+                || exact_numeric_instruction_kind_equal(left, right)
                 || exact_enum_instruction_kind_equal(left, right)
         }
     }

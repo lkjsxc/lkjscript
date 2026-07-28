@@ -15,6 +15,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
             id: PlaceId::new(0),
             binding: crate::BindingId::new(0),
             ty: SsaType::Owned(Box::new(SsaType::Buf)),
+            drop_glue: Some(DropGlueIdentity::LegacyTracedByteVector),
         }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
@@ -41,7 +42,6 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
         origin: Origin::SYNTHETIC,
     });
     assert!(verify(valid.clone()).is_ok());
-
     let mut duplicate_place_end = valid.clone();
     duplicate_place_end.functions[1].blocks[0].instructions = vec![
         Instruction {
@@ -72,12 +72,14 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
     ];
     duplicate_place_end.functions[1].blocks[0].terminator = Terminator::Return(ValueId::new(3));
     let end_error = verify(duplicate_place_end).expect_err("duplicate PlaceEnd must fail");
-    assert!(end_error.to_string().contains("not active"), "{end_error}");
+    assert!(
+        end_error.to_string().contains("cannot erase"),
+        "{end_error}"
+    );
 
     let mut copied = valid.clone();
     copied.functions[1].blocks[0].instructions[0].kind = InstructionKind::Copy(ValueId::new(0));
     assert!(verify(copied).is_err());
-
     let mut wrong_move = valid.clone();
     wrong_move.functions[1].blocks[0].instructions[0].ty = SsaType::Buf;
     assert!(verify(wrong_move).is_err());
@@ -90,7 +92,6 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
     };
     *place = PlaceId::new(9);
     assert!(verify(unknown_place).is_err());
-
     let mut duplicate_place = valid.clone();
     let repeated_place = duplicate_place.functions[1].places[0].clone();
     duplicate_place.functions[1].places.push(repeated_place);
@@ -166,6 +167,18 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
                     },
                     metadata: metadata(EffectSet::READS_MEMORY),
                 },
+                Instruction {
+                    id: ValueId::new(3),
+                    ty: SsaType::Unit,
+                    kind: InstructionKind::EndBorrow {
+                        place: PlaceId::new(0),
+                        loan: LoanId::new(0),
+                        value: ValueId::new(1),
+                    },
+                    metadata: metadata(EffectSet::PURE),
+                },
+                drop_byte(4, 0, 0),
+                place_end(5, 0),
             ],
             terminator: Terminator::Return(ValueId::new(2)),
             metadata: block_metadata(),

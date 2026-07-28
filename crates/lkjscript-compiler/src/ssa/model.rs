@@ -98,3 +98,75 @@ pub(in crate::ssa) fn is_owned_value(ty: &SsaType) -> bool {
     matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
         || matches!(ty, SsaType::Resource(_))
 }
+
+pub(in crate::ssa) struct CleanupPlan {
+    pub(in crate::ssa) next_expression: u32,
+    pub(in crate::ssa) loan_ends: BTreeMap<u32, Vec<SsaLoanId>>,
+    pub(in crate::ssa) place_glues: BTreeMap<SsaPlaceId, DropGlueIdentity>,
+}
+
+#[derive(Clone, Copy)]
+pub(in crate::ssa) struct ActiveLoan {
+    pub(in crate::ssa) place: SsaPlaceId,
+    pub(in crate::ssa) value: ValueId,
+}
+
+impl CleanupPlan {
+    pub(in crate::ssa) fn new(plan: &HirMemoryPlan, function: MemoryFunctionId) -> Result<Self> {
+        let function_plan = plan
+            .function(function)
+            .ok_or_else(|| Error::msg("HIR memory plan lost an SSA function"))?;
+        let mut loan_ends: BTreeMap<u32, Vec<SsaLoanId>> = BTreeMap::new();
+        for loan in plan.loans.iter().filter(|loan| loan.function == function) {
+            loan_ends
+                .entry(loan.end_after.raw())
+                .or_default()
+                .push(SsaLoanId::new(loan.loan));
+        }
+        let mut place_glues = BTreeMap::new();
+        for obligation in plan
+            .obligations
+            .iter()
+            .filter(|obligation| obligation.function == function)
+        {
+            if matches!(obligation.kind, MemoryObligationKind::EndBorrow) {
+                continue;
+            }
+            let entry = plan
+                .entry(obligation.entry)
+                .ok_or_else(|| Error::msg("HIR memory obligation lost its entry"))?;
+            let MemorySubject::Place { place, .. } = entry.subject else {
+                return Err(Error::msg("HIR drop obligation does not name a place"));
+            };
+            let glue = obligation
+                .drop_glue
+                .and_then(|id| plan.drop_glues.iter().find(|glue| glue.id == id))
+                .ok_or_else(|| Error::msg("HIR drop obligation lost closed glue identity"))?;
+            let glue = match glue.kind {
+                MemoryDropGlueKind::LegacyTracedByteVector => {
+                    DropGlueIdentity::LegacyTracedByteVector
+                }
+                MemoryDropGlueKind::Resource(kind) => DropGlueIdentity::Resource(kind),
+            };
+            if place_glues.insert(SsaPlaceId::new(place), glue).is_some() {
+                return Err(Error::msg(
+                    "HIR memory plan duplicates a place drop obligation",
+                ));
+            }
+        }
+        Ok(Self {
+            next_expression: function_plan.body.raw(),
+            loan_ends,
+            place_glues,
+        })
+    }
+
+    pub(in crate::ssa) fn begin_expression(&mut self) -> Result<MemoryExpressionId> {
+        let id = MemoryExpressionId::new(self.next_expression);
+        self.next_expression = self
+            .next_expression
+            .checked_add(1)
+            .ok_or_else(|| Error::msg("SSA HIR memory expression identity overflow"))?;
+        Ok(id)
+    }
+}

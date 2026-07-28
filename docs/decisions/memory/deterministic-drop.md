@@ -4,9 +4,26 @@
 
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
-**Accepted contract; Current promotion requires executable whole-place cleanup
-for byte owners and every typed resource.** Aggregate partial moves remain out
-of scope.
+**Accepted contract with a verified static/dead whole-place spine; Current
+promotion still requires executable cleanup for byte owners and every typed
+resource on every runtime outcome.** Aggregate partial moves remain out of
+scope.
+
+The implemented spine gives each direct affine SSA place an exact closed drop
+identity, emits explicit loan-end and whole-place-drop events, rejects an
+available owner at `place-end`, and verifies discharge before every explicit
+SSA terminator. It elaborates legacy byte-vector cleanup on normal lexical exit
+and source-level return, break, continue, trap, and exit. Explicit typed
+resource close is paired with its exact resource-drop event; an otherwise-live
+typed resource remains a compile error rather than receiving fabricated
+cleanup.
+
+Conditional flags, implicit typed-resource close, physical byte backing
+release, cleanup-failure aggregation, and routing around instruction-originated
+trap, resource-limit, deadline, host-failure, or propagated callee outcomes are
+not Current. The event-only byte-vector glue remains a compiler/runtime fact
+while byte-vector storage is legacy traced; it is not a claim of deterministic
+physical release.
 
 ## Obligations
 

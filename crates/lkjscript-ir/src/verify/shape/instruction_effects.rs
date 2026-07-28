@@ -30,40 +30,13 @@ pub(crate) fn expected_instruction_effects(
             }
             EffectSet::PURE
         }
-        InstructionKind::PlaceInit { place, value } => {
-            let declared = place_by_id(function, *place)?;
-            if !is_owned_value(&declared.ty)
-                || !is_owned_value(value_type(types, *value)?)
-                || instruction.ty != SsaType::Unit
-            {
-                return fail("SSA PlaceInit requires an exact affine place and owner value");
-            }
-            EffectSet::PURE
-        }
-        InstructionKind::PlaceEnd { place } => {
-            let declared = place_by_id(function, *place)?;
-            if !is_owned_value(&declared.ty) || instruction.ty != SsaType::Unit {
-                return fail("SSA PlaceEnd requires an exact affine place and Unit result");
-            }
-            EffectSet::PURE
-        }
-        InstructionKind::Move { value, .. } => {
-            if value_type(types, *value)? != &instruction.ty || !is_owned_value(&instruction.ty) {
-                return fail("SSA Move requires matching exact affine input and result");
-            }
-            EffectSet::PURE
-        }
-        InstructionKind::Borrow { kind, value, .. } => {
-            if !is_owned_buf(value_type(types, *value)?)
-                || instruction.ty
-                    != match kind {
-                        crate::BorrowKind::Shared => SsaType::Ref(Box::new(SsaType::Buf)),
-                        crate::BorrowKind::Mutable => SsaType::RefMut(Box::new(SsaType::Buf)),
-                    }
-            {
-                return fail("SSA Borrow ownership or reference type mismatch");
-            }
-            EffectSet::PURE
+        InstructionKind::PlaceInit { .. }
+        | InstructionKind::PlaceEnd { .. }
+        | InstructionKind::EndBorrow { .. }
+        | InstructionKind::Drop { .. }
+        | InstructionKind::Move { .. }
+        | InstructionKind::Borrow { .. } => {
+            super::memory_instruction::verify(function, instruction, types)?
         }
         InstructionKind::FunctionRef(target) => {
             let callee = function_by_id(program, *target)?;

@@ -36,9 +36,21 @@ pub enum MemoryContention {
     SingleOwner,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DropGlueIdentity {
+    LegacyTracedByteVector,
+    Resource(lkjscript_contracts::ResourceKind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DropEventKind {
+    ImplicitCleanup,
+    ExplicitClose,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryDestruction {
-    CompilerFactOnly,
+    DropGlue(DropGlueIdentity),
     EndBorrow,
     ExplicitExternalClose,
 }
@@ -80,6 +92,7 @@ pub struct SsaMemoryObligation {
     pub subject: MemoryObligationSubject,
     pub ty: SsaType,
     pub mode: MemoryMode,
+    pub drop_glue: Option<DropGlueIdentity>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -92,7 +105,7 @@ impl SsaMemoryInventory {
         let mut obligations = Vec::new();
         for function in &program.functions {
             for place in &function.places {
-                if let Some(mode) = owner_mode(&place.ty) {
+                if let Some(mode) = owner_mode(place) {
                     obligations.push(SsaMemoryObligation {
                         function: function.id,
                         subject: MemoryObligationSubject::Owner {
@@ -101,6 +114,7 @@ impl SsaMemoryInventory {
                         },
                         ty: place.ty.clone(),
                         mode,
+                        drop_glue: place.drop_glue,
                     });
                 }
             }
@@ -119,6 +133,7 @@ impl SsaMemoryInventory {
                             },
                             ty: instruction.ty.clone(),
                             mode: borrow_mode(*kind),
+                            drop_glue: None,
                         });
                     }
                 }
@@ -129,65 +144,7 @@ impl SsaMemoryInventory {
     }
 }
 
-fn owner_mode(ty: &SsaType) -> Option<MemoryMode> {
-    let (storage, destruction, identity) = match ty {
-        SsaType::Owned(inner) if **inner == SsaType::Buf => (
-            MemoryStorage::TransitionalTracedBuffer,
-            MemoryDestruction::CompilerFactOnly,
-            MemoryIdentity::Value,
-        ),
-        SsaType::Resource(_) => (
-            MemoryStorage::ExternalSlot,
-            MemoryDestruction::ExplicitExternalClose,
-            MemoryIdentity::External,
-        ),
-        _ => return None,
-    };
-    Some(MemoryMode {
-        multiplicity: MemoryMultiplicity::Affine,
-        aliasing: MemoryAliasing::Unique,
-        locality: MemoryLocality::LocalOrEscaping,
-        storage,
-        portability: MemoryPortability::WorkerLocal,
-        contention: MemoryContention::SingleOwner,
-        destruction,
-        identity,
-    })
-}
-
-fn borrow_mode(kind: BorrowKind) -> MemoryMode {
-    MemoryMode {
-        multiplicity: match kind {
-            BorrowKind::Shared => MemoryMultiplicity::Copy,
-            BorrowKind::Mutable => MemoryMultiplicity::Affine,
-        },
-        aliasing: match kind {
-            BorrowKind::Shared => MemoryAliasing::BorrowedShared,
-            BorrowKind::Mutable => MemoryAliasing::BorrowedExclusive,
-        },
-        locality: MemoryLocality::BorrowLocal,
-        storage: MemoryStorage::BorrowedView,
-        portability: MemoryPortability::WorkerLocal,
-        contention: MemoryContention::SingleOwner,
-        destruction: MemoryDestruction::EndBorrow,
-        identity: MemoryIdentity::Value,
-    }
-}
-
-fn sort_key(obligation: &SsaMemoryObligation) -> (u32, u8, u32, u32, u32) {
-    match obligation.subject {
-        MemoryObligationSubject::Owner { place, binding } => {
-            (obligation.function.raw(), 0, place.raw(), binding.raw(), 0)
-        }
-        MemoryObligationSubject::Loan { place, loan, value } => (
-            obligation.function.raw(),
-            1,
-            place.raw(),
-            loan.raw(),
-            value.raw(),
-        ),
-    }
-}
+include!("memory/modes.rs");
 
 #[cfg(test)]
 mod tests;

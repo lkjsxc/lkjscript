@@ -57,6 +57,9 @@ pub(crate) fn transfer_edge(
 ) -> crate::Result<OwnershipState> {
     let target_block = block_by_id(function, target)?;
     charge_ownership_work(work, ownership_state_cells(state)?)?;
+    if !state.pending_drops.is_empty() {
+        return fail("SSA edge leaves an explicit resource drop event pending");
+    }
     let argument_values: BTreeSet<ValueId> = arguments.iter().copied().collect();
     if state
         .owners

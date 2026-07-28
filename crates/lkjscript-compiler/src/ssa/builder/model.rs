@@ -11,6 +11,7 @@ impl<'a> FunctionBuilder<'a> {
         signature: Signature,
         function_effect: EffectSet,
         function_origin: Origin,
+        cleanup: CleanupPlan,
     ) -> Self {
         Self {
             product_ids,
@@ -28,6 +29,9 @@ impl<'a> FunctionBuilder<'a> {
             next_position: 0,
             value_types: Vec::new(),
             places: Vec::new(),
+            cleanup,
+            active_place_bindings: Vec::new(),
+            active_loans: BTreeMap::new(),
             env: BTreeMap::new(),
             slots: BTreeMap::new(),
             loops: Vec::new(),
@@ -45,10 +49,12 @@ impl<'a> FunctionBuilder<'a> {
         if place.raw() != expected {
             return Err(Error::msg("HIR PlaceIds are not dense in function order"));
         }
+        let id = SsaPlaceId::new(place.raw());
         self.places.push(PlaceMetadata {
-            id: SsaPlaceId::new(place.raw()),
+            id,
             binding: SsaBindingId::new(binding.raw()),
             ty,
+            drop_glue: self.cleanup.place_glues.get(&id).copied(),
         });
         Ok(())
     }
@@ -60,7 +66,7 @@ impl<'a> FunctionBuilder<'a> {
         let binding = SsaBindingId::new(binding.raw());
         let place = self.places.iter().find(|place| place.binding == binding);
         match place {
-            Some(place) if is_owned_value(&place.ty) => Ok(Some(place.id)),
+            Some(place) if place.drop_glue.is_some() => Ok(Some(place.id)),
             Some(_) => Ok(None),
             None => Err(Error::msg(format!(
                 "HIR binding {} has no registered SSA place",
@@ -82,23 +88,16 @@ impl<'a> FunctionBuilder<'a> {
                 EffectSet::PURE,
                 expression_origin,
             )?;
+            if !self.active_place_bindings.contains(&binding) {
+                self.active_place_bindings.push(binding);
+            }
         }
         Ok(())
     }
 
-    pub(in crate::ssa) fn end_owned_place(
-        &mut self,
-        binding: BindingId,
-        expression_origin: hir::SourceId,
-    ) -> Result<()> {
-        if let Some(place) = self.owned_place_for_binding(binding)? {
-            let _fact = self.append(
-                SsaType::Unit,
-                InstructionKind::PlaceEnd { place },
-                EffectSet::PURE,
-                expression_origin,
-            )?;
+    pub(in crate::ssa) fn mark_entry_owner(&mut self, binding: BindingId) {
+        if !self.active_place_bindings.contains(&binding) {
+            self.active_place_bindings.push(binding);
         }
-        Ok(())
     }
 }

@@ -96,6 +96,7 @@ impl FunctionBuilder<'_> {
         let failure = self.new_block(block_origin, false)?;
         let incoming = self.env.clone();
         let slots = self.slots.clone();
+        let active_places = self.active_place_bindings.clone();
         let success_env = self.add_environment_parameters(success, &incoming, block_origin)?;
         let failure_env = self.add_environment_parameters(failure, &incoming, block_origin)?;
         let arguments = Self::environment_arguments(&incoming);
@@ -111,9 +112,11 @@ impl FunctionBuilder<'_> {
         self.env = failure_env;
         self.slots = slots.clone();
         let message = self.constant(SsaType::Str, Constant::Str(trap.into()), source)?;
+        self.cleanup_byte_places(source)?;
         self.terminate(Terminator::Trap { value: message })?;
 
         self.switch_to(success)?;
+        self.active_place_bindings = active_places;
         self.env = success_env;
         self.slots = slots;
         self.append_enum_field(ids, layout, value, ty, source)

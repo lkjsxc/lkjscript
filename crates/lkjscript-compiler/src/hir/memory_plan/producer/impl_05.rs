@@ -67,9 +67,17 @@ impl<'a> Producer<'a> {
                             && item.expression > loan.expression
                     })
                     .collect();
-                let end_after = matching.last().map(|item| item.expression).ok_or_else(|| {
+                let last_use = matching.last().map(|item| item.expression).ok_or_else(|| {
                     Error::msg("HIR memory-plan loan has no semantic reference use")
                 })?;
+                let end_after = self
+                    .expression_parents
+                    .get(&last_use)
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| {
+                        Error::msg("HIR memory-plan reference use has no complete call expression")
+                    })?;
                 (
                     u32::try_from(matching.len())
                         .map_err(|_| Error::msg("HIR memory-plan loan use count exceeds u32"))?,
