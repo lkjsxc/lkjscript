@@ -91,7 +91,7 @@
       "interface": "exact modules and content-addressed local package lock",
       "authority": "docs/decisions/platform/modules-and-packages.md",
       "evidence": "docs/operations/verification.md",
-      "claimants": ["docs/current-state.md"] },
+      "claimants": ["docs/current-state.md","docs/operations/agent-handoff.md"] },
     { "id": "never-control", "status": "current",
       "interface": "Never and structured control through all four engines",
       "authority": "docs/decisions/semantics/never-and-control.md",

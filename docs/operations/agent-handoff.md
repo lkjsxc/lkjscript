@@ -20,6 +20,7 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
 <!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
+<!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=memory-plan status=accepted-contract -->
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
