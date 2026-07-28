@@ -2,50 +2,68 @@ use super::*;
 
 impl ResourceTable {
     pub fn sys_open_read(&mut self, path: &[u8]) -> Result<Value> {
-        self.ensure_capacity()?;
-        let file = lkjscript_sys::open_read(path)
-            .map_err(|error| Error::msg(format!("open-file-reader: {error}")))?;
-        self.push(OwnedResource::File {
-            descriptor: file,
-            kind: ResourceKind::FileReader,
-        })
+        self.acquire_owned(
+            ResourceKind::FileReader,
+            FILESYSTEM_PROVIDER,
+            "open-file-reader",
+            || {
+                lkjscript_sys::open_read(path)
+                    .map(OwnedResource::File)
+                    .map_err(|error| Error::msg(format!("open-file-reader: {error}")))
+            },
+        )
     }
 
     pub fn sys_open_write(&mut self, path: &[u8]) -> Result<Value> {
-        self.ensure_capacity()?;
-        let file = lkjscript_sys::open_write(path)
-            .map_err(|error| Error::msg(format!("open-file-writer: {error}")))?;
-        self.push(OwnedResource::File {
-            descriptor: file,
-            kind: ResourceKind::FileWriter,
-        })
+        self.acquire_owned(
+            ResourceKind::FileWriter,
+            FILESYSTEM_PROVIDER,
+            "open-file-writer",
+            || {
+                lkjscript_sys::open_write(path)
+                    .map(OwnedResource::File)
+                    .map_err(|error| Error::msg(format!("open-file-writer: {error}")))
+            },
+        )
     }
 
     pub fn sys_open_append(&mut self, path: &[u8]) -> Result<Value> {
-        self.ensure_capacity()?;
-        let file = lkjscript_sys::open_append(path)
-            .map_err(|error| Error::msg(format!("open-file-appender: {error}")))?;
-        self.push(OwnedResource::File {
-            descriptor: file,
-            kind: ResourceKind::FileAppender,
-        })
+        self.acquire_owned(
+            ResourceKind::FileAppender,
+            FILESYSTEM_PROVIDER,
+            "open-file-appender",
+            || {
+                lkjscript_sys::open_append(path)
+                    .map(OwnedResource::File)
+                    .map_err(|error| Error::msg(format!("open-file-appender: {error}")))
+            },
+        )
     }
 
     pub fn sys_open_create_new(&mut self, path: &[u8]) -> Result<Value> {
-        self.ensure_capacity()?;
-        let file = lkjscript_sys::open_create_new(path)
-            .map_err(|error| Error::msg(format!("create-file: {error}")))?;
-        self.push(OwnedResource::File {
-            descriptor: file,
-            kind: ResourceKind::FileWriter,
-        })
+        self.acquire_owned(
+            ResourceKind::FileWriter,
+            FILESYSTEM_PROVIDER,
+            "create-file",
+            || {
+                lkjscript_sys::open_create_new(path)
+                    .map(OwnedResource::File)
+                    .map_err(|error| Error::msg(format!("create-file: {error}")))
+            },
+        )
     }
 
     pub fn sys_open_dir(&mut self, path: &[u8]) -> Result<Value> {
-        self.ensure_capacity()?;
-        let directory = lkjscript_sys::open_dir(path)
-            .map_err(|error| Error::msg(format!("sys-open-dir: {error}")))?;
-        self.push(OwnedResource::Directory(directory))
+        self.acquire_owned(
+            ResourceKind::Directory,
+            FILESYSTEM_PROVIDER,
+            "open-directory",
+            || {
+                lkjscript_sys::open_dir(path)
+                    .map(OwnedResource::Directory)
+                    .map_err(|error| Error::msg(format!("sys-open-dir: {error}")))
+            },
+        )
     }
 
     /// Files and directory handles may be synced; directories make a prior

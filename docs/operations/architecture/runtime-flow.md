@@ -17,19 +17,22 @@ ValidatedChunk main
   -> dense opcode dispatch with fuel/stack/frame/heap/allocation metering
   -> stack frames and return-adjacent tail reuse
   -> tagged immediate values or arena objects
-  -> bounded handle/output accounting
+  -> bounded generation-safe resource/output accounting
+  -> reserve a provider/scope-bound slot before host acquisition
   -> host operation dispatch
   -> lkjscript-sys Linux FFI
   -> owned Returned value or structured terminal outcome
-  -> drop resources, restore terminal, flush, then CLI status translation
+  -> verify obligations and reverse-clean resources
+  -> restore terminal, flush, then CLI status translation
 ```
 
 The VM is synchronous and single-threaded. It never terminates the Rust process;
 exit, traps, limits, deadlines, and host failures stop only the current VM.
 Returned heap values own a private reachable-object snapshot, and later VM
-instances have fresh globals, arenas, handles, counters, and deadlines.
-Process-global stdin/stdout and the terminal guard still prevent parallel VM
-supervision. Cooperative deadlines can overrun inside current filesystem and
+instances have fresh globals, arenas, resource scopes, generation-bearing
+slots, counters, and deadlines. Borrowed standard input is table-bound but
+remains provider-owned. Process-global stdin/stdout and the terminal guard still
+prevent parallel VM supervision. Cooperative deadlines can overrun inside current filesystem and
 write/send wrappers; hard-deadline mode rejects those operations before effects
 rather than claiming cancellation.
 

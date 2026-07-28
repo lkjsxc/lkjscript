@@ -7,13 +7,16 @@ pub enum SocketReceiveError {
 
 impl ResourceTable {
     pub fn sys_socket(&mut self) -> Result<Value> {
-        self.ensure_capacity()?;
-        let socket = lkjscript_sys::tcp_socket()
-            .map_err(|error| Error::msg(format!("sys-socket: {error}")))?;
-        self.push(OwnedResource::Socket {
-            descriptor: socket,
-            kind: ResourceKind::TcpListener,
-        })
+        self.acquire_owned(
+            ResourceKind::TcpListener,
+            NETWORK_PROVIDER,
+            "open-tcp-socket",
+            || {
+                lkjscript_sys::tcp_socket()
+                    .map(OwnedResource::Socket)
+                    .map_err(|error| Error::msg(format!("sys-socket: {error}")))
+            },
+        )
     }
 
     pub fn sys_bind(&self, handle: Value, port: i64) -> Result<Value> {
@@ -39,14 +42,17 @@ impl ResourceTable {
     }
 
     pub fn sys_accept(&mut self, handle: Value) -> Result<Value> {
-        self.ensure_capacity()?;
         let raw = self.socket_raw(handle, ResourceKind::TcpListener, "accept-tcp")?;
-        let client = lkjscript_sys::accept_sock(raw)
-            .map_err(|error| Error::msg(format!("sys-accept: {error}")))?;
-        self.push(OwnedResource::Socket {
-            descriptor: client,
-            kind: ResourceKind::TcpStream,
-        })
+        self.acquire_owned(
+            ResourceKind::TcpStream,
+            NETWORK_PROVIDER,
+            "accept-tcp",
+            || {
+                lkjscript_sys::accept_sock(raw)
+                    .map(OwnedResource::Socket)
+                    .map_err(|error| Error::msg(format!("sys-accept: {error}")))
+            },
+        )
     }
 
     pub fn sys_recv(

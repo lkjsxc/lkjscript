@@ -49,7 +49,7 @@ pub use resource_table::{
     BorrowedReservation, EmergencyObligations, OwnedReservation, ProviderId,
     ResourceCleanupAttempt, ResourceCleanupReport, ResourceKey, ResourceObservation,
     ResourceOwnership, ResourceState, ResourceTable, ResourceTableConfigError, ResourceTableError,
-    ResourceTableLimit, ResourceTableLimits, ResourceTableStats, ScopeId,
+    ResourceTableLimit, ResourceTableLimits, ResourceTableStats, ResourceTokenParts, ScopeId,
 };
 pub use sha256::sha256;
 pub use unique::{

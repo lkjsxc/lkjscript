@@ -5,28 +5,89 @@ use super::*;
 #[test]
 fn integer_and_borrowed_handles_cannot_be_closed() {
     let mut table = ResourceTable::default();
+    assert_eq!(table.table.stats().borrowed_open(), 1);
+    assert_eq!(table.metrics().resources_opened(), 0);
     let integer = Value::from_i64(16);
     assert!(table.close(integer).is_err());
     assert!(table.close(ResourceTable::stdin_handle()).is_err());
+    assert_eq!(table.metrics().resources_closed(), 0);
+    let teardown = table.teardown();
+    assert_eq!(teardown.ordinary_obligations(), 0);
+    assert_eq!(teardown.emergency_obligations(), 0);
+    assert_eq!(teardown.cleanup_attempts(), 0);
 }
+
 #[test]
-fn closed_tokens_are_never_reused() -> std::io::Result<()> {
+fn closed_slots_reuse_with_a_new_generation_and_reject_stale_tokens() -> std::io::Result<()> {
     let file = TempFile::new()?;
     let path = file.0.as_os_str().as_bytes();
     let mut table = ResourceTable::default();
-    let first = table.sys_open_read(path).ok();
-    assert!(first.is_some());
-    let first = first.expect("open first temporary file");
+    let first = table
+        .sys_open_read(path)
+        .expect("open first temporary file");
     assert_ne!(first, ResourceTable::stdin_handle());
-    assert!(table.close(first).is_ok());
+    assert_eq!(table.allocated_handle_slots(), 1);
+    table.close(first).expect("close first file");
+
+    let second = table
+        .sys_open_read(path)
+        .expect("open second temporary file");
+    assert_ne!(first, second);
+    assert_eq!(table.allocated_handle_slots(), 1);
     assert!(table.close(first).is_err());
     assert!(table.read_byte(first).is_err());
+    table.close(second).expect("close second file");
 
-    let second = table.sys_open_read(path).ok();
-    assert!(second.is_some());
-    let second = second.expect("open second temporary file");
-    assert_ne!(first, second);
-    assert!(table.close(second).is_ok());
+    let metrics = table.metrics();
+    assert_eq!(metrics.resources_opened(), 2);
+    assert_eq!(metrics.resources_closed(), 2);
+    assert_eq!(metrics.slots_reused(), 1);
+    assert_eq!(metrics.stale_key_failures(), 2);
+    Ok(())
+}
+
+#[test]
+fn failed_acquisition_publishes_no_key_or_open_obligation() {
+    let mut table = ResourceTable::default();
+    let missing = b"/lkjscript-test-path-that-must-not-exist";
+    assert!(table.sys_open_read(missing).is_err());
+    assert_eq!(table.metrics().resources_opened(), 0);
+    assert_eq!(table.table.stats().reserved(), 0);
+    assert_eq!(table.table.stats().owned_open(), 0);
+    assert_eq!(table.table.stats().ordinary_obligations(), 0);
+}
+
+#[test]
+fn guest_token_resolution_checks_provider_and_scope(
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let file = TempFile::new()?;
+    let mut table = ResourceTable::default();
+    let handle = table.sys_open_read(file.0.as_os_str().as_bytes())?;
+    let parts = crate::host_ext::resource_token::decode_parts(handle, "test")?;
+    let scope = table.scope_id();
+
+    assert!(matches!(
+        table.table.resolve_token_parts(
+            parts,
+            lkjscript_core::ResourceKind::FileReader,
+            crate::host_ext::NETWORK_PROVIDER,
+            scope,
+            lkjscript_core::ResourceOwnership::Owned,
+        ),
+        Err(lkjscript_core::ResourceTableError::ProviderMismatch { .. })
+    ));
+    let other_scope = lkjscript_core::ScopeId::new(scope.get() + 1).expect("next test scope");
+    assert!(matches!(
+        table.table.resolve_token_parts(
+            parts,
+            lkjscript_core::ResourceKind::FileReader,
+            crate::host_ext::FILESYSTEM_PROVIDER,
+            other_scope,
+            lkjscript_core::ResourceOwnership::Owned,
+        ),
+        Err(lkjscript_core::ResourceTableError::ScopeMismatch { .. })
+    ));
+    table.close(handle)?;
     Ok(())
 }
 #[test]

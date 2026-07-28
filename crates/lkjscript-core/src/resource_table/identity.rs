@@ -1,7 +1,7 @@
 use std::fmt;
 use std::num::NonZeroU64;
 
-use lkjscript_contracts::ResourceKind;
+use lkjscript_contracts::{CapabilityKind, ResourceKind};
 
 use super::ResourceOwnership;
 
@@ -13,6 +13,14 @@ impl ProviderId {
         match NonZeroU64::new(value) {
             Some(value) => Some(Self(value)),
             None => None,
+        }
+    }
+
+    pub const fn for_capability(kind: CapabilityKind) -> Self {
+        let value = (kind as u64) + 1;
+        match NonZeroU64::new(value) {
+            Some(value) => Self(value),
+            None => Self(NonZeroU64::MIN),
         }
     }
 

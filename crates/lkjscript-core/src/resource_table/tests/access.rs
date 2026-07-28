@@ -1,4 +1,4 @@
-use lkjscript_contracts::ResourceKind;
+use lkjscript_contracts::{CapabilityKind, ResourceKind};
 
 use super::*;
 
@@ -120,4 +120,60 @@ fn owned_close_and_borrowed_removal_are_distinct() {
         20
     );
     table.assert_zero_ordinary_obligations().unwrap();
+}
+
+#[test]
+fn provider_ids_are_stable_exact_capability_origins() {
+    let ids = CapabilityKind::ALL.map(ProviderId::for_capability);
+    for (index, id) in ids.into_iter().enumerate() {
+        assert_eq!(id.get(), u64::try_from(index).unwrap() + 1);
+        assert_eq!(ids.iter().filter(|candidate| **candidate == id).count(), 1);
+    }
+}
+
+#[test]
+fn token_parts_resolve_only_an_exact_live_binding() {
+    let session = scope(13);
+    let other_session = scope(14);
+    let origin = provider(15);
+    let other_origin = provider(16);
+    let kind = ResourceKind::TcpStream;
+    let mut table = ResourceTable::new(session, limits(1, 4));
+    let key = table.reserve_owned(kind, origin).unwrap().commit(7);
+    let parts = key.token_parts();
+
+    assert_eq!(
+        table
+            .resolve_token_parts(parts, kind, origin, session, ResourceOwnership::Owned)
+            .unwrap(),
+        key
+    );
+    assert!(matches!(
+        table.resolve_token_parts(
+            parts,
+            ResourceKind::TcpListener,
+            origin,
+            session,
+            ResourceOwnership::Owned,
+        ),
+        Err(ResourceTableError::WrongKind { .. })
+    ));
+    assert!(matches!(
+        table.resolve_token_parts(parts, kind, other_origin, session, ResourceOwnership::Owned),
+        Err(ResourceTableError::ProviderMismatch { .. })
+    ));
+    assert!(matches!(
+        table.resolve_token_parts(parts, kind, origin, other_session, ResourceOwnership::Owned,),
+        Err(ResourceTableError::ScopeMismatch { .. })
+    ));
+    assert!(matches!(
+        table.resolve_token_parts(parts, kind, origin, session, ResourceOwnership::Borrowed),
+        Err(ResourceTableError::OwnershipMismatch { .. })
+    ));
+
+    table.close_owned(key, kind, origin, session).unwrap();
+    assert_eq!(
+        table.resolve_token_parts(parts, kind, origin, session, ResourceOwnership::Owned),
+        Err(ResourceTableError::StaleKey)
+    );
 }

@@ -1,7 +1,9 @@
 use std::num::NonZeroU64;
 
-use super::slot::Binding;
-use super::{ResourceKey, ResourceObservation, ResourceTable, ResourceTableStats};
+use super::slot::{Binding, SlotState};
+use super::{
+    ResourceKey, ResourceObservation, ResourceTable, ResourceTableError, ResourceTableStats,
+};
 
 pub struct OwnedReservation<'a, P> {
     pub(super) table: &'a mut ResourceTable<P>,
@@ -19,6 +21,24 @@ impl<P> OwnedReservation<'_, P> {
 
     pub fn stats(&self) -> ResourceTableStats {
         self.table.stats()
+    }
+
+    pub fn parent_payload(&self) -> Result<Option<&P>, ResourceTableError> {
+        let Some(parent) = self.binding.parent else {
+            return Ok(None);
+        };
+        let Some(slot) = self.table.slots.get(parent.slot) else {
+            return Err(ResourceTableError::StaleKey);
+        };
+        if slot.generation != parent.generation {
+            return Err(ResourceTableError::StaleKey);
+        }
+        match &slot.state {
+            SlotState::OwnedOpen(open) | SlotState::BorrowedOpen(open) => Ok(Some(&open.payload)),
+            state => Err(ResourceTableError::InvalidState {
+                state: state.into(),
+            }),
+        }
     }
 
     pub fn commit(mut self, payload: P) -> ResourceKey {

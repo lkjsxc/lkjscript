@@ -1,38 +1,53 @@
+use super::resource_token::decode_parts;
 use super::*;
 
 impl ResourceTable {
     pub(crate) fn raw_fd(&self, handle: Value, operation: &str) -> Result<RawFd> {
-        if handle.as_resource() == Some(STDIN_TOKEN) {
-            return Ok(lkjscript_sys::STDIN_FD);
+        let parts = decode_parts(handle, operation)?;
+        match self.table.resolve_token_parts(
+            parts,
+            ResourceKind::InputStream,
+            STDIO_PROVIDER,
+            self.table.scope(),
+            ResourceOwnership::Borrowed,
+        ) {
+            Ok(key) => {
+                return match self.table.borrowed(
+                    &key,
+                    ResourceKind::InputStream,
+                    STDIO_PROVIDER,
+                    self.table.scope(),
+                ) {
+                    Ok(OwnedResource::StandardInput) => Ok(lkjscript_sys::STDIN_FD),
+                    Ok(_) => Err(Error::msg(format!(
+                        "{operation}: invalid standard input payload"
+                    ))),
+                    Err(error) => Err(self.access_error(operation, error)),
+                };
+            }
+            Err(ResourceTableError::WrongKind { .. }) => {}
+            Err(error) => return Err(self.access_error(operation, error)),
         }
-        let index = self.owned_index(handle, operation)?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::File {
-                descriptor: file,
-                kind: ResourceKind::FileReader,
-            }) => Ok(file.as_raw()),
-            Some(OwnedResource::Socket {
-                descriptor: socket,
-                kind: ResourceKind::TcpListener | ResourceKind::TcpStream,
-            }) => Ok(socket.as_raw()),
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: typed resource kind is not pollable"
+        let (kind, payload) = self.owned_payload_for(
+            handle,
+            &[
+                ResourceKind::FileReader,
+                ResourceKind::TcpListener,
+                ResourceKind::TcpStream,
+            ],
+            operation,
+            "typed resource kind is not pollable",
+        )?;
+        match (kind, payload) {
+            (ResourceKind::FileReader, OwnedResource::File(descriptor))
+            | (
+                ResourceKind::TcpListener | ResourceKind::TcpStream,
+                OwnedResource::Socket(descriptor),
+            ) => Ok(descriptor.as_raw()),
+            _ => Err(Error::msg(format!(
+                "{operation}: invalid pollable resource payload"
             ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
-    }
-
-    pub(crate) fn close_slot(&mut self, index: usize, operation: &str) -> Result<Value> {
-        let slot = self
-            .slots
-            .get_mut(index)
-            .ok_or_else(|| Error::msg(format!("{operation}: unknown handle")))?;
-        if slot.take().is_none() {
-            return Err(Error::msg(format!(
-                "{operation}: stale or already closed handle"
-            )));
-        }
-        Ok(Value::UNIT)
     }
 
     pub(crate) fn sqlite_connection(
@@ -40,37 +55,17 @@ impl ResourceTable {
         handle: Value,
         operation: &str,
     ) -> Result<&lkjscript_sys::SqliteConnection> {
-        let index = self.owned_index(handle, operation)?;
-        self.sqlite_connection_at(index, operation)
-    }
-
-    pub(crate) fn sqlite_connection_at(
-        &self,
-        index: usize,
-        operation: &str,
-    ) -> Result<&lkjscript_sys::SqliteConnection> {
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::SqliteConnection { connection, .. }) => Ok(connection),
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: handle is not a SQLite connection"
+        let payload = self.owned_exact_payload(
+            handle,
+            ResourceKind::SqliteConnection,
+            SQLITE_PROVIDER,
+            operation,
+        )?;
+        match payload {
+            OwnedResource::SqliteConnection(connection) => Ok(connection),
+            _ => Err(Error::msg(format!(
+                "{operation}: invalid SQLite connection payload"
             ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
-        }
-    }
-
-    pub(crate) fn sqlite_live_statements_at_mut(
-        &mut self,
-        index: usize,
-        operation: &str,
-    ) -> Result<&mut usize> {
-        match self.slots.get_mut(index).and_then(Option::as_mut) {
-            Some(OwnedResource::SqliteConnection {
-                live_statements, ..
-            }) => Ok(live_statements),
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: handle is not a SQLite connection"
-            ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
@@ -79,23 +74,17 @@ impl ResourceTable {
         handle: Value,
         operation: &str,
     ) -> Result<&lkjscript_sys::SqliteStatement> {
-        let index = self.owned_index(handle, operation)?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::SqliteStatement { statement, parent }) => {
-                if !matches!(
-                    self.slots.get(*parent),
-                    Some(Some(OwnedResource::SqliteConnection { .. }))
-                ) {
-                    return Err(Error::msg(format!(
-                        "{operation}: parent SQLite connection is closed"
-                    )));
-                }
-                Ok(statement)
-            }
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: handle is not a SQLite statement"
+        let payload = self.owned_exact_payload(
+            handle,
+            ResourceKind::SqliteStatement,
+            SQLITE_PROVIDER,
+            operation,
+        )?;
+        match payload {
+            OwnedResource::SqliteStatement(statement) => Ok(statement),
+            _ => Err(Error::msg(format!(
+                "{operation}: invalid SQLite statement payload"
             ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
@@ -105,76 +94,84 @@ impl ResourceTable {
         expected: ResourceKind,
         operation: &str,
     ) -> Result<RawFd> {
-        let index = self.owned_index(handle, operation)?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::Socket {
-                descriptor: socket,
-                kind,
-            }) if *kind == expected => Ok(socket.as_raw()),
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: expected {}",
+        let payload = self.owned_exact_payload(handle, expected, NETWORK_PROVIDER, operation)?;
+        match payload {
+            OwnedResource::Socket(socket) => Ok(socket.as_raw()),
+            _ => Err(Error::msg(format!(
+                "{operation}: invalid {} payload",
                 expected.as_str()
             ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
     pub(crate) fn file_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
-        let index = self.owned_index(handle, operation)?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::File {
-                descriptor: file,
-                kind: ResourceKind::FileWriter | ResourceKind::FileAppender,
-            }) => Ok(file.as_raw()),
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: expected file-writer or file-appender"
+        let (_, payload) = self.owned_payload_for(
+            handle,
+            &[ResourceKind::FileWriter, ResourceKind::FileAppender],
+            operation,
+            "expected file-writer or file-appender",
+        )?;
+        match payload {
+            OwnedResource::File(file) => Ok(file.as_raw()),
+            _ => Err(Error::msg(format!(
+                "{operation}: invalid writable file payload"
             ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
     pub(crate) fn sync_raw(&self, handle: Value, operation: &str) -> Result<RawFd> {
-        let index = self.owned_index(handle, operation)?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::File {
-                descriptor: file,
-                kind: ResourceKind::FileWriter | ResourceKind::FileAppender,
-            }) => Ok(file.as_raw()),
-            Some(OwnedResource::Directory(directory)) => Ok(directory.as_raw()),
-            Some(_) => Err(Error::msg(format!(
-                "{operation}: expected file-writer, file-appender, or directory"
+        let (kind, payload) = self.owned_payload_for(
+            handle,
+            &[
+                ResourceKind::FileWriter,
+                ResourceKind::FileAppender,
+                ResourceKind::Directory,
+            ],
+            operation,
+            "expected file-writer, file-appender, or directory",
+        )?;
+        match (kind, payload) {
+            (ResourceKind::FileWriter | ResourceKind::FileAppender, OwnedResource::File(file)) => {
+                Ok(file.as_raw())
+            }
+            (ResourceKind::Directory, OwnedResource::Directory(directory)) => {
+                Ok(directory.as_raw())
+            }
+            _ => Err(Error::msg(format!(
+                "{operation}: invalid syncable resource payload"
             ))),
-            None => Err(Error::msg(format!("{operation}: stale or unknown handle"))),
         }
     }
 
-    pub(crate) fn owned_index(&self, handle: Value, operation: &str) -> Result<usize> {
-        let token = handle
-            .as_resource()
-            .ok_or_else(|| Error::msg(format!("{operation}: expected typed resource")))?;
-        let index = token
-            .checked_sub(FIRST_OWNED_TOKEN)
-            .ok_or_else(|| Error::msg(format!("{operation}: borrowed or invalid handle")))?;
-        usize::try_from(index).map_err(|_| Error::msg(format!("{operation}: invalid handle")))
-    }
-
-    pub(super) fn push(&mut self, handle: OwnedResource) -> Result<Value> {
-        self.ensure_capacity()?;
-        let index = u32::try_from(self.slots.len())
-            .map_err(|_| Error::msg("resource handle table exhausted"))?;
-        let token = FIRST_OWNED_TOKEN
-            .checked_add(index)
-            .ok_or_else(|| Error::msg("resource handle token exhausted"))?;
-        self.slots.push(Some(handle));
-        Ok(Value::from_resource(token))
-    }
-
-    pub(crate) fn ensure_capacity(&mut self) -> Result<()> {
-        if self.slots.len() >= self.max_handles {
-            self.limit_exceeded = true;
-            Err(Error::msg("resource handle limit exceeded"))
-        } else {
-            Ok(())
+    pub(super) fn owned_payload_for(
+        &self,
+        handle: Value,
+        allowed: &[ResourceKind],
+        operation: &str,
+        expected: &str,
+    ) -> Result<(ResourceKind, &OwnedResource)> {
+        let (key, kind, provider) = self.resolve_owned_any(handle, operation)?;
+        if !allowed.contains(&kind) {
+            return Err(Error::msg(format!("{operation}: {expected}")));
         }
+        let payload = self
+            .table
+            .owned(&key, kind, provider, self.table.scope())
+            .map_err(|error| self.access_error(operation, error))?;
+        Ok((kind, payload))
+    }
+
+    pub(super) fn owned_exact_payload(
+        &self,
+        handle: Value,
+        kind: ResourceKind,
+        provider: ProviderId,
+        operation: &str,
+    ) -> Result<&OwnedResource> {
+        let key =
+            self.resolve_exact(handle, kind, provider, ResourceOwnership::Owned, operation)?;
+        self.table
+            .owned(&key, kind, provider, self.table.scope())
+            .map_err(|error| self.access_error(operation, error))
     }
 }

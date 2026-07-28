@@ -6,12 +6,24 @@
   "kind": "crate",
   "purpose": "Execute validated bytecode and coordinate host capabilities and adaptive JIT tiers.",
   "layer": "runtime",
-  "concepts": ["reference VM", "host capability dispatch", "JIT promotion"],
+  "concepts": [
+    "reference VM",
+    "generation-safe resources",
+    "host capability dispatch",
+    "JIT promotion"
+  ],
   "facade": ["crates/lkjscript-vm/src/lib.rs"],
   "allowed_dependencies": ["core", "jit", "sys"],
   "forbidden_dependencies": ["app", "compiler"],
-  "tests": ["crates/lkjscript-vm/src/run/tests/mod.rs"],
-  "decisions": ["docs/decisions/execution/execution-portfolio.md", "docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md"],
+  "tests": [
+    "crates/lkjscript-vm/src/host_ext/tests/mod.rs",
+    "crates/lkjscript-vm/src/run/tests/mod.rs"
+  ],
+  "decisions": [
+    "docs/decisions/execution/execution-portfolio.md",
+    "docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md",
+    "docs/decisions/memory/generation-safe-resources.md"
+  ],
   "unsafe_boundary": { "status": "crosses", "boundaries": ["sys.native-call"] },
   "capability": { "status": "uses", "names": ["host I/O", "executable memory"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
@@ -19,6 +31,10 @@
   "context_card": {
     "goal": "Keep reference and adaptive runtime tiers semantically aligned.",
     "interfaces": ["crates/lkjscript-vm/src/lib.rs"],
-    "invariants": ["validated bytecode", "shared verified SSA semantics"]
+    "invariants": [
+      "validated bytecode",
+      "provider-bound generation-safe resources",
+      "shared verified SSA semantics"
+    ]
   }
 }

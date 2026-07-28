@@ -1,68 +1,120 @@
-//! Strings, resource handles, filesystem, and socket host operations.
+//! Strings, generation-safe resources, filesystem, SQLite, and socket host operations.
 
+use std::cell::Cell;
+use std::num::NonZeroU64;
 use std::os::fd::RawFd;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use lkjscript_core::{Error, GcHeap as Arena, HeapObj, ResourceKind, Result, Value};
+use lkjscript_core::{
+    CapabilityKind, Error, GcHeap as Arena, HeapObj, OwnedReservation, ProviderId, ResourceKey,
+    ResourceKind, ResourceOwnership, ResourceTable as CoreResourceTable, ResourceTableError,
+    ResourceTableLimits, ResourceTokenParts, Result, ScopeId, Value,
+};
 use lkjscript_sys::OwnedFd;
 
-const STDIN_TOKEN: u32 = 1;
-const FIRST_OWNED_TOKEN: u32 = 16;
+const TOKEN_SLOT_BITS: u32 = 12;
+const TOKEN_SLOT_COUNT: usize = 1 << TOKEN_SLOT_BITS;
+const TOKEN_SLOT_MASK: u32 = (1 << TOKEN_SLOT_BITS) - 1;
+const TOKEN_GENERATION_MAX: u32 = (1 << (u32::BITS - TOKEN_SLOT_BITS)) - 1;
+const TOKEN_MAX_GENERATION: NonZeroU64 = match NonZeroU64::new(TOKEN_GENERATION_MAX as u64) {
+    Some(value) => value,
+    None => NonZeroU64::MIN,
+};
+
+const FILESYSTEM_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::FileSystem);
+const NETWORK_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::Network);
+const SQLITE_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::Sqlite);
+const STDIO_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::Stdio);
+const TERMINAL_PROVIDER: ProviderId = ProviderId::for_capability(CapabilityKind::Terminal);
+
+static NEXT_SCOPE: AtomicU64 = AtomicU64::new(1);
+
+fn next_scope() -> Option<ScopeId> {
+    let value = NEXT_SCOPE
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            current.checked_add(1)
+        })
+        .ok()?;
+    ScopeId::new(value)
+}
+
+fn exhausted_scope() -> ScopeId {
+    ScopeId::new(u64::MAX).unwrap_or_else(|| std::process::abort())
+}
 
 enum OwnedResource {
-    File {
-        descriptor: OwnedFd,
-        kind: ResourceKind,
-    },
+    StandardInput,
+    File(OwnedFd),
     Directory(OwnedFd),
-    Socket {
-        descriptor: OwnedFd,
-        kind: ResourceKind,
-    },
-    SqliteConnection {
-        connection: lkjscript_sys::SqliteConnection,
-        live_statements: usize,
-    },
-    SqliteStatement {
-        statement: lkjscript_sys::SqliteStatement,
-        parent: usize,
-    },
+    Socket(OwnedFd),
+    SqliteConnection(lkjscript_sys::SqliteConnection),
+    SqliteStatement(lkjscript_sys::SqliteStatement),
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ResourceMetrics {
+    resources_opened: u64,
+    resources_closed: u64,
+    slots_reused: u64,
+    stale_key_failures: u64,
+    ordinary_obligations: usize,
+    emergency_obligations: usize,
+    cleanup_attempts: usize,
+}
+
+#[cfg(test)]
+impl ResourceMetrics {
+    pub const fn resources_opened(self) -> u64 {
+        self.resources_opened
+    }
+
+    pub const fn resources_closed(self) -> u64 {
+        self.resources_closed
+    }
+
+    pub const fn slots_reused(self) -> u64 {
+        self.slots_reused
+    }
+
+    pub const fn stale_key_failures(self) -> u64 {
+        self.stale_key_failures
+    }
+
+    pub const fn ordinary_obligations(self) -> usize {
+        self.ordinary_obligations
+    }
+
+    pub const fn emergency_obligations(self) -> usize {
+        self.emergency_obligations
+    }
+
+    pub const fn cleanup_attempts(self) -> usize {
+        self.cleanup_attempts
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ResourceTeardown {
+    ordinary_obligations: usize,
+    emergency_obligations: usize,
+    cleanup_attempts: usize,
+    cleanup_error: Option<String>,
 }
 
 pub struct ResourceTable {
-    slots: Vec<Option<OwnedResource>>,
-    max_handles: usize,
+    table: CoreResourceTable<OwnedResource>,
+    stdin_key: ResourceKey,
+    metrics: Cell<ResourceMetrics>,
     limit_exceeded: bool,
-}
-
-impl Default for ResourceTable {
-    fn default() -> Self {
-        Self::new(4_096)
-    }
-}
-
-impl ResourceTable {
-    pub fn new(max_handles: usize) -> Self {
-        Self {
-            slots: Vec::new(),
-            max_handles,
-            limit_exceeded: false,
-        }
-    }
-
-    pub fn allocated_handle_slots(&self) -> usize {
-        self.slots.len()
-    }
-
-    pub const fn limit_exceeded(&self) -> bool {
-        self.limit_exceeded
-    }
-    pub fn stdin_handle() -> Value {
-        Value::from_resource(STDIN_TOKEN)
-    }
+    scope_exhausted: bool,
 }
 
 mod files;
 mod paths;
+mod resource_cleanup;
+mod resource_keys;
+mod resource_session;
+mod resource_token;
 mod resources;
 mod results;
 mod sockets;

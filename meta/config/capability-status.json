@@ -57,7 +57,11 @@
       "interface": "typed reusable generation-bearing resource slots",
       "authority": "docs/decisions/memory/generation-safe-resources.md",
       "evidence": "docs/decisions/memory/generation-safe-resources.md",
-      "claimants": ["docs/decisions/memory/generation-safe-resources.md","docs/operations/agent-handoff.md"] },
+      "claimants": [
+        "docs/current-state.md",
+        "docs/decisions/memory/generation-safe-resources.md",
+        "docs/operations/agent-handoff.md"
+      ] },
     { "id": "jit-auto-promotion", "status": "accepted-selection",
       "interface": "auto --auto-jit-threshold",
       "authority": "docs/current-state/accepted-target-automatic-baseline-to-proof-promotion.md",

@@ -68,10 +68,11 @@ traced byte object.
 narrow independently recomputed SSA inventory for direct byte-vector owners,
 byte loans, and direct typed resources. Only the opaque memory-verified HIR
 wrapper enters SSA lowering. `place-end` may still discard an active owner fact.
-VM resources still use monotonic opaque tokens, explicit close, and teardown
-safety. The replacement core table has reusable generation keys and deterministic
-cleanup accounting, but is not yet wired into VM/native execution or compiler
-cleanup edges.
+VM resources now use the core table through reusable generation-bearing guest
+tokens, exact capability providers, one execution scope, reservations,
+invalidating close, and reverse emergency cleanup. Compiler cleanup edges,
+bounded structured provider-close failure attachment, evaluator providers, and
+native execution remain absent.
 
 ## Current Non-Memory Boundaries
 
@@ -90,8 +91,9 @@ cleanup edges.
 ## Accepted Next Sequence
 
 1. Elaborate exact whole-place cleanup for byte owners and all typed resources.
-2. Integrate the reusable generation-bearing resource table into VM and native.
-3. Integrate deterministic unique storage into evaluator, VM, and native.
+2. Extend resource cleanup and host execution through evaluator and forced
+   native tiers with bounded structured cleanup-failure attachment.
+3. Integrate deterministic generation-safe unique storage into every engine.
 4. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
 5. Execute and verify the remaining exact island types through evaluator, VM,
    forced baseline, and forced proof tiers with zero collector interaction and

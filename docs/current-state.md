@@ -8,6 +8,7 @@
 <!-- LKJ-STATUS id=canonical-lowercase-vocabulary status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
 <!-- LKJ-STATUS id=enum-declarations status=current -->
+<!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
@@ -94,12 +95,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
   HIR and verified SSA. Exactly-once compiler-inserted cleanup and generated
   native host execution remain accepted-contract work, so typed resources are
   not claimed Current as a complete capability.
-- Opaque monotonic VM tokens remain stale-safe, exact-kind checked, and
-  disjoint from integers and borrowed standard input. Core now provides the
-  replacement host-independent resource table with typed provider/scope-bound
-  generation keys, reservations, nonwrapping LIFO reuse, parent protection,
-  invalidating close, reverse cleanup, and exact obligation accounting. VM and
-  native integration remain incomplete.
+- The VM now projects the core resource table's provider/scope-bound keys into
+  checked 12-bit-slot, 20-bit-generation guest tokens. It reserves before host
+  acquisition, reuses slots without reviving stale tokens, protects SQLite
+  parents, installs borrowed standard input in the table, invalidates before
+  explicit close, and performs exact reverse emergency cleanup. Compiler
+  all-outcome cleanup and native resource execution remain incomplete.
 - Core provides a bounded deterministic unique store with opaque store-scoped,
   generation-bearing typed keys for byte-vector, dynamic bytes, and path
   layouts. It is not yet integrated into source execution or native tiers.
@@ -158,9 +159,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
-- complete typed-resource provider/state facts, integration of reusable
-  generation-bearing slots, compiler-inserted exactly-once cleanup, evaluator
-  providers, and forced native host execution;
+- complete typed-resource compiler-inserted exactly-once cleanup, evaluator
+  providers, bounded structured cleanup-failure attachment, and forced native
+  host execution;
 - immutable `bytes`, full affine `byte-vector` corpus migration, ranged lexical
   byte slices, borrowed `str`, and removal of transitional `buf` after complete
   cross-engine replacement;

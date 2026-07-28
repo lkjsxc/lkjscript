@@ -79,15 +79,16 @@ fn parent_cannot_close_while_a_child_is_live() {
         .reserve_owned(ResourceKind::SqliteConnection, origin)
         .unwrap()
         .commit(10);
-    let child = table
+    let child_reservation = table
         .reserve_owned_child(
             &parent,
             ResourceKind::SqliteConnection,
             ResourceKind::SqliteStatement,
             origin,
         )
-        .unwrap()
-        .commit(20);
+        .unwrap();
+    assert_eq!(child_reservation.parent_payload().unwrap(), Some(&10));
+    let child = child_reservation.commit(20);
 
     let error = table
         .close_owned(

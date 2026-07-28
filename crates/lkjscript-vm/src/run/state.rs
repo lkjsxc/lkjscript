@@ -34,7 +34,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         self.run_inner()
     }
 
-    fn run_inner(&mut self) -> ExecutionOutcome {
+    pub(super) fn run_inner(&mut self) -> ExecutionOutcome {
         let stopped = self.run_loop();
         let mut outcome = match stopped {
             Ok(Stop::Returned(value)) => {
@@ -50,8 +50,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             Err(error) => outcome_from_error(error),
         };
 
-        let resources = std::mem::replace(&mut self.resources, ResourceTable::new(0));
-        drop(resources);
+        let resource_teardown = self.resources.teardown();
         let restore_error = self
             .inputs
             .capabilities
@@ -64,17 +63,22 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             .contains(&lkjscript_core::CapabilityKind::Stdio)
             .then(crate::host::flush_out)
             .and_then(Result::err);
-        if restore_error.is_some() || flush_error.is_some() {
+        let mut cleanup_errors = Vec::new();
+        if let Some(error) = resource_teardown.cleanup_error() {
+            cleanup_errors.push(format!("resource cleanup {error}"));
+        }
+        if let Some(error) = restore_error {
+            cleanup_errors.push(error.to_string());
+        }
+        if let Some(error) = flush_error {
+            cleanup_errors.push(format!("stdout cleanup {error}"));
+        }
+        if !cleanup_errors.is_empty() {
             let prior = outcome.summary();
-            let message = match (restore_error, flush_error) {
-                (Some(restore), Some(flush)) => {
-                    format!("{restore}; stdout cleanup {flush}")
-                }
-                (Some(restore), None) => restore.to_string(),
-                (None, Some(flush)) => format!("stdout cleanup {flush}"),
-                (None, None) => String::new(),
-            };
-            outcome = ExecutionOutcome::HostFailure(HostError::during_cleanup(message, prior));
+            outcome = ExecutionOutcome::HostFailure(HostError::during_cleanup(
+                cleanup_errors.join("; "),
+                prior,
+            ));
         }
         outcome
     }

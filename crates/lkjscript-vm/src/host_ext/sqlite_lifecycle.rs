@@ -1,42 +1,33 @@
 use super::*;
 
 impl ResourceTable {
-    pub fn close(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "drop")?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::SqliteConnection { .. })
-            | Some(OwnedResource::SqliteStatement { .. }) => Err(Error::msg(
-                "drop: SQLite handles require their SQLite close operation",
-            )),
-            Some(_) => self.close_slot(index, "drop"),
-            None => Err(Error::msg("drop: stale or already closed handle")),
-        }
-    }
-
     pub fn sqlite_open(&mut self, path: &[u8], flags: i64) -> Result<Value> {
-        self.ensure_capacity()?;
-        let connection = lkjscript_sys::SqliteConnection::open(path, flags)
-            .map_err(|error| Error::msg(format!("sys-sqlite-open: {error}")))?;
-        self.push(OwnedResource::SqliteConnection {
-            connection,
-            live_statements: 0,
-        })
+        self.acquire_owned(
+            ResourceKind::SqliteConnection,
+            SQLITE_PROVIDER,
+            "open-sqlite",
+            || {
+                lkjscript_sys::SqliteConnection::open(path, flags)
+                    .map(OwnedResource::SqliteConnection)
+                    .map_err(|error| Error::msg(format!("sys-sqlite-open: {error}")))
+            },
+        )
     }
 
     pub fn sqlite_close(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "close-sqlite")?;
-        match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::SqliteConnection {
-                live_statements, ..
-            }) if *live_statements > 0 => Err(Error::msg(
-                "sys-sqlite-close: live statements must be finalized",
-            )),
-            Some(OwnedResource::SqliteConnection { .. }) => self.close_slot(index, "close-sqlite"),
-            Some(_) => Err(Error::msg(
-                "sys-sqlite-close: handle is not a SQLite connection",
-            )),
-            None => Err(Error::msg("sys-sqlite-close: stale or unknown handle")),
-        }
+        let key = self.resolve_exact(
+            handle,
+            ResourceKind::SqliteConnection,
+            SQLITE_PROVIDER,
+            ResourceOwnership::Owned,
+            "close-sqlite",
+        )?;
+        self.close_owned_key(
+            key,
+            ResourceKind::SqliteConnection,
+            SQLITE_PROVIDER,
+            "close-sqlite",
+        )
     }
 
     pub fn sqlite_busy_timeout(&self, handle: Value, milliseconds: i64) -> Result<Value> {
@@ -54,36 +45,47 @@ impl ResourceTable {
     }
 
     pub fn sqlite_prepare(&mut self, handle: Value, sql: &str) -> Result<Value> {
-        self.ensure_capacity()?;
-        let parent = self.owned_index(handle, "prepare-sqlite")?;
-        let statement = self
-            .sqlite_connection_at(parent, "prepare-sqlite")?
+        let parent = self.resolve_exact(
+            handle,
+            ResourceKind::SqliteConnection,
+            SQLITE_PROVIDER,
+            ResourceOwnership::Owned,
+            "prepare-sqlite",
+        )?;
+        let reservation = self.reserve_owned_child(
+            &parent,
+            ResourceKind::SqliteConnection,
+            ResourceKind::SqliteStatement,
+            SQLITE_PROVIDER,
+            "prepare-sqlite",
+        )?;
+        let parent_payload = reservation
+            .parent_payload()
+            .map_err(|error| Error::msg(format!("prepare-sqlite: {error}")))?;
+        let connection = match parent_payload {
+            Some(OwnedResource::SqliteConnection(connection)) => connection,
+            _ => return Err(Error::msg("prepare-sqlite: invalid parent payload")),
+        };
+        let statement = connection
             .prepare(sql)
             .map_err(|error| Error::msg(format!("sys-sqlite-prepare: {error}")))?;
-        let live_statements = self.sqlite_live_statements_at_mut(parent, "prepare-sqlite")?;
-        *live_statements = live_statements.saturating_add(1);
-        self.push(OwnedResource::SqliteStatement { statement, parent })
+        let key = reservation.commit(OwnedResource::SqliteStatement(statement));
+        self.publish_owned(key, ResourceKind::SqliteStatement, SQLITE_PROVIDER)
     }
 
     pub fn sqlite_finalize(&mut self, handle: Value) -> Result<Value> {
-        let index = self.owned_index(handle, "finalize-sqlite-statement")?;
-        let parent = match self.slots.get(index).and_then(Option::as_ref) {
-            Some(OwnedResource::SqliteStatement { parent, .. }) => *parent,
-            Some(_) => {
-                return Err(Error::msg(
-                    "sys-sqlite-finalize: handle is not a SQLite statement",
-                ))
-            }
-            None => return Err(Error::msg("sys-sqlite-finalize: stale or unknown handle")),
-        };
-        let _statement = self
-            .slots
-            .get_mut(index)
-            .and_then(Option::take)
-            .ok_or_else(|| Error::msg("sys-sqlite-finalize: stale or unknown handle"))?;
-        let live_statements =
-            self.sqlite_live_statements_at_mut(parent, "finalize-sqlite-statement")?;
-        *live_statements = live_statements.saturating_sub(1);
-        Ok(Value::UNIT)
+        let key = self.resolve_exact(
+            handle,
+            ResourceKind::SqliteStatement,
+            SQLITE_PROVIDER,
+            ResourceOwnership::Owned,
+            "finalize-sqlite-statement",
+        )?;
+        self.close_owned_key(
+            key,
+            ResourceKind::SqliteStatement,
+            SQLITE_PROVIDER,
+            "finalize-sqlite-statement",
+        )
     }
 }
