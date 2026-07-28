@@ -78,6 +78,9 @@ fn verify_forced_entry(
     expected_state: TierState,
 ) -> Result<(), EngineError> {
     if stats.native_entries == 0
+        || stats.vm_fallbacks != 0
+        || stats.vm_to_native_transitions != 0
+        || stats.native_to_vm_transitions != 0
         || stats
             .functions
             .iter()
@@ -87,7 +90,7 @@ fn verify_forced_entry(
         return Err(EngineError::new(
             FailureCode::InvocationFailure,
             Some(main),
-            "forced engine did not enter installed code in the selected tier",
+            "forced engine did not remain generated-only in the selected tier",
         ));
     }
     Ok(())
