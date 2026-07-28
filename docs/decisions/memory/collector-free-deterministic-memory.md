@@ -12,8 +12,9 @@ clean.
 
 ## Decision
 
-[Research evidence](research-evidence.md) records exact adoption, rejection,
-and uncertainty; inaccessible paper details are not assumed.
+[Research evidence](research-evidence.md) records adoption and uncertainty;
+[plans](authoritative-memory-plan.md), [drop](deterministic-drop.md), and the
+[first island](collector-free-value-island.md) refine the initial executable cut.
 
 The selected destination is one deterministic memory architecture with no
 tracing liveness traversal or collector fallback. The compiler tries, in order:

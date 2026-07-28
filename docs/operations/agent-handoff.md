@@ -2,97 +2,107 @@
 
 ## Purpose
 
-Capture product intent, current sharp edges, accepted next contracts, and
-verification discipline without preserving obsolete implementation priorities.
+Capture exact Current capability, accepted next contracts, sharp edges, and
+verification discipline for autonomous continuation.
 
 ## Status
 
 <!-- LKJ-STATUS id=agent-work-state status=current -->
-<!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
-<!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=repository-graph-context status=current -->
 <!-- LKJ-STATUS id=repository-topology status=current -->
 <!-- LKJ-STATUS id=resource-profile-compiler status=current -->
 <!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-session status=current -->
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
+<!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
+<!-- LKJ-STATUS id=memory-obligations status=current -->
+<!-- LKJ-STATUS id=memory-plan status=accepted-contract -->
+<!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
+<!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
+<!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
+<!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
 
-**Current** for the engineering policy and implementation boundaries linked from
-[Current State](../current-state.md). Bounded Repository Topology, Repository
-Intelligence Graph/context, Agent Work State canonical contract semantic references, complete
-Semantic Source Schema with its exact legacy contract base, typed holes/legal actions,
-closed hole transactions, one-shot protocol, compiler Resource resource profile, and
-the core hierarchical pre-allocation plus deterministic journal foundation are
-Current. Agent Foundation
-legacy contract and Semantic Source Schema are historical rejected identities. Bounded
-local stdio sessions serve canonical contract and are Current. the canonical source contract identity, homogeneous
-closures, marker projection, exact atomic migration publication, the canonical
-corpus, and ordinary-compilation cutover are Current. Other the canonical source contract changed
-execution, whole-pipeline pre-allocation, logical metering integration, and a shared ledger
-remain Accepted Targets.
-Automatic proof promotion remains
-an Accepted Implementation Selection, not the immediate priority.
+Repository topology and graph/context, bounded task state, exact modules and
+packages, canonical Semantic Source and local sessions, explicit capabilities,
+generic ADTs and structured control, validated VM, callable baseline JIT, and
+forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
+and explain commands are Current descriptive evidence.
+
+The authoritative memory plan, deterministic whole-place drop,
+generation-safe resource table, and first collector-free value island are
+Accepted Contracts until executable acceptance passes. The whole runtime still
+uses a tracing collector for structural values; collector-free deterministic
+memory is not Current.
 
 ## Product Intent
 
-- Build the language, compiler, runtime, standard library, and ecosystem as one
-  coherent product named `lkjscript`.
-- Canonical accepted sources use `.lkjscript`; do not preserve `.lkjml` support.
-- Keep the Rust host small and Linux-first; grow policy in lkjscript source.
-- Keep unsafe Rust inside `lkjscript-sys`, with safe APIs sound for every safe
-  caller.
-- Add no third-party Rust dependency without an accepted measured decision.
-- Remove stale aliases/contracts instead of preserving compatibility shims.
-- Mark every placeholder in code, behavior, and documentation as `PLACEHOLDER`.
-- Prefer complete vertical slices and focused conformance tests over mocks.
+- Build one AI-primary, statically typed, memory-safe language and platform.
+- Canonical source uses `.lkjscript`; removed spellings and contracts have no
+  aliases.
+- Compiler, evaluator, VM, baseline JIT, proof JIT, package, and Semantic Source
+  consume one typed semantic authority.
+- Keep ordinary source free of lifetime names, retain/release, general `free`,
+  raw pointers, and memory-engine switches.
+- Preserve exact capabilities, effects, outcomes, budgets, W^X, content
+  identities, and proof checking.
+- Keep unsafe Rust confined to `lkjscript-sys` behind safe caller contracts.
+- Add no third-party Rust dependency without accepted external review.
+- Prefer complete vertical slices and focused conformance over mocks.
 
-## Current Sharp Edges
+## Current Memory Foundation
 
-- the removed legacy source contract still enforces depth 8, 16 form children, 384 tokens per file,
-  8 top-level forms, 15 product fields, and 16 immediate source-directory
-  entries. Repository topology contracts do not change those language limits.
-- Imports still merge declarations into one loaded-closure namespace; modules,
-  exports, package coherence, and general ownership are incomplete.
-- `set` remains function-local and SSA joins use stable BindingId-ordered block
-  parameters. Workload state is product-threaded.
-- The independent SSA evaluator intentionally reports host operations as
-  unsupported; it is not a host-runtime substitute.
-- Compiler execution authority is verified normalized SSA plus validated
-  reference bytecode. Do not restore an independent HIR-to-bytecode emitter or
-  let a backend reinterpret source syntax.
-- VM host operations block, and process-global terminal/stdio wrappers prevent
-  concurrent VM supervision. Core exit remains a structured outcome.
-- Current auto execution is baseline-only. Forced proof optimization is Current,
-  but automatic promotion, OSR, deoptimization, and speculation are absent.
-- Linux x86-64 callable-native claims require real synchronous generated entry
-  from verified SSA. Emission, disassembly, or historical foundation scaffolding
-  alone is not current tier evidence.
-- String/file helpers may still perform per-byte calls or quadratic construction.
-  Raw terminal redraw requires CR+LF, idle editor operation must not repaint,
-  and final cursor placement requires a flush.
+The stable-index non-moving `GcHeap` still traces reference values, exact roots,
+and generated native stack maps. Wide VM i64/f64 values may be heap boxed.
+`buf` remains a traced mutable object, `bytes` is a source `PLACEHOLDER`, and
+`path` remains a traced byte object.
+
+`ExecutableProgram` retains a narrow independently recomputed SSA inventory for
+direct byte-vector owners represented through transitional `buf`, byte loans,
+and direct typed resources. It is not an authoritative pre-backend memory plan.
+`place-end` may still discard an active owner fact. Resources use monotonic
+opaque tokens, explicit close, and teardown safety rather than compiler-inserted
+cleanup on every outcome.
+
+## Current Non-Memory Boundaries
+
+- Compiler authority is resolved typed HIR, verified SSA, and validated
+  reference bytecode; no backend reinterprets source syntax.
+- Imports and packages are exact and content-addressed. The canonical lowercase
+  vocabulary remains Accepted Contract while transitional `buf` exists.
+- Borrowing is a bounded direct whole-place slice; borrowed returns,
+  projections, aggregate partial moves, and resource-bearing aggregates remain
+  rejected.
+- Forced native claims require synchronous generated entry with zero fallback.
+- Collection roots remain required for non-island native functions.
+- General regions, sealed regions, weak links, shared-node counting, pools, ECS,
+  and collector-free closures/lists/products/enums are later work.
 
 ## Accepted Next Sequence
 
-1. Continue moving the [resource profile](../decisions/platform/resource-budget-profiles.md)
-   to whole-pipeline pre-allocation hierarchical request charging.
-2. Implement the canonical source contract from the accepted ADT, pattern, control-flow, numeric,
-   value, layout, and typed-error contracts.
-3. Carry each the canonical source contract slice through HIR, verified SSA, the evaluator, VM,
-   baseline native execution, and forced proof-optimized execution.
+1. Establish the pre-backend authoritative memory plan and independent verifier.
+2. Elaborate exact whole-place cleanup for byte owners and all typed resources.
+3. Replace monotonic resource tokens with reusable generation-bearing slots.
+4. Add deterministic generation-safe unique byte storage.
+5. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
+6. Unbox complete i64 and exact-bit f64 in typed VM slots.
+7. Execute and verify the exact island through evaluator, VM, forced baseline,
+   and forced proof tiers with zero collector interaction and fallback.
+8. Expose compiler-derived plans, owners, loans, storage, and cleanup to agents.
+9. Ratchet remaining structural traced families downward.
 
-This order is an accepted implementation contract, not a capability claim.
-Automatic proof promotion and its retained gate remain later measured work.
+This order is an implementation contract, not a Current capability claim.
 
 ## Change Discipline
 
-Update the authority before public behavior. Preserve Current, Accepted Target,
-Deferred, Rejected, and historical evidence distinctions. Moves require
-repository-wide link updates with no aliases. Generated outputs belong under
-`target/`; immutable evidence bytes are not reformatted.
+Update authority before public behavior. Keep Current, Accepted Contract,
+Accepted Target, Deferred, Rejected, superseded, and historical evidence
+distinct. Analysis failure is a compile error, never a tracing fallback.
+Generated outputs belong under `target/`; retain compact negative evidence and
+remove reproducible temporary outputs.
 
-Use [Verification](verification.md). Record only commands that ran, with exact
-commit/environment/result, and retain every failed or rejected experiment.
-Code/build/runtime gates remain explicitly not tested for documentation-only
-changes.
+Use [Verification](verification.md). Record only commands that ran, including
+failed attempts and explicit untested gates. Each coherent commit includes
+exact `Tested:` and `Not-tested:` trailers and passes the 16×200 topology gate.

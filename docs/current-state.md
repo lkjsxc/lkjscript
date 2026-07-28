@@ -10,6 +10,7 @@
 <!-- LKJ-STATUS id=enum-declarations status=current -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
+<!-- LKJ-STATUS id=memory-obligations status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->

@@ -33,6 +33,26 @@ Index active architecture decisions separately from superseded history.
 - [compiler-pipeline.md](execution/compiler-pipeline.md): typed HIR/SSA and runtime JIT pipeline
 - [collector-free-deterministic-memory.md](memory/collector-free-deterministic-memory.md): inferred
   deterministic memory destination, Current inventory, migration, and falsification contract
+- [authoritative-memory-plan.md](memory/authoritative-memory-plan.md): pre-backend
+  plan axes, function signatures, bounded analyses, identity, and independent verification
+- [deterministic-drop.md](memory/deterministic-drop.md): initializedness, exact
+  whole-place cleanup, drop flags, outcome routing, and bounded cleanup failures
+- [generation-safe-resources.md](memory/generation-safe-resources.md): typed reusable
+  resource slots, provider identity, stale-key rejection, and exact close ownership
+- [unique-storage.md](memory/unique-storage.md): non-tracing generation-safe unique
+  byte storage, checked publication, transfer, deallocation, and reuse
+- [bytes-and-byte-vector.md](memory/bytes-and-byte-vector.md): immutable bytes,
+  affine vectors, ranged loans, freeze/thaw, path, and atomic `buf` removal
+- [typed-vm-scalars.md](memory/typed-vm-scalars.md): complete-range i64 and
+  exact-bit f64 typed VM slots without collector boxes
+- [collector-free-value-island.md](memory/collector-free-value-island.md): exact
+  first-island eligibility, engine support, leak checks, and collector-zero evidence
+- [tracing-ratchet.md](memory/tracing-ratchet.md): closed non-increasing legacy
+  tracing-family registry and separation from the final no-tracing gate
+- [ownership-spine-research.md](memory/ownership-spine-research.md): adopted Rust,
+  Swift, Perceus, Lean, Polonius, and destination-passing mechanisms and differences
+- [research-evidence.md](memory/research-evidence.md): primary-source mechanisms,
+  adoption, rejection, and explicit uncertainty for deterministic memory
 - [equality-families.md](semantics/equality-families.md): explicit value, identity, list, and F64-bit equality
 - [immutable-nominal-products.md](semantics/immutable-nominal-products.md): named immutable aggregate state
 - [isolates-and-structured-concurrency.md](platform/isolates-and-structured-concurrency.md):
