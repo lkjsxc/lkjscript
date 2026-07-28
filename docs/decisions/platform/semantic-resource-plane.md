@@ -26,7 +26,6 @@ A worker is one session-owned OS thread. Linux schedules workers; lkjscript
 schedules verified logical tasks onto them. Ordinary correctness requires no
 root privilege, debugfs, custom kernel, `sched_ext`, resctrl, DAMON, PMU, or
 NUMA-policy permission. Missing observations reduce optimization only.
-
 ## Semantic Authority And Policy
 `lkjscript.semantic-resource-plane` separates `VerifiedTaskGraph`,
 `HardwareTopologySnapshot`, `ExecutionResourcePlan`, `SchedulePolicy`, and
@@ -179,10 +178,14 @@ never false zero.
 
 A parallel/locality policy becomes default only after exact correctness and
 same-commit evidence with bounded overhead, acceptable p99/fairness, safe
-unknown-topology fallback, and no unexplained catastrophic regression.
-Otherwise sequential remains default, negative evidence is retained, and
-losing production hot paths are removed.
-
+unknown-topology fallback, and no unexplained catastrophic regression. The
+resource runtime default is `owner-compute` with `kernel-managed` placement;
+small proof-edit discovery remains sequential by default, while forced
+multi-worker discovery uses static partitions. These are separate defaults:
+owner-compute was the lowest aggregate parallel policy in the first retained
+mixed-workload comparison, but scheduling overhead made sequential discovery
+faster on the first one-function optimizer fixture. Negative evidence is
+retained and losing production hot paths are removed.
 ## Source Concurrency And Rejections
 
 This internal plane does not add source `spawn`, `await`, channels, async, or

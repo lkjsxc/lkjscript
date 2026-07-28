@@ -25,9 +25,9 @@ pub enum SchedulePolicy {
     Sequential,
     StaticPartition,
     GlobalFifo,
-    #[default]
     LocalWorkStealing,
     HierarchicalLocality,
+    #[default]
     OwnerCompute,
 }
 

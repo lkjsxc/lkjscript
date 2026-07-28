@@ -6,6 +6,8 @@ use lkjscript_sys::{discover_linux_host, LinuxWorkerBinder};
 
 #[path = "benchmark/graph.rs"]
 mod graph;
+#[path = "benchmark/proof.rs"]
+mod proof;
 #[path = "benchmark/stats.rs"]
 mod stats;
 #[path = "benchmark/workload.rs"]
@@ -24,6 +26,12 @@ const POLICIES: [SchedulePolicy; 6] = [
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "proof")
+    {
+        return proof::run(argument_usize(&arguments, 1, 30)?);
+    }
     let samples = argument_usize(&arguments, 0, 12)?;
     let requested_workers = argument_usize(&arguments, 1, 4)?;
     let mode = parse_mode(
