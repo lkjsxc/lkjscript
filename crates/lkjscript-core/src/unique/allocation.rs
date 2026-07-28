@@ -26,7 +26,7 @@ impl UniqueStore {
         self.allocate(Payload::Path(bytes)).map(PathKey::from_raw)
     }
 
-    fn allocate(&mut self, payload: Payload) -> Result<RawUniqueKey, UniqueStoreError> {
+    pub(super) fn allocate(&mut self, payload: Payload) -> Result<RawUniqueKey, UniqueStoreError> {
         let retained = payload.retained_bytes()?;
         let (slot_plan, next_stats) = self.preflight_allocation(retained)?;
         if matches!(slot_plan, SlotPlan::New { .. }) {
@@ -60,6 +60,10 @@ impl UniqueStore {
             index,
             generation,
         })
+    }
+
+    pub(super) fn check_allocation(&self, retained: u64) -> Result<(), UniqueStoreError> {
+        self.preflight_allocation(retained).map(|_| ())
     }
 
     fn preflight_allocation(

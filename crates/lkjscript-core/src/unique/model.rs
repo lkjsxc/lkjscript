@@ -1,7 +1,7 @@
 use std::num::{NonZeroU32, NonZeroU64};
 
 use super::object::Slot;
-use super::{UniqueStoreLeak, UniqueStoreLimits};
+use super::{InvalidUniqueKeyWord, UniqueStoreError, UniqueStoreLeak, UniqueStoreLimits};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct UniqueStoreId(NonZeroU64);
@@ -26,6 +26,42 @@ pub enum UniqueLayout {
     Path,
 }
 
+/// A runtime-local key projection containing only slot index and generation.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(transparent)]
+pub struct UniqueKeyWord(u64);
+
+impl UniqueKeyWord {
+    const INDEX_BITS: u32 = u32::BITS;
+
+    pub const fn new(word: u64) -> Result<Self, InvalidUniqueKeyWord> {
+        let generation = (word >> Self::INDEX_BITS) as u32;
+        if generation == 0 {
+            return Err(InvalidUniqueKeyWord::ZeroGeneration);
+        }
+        Ok(Self(word))
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    pub(super) const fn from_raw(raw: RawUniqueKey) -> Self {
+        let generation = (raw.generation.get() as u64) << Self::INDEX_BITS;
+        Self(generation | raw.index as u64)
+    }
+
+    pub(super) fn bind(self, store: UniqueStoreId) -> Result<RawUniqueKey, UniqueStoreError> {
+        let generation = (self.0 >> Self::INDEX_BITS) as u32;
+        let generation = NonZeroU32::new(generation).ok_or(UniqueStoreError::ArithmeticOverflow)?;
+        Ok(RawUniqueKey {
+            store,
+            index: self.0 as u32,
+            generation,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) struct RawUniqueKey {
     pub(super) store: UniqueStoreId,
@@ -41,6 +77,10 @@ macro_rules! typed_key {
         impl $name {
             pub(super) const fn from_raw(raw: RawUniqueKey) -> Self {
                 Self(raw)
+            }
+
+            pub const fn packed_word(self) -> UniqueKeyWord {
+                UniqueKeyWord::from_raw(self.0)
             }
 
             pub(super) const fn raw(self) -> RawUniqueKey {

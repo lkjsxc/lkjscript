@@ -3,7 +3,11 @@
 use super::*;
 
 mod access;
+mod cloning;
 mod limits;
+mod mutation;
+mod packed;
+mod range;
 mod transfer;
 
 fn store_with(

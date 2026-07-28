@@ -2,18 +2,22 @@
 
 mod access;
 mod allocation;
+mod cloning;
 mod error;
 mod limits;
 mod model;
+mod mutation;
 mod object;
 mod release;
 mod transfer;
 
-pub use error::{InvalidUniqueStoreLimits, UniqueStoreError, UniqueStoreLeak};
+pub use error::{
+    InvalidUniqueKeyWord, InvalidUniqueStoreLimits, UniqueStoreError, UniqueStoreLeak,
+};
 pub use limits::UniqueStoreLimits;
 pub use model::{
-    ByteVectorKey, BytesKey, PathKey, StaticBytes, UniqueLayout, UniqueStore, UniqueStoreId,
-    UniqueStoreStats,
+    ByteVectorKey, BytesKey, PathKey, StaticBytes, UniqueKeyWord, UniqueLayout, UniqueStore,
+    UniqueStoreId, UniqueStoreStats,
 };
 
 #[cfg(test)]

@@ -53,9 +53,9 @@ pub use resource_table::{
 };
 pub use sha256::sha256;
 pub use unique::{
-    ByteVectorKey, BytesKey, InvalidUniqueStoreLimits, PathKey, StaticBytes, UniqueLayout,
-    UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits,
-    UniqueStoreStats,
+    ByteVectorKey, BytesKey, InvalidUniqueKeyWord, InvalidUniqueStoreLimits, PathKey, StaticBytes,
+    UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
+    UniqueStoreLimits, UniqueStoreStats,
 };
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{CapabilityKind, HeapObj, ResourceKind, Value};

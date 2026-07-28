@@ -20,6 +20,23 @@ impl fmt::Display for InvalidUniqueStoreLimits {
 impl std::error::Error for InvalidUniqueStoreLimits {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InvalidUniqueKeyWord {
+    ZeroGeneration,
+}
+
+impl fmt::Display for InvalidUniqueKeyWord {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ZeroGeneration => {
+                formatter.write_str("unique key word generation must be nonzero")
+            }
+        }
+    }
+}
+
+impl std::error::Error for InvalidUniqueKeyWord {}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UniqueStoreError {
     AllocationLimit,
     ObjectLimit,
@@ -29,6 +46,15 @@ pub enum UniqueStoreError {
     StorageCapacity,
     StoreMismatch,
     StaleKey,
+    RangeOverflow {
+        start: usize,
+        len: usize,
+    },
+    RangeOutOfBounds {
+        start: usize,
+        len: usize,
+        available: usize,
+    },
     WrongLayout {
         expected: UniqueLayout,
         actual: UniqueLayout,
@@ -48,6 +74,18 @@ impl fmt::Display for UniqueStoreError {
             }
             Self::StoreMismatch => formatter.write_str("unique-store key belongs to another store"),
             Self::StaleKey => formatter.write_str("unique-store key is stale"),
+            Self::RangeOverflow { start, len } => write!(
+                formatter,
+                "unique-store range start {start} plus length {len} overflows"
+            ),
+            Self::RangeOutOfBounds {
+                start,
+                len,
+                available,
+            } => write!(
+                formatter,
+                "unique-store range {start}..+{len} exceeds length {available}"
+            ),
             Self::WrongLayout { expected, actual } => write!(
                 formatter,
                 "unique-store layout mismatch: expected {expected:?}, found {actual:?}"

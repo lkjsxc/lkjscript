@@ -9,9 +9,16 @@ retained after migration.
 ## Byte-Vector
 
 `byte-vector` is an affine mutable value in deterministic unique storage. New,
-length, indexed read/write, fill, ranged copy, and bulk host operations use one
-owner key. Reads infer shared loans. Mutation requires an exclusive loan.
-Copying the owner is invalid.
+length, indexed read/write, resize, fill, ranged copy, and bulk host operations
+use one owner key. Reads infer shared loans. Mutation requires an exclusive
+loan. Copying the owner is invalid.
+
+Resize, fill, and ranged copy validate every range, arithmetic result, retained
+byte change, and ceiling before mutation. Ranged copy within one vector is
+memmove-like: overlap is accepted and reads the logical source bytes before
+they are overwritten. Resize growth beyond capacity is privately constructed
+and atomically published; shrinking length retains capacity and therefore does
+not reduce retained/live-byte metrics.
 
 ## Views
 
@@ -37,8 +44,11 @@ byte-vector freeze, bytes thaw, and explicit clone.
 
 Freeze consumes a vector and transfers compatible backing to dynamic bytes
 without copy. Thaw consumes uniquely owned dynamic bytes and transfers backing
-to a vector. Thawing static bytes performs one explicit copy. Failed operations
-preserve exact ownership and establish no duplicate owner.
+to a vector. Both preserve runtime-local packed slot/generation identity.
+Thawing static bytes performs one bounded, accounted allocation and copy.
+Explicit dynamic-bytes clone likewise publishes one independently releasable
+owner. Failed operations preserve exact ownership and establish no duplicate
+owner.
 
 ## Host Boundaries
 
