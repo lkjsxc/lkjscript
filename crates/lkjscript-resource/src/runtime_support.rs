@@ -3,14 +3,16 @@ use std::sync::MutexGuard;
 use crate::runtime::{Control, Shared};
 use crate::{ResourceError, ResourceResult, TaskId};
 
-pub(crate) fn lock_control(shared: &Shared) -> ResourceResult<MutexGuard<'_, Control>> {
+pub(crate) fn lock_control<O, E>(
+    shared: &Shared<O, E>,
+) -> ResourceResult<MutexGuard<'_, Control<O, E>>> {
     shared
         .control
         .lock()
         .map_err(|_| ResourceError::new("poison", "runtime control poisoned"))
 }
 
-pub(crate) fn update_active(shared: &Shared, entering: bool) -> ResourceResult<()> {
+pub(crate) fn update_active<O, E>(shared: &Shared<O, E>, entering: bool) -> ResourceResult<()> {
     let mut control = lock_control(shared)?;
     if entering {
         control.metrics.active_workers = control.metrics.active_workers.saturating_add(1);
@@ -20,7 +22,10 @@ pub(crate) fn update_active(shared: &Shared, entering: bool) -> ResourceResult<(
     Ok(())
 }
 
-pub(crate) fn take_task(shared: &Shared, worker: usize) -> ResourceResult<Option<(TaskId, bool)>> {
+pub(crate) fn take_task<O, E>(
+    shared: &Shared<O, E>,
+    worker: usize,
+) -> ResourceResult<Option<(TaskId, bool)>> {
     let mut local = shared.queues[worker]
         .lock()
         .map_err(|_| ResourceError::new("poison", "worker queue poisoned"))?;
@@ -40,7 +45,11 @@ pub(crate) fn take_task(shared: &Shared, worker: usize) -> ResourceResult<Option
     Ok(None)
 }
 
-pub(crate) fn enqueue_many(shared: &Shared, worker: usize, tasks: &[TaskId]) -> ResourceResult<()> {
+pub(crate) fn enqueue_many<O, E>(
+    shared: &Shared<O, E>,
+    worker: usize,
+    tasks: &[TaskId],
+) -> ResourceResult<()> {
     if tasks.is_empty() {
         return Ok(());
     }
@@ -50,7 +59,6 @@ pub(crate) fn enqueue_many(shared: &Shared, worker: usize, tasks: &[TaskId]) -> 
     if queue.len().saturating_add(tasks.len()) > shared.queue_capacity {
         drop(queue);
         let mut control = lock_control(shared)?;
-        control.failures.insert(tasks[0], "queue-full".to_owned());
         control.shutdown = true;
         control.wake_epoch = control.wake_epoch.saturating_add(1);
         drop(control);
@@ -73,10 +81,10 @@ pub(crate) fn enqueue_many(shared: &Shared, worker: usize, tasks: &[TaskId]) -> 
     Ok(())
 }
 
-pub(crate) fn complete_task(
-    shared: &Shared,
+pub(crate) fn complete_task<O, E>(
+    shared: &Shared<O, E>,
     task: TaskId,
-    outcome: Result<Vec<u8>, String>,
+    outcome: Result<O, E>,
 ) -> ResourceResult<Vec<TaskId>> {
     let mut control = lock_control(shared)?;
     match outcome {

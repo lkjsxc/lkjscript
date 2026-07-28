@@ -25,7 +25,10 @@ impl CountingExecutor {
     }
 }
 impl TaskExecutor for CountingExecutor {
-    fn execute(&self, task: TaskId) -> Result<Vec<u8>, String> {
+    type Output = Vec<u8>;
+    type Error = String;
+
+    fn execute(&self, task: TaskId) -> Result<Self::Output, String> {
         std::thread::sleep(self.delay);
         let Some(count) = self.counts.get(task.slot as usize) else {
             return Err("unknown-task".to_owned());

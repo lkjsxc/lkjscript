@@ -30,7 +30,7 @@ pub(super) fn worker_loop<E: TaskExecutor, B: WorkerBinder>(
     index: usize,
     descriptor: &WorkerDescriptor,
     spin_limit: usize,
-    shared: &Shared,
+    shared: &Shared<E::Output, E::Error>,
     executor: &E,
     binder: &B,
 ) -> ResourceResult<()> {
@@ -44,7 +44,7 @@ pub(super) fn worker_loop<E: TaskExecutor, B: WorkerBinder>(
 fn worker_tasks<E: TaskExecutor>(
     index: usize,
     spin_limit: usize,
-    shared: &Shared,
+    shared: &Shared<E::Output, E::Error>,
     executor: &E,
 ) -> ResourceResult<()> {
     let mut spins = 0;

@@ -9,7 +9,10 @@ mod worker;
 use worker::{validate_config, worker_loop};
 
 pub trait TaskExecutor: Sync {
-    fn execute(&self, task: TaskId) -> Result<Vec<u8>, String>;
+    type Output: Clone + Send;
+    type Error: Clone + Send;
+
+    fn execute(&self, task: TaskId) -> Result<Self::Output, Self::Error>;
 }
 
 pub trait WorkerBinder: Sync {
@@ -48,29 +51,29 @@ pub struct RuntimeMetrics {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RuntimeReport {
-    pub outputs: Vec<(TaskId, Vec<u8>)>,
-    pub failures: Vec<(TaskId, String)>,
-    pub selected_failure: Option<(TaskId, String)>,
+pub struct RuntimeReport<O, E> {
+    pub outputs: Vec<(TaskId, O)>,
+    pub failures: Vec<(TaskId, E)>,
+    pub selected_failure: Option<(TaskId, E)>,
     pub cancelled: Vec<TaskId>,
     pub metrics: RuntimeMetrics,
 }
 
-pub(crate) struct Control {
+pub(crate) struct Control<O, E> {
     pub(crate) dependencies: BTreeMap<TaskId, usize>,
     pub(crate) successors: BTreeMap<TaskId, Vec<TaskId>>,
     pub(crate) attempted: BTreeSet<TaskId>,
     pub(crate) completed: BTreeSet<TaskId>,
-    pub(crate) outputs: BTreeMap<TaskId, Vec<u8>>,
-    pub(crate) failures: BTreeMap<TaskId, String>,
+    pub(crate) outputs: BTreeMap<TaskId, O>,
+    pub(crate) failures: BTreeMap<TaskId, E>,
     pub(crate) remaining: usize,
     pub(crate) shutdown: bool,
     pub(crate) wake_epoch: u64,
     pub(crate) metrics: RuntimeMetrics,
 }
-pub(crate) struct Shared {
+pub(crate) struct Shared<O, E> {
     pub(crate) queues: Vec<Mutex<VecDeque<TaskId>>>,
-    pub(crate) control: Mutex<Control>,
+    pub(crate) control: Mutex<Control<O, E>>,
     pub(crate) wake: Condvar,
     pub(crate) queue_capacity: usize,
 }
@@ -83,7 +86,7 @@ impl ScopedRuntime {
         config: RuntimeConfig,
         executor: &E,
         binder: &B,
-    ) -> ResourceResult<RuntimeReport> {
+    ) -> ResourceResult<RuntimeReport<E::Output, E::Error>> {
         validate_config(&config)?;
         let mut dependencies = BTreeMap::new();
         let mut successors: BTreeMap<TaskId, Vec<TaskId>> = BTreeMap::new();
