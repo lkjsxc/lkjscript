@@ -5,6 +5,7 @@ pub enum ImageIntegrityError {
     EmptyCode,
     CodeAccountingMismatch,
     MetadataAccountingMismatch,
+    StaticBytes,
     EntryRange,
     DuplicateEntry,
     RelocationRange,
@@ -28,6 +29,7 @@ impl fmt::Display for ImageIntegrityError {
             Self::MetadataAccountingMismatch => {
                 "installable image metadata accounting is inconsistent"
             }
+            Self::StaticBytes => "installable image static bytes data is invalid",
             Self::EntryRange => "installable image entry range is invalid",
             Self::DuplicateEntry => "installable image has duplicate entries",
             Self::RelocationRange => "installable image relocation range is invalid",

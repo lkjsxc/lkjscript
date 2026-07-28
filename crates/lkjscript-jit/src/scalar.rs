@@ -71,23 +71,16 @@ pub(crate) fn scalar_to_execution(
                         )
                     })?
                 }
+                NativeValue::StaticBytes(_) => session.take_returned_unique(function, true)?,
                 NativeValue::Unique(owner)
                     if owner.unique_type() == lkjscript_native::UniqueType::ByteVector =>
                 {
-                    let bytes = session.returned_unique.take().ok_or_else(|| {
-                        EngineError::new(
-                            FailureCode::InvocationFailure,
-                            Some(function),
-                            "native byte-vector return has no transferred backing",
-                        )
-                    })?;
-                    OwnedValue::from_unique_byte_vector(bytes).map_err(|error| {
-                        EngineError::new(
-                            FailureCode::InvocationFailure,
-                            Some(function),
-                            error.to_string(),
-                        )
-                    })?
+                    session.take_returned_unique(function, false)?
+                }
+                NativeValue::Unique(owner)
+                    if owner.unique_type() == lkjscript_native::UniqueType::Bytes =>
+                {
+                    session.take_returned_unique(function, true)?
                 }
                 NativeValue::Capability(_)
                 | NativeValue::Resource(_)
@@ -136,7 +129,8 @@ pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedVa
         NativeValue::F64Bits(bits) => {
             OwnedValue::from_vm_snapshot(Value::from_f64_bits(bits), Vec::new())
         }
-        NativeValue::Capability(_)
+        NativeValue::StaticBytes(_)
+        | NativeValue::Capability(_)
         | NativeValue::Resource(_)
         | NativeValue::Unique(_)
         | NativeValue::Loan(_)

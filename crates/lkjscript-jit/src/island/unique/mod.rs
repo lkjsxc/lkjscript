@@ -2,6 +2,7 @@ use crate::island::{config_error, EngineErrorDetail};
 use crate::*;
 
 mod access;
+mod bytes;
 mod cleanup;
 #[cfg(test)]
 mod tests;
@@ -64,25 +65,42 @@ impl JitUniqueRuntime {
             .allocate_byte_vector(bytes)
             .map_err(|error| self.store_error(error))?;
         let word = key.packed_word().get();
-        if self.owners.contains(&word) {
-            return Err(self.reject());
-        }
-        self.owners.push(word);
+        self.publish_owner(word)?;
         self.stats.allocations = self.stats.allocations.saturating_add(1);
         Ok(NativeUnique::byte_vector(word))
     }
 
-    fn validate_owner(&mut self, owner: NativeUnique) -> Result<UniqueKeyWord, NativeServiceError> {
-        if owner.unique_type() != lkjscript_native::UniqueType::ByteVector
-            || !self.owners.contains(&owner.opaque_word())
-        {
+    fn validate_owner(
+        &mut self,
+        owner: NativeUnique,
+        expected: lkjscript_native::UniqueType,
+    ) -> Result<UniqueKeyWord, NativeServiceError> {
+        if owner.unique_type() != expected || !self.owners.contains(&owner.opaque_word()) {
             return Err(self.reject());
         }
         let word = UniqueKeyWord::new(owner.opaque_word()).map_err(|_| self.reject())?;
-        self.store
-            .import_byte_vector_key(word)
-            .map_err(|_| self.reject())?;
+        let valid = match expected {
+            lkjscript_native::UniqueType::ByteVector => {
+                self.store.import_byte_vector_key(word).is_ok()
+            }
+            lkjscript_native::UniqueType::Bytes => self.store.import_bytes_key(word).is_ok(),
+        };
+        if !valid {
+            return Err(self.reject());
+        }
         Ok(word)
+    }
+
+    fn reserve_owner(&mut self) -> Result<(), NativeServiceError> {
+        self.owners.try_reserve(1).map_err(|_| self.heap_limit())
+    }
+
+    fn publish_owner(&mut self, word: u64) -> Result<(), NativeServiceError> {
+        if self.owners.contains(&word) {
+            return Err(self.reject());
+        }
+        self.owners.push(word);
+        Ok(())
     }
 
     fn active_loans_for(&self, owner: UniqueKeyWord) -> impl Iterator<Item = Loan> + '_ {
@@ -103,15 +121,19 @@ impl JitUniqueRuntime {
             .and_then(|slot| slot.loan)
             .filter(|loan| loan.kind == value.loan_type())
             .ok_or_else(|| self.reject())?;
-        let key = self
-            .store
-            .import_byte_vector_key(loan.owner)
-            .map_err(|_| self.reject())?;
-        if self
-            .store
-            .byte_vector_range(key, loan.start, loan.len)
-            .is_err()
-        {
+        let valid = match loan.kind {
+            LoanType::ByteSlice | LoanType::ByteSliceMut => self
+                .store
+                .import_byte_vector_key(loan.owner)
+                .and_then(|key| self.store.byte_vector_range(key, loan.start, loan.len))
+                .is_ok(),
+            LoanType::Bytes => self
+                .store
+                .import_bytes_key(loan.owner)
+                .and_then(|key| self.store.bytes_range(key, loan.start, loan.len))
+                .is_ok(),
+        };
+        if !valid {
             return Err(self.reject());
         }
         Ok(loan)

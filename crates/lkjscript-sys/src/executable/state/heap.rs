@@ -184,7 +184,8 @@ impl NativeCallState<'_> {
                 ValueType::Bool => return false,
                 ValueType::Unit if word == 0 => NativeValue::Unit,
                 ValueType::Unit => return false,
-                ValueType::Capability(_)
+                ValueType::StaticBytes
+                | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_) => return false,

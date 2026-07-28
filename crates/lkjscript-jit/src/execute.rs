@@ -1,8 +1,5 @@
 use crate::*;
 
-mod bytes;
-use bytes::reject_native_bytes;
-
 pub(crate) fn optimization_metadata_bytes_estimate(stats: Option<&OptimizationStats>) -> u64 {
     stats.map_or(0, |stats| {
         stats
@@ -25,7 +22,6 @@ pub fn execute_forced_with_capabilities(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
-    reject_native_bytes(program)?;
     let main = program.program().main;
     let mut session = JitSession::new_baseline(program, config);
     session.compile_group(main)?;
@@ -60,7 +56,6 @@ pub fn execute_optimizing_with_capabilities(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
-    reject_native_bytes(program)?;
     let started = Instant::now();
     let optimized = optimize(program, config.optimization_limits).map_err(optimization_error)?;
     let optimization_time = started.elapsed();

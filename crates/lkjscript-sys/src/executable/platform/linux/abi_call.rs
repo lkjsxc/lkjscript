@@ -21,6 +21,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),
@@ -38,6 +39,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [MachineArgument::Integer(first)],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),
@@ -57,6 +59,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [MachineArgument::Float(first)],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),
@@ -76,6 +79,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [MachineArgument::Integer(first), MachineArgument::Integer(second)],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),
@@ -103,6 +107,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [MachineArgument::Integer(first), MachineArgument::Float(second)],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),
@@ -130,6 +135,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [MachineArgument::Float(first), MachineArgument::Integer(second)],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),
@@ -157,6 +163,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
             [MachineArgument::Float(first), MachineArgument::Float(second)],
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_),

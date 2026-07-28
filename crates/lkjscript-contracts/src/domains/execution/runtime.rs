@@ -38,12 +38,17 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "unique-values",
                     "unique-values",
-                    "exact unique/byte-vector loan/byte-slice loan/byte-slice-mut words",
+                    "exact static/bytes unique/bytes loan/bytes and byte-vector/view words",
                 ))
                 .fact(fact(
                     "unique-service",
                     "unique-service",
                     "bounded invocation-owned UniqueStore and generation-bearing loan table",
+                ))
+                .fact(fact(
+                    "static-data",
+                    "static-data",
+                    "immutable accounted image bytes addressed only by verified tokens",
                 ))
                 .fact(fact(
                     "heap-sites",

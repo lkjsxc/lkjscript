@@ -1,5 +1,4 @@
 # Current State
-
 ## Status
 <!-- LKJ-STATUS id=affine-resource-handles status=superseded -->
 <!-- LKJ-STATUS id=agent-work-state status=current -->
@@ -15,6 +14,7 @@
 <!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=native-byte-vector-island status=current -->
+<!-- LKJ-STATUS id=native-bytes-island status=current -->
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->
 <!-- LKJ-STATUS id=opaque-paths status=current -->
@@ -30,7 +30,6 @@
 <!-- LKJ-STATUS id=typed-capabilities status=current -->
 <!-- LKJ-STATUS id=typed-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=typed-vm-scalars status=current -->
-
 This file is the concise Current authority. Historical source generations,
 protocol experiments, candidate resource profiles, rejected performance
 results, and immutable AI-authorability records live only under
@@ -102,13 +101,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
   borrowed `input-stream` in an invocation-owned table and removing it at
   teardown. Owned native resource operations and evaluator dispatch remain incomplete.
 - Core provides deterministic unique storage for byte-vector, dynamic bytes, and
-  path layouts. Exact byte-vector owners, loans, byte access, mutation, and
-  checked little-endian u32 read/write execute through evaluator, VM, forced
-  baseline, and forced proof tiers with typed ABI categories, bounded runtime
-  tables, and exactly-once release on every supported outcome.
-- Immutable bytes literals, length/read, slice copy, clone, freeze, and thaw use
-  static or execution-owned storage through evaluator and VM. Native tiers reject
-  bytes before entry; path and resource/unique mixing remain outside this subset.
+  path layouts. Exact byte-vector owners, loans, byte/u32 access, and mutation
+  execute through evaluator, VM, forced baseline, and forced proof tiers with
+  bounded runtime tables and exactly-once release on every supported outcome.
+- Immutable bytes literal/read/copy/clone/freeze/thaw operations execute through
+  all four engines. Native static identities select verified image data; dynamic
+  values remain affine. Path, owned resources, and mixed groups remain outside.
 
 ## Compiler and execution
 - One validated source tree feeds module resolution, typed HIR, ownership and
@@ -123,10 +121,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   fallback, no collector-capable runtime call or safepoint metadata, and zero
   allocation, collection, root, and barrier counters. Collector-free scalar and
   supported resource groups use a distinct noncollecting sys dispatch and do
-  not construct or configure `GcHeap` or `JitHeapServices`. The exact
-  byte-vector family uses that domain with closed allocation/move/borrow/view/
-  byte/u32 access/mutation/end-borrow/drop calls, zero roots/safepoints/heap
-  dispatch/barriers, and zero
+  not construct or configure `GcHeap` or `JitHeapServices`. Exact byte-vector
+  and bytes groups use closed byte/u32 access, mutation, borrow, copy, clone,
+  freeze, thaw, end-borrow, and drop calls with no collector metadata and zero
   final live owners, loans, or release backlog.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
@@ -169,8 +166,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - complete typed-resource compiler-inserted exactly-once cleanup, evaluator
   resource-operation dispatch, bounded structured cleanup-failure attachment,
   and forced native owned-resource execution beyond borrowed `standard-input`;
-- full affine `byte-vector` corpus migration, native bytes lowering, ranged
-  lexical byte slices, borrowed `str`, and removal of transitional `buf`;
+- full affine `byte-vector` corpus migration, ranged lexical byte slices,
+  borrowed `str`, and removal of transitional `buf`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
 - the selected collector-free deterministic cutover: inferred modes and loans,
   ordinary and sealed shared regions, pools, exact cleanup, migrated evaluator,
@@ -183,8 +180,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - portability acceptance beyond Linux x86-64.
 
 Immutable `bytes` is executable in the compiler, evaluator, validated bytecode,
-and VM. The complete island remains Accepted until native bytes, path, owned
-resources, and the other listed island requirements are complete.
+VM, forced baseline, and forced proof tiers for the exact listed subset. The
+complete island remains Accepted until path, owned resources, transitional
+legacy removal, and the other listed island requirements are complete.
 ## Verification authority
 The canonical local gate is:
 

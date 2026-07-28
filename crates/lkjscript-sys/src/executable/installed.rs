@@ -22,6 +22,10 @@ impl InstalledImage {
         self.image.entries()
     }
 
+    pub fn resolve_static_bytes(&self, identity: NativeStaticBytes) -> Option<&[u8]> {
+        self.image.resolve_static_bytes(identity)
+    }
+
     pub fn invoke(
         &self,
         entry: FunctionId,

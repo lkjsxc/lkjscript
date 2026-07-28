@@ -25,6 +25,12 @@ impl RawReturn {
             }
             (Self::Float(value), ValueType::F64) => Ok(NativeValue::F64Bits(value.to_bits())),
             (Self::Unit, ValueType::Unit) => Ok(NativeValue::Unit),
+            (Self::Integer(value), ValueType::StaticBytes) if value != 0 => {
+                Ok(NativeValue::StaticBytes(NativeStaticBytes::new(value)))
+            }
+            (Self::Integer(_), ValueType::StaticBytes) => {
+                Err(InvocationError::UnsupportedSignature)
+            }
             (Self::Integer(value), ValueType::Capability(kind))
                 if value == capability_word(kind) =>
             {
@@ -64,6 +70,7 @@ pub(super) fn native_value_word(value: NativeValue, expected: ValueType) -> Opti
         NativeValue::F64Bits(bits) => bits,
         NativeValue::Bool(value) => u64::from(value),
         NativeValue::Unit => 0,
+        NativeValue::StaticBytes(identity) => identity.opaque_word(),
         NativeValue::Capability(kind) => capability_word(kind),
         NativeValue::Resource(resource) => resource.opaque_word(),
         NativeValue::Unique(unique) => unique.opaque_word(),
@@ -108,6 +115,9 @@ pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgumen
             NativeValue::F64Bits(bits) => Some(MachineArgument::Float(f64::from_bits(*bits))),
             NativeValue::Bool(value) => Some(MachineArgument::Integer(u64::from(*value))),
             NativeValue::Unit => None,
+            NativeValue::StaticBytes(identity) => {
+                Some(MachineArgument::Integer(identity.opaque_word()))
+            }
             NativeValue::Capability(kind) => Some(MachineArgument::Integer(capability_word(*kind))),
             NativeValue::Resource(resource) => {
                 Some(MachineArgument::Integer(resource.opaque_word()))

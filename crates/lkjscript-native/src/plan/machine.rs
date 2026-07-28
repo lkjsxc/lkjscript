@@ -1,9 +1,30 @@
 use super::*;
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct StaticBytesIdentity(u32);
+
+impl StaticBytesIdentity {
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self.0
+    }
+
+    #[must_use]
+    pub const fn opaque_word(self) -> u64 {
+        self.0 as u64 + 1
+    }
+}
+
 #[derive(Debug)]
 pub struct MachinePlanBuilder {
     pub(super) plan: u64,
     pub(super) functions: Vec<FunctionDeclaration>,
+    pub(super) static_bytes: Vec<Box<[u8]>>,
 }
 
 impl MachinePlanBuilder {
@@ -12,7 +33,23 @@ impl MachinePlanBuilder {
         Self {
             plan: NEXT_PLAN_ID.fetch_add(1, Ordering::Relaxed),
             functions: Vec::new(),
+            static_bytes: Vec::new(),
         }
+    }
+
+    pub fn intern_static_bytes(&mut self, bytes: &[u8]) -> Result<StaticBytesIdentity, PlanError> {
+        if let Some(index) = self
+            .static_bytes
+            .iter()
+            .position(|candidate| candidate.as_ref() == bytes)
+        {
+            return u32::try_from(index)
+                .map(StaticBytesIdentity::new)
+                .map_err(|_| PlanError::TooManyItems);
+        }
+        let index = u32::try_from(self.static_bytes.len()).map_err(|_| PlanError::TooManyItems)?;
+        self.static_bytes.push(bytes.to_vec().into_boxed_slice());
+        Ok(StaticBytesIdentity::new(index))
     }
 
     pub fn declare_function(
@@ -65,7 +102,7 @@ impl MachinePlanBuilder {
     }
 
     pub fn verify(self, limits: BackendLimits) -> Result<VerifiedMachinePlan, NativeError> {
-        verify_plan(self.plan, self.functions, limits)
+        verify_plan(self.plan, self.functions, self.static_bytes, limits)
     }
 
     fn declaration(&self, function: FunctionId) -> Result<&FunctionDeclaration, PlanError> {

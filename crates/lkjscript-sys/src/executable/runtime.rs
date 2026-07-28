@@ -1,9 +1,15 @@
 use super::*;
 
 mod island;
+mod island_bytes;
+mod island_bytes_static;
+mod island_results;
 mod island_unique;
 mod symbols;
 use island::*;
+use island_bytes::*;
+use island_bytes_static::*;
+use island_results::*;
 use island_unique::*;
 pub(super) use symbols::runtime_symbol;
 

@@ -1,6 +1,32 @@
 use crate::*;
 
 impl JitSession {
+    pub(crate) fn take_returned_unique(
+        &mut self,
+        function: FunctionId,
+        bytes: bool,
+    ) -> Result<OwnedValue, EngineError> {
+        let payload = self.returned_unique.take().ok_or_else(|| {
+            EngineError::new(
+                FailureCode::InvocationFailure,
+                Some(function),
+                "native unique return has no transferred backing",
+            )
+        })?;
+        let result = if bytes {
+            OwnedValue::from_unique_bytes(payload)
+        } else {
+            OwnedValue::from_unique_byte_vector(payload)
+        };
+        result.map_err(|error| {
+            EngineError::new(
+                FailureCode::InvocationFailure,
+                Some(function),
+                error.to_string(),
+            )
+        })
+    }
+
     pub(super) fn invoke_collector_free(
         &mut self,
         function: FunctionId,
@@ -35,6 +61,13 @@ impl JitSession {
                 InvocationOutcome::Returned(NativeValue::Unique(owner)) => {
                     Some(services.export_unique(owner))
                 }
+                InvocationOutcome::Returned(NativeValue::StaticBytes(identity)) => Some(
+                    self.objects[object_index]
+                        .installed
+                        .resolve_static_bytes(identity)
+                        .map(<[u8]>::to_vec)
+                        .ok_or(NativeServiceError::Trap),
+                ),
                 _ => None,
             });
         let (resources, unique, last_resource) = services.finish();

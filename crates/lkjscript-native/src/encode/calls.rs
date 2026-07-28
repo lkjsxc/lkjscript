@@ -37,6 +37,7 @@ impl FunctionEncoder<'_> {
             match argument_type {
                 ValueType::I64
                 | ValueType::Bool
+                | ValueType::StaticBytes
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
@@ -78,6 +79,7 @@ impl FunctionEncoder<'_> {
         match signature.result() {
             ValueType::I64
             | ValueType::Bool
+            | ValueType::StaticBytes
             | ValueType::Capability(_)
             | ValueType::Resource(_)
             | ValueType::Unique(_)

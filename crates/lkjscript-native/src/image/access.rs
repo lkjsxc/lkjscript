@@ -7,6 +7,17 @@ impl InstallableImage {
     }
 
     #[must_use]
+    pub fn static_bytes_count(&self) -> usize {
+        self.static_bytes.len()
+    }
+
+    pub fn resolve_static_bytes(&self, identity: NativeStaticBytes) -> Option<&[u8]> {
+        let index = identity.opaque_word().checked_sub(1)?;
+        let index = usize::try_from(index).ok()?;
+        self.static_bytes.get(index).map(AsRef::as_ref)
+    }
+
+    #[must_use]
     pub fn entries(&self) -> &[EntryMetadata] {
         &self.entries
     }

@@ -94,6 +94,19 @@ impl FunctionBuilder {
         self.append(block, ValueType::Unit, Operation::Unit, None)
     }
 
+    pub fn static_bytes_const(
+        &mut self,
+        block: BlockId,
+        identity: StaticBytesIdentity,
+    ) -> Result<ValueId, PlanError> {
+        self.append(
+            block,
+            ValueType::StaticBytes,
+            Operation::StaticBytesConst(identity),
+            None,
+        )
+    }
+
     pub fn i64_add(
         &mut self,
         block: BlockId,

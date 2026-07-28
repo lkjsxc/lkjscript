@@ -51,6 +51,51 @@ pub(in crate::executable) fn runtime_symbol(
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ByteVectorDrop) => {
             runtime_island_byte_vector_drop as *const () as usize
         }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StaticBytesLength) => {
+            runtime_island_static_bytes_length as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StaticBytesByteAt) => {
+            runtime_island_static_bytes_byte_at as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StaticBytesClone) => {
+            runtime_island_static_bytes_clone as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StaticBytesCopySlice) => {
+            runtime_island_static_bytes_copy_slice as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StaticBytesThaw) => {
+            runtime_island_static_bytes_thaw as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesMove) => {
+            runtime_island_bytes_move as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesBorrowShared) => {
+            runtime_island_bytes_borrow as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesLength) => {
+            runtime_island_bytes_length as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesByteAt) => {
+            runtime_island_bytes_byte_at as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesClone) => {
+            runtime_island_bytes_clone as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesCopySlice) => {
+            runtime_island_bytes_copy_slice as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesEndBorrow) => {
+            runtime_island_bytes_end as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::BytesDrop) => {
+            runtime_island_bytes_drop as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::FreezeByteVector) => {
+            runtime_island_freeze_byte_vector as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ThawBytes) => {
+            runtime_island_thaw_bytes as *const () as usize
+        }
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ReserveFrame) => {
             runtime_island_reserve as *const () as usize
         }

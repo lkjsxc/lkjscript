@@ -6,6 +6,7 @@ pub(crate) enum Operation {
     F64Const(u64),
     BoolConst(bool),
     Unit,
+    StaticBytesConst(StaticBytesIdentity),
     I64Add(ValueId, ValueId),
     I64Sub(ValueId, ValueId),
     I64Mul(ValueId, ValueId),
@@ -37,6 +38,7 @@ impl Operation {
             | Self::F64Const(_)
             | Self::BoolConst(_)
             | Self::Unit
+            | Self::StaticBytesConst(_)
             | Self::ReadLocal(_) => Vec::new(),
             Self::BoolNot(value) | Self::I64ToF64(value) | Self::WriteLocal(_, value) => {
                 vec![*value]

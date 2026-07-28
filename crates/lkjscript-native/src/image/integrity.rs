@@ -9,6 +9,7 @@ impl InstallableImage {
             return Err(ImageIntegrityError::CodeAccountingMismatch);
         }
         let expected_metadata = metadata_bytes(MetadataSlices {
+            static_bytes: &self.static_bytes,
             entries: &self.entries,
             relocations: &self.relocations,
             runtime_calls: &self.runtime_calls,
@@ -25,6 +26,9 @@ impl InstallableImage {
             return Err(ImageIntegrityError::MetadataAccountingMismatch);
         }
 
+        if self.static_bytes.len() > u32::MAX as usize {
+            return Err(ImageIntegrityError::StaticBytes);
+        }
         let mut functions = HashSet::new();
         for entry in &self.entries {
             if entry.offset >= entry.end || entry.end as usize > self.bytes.len() {

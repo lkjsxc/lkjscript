@@ -5,6 +5,7 @@ use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig, 
 use lkjscript_native::RuntimeCallSlot;
 use lkjscript_vm::run_chunk;
 
+mod bytes;
 mod support;
 mod word;
 use support::*;

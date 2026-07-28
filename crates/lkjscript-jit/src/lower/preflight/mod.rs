@@ -1,15 +1,23 @@
 use super::*;
 
+mod bytes;
+mod bytes_edges;
+mod bytes_graph;
 mod runtime;
+use bytes::{bytes_mode_error, preflight_bytes_runtime};
+pub(in crate::lower) use bytes::{BytesMode, BytesModes};
+use bytes_edges::*;
+use bytes_graph::*;
 use runtime::*;
 
 pub(super) fn preflight_function(
     program: &lkjscript_ir::Program,
     function: &Function,
     layouts: &LayoutInterner,
+    modes: &BytesModes,
     domain: LoweringDomain,
 ) -> Result<(), LoweringError> {
-    lower_signature(function.id, &function.signature, layouts)?;
+    lower_signature(function, modes, layouts)?;
     for ty in function
         .signature
         .parameters
@@ -31,7 +39,7 @@ pub(super) fn preflight_function(
     }
     for block in &function.blocks {
         for parameter in &block.parameters {
-            lower_type(function.id, &parameter.ty, layouts)?;
+            lower_value_type(function.id, parameter.id, &parameter.ty, modes, layouts)?;
             match domain {
                 LoweringDomain::ResourceIsland => {
                     require_resource_island_type(function.id, &parameter.ty)?;
@@ -43,7 +51,7 @@ pub(super) fn preflight_function(
             }
         }
         for instruction in &block.instructions {
-            lower_type(function.id, &instruction.ty, layouts)?;
+            lower_value_type(function.id, instruction.id, &instruction.ty, modes, layouts)?;
             match domain {
                 LoweringDomain::ResourceIsland => {
                     require_resource_island_type(function.id, &instruction.ty)?;
@@ -61,9 +69,7 @@ pub(super) fn preflight_function(
                     | Constant::F64(_)
                     | Constant::Str(_)
                     | Constant::EmptyList => {}
-                    Constant::StaticBytes(_) => {
-                        return unsupported_operation(function.id, "immutable bytes constant")
-                    }
+                    Constant::StaticBytes(_) => {}
                     Constant::Symbol(_) => {
                         return unsupported_operation(function.id, "Symbol constant")
                     }
@@ -84,7 +90,9 @@ pub(super) fn preflight_function(
                 | InstructionKind::PlaceEnd { .. }
                 | InstructionKind::EndBorrow { .. }
                 | InstructionKind::Drop {
-                    glue: lkjscript_ir::DropGlueIdentity::ByteVector,
+                    glue:
+                        lkjscript_ir::DropGlueIdentity::ByteVector
+                        | lkjscript_ir::DropGlueIdentity::Bytes,
                     ..
                 }
                 | InstructionKind::Move { .. }
@@ -101,18 +109,23 @@ pub(super) fn preflight_function(
                 | InstructionKind::Borrow { .. } => {
                     return unsupported_operation(function.id, "ownership/reference operation");
                 }
-                InstructionKind::Runtime { operation, .. }
-                    if supported_runtime(*operation, domain) => {}
+                InstructionKind::Runtime {
+                    operation,
+                    arguments,
+                    ..
+                } if supported_runtime(*operation, domain) => {
+                    preflight_bytes_runtime(function, instruction, *operation, arguments, modes)?;
+                }
                 InstructionKind::F64FromI64Exact { .. }
                 | InstructionKind::F64FromI64Rounded { .. }
                 | InstructionKind::I64FromF64Exact { .. }
                 | InstructionKind::I64FromF64Trunc { .. } => {}
                 InstructionKind::Call {
-                    target: CallTarget::Direct(_),
-                    signature,
+                    target: CallTarget::Direct(callee),
                     ..
                 } => {
-                    lower_signature(function.id, signature, layouts)?;
+                    let callee = source_function(program, *callee)?;
+                    lower_signature(callee, modes, layouts)?;
                 }
                 InstructionKind::Call {
                     target: CallTarget::Indirect(_),

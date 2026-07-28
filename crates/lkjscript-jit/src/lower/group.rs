@@ -23,10 +23,11 @@ pub(super) fn lower_group(
 ) -> Result<LoweredGroup, LoweringError> {
     let functions = reachable_group(program, root)?;
     let domain = lowering_domain(program, &functions)?;
+    let bytes_modes = BytesModes::analyze(program, &functions)?;
     let layouts = LayoutInterner::build(program, &functions)?;
     for function in &functions {
         let item = source_function(program, *function)?;
-        preflight_function(program, item, &layouts, domain)?;
+        preflight_function(program, item, &layouts, &bytes_modes, domain)?;
     }
     let root_function = source_function(program, root)?;
     if matches!(
@@ -41,10 +42,27 @@ pub(super) fn lower_group(
     }
 
     let mut plan = MachinePlanBuilder::new();
+    let mut static_bytes = HashMap::new();
+    for function in &functions {
+        for value in source_function(program, *function)?
+            .blocks
+            .iter()
+            .flat_map(|block| block.instructions.iter())
+            .filter_map(|instruction| match &instruction.kind {
+                InstructionKind::Constant(Constant::StaticBytes(bytes)) => Some(bytes),
+                _ => None,
+            })
+        {
+            let identity = plan
+                .intern_static_bytes(value)
+                .map_err(LoweringError::backend)?;
+            static_bytes.insert(value.clone(), identity);
+        }
+    }
     let mut native_functions = Vec::with_capacity(functions.len());
     for function in &functions {
         let item = source_function(program, *function)?;
-        let signature = lower_signature(*function, &item.signature, &layouts)?;
+        let signature = lower_signature(item, &bytes_modes, &layouts)?;
         let native = plan
             .declare_function(SourceFunctionId::new(function.raw()), signature)
             .map_err(LoweringError::backend)?;
@@ -63,6 +81,8 @@ pub(super) fn lower_group(
             item,
             &native_functions,
             &layouts,
+            &bytes_modes,
+            &static_bytes,
             &mut builder,
             &mut explicit_traps,
         )?;
@@ -137,7 +157,7 @@ fn lowering_domain(
 
 fn contains_unique(ty: &SsaType) -> bool {
     match ty {
-        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
+        SsaType::Bytes | SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
         SsaType::List(inner) => contains_unique(inner),
         SsaType::Enum { arguments, .. } => arguments.iter().any(contains_unique),
         SsaType::Function(signature) => signature

@@ -22,6 +22,10 @@ impl FunctionEncoder<'_> {
                 self.zero_rax()?;
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
+            Operation::StaticBytesConst(identity) => {
+                self.load_rax_immediate(identity.opaque_word())?;
+                self.store_rax(self.value_offset(instruction.output)?)?;
+            }
             Operation::I64Add(left, right) => {
                 self.emit_checked_i64_binary(instruction.output, *left, *right, 0x03, None)?;
             }

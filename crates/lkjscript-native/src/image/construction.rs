@@ -3,6 +3,7 @@ use super::*;
 impl InstallableImage {
     pub(crate) fn new(parts: ImageParts) -> Result<Self, ImageIntegrityError> {
         let metadata_bytes = metadata_bytes(MetadataSlices {
+            static_bytes: &parts.static_bytes,
             entries: &parts.entries,
             relocations: &parts.relocations,
             runtime_calls: &parts.runtime_calls,
@@ -19,6 +20,7 @@ impl InstallableImage {
             .map_err(|_| ImageIntegrityError::CodeAccountingMismatch)?;
         let image = Self {
             bytes: parts.bytes.into_boxed_slice(),
+            static_bytes: parts.static_bytes.into_boxed_slice(),
             entries: parts.entries.into_boxed_slice(),
             relocations: parts.relocations.into_boxed_slice(),
             runtime_calls: parts.runtime_calls.into_boxed_slice(),

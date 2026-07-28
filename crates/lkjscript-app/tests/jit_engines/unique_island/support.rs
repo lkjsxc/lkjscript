@@ -48,6 +48,55 @@ pub(super) fn forced_pair(
     ]
 }
 
+pub(super) fn assert_returned_bytes_all_engines(source: &str, expected: &[u8], allocations: u64) {
+    let program = compile(source, "native-bytes-return.lkjscript");
+    assert_eq!(
+        evaluate(program.ssa(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::ReturnedBytes(expected.to_vec()))
+    );
+    assert!(matches!(
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default()
+        ),
+        ExecutionOutcome::Returned(value) if value.as_bytes() == Some(expected)
+    ));
+    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_bytes() == Some(expected)
+        ));
+        assert_unique_metrics(&execution.stats, proof);
+        assert_eq!(execution.stats.native_unique.allocations, allocations);
+        assert_eq!(execution.stats.native_unique.transfers, 1);
+    }
+}
+
+pub(super) fn assert_returned_vector_all_engines(source: &str, expected: &[u8], allocations: u64) {
+    let program = compile(source, "native-bytes-vector-return.lkjscript");
+    assert!(matches!(
+        evaluate(program.ssa(), &EvalConfig::default()),
+        EvalOutcome::Returned(EvalValue::ReturnedByteVector(value)) if value == expected
+    ));
+    assert!(matches!(
+        run_chunk(
+            program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default()
+        ),
+        ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(expected)
+    ));
+    for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
+        assert!(matches!(
+            execution.outcome,
+            ExecutionOutcome::Returned(value) if value.as_byte_vector() == Some(expected)
+        ));
+        assert_unique_metrics(&execution.stats, proof);
+        assert_eq!(execution.stats.native_unique.allocations, allocations);
+    }
+}
+
 pub(super) fn assert_unique_metrics(stats: &JitStats, proof: bool) {
     assert!(stats.native_entries > 0 && stats.unique_runtime_calls > 0);
     assert_eq!(

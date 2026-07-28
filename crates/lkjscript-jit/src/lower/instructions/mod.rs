@@ -1,7 +1,9 @@
 use super::*;
 mod constants;
+mod runtime_bytes;
 mod unique;
 use constants::*;
+pub(in crate::lower) use runtime_bytes::lower_bytes_runtime;
 use unique::*;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
@@ -13,31 +15,19 @@ pub(super) fn lower_instruction(
     value_types: &[ValueType],
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
     layouts: &LayoutInterner,
+    static_bytes: &HashMap<Vec<u8>, lkjscript_native::StaticBytesIdentity>,
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
     let output = match &instruction.kind {
-        InstructionKind::Constant(constant) => match constant {
-            Constant::Unit => builder.unit(block),
-            Constant::Bool(value) => builder.bool_const(block, *value),
-            Constant::I64(value) => builder.i64_const(block, *value),
-            Constant::F64(value) => builder.f64_const_bits(block, value.to_bits()),
-            Constant::Str(value) => lower_heap_constant(
-                block,
-                HeapOperation::ConstantStr(value.clone()),
-                value_type(value_types, instruction.id)?,
-                builder,
-            ),
-            Constant::EmptyList => lower_heap_constant(
-                block,
-                HeapOperation::EmptyList,
-                value_type(value_types, instruction.id)?,
-                builder,
-            ),
-            Constant::StaticBytes(_) => {
-                return unsupported_operation(function.id, "immutable bytes constant")
-            }
-            Constant::Symbol(_) => return unsupported_operation(function.id, "Symbol constant"),
-        },
+        InstructionKind::Constant(constant) => lower_constant(
+            function,
+            instruction,
+            constant,
+            block,
+            value_types,
+            static_bytes,
+            builder,
+        )?,
         InstructionKind::Copy(value) => {
             let value = read_value(builder, block, locals, *value, function.id)?;
             Ok(value)
@@ -182,7 +172,7 @@ pub(super) fn lower_instruction(
             builder,
         ),
         InstructionKind::Borrow { kind, value, .. } => {
-            lower_borrow(function, *kind, *value, block, locals, builder)
+            lower_borrow(function, *kind, *value, block, locals, value_types, builder)
         }
         InstructionKind::FunctionRef(_) => {
             return unsupported_operation(function.id, "first-class function reference")

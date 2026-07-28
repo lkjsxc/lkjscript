@@ -12,16 +12,15 @@ impl Resolver<'_> {
         })?;
         let ty = self.analyzer.binding(binding)?.ty.clone();
         match ty {
-            Type::ByteVector | Type::Resource(_) => {}
+            Type::Bytes | Type::ByteVector | Type::Resource(_) => {}
             Type::ByteSliceMut => {
                 return Err(self.error(
                     "byte-slice-mut forwarding is unsupported in the initial ownership slice",
                 ));
             }
             _ => {
-                return Err(
-                    self.error("move requires an affine byte-vector or typed resource place")
-                )
+                return Err(self
+                    .error("move requires affine bytes, byte-vector, or a typed resource place"))
             }
         }
         let place = self.place(binding)?;

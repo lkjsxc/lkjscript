@@ -3,14 +3,17 @@ use super::*;
 pub(crate) fn verify_plan(
     plan: u64,
     declarations: Vec<FunctionDeclaration>,
+    static_bytes: Vec<Box<[u8]>>,
     limits: BackendLimits,
 ) -> Result<VerifiedMachinePlan, crate::NativeError> {
-    verify_plan_inner(plan, declarations, limits).map_err(crate::NativeError::Verification)
+    verify_plan_inner(plan, declarations, static_bytes, limits)
+        .map_err(crate::NativeError::Verification)
 }
 
 pub(super) fn verify_plan_inner(
     plan: u64,
     declarations: Vec<FunctionDeclaration>,
+    static_bytes: Vec<Box<[u8]>>,
     limits: BackendLimits,
 ) -> Result<VerifiedMachinePlan, VerificationError> {
     if declarations.is_empty() {
@@ -20,6 +23,17 @@ pub(super) fn verify_plan_inner(
         return Err(VerificationError::LimitExceeded("function count"));
     }
     verify_layout_identities(&declarations)?;
+    let static_metadata = static_bytes.iter().try_fold(0_u64, |total, bytes| {
+        let len = u64::try_from(bytes.len())
+            .map_err(|_| VerificationError::LimitExceeded("static bytes"))?;
+        total
+            .checked_add(8)
+            .and_then(|value| value.checked_add(len))
+            .ok_or(VerificationError::LimitExceeded("static bytes"))
+    })?;
+    if static_metadata > limits.max_metadata_bytes() {
+        return Err(VerificationError::LimitExceeded("static bytes"));
+    }
     let mut source_functions = HashSet::new();
     let signatures: Vec<_> = declarations
         .iter()
@@ -43,6 +57,17 @@ pub(super) fn verify_plan_inner(
             .ok_or(VerificationError::MissingFunctionBody(declaration.id))?;
         if function.id.plan != plan || function.id != declaration.id {
             return Err(VerificationError::MissingFunctionBody(declaration.id));
+        }
+        for instruction in function
+            .blocks
+            .iter()
+            .flat_map(|block| block.instructions.iter())
+        {
+            if let Operation::StaticBytesConst(identity) = instruction.operation {
+                if static_bytes.get(identity.index() as usize).is_none() {
+                    return Err(VerificationError::TypeMismatch("static bytes constant"));
+                }
+            }
         }
         total_blocks = total_blocks
             .checked_add(function.blocks.len())
@@ -79,6 +104,7 @@ pub(super) fn verify_plan_inner(
 
     Ok(VerifiedMachinePlan {
         functions,
+        static_bytes,
         root_requirements,
         limits,
         work_units: total_work,

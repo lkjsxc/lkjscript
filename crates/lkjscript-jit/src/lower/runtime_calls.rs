@@ -71,6 +71,9 @@ pub(super) fn lower_runtime(
             values,
         );
     }
+    if let Some(result) = lower_bytes_runtime(operation, &input_types, block, &values, builder) {
+        return result;
+    }
     match operation {
         RuntimeOp::StdinHandle => builder.runtime_call(block, RuntimeCallSlot::StdinHandle, values),
         RuntimeOp::OwnedBufNew => {
@@ -167,7 +170,8 @@ pub(super) fn lower_runtime(
                 ValueType::F64 => {
                     builder.f64_compare(block, F64Comparison::OrderedEqual, left, right)
                 }
-                ValueType::Capability(_)
+                ValueType::StaticBytes
+                | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)

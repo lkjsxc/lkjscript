@@ -90,6 +90,7 @@ pub(super) fn range_in_function(
 }
 
 pub(super) struct MetadataSlices<'a> {
+    pub(super) static_bytes: &'a [Box<[u8]>],
     pub(super) entries: &'a [EntryMetadata],
     pub(super) relocations: &'a [Relocation],
     pub(super) runtime_calls: &'a [RuntimeCallSlot],

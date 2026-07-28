@@ -39,6 +39,7 @@ pub use values::*;
 #[derive(Debug)]
 pub struct InstallableImage {
     bytes: Box<[u8]>,
+    static_bytes: Box<[Box<[u8]>]>,
     entries: Box<[EntryMetadata]>,
     relocations: Box<[Relocation]>,
     runtime_calls: Box<[RuntimeCallSlot]>,
@@ -56,6 +57,7 @@ pub struct InstallableImage {
 
 pub(crate) struct ImageParts {
     pub(crate) bytes: Vec<u8>,
+    pub(crate) static_bytes: Vec<Box<[u8]>>,
     pub(crate) entries: Vec<EntryMetadata>,
     pub(crate) relocations: Vec<Relocation>,
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,

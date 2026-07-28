@@ -102,6 +102,7 @@ pub(crate) type FunctionRootRequirements = Vec<Option<Vec<CertifiedRoot>>>;
 #[derive(Clone, Debug)]
 pub struct VerifiedMachinePlan {
     pub(crate) functions: Vec<FunctionPlan>,
+    pub(crate) static_bytes: Vec<Box<[u8]>>,
     pub(crate) root_requirements: Vec<FunctionRootRequirements>,
     pub(crate) limits: BackendLimits,
     pub(crate) work_units: u64,

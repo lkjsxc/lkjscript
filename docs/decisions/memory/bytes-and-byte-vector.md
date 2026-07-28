@@ -2,17 +2,15 @@
 
 ## Status
 
-**Accepted contract with executable byte-vector and immutable-bytes evaluator/VM families.** The exact
-`new-byte-vector`, whole-place `move`, `borrow`, `borrow-mut`,
-`byte-slice-length`, `byte-slice-byte-at`, `byte-slice-mut-set-byte`,
-`byte-slice-read-u32-little-endian`, and
-`byte-slice-mut-write-u32-little-endian` family uses deterministic unique
-storage in the SSA evaluator, reference VM, and forced native tiers. The
-immutable-bytes source projection and six operations below are also executable
-through typing, verified SSA, evaluator, independently validated bytecode, and
-VM. Native immutable bytes, ranged borrowed views, host byte operations, and
-the remaining byte-vector operations are not Current. Transitional `buf` remains a
-separate traced family; it is neither an alias nor a conversion path.
+**Accepted contract with exact Current byte-vector and immutable-bytes
+subsets.** Construction, whole-place move/borrow, byte/slice access and mutation,
+and checked little-endian u32 read/write use deterministic unique storage through
+evaluator, VM, forced baseline, and forced proof tiers. The immutable-bytes
+projection and six operations below execute through the same four engines.
+Native literals use verified image data; dynamic values use the noncollecting
+unique service. Ranged borrowed views, host byte operations, and remaining
+byte-vector operations are not Current. Transitional `buf` remains separately
+traced; it is neither an alias nor a conversion path.
 
 ## Byte-Vector
 

@@ -1,14 +1,17 @@
 use super::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn lower_function(
     program: &lkjscript_ir::Program,
     function: &Function,
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
     layouts: &LayoutInterner,
+    modes: &BytesModes,
+    static_bytes: &HashMap<Vec<u8>, lkjscript_native::StaticBytesIdentity>,
     builder: &mut FunctionBuilder,
     explicit_traps: &mut Vec<(u32, String)>,
 ) -> Result<(), LoweringError> {
-    let value_types = collect_value_types(function, layouts)?;
+    let value_types = collect_value_types(function, layouts, modes)?;
     let mut locals = Vec::with_capacity(value_types.len());
     for value_type in &value_types {
         locals.push(
@@ -97,6 +100,7 @@ pub(super) fn lower_function(
                 &value_types,
                 native_functions,
                 layouts,
+                static_bytes,
                 builder,
             )?;
         }
@@ -119,6 +123,7 @@ pub(super) fn lower_function(
 pub(super) fn collect_value_types(
     function: &Function,
     layouts: &LayoutInterner,
+    modes: &BytesModes,
 ) -> Result<Vec<ValueType>, LoweringError> {
     let mut types: Vec<Option<ValueType>> = Vec::new();
     for block in &function.blocks {
@@ -126,14 +131,14 @@ pub(super) fn collect_value_types(
             set_value_type(
                 &mut types,
                 parameter.id,
-                lower_type(function.id, &parameter.ty, layouts)?,
+                lower_value_type(function.id, parameter.id, &parameter.ty, modes, layouts)?,
             )?;
         }
         for instruction in &block.instructions {
             set_value_type(
                 &mut types,
                 instruction.id,
-                lower_type(function.id, &instruction.ty, layouts)?,
+                lower_value_type(function.id, instruction.id, &instruction.ty, modes, layouts)?,
             )?;
         }
     }

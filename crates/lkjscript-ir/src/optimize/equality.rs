@@ -151,6 +151,7 @@ pub(crate) fn exact_constant_equal(left: &Constant, right: &Constant) -> bool {
         (Constant::I64(left), Constant::I64(right)) => left == right,
         (Constant::Str(left), Constant::Str(right))
         | (Constant::Symbol(left), Constant::Symbol(right)) => left == right,
+        (Constant::StaticBytes(left), Constant::StaticBytes(right)) => left == right,
         _ => false,
     }
 }

@@ -94,6 +94,7 @@ pub(super) fn convert_to_f64(
         ValueType::I64 => builder.i64_to_f64(block, value),
         ValueType::Bool
         | ValueType::Unit
+        | ValueType::StaticBytes
         | ValueType::Capability(_)
         | ValueType::Resource(_)
         | ValueType::Unique(_)

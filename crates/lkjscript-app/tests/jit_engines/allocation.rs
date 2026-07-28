@@ -15,10 +15,6 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
                 "flush/\nstdio\n/flush\n/main\n"
             ),
         ),
-        (
-            "bytes.lkjscript",
-            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nbytes-length/\nbytes-literal/\n00ff\n/bytes-literal\n/bytes-length\n/main\n",
-        ),
     ];
     for (name, source) in unsupported {
         let program = compile(source, name);
@@ -32,23 +28,6 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
             error.code(),
             FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
         ));
-        if name == "bytes.lkjscript" {
-            let diagnostic = error.to_string();
-            assert!(
-                diagnostic.contains("collector-free") || diagnostic.contains("bytes"),
-                "forced bytes rejection was not type-specific: {diagnostic}"
-            );
-            let proof = execute_optimizing(
-                program.ssa(),
-                &ExecutionConfig::default(),
-                JitConfig::default(),
-            )
-            .expect_err("forced proof tier must reject missing native bytes lowering");
-            assert!(matches!(
-                proof.code(),
-                FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
-            ));
-        }
     }
 
     let recursion = "def/\nname/\nrecur\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\nif/\nless-than-or-equal/\nn\n0\n/less-than-or-equal\n0\nrecur/\nsubtract/\nn\n1\n/subtract\n/recur\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nrecur/\n3\n/recur\n/main\n";

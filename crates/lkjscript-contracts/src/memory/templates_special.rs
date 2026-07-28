@@ -63,7 +63,7 @@ pub const fn affine_buffer(
         allocation_frequency: "operation dependent",
         size_class: "bounded variable bytes",
         current_trace_fields: "none",
-        current_exact_roots: "none in evaluator/VM; native is fail-closed",
+        current_exact_roots: "none in evaluator/VM/native unique island",
         object_identity: "runtime-local generation-bearing owner key",
         current_placement: "execution-owned unique store in evaluator, VM, and forced native",
         candidate_placements: "stack header plus unique allocation or owned region",
@@ -77,7 +77,7 @@ pub const fn affine_buffer(
 pub const fn immutable_bytes() -> MemoryObligation {
     MemoryObligation {
         identity: "bytes",
-        authority: "source, HIR, SSA, evaluator, validated bytecode, VM",
+        authority: "source, HIR, SSA, evaluator, validated bytecode, VM, forced native tiers",
         semantic_type: "exact immutable bytes",
         runtime_layout: "static constant or execution-owned UniqueStore BytesKey",
         value_semantics: "copyable static value or affine dynamic value",
@@ -91,19 +91,19 @@ pub const fn immutable_bytes() -> MemoryObligation {
         weak_links: "none",
         destructor: "dynamic exact Bytes drop glue",
         external_resources: "prohibited",
-        portability: "evaluator/VM portable; native unsupported",
+        portability: "evaluator/VM portable; native Current on Linux x86-64",
         contention: "single dynamic owner",
         allocation_frequency: "clone, slice copy, or static thaw",
         size_class: "bounded constant or retained unique bytes",
         current_trace_fields: "none",
-        current_exact_roots: "none in evaluator/VM; native fail-closed",
+        current_exact_roots: "none in evaluator/VM/native unique island",
         object_identity: "none",
-        current_placement: "static bytecode data or evaluator/VM unique store",
-        candidate_placements: "owned region after native unique lowering",
+        current_placement: "verified static image data or execution-owned unique store",
+        candidate_placements: "owned region for broader island composition",
         reclamation_plan: "exact owner drop after final loan",
         producers: "bytes-literal, clone, slice copy, freeze",
-        tests: "literal, ownership, evaluator/VM, allocation and forced-tier rejection suites",
-        status: "current exact evaluator/VM family; native fail-closed",
+        tests: "literal, ownership, four-engine differential, allocation and identity suites",
+        status: "current exact evaluator/VM/forced-native immutable-bytes subset",
     }
 }
 

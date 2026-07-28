@@ -37,6 +37,33 @@ fn stale_forged_and_wrong_kind_words_fail_closed_without_leaks() {
 }
 
 #[test]
+fn bytes_layout_transfers_and_forged_words_fail_closed() {
+    let mut runtime = JitUniqueRuntime::new(&ExecutionConfig::default()).expect("unique runtime");
+    let vector = runtime.allocate(3).expect("vector owner");
+    let bytes = runtime.freeze(vector).expect("freeze backing");
+    assert_eq!(runtime.move_owner(vector), Err(NativeServiceError::Trap));
+    runtime.move_bytes(bytes).expect("exact bytes owner");
+    assert_eq!(
+        runtime.move_bytes(NativeUnique::bytes(u64::MAX)),
+        Err(NativeServiceError::Trap)
+    );
+    let vector = runtime.thaw(bytes).expect("thaw backing");
+    assert_eq!(runtime.move_bytes(bytes), Err(NativeServiceError::Trap));
+    runtime.drop_owner(vector).expect("drop transferred owner");
+    let stats = runtime.finish();
+    assert!(stats.stale_or_forged_failures >= 3);
+    assert_eq!(
+        (
+            stats.live_owners,
+            stats.live_loans,
+            stats.release_backlog,
+            stats.teardown_failures,
+        ),
+        (0, 0, 0, 0)
+    );
+}
+
+#[test]
 fn configured_allocation_limit_is_structured_and_atomic() {
     let config = ExecutionConfig {
         max_allocations: 0,
@@ -45,6 +72,10 @@ fn configured_allocation_limit_is_structured_and_atomic() {
     let mut runtime = JitUniqueRuntime::new(&config).expect("limited unique runtime");
     assert_eq!(
         runtime.allocate(1),
+        Err(NativeServiceError::ResourceLimitExceeded)
+    );
+    assert_eq!(
+        runtime.clone_static_bytes(&[1]),
         Err(NativeServiceError::ResourceLimitExceeded)
     );
     assert_eq!(

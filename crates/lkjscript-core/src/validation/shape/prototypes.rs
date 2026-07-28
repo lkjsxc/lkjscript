@@ -45,9 +45,14 @@ fn validate_proto_shape(proto: &FunctionProto, category: &str) -> Result<()> {
                 proto.name
             )));
         }
-        if place.is_some() != matches!(unique, Some(crate::UniqueValueKind::ByteVector)) {
+        if place.is_some()
+            != matches!(
+                unique,
+                Some(crate::UniqueValueKind::Bytes | crate::UniqueValueKind::ByteVector)
+            )
+        {
             return Err(Error::msg(format!(
-                "bytecode {category} {} owner-place metadata does not match byte-vector parameter",
+                "bytecode {category} {} owner-place metadata does not match owned unique parameter",
                 proto.name
             )));
         }

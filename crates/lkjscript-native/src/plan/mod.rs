@@ -27,5 +27,5 @@ pub use heap::{AllocationClass, HeapCallDescriptor, HeapOperation, StoreClass};
 pub use identity::*;
 pub use ir::FunctionPlan;
 pub(crate) use ir::*;
-pub use machine::MachinePlanBuilder;
+pub use machine::{MachinePlanBuilder, StaticBytesIdentity};
 pub use runtime::*;

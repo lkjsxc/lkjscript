@@ -2,17 +2,22 @@ use super::*;
 
 impl JitUniqueRuntime {
     pub(crate) fn drop_owner(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError> {
-        let word = self.validate_owner(owner)?;
+        let kind = owner.unique_type();
+        let word = self.validate_owner(owner, kind)?;
         if self.active_loans_for(word).next().is_some() {
             return Err(self.reject());
         }
-        let key = self
-            .store
-            .import_byte_vector_key(word)
-            .map_err(|_| self.reject())?;
-        self.store
-            .free_byte_vector(key)
-            .map_err(|error| self.store_error(error))?;
+        let result = match kind {
+            lkjscript_native::UniqueType::ByteVector => self
+                .store
+                .import_byte_vector_key(word)
+                .and_then(|key| self.store.free_byte_vector(key)),
+            lkjscript_native::UniqueType::Bytes => self
+                .store
+                .import_bytes_key(word)
+                .and_then(|key| self.store.free_bytes(key)),
+        };
+        result.map_err(|error| self.store_error(error))?;
         self.remove_owner(word.get())?;
         self.stats.drops = self.stats.drops.saturating_add(1);
         Ok(())
@@ -22,18 +27,22 @@ impl JitUniqueRuntime {
         &mut self,
         owner: NativeUnique,
     ) -> Result<Vec<u8>, NativeServiceError> {
-        let word = self.validate_owner(owner)?;
+        let kind = owner.unique_type();
+        let word = self.validate_owner(owner, kind)?;
         if self.active_loans_for(word).next().is_some() {
             return Err(self.reject());
         }
-        let key = self
-            .store
-            .import_byte_vector_key(word)
-            .map_err(|_| self.reject())?;
-        let bytes = self
-            .store
-            .take_byte_vector(key)
-            .map_err(|error| self.store_error(error))?;
+        let bytes = match kind {
+            lkjscript_native::UniqueType::ByteVector => self
+                .store
+                .import_byte_vector_key(word)
+                .and_then(|key| self.store.take_byte_vector(key)),
+            lkjscript_native::UniqueType::Bytes => self
+                .store
+                .import_bytes_key(word)
+                .and_then(|key| self.store.take_bytes(key)),
+        }
+        .map_err(|error| self.store_error(error))?;
         self.remove_owner(word.get())?;
         self.stats.transfers = self.stats.transfers.saturating_add(1);
         Ok(bytes)
@@ -53,8 +62,16 @@ impl JitUniqueRuntime {
             self.stats.cleanup_attempts = self.stats.cleanup_attempts.saturating_add(1);
             let result = UniqueKeyWord::new(owner)
                 .map_err(|_| UniqueStoreError::StaleKey)
-                .and_then(|word| self.store.import_byte_vector_key(word))
-                .and_then(|key| self.store.free_byte_vector(key));
+                .and_then(|word| {
+                    self.store
+                        .import_byte_vector_key(word)
+                        .and_then(|key| self.store.free_byte_vector(key))
+                        .or_else(|_| {
+                            self.store
+                                .import_bytes_key(word)
+                                .and_then(|key| self.store.free_bytes(key))
+                        })
+                });
             if result.is_ok() {
                 self.stats.cleanup_releases = self.stats.cleanup_releases.saturating_add(1);
             } else {

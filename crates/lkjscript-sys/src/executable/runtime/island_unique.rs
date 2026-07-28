@@ -11,7 +11,7 @@ pub(super) extern "C" fn runtime_island_byte_vector_new(
         return 0;
     };
     let result = state.services.new_byte_vector(size as i64);
-    unique_result(state, result)
+    unique_result(state, result, UniqueType::ByteVector)
 }
 
 pub(super) extern "C" fn runtime_island_byte_vector_move(
@@ -24,7 +24,7 @@ pub(super) extern "C" fn runtime_island_byte_vector_move(
     let result = state
         .services
         .move_byte_vector(NativeUnique::byte_vector(owner));
-    unique_result(state, result)
+    unique_result(state, result, UniqueType::ByteVector)
 }
 
 pub(super) extern "C" fn runtime_island_borrow_shared(
@@ -137,7 +137,9 @@ fn end_borrow(state: *mut IslandCallState<'_>, loan: NativeLoan) {
     unit_result(state, result);
 }
 
-fn active_state<'a>(state: *mut IslandCallState<'a>) -> Option<&'a mut IslandCallState<'a>> {
+pub(super) fn active_state<'a>(
+    state: *mut IslandCallState<'a>,
+) -> Option<&'a mut IslandCallState<'a>> {
     // SAFETY: collector-free relocations pass the live invocation-owned state.
     let state = unsafe { state.as_mut() }?;
     if state.status != 0 {
@@ -147,12 +149,13 @@ fn active_state<'a>(state: *mut IslandCallState<'a>) -> Option<&'a mut IslandCal
     Some(state)
 }
 
-fn unique_result(
+pub(super) fn unique_result(
     state: &mut IslandCallState<'_>,
     result: Result<NativeUnique, NativeServiceError>,
+    expected: UniqueType,
 ) -> u64 {
     match result {
-        Ok(owner) if owner.unique_type() == UniqueType::ByteVector && owner.opaque_word() != 0 => {
+        Ok(owner) if owner.unique_type() == expected && owner.opaque_word() != 0 => {
             owner.opaque_word()
         }
         Ok(_) => {
@@ -163,36 +166,5 @@ fn unique_result(
             service_error(state, error);
             0
         }
-    }
-}
-
-fn scalar_result(state: &mut IslandCallState<'_>, result: Result<i64, NativeServiceError>) -> u64 {
-    match result {
-        Ok(value) => value as u64,
-        Err(error) => {
-            service_error(state, error);
-            0
-        }
-    }
-}
-
-fn unit_result(state: &mut IslandCallState<'_>, result: Result<(), NativeServiceError>) {
-    if let Err(error) = result {
-        service_error(state, error);
-    }
-}
-
-fn service_error(state: &mut IslandCallState<'_>, error: NativeServiceError) {
-    match error {
-        NativeServiceError::Trap => {
-            state.status = 1;
-            state.trap = TrapCode::Explicit.as_u32();
-            state.payload = -1;
-        }
-        NativeServiceError::ResourceLimitExceeded => {
-            state.status = 4;
-            state.payload = 4;
-        }
-        NativeServiceError::HostFailure => state.status = 5,
     }
 }

@@ -2,6 +2,10 @@ use super::*;
 
 pub(super) fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
     let mut bytes = 64_u64;
+    bytes = add_records(bytes, parts.static_bytes.len(), 8)?;
+    for value in parts.static_bytes {
+        bytes = add_records(bytes, value.len(), 1)?;
+    }
     bytes = add_records(bytes, parts.entries.len(), 32)?;
     for entry in parts.entries {
         bytes = add_records(bytes, entry.signature.parameters().len(), 1)?;

@@ -114,6 +114,7 @@ impl FunctionEncoder<'_> {
             match parameter {
                 ValueType::I64
                 | ValueType::Bool
+                | ValueType::StaticBytes
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)

@@ -1,30 +1,75 @@
 use super::*;
 
 pub(super) fn lower_signature(
-    function: FunctionId,
-    signature: &lkjscript_ir::Signature,
+    function: &Function,
+    modes: &BytesModes,
     layouts: &LayoutInterner,
 ) -> Result<Signature, LoweringError> {
-    if !signature.type_parameters.is_empty() {
+    if !function.signature.type_parameters.is_empty() {
         return Err(LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
-            Some(function),
+            Some(function.id),
             "polymorphic native signatures are unsupported",
         ));
     }
-    let parameters = signature
+    let entry = function
+        .blocks
+        .get(
+            function
+                .entry
+                .index()
+                .ok_or_else(|| mode_signature_error(function.id))?,
+        )
+        .ok_or_else(|| mode_signature_error(function.id))?;
+    let parameters = function
+        .signature
         .parameters
         .iter()
-        .map(|ty| lower_type(function, ty, layouts))
+        .zip(&entry.parameters)
+        .map(|(ty, parameter)| lower_value_type(function.id, parameter.id, ty, modes, layouts))
         .collect::<Result<Vec<_>, _>>()?;
-    let result = lower_type(function, &signature.result, layouts)?;
+    let result = if function.signature.result.as_ref() == &SsaType::Bytes {
+        lower_bytes_mode(modes.result(function.id)?)
+    } else {
+        lower_type(function.id, &function.signature.result, layouts)?
+    };
     Signature::new(parameters, result).map_err(|error| {
         LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
-            Some(function),
+            Some(function.id),
             error.to_string(),
         )
     })
+}
+
+pub(super) fn lower_value_type(
+    function: FunctionId,
+    value: ValueId,
+    ty: &SsaType,
+    modes: &BytesModes,
+    layouts: &LayoutInterner,
+) -> Result<ValueType, LoweringError> {
+    if ty == &SsaType::Bytes {
+        Ok(lower_bytes_mode(modes.value(function, value)?))
+    } else {
+        lower_type(function, ty, layouts)
+    }
+}
+
+fn lower_bytes_mode(mode: BytesMode) -> ValueType {
+    match mode {
+        BytesMode::Static => ValueType::StaticBytes,
+        BytesMode::Owner => ValueType::Unique(UniqueType::Bytes),
+        BytesMode::Loan => ValueType::Loan(LoanType::Bytes),
+    }
+}
+
+fn mode_signature_error(function: FunctionId) -> LoweringError {
+    LoweringError::new(
+        LoweringFailureCode::InvalidFunction,
+        Some(function),
+        "native bytes signature has no exact entry mode",
+    )
 }
 
 pub(super) fn lower_type(
@@ -112,6 +157,7 @@ pub(super) fn require_unique_island_type(
             | SsaType::Bool
             | SsaType::I64
             | SsaType::F64
+            | SsaType::Bytes
             | SsaType::ByteVector
             | SsaType::ByteSlice
             | SsaType::ByteSliceMut

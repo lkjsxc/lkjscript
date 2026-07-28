@@ -39,7 +39,8 @@ fn validate_unique_arguments(
     for (index, actual) in arguments.iter().copied().enumerate() {
         let expected = callee.parameter_uniques.get(index).copied().flatten();
         let valid = match (expected, actual) {
-            (Some(crate::UniqueValueKind::ByteVector), Kind::ByteVector(_))
+            (Some(crate::UniqueValueKind::Bytes), Kind::Bytes(_))
+            | (Some(crate::UniqueValueKind::ByteVector), Kind::ByteVector(_))
             | (
                 Some(crate::UniqueValueKind::ByteSlice),
                 Kind::ByteSlice {
@@ -56,7 +57,13 @@ fn validate_unique_arguments(
                     ..
                 },
             ) => true,
-            (None, Kind::ByteVector(_) | Kind::ByteSlice { .. }) => false,
+            (
+                None,
+                Kind::Bytes(_)
+                | Kind::BytesBorrow { .. }
+                | Kind::ByteVector(_)
+                | Kind::ByteSlice { .. },
+            ) => false,
             (Some(_), _) => false,
             (None, _) => true,
         };

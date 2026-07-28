@@ -15,6 +15,9 @@ pub(super) fn verify_instruction(
         Operation::F64Const(_) => require_output(instruction, ValueType::F64, "F64 constant"),
         Operation::BoolConst(_) => require_output(instruction, ValueType::Bool, "Bool constant"),
         Operation::Unit => require_output(instruction, ValueType::Unit, "Unit constant"),
+        Operation::StaticBytesConst(_) => {
+            require_output(instruction, ValueType::StaticBytes, "static bytes constant")
+        }
         Operation::I64Add(left, right)
         | Operation::I64Sub(left, right)
         | Operation::I64Mul(left, right)
@@ -143,7 +146,22 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
         | RuntimeCallSlot::ByteSliceMutWriteU32Le
         | RuntimeCallSlot::ByteSliceEnd
         | RuntimeCallSlot::ByteSliceMutEnd
-        | RuntimeCallSlot::ByteVectorDrop => {}
+        | RuntimeCallSlot::ByteVectorDrop
+        | RuntimeCallSlot::StaticBytesLength
+        | RuntimeCallSlot::StaticBytesByteAt
+        | RuntimeCallSlot::StaticBytesClone
+        | RuntimeCallSlot::StaticBytesCopySlice
+        | RuntimeCallSlot::StaticBytesThaw
+        | RuntimeCallSlot::BytesMove
+        | RuntimeCallSlot::BytesBorrowShared
+        | RuntimeCallSlot::BytesLength
+        | RuntimeCallSlot::BytesByteAt
+        | RuntimeCallSlot::BytesClone
+        | RuntimeCallSlot::BytesCopySlice
+        | RuntimeCallSlot::BytesEndBorrow
+        | RuntimeCallSlot::BytesDrop
+        | RuntimeCallSlot::FreezeByteVector
+        | RuntimeCallSlot::ThawBytes => {}
         RuntimeCallSlot::HeapDispatch
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame

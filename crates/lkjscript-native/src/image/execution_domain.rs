@@ -30,7 +30,10 @@ impl InstallableImage {
                 value_type,
                 ValueType::Capability(_) | ValueType::Resource(_)
             );
-            has_unique |= matches!(value_type, ValueType::Unique(_) | ValueType::Loan(_));
+            has_unique |= matches!(
+                value_type,
+                ValueType::StaticBytes | ValueType::Unique(_) | ValueType::Loan(_)
+            );
         }
         let has_island_value = has_resource || has_unique;
         match self.execution_domain {

@@ -2,6 +2,8 @@ use super::*;
 
 pub(super) fn plan_signature(slot: RuntimeCallSlot) -> Option<Signature> {
     let unique = ValueType::Unique(UniqueType::ByteVector);
+    let bytes = ValueType::Unique(UniqueType::Bytes);
+    let bytes_loan = ValueType::Loan(LoanType::Bytes);
     let shared = ValueType::Loan(LoanType::ByteSlice);
     let exclusive = ValueType::Loan(LoanType::ByteSliceMut);
     match slot {
@@ -31,6 +33,30 @@ pub(super) fn plan_signature(slot: RuntimeCallSlot) -> Option<Signature> {
         RuntimeCallSlot::ByteSliceEnd => signature(vec![shared], ValueType::Unit),
         RuntimeCallSlot::ByteSliceMutEnd => signature(vec![exclusive], ValueType::Unit),
         RuntimeCallSlot::ByteVectorDrop => signature(vec![unique], ValueType::Unit),
+        RuntimeCallSlot::StaticBytesLength => {
+            signature(vec![ValueType::StaticBytes], ValueType::I64)
+        }
+        RuntimeCallSlot::StaticBytesByteAt => {
+            signature(vec![ValueType::StaticBytes, ValueType::I64], ValueType::I64)
+        }
+        RuntimeCallSlot::StaticBytesClone => signature(vec![ValueType::StaticBytes], bytes),
+        RuntimeCallSlot::StaticBytesCopySlice => signature(
+            vec![ValueType::StaticBytes, ValueType::I64, ValueType::I64],
+            bytes,
+        ),
+        RuntimeCallSlot::StaticBytesThaw => signature(vec![ValueType::StaticBytes], unique),
+        RuntimeCallSlot::BytesMove => signature(vec![bytes], bytes),
+        RuntimeCallSlot::BytesBorrowShared => signature(vec![bytes], bytes_loan),
+        RuntimeCallSlot::BytesLength => signature(vec![bytes_loan], ValueType::I64),
+        RuntimeCallSlot::BytesByteAt => signature(vec![bytes_loan, ValueType::I64], ValueType::I64),
+        RuntimeCallSlot::BytesClone => signature(vec![bytes_loan], bytes),
+        RuntimeCallSlot::BytesCopySlice => {
+            signature(vec![bytes_loan, ValueType::I64, ValueType::I64], bytes)
+        }
+        RuntimeCallSlot::BytesEndBorrow => signature(vec![bytes_loan], ValueType::Unit),
+        RuntimeCallSlot::BytesDrop => signature(vec![bytes], ValueType::Unit),
+        RuntimeCallSlot::FreezeByteVector => signature(vec![unique], bytes),
+        RuntimeCallSlot::ThawBytes => signature(vec![bytes], unique),
         RuntimeCallSlot::CollectReference => signature(
             vec![ValueType::Reference(ReferenceType::Buf)],
             ValueType::Reference(ReferenceType::Buf),

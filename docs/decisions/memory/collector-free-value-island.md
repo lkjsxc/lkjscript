@@ -4,18 +4,21 @@
 
 <!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
 <!-- LKJ-STATUS id=native-byte-vector-island status=current -->
+<!-- LKJ-STATUS id=native-bytes-island status=current -->
 
 **The complete listed island remains an Accepted Contract.** The exact
-collector-free native `byte-vector`/`byte-slice`/`byte-slice-mut` subset is
-**Current** for forced baseline and proof execution, alongside the existing
-scalar set and `stdio` capability to borrowed `input-stream`. This promotion
-does not include immutable `bytes`, `path`, owned resources, mixed resource and
-unique groups, or the complete island.
+collector-free native `byte-vector`/`byte-slice`/`byte-slice-mut` subset and the
+separate immutable `bytes` subset are **Current** for forced baseline and proof
+execution, alongside the scalar set and `stdio` capability to borrowed
+`input-stream`. This promotion does not include `path`, owned resources, mixed
+resource and unique groups, transitional legacy removal, or the complete
+island.
 
 The evaluator, VM, forced baseline, and forced proof tiers consume the same
-verified byte-vector family with whole-group native eligibility and no fallback.
-Immutable static/dynamic bytes execute in evaluator and VM; native tiers reject
-bytes before entry, so the complete island remains non-Current.
+verified byte-vector and immutable-bytes operations with whole-group native
+eligibility and no fallback. Static bytes use exact immutable image-data tokens;
+dynamic bytes use affine owner words and shared loans in the invocation-owned
+unique service.
 
 ## Type Set
 
@@ -76,14 +79,17 @@ owned resource obligations, cleanup flags, and release backlog.
 The Current byte-vector subset has forced baseline/proof fixtures for allocation,
 move, shared and exclusive borrow, length, read, mutation, loan end, drop,
 transferred return, trap cleanup, allocation failure, stale/forged identities,
-and exactly-once release. Each fixture requires evaluator/VM/native result
-identity, nonzero selected-tier entries, zero VM transitions/fallback, zero
-collector-capable calls/counters, and zero final owners, loans, or release
-backlog. Proof fixtures permit optimizing entries only.
+and exactly-once release. The immutable-bytes fixtures add literal image data,
+static and dynamic length/read, checked slice copy, clone independence,
+zero-copy freeze/dynamic thaw, one-copy static thaw, returned payloads, failed
+preflight ownership preservation, wrong-layout identities, and trap cleanup.
+Each fixture requires evaluator/VM/native result identity, nonzero selected-tier
+entries, zero VM transitions/fallback, zero collector-capable calls/counters,
+and zero final owners, loans, or release backlog. Proof fixtures permit
+optimizing entries only.
 
-Freeze/thaw and immutable `bytes` have evaluator/VM evidence. Native bytes,
-path construction, file I/O, owned resource close, and mixed resource/unique
-execution remain required evidence for the complete island.
+Path construction, file I/O, owned resource close, mixed resource/unique
+execution, legacy-family removal, and the full island remain required evidence.
 
 ## Remaining Collector
 

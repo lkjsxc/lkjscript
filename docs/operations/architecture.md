@@ -36,12 +36,15 @@ plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
 and `ExecutableProgram` retains the complete plan. The independently recomputed
 direct-affine SSA inventory remains derived evidence. The public 62-record
 inventory reports Current tracing layouts and Accepted deterministic candidates.
-The first exact byte-vector family has explicit end-borrow/drop execution and
-execution-owned `UniqueStore` backing in the evaluator, reference VM, and forced
-native tiers. Native lowering assigns distinct unique/shared-loan/exclusive-loan
-machine identities and selects an invocation-owned bounded unique/loan runtime
-only after whole-group preflight. General regions, pools, broader unique storage,
-immutable bytes/path, and collector removal remain Accepted Contract work.
+The exact byte-vector and immutable-bytes families have explicit
+end-borrow/drop execution and execution-owned `UniqueStore` backing in the
+evaluator, reference VM, and forced native tiers. Native lowering assigns
+separate static-bytes, dynamic-bytes owner, bytes-loan, byte-vector owner,
+shared-loan, and exclusive-loan machine identities. Static literal tokens
+resolve only through immutable verified image data. Whole-group preflight
+selects the invocation-owned bounded unique/loan runtime before effects.
+General regions, pools, path, and collector removal remain Accepted Contract
+work.
 
 Provider authority enters only through explicit closed capability parameters.
 Package verification bounds grants; bytecode records exact main requirements;

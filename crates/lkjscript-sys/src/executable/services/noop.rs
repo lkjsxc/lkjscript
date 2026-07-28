@@ -72,6 +72,71 @@ impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
     fn drop_byte_vector(&mut self, _owner: NativeUnique) -> Result<(), NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
+
+    fn clone_static_bytes(&mut self, _bytes: &[u8]) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn copy_static_bytes_slice(
+        &mut self,
+        _bytes: &[u8],
+        _start: i64,
+        _len: i64,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn thaw_static_bytes(&mut self, _bytes: &[u8]) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn move_bytes(&mut self, _owner: NativeUnique) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn borrow_bytes(&mut self, _owner: NativeUnique) -> Result<NativeLoan, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn bytes_length(&mut self, _loan: NativeLoan) -> Result<i64, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn bytes_byte_at(&mut self, _loan: NativeLoan, _index: i64) -> Result<i64, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn clone_bytes(&mut self, _loan: NativeLoan) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn copy_bytes_slice(
+        &mut self,
+        _loan: NativeLoan,
+        _start: i64,
+        _len: i64,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn end_bytes_borrow(&mut self, _loan: NativeLoan) -> Result<(), NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn drop_bytes(&mut self, _owner: NativeUnique) -> Result<(), NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn freeze_byte_vector(
+        &mut self,
+        _owner: NativeUnique,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn thaw_bytes(&mut self, _owner: NativeUnique) -> Result<NativeUnique, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
 }
 
 #[derive(Default)]

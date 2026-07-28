@@ -6,8 +6,8 @@
 spelled `string`; `string-literal/` replaces the old `str/` marker. Direct
 `byte-vector`, `byte-slice`, and `byte-slice-mut` spellings expose the existing
 whole-place affine slice. Immutable `bytes` has one accepted
-`bytes-literal/` lowercase hexadecimal projection and the exact evaluator/VM
-operation contract defined by
+`bytes-literal/` lowercase hexadecimal projection and the exact
+four-engine operation subset defined by
 [bytes and byte-vector ownership](../memory/bytes-and-byte-vector.md). Ranged
 borrowed views and borrowed `str` are non-Current, and transitional `buf`
 remains outside the destination. No old spelling aliases a destination type.

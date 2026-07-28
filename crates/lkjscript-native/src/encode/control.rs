@@ -25,6 +25,7 @@ impl FunctionEncoder<'_> {
                 match self.value_type(*value)? {
                     ValueType::I64
                     | ValueType::Bool
+                    | ValueType::StaticBytes
                     | ValueType::Capability(_)
                     | ValueType::Resource(_)
                     | ValueType::Unique(_)

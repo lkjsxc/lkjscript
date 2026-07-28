@@ -105,6 +105,15 @@ stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
 
+Focused native immutable-bytes tests cover exact static/dynamic owner/loan ABI
+categories, immutable verified image-data identities, literal/read/length,
+checked slice copy, clone independence, zero-copy freeze and dynamic thaw,
+one-copy static thaw, direct calls, exact returned payload transfer, allocation
+failure, stale/wrong-layout/forged identities, traps, and cleanup. Differentials
+require evaluator/VM/native equality, nonzero selected-tier entries,
+optimizing-only proof entries, zero fallback/transitions/collector counters,
+and zero final owners, loans, or release backlog.
+
 Focused native resource-island tests cover exact capability/resource ABI
 categories, wrong capability and resource kinds, whole-group rejection of
 unsupported operations and reachable traced types, forced baseline/proof

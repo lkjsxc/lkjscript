@@ -140,6 +140,32 @@ pub trait NativeIslandRuntimeServices {
     ) -> Result<(), NativeServiceError>;
     fn end_byte_vector_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError>;
     fn drop_byte_vector(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError>;
+    fn clone_static_bytes(&mut self, bytes: &[u8]) -> Result<NativeUnique, NativeServiceError>;
+    fn copy_static_bytes_slice(
+        &mut self,
+        bytes: &[u8],
+        start: i64,
+        len: i64,
+    ) -> Result<NativeUnique, NativeServiceError>;
+    fn thaw_static_bytes(&mut self, bytes: &[u8]) -> Result<NativeUnique, NativeServiceError>;
+    fn move_bytes(&mut self, owner: NativeUnique) -> Result<NativeUnique, NativeServiceError>;
+    fn borrow_bytes(&mut self, owner: NativeUnique) -> Result<NativeLoan, NativeServiceError>;
+    fn bytes_length(&mut self, loan: NativeLoan) -> Result<i64, NativeServiceError>;
+    fn bytes_byte_at(&mut self, loan: NativeLoan, index: i64) -> Result<i64, NativeServiceError>;
+    fn clone_bytes(&mut self, loan: NativeLoan) -> Result<NativeUnique, NativeServiceError>;
+    fn copy_bytes_slice(
+        &mut self,
+        loan: NativeLoan,
+        start: i64,
+        len: i64,
+    ) -> Result<NativeUnique, NativeServiceError>;
+    fn end_bytes_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError>;
+    fn drop_bytes(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError>;
+    fn freeze_byte_vector(
+        &mut self,
+        owner: NativeUnique,
+    ) -> Result<NativeUnique, NativeServiceError>;
+    fn thaw_bytes(&mut self, owner: NativeUnique) -> Result<NativeUnique, NativeServiceError>;
 }
 
 pub trait NativeRuntimeServices {

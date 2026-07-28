@@ -1,4 +1,6 @@
 use super::*;
+use lkjscript_native::{LoanType, NativeLoan};
+use lkjscript_sys::executable::NativeIslandRuntimeServices;
 
 impl NativeIslandRuntimeServices for JitIslandServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {
@@ -68,5 +70,70 @@ impl NativeIslandRuntimeServices for JitIslandServices {
 
     fn drop_byte_vector(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError> {
         self.unique.drop_owner(owner)
+    }
+
+    fn clone_static_bytes(&mut self, bytes: &[u8]) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.clone_static_bytes(bytes)
+    }
+
+    fn copy_static_bytes_slice(
+        &mut self,
+        bytes: &[u8],
+        start: i64,
+        len: i64,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.copy_static_bytes_slice(bytes, start, len)
+    }
+
+    fn thaw_static_bytes(&mut self, bytes: &[u8]) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.thaw_static_bytes(bytes)
+    }
+
+    fn move_bytes(&mut self, owner: NativeUnique) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.move_bytes(owner)
+    }
+
+    fn borrow_bytes(&mut self, owner: NativeUnique) -> Result<NativeLoan, NativeServiceError> {
+        self.unique.borrow(owner, LoanType::Bytes)
+    }
+
+    fn bytes_length(&mut self, loan: NativeLoan) -> Result<i64, NativeServiceError> {
+        self.unique.bytes_length(loan)
+    }
+
+    fn bytes_byte_at(&mut self, loan: NativeLoan, index: i64) -> Result<i64, NativeServiceError> {
+        self.unique.bytes_byte_at(loan, index)
+    }
+
+    fn clone_bytes(&mut self, loan: NativeLoan) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.clone_bytes(loan)
+    }
+
+    fn copy_bytes_slice(
+        &mut self,
+        loan: NativeLoan,
+        start: i64,
+        len: i64,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.copy_bytes_slice(loan, start, len)
+    }
+
+    fn end_bytes_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError> {
+        self.unique.end_borrow(loan)
+    }
+
+    fn drop_bytes(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError> {
+        self.unique.drop_owner(owner)
+    }
+
+    fn freeze_byte_vector(
+        &mut self,
+        owner: NativeUnique,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.freeze(owner)
+    }
+
+    fn thaw_bytes(&mut self, owner: NativeUnique) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.thaw(owner)
     }
 }

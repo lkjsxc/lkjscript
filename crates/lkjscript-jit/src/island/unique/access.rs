@@ -5,7 +5,7 @@ impl JitUniqueRuntime {
         &mut self,
         owner: NativeUnique,
     ) -> Result<NativeUnique, NativeServiceError> {
-        let word = self.validate_owner(owner)?;
+        let word = self.validate_owner(owner, lkjscript_native::UniqueType::ByteVector)?;
         if self.active_loans_for(word).next().is_some() {
             return Err(self.reject());
         }
@@ -18,7 +18,12 @@ impl JitUniqueRuntime {
         owner: NativeUnique,
         kind: LoanType,
     ) -> Result<NativeLoan, NativeServiceError> {
-        let owner = self.validate_owner(owner)?;
+        let owner_type = if kind == LoanType::Bytes {
+            lkjscript_native::UniqueType::Bytes
+        } else {
+            lkjscript_native::UniqueType::ByteVector
+        };
+        let owner = self.validate_owner(owner, owner_type)?;
         let exclusive = kind == LoanType::ByteSliceMut;
         if self
             .active_loans_for(owner)
@@ -26,13 +31,27 @@ impl JitUniqueRuntime {
         {
             return Err(self.reject());
         }
-        let key = self
-            .store
-            .import_byte_vector_key(owner)
-            .map_err(|_| self.reject())?;
-        let len = match self.store.byte_vector(key) {
-            Ok(bytes) => bytes.len(),
-            Err(_) => return Err(self.reject()),
+        let len = match kind {
+            LoanType::ByteSlice | LoanType::ByteSliceMut => {
+                let key = self
+                    .store
+                    .import_byte_vector_key(owner)
+                    .map_err(|_| self.reject())?;
+                match self.store.byte_vector(key) {
+                    Ok(bytes) => bytes.len(),
+                    Err(_) => return Err(self.reject()),
+                }
+            }
+            LoanType::Bytes => {
+                let key = self
+                    .store
+                    .import_bytes_key(owner)
+                    .map_err(|_| self.reject())?;
+                match self.store.bytes(key) {
+                    Ok(bytes) => bytes.len(),
+                    Err(_) => return Err(self.reject()),
+                }
+            }
         };
         let loan = Loan {
             owner,
@@ -50,6 +69,10 @@ impl JitUniqueRuntime {
             LoanType::ByteSliceMut => {
                 self.stats.exclusive_borrows = self.stats.exclusive_borrows.saturating_add(1);
                 Ok(NativeLoan::byte_slice_mut(token))
+            }
+            LoanType::Bytes => {
+                self.stats.shared_borrows = self.stats.shared_borrows.saturating_add(1);
+                Ok(NativeLoan::bytes(token))
             }
         }
     }
@@ -126,7 +149,7 @@ impl JitUniqueRuntime {
         Ok(())
     }
 
-    fn install_loan(&mut self, loan: Loan) -> Result<(u32, u32), NativeServiceError> {
+    pub(super) fn install_loan(&mut self, loan: Loan) -> Result<(u32, u32), NativeServiceError> {
         if let Some(index) = self
             .loans
             .iter()
