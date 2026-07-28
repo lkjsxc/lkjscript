@@ -41,6 +41,7 @@ mod config;
 mod error;
 mod execute;
 mod heap;
+mod island;
 mod scalar;
 mod session;
 mod stats;
@@ -50,17 +51,21 @@ mod tests;
 
 use execute::optimization_metadata_bytes_estimate;
 use heap::*;
+use island::*;
 use scalar::scalar_to_execution;
 
 pub use code::{CodeObject, CodeObjectRecord, NumericConversionSiteCounts};
 pub use config::{JitConfig, Tier, TierState};
 pub use error::{EngineError, FailureCode};
-pub use execute::{execute_forced, execute_optimizing};
+pub use execute::{
+    execute_forced, execute_forced_with_capabilities, execute_optimizing,
+    execute_optimizing_with_capabilities,
+};
 pub use scalar::{
     native_type, EntryDecision, JitExecution, ScalarInvocation, ScalarInvocationOutcome,
     ScalarSignature,
 };
-pub use stats::{CompileStats, FunctionTierRecord, JitStats};
+pub use stats::{CompileStats, FunctionTierRecord, JitStats, NativeResourceStats};
 
 enum ProgramAuthority {
     Baseline(VerifiedProgram),
@@ -104,11 +109,15 @@ pub struct JitSession {
     first_native_call: Option<Duration>,
     native_execution: Duration,
     diagnostic_bytes: u64,
-    heap: GcHeap,
+    heap: Option<GcHeap>,
     maximum_roots: usize,
     runtime_heap_attempts: u64,
     runtime_heap_successes: u64,
     barrier_count: u64,
+    collector_runtime_invocations: u64,
+    resource_runtime_calls: u64,
+    native_resources: NativeResourceStats,
+    next_resource_scope: u64,
     peak_native_frame_depth: usize,
     vm_to_native_transitions: u64,
     native_to_vm_transitions: u64,

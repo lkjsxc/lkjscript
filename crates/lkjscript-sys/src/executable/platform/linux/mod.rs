@@ -2,8 +2,9 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 
 use crate::executable::{
-    machine_arguments, InstallError, InvocationError, MachineArgument, MappingPermissions,
-    NativeCallState, NativeValue, PermissionProbeError, RawReturn, Signature, ValueType,
+    machine_arguments, InstallError, InvocationError, IslandCallState, MachineArgument,
+    MappingPermissions, NativeCallState, NativeValue, PermissionProbeError, RawReturn, Signature,
+    ValueType,
 };
 
 const PROT_READ: i32 = 0x1;

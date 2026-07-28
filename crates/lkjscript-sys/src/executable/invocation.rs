@@ -25,6 +25,20 @@ impl RawReturn {
             }
             (Self::Float(value), ValueType::F64) => Ok(NativeValue::F64Bits(value.to_bits())),
             (Self::Unit, ValueType::Unit) => Ok(NativeValue::Unit),
+            (Self::Integer(value), ValueType::Capability(kind))
+                if value == capability_word(kind) =>
+            {
+                Ok(NativeValue::Capability(kind))
+            }
+            (Self::Integer(_), ValueType::Capability(_)) => {
+                Err(InvocationError::UnsupportedSignature)
+            }
+            (Self::Integer(value), ValueType::Resource(kind)) if value != 0 => {
+                Ok(NativeValue::Resource(NativeResource::new(kind, value)))
+            }
+            (Self::Integer(_), ValueType::Resource(_)) => {
+                Err(InvocationError::UnsupportedSignature)
+            }
             (Self::Integer(value), ValueType::Reference(reference_type)) => Ok(
                 NativeValue::Reference(NativeReference::new(reference_type, value)),
             ),
@@ -42,6 +56,8 @@ pub(super) fn native_value_word(value: NativeValue, expected: ValueType) -> Opti
         NativeValue::F64Bits(bits) => bits,
         NativeValue::Bool(value) => u64::from(value),
         NativeValue::Unit => 0,
+        NativeValue::Capability(kind) => capability_word(kind),
+        NativeValue::Resource(resource) => resource.opaque_word(),
         NativeValue::Reference(reference) => reference.opaque_word(),
     })
 }
@@ -82,9 +98,17 @@ pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgumen
             NativeValue::F64Bits(bits) => Some(MachineArgument::Float(f64::from_bits(*bits))),
             NativeValue::Bool(value) => Some(MachineArgument::Integer(u64::from(*value))),
             NativeValue::Unit => None,
+            NativeValue::Capability(kind) => Some(MachineArgument::Integer(capability_word(*kind))),
+            NativeValue::Resource(resource) => {
+                Some(MachineArgument::Integer(resource.opaque_word()))
+            }
             NativeValue::Reference(reference) => {
                 Some(MachineArgument::Integer(reference.opaque_word()))
             }
         })
         .collect()
+}
+
+pub(super) const fn capability_word(kind: lkjscript_native::CapabilityKind) -> u64 {
+    kind as u64 + 1
 }

@@ -18,6 +18,8 @@ pub struct InvocationReport {
     pub(super) barrier_count: u64,
     pub(super) peak_active_value_homes: usize,
     pub(super) active_value_homes: usize,
+    pub(super) resource_calls: u64,
+    pub(super) collector_runtime: bool,
 }
 
 impl InvocationReport {
@@ -99,6 +101,16 @@ impl InvocationReport {
     #[must_use]
     pub const fn active_value_homes(&self) -> usize {
         self.active_value_homes
+    }
+
+    #[must_use]
+    pub const fn resource_calls(&self) -> u64 {
+        self.resource_calls
+    }
+
+    #[must_use]
+    pub const fn collector_runtime(&self) -> bool {
+        self.collector_runtime
     }
 }
 

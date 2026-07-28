@@ -12,6 +12,8 @@ mod buffer_boundaries;
 mod collector_free_scalar;
 #[path = "jit_engines/reference_graphs.rs"]
 mod reference_graphs;
+#[path = "jit_engines/resource_island.rs"]
+mod resource_island;
 #[path = "jit_engines/resource_limits.rs"]
 mod resource_limits;
 #[path = "jit_engines/scalar_semantics.rs"]

@@ -42,6 +42,7 @@ impl InstallableImage {
         if runtime_calls.len() != self.runtime_calls.len() {
             return Err(ImageIntegrityError::RuntimeCallSet);
         }
+        self.validate_execution_domain(&runtime_calls)?;
         let mut relocated_runtime_calls = HashSet::new();
         for relocation in &self.relocations {
             let start = relocation.offset as usize;

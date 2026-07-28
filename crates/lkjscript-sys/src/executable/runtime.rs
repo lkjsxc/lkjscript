@@ -1,17 +1,59 @@
 use super::*;
 
-pub(super) fn runtime_symbol(slot: RuntimeCallSlot) -> usize {
-    match slot {
-        RuntimeCallSlot::IdentityI64 => runtime_identity_i64 as *const () as usize,
-        RuntimeCallSlot::Poll => runtime_poll as *const () as usize,
-        RuntimeCallSlot::EnterFunction => runtime_enter_function as *const () as usize,
-        RuntimeCallSlot::CollectReference => runtime_collect_reference as *const () as usize,
-        RuntimeCallSlot::HeapDispatch => runtime_heap_dispatch as *const () as usize,
-        RuntimeCallSlot::ReserveFrame => runtime_reserve_frame as *const () as usize,
-        RuntimeCallSlot::RegisterFrame => runtime_register_frame as *const () as usize,
-        RuntimeCallSlot::PublishSafepoint => runtime_publish_safepoint as *const () as usize,
-        RuntimeCallSlot::UnregisterFrame => runtime_unregister_frame as *const () as usize,
-    }
+mod island;
+use island::*;
+
+pub(super) fn runtime_symbol(
+    domain: NativeExecutionDomain,
+    slot: RuntimeCallSlot,
+) -> Option<usize> {
+    let symbol = match (domain, slot) {
+        (_, RuntimeCallSlot::IdentityI64) => runtime_identity_i64 as *const () as usize,
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::Poll) => {
+            runtime_island_poll as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::EnterFunction) => {
+            runtime_island_enter as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StdinHandle) => {
+            runtime_island_stdin as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ReserveFrame) => {
+            runtime_island_reserve as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::RegisterFrame) => {
+            runtime_island_register as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::UnregisterFrame) => {
+            runtime_island_unregister as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::Poll) => {
+            runtime_poll as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::EnterFunction) => {
+            runtime_enter_function as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::CollectReference) => {
+            runtime_collect_reference as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::HeapDispatch) => {
+            runtime_heap_dispatch as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::ReserveFrame) => {
+            runtime_reserve_frame as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::RegisterFrame) => {
+            runtime_register_frame as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::PublishSafepoint) => {
+            runtime_publish_safepoint as *const () as usize
+        }
+        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::UnregisterFrame) => {
+            runtime_unregister_frame as *const () as usize
+        }
+        _ => return None,
+    };
+    Some(symbol)
 }
 
 extern "C" fn runtime_identity_i64(_state: *mut NativeCallState<'_>, value: u64) -> u64 {

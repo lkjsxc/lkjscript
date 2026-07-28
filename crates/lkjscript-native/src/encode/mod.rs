@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use crate::image::{
     entry_metadata, exact_safepoint, frame_facts, frame_home, heap_runtime_site, outcome_map_entry,
     relocation, root_location, root_map_requirement, source_map_entry, trap_map_entry,
-    FrameHomeKind, ImageContracts, ImageParts, InstallableImage, OutcomeKind, RelocationKind,
-    RelocationTarget, RootLocation,
+    FrameHomeKind, ImageContracts, ImageParts, InstallableImage, NativeExecutionDomain,
+    OutcomeKind, RelocationKind, RelocationTarget, RootLocation,
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
@@ -75,6 +75,7 @@ struct FunctionEncoder<'a> {
     function: &'a FunctionPlan,
     function_ordinal: u32,
     signatures: &'a [(FunctionId, crate::Signature)],
+    execution_domain: NativeExecutionDomain,
     collecting_functions: &'a HashSet<FunctionId>,
     bytes: &'a mut Vec<u8>,
     relocations: &'a mut Vec<crate::Relocation>,

@@ -9,17 +9,24 @@ impl FunctionEncoder<'_> {
         target: RelocationTarget,
     ) -> Result<(), NativeError> {
         let safepoint_id = to_u32(self.safepoints.len())?;
-        let certificate = self
-            .certified_call_roots
-            .get(output.index as usize)
-            .and_then(Option::as_deref)
-            .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
-        let roots = certified_root_locations(self.function, certificate)?;
+        let roots = if self.execution_domain == NativeExecutionDomain::LegacyHeap {
+            let certificate = self
+                .certified_call_roots
+                .get(output.index as usize)
+                .and_then(Option::as_deref)
+                .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
+            certified_root_locations(self.function, certificate)?
+        } else {
+            Vec::new()
+        };
         let may_collect = match target {
             RelocationTarget::Function(function) => self.collecting_functions.contains(&function),
             RelocationTarget::Runtime(slot) => slot.may_collect(),
         };
         if may_collect {
+            if self.execution_domain != NativeExecutionDomain::LegacyHeap {
+                return Err(NativeError::Encode(EncodeError::InvalidCall));
+            }
             self.emit_publish_safepoint(safepoint_id)?;
         }
 
@@ -28,7 +35,11 @@ impl FunctionEncoder<'_> {
         let mut float_index = 0_usize;
         for (argument, argument_type) in arguments.iter().zip(signature.parameters()) {
             match argument_type {
-                ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
+                ValueType::I64
+                | ValueType::Bool
+                | ValueType::Capability(_)
+                | ValueType::Resource(_)
+                | ValueType::Reference(_) => {
                     let register = [6_u8, 2_u8]
                         .get(integer_index)
                         .copied()
@@ -46,19 +57,28 @@ impl FunctionEncoder<'_> {
         self.emit_call_target(target)?;
         let call_offset = self.bytes.len();
         self.emit(&[0x41, 0xff, 0xd3])?;
-        self.safepoints.push(exact_safepoint(
-            safepoint_id,
-            self.function.id,
-            to_u32(call_offset)?,
-            roots.clone(),
-        ));
-        self.root_requirements
-            .push(root_map_requirement(safepoint_id, self.function.id, roots));
+        if self.execution_domain == NativeExecutionDomain::LegacyHeap {
+            self.safepoints.push(exact_safepoint(
+                safepoint_id,
+                self.function.id,
+                to_u32(call_offset)?,
+                roots.clone(),
+            ));
+            self.root_requirements.push(root_map_requirement(
+                safepoint_id,
+                self.function.id,
+                roots,
+            ));
+        }
         self.load_integer_register(1, self.context_offset())?;
         self.emit(&[0x83, 0x39, 0x00])?;
         self.emit_conditional_jump(0x85, FixupTarget::StatusReturn)?;
         match signature.result() {
-            ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
+            ValueType::I64
+            | ValueType::Bool
+            | ValueType::Capability(_)
+            | ValueType::Resource(_)
+            | ValueType::Reference(_) => {
                 self.store_rax(self.value_offset(output)?)?;
             }
             ValueType::F64 => self.store_xmm0(self.value_offset(output)?)?,

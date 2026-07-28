@@ -101,13 +101,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
   instruction-originated all-outcome routing, physical byte release, cleanup
   failures, and generated native host execution remain accepted-contract work,
   so deterministic drop and typed resources are not complete Current capabilities.
-- The VM projects the core resource table's provider/scope-bound keys into
-  checked 12-bit-slot, 20-bit-generation guest tokens. It reserves before host
-  acquisition, reuses slots without reviving stale tokens, protects SQLite
-  parents, installs borrowed standard input in the table, invalidates before
-  explicit close, and performs exact reverse emergency cleanup.
-- Each evaluator execution owns one core resource table with exact fake lifecycle
-  providers for all eleven kinds. It performs no ambient host I/O; resource-operation dispatch remains incomplete.
+- The VM uses checked generation-bearing core resource-table tokens; evaluator
+  executions use exact fake lifecycle providers without ambient host I/O. Forced
+  baseline and proof JIT support only `standard-input`, installing or reusing a
+  borrowed `input-stream` in an invocation-owned table and removing it at
+  teardown. Owned native resource operations and evaluator dispatch remain incomplete.
 - Core provides a bounded deterministic unique store with opaque store-scoped,
   generation-bearing typed keys for byte-vector, dynamic bytes, and path
   layouts. It is not yet integrated into source execution or native tiers.
@@ -123,8 +121,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   conversions, calls, returns, host adapters, and JIT transitions allocate no
   traced scalar objects. A focused scalar group with direct calls, loops, bool,
   i64, and f64 proves both forced tiers have nonzero generated entries, zero
-  fallback, no collector-capable runtime call, empty exact root maps, and zero
-  allocation, collection, root, and barrier counters.
+  fallback, no collector-capable runtime call or safepoint metadata, and zero
+  allocation, collection, root, and barrier counters. Collector-free scalar and
+  supported resource groups use a distinct noncollecting sys dispatch and do
+  not construct or configure `GcHeap` or `JitHeapServices`.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
@@ -167,7 +167,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   only by the atomic removal of transitional `buf` source surfaces;
 - complete typed-resource compiler-inserted exactly-once cleanup, evaluator
   resource-operation dispatch, bounded structured cleanup-failure attachment,
-  and forced native host execution;
+  and forced native owned-resource execution beyond borrowed `standard-input`;
 - immutable `bytes`, full affine `byte-vector` corpus migration, ranged lexical
   byte slices, borrowed `str`, and removal of transitional `buf` after complete
   cross-engine replacement;

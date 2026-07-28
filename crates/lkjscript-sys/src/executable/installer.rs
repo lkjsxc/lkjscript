@@ -74,7 +74,8 @@ impl ExecutableInstaller {
                         .ok_or(InstallError::RelocationAddress)?;
                     mapping.address_at(entry.offset() as usize)?
                 }
-                RelocationTarget::Runtime(slot) => runtime_symbol(slot),
+                RelocationTarget::Runtime(slot) => runtime_symbol(image.execution_domain(), slot)
+                    .ok_or(InstallError::RelocationAddress)?,
             };
             mapping.write_absolute64(item.offset() as usize, address)?;
         }

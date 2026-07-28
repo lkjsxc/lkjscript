@@ -184,6 +184,7 @@ impl NativeCallState<'_> {
                 ValueType::Bool => return false,
                 ValueType::Unit if word == 0 => NativeValue::Unit,
                 ValueType::Unit => return false,
+                ValueType::Capability(_) | ValueType::Resource(_) => return false,
                 ValueType::Reference(reference_type) => {
                     NativeValue::Reference(NativeReference::new(reference_type, word))
                 }

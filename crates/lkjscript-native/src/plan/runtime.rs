@@ -8,6 +8,8 @@ pub enum RuntimeCallSlot {
     Poll,
     /// Records entry to a source function for exact native-tier accounting.
     EnterFunction,
+    /// Installs or reuses the invocation-owned borrowed standard-input resource.
+    StdinHandle,
     /// Collecting reference round trip used by the closed runtime contract.
     CollectReference,
     /// Generic verified-frame-home heap dispatch. Plans create it only through
@@ -73,6 +75,12 @@ impl RuntimeCallSlot {
                 parameters: vec![ValueType::I64],
                 result: ValueType::Unit,
             }),
+            Self::StdinHandle => Some(Signature {
+                parameters: vec![ValueType::Capability(
+                    lkjscript_contracts::CapabilityKind::Stdio,
+                )],
+                result: ValueType::Resource(lkjscript_contracts::ResourceKind::InputStream),
+            }),
             Self::CollectReference => Some(Signature {
                 parameters: vec![ValueType::Reference(ReferenceType::Buf)],
                 result: ValueType::Reference(ReferenceType::Buf),
@@ -120,7 +128,11 @@ impl RuntimeCallSlot {
                 ],
                 result: InternalMachineResult::Unit,
             }),
-            Self::IdentityI64 | Self::Poll | Self::EnterFunction | Self::CollectReference => None,
+            Self::IdentityI64
+            | Self::Poll
+            | Self::EnterFunction
+            | Self::StdinHandle
+            | Self::CollectReference => None,
         }
     }
 
@@ -132,7 +144,11 @@ impl RuntimeCallSlot {
     pub(crate) const fn plan_callable(self) -> bool {
         matches!(
             self,
-            Self::IdentityI64 | Self::Poll | Self::EnterFunction | Self::CollectReference
+            Self::IdentityI64
+                | Self::Poll
+                | Self::EnterFunction
+                | Self::StdinHandle
+                | Self::CollectReference
         )
     }
 }

@@ -53,12 +53,7 @@ impl JitSession {
                     "code object has no source-function entry",
                 )
             })?;
-        self.heap.set_config(GcConfig {
-            max_allocations: execution.max_allocations,
-            max_heap_bytes: execution.max_heap_bytes,
-            collect_before_every_allocation: self.config.force_gc_before_allocation,
-            ..self.heap.config()
-        });
+        let execution_domain = self.objects[object_index].installed.execution_domain();
         self.last_runtime_trap = None;
         self.last_runtime_resource = None;
         let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time)
@@ -71,22 +66,60 @@ impl JitSession {
         if self.links.is_some() {
             self.vm_to_native_transitions = self.vm_to_native_transitions.saturating_add(1);
         }
-        let force_collection = self.config.force_gc_before_allocation;
-        let enums = &self.program.program().enums;
-        let mut services = JitHeapServices::new(
-            &mut self.heap,
-            enums,
-            force_collection,
-            execution.max_logical_aggregate_constructions,
-        );
-        let report = self.objects[object_index].installed.invoke_with_services(
-            native,
-            arguments,
-            &config,
-            &mut services,
-        );
-        self.last_runtime_trap = services.last_trap.take();
-        self.last_runtime_resource = services.last_resource;
+        let report = match execution_domain {
+            lkjscript_native::NativeExecutionDomain::CollectorFree => {
+                let scope =
+                    lkjscript_core::ScopeId::new(self.next_resource_scope).ok_or_else(|| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            "native resource scope exhausted",
+                        )
+                    })?;
+                self.next_resource_scope =
+                    self.next_resource_scope.checked_add(1).ok_or_else(|| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            "native resource scope exhausted",
+                        )
+                    })?;
+                let mut services = JitIslandServices::new(scope, execution.max_handles)?;
+                let report = self.objects[object_index]
+                    .installed
+                    .invoke_island_with_services(native, arguments, &config, &mut services);
+                self.native_resources.add(services.finish());
+                report
+            }
+            lkjscript_native::NativeExecutionDomain::LegacyHeap => {
+                self.collector_runtime_invocations =
+                    self.collector_runtime_invocations.saturating_add(1);
+                let heap = self.heap.get_or_insert_with(GcHeap::default);
+                heap.set_config(GcConfig {
+                    max_allocations: execution.max_allocations,
+                    max_heap_bytes: execution.max_heap_bytes,
+                    collect_before_every_allocation: self.config.force_gc_before_allocation,
+                    ..heap.config()
+                });
+                let force_collection = self.config.force_gc_before_allocation;
+                let enums = &self.program.program().enums;
+                let mut services = JitHeapServices::new(
+                    heap,
+                    enums,
+                    force_collection,
+                    execution.max_logical_aggregate_constructions,
+                );
+                let report = self.objects[object_index].installed.invoke_with_services(
+                    native,
+                    arguments,
+                    &config,
+                    &mut services,
+                );
+                self.last_runtime_trap = services.last_trap.take();
+                self.last_runtime_resource = services.last_resource;
+                report
+            }
+        };
         if self.links.is_some() {
             self.native_to_vm_transitions = self.native_to_vm_transitions.saturating_add(1);
         }
@@ -100,6 +133,9 @@ impl JitSession {
         }
         let report = report.map_err(|error| invocation_error(function, error))?;
         self.poll_calls = self.poll_calls.saturating_add(report.poll_count());
+        self.resource_runtime_calls = self
+            .resource_runtime_calls
+            .saturating_add(report.resource_calls());
         self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
         self.runtime_heap_attempts = self
             .runtime_heap_attempts
@@ -124,10 +160,6 @@ impl JitSession {
                 }
             }
         }
-        // The root machine entry was invoked even when its frame/value
-        // reservation failed before frame registration could record the source
-        // function. Count that actual entry once so forced-tier evidence never reports zero native
-        // execution for a structured pre-entry resource outcome.
         if invocation_entries == 0 {
             invocation_entries = 1;
             self.native_entries = self.native_entries.saturating_add(1);

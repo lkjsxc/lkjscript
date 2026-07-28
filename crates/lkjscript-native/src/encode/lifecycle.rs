@@ -112,7 +112,11 @@ impl FunctionEncoder<'_> {
                 .id;
             let offset = self.value_offset(value)?;
             match parameter {
-                ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
+                ValueType::I64
+                | ValueType::Bool
+                | ValueType::Capability(_)
+                | ValueType::Resource(_)
+                | ValueType::Reference(_) => {
                     let scratch = [SCRATCH_INTEGER_ARGUMENT_0, SCRATCH_INTEGER_ARGUMENT_1]
                         .get(integer_index)
                         .copied()

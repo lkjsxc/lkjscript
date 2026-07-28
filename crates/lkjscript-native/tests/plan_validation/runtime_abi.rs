@@ -74,3 +74,65 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
     );
     Ok(())
 }
+
+#[test]
+fn typed_resource_runtime_abi_rejects_wrong_capability_and_resource_kinds(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut capability_plan = MachinePlanBuilder::new();
+    let function = capability_plan.declare_function(
+        SourceFunctionId::new(40),
+        Signature::new(
+            vec![ValueType::Capability(CapabilityKind::FileSystem)],
+            ValueType::Resource(ResourceKind::InputStream),
+        )?,
+    )?;
+    let mut builder = capability_plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let capability = builder.parameter(0)?;
+    let input = builder.runtime_call(entry, RuntimeCallSlot::StdinHandle, vec![capability])?;
+    builder.return_value(entry, input)?;
+    capability_plan.define_function(builder.finish())?;
+    assert!(matches!(
+        capability_plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            "runtime call"
+        )))
+    ));
+
+    let mut resource_plan = MachinePlanBuilder::new();
+    let callee = resource_plan.declare_function(
+        SourceFunctionId::new(41),
+        Signature::new(
+            vec![ValueType::Resource(ResourceKind::FileReader)],
+            ValueType::Unit,
+        )?,
+    )?;
+    let root = resource_plan.declare_function(
+        SourceFunctionId::new(42),
+        Signature::new(
+            vec![ValueType::Resource(ResourceKind::InputStream)],
+            ValueType::Unit,
+        )?,
+    )?;
+    let mut callee_builder = resource_plan.function_builder(callee)?;
+    let callee_entry = callee_builder.create_block()?;
+    callee_builder.set_entry(callee_entry)?;
+    let unit = callee_builder.unit(callee_entry)?;
+    callee_builder.return_value(callee_entry, unit)?;
+    resource_plan.define_function(callee_builder.finish())?;
+    let mut root_builder = resource_plan.function_builder(root)?;
+    let root_entry = root_builder.create_block()?;
+    root_builder.set_entry(root_entry)?;
+    let input = root_builder.parameter(0)?;
+    let output = root_builder.call(root_entry, callee, vec![input])?;
+    root_builder.return_value(root_entry, output)?;
+    resource_plan.define_function(root_builder.finish())?;
+    assert!(matches!(
+        resource_plan.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            "compiled call"
+        )))
+    ));
+    Ok(())
+}

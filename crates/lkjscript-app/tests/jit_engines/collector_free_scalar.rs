@@ -50,8 +50,10 @@ fn assert_collector_zero(stats: &JitStats) {
     assert_eq!(stats.runtime_heap_attempts, 0);
     assert_eq!(stats.runtime_heap_successes, 0);
     assert_eq!(stats.barrier_count, 0);
+    assert_eq!(stats.collector_runtime_invocations, 0);
+    assert_eq!(stats.resource_runtime_calls, 0);
     assert!(stats.code_objects.iter().all(|object| {
-        object.safepoint_count > 0
+        object.safepoint_count == 0
             && object.exact_scalar_stack_maps
             && !object
                 .runtime_calls

@@ -165,7 +165,7 @@ fn forced_optimizing_rejects_unsupported_and_budget_failure_without_downgrade() 
         JitConfig::default(),
     )
     .expect_err("forced optimizing host operation must not fall back");
-    assert_eq!(error.code(), FailureCode::UnsupportedType);
+    assert_eq!(error.code(), FailureCode::UnsupportedOperation);
 
     let source = include_str!("../fixtures/optimizing-loop.lkjscript");
     let program = compile(source, "optimizing-budget.lkjscript");

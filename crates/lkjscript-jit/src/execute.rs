@@ -13,10 +13,20 @@ pub fn execute_forced(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
+    execute_forced_with_capabilities(program, &[], execution, config)
+}
+
+pub fn execute_forced_with_capabilities(
+    program: &VerifiedProgram,
+    capabilities: &[lkjscript_core::CapabilityKind],
+    execution: &ExecutionConfig,
+    config: JitConfig,
+) -> Result<JitExecution, EngineError> {
     let main = program.program().main;
     let mut session = JitSession::new_baseline(program, config);
     session.compile_group(main)?;
-    let invocation = session.invoke_scalar(main, &[], execution)?;
+    let arguments = capability_arguments(program, capabilities)?;
+    let invocation = session.invoke_scalar(main, &arguments, execution)?;
     let outcome = scalar_to_execution(&session, main, invocation.outcome)?;
     let stats = session.stats();
     verify_forced_entry(&outcome, &stats, main, TierState::BaselineNative)?;
@@ -37,6 +47,15 @@ pub fn execute_optimizing(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
+    execute_optimizing_with_capabilities(program, &[], execution, config)
+}
+
+pub fn execute_optimizing_with_capabilities(
+    program: &VerifiedProgram,
+    capabilities: &[lkjscript_core::CapabilityKind],
+    execution: &ExecutionConfig,
+    config: JitConfig,
+) -> Result<JitExecution, EngineError> {
     let started = Instant::now();
     let optimized = optimize(program, config.optimization_limits).map_err(optimization_error)?;
     let optimization_time = started.elapsed();
@@ -52,7 +71,8 @@ pub fn execute_optimizing(
     let main = optimized.program().main;
     let mut session = JitSession::new_optimizing(optimized, config, optimization_time);
     session.compile_group(main)?;
-    let invocation = session.invoke_scalar(main, &[], execution)?;
+    let arguments = capability_arguments(program, capabilities)?;
+    let invocation = session.invoke_scalar(main, &arguments, execution)?;
     let outcome = scalar_to_execution(&session, main, invocation.outcome)?;
     let stats = session.stats();
     verify_forced_entry(&outcome, &stats, main, TierState::OptimizedNative)?;
@@ -94,6 +114,45 @@ fn verify_forced_entry(
         ));
     }
     Ok(())
+}
+
+fn capability_arguments(
+    program: &VerifiedProgram,
+    capabilities: &[lkjscript_core::CapabilityKind],
+) -> Result<Vec<NativeValue>, EngineError> {
+    let Some(index) = program.program().main.index() else {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(program.program().main),
+            "native main identity is invalid",
+        ));
+    };
+    let Some(main) = program.program().functions.get(index) else {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(program.program().main),
+            "native main is absent",
+        ));
+    };
+    if main.signature.parameters.len() != capabilities.len()
+        || main
+            .signature
+            .parameters
+            .iter()
+            .zip(capabilities)
+            .any(|(parameter, capability)| parameter != &SsaType::Capability(*capability))
+    {
+        return Err(EngineError::new(
+            FailureCode::InvocationFailure,
+            Some(program.program().main),
+            "native main capability arguments do not exactly match verified SSA",
+        ));
+    }
+    Ok(capabilities
+        .iter()
+        .copied()
+        .map(NativeValue::Capability)
+        .collect())
 }
 
 fn optimization_error(error: lkjscript_ir::OptimizationError) -> EngineError {

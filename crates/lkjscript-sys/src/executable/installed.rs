@@ -1,5 +1,7 @@
 use super::*;
 
+mod island;
+
 #[derive(Debug)]
 pub struct InstalledImage {
     pub(super) installer: Rc<InstallerState>,
@@ -10,6 +12,11 @@ pub struct InstalledImage {
 }
 
 impl InstalledImage {
+    #[must_use]
+    pub const fn execution_domain(&self) -> NativeExecutionDomain {
+        self.image.execution_domain()
+    }
+
     #[must_use]
     pub fn entries(&self) -> &[lkjscript_native::EntryMetadata] {
         self.image.entries()
@@ -30,8 +37,16 @@ impl InstalledImage {
         arguments: &[NativeValue],
         config: &NativeInvocationConfig,
     ) -> Result<InvocationReport, InvocationError> {
-        let mut services = NoopNativeRuntimeServices;
-        self.invoke_with_services(entry, arguments, config, &mut services)
+        match self.image.execution_domain() {
+            NativeExecutionDomain::CollectorFree => {
+                let mut services = NoopNativeIslandRuntimeServices;
+                self.invoke_island_with_services(entry, arguments, config, &mut services)
+            }
+            NativeExecutionDomain::LegacyHeap => {
+                let mut services = NoopNativeRuntimeServices;
+                self.invoke_with_services(entry, arguments, config, &mut services)
+            }
+        }
     }
 
     pub fn invoke_with_services(
@@ -41,6 +56,9 @@ impl InstalledImage {
         config: &NativeInvocationConfig,
         services: &mut dyn NativeRuntimeServices,
     ) -> Result<InvocationReport, InvocationError> {
+        if self.image.execution_domain() != NativeExecutionDomain::LegacyHeap {
+            return Err(InvocationError::ExecutionDomain);
+        }
         let entry = self
             .image
             .entries()
@@ -129,6 +147,8 @@ impl InstalledImage {
             barrier_count: state.barrier_count,
             peak_active_value_homes: state.peak_active_value_homes,
             active_value_homes: state.active_value_homes,
+            resource_calls: 0,
+            collector_runtime: true,
         })
     }
 

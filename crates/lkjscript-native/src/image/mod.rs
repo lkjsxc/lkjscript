@@ -14,6 +14,7 @@ mod construction;
 mod constructors;
 mod entries;
 mod error;
+mod execution_domain;
 mod frames;
 mod heap_sites;
 mod integrity;
@@ -39,6 +40,7 @@ pub struct InstallableImage {
     entries: Box<[EntryMetadata]>,
     relocations: Box<[Relocation]>,
     runtime_calls: Box<[RuntimeCallSlot]>,
+    execution_domain: NativeExecutionDomain,
     frames: Box<[FrameFacts]>,
     safepoints: Box<[Safepoint]>,
     root_requirements: Box<[RootMapRequirement]>,
@@ -55,6 +57,7 @@ pub(crate) struct ImageParts {
     pub(crate) entries: Vec<EntryMetadata>,
     pub(crate) relocations: Vec<Relocation>,
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,
+    pub(crate) execution_domain: NativeExecutionDomain,
     pub(crate) frames: Vec<FrameFacts>,
     pub(crate) safepoints: Vec<Safepoint>,
     pub(crate) root_requirements: Vec<RootMapRequirement>,

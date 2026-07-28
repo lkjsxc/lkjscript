@@ -5,9 +5,10 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use lkjscript_native::{
-    FunctionId, HeapRuntimeSite, ImageContracts, ImageIntegrityError, InstallableImage,
-    NativeReference, NativeValue, ReferenceType, RelocationTarget, RuntimeCallSlot, Signature,
-    StoreClass, TrapCode, ValueType,
+    CapabilityKind, FunctionId, HeapRuntimeSite, ImageContracts, ImageIntegrityError,
+    InstallableImage, NativeExecutionDomain, NativeReference, NativeResource, NativeValue,
+    ReferenceType, RelocationTarget, ResourceKind, RuntimeCallSlot, Signature, StoreClass,
+    TrapCode, ValueType,
 };
 
 mod accounting;
@@ -33,6 +34,6 @@ pub use limits::*;
 pub use permissions::*;
 pub use report::*;
 use runtime::*;
-use services::NoopNativeRuntimeServices;
 pub use services::*;
+use services::{NoopNativeIslandRuntimeServices, NoopNativeRuntimeServices};
 use state::*;

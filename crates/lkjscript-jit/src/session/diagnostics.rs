@@ -17,8 +17,9 @@ impl JitSession {
                     let word = u64::from(site?);
                     let reference =
                         lkjscript_native::NativeReference::new(ReferenceType::Str, word);
-                    let value = native_reference_value(&self.heap, reference).ok()?;
-                    match self.heap.get(value).ok()? {
+                    let heap = self.heap.as_ref()?;
+                    let value = native_reference_value(heap, reference).ok()?;
+                    match heap.get(value).ok()? {
                         HeapObj::Str(message) => Some(message.clone()),
                         _ => None,
                     }

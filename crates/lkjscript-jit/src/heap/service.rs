@@ -103,6 +103,9 @@ impl<'a> JitHeapServices<'a> {
             NativeValue::Bool(value) => Ok(Value::from_bool(value)),
             NativeValue::I64(value) => Ok(Value::from_i64(value)),
             NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
+            NativeValue::Capability(_) | NativeValue::Resource(_) => {
+                self.trap("typed resource entered legacy heap service")
+            }
             NativeValue::Reference(reference) => native_reference_value(self.heap, reference)
                 .map_err(|message| {
                     self.last_trap = Some(message);

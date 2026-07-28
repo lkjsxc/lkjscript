@@ -64,6 +64,7 @@ pub enum InvocationError {
     RootCapacityExceeded,
     InvalidActiveFrame,
     LeakedActiveFrames(usize),
+    ExecutionDomain,
 }
 
 impl fmt::Display for InvocationError {
@@ -108,6 +109,9 @@ impl fmt::Display for InvocationError {
                     formatter,
                     "generated invocation leaked {depth} active frames"
                 )
+            }
+            Self::ExecutionDomain => {
+                formatter.write_str("native invocation selected the wrong execution domain")
             }
         }
     }

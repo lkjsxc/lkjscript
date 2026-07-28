@@ -4,14 +4,15 @@ pub(in crate::executable) unsafe fn invoke_typed(
     address: *mut c_void,
     result: ValueType,
     arguments: &[MachineArgument],
-    state: &mut NativeCallState,
+    state: *mut c_void,
 ) -> Result<RawReturn, InvocationError> {
+    let state = state.cast::<NativeCallState>();
     macro_rules! call {
             ($type:ty $(, $argument:expr)*) => {{
                 // SAFETY: The caller validates that `address` is a sealed entry
                 // with the exact closed SysV signature selected by this match.
                 let function: $type = unsafe { std::mem::transmute(address) };
-                function(state as *mut NativeCallState $(, $argument)*)
+                function(state $(, $argument)*)
             }};
         }
 

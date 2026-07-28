@@ -72,6 +72,7 @@ pub(super) fn lower_runtime(
         );
     }
     match operation {
+        RuntimeOp::StdinHandle => builder.runtime_call(block, RuntimeCallSlot::StdinHandle, values),
         RuntimeOp::Add | RuntimeOp::Subtract | RuntimeOp::Multiply | RuntimeOp::Divide => {
             let [left, right] = two_values(&values)?;
             match value_type(value_types, arguments[0])? {
@@ -148,7 +149,9 @@ pub(super) fn lower_runtime(
                 ValueType::F64 => {
                     builder.f64_compare(block, F64Comparison::OrderedEqual, left, right)
                 }
-                ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
+                ValueType::Capability(_) | ValueType::Resource(_) | ValueType::Reference(_) => {
+                    Err(lkjscript_native::PlanError::UnknownValue)
+                }
             }
         }
         RuntimeOp::F64BitsEqual => {

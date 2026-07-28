@@ -20,6 +20,7 @@ pub fn encode(
         .iter()
         .map(|function| (function.id, function.signature.clone()))
         .collect();
+    let execution_domain = execution_domain(&plan.functions);
     let collecting_functions = collecting_function_closure(&plan.functions);
 
     for (function_ordinal, function) in plan.functions.iter().enumerate() {
@@ -35,6 +36,7 @@ pub fn encode(
             function,
             function_ordinal,
             signatures: &signatures,
+            execution_domain,
             collecting_functions: &collecting_functions,
             bytes: &mut bytes,
             relocations: &mut relocations,
@@ -81,12 +83,13 @@ pub fn encode(
         RuntimeCallSlot::IdentityI64 => 1_u8,
         RuntimeCallSlot::Poll => 2_u8,
         RuntimeCallSlot::EnterFunction => 3_u8,
-        RuntimeCallSlot::CollectReference => 4_u8,
-        RuntimeCallSlot::HeapDispatch => 5_u8,
-        RuntimeCallSlot::ReserveFrame => 6_u8,
-        RuntimeCallSlot::RegisterFrame => 7_u8,
-        RuntimeCallSlot::PublishSafepoint => 8_u8,
-        RuntimeCallSlot::UnregisterFrame => 9_u8,
+        RuntimeCallSlot::StdinHandle => 4_u8,
+        RuntimeCallSlot::CollectReference => 5_u8,
+        RuntimeCallSlot::HeapDispatch => 6_u8,
+        RuntimeCallSlot::ReserveFrame => 7_u8,
+        RuntimeCallSlot::RegisterFrame => 8_u8,
+        RuntimeCallSlot::PublishSafepoint => 9_u8,
+        RuntimeCallSlot::UnregisterFrame => 10_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -94,6 +97,7 @@ pub fn encode(
         entries,
         relocations,
         runtime_calls,
+        execution_domain,
         frames,
         safepoints,
         root_requirements,
@@ -111,4 +115,31 @@ pub fn encode(
         )));
     }
     Ok(image)
+}
+
+fn execution_domain(functions: &[FunctionPlan]) -> NativeExecutionDomain {
+    let uses_collector = functions.iter().any(|function| {
+        function
+            .values
+            .iter()
+            .any(|value| matches!(value.value_type, ValueType::Reference(_)))
+            || function
+                .locals
+                .iter()
+                .any(|local| matches!(local.value_type, ValueType::Reference(_)))
+            || function.blocks.iter().any(|block| {
+                block.instructions.iter().any(|instruction| {
+                    matches!(instruction.operation, Operation::HeapCall(_, _))
+                        || matches!(
+                            instruction.operation,
+                            Operation::RuntimeCall(slot, _) if slot.may_collect()
+                        )
+                })
+            })
+    });
+    if uses_collector {
+        NativeExecutionDomain::LegacyHeap
+    } else {
+        NativeExecutionDomain::CollectorFree
+    }
 }

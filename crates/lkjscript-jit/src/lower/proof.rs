@@ -92,7 +92,11 @@ pub(super) fn convert_to_f64(
     match ty {
         ValueType::F64 => Ok(value),
         ValueType::I64 => builder.i64_to_f64(block, value),
-        _ => Err(lkjscript_native::PlanError::UnknownValue),
+        ValueType::Bool
+        | ValueType::Unit
+        | ValueType::Capability(_)
+        | ValueType::Resource(_)
+        | ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
     }
 }
 

@@ -22,6 +22,7 @@ impl InstallableImage {
             entries: parts.entries.into_boxed_slice(),
             relocations: parts.relocations.into_boxed_slice(),
             runtime_calls: parts.runtime_calls.into_boxed_slice(),
+            execution_domain: parts.execution_domain,
             frames: parts.frames.into_boxed_slice(),
             safepoints: parts.safepoints.into_boxed_slice(),
             root_requirements: parts.root_requirements.into_boxed_slice(),

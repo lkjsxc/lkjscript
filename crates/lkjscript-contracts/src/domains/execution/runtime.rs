@@ -14,12 +14,17 @@ pub(crate) fn runtime_calls() -> ContractDescriptor {
             .fact(fact(
                 "poll",
                 "Poll",
-                "(state)->status safepoint collection-capable",
+                "(state)->deadline and fuel status noncollecting",
             ))
             .fact(fact(
                 "enter-function",
                 "EnterFunction",
                 "(state,function)->status",
+            ))
+            .fact(fact(
+                "standard-input",
+                "StdinHandle",
+                "(island-state,capability/stdio)->resource/input-stream",
             ))
             .fact(fact(
                 "collect-reference",
@@ -76,6 +81,11 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                     "bounded runtime-call relocations",
                 ))
                 .fact(fact("frames", "frames", "exact native frame layout"))
+                .fact(fact(
+                    "execution-domain",
+                    "execution-domain",
+                    "closed collector-free or legacy-heap dispatch table",
+                ))
                 .fact(fact(
                     "heap-sites",
                     "heap-sites",

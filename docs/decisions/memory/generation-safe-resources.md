@@ -5,12 +5,12 @@
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 
 **Accepted end-to-end contract with Current core, VM, and evaluator lifecycle
-foundations.** The host-independent core table and both interpreter foundations
-cover all eleven kinds, reusable nonwrapping slots, provider/scope binding,
-stale-key rejection, reservations, invalidating close, reverse emergency
-cleanup, and exact obligations. The evaluator uses deterministic fake owners;
-its resource-operation dispatch remains absent. Capability promotion remains
-blocked by compiler cleanup on every outcome and generated native execution.
+foundations.** They cover all eleven kinds, reusable nonwrapping slots,
+provider/scope binding, stale-key rejection, reservations, invalidating close,
+reverse emergency cleanup, and exact obligations. The evaluator uses fake
+owners without resource-operation dispatch. Forced native tiers implement only
+borrowed `standard-input` over an invocation-owned core table. Promotion remains
+blocked by compiler cleanup on every outcome and owned native resource execution.
 
 ## Key And Slot
 
@@ -67,14 +67,18 @@ structured bounded failure attachment remains Accepted Contract work.
 ## Native Contract
 
 Forced native execution preflights the complete function group before effects.
-Supported resource runtime calls are contract-digested and closed. Unsupported
-operations reject preflight rather than falling back to VM or tracing.
+The Current closed native subset is `standard-input` with exact `stdio`
+capability and `input-stream` result. It reserves one borrowed table entry,
+reuses it within the invocation, removes it at teardown, and has no collector
+state, roots, safepoints, heap dispatch, or fallback. Owned open/read/write and
+explicit close remain unsupported and reject preflight before effects.
 
 ## Verification
 
 Core, VM, and evaluator lifecycle tests cover all kinds, wrong-kind access
-before effects, provider and scope mismatch, borrowed standard streams,
-explicit close, reuse, stale generations, failed acquisition, SQLite
-parent/child protection, reverse cleanup order, and emergency teardown
-reporting. Evaluator resource operations, compiler all-outcome cleanup, and
-generated native resource support remain absent.
+before effects, provider and scope mismatch, borrowed streams, explicit close,
+reuse, stale generations, generation exhaustion, failed acquisition, SQLite
+parent/child protection, reverse cleanup, and emergency teardown. Native tests
+add exact borrowed reservation/reuse/removal and zero obligations in both forced
+tiers. Evaluator resource operations, compiler all-outcome cleanup, and owned
+native resource support remain absent.

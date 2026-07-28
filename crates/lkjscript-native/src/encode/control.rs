@@ -23,7 +23,11 @@ impl FunctionEncoder<'_> {
                 ));
                 self.emit_unregister_frame()?;
                 match self.value_type(*value)? {
-                    ValueType::I64 | ValueType::Bool | ValueType::Reference(_) => {
+                    ValueType::I64
+                    | ValueType::Bool
+                    | ValueType::Capability(_)
+                    | ValueType::Resource(_)
+                    | ValueType::Reference(_) => {
                         self.load_rax(self.value_offset(*value)?)?;
                     }
                     ValueType::F64 => {

@@ -128,7 +128,10 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
                 "collecting runtime-call signature",
             ));
         }
-        RuntimeCallSlot::IdentityI64 | RuntimeCallSlot::Poll | RuntimeCallSlot::EnterFunction => {}
+        RuntimeCallSlot::IdentityI64
+        | RuntimeCallSlot::Poll
+        | RuntimeCallSlot::EnterFunction
+        | RuntimeCallSlot::StdinHandle => {}
         RuntimeCallSlot::HeapDispatch
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame

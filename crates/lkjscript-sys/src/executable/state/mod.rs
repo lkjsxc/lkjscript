@@ -3,9 +3,14 @@ use super::*;
 mod collection;
 mod frames;
 mod heap;
+mod island;
+mod island_frames;
+mod island_stack;
 mod lifecycle;
 mod roots;
 mod stack;
+
+pub(super) use island::*;
 
 pub(super) const MAX_NATIVE_ENTRY_COUNTS: usize = 64;
 pub(super) const MAX_ACTIVE_FRAMES: usize = 64;

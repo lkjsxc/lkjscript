@@ -107,6 +107,12 @@ impl fmt::Display for LoweringError {
 
 impl std::error::Error for LoweringError {}
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LoweringDomain {
+    ResourceIsland,
+    Legacy,
+}
+
 pub(crate) struct LoweredGroup {
     pub(crate) image: InstallableImage,
     pub(crate) functions: Vec<FunctionId>,

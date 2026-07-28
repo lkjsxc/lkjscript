@@ -5,7 +5,9 @@
 <!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
 
 **Accepted contract; not Current until all listed types execute through every
-required engine with zero collector interaction and zero fallback.**
+required engine with zero collector interaction and zero fallback.** Forced
+native tiers currently cover the scalar set plus `stdio` capability to borrowed
+`input-stream`; this subset does not promote the complete island.
 
 ## Type Set
 
@@ -41,6 +43,10 @@ budgets, deadlines, outcomes, and transitions, but no collector root map or
 collection poll.
 
 ## Required Evidence
+
+The implemented native subset selects a separate noncollecting call state and
+closed dispatch table before entry. Its images contain no safepoints or root
+maps, and invocation does not construct `GcHeap` or `JitHeapServices`.
 
 Each island execution records zero deltas for:
 

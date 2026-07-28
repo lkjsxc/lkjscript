@@ -38,10 +38,14 @@ pub(super) fn lower_instruction(
             ),
             Constant::Symbol(_) => return unsupported_operation(function.id, "Symbol constant"),
         },
-        InstructionKind::Copy(value) => {
+        InstructionKind::Copy(value) | InstructionKind::Move { value, .. } => {
             let value = read_value(builder, block, locals, *value, function.id)?;
             Ok(value)
         }
+        InstructionKind::PlaceInit { .. }
+        | InstructionKind::PlaceEnd { .. }
+        | InstructionKind::EndBorrow { .. }
+        | InstructionKind::Drop { .. } => builder.unit(block),
         InstructionKind::Runtime {
             operation,
             arguments,
@@ -171,7 +175,12 @@ pub(super) fn lower_instruction(
             layouts,
             builder,
         ),
-        _ => return unsupported_operation(function.id, "ownership/reference operation"),
+        InstructionKind::Borrow { .. } => {
+            return unsupported_operation(function.id, "borrow operation")
+        }
+        InstructionKind::FunctionRef(_) => {
+            return unsupported_operation(function.id, "first-class function reference")
+        }
     }
     .map_err(LoweringError::backend)?;
     builder

@@ -1,10 +1,10 @@
 #![allow(clippy::panic)]
 
 use lkjscript_native::{
-    encode, AllocationClass, BackendLimits, EncodingConfig, FrameHomeKind, HeapCallDescriptor,
-    HeapOperation, InternalMachineArgument, InternalMachineResult, LayoutIdentity,
-    MachinePlanBuilder, NativeError, PlanError, ReferenceType, RuntimeCallSlot, Signature,
-    SourceFunctionId, StoreClass, ValueType, VerificationError,
+    encode, AllocationClass, BackendLimits, CapabilityKind, EncodingConfig, FrameHomeKind,
+    HeapCallDescriptor, HeapOperation, InternalMachineArgument, InternalMachineResult,
+    LayoutIdentity, MachinePlanBuilder, NativeError, PlanError, ReferenceType, ResourceKind,
+    RuntimeCallSlot, Signature, SourceFunctionId, StoreClass, ValueType, VerificationError,
 };
 
 mod control;

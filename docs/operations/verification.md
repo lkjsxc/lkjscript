@@ -105,6 +105,13 @@ stale revisions, external edits, refresh, publication revision advance,
 lifetime/request/revision limits, deterministic responses, shutdown, and CLI
 stdout isolation.
 
+Focused native resource-island tests cover exact capability/resource ABI
+categories, wrong capability and resource kinds, whole-group rejection of
+unsupported operations and reachable traced types, forced baseline/proof
+`standard-input` entries, VM outcome equality, zero fallback/transitions,
+zero collector runtime construction/calls/roots/safepoints/heap/barriers, and
+exact borrowed reservation/install/reuse/removal with zero obligations.
+
 Focused scalar tests cover the safe closed 16-byte `Value`, complete-range i64,
 exact f64 payloads including NaNs and signed zero, inline constants/locals/calls/
 returns, VM/native and detached-return transitions, SQLite f64 binding, zero

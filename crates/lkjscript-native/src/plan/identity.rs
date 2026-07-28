@@ -44,6 +44,8 @@ pub enum ValueType {
     F64,
     Bool,
     Unit,
+    Capability(lkjscript_contracts::CapabilityKind),
+    Resource(lkjscript_contracts::ResourceKind),
     Reference(ReferenceType),
 }
 
@@ -52,7 +54,12 @@ impl ValueType {
     pub const fn reference_type(self) -> Option<ReferenceType> {
         match self {
             Self::Reference(reference_type) => Some(reference_type),
-            Self::I64 | Self::F64 | Self::Bool | Self::Unit => None,
+            Self::I64
+            | Self::F64
+            | Self::Bool
+            | Self::Unit
+            | Self::Capability(_)
+            | Self::Resource(_) => None,
         }
     }
 
@@ -67,6 +74,8 @@ impl ValueType {
             Self::F64 => LayoutIdentity::new(4),
             Self::Reference(ReferenceType::Str) => LayoutIdentity::new(5),
             Self::Reference(ReferenceType::Buf) => LayoutIdentity::new(7),
+            Self::Capability(kind) => LayoutIdentity::new(8 + kind as u32),
+            Self::Resource(kind) => LayoutIdentity::new(16 + kind as u32),
             Self::Reference(ReferenceType::Product(layout))
             | Self::Reference(ReferenceType::List(layout, _))
             | Self::Reference(ReferenceType::Enum(layout, _)) => layout,

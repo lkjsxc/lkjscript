@@ -5,11 +5,11 @@
 **Accepted contract with implemented foundation.** Universal source `handle` is
 removed. Exact kinds now cross source typing, HIR, verified SSA, bytecode
 validation, and VM resource-kind checks. Core, VM, and evaluator lifecycle
-foundations now enforce provider/state facts and reusable generations. The
-complete capability remains non-Current until exactly-once cleanup, evaluator
-resource-operation dispatch, forced native host execution, malformed-input,
-and acceptance coverage are complete. An opaque runtime token alone does not
-qualify.
+foundations enforce provider/state facts and reusable generations. The complete
+capability remains non-Current until exactly-once cleanup, evaluator resource
+operation dispatch, owned native host execution, malformed-input, and acceptance
+coverage are complete. Forced native support is currently only borrowed
+`standard-input`; an opaque runtime token alone does not qualify.
 
 ## Closed initial kinds
 
@@ -92,7 +92,9 @@ proofs.
 
 VM and forced native execution preflight complete reachable support, preserve
 ownership and exact roots, execute cleanup, produce real native entries, and
-never silently fall back. An unsupported tier rejects before effects.
+never silently fall back. Current forced native support is the collector-free
+`stdio` capability to borrowed `input-stream` operation only. Owned operations,
+including explicit close, reject before effects.
 
 ## Public operations
 

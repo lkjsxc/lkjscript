@@ -22,6 +22,11 @@ impl InstallableImage {
     }
 
     #[must_use]
+    pub const fn execution_domain(&self) -> NativeExecutionDomain {
+        self.execution_domain
+    }
+
+    #[must_use]
     pub fn frames(&self) -> &[FrameFacts] {
         &self.frames
     }

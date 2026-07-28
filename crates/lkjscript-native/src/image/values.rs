@@ -61,6 +61,12 @@ impl Default for ImageContracts {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeExecutionDomain {
+    CollectorFree,
+    LegacyHeap,
+}
+
 /// Copyable, worker-local runtime-adapter token. The opaque word is never
 /// interpreted as an object address by the native ABI. The ownership marker
 /// intentionally makes this token non-Send and non-Sync; it is not a source
@@ -104,12 +110,42 @@ impl NativeReference {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeResource {
+    resource_kind: lkjscript_contracts::ResourceKind,
+    opaque_word: u64,
+    worker_owner: PhantomData<Rc<()>>,
+}
+
+impl NativeResource {
+    #[must_use]
+    pub const fn new(resource_kind: lkjscript_contracts::ResourceKind, opaque_word: u64) -> Self {
+        Self {
+            resource_kind,
+            opaque_word,
+            worker_owner: PhantomData,
+        }
+    }
+
+    #[must_use]
+    pub const fn resource_kind(self) -> lkjscript_contracts::ResourceKind {
+        self.resource_kind
+    }
+
+    #[must_use]
+    pub const fn opaque_word(self) -> u64 {
+        self.opaque_word
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NativeValue {
     I64(i64),
     F64Bits(u64),
     Bool(bool),
     Unit,
+    Capability(lkjscript_contracts::CapabilityKind),
+    Resource(NativeResource),
     Reference(NativeReference),
 }
 
@@ -126,6 +162,8 @@ impl NativeValue {
             Self::F64Bits(_) => ValueType::F64,
             Self::Bool(_) => ValueType::Bool,
             Self::Unit => ValueType::Unit,
+            Self::Capability(kind) => ValueType::Capability(kind),
+            Self::Resource(resource) => ValueType::Resource(resource.resource_kind()),
             Self::Reference(reference) => ValueType::Reference(reference.reference_type()),
         }
     }

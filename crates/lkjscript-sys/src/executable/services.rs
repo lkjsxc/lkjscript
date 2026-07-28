@@ -102,6 +102,10 @@ pub enum NativeServiceError {
 
 /// Safe runtime boundary. Implementations receive only copied typed values and
 /// roots; frame addresses and stack traversal remain private to this crate.
+pub trait NativeIslandRuntimeServices {
+    fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError>;
+}
+
 pub trait NativeRuntimeServices {
     fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError>;
 
@@ -121,6 +125,15 @@ pub trait NativeRuntimeServices {
         _site: &HeapRuntimeSite,
         _arguments: &[NativeValue],
     ) -> Result<NativeValue, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+}
+
+#[derive(Default)]
+pub(super) struct NoopNativeIslandRuntimeServices;
+
+impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
+    fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
 }

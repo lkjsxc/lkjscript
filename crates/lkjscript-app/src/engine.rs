@@ -2,7 +2,10 @@ use std::time::{Duration, Instant};
 
 use lkjscript_compiler::ExecutableProgram;
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
-use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig, JitSession, JitStats};
+use lkjscript_jit::{
+    execute_forced_with_capabilities, execute_optimizing_with_capabilities, JitConfig, JitSession,
+    JitStats,
+};
 use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
 
 use crate::args::{Engine, RunOptions};
@@ -32,13 +35,23 @@ pub fn execute(
             (outcome, None)
         }
         Engine::BaselineJit => {
-            let execution = execute_forced(program.ssa(), config, jit_config)
-                .map_err(|error| format!("engine error: {error}"))?;
+            let execution = execute_forced_with_capabilities(
+                program.ssa(),
+                &inputs.capabilities,
+                config,
+                jit_config,
+            )
+            .map_err(|error| format!("engine error: {error}"))?;
             (execution.outcome, Some(execution.stats))
         }
         Engine::OptimizingJit => {
-            let execution = execute_optimizing(program.ssa(), config, jit_config)
-                .map_err(|error| format!("engine error: {error}"))?;
+            let execution = execute_optimizing_with_capabilities(
+                program.ssa(),
+                &inputs.capabilities,
+                config,
+                jit_config,
+            )
+            .map_err(|error| format!("engine error: {error}"))?;
             (execution.outcome, Some(execution.stats))
         }
         Engine::Auto => {

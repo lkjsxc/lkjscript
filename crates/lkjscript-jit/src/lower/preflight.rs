@@ -4,8 +4,19 @@ pub(super) fn preflight_function(
     program: &lkjscript_ir::Program,
     function: &Function,
     layouts: &LayoutInterner,
+    domain: LoweringDomain,
 ) -> Result<(), LoweringError> {
     lower_signature(function.id, &function.signature, layouts)?;
+    if domain == LoweringDomain::ResourceIsland {
+        for ty in function
+            .signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(function.signature.result.as_ref()))
+        {
+            require_resource_island_type(function.id, ty)?;
+        }
+    }
     if function.id.raw() >= 64 {
         return Err(LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
@@ -16,9 +27,15 @@ pub(super) fn preflight_function(
     for block in &function.blocks {
         for parameter in &block.parameters {
             lower_type(function.id, &parameter.ty, layouts)?;
+            if domain == LoweringDomain::ResourceIsland {
+                require_resource_island_type(function.id, &parameter.ty)?;
+            }
         }
         for instruction in &block.instructions {
             lower_type(function.id, &instruction.ty, layouts)?;
+            if domain == LoweringDomain::ResourceIsland {
+                require_resource_island_type(function.id, &instruction.ty)?;
+            }
             match &instruction.kind {
                 InstructionKind::Constant(constant) => match constant {
                     Constant::Unit
@@ -31,19 +48,29 @@ pub(super) fn preflight_function(
                         return unsupported_operation(function.id, "Symbol constant")
                     }
                 },
+                InstructionKind::Copy(_)
+                    if domain == LoweringDomain::ResourceIsland
+                        && matches!(instruction.ty, SsaType::Resource(_)) =>
+                {
+                    return unsupported_operation(function.id, "copy of affine resource");
+                }
                 InstructionKind::Copy(_) => {}
                 InstructionKind::PlaceInit { .. }
                 | InstructionKind::PlaceEnd { .. }
                 | InstructionKind::EndBorrow { .. }
                 | InstructionKind::Drop { .. }
                 | InstructionKind::Move { .. }
+                    if domain == LoweringDomain::ResourceIsland => {}
+                InstructionKind::PlaceInit { .. }
+                | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::EndBorrow { .. }
+                | InstructionKind::Drop { .. }
+                | InstructionKind::Move { .. }
                 | InstructionKind::Borrow { .. } => {
-                    return unsupported_operation(
-                        function.id,
-                        "ownership/reference operation in initial Owned Buf slice",
-                    );
+                    return unsupported_operation(function.id, "ownership/reference operation");
                 }
-                InstructionKind::Runtime { operation, .. } if supported_runtime(*operation) => {}
+                InstructionKind::Runtime { operation, .. }
+                    if supported_runtime(*operation, domain) => {}
                 InstructionKind::F64FromI64Exact { .. }
                 | InstructionKind::F64FromI64Rounded { .. }
                 | InstructionKind::I64FromF64Exact { .. }
@@ -94,7 +121,10 @@ pub(super) fn preflight_function(
     Ok(())
 }
 
-pub(super) fn supported_runtime(operation: RuntimeOp) -> bool {
+pub(super) fn supported_runtime(operation: RuntimeOp, domain: LoweringDomain) -> bool {
+    if domain == LoweringDomain::ResourceIsland && operation == RuntimeOp::StdinHandle {
+        return true;
+    }
     matches!(
         operation,
         RuntimeOp::Add

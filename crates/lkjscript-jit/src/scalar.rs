@@ -53,17 +53,30 @@ pub(crate) fn scalar_to_execution(
         ScalarInvocationOutcome::Returned(value) => {
             let owned = match value {
                 NativeValue::Reference(reference) => {
-                    let value =
-                        native_reference_value(&session.heap, reference).map_err(|error| {
-                            EngineError::new(FailureCode::InvocationFailure, Some(function), error)
-                        })?;
-                    session.heap.snapshot(value).map_err(|error| {
+                    let heap = session.heap.as_ref().ok_or_else(|| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            "collector-free invocation returned a legacy reference",
+                        )
+                    })?;
+                    let value = native_reference_value(heap, reference).map_err(|error| {
+                        EngineError::new(FailureCode::InvocationFailure, Some(function), error)
+                    })?;
+                    heap.snapshot(value).map_err(|error| {
                         EngineError::new(
                             FailureCode::InvocationFailure,
                             Some(function),
                             error.to_string(),
                         )
                     })?
+                }
+                NativeValue::Capability(_) | NativeValue::Resource(_) => {
+                    return Err(EngineError::new(
+                        FailureCode::InvocationFailure,
+                        Some(function),
+                        "capability or resource escaped the native root",
+                    ));
                 }
                 scalar => owned_scalar(scalar).map_err(|error| {
                     EngineError::new(
@@ -102,9 +115,9 @@ pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedVa
         NativeValue::F64Bits(bits) => {
             OwnedValue::from_vm_snapshot(Value::from_f64_bits(bits), Vec::new())
         }
-        NativeValue::Reference(_) => Err(lkjscript_core::Error::msg(
-            "scalar JIT cannot return a native reference",
-        )),
+        NativeValue::Capability(_) | NativeValue::Resource(_) | NativeValue::Reference(_) => Err(
+            lkjscript_core::Error::msg("scalar JIT cannot return a native adapter value"),
+        ),
     }
 }
 

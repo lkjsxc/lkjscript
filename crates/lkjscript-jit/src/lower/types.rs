@@ -37,6 +37,8 @@ pub(super) fn lower_type(
         SsaType::Bool => Ok(ValueType::Bool),
         SsaType::I64 => Ok(ValueType::I64),
         SsaType::F64 => Ok(ValueType::F64),
+        SsaType::Capability(kind) => Ok(ValueType::Capability(*kind)),
+        SsaType::Resource(kind) => Ok(ValueType::Resource(*kind)),
         SsaType::Str => Ok(ValueType::Reference(ReferenceType::Str)),
         SsaType::Buf => Ok(ValueType::Reference(ReferenceType::Buf)),
         SsaType::Product(product) => Ok(ValueType::Reference(ReferenceType::Product(
@@ -71,6 +73,29 @@ pub(super) fn lower_type(
             Some(function),
             format!("type {ty:?} contains a reference or unsupported native representation"),
         )),
+    }
+}
+
+pub(super) fn require_resource_island_type(
+    function: FunctionId,
+    ty: &SsaType,
+) -> Result<(), LoweringError> {
+    if matches!(
+        ty,
+        SsaType::Unit
+            | SsaType::Bool
+            | SsaType::I64
+            | SsaType::F64
+            | SsaType::Capability(_)
+            | SsaType::Resource(_)
+    ) {
+        Ok(())
+    } else {
+        Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            format!("type {ty:?} is reachable from a collector-free resource group"),
+        ))
     }
 }
 

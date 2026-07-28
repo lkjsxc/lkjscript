@@ -44,7 +44,10 @@ Package verification bounds grants; bytecode records exact main requirements;
 VM entry validates them before source effects. Acquired handles remain object
 capabilities and do not repeat provider parameters on every operation.
 Capability-bearing functions remain VM-only where a native tier lacks the exact
-value and operation contract; forced tiers reject before effects without fallback.
+value and operation contract; forced tiers reject before effects without
+fallback. The sole Current native resource operation is `standard-input` from
+exact `stdio` capability to borrowed `input-stream`, dispatched through a
+noncollecting invocation state and invocation-owned core resource table.
 
 Linux x86-64 callable baseline and forced proof-optimizing claims require real
 synchronous generated entry from verified SSA. Exact Current coverage and

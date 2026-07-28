@@ -17,6 +17,7 @@ pub enum ImageIntegrityError {
     TrapMap,
     OutcomeMap,
     RuntimeCallSet,
+    ExecutionDomain,
 }
 
 impl fmt::Display for ImageIntegrityError {
@@ -41,6 +42,7 @@ impl fmt::Display for ImageIntegrityError {
             Self::TrapMap => "installable image trap map is invalid",
             Self::OutcomeMap => "installable image outcome map is invalid",
             Self::RuntimeCallSet => "installable image runtime-call set is invalid",
+            Self::ExecutionDomain => "installable image execution domain is invalid",
         };
         formatter.write_str(message)
     }
