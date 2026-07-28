@@ -1,0 +1,194 @@
+{
+  "affinities": [
+    "cpu-pinned",
+    "kernel-managed",
+    "llc-domain-masked"
+  ],
+  "affinity_normalized_p50": {
+    "cpu-pinned": {
+      "mean": 1.075952294881633,
+      "median": 1.0006703357892397,
+      "worst": 1.698171069825304
+    },
+    "kernel-managed": {
+      "mean": 1.1107809769739259,
+      "median": 1.0315248053018529,
+      "worst": 1.4260533513892726
+    },
+    "llc-domain-masked": {
+      "mean": 1.2770160875871133,
+      "median": 1.2324232629790908,
+      "worst": 1.9141500755090273
+    }
+  },
+  "all_policy_normalized_p50": {
+    "global-fifo": {
+      "mean_normalized_p50": 1.3001128261169654,
+      "median_normalized_p50": 1.1993261433182059,
+      "wins": 2,
+      "worst_normalized_p50": 2.759432756800023
+    },
+    "hierarchical-locality": {
+      "mean_normalized_p50": 1.2551249279538153,
+      "median_normalized_p50": 1.064419873423182,
+      "wins": 4,
+      "worst_normalized_p50": 2.8288048064265703
+    },
+    "local-work-stealing": {
+      "mean_normalized_p50": 1.2390994850038157,
+      "median_normalized_p50": 1.08195052276362,
+      "wins": 0,
+      "worst_normalized_p50": 2.5988986879728433
+    },
+    "owner-compute": {
+      "mean_normalized_p50": 1.2437360613594424,
+      "median_normalized_p50": 1.0349515706122336,
+      "wins": 5,
+      "worst_normalized_p50": 2.665469238966387
+    },
+    "sequential": {
+      "mean_normalized_p50": 1.946881465077301,
+      "median_normalized_p50": 1.6747845377479096,
+      "wins": 7,
+      "worst_normalized_p50": 3.6871501149777224
+    },
+    "static-partition": {
+      "mean_normalized_p50": 1.4473971154560337,
+      "median_normalized_p50": 1.3752689139973606,
+      "wins": 0,
+      "worst_normalized_p50": 2.813056623061011
+    }
+  },
+  "cases": 18,
+  "commit": "52ddc5cbe3d95e455cd78afbab411a7a93c51596",
+  "interference_cpu0_yes_degradation": {
+    "global-fifo": {
+      "median_p50_ratio": 3.7708257963016836,
+      "worst_p50_ratio": 6.855866688068174
+    },
+    "hierarchical-locality": {
+      "median_p50_ratio": 3.7538758897808377,
+      "worst_p50_ratio": 6.157819238443785
+    },
+    "local-work-stealing": {
+      "median_p50_ratio": 3.8114933545676424,
+      "worst_p50_ratio": 6.092067400568592
+    },
+    "owner-compute": {
+      "median_p50_ratio": 2.7217903565378854,
+      "worst_p50_ratio": 5.292354799908355
+    },
+    "sequential": {
+      "median_p50_ratio": 0.9924120931723693,
+      "worst_p50_ratio": 1.0317544892235193
+    },
+    "static-partition": {
+      "median_p50_ratio": 3.3583682273083255,
+      "worst_p50_ratio": 6.577940791837673
+    }
+  },
+  "parallel_policy_normalized_p50": {
+    "global-fifo": {
+      "mean_normalized_p50": 1.0967170297165565,
+      "median_normalized_p50": 1.0280146824022887,
+      "wins": 5,
+      "worst_normalized_p50": 1.4424311176873539
+    },
+    "hierarchical-locality": {
+      "mean_normalized_p50": 1.0457465506148496,
+      "median_normalized_p50": 1.032684996361475,
+      "wins": 4,
+      "worst_normalized_p50": 1.1703155756870507
+    },
+    "local-work-stealing": {
+      "mean_normalized_p50": 1.0394206188155883,
+      "median_normalized_p50": 1.0210233609622543,
+      "wins": 3,
+      "worst_normalized_p50": 1.1640973189134385
+    },
+    "owner-compute": {
+      "mean_normalized_p50": 1.0399598699913468,
+      "median_normalized_p50": 1.0195186005555654,
+      "wins": 5,
+      "worst_normalized_p50": 1.2973504253449817
+    },
+    "static-partition": {
+      "mean_normalized_p50": 1.231809383465025,
+      "median_normalized_p50": 1.1039457062263858,
+      "wins": 1,
+      "worst_normalized_p50": 1.7031156539896248
+    }
+  },
+  "policy_telemetry_totals": {
+    "global-fifo": {
+      "cross-group-steals": 0,
+      "cross-numa-steals": 0,
+      "parks": 9,
+      "remote-releases": 11520,
+      "same-group-steals": 44966,
+      "steals": 44966,
+      "transfers": 11520
+    },
+    "hierarchical-locality": {
+      "cross-group-steals": 0,
+      "cross-numa-steals": 0,
+      "parks": 10,
+      "remote-releases": 11520,
+      "same-group-steals": 11610,
+      "steals": 11610,
+      "transfers": 11520
+    },
+    "local-work-stealing": {
+      "cross-group-steals": 0,
+      "cross-numa-steals": 0,
+      "parks": 10,
+      "remote-releases": 11520,
+      "same-group-steals": 11652,
+      "steals": 11652,
+      "transfers": 11520
+    },
+    "owner-compute": {
+      "cross-group-steals": 0,
+      "cross-numa-steals": 0,
+      "parks": 18,
+      "remote-releases": 11520,
+      "same-group-steals": 10909,
+      "steals": 10909,
+      "transfers": 11520
+    },
+    "sequential": {
+      "cross-group-steals": 0,
+      "cross-numa-steals": 0,
+      "parks": 0,
+      "remote-releases": 11520,
+      "same-group-steals": 0,
+      "steals": 0,
+      "transfers": 11520
+    },
+    "static-partition": {
+      "cross-group-steals": 0,
+      "cross-numa-steals": 0,
+      "parks": 1914,
+      "remote-releases": 11520,
+      "same-group-steals": 0,
+      "steals": 0,
+      "transfers": 11520
+    }
+  },
+  "proof_tsv_sha256": "fc66b11861d252139790a9a1e84dedc69cc9ac963fa11ab941e85cc0924d6f3e",
+  "raw_tsv_sha256": {
+    "cpu-pinned": "1f5f829443bad459cccf61eabb3517e674828ae0cc972d0b9294eea94ddd479f",
+    "interference": "866b6ca5ab2423e678a698289be55b727dddf87a7f1eef54592cba2773f3bfe0",
+    "kernel-managed": "ebc585630353509865c8aa3ef748443470696e34e202a4e5f0f412a8fe9044ce",
+    "llc-domain-masked": "b2d21f00c0eae215786396d7ee99dc54181594b8afc2f2ffe0cc85816a66d12b"
+  },
+  "schema": "lkjscript.resource-policy-summary.v1",
+  "workloads": [
+    "false-sharing",
+    "imbalanced",
+    "owner-transfer",
+    "padded-metadata",
+    "reuse",
+    "streaming"
+  ]
+}

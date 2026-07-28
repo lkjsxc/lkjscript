@@ -3,32 +3,33 @@ use super::*;
 #[derive(Debug)]
 pub(super) struct InstallerState {
     pub(super) limits: ExecutableLimits,
-    pub(super) usage: Cell<ExecutableUsage>,
+    pub(super) usage: Mutex<ExecutableUsage>,
 }
 
-/// Bounded non-Send executable allocation session. Installed images retain an
-/// owned lease on this state, so mappings cannot outlive their accounting.
+/// Bounded executable allocation session. Installed images retain a shared
+/// accounted lease, so mappings cannot outlive their installer state.
 #[derive(Clone, Debug)]
 pub struct ExecutableInstaller {
-    pub(super) state: Rc<InstallerState>,
-    pub(super) not_send_or_sync: PhantomData<Rc<()>>,
+    pub(super) state: Arc<InstallerState>,
 }
 
 impl ExecutableInstaller {
     #[must_use]
     pub fn new(limits: ExecutableLimits) -> Self {
         Self {
-            state: Rc::new(InstallerState {
+            state: Arc::new(InstallerState {
                 limits,
-                usage: Cell::new(ExecutableUsage::default()),
+                usage: Mutex::new(ExecutableUsage::default()),
             }),
-            not_send_or_sync: PhantomData,
         }
     }
 
     #[must_use]
     pub fn usage(&self) -> ExecutableUsage {
-        self.state.usage.get()
+        match self.state.usage.lock() {
+            Ok(usage) => *usage,
+            Err(poisoned) => *poisoned.into_inner(),
+        }
     }
 
     pub fn install(&self, image: InstallableImage) -> Result<InstalledImage, InstallError> {
@@ -61,7 +62,11 @@ impl ExecutableInstaller {
             self.state.limits.max_object_work_units,
             ExecutableLimitKind::ObjectWorkUnits,
         )?;
-        let next_usage = checked_usage(self.state.usage.get(), accounting, self.state.limits)?;
+        let mut usage = match self.state.usage.lock() {
+            Ok(usage) => usage,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let next_usage = checked_usage(*usage, accounting, self.state.limits)?;
         let mut mapping = platform::Mapping::allocate_rw(image.bytes().len())?;
         mapping.copy_from(image.bytes())?;
         for item in image.relocations() {
@@ -80,9 +85,10 @@ impl ExecutableInstaller {
             mapping.write_absolute64(item.offset() as usize, address)?;
         }
         mapping.seal_rx()?;
-        self.state.usage.set(next_usage);
+        *usage = next_usage;
+        drop(usage);
         Ok(InstalledImage {
-            installer: Rc::clone(&self.state),
+            installer: Arc::clone(&self.state),
             image,
             mapping,
             usage: ExecutableUsage {
@@ -91,7 +97,6 @@ impl ExecutableInstaller {
                 work_units: accounting.work_units(),
                 objects: 1,
             },
-            not_send_or_sync: PhantomData,
         })
     }
 }

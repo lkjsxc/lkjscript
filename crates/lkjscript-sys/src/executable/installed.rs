@@ -4,11 +4,10 @@ mod island;
 
 #[derive(Debug)]
 pub struct InstalledImage {
-    pub(super) installer: Rc<InstallerState>,
+    pub(super) installer: Arc<InstallerState>,
     pub(super) image: InstallableImage,
     pub(super) mapping: platform::Mapping,
     pub(super) usage: ExecutableUsage,
-    pub(super) not_send_or_sync: PhantomData<Rc<()>>,
 }
 
 impl InstalledImage {
@@ -176,14 +175,17 @@ impl InstalledImage {
 
 impl Drop for InstalledImage {
     fn drop(&mut self) {
-        let current = self.installer.usage.get();
-        self.installer.usage.set(ExecutableUsage {
+        let mut current = match self.installer.usage.lock() {
+            Ok(usage) => usage,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *current = ExecutableUsage {
             code_bytes: current.code_bytes.saturating_sub(self.usage.code_bytes),
             metadata_bytes: current
                 .metadata_bytes
                 .saturating_sub(self.usage.metadata_bytes),
             work_units: current.work_units.saturating_sub(self.usage.work_units),
             objects: current.objects.saturating_sub(1),
-        });
+        };
     }
 }

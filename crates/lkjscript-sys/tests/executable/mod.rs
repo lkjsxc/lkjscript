@@ -6,8 +6,8 @@ use lkjscript_native::{
     SourceFunctionId, TrapCode, ValueType,
 };
 use lkjscript_sys::executable::{
-    ExecutableInstaller, ExecutableLimitKind, ExecutableLimits, InstallError, InvocationOutcome,
-    NativeInvocationConfig,
+    ExecutableInstaller, ExecutableLimitKind, ExecutableLimits, InstallError, InvocationError,
+    InvocationOutcome, NativeInvocationConfig,
 };
 
 #[derive(Clone, Copy)]
@@ -32,6 +32,7 @@ struct Entries {
 }
 
 mod calls;
+mod concurrent;
 mod control;
 mod declarations;
 mod limits;

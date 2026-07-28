@@ -12,7 +12,12 @@ monomorphic enum operations, is installed in W^X memory and actually called.
 Exact current coverage and unsupported native semantics are recorded in [Current State](../../current-state.md) and
 [Callable Baseline JIT](../../runtime/baseline-jit.md). Native references,
 allocation, host IO, recursion, OSR, background work, and optimizing tiers are
-not made Current by this completion.
+not made Current by this completion. A sealed installed image is immutable and
+may be shared across worker threads for concurrent invocation. Every call owns
+its frame/root/unique/runtime-service state; installer accounting is synchronized,
+image lifetime encloses all calls, and mapping teardown occurs only after the
+last shared owner. Installation remains a private RW phase followed by verified
+RX sealing before publication.
 
 ## Authority And Status Vocabulary
 

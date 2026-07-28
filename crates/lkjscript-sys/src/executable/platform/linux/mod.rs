@@ -46,6 +46,14 @@ pub(in crate::executable) struct Mapping {
     wx_transition_verified: bool,
 }
 
+// SAFETY: Mapping uniquely owns one mmap allocation. Moving ownership does not
+// invalidate the address, and Drop unmaps exactly once after ownership ends.
+unsafe impl Send for Mapping {}
+// SAFETY: Mapping is exposed across threads only through InstalledImage after
+// seal_rx succeeds. The mapping is then immutable RX memory; invocation creates
+// per-call state and performs no writes through Mapping.
+unsafe impl Sync for Mapping {}
+
 mod abi_call;
 mod invocation;
 mod mapping;

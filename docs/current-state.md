@@ -25,6 +25,7 @@
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
+<!-- LKJ-STATUS id=semantic-resource-runtime status=current -->
 <!-- LKJ-STATUS id=semantic-session status=current -->
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
@@ -84,9 +85,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Exact drop glue for deterministic `byte-vector` and all eleven resource kinds
   reaches affine SSA place metadata. Verified SSA has explicit loan-end and
   whole-place-drop events, rejects owner-erasing `place-end`, proves
-  static/dead/conditional discharge at joins and explicit terminators, and
-  pairs explicit `drop`, SQLite close,
-  and SQLite finalize with exact resource-drop events.
+  static/dead/conditional discharge at joins and explicit terminators, and pairs
+  explicit `drop`, SQLite close, and SQLite finalize with exact resource-drop events.
 - Byte-vector and owned typed-resource cleanup is elaborated on normal lexical
   and source-level return, break, continue, trap, and exit paths. Each live SSA
   failure site names an exact interned cleanup plan independently reconstructed
@@ -98,15 +98,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   byte owners execute through all four engines, and conditional typed resources
   execute explicit/implicit close in the VM. Bounded ordered cleanup failures
   retain the unchanged primary outcome. Native owned-resource execution remains
-  fail-closed, so deterministic drop and typed resources are not complete
-  Current capabilities.
+  fail-closed, so deterministic drop and typed resources are not complete Current capabilities.
 - The VM uses checked generation-bearing core resource-table tokens. Evaluator
   fake providers perform no ambient I/O and dispatch borrowed standard input,
   terminal detection, file/directory acquisition and close, and SQLite
   connection/statement acquisition and close/finalize. One exact kind can fail
   acquisition or close deterministically. Native tiers still support only
-  borrowed `standard-input`; complete evaluator host and owned-native operations
-  remain incomplete.
+  borrowed `standard-input`; complete evaluator host and owned-native operations remain incomplete.
 - Core provides deterministic unique storage for byte-vector, dynamic bytes, and
   path layouts. Exact byte-vector owners, loans, byte/u32 access, and mutation
   execute through evaluator, VM, forced baseline, and forced proof tiers with
@@ -132,8 +130,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   freeze, thaw, end-borrow, and drop calls with no collector metadata and zero
   final live owners, loans, or release backlog.
 - Native image compatibility is the exact tuple of language, verified-SSA,
-  runtime-call, and native-layout contract digests. Runtime calls and public
-  metrics use stable unnumbered names.
+  runtime-call, and native-layout contract digests; public metrics use stable unnumbered names.
 - Metrics use `lkjscript.metrics` and its full contract digest. `lkjscript
   memory inventory` exposes 62 sorted memory-obligation records under
   `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
@@ -151,6 +148,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
   compiler/runtime ledger remains an accepted target.
+- The measured semantic resource runtime, Linux observation, owner homes,
+  scheduled optimizer/native integrations, and selected defaults are Current.
+  See [exact evidence](current-state/semantic-resource-plane-evidence.md).
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.
@@ -179,9 +179,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   candidate failed its measured adoption gate and was removed;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
 - automatic baseline-to-proof promotion acceptance beyond its selected measured candidate;
-- the semantic resource plane: bounded topology and Linux observation, verified
-  task graphs, deterministic and multi-worker scheduling, memory homes,
-  proof-discovery/native-kernel integrations, and measured policy selection;
+- the semantic resource plane beyond its Current runtime slice: elastic/adaptive
+  locality, blocking pools, real multi-domain adoption, and source structured
+  concurrency;
 - portability acceptance beyond Linux x86-64.
 
 Immutable `bytes` is executable in the compiler, evaluator, validated bytecode,

@@ -15,6 +15,7 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
+<!-- LKJ-STATUS id=semantic-resource-runtime status=current -->
 <!-- LKJ-STATUS id=semantic-session status=current -->
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
@@ -35,6 +36,11 @@ generic ADTs and structured control, validated VM, callable baseline JIT, and
 forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
 and explain commands are Current descriptive evidence. The machine tracing
 ratchet and `memory traced` expose the exact nine allowed `HeapObj` families.
+The measured semantic resource runtime is Current: Linux observation, verified
+task graphs, six real policies, owner homes, forced scheduled proof discovery,
+scheduled native kernels, shared sealed-image invocation, and retained policy
+evidence. Owner compute/kernel managed is the runtime default; proof discovery
+remains sequential by default.
 
 The authoritative pre-backend HIR memory plan is Current. The verified
 whole-place drop spine and generation-safe resource tables remain foundations
@@ -103,20 +109,14 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Implement the accepted semantic resource plane: bounded hardware topology,
-   read-only Linux scheduler observation, independently verified task graphs,
-   deterministic reference scheduling, and a session-owned worker runtime.
-2. Derive proof-edit discovery tasks per verified SSA function; merge journals
-   and certificates in stable ID order while retaining the independent checker.
-3. Integrate deterministic memory homes and actual collector-free generated
-   kernels, then retain same-commit policy evidence and select or reject a
-   production default honestly.
-4. Continue evaluator breadth and forced-native owned-resource execution beyond
-   borrowed standard input without delaying the scheduler slice.
-5. Verify aggregate-affine transfer/drop, migrate path and host byte boundaries,
+1. Continue evaluator breadth and forced-native owned-resource execution beyond
+   borrowed standard input.
+2. Verify aggregate-affine transfer/drop, migrate path and host byte boundaries,
    and remove transitional `buf` atomically without aliases.
-6. Implement ordinary/sealed regions, pools, weak links, and evidence-based
+3. Implement ordinary/sealed regions, pools, weak links, and evidence-based
    immutable sharing; ratchet traced families to zero before removing `GcHeap`.
+4. Validate cross-LLC/NUMA resource policies on real multi-domain hardware
+   before considering elastic locality or adaptive switching Current.
 
 This order is an implementation contract, not a Current capability claim.
 

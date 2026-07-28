@@ -1,10 +1,8 @@
 # Semantic Resource Plane
-
 ## Purpose
 
 Define one bounded in-process authority for verified task legality, deterministic
 resource outcomes, and replaceable topology-aware placement.
-
 ## Status
 
 <!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
@@ -167,7 +165,9 @@ must be exactly equal.
 A second suite schedules actual installed collector-free native scalar/bytes/
 byte-vector kernels. Acceptance requires nonzero native entries, exact output,
 zero VM fallback, zero collector construction/allocation/collection/root/
-barrier activity, and zero owner/task/cleanup leaks.
+barrier activity, and zero owner/task/cleanup leaks. Sealed installed images
+are immutable shared code: concurrent calls use independent invocation and
+runtime-service state, synchronized lease accounting, and last-owner teardown.
 
 All policy comparisons use one commit, binary, host configuration, declared
 schema, warmup/sample count, and unchanged gates. Retained evidence records wall
