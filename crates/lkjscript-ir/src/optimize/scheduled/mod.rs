@@ -9,6 +9,7 @@ use crate::optimize::*;
 use crate::VerifiedProgram;
 
 mod executor;
+mod grants;
 mod graph;
 mod merge;
 
@@ -51,11 +52,14 @@ pub fn optimize_scheduled_with_binder<B: WorkerBinder>(
     budget.set_input_instructions(input_shape.instructions);
     budget.discovery_passes = budget.discovery_passes.saturating_add(1);
 
-    let ranges = graph::ranges(input.program(), plan.workers.len());
-    let task_graph = graph::task_graph(input.program(), &ranges).map_err(resource_error)?;
+    let grants = grants::reserve(input.program(), limits, budget.work)?;
+    let task_graph = graph::task_graph(input.program()).map_err(resource_error)?;
+    graph::validate_admission(&task_graph, plan).map_err(|detail| {
+        OptimizationError::new(OptimizationFailureCode::BudgetExceeded, detail)
+    })?;
     let executor = DiscoveryExecutor {
         program: input.program(),
-        ranges: &ranges,
+        grants: &grants,
         limits,
     };
     let config = RuntimeConfig {
@@ -69,7 +73,7 @@ pub fn optimize_scheduled_with_binder<B: WorkerBinder>(
                 numa_node: None,
             })
             .collect(),
-        queue_capacity: ranges.len().max(1),
+        queue_capacity: input.program().functions.len().max(1),
         spin_limit: 64,
         policy: lkjscript_resource::SchedulePolicy::StaticPartition,
     };
@@ -96,7 +100,7 @@ pub fn optimize_scheduled_with_binder<B: WorkerBinder>(
         optimized,
         task_graph: task_graph.id(),
         runtime,
-        task_count: ranges.len(),
+        task_count: input.program().functions.len(),
         worker_count: plan.workers.len(),
     })
 }

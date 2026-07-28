@@ -25,10 +25,11 @@ Accepted Target in the semantic resource plane contract.
 - Owner homes use per-owner proof epochs and partitioned unique payload stores.
   Transfers require a fresh no-live-loan proof. Remote releases are bounded and
   home-drained; unrelated owner activity cannot stale a transfer proof.
-- Forced multi-worker proof-edit discovery partitions each SSA function,
-  returns local untrusted records, merges them stably, and leaves candidate
-  reconstruction and the independent checker unchanged. Sequential remains the
-  optimizer default.
+- Forced multi-worker proof-edit discovery creates one task per verified SSA
+  function. A serial coordinator partitions aggregate work/certificate grants
+  and validates queue/scratch reservations before worker spawn. Local untrusted
+  records merge stably; reconstruction and the independent checker are unchanged.
+  Sequential remains the optimizer default.
 - Scheduled generated scalar and unique byte-vector kernels execute through
   both forced native tiers with nonzero native entries, exact returns, zero VM
   fallback, zero collector activity, and zero final owner/loan/release backlog.

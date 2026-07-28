@@ -1,60 +1,13 @@
 use lkjscript_resource::{
-    AccessMode, AccessRecord, AccessRecordId, DataOwnerId, GraphLimits, TaskClassId,
-    TaskGraphBuilder, TaskGraphVerifier, TaskId, TaskNode, TaskResultId, TaskScope, TaskScopeId,
-    VerifiedTaskGraph,
+    AccessMode, AccessRecord, AccessRecordId, DataOwnerId, ExecutionResourcePlan, GraphLimits,
+    TaskClassId, TaskGraphBuilder, TaskGraphVerifier, TaskId, TaskNode, TaskResultId, TaskScope,
+    TaskScopeId, VerifiedTaskGraph,
 };
 
-use crate::Program;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct FunctionRange {
-    pub(super) start: usize,
-    pub(super) end: usize,
-}
-
-pub(super) fn ranges(program: &Program, workers: usize) -> Vec<FunctionRange> {
-    let total = program
-        .functions
-        .iter()
-        .flat_map(|function| &function.blocks)
-        .map(|block| block.instructions.len())
-        .sum::<usize>();
-    let target = total
-        .checked_div(workers.max(1).saturating_mul(4))
-        .unwrap_or(0)
-        .max(64);
-    let mut output = Vec::new();
-    let mut start = 0;
-    let mut work = 0_usize;
-    for (index, function) in program.functions.iter().enumerate() {
-        work = work.saturating_add(
-            function
-                .blocks
-                .iter()
-                .map(|block| block.instructions.len())
-                .sum::<usize>(),
-        );
-        if work >= target {
-            output.push(FunctionRange {
-                start,
-                end: index + 1,
-            });
-            start = index + 1;
-            work = 0;
-        }
-    }
-    if start < program.functions.len() {
-        output.push(FunctionRange {
-            start,
-            end: program.functions.len(),
-        });
-    }
-    output
-}
+use crate::{Function, InstructionKind, Program, Terminator};
 
 pub(super) fn task_graph(
     program: &Program,
-    ranges: &[FunctionRange],
 ) -> Result<VerifiedTaskGraph, lkjscript_resource::ResourceError> {
     let scope = TaskScopeId::new(0, 1);
     let mut builder = TaskGraphBuilder::new();
@@ -65,15 +18,10 @@ pub(super) fn task_graph(
     let input = DataOwnerId::new(0, 1);
     let mut compute = 0_u64;
     let mut scratch = 0_u64;
-    for (slot, range) in ranges.iter().enumerate() {
+    for (slot, function) in program.functions.iter().enumerate() {
         let task = TaskId::new(slot as u32, 1);
-        let local_compute = program.functions[range.start..range.end]
-            .iter()
-            .flat_map(|function| &function.blocks)
-            .map(|block| block.instructions.len() as u64)
-            .sum::<u64>()
-            .max(1);
-        let local_scratch = local_compute.saturating_mul(64);
+        let local_compute = discovery_weight(function);
+        let local_scratch = discovery_scratch(function);
         compute = compute.saturating_add(local_compute);
         scratch = scratch.saturating_add(local_scratch);
         let output = DataOwnerId::new(slot as u32 + 1, 1);
@@ -108,11 +56,108 @@ pub(super) fn task_graph(
     TaskGraphVerifier::verify(
         builder.build(),
         GraphLimits {
-            max_tasks: ranges.len(),
+            max_tasks: program.functions.len(),
             max_dependencies: 0,
-            max_accesses: ranges.len().saturating_mul(2),
+            max_accesses: program.functions.len().saturating_mul(2),
             max_compute_units: compute,
             max_scratch_bytes: scratch,
         },
     )
+}
+
+pub(super) fn validate_admission(
+    graph: &VerifiedTaskGraph,
+    plan: &ExecutionResourcePlan,
+) -> Result<(), &'static str> {
+    if plan.workers.is_empty() {
+        return Err("scheduled discovery requires a worker");
+    }
+    let mut queued = vec![0_u64; plan.workers.len()];
+    let descriptor_bytes = std::mem::size_of::<TaskId>() as u64;
+    for task in graph.tasks() {
+        let worker = task.id.slot as usize % plan.workers.len();
+        queued[worker] = queued[worker].saturating_add(descriptor_bytes);
+        if task.scratch_bytes > plan.workers[worker].scratch_bytes {
+            return Err("scheduled discovery scratch reservation exceeds worker plan");
+        }
+    }
+    if queued
+        .iter()
+        .zip(&plan.workers)
+        .any(|(bytes, worker)| *bytes > worker.queue_bytes)
+    {
+        return Err("scheduled discovery queue reservation exceeds worker plan");
+    }
+    Ok(())
+}
+
+fn discovery_scratch(function: &Function) -> u64 {
+    let blocks = function.blocks.len() as u64;
+    let values = function
+        .blocks
+        .iter()
+        .map(|block| {
+            block
+                .parameters
+                .len()
+                .saturating_add(block.instructions.len()) as u64
+        })
+        .sum::<u64>();
+    let words = blocks.saturating_add(63) / 64;
+    values
+        .saturating_mul(192)
+        .saturating_add(blocks.saturating_mul(words).saturating_mul(8))
+        .saturating_add(blocks.saturating_mul(64))
+        .max(1)
+}
+
+pub(super) fn discovery_weight(function: &Function) -> u64 {
+    let blocks = function.blocks.len() as u64;
+    let instructions = function
+        .blocks
+        .iter()
+        .map(|block| block.instructions.len() as u64)
+        .sum::<u64>();
+    let parameters = function
+        .blocks
+        .iter()
+        .map(|block| block.parameters.len() as u64)
+        .sum::<u64>();
+    let operands = function
+        .blocks
+        .iter()
+        .flat_map(|block| &block.instructions)
+        .map(|instruction| match &instruction.kind {
+            InstructionKind::Runtime { arguments, .. }
+            | InstructionKind::Call { arguments, .. } => arguments.len() as u64,
+            _ => 0,
+        })
+        .sum::<u64>();
+    let edges = function
+        .blocks
+        .iter()
+        .map(|block| match block.terminator {
+            Terminator::Branch { .. } => 1,
+            Terminator::ConditionalBranch { .. } => 2,
+            _ => 0,
+        })
+        .sum::<u64>();
+    let words = blocks.saturating_add(63) / 64;
+    let dominance_scan = blocks.saturating_add(edges).saturating_mul(words);
+    let dominance = blocks
+        .saturating_mul(words.saturating_add(3))
+        .saturating_add(edges)
+        .saturating_add(blocks.saturating_mul(blocks))
+        .saturating_add(
+            blocks
+                .saturating_mul(blocks)
+                .saturating_add(1)
+                .saturating_mul(dominance_scan),
+        );
+    1_u64
+        .saturating_add(parameters.saturating_add(instructions).saturating_mul(2))
+        .saturating_add(instructions.saturating_mul(4))
+        .saturating_add(operands.saturating_mul(3))
+        .saturating_add(dominance)
+        .saturating_add(instructions.saturating_mul(instructions))
 }

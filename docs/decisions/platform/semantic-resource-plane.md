@@ -1,6 +1,5 @@
 # Semantic Resource Plane
 ## Purpose
-
 Define one bounded in-process authority for verified task legality, deterministic
 resource outcomes, and replaceable topology-aware placement.
 ## Status
@@ -12,7 +11,6 @@ scheduler, topology query, parallel optimizer, or source concurrency capability
 is Current merely because this decision exists.
 
 ## Boundary With Linux
-
 Linux owns system-wide process and thread arbitration, preemption, interrupts,
 page faults, physical allocation, reclaim, devices, filesystems, protection,
 cgroups, cpusets, thermal safety, and fairness among unrelated processes.
@@ -155,12 +153,13 @@ may survive adoption. Live borrowed data is never migrated.
 
 ## First Integrations And Adoption
 
-The first compiler task class discovers proof-optimization edits per verified
-SSA function from immutable function-local facts. Tasks return untrusted local
-records and journals. Stable merge orders function, block, value, and edit kind,
-then assigns global sequence. Candidate reconstruction and the independent
-checker remain sequential proof authority. Sequential and scheduled outputs
-must be exactly equal.
+The first compiler task class creates one proof-edit task for every verified
+SSA function from immutable function-local facts. Before dispatch, the serial
+coordinator partitions aggregate work, record, and byte grants and validates
+queue and scratch reservations. Tasks return untrusted local records and
+journals. Stable merge orders function, block, value, and edit kind, then assigns
+global sequence. Candidate reconstruction and the independent checker remain
+sequential proof authority. Sequential and scheduled outputs must be equal.
 
 A second suite schedules actual installed collector-free native scalar/bytes/
 byte-vector kernels. Acceptance requires nonzero native entries, exact output,

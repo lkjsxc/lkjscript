@@ -31,6 +31,24 @@ fn scheduled_discovery_is_exactly_sequential_and_uses_verified_tasks() {
     assert_eq!(scheduled.task_count, 2);
     assert_eq!(scheduled.worker_count, 2);
     assert_eq!(scheduled.runtime.executed, 2);
+    assert!(scheduled
+        .optimized()
+        .certificate()
+        .records
+        .iter()
+        .any(|record| record.function == FunctionId::new(0)));
+    assert!(scheduled
+        .optimized()
+        .certificate()
+        .records
+        .iter()
+        .any(|record| record.function == FunctionId::new(1)));
+    assert!(scheduled
+        .optimized()
+        .certificate()
+        .records
+        .windows(2)
+        .all(|records| records[0].sequence + 1 == records[1].sequence));
     assert_eq!(
         evaluate(&input, &EvalConfig::default()),
         evaluate(
@@ -42,6 +60,13 @@ fn scheduled_discovery_is_exactly_sequential_and_uses_verified_tasks() {
     let repeated = optimize_scheduled(&input, limits, &plan).expect("repeat scheduled optimize");
     assert_eq!(repeated.optimized(), scheduled.optimized());
     assert_eq!(repeated.task_graph, scheduled.task_graph);
+
+    let mut under_reserved = plan.clone();
+    under_reserved.workers[0].queue_bytes = 0;
+    let error = optimize_scheduled(&input, limits, &under_reserved)
+        .err()
+        .expect("queue reservation must fail before worker spawn");
+    assert_eq!(error.code(), OptimizationFailureCode::BudgetExceeded);
 }
 
 fn widened_optimization_program() -> Program {
@@ -61,6 +86,24 @@ fn widened_optimization_program() -> Program {
             });
         }
     }
+    let main = &mut program.functions[1].blocks[0];
+    main.instructions.push(Instruction {
+        id: ValueId::new(82),
+        ty: SsaType::I64,
+        kind: InstructionKind::Constant(Constant::I64(0)),
+        metadata: metadata(EffectSet::PURE),
+    });
+    main.instructions.push(Instruction {
+        id: ValueId::new(83),
+        ty: SsaType::I64,
+        kind: InstructionKind::Runtime {
+            operation: RuntimeOp::BitXor,
+            arguments: vec![ValueId::new(1), ValueId::new(82)],
+            signature: Signature::monomorphic(vec![SsaType::I64, SsaType::I64], SsaType::I64),
+        },
+        metadata: metadata(EffectSet::PURE),
+    });
+    main.terminator = Terminator::Return(ValueId::new(83));
     program
 }
 

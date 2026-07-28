@@ -1,8 +1,8 @@
-use super::executor::RangeDiscovery;
+use super::executor::FunctionDiscovery;
 use crate::optimize::*;
 
 pub(super) fn merge_discovery<'a>(
-    mut outputs: Vec<(lkjscript_resource::TaskId, RangeDiscovery<'a>)>,
+    mut outputs: Vec<(lkjscript_resource::TaskId, FunctionDiscovery<'a>)>,
     function_count: usize,
     budget: &mut Budget,
 ) -> Result<(DiscoveryIndexes<'a>, OptimizationCertificate), OptimizationError> {
@@ -12,16 +12,14 @@ pub(super) fn merge_discovery<'a>(
     let mut functions = Vec::with_capacity(function_count);
     let mut records = Vec::new();
     for (expected, (task, output)) in outputs.into_iter().enumerate() {
-        if task.slot as usize != expected || output.start != functions.len() {
+        if task.slot as usize != expected || output.function != expected {
             return Err(input_index_error(
-                "scheduled discovery result order or range is incomplete",
+                "scheduled discovery result order is incomplete",
             ));
         }
         budget.charge(output.work)?;
-        for function in output.functions {
-            functions.push(function.indexes);
-            records.extend(function.records);
-        }
+        functions.push(output.indexes);
+        records.extend(output.records);
     }
     if functions.len() != function_count {
         return Err(input_index_error(
