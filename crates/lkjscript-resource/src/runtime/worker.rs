@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::thread;
+use std::time::Instant;
 
 use super::{RuntimeConfig, Shared, TaskExecutor, WorkerBinder, WorkerDescriptor};
 use crate::runtime_support::{
@@ -56,7 +57,7 @@ fn worker_tasks<E: TaskExecutor>(
     let mut spins = 0;
     let mut seen_epoch = 0;
     loop {
-        if let Some((task, victim)) = take_task(shared, index)? {
+        if let Some((task, victim, queue_wait_ns)) = take_task(shared, index)? {
             spins = 0;
             {
                 let mut control = lock_control(shared)?;
@@ -67,6 +68,10 @@ fn worker_tasks<E: TaskExecutor>(
                     return Err(ResourceError::new("exactly-once", "task dequeued twice"));
                 }
                 control.metrics.executed = control.metrics.executed.saturating_add(1);
+                control.metrics.queue_wait_ns =
+                    control.metrics.queue_wait_ns.saturating_add(queue_wait_ns);
+                control.metrics.max_queue_wait_ns =
+                    control.metrics.max_queue_wait_ns.max(queue_wait_ns);
                 if let Some(victim) = victim {
                     control.metrics.steals = control.metrics.steals.saturating_add(1);
                     if shared.worker_groups[index] == shared.worker_groups[victim] {
@@ -85,7 +90,15 @@ fn worker_tasks<E: TaskExecutor>(
                     }
                 }
             }
-            let ready = complete_task(shared, task, executor.execute(task, worker))?;
+            let start = Instant::now();
+            let outcome = executor.execute(task, worker);
+            let task_time = u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX);
+            {
+                let mut control = lock_control(shared)?;
+                control.metrics.task_time_ns =
+                    control.metrics.task_time_ns.saturating_add(task_time);
+            }
+            let ready = complete_task(shared, task, outcome)?;
             if !ready.is_empty() {
                 enqueue_ready(shared, index, &ready)?;
             }
@@ -111,6 +124,7 @@ fn worker_tasks<E: TaskExecutor>(
             .wake
             .wait(control)
             .map_err(|_| ResourceError::new("poison", "runtime wait poisoned"))?;
+        control.metrics.wakeups = control.metrics.wakeups.saturating_add(1);
         seen_epoch = control.wake_epoch;
         spins = 0;
     }

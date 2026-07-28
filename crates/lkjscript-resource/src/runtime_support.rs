@@ -1,4 +1,5 @@
 use std::sync::MutexGuard;
+use std::time::Instant;
 
 use crate::runtime::{Control, Shared};
 use crate::{ResourceError, ResourceResult, TaskId};
@@ -25,12 +26,12 @@ pub(crate) fn update_active<O, E>(shared: &Shared<O, E>, entering: bool) -> Reso
 pub(crate) fn take_task<O, E>(
     shared: &Shared<O, E>,
     worker: usize,
-) -> ResourceResult<Option<(TaskId, Option<usize>)>> {
+) -> ResourceResult<Option<(TaskId, Option<usize>, u64)>> {
     let mut local = shared.queues[worker]
         .lock()
         .map_err(|_| ResourceError::new("poison", "worker queue poisoned"))?;
     if let Some(task) = local.pop_front() {
-        return Ok(Some((task, None)));
+        return Ok(Some((task, None, queue_wait(shared, task)?)));
     }
     drop(local);
     if matches!(
@@ -58,7 +59,7 @@ pub(crate) fn take_task<O, E>(
             .lock()
             .map_err(|_| ResourceError::new("poison", "victim queue poisoned"))?;
         if let Some(task) = queue.pop_back() {
-            return Ok(Some((task, Some(victim))));
+            return Ok(Some((task, Some(victim), queue_wait(shared, task)?)));
         }
     }
     Ok(None)
@@ -108,9 +109,19 @@ pub(crate) fn enqueue_many<O, E>(
             "worker queue capacity exceeded",
         ));
     }
-    for task in tasks {
-        queue.push_back(*task);
+    let mut enqueued = shared
+        .enqueued
+        .lock()
+        .map_err(|_| ResourceError::new("poison", "enqueue times poisoned"))?;
+    if tasks.iter().any(|task| enqueued.contains_key(task)) {
+        return Err(ResourceError::new(
+            "enqueue-duplicate",
+            "task already queued",
+        ));
     }
+    let now = Instant::now();
+    enqueued.extend(tasks.iter().map(|task| (*task, now)));
+    queue.extend(tasks.iter().copied());
     let high_water = queue.len();
     drop(queue);
     let mut control = lock_control(shared)?;
@@ -119,6 +130,16 @@ pub(crate) fn enqueue_many<O, E>(
     drop(control);
     shared.wake.notify_all();
     Ok(())
+}
+
+fn queue_wait<O, E>(shared: &Shared<O, E>, task: TaskId) -> ResourceResult<u64> {
+    let queued = shared
+        .enqueued
+        .lock()
+        .map_err(|_| ResourceError::new("poison", "enqueue times poisoned"))?
+        .remove(&task)
+        .ok_or_else(|| ResourceError::new("enqueue-missing", "task lacks queue timestamp"))?;
+    Ok(u64::try_from(queued.elapsed().as_nanos()).unwrap_or(u64::MAX))
 }
 
 pub(crate) fn complete_task<O, E>(

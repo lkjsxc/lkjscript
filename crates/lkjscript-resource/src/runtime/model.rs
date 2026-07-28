@@ -25,6 +25,10 @@ pub struct RuntimeMetrics {
     pub same_group_steals: u64,
     pub cross_group_steals: u64,
     pub cross_numa_steals: u64,
+    pub queue_wait_ns: u64,
+    pub max_queue_wait_ns: u64,
+    pub task_time_ns: u64,
+    pub wakeups: u64,
     pub queue_high_water: usize,
     pub active_workers: usize,
 }

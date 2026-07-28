@@ -6,17 +6,43 @@ pub(super) struct Samples {
     cross_group_steals: u64,
     cross_numa_steals: u64,
     parks: u64,
+    queue_wait_ns: u64,
+    max_queue_wait_ns: u64,
+    task_time_ns: u64,
+    wakeups: u64,
+    transfers: u64,
+    remote_releases: u64,
+    allocated_bytes: u64,
+    peak_live_bytes: u64,
+    live_objects: u64,
     checksum: u64,
 }
 
 impl Samples {
-    pub(super) fn push(&mut self, elapsed_ns: u128, steals: [u64; 4], parks: u64, checksum: u64) {
+    pub(super) fn push(
+        &mut self,
+        elapsed_ns: u128,
+        steals: [u64; 4],
+        parks: u64,
+        telemetry: [u64; 4],
+        homes: [u64; 5],
+        checksum: u64,
+    ) {
         self.elapsed_ns.push(elapsed_ns);
         self.steals = self.steals.saturating_add(steals[0]);
         self.same_group_steals = self.same_group_steals.saturating_add(steals[1]);
         self.cross_group_steals = self.cross_group_steals.saturating_add(steals[2]);
         self.cross_numa_steals = self.cross_numa_steals.saturating_add(steals[3]);
         self.parks = self.parks.saturating_add(parks);
+        self.queue_wait_ns = self.queue_wait_ns.saturating_add(telemetry[0]);
+        self.max_queue_wait_ns = self.max_queue_wait_ns.max(telemetry[1]);
+        self.task_time_ns = self.task_time_ns.saturating_add(telemetry[2]);
+        self.wakeups = self.wakeups.saturating_add(telemetry[3]);
+        self.transfers = self.transfers.saturating_add(homes[0]);
+        self.remote_releases = self.remote_releases.saturating_add(homes[1]);
+        self.allocated_bytes = self.allocated_bytes.saturating_add(homes[2]);
+        self.peak_live_bytes = self.peak_live_bytes.max(homes[3]);
+        self.live_objects = self.live_objects.saturating_add(homes[4]);
         self.checksum ^= checksum;
     }
 
@@ -34,7 +60,8 @@ impl Samples {
         println!(
             concat!(
                 "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
-                "{}\t{}\t{}\t{}\t{}\t{}"
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
+                "{}\t{}\t{}\t{}\t{}"
             ),
             workload,
             policy,
@@ -50,6 +77,15 @@ impl Samples {
             self.cross_group_steals,
             self.cross_numa_steals,
             self.parks,
+            self.queue_wait_ns,
+            self.max_queue_wait_ns,
+            self.task_time_ns,
+            self.wakeups,
+            self.transfers,
+            self.remote_releases,
+            self.allocated_bytes,
+            self.peak_live_bytes,
+            self.live_objects,
             self.checksum,
         );
     }

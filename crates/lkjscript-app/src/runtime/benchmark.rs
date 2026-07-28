@@ -44,7 +44,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(concat!(
         "workload\tpolicy\taffinity\tworkers\tsamples\t",
         "p50-ns\tp95-ns\tp99-ns\ttasks-per-second\tsteals\t",
-        "same-group-steals\tcross-group-steals\tcross-numa-steals\tparks\tchecksum"
+        "same-group-steals\tcross-group-steals\tcross-numa-steals\tparks\t",
+        "queue-wait-ns\tmax-queue-wait-ns\ttask-time-ns\twakeups\ttransfers\t",
+        "remote-releases\tallocated-bytes\tpeak-live-bytes\tlive-objects\tchecksum"
     ));
     for workload in Workload::ALL {
         let graph = graph::graph(workload)?;
@@ -95,7 +97,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let binder = LinuxWorkerBinder::for_mode(mode);
             let mut measurements = Samples::default();
             for sample in 0..samples + 2 {
-                let executor = WorkloadExecutor::new(workload);
+                let executor = WorkloadExecutor::new(workload)?;
                 let start = Instant::now();
                 let report = ScopedRuntime::run(&graph, config.clone(), &executor, &binder)?;
                 let elapsed = start.elapsed().as_nanos();
@@ -116,6 +118,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                             report.metrics.cross_numa_steals,
                         ],
                         report.metrics.parks,
+                        [
+                            report.metrics.queue_wait_ns,
+                            report.metrics.max_queue_wait_ns,
+                            report.metrics.task_time_ns,
+                            report.metrics.wakeups,
+                        ],
+                        executor.home_metrics()?,
                         checksum,
                     );
                 }

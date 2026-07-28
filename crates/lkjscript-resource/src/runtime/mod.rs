@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use crate::{
     CpuSet, ResourceError, ResourceResult, SchedulePolicy, TaskId, VerifiedTaskGraph,
@@ -50,6 +51,7 @@ pub(crate) struct Shared<O, E> {
     pub(crate) worker_groups: Vec<WorkerGroupId>,
     pub(crate) worker_numa: Vec<Option<u32>>,
     pub(crate) preferred: BTreeMap<TaskId, usize>,
+    pub(crate) enqueued: Mutex<BTreeMap<TaskId, Instant>>,
 }
 
 pub struct ScopedRuntime;
@@ -114,6 +116,7 @@ impl ScopedRuntime {
                     (task.id, slot as usize % config.workers.len())
                 })
                 .collect(),
+            enqueued: Mutex::new(BTreeMap::new()),
         });
         let roots: Vec<_> = graph
             .tasks()
@@ -147,10 +150,20 @@ impl ScopedRuntime {
         let shared = Arc::try_unwrap(shared).map_err(|_| {
             ResourceError::new("runtime-live-share", "worker retained runtime state")
         })?;
+        let enqueued = shared
+            .enqueued
+            .into_inner()
+            .map_err(|_| ResourceError::new("poison", "enqueue times poisoned"))?;
         let control = shared
             .control
             .into_inner()
             .map_err(|_| ResourceError::new("poison", "runtime control poisoned"))?;
+        if !enqueued.is_empty() && control.failures.is_empty() {
+            return Err(ResourceError::new(
+                "runtime-invariant",
+                "completed runtime retained queued timestamps",
+            ));
+        }
         let cancelled = graph
             .tasks()
             .iter()

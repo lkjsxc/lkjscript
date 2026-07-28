@@ -1,46 +1,64 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use lkjscript_core::{
-    ByteVectorKey, UniqueStore, UniqueStoreId, UniqueStoreLimits, UniqueStoreStats,
-};
+use lkjscript_core::{ByteVectorKey, UniqueStore, UniqueStoreId, UniqueStoreLimits};
 
 use crate::{
-    DataOwnerId, NoLiveLoanProof, OwnerHomeTable, OwnerMetrics, RemoteRelease, ResourceError,
-    ResourceResult, TaskId, WorkerId,
+    DataOwnerId, NoLiveLoanProof, OwnerHomeTable, RemoteRelease, ResourceError, ResourceResult,
+    TaskId, WorkerId,
 };
+
+mod stats;
+mod support;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HomedByteVector {
     pub owner: DataOwnerId,
+    partition: usize,
     key: ByteVectorKey,
 }
 
-struct State {
-    store: UniqueStore,
+struct Metadata {
     homes: OwnerHomeTable,
-    keys: BTreeMap<DataOwnerId, ByteVectorKey>,
+    keys: BTreeMap<DataOwnerId, (usize, ByteVectorKey)>,
 }
 
 pub struct PartitionedUniqueStore {
-    state: Mutex<State>,
+    metadata: Mutex<Metadata>,
+    stores: Vec<Mutex<UniqueStore>>,
 }
 
 impl PartitionedUniqueStore {
     pub fn new(
         store_id: u64,
         limits: UniqueStoreLimits,
+        partitions: usize,
         owner_limit: usize,
         release_limit: usize,
     ) -> ResourceResult<Self> {
-        let id = UniqueStoreId::new(store_id)
-            .ok_or_else(|| ResourceError::new("unique-store-id", "store ID must be nonzero"))?;
+        if partitions == 0 {
+            return Err(ResourceError::new(
+                "unique-partitions",
+                "partitions required",
+            ));
+        }
+        let stores = (0..partitions)
+            .map(|partition| {
+                let raw = store_id
+                    .checked_add(partition as u64)
+                    .ok_or_else(|| ResourceError::new("unique-store-id", "store ID overflow"))?;
+                let id = UniqueStoreId::new(raw).ok_or_else(|| {
+                    ResourceError::new("unique-store-id", "store ID must be nonzero")
+                })?;
+                Ok(Mutex::new(UniqueStore::new(id, limits)))
+            })
+            .collect::<ResourceResult<Vec<_>>>()?;
         Ok(Self {
-            state: Mutex::new(State {
-                store: UniqueStore::new(id, limits),
+            metadata: Mutex::new(Metadata {
                 homes: OwnerHomeTable::new(owner_limit, release_limit),
                 keys: BTreeMap::new(),
             }),
+            stores,
         })
     }
 
@@ -50,39 +68,50 @@ impl PartitionedUniqueStore {
         home: WorkerId,
         bytes: Vec<u8>,
     ) -> ResourceResult<HomedByteVector> {
-        let mut state = self.lock()?;
-        if state.keys.contains_key(&owner) {
+        let partition = home.slot as usize % self.stores.len();
+        let mut metadata = self.metadata()?;
+        if metadata.keys.contains_key(&owner) {
             return Err(ResourceError::new(
                 "owner-duplicate",
                 "owner already stored",
             ));
         }
-        let key = state
-            .store
-            .allocate_byte_vector(bytes)
-            .map_err(unique_error)?;
-        if let Err(error) = state.homes.insert(owner, home) {
-            state.store.free_byte_vector(key).map_err(unique_error)?;
+        let mut store = self.store(partition)?;
+        let key = store.allocate_byte_vector(bytes).map_err(unique_error)?;
+        if let Err(error) = metadata.homes.insert(owner, home) {
+            store.free_byte_vector(key).map_err(unique_error)?;
             return Err(error);
         }
-        state.keys.insert(owner, key);
-        Ok(HomedByteVector { owner, key })
+        metadata.keys.insert(owner, (partition, key));
+        Ok(HomedByteVector {
+            owner,
+            partition,
+            key,
+        })
     }
 
     pub fn home(&self, value: HomedByteVector) -> ResourceResult<WorkerId> {
-        self.lock()?.homes.home(value.owner)
+        let metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        metadata.homes.home(value.owner)
     }
 
     pub fn begin_loan(&self, value: HomedByteVector) -> ResourceResult<()> {
-        self.lock()?.homes.begin_loan(value.owner)
+        let mut metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        metadata.homes.begin_loan(value.owner)
     }
 
     pub fn end_loan(&self, value: HomedByteVector) -> ResourceResult<()> {
-        self.lock()?.homes.end_loan(value.owner)
+        let mut metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        metadata.homes.end_loan(value.owner)
     }
 
     pub fn prove_no_live_loan(&self, value: HomedByteVector) -> ResourceResult<NoLiveLoanProof> {
-        self.lock()?.homes.prove_no_live_loan(value.owner)
+        let metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        metadata.homes.prove_no_live_loan(value.owner)
     }
 
     pub fn move_home(
@@ -91,25 +120,28 @@ impl PartitionedUniqueStore {
         destination: WorkerId,
         proof: NoLiveLoanProof,
     ) -> ResourceResult<()> {
-        self.lock()?
-            .homes
-            .move_owner(value.owner, destination, proof)
+        let mut metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        metadata.homes.move_owner(value.owner, destination, proof)
     }
 
     pub fn fill(&self, value: HomedByteVector, byte: u8) -> ResourceResult<()> {
-        let mut state = self.lock()?;
-        require_key(&state, value)?;
-        state
-            .store
+        let metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        drop(metadata);
+        self.store(value.partition)?
             .fill_byte_vector(value.key, byte)
             .map_err(unique_error)
     }
 
     pub fn checksum(&self, value: HomedByteVector) -> ResourceResult<u64> {
-        let mut state = self.lock()?;
-        require_key(&state, value)?;
-        let bytes = state.store.byte_vector(value.key).map_err(unique_error)?;
-        Ok(bytes
+        let metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        drop(metadata);
+        let mut store = self.store(value.partition)?;
+        Ok(store
+            .byte_vector(value.key)
+            .map_err(unique_error)?
             .iter()
             .fold(0_u64, |sum, byte| sum.wrapping_add(u64::from(*byte))))
     }
@@ -120,11 +152,11 @@ impl PartitionedUniqueStore {
         task: TaskId,
         value: HomedByteVector,
     ) -> ResourceResult<()> {
-        let mut state = self.lock()?;
-        require_key(&state, value)?;
-        let home = state.homes.home(value.owner)?;
+        let mut metadata = self.metadata()?;
+        self.require(&metadata, value)?;
+        let home = metadata.homes.home(value.owner)?;
         if home != worker {
-            return state.homes.remote_release(
+            return metadata.homes.remote_release(
                 home,
                 RemoteRelease {
                     owner: value.owner,
@@ -132,67 +164,29 @@ impl PartitionedUniqueStore {
                 },
             );
         }
-        release_now(&mut state, value)
+        self.release_locked(&mut metadata, value)
     }
 
     pub fn drain_remote(&self, home: WorkerId, limit: usize) -> ResourceResult<usize> {
-        let mut state = self.lock()?;
-        let releases = state.homes.drain_releases(home, limit);
+        let mut metadata = self.metadata()?;
+        let releases = metadata.homes.drain_releases(home, limit);
         for release in &releases {
-            let key =
-                state.keys.get(&release.owner).copied().ok_or_else(|| {
-                    ResourceError::new("owner-stale", "remote release owner missing")
-                })?;
-            release_now(
-                &mut state,
+            let (partition, key) = metadata
+                .keys
+                .get(&release.owner)
+                .copied()
+                .ok_or_else(|| ResourceError::new("owner-stale", "release owner missing"))?;
+            self.release_locked(
+                &mut metadata,
                 HomedByteVector {
                     owner: release.owner,
+                    partition,
                     key,
                 },
             )?;
         }
         Ok(releases.len())
     }
-
-    pub fn metrics(&self) -> ResourceResult<(OwnerMetrics, UniqueStoreStats)> {
-        let state = self.lock()?;
-        Ok((state.homes.metrics(), state.store.stats()))
-    }
-
-    pub fn verify_empty(&self) -> ResourceResult<()> {
-        let state = self.lock()?;
-        if !state.keys.is_empty() || state.store.assert_no_leaks().is_err() {
-            return Err(ResourceError::new(
-                "unique-leak",
-                "session unique owner leaked",
-            ));
-        }
-        Ok(())
-    }
-
-    fn lock(&self) -> ResourceResult<std::sync::MutexGuard<'_, State>> {
-        self.state
-            .lock()
-            .map_err(|_| ResourceError::new("poison", "unique home state poisoned"))
-    }
-}
-
-fn require_key(state: &State, value: HomedByteVector) -> ResourceResult<()> {
-    if state.keys.get(&value.owner) != Some(&value.key) {
-        return Err(ResourceError::new("owner-stale", "owner key is stale"));
-    }
-    Ok(())
-}
-
-fn release_now(state: &mut State, value: HomedByteVector) -> ResourceResult<()> {
-    let proof = state.homes.prove_no_live_loan(value.owner)?;
-    state
-        .store
-        .free_byte_vector(value.key)
-        .map_err(unique_error)?;
-    state.homes.remove(value.owner, proof)?;
-    state.keys.remove(&value.owner);
-    Ok(())
 }
 
 fn unique_error(error: impl std::fmt::Display) -> ResourceError {

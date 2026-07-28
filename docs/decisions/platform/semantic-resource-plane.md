@@ -137,7 +137,6 @@ contractible. Hierarchical stealing increases topology cost from same group to
 LLC, die/chiplet, NUMA, then remote NUMA. Hysteresis, minimum residence,
 cooldown, score-improvement thresholds, and age/service debt prevent ping-pong
 and starvation. Critical-path delay may outweigh locality.
-
 ## Memory Homes
 
 Task descriptors, topology, workers, queues, traces, metrics, and scheduler
@@ -147,7 +146,8 @@ epoch; these are placement facts, not artifact identity.
 
 Owner-compute prefers moving computation to the dominant owner. A unique-owner
 transfer records owner, source/destination tasks and homes, no-live-loan proof,
-backing-transfer policy, and resource charge. Remote destruction uses one
+backing-transfer policy, and resource charge. Proof freshness is per owner, so
+unrelated owner activity cannot spuriously stale a valid transfer. Remote destruction uses one
 bounded home release or a separately verified direct release. Static bytes are
 readable everywhere; dynamic bytes remain affine without implicit copy or RC.
 
