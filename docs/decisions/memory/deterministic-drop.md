@@ -90,8 +90,20 @@ Cleanup is not VM teardown and does not depend on collector finalization.
 7. An external close consumes ownership even if the provider reports failure.
 8. Close is never retried and the resource is never made live again.
 
-Borrowed standard streams are not guest-owned and are never closed by guest
-drop.
+The attachment records a closed cleanup phase and subject, a bounded UTF-8
+message, retained message bytes, omitted message bytes, and omitted failure
+count. Default execution limits retain at most 32 failures and 8192 message
+bytes; evaluator and VM configurations may only choose bounded explicit
+limits. A record whose message exceeds the remaining byte budget is retained
+with an exact UTF-8 prefix and omitted-byte count. Attempts after the retained
+record ceiling are counted but retain no message. Arithmetic saturates rather
+than wrapping. Emergency runtime teardown is a distinct phase and never
+masquerades as ordinary semantic drop.
+
+An outcome with attachments is represented as one structured cleanup failure
+containing the unchanged primary outcome and the bounded ordered attachment;
+it is not flattened into a host-error string. Borrowed standard streams are
+not guest-owned and are never closed by guest drop.
 
 ## Supported Shape
 

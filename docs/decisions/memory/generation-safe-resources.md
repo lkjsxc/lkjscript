@@ -59,10 +59,17 @@ semantics.
 
 Primary and cleanup outcomes follow the deterministic drop contract. Every
 remaining close is attempted once. A failed close leaves the slot closed and
-stale; it is never retried or re-exposed. Current safe Linux descriptor and
-SQLite owners report close only through infallible `Drop`, so VM teardown can
-count attempts but cannot attach provider close failures to `ExecutionOutcome`;
-structured bounded failure attachment remains Accepted Contract work.
+stale; it is never retried or re-exposed. Cleanup reports retain exact resource
+kind as their structured subject and distinguish ordinary close, emergency
+resource teardown, terminal restoration, standard-output flush, and unique
+storage release. The configured attachment ceiling never limits cleanup
+attempts; excess records and message bytes are counted as omitted.
+
+Current safe Linux descriptor and SQLite owners report close only through
+infallible `Drop`, so production VM teardown has no provider-close failure to
+attach yet. Deterministic evaluator providers and failure injection must cover
+ordered attachment, truncation, and later-cleanup continuation before this
+contract is promoted.
 
 ## Native Contract
 
