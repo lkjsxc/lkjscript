@@ -2,61 +2,10 @@ use crate::{ContractDescriptor, ContractDigest, ContractFact, ContractItem, Cont
 
 use super::super::{name, METRICS, NATIVE_LAYOUT, RUNTIME_CALLS, VERIFIED_SSA};
 
+mod slots;
+
 pub(crate) fn runtime_calls() -> ContractDescriptor {
-    descriptor(RUNTIME_CALLS).item(
-        ContractItem::new("slots", ContractItemKind::Operation)
-            .semantic_order()
-            .fact(fact(
-                "identity-i64",
-                "IdentityI64",
-                "(state,i64)->i64 pure test boundary",
-            ))
-            .fact(fact(
-                "poll",
-                "Poll",
-                "(state)->deadline and fuel status noncollecting",
-            ))
-            .fact(fact(
-                "enter-function",
-                "EnterFunction",
-                "(state,function)->status",
-            ))
-            .fact(fact(
-                "standard-input",
-                "StdinHandle",
-                "(island-state,capability/stdio)->resource/input-stream",
-            ))
-            .fact(fact(
-                "collect-reference",
-                "CollectReference",
-                "(state,reference)->status",
-            ))
-            .fact(fact(
-                "heap-dispatch",
-                "HeapDispatch",
-                "(state,operation,args)->status",
-            ))
-            .fact(fact(
-                "reserve-frame",
-                "ReserveFrame",
-                "(state,slots)->status",
-            ))
-            .fact(fact(
-                "register-frame",
-                "RegisterFrame",
-                "(state,frame)->status",
-            ))
-            .fact(fact(
-                "publish-safepoint",
-                "PublishSafepoint",
-                "(state,map)->status",
-            ))
-            .fact(fact(
-                "unregister-frame",
-                "UnregisterFrame",
-                "(state,frame)->status",
-            )),
-    )
+    descriptor(RUNTIME_CALLS).item(slots::runtime_slots())
 }
 
 pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> ContractDescriptor {
@@ -85,6 +34,16 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                     "execution-domain",
                     "execution-domain",
                     "closed collector-free or legacy-heap dispatch table",
+                ))
+                .fact(fact(
+                    "unique-values",
+                    "unique-values",
+                    "exact unique/byte-vector loan/byte-slice loan/byte-slice-mut words",
+                ))
+                .fact(fact(
+                    "unique-service",
+                    "unique-service",
+                    "bounded invocation-owned UniqueStore and generation-bearing loan table",
                 ))
                 .fact(fact(
                     "heap-sites",
@@ -129,6 +88,11 @@ pub(crate) fn metrics() -> ContractDescriptor {
                 "heap",
                 "heap",
                 "allocations collections roots and barriers",
+            ))
+            .fact(fact(
+                "unique",
+                "unique",
+                "operations cleanup live owners live loans release backlog and forged failures",
             )),
     )
 }

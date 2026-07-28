@@ -3,16 +3,19 @@
 ## Status
 
 <!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
+<!-- LKJ-STATUS id=native-byte-vector-island status=current -->
 
-**Accepted contract; not Current until all listed types execute through every
-required engine with zero collector interaction and zero fallback.** Forced
-native tiers currently cover the scalar set plus `stdio` capability to borrowed
-`input-stream`; this subset does not promote the complete island.
+**The complete listed island remains an Accepted Contract.** The exact
+collector-free native `byte-vector`/`byte-slice`/`byte-slice-mut` subset is
+**Current** for forced baseline and proof execution, alongside the existing
+scalar set and `stdio` capability to borrowed `input-stream`. This promotion
+does not include immutable `bytes`, `path`, owned resources, mixed resource and
+unique groups, or the complete island.
 
-The exact byte-vector/slice and immutable static/dynamic bytes families are now
-collector-free in the independent SSA evaluator and validated reference VM.
-Native tiers reject those families in preflight, so this partial execution
-evidence does not promote the island.
+The evaluator, VM, forced baseline, and forced proof tiers consume the same
+verified byte-vector family with whole-group native eligibility and no fallback.
+Immutable static/dynamic bytes execute in evaluator and VM; native tiers reject
+bytes before entry, so the complete island remains non-Current.
 
 ## Type Set
 
@@ -38,14 +41,19 @@ proof JIT cannot use tracing or fall back after eligibility succeeds.
 
 ## Execution Domains
 
-The independent evaluator uses execution-owned deterministic byte-vector and
-immutable dynamic-bytes keys
+The independent evaluator uses execution-owned byte-vector/dynamic-bytes keys
 and fake resource providers; resource-operation dispatch remains absent. The VM
 uses typed scalar slots, unique storage, bounded loan records, resource slots,
-and explicit cleanup. Native tiers consume the same memory-verified SSA and closed
-runtime call table. Island native frames contain owners, loans, flags, resources,
-budgets, deadlines, outcomes, and transitions, but no collector root map or
-collection poll.
+and explicit cleanup. Native tiers consume the same verified SSA and a closed
+unique/runtime call table. The invocation-owned noncollecting service contains a
+bounded
+`UniqueStore`, a generation-bearing owner set, and a bounded generation-bearing
+loan table. Exact owner, shared-loan, and exclusive-loan machine categories are
+opaque words, never collector references or integers. Every operation validates
+the key layout/generation, loan identity/range/kind, and exclusivity. Island
+native frames contain owners, loans, flags, supported borrowed resources,
+budgets, deadlines, outcomes, and transitions, but no collector root map,
+collection poll, heap dispatch, or barrier.
 
 ## Required Evidence
 
@@ -65,10 +73,17 @@ Each island execution records zero deltas for:
 Completion additionally requires zero untransferred unique owners, live loans,
 owned resource obligations, cleanup flags, and release backlog.
 
-Representative fixtures cover scalar limits and exact f64 bits, byte mutation
-and slicing, freeze/thaw, path construction, file write and read, explicit and
-implicit close, trap and early-return cleanup, stale resource keys, and
-allocation failure. Forced tiers report nonzero generated entries.
+The Current byte-vector subset has forced baseline/proof fixtures for allocation,
+move, shared and exclusive borrow, length, read, mutation, loan end, drop,
+transferred return, trap cleanup, allocation failure, stale/forged identities,
+and exactly-once release. Each fixture requires evaluator/VM/native result
+identity, nonzero selected-tier entries, zero VM transitions/fallback, zero
+collector-capable calls/counters, and zero final owners, loans, or release
+backlog. Proof fixtures permit optimizing entries only.
+
+Freeze/thaw and immutable `bytes` have evaluator/VM evidence. Native bytes,
+path construction, file I/O, owned resource close, and mixed resource/unique
+execution remain required evidence for the complete island.
 
 ## Remaining Collector
 

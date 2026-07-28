@@ -45,7 +45,7 @@ pub struct ScalarInvocation {
 }
 
 pub(crate) fn scalar_to_execution(
-    session: &JitSession,
+    session: &mut JitSession,
     function: FunctionId,
     outcome: ScalarInvocationOutcome,
 ) -> Result<ExecutionOutcome, EngineError> {
@@ -71,11 +71,32 @@ pub(crate) fn scalar_to_execution(
                         )
                     })?
                 }
-                NativeValue::Capability(_) | NativeValue::Resource(_) => {
+                NativeValue::Unique(owner)
+                    if owner.unique_type() == lkjscript_native::UniqueType::ByteVector =>
+                {
+                    let bytes = session.returned_unique.take().ok_or_else(|| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            "native byte-vector return has no transferred backing",
+                        )
+                    })?;
+                    OwnedValue::from_unique_byte_vector(bytes).map_err(|error| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            error.to_string(),
+                        )
+                    })?
+                }
+                NativeValue::Capability(_)
+                | NativeValue::Resource(_)
+                | NativeValue::Unique(_)
+                | NativeValue::Loan(_) => {
                     return Err(EngineError::new(
                         FailureCode::InvocationFailure,
                         Some(function),
-                        "capability or resource escaped the native root",
+                        "capability, resource, or loan escaped the native root",
                     ));
                 }
                 scalar => owned_scalar(scalar).map_err(|error| {
@@ -115,9 +136,13 @@ pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedVa
         NativeValue::F64Bits(bits) => {
             OwnedValue::from_vm_snapshot(Value::from_f64_bits(bits), Vec::new())
         }
-        NativeValue::Capability(_) | NativeValue::Resource(_) | NativeValue::Reference(_) => Err(
-            lkjscript_core::Error::msg("scalar JIT cannot return a native adapter value"),
-        ),
+        NativeValue::Capability(_)
+        | NativeValue::Resource(_)
+        | NativeValue::Unique(_)
+        | NativeValue::Loan(_)
+        | NativeValue::Reference(_) => Err(lkjscript_core::Error::msg(
+            "scalar JIT cannot return a native adapter value",
+        )),
     }
 }
 

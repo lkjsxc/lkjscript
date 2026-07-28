@@ -10,6 +10,7 @@ mod help;
 mod memory;
 mod metrics;
 mod metrics_jit;
+mod metrics_jit_island;
 mod metrics_json;
 mod output;
 mod package;

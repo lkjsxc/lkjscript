@@ -1,5 +1,8 @@
 use super::*;
-
+mod constants;
+mod unique;
+use constants::*;
+use unique::*;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
     program: &lkjscript_ir::Program,
@@ -18,37 +21,37 @@ pub(super) fn lower_instruction(
             Constant::Bool(value) => builder.bool_const(block, *value),
             Constant::I64(value) => builder.i64_const(block, *value),
             Constant::F64(value) => builder.f64_const_bits(block, value.to_bits()),
-            Constant::Str(value) => builder.heap_call(
+            Constant::Str(value) => lower_heap_constant(
                 block,
-                heap_descriptor(
-                    HeapOperation::ConstantStr(value.clone()),
-                    Vec::new(),
-                    value_type(value_types, instruction.id)?,
-                )?,
-                Vec::new(),
+                HeapOperation::ConstantStr(value.clone()),
+                value_type(value_types, instruction.id)?,
+                builder,
             ),
-            Constant::EmptyList => builder.heap_call(
+            Constant::EmptyList => lower_heap_constant(
                 block,
-                heap_descriptor(
-                    HeapOperation::EmptyList,
-                    Vec::new(),
-                    value_type(value_types, instruction.id)?,
-                )?,
-                Vec::new(),
+                HeapOperation::EmptyList,
+                value_type(value_types, instruction.id)?,
+                builder,
             ),
             Constant::StaticBytes(_) => {
                 return unsupported_operation(function.id, "immutable bytes constant")
             }
             Constant::Symbol(_) => return unsupported_operation(function.id, "Symbol constant"),
         },
-        InstructionKind::Copy(value) | InstructionKind::Move { value, .. } => {
+        InstructionKind::Copy(value) => {
             let value = read_value(builder, block, locals, *value, function.id)?;
             Ok(value)
         }
-        InstructionKind::PlaceInit { .. }
-        | InstructionKind::PlaceEnd { .. }
-        | InstructionKind::EndBorrow { .. }
-        | InstructionKind::Drop { .. } => builder.unit(block),
+        InstructionKind::Move { value, .. } => {
+            lower_move(function, *value, block, locals, value_types, builder)
+        }
+        InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => builder.unit(block),
+        InstructionKind::EndBorrow { value, .. } => {
+            lower_end_borrow(function, *value, block, locals, value_types, builder)
+        }
+        InstructionKind::Drop { value, glue, .. } => {
+            lower_drop(function, *value, *glue, block, locals, builder)
+        }
         InstructionKind::Runtime {
             operation,
             arguments,
@@ -178,8 +181,8 @@ pub(super) fn lower_instruction(
             layouts,
             builder,
         ),
-        InstructionKind::Borrow { .. } => {
-            return unsupported_operation(function.id, "borrow operation")
+        InstructionKind::Borrow { kind, value, .. } => {
+            lower_borrow(function, *kind, *value, block, locals, builder)
         }
         InstructionKind::FunctionRef(_) => {
             return unsupported_operation(function.id, "first-class function reference")

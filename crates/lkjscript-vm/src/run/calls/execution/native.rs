@@ -14,7 +14,11 @@ fn native_from_value(ty: ValueType, value: Value) -> Result<NativeValue> {
             .map(NativeValue::F64Bits)
             .ok_or_else(|| Error::msg("native boundary expected F64")),
         ValueType::Unit => Err(Error::msg("native boundary expected Unit")),
-        ValueType::Capability(_) | ValueType::Resource(_) | ValueType::Reference(_) => Err(
+        ValueType::Capability(_)
+        | ValueType::Resource(_)
+        | ValueType::Unique(_)
+        | ValueType::Loan(_)
+        | ValueType::Reference(_) => Err(
             Error::msg("VM/native adapter transfer is not enabled in automatic tiering"),
         ),
     }
@@ -26,7 +30,11 @@ fn value_from_native(value: NativeValue) -> Result<Value> {
         NativeValue::Bool(value) => Ok(Value::from_bool(value)),
         NativeValue::I64(value) => Ok(Value::from_i64(value)),
         NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
-        NativeValue::Capability(_) | NativeValue::Resource(_) | NativeValue::Reference(_) => {
+        NativeValue::Capability(_)
+        | NativeValue::Resource(_)
+        | NativeValue::Unique(_)
+        | NativeValue::Loan(_)
+        | NativeValue::Reference(_) => {
             unreachable!("automatic tier returned an ineligible native adapter")
         }
     }

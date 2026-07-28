@@ -132,7 +132,13 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             let slot = usize::from(vm.read_u8()?);
             let value = local(vm, slot)?;
             let owner = vm.unique.validate_any_owner(value)?;
-            if value.as_bytes_key().is_none() || !current_places(vm).iter().any(|place| matches!(place, unique::RuntimePlace::Active { owner: Some(actual), .. } if *actual == owner)) { return Err(Error::msg("bytes borrow source is not current owner")); }
+            if value.as_bytes_key().is_none()
+                || !current_places(vm).iter().any(|place| {
+                    matches!(place, unique::RuntimePlace::Active { owner: Some(actual), .. } if *actual == owner)
+                })
+            {
+                return Err(Error::msg("bytes borrow source is not current owner"));
+            }
             let borrowed = vm.unique.borrow_bytes(value)?;
             vm.push(borrowed);
         }
@@ -140,7 +146,13 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             let (place, slot) = place_and_slot(vm)?;
             let value = local(vm, slot)?;
             let owner = vm.unique.ensure_any_unloaned(value)?;
-            let exact = current_places(vm).get(place).is_some_and(|item| matches!(item, unique::RuntimePlace::Active { owner: Some(actual), .. } | unique::RuntimePlace::Active { transferred: Some(actual), .. } if *actual == owner));
+            let exact = current_places(vm).get(place).is_some_and(|item| {
+                matches!(
+                    item,
+                    unique::RuntimePlace::Active { owner: Some(actual), .. }
+                        | unique::RuntimePlace::Active { transferred: Some(actual), .. } if *actual == owner
+                )
+            });
             if !exact {
                 return Err(Error::msg("bytes Drop does not name exact owner"));
             }

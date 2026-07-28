@@ -56,6 +56,7 @@ impl JitSession {
         let execution_domain = self.objects[object_index].installed.execution_domain();
         self.last_runtime_trap = None;
         self.last_runtime_resource = None;
+        self.returned_unique = None;
         let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time)
             .with_max_active_frames(execution.max_frames)
             .with_max_active_values(execution.max_stack_values);
@@ -67,30 +68,14 @@ impl JitSession {
             self.vm_to_native_transitions = self.vm_to_native_transitions.saturating_add(1);
         }
         let report = match execution_domain {
-            lkjscript_native::NativeExecutionDomain::CollectorFree => {
-                let scope =
-                    lkjscript_core::ScopeId::new(self.next_resource_scope).ok_or_else(|| {
-                        EngineError::new(
-                            FailureCode::InvocationFailure,
-                            Some(function),
-                            "native resource scope exhausted",
-                        )
-                    })?;
-                self.next_resource_scope =
-                    self.next_resource_scope.checked_add(1).ok_or_else(|| {
-                        EngineError::new(
-                            FailureCode::InvocationFailure,
-                            Some(function),
-                            "native resource scope exhausted",
-                        )
-                    })?;
-                let mut services = JitIslandServices::new(scope, execution.max_handles)?;
-                let report = self.objects[object_index]
-                    .installed
-                    .invoke_island_with_services(native, arguments, &config, &mut services);
-                self.native_resources.add(services.finish());
-                report
-            }
+            lkjscript_native::NativeExecutionDomain::CollectorFree => self.invoke_collector_free(
+                function,
+                object_index,
+                native,
+                arguments,
+                &config,
+                execution,
+            ),
             lkjscript_native::NativeExecutionDomain::LegacyHeap => {
                 self.collector_runtime_invocations =
                     self.collector_runtime_invocations.saturating_add(1);
@@ -117,7 +102,7 @@ impl JitSession {
                 );
                 self.last_runtime_trap = services.last_trap.take();
                 self.last_runtime_resource = services.last_resource;
-                report
+                report.map_err(|error| invocation_error(function, error))
             }
         };
         if self.links.is_some() {
@@ -131,11 +116,14 @@ impl JitSession {
                 self.first_native_call = Some(elapsed);
             }
         }
-        let report = report.map_err(|error| invocation_error(function, error))?;
+        let report = report?;
         self.poll_calls = self.poll_calls.saturating_add(report.poll_count());
         self.resource_runtime_calls = self
             .resource_runtime_calls
             .saturating_add(report.resource_calls());
+        self.unique_runtime_calls = self
+            .unique_runtime_calls
+            .saturating_add(report.unique_calls());
         self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
         self.runtime_heap_attempts = self
             .runtime_heap_attempts

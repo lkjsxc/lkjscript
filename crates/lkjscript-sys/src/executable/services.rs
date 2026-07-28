@@ -1,5 +1,8 @@
 use super::*;
 
+mod noop;
+pub(super) use noop::*;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NativeInvocationConfig {
     pub(super) poll_fuel: u64,
@@ -104,6 +107,28 @@ pub enum NativeServiceError {
 /// roots; frame addresses and stack traversal remain private to this crate.
 pub trait NativeIslandRuntimeServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError>;
+    fn new_byte_vector(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError>;
+    fn move_byte_vector(&mut self, owner: NativeUnique)
+        -> Result<NativeUnique, NativeServiceError>;
+    fn borrow_byte_vector(
+        &mut self,
+        owner: NativeUnique,
+        kind: LoanType,
+    ) -> Result<NativeLoan, NativeServiceError>;
+    fn byte_slice_length(&mut self, loan: NativeLoan) -> Result<i64, NativeServiceError>;
+    fn byte_slice_byte_at(
+        &mut self,
+        loan: NativeLoan,
+        index: i64,
+    ) -> Result<i64, NativeServiceError>;
+    fn byte_slice_mut_set_byte(
+        &mut self,
+        loan: NativeLoan,
+        index: i64,
+        byte: i64,
+    ) -> Result<(), NativeServiceError>;
+    fn end_byte_vector_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError>;
+    fn drop_byte_vector(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError>;
 }
 
 pub trait NativeRuntimeServices {
@@ -126,23 +151,5 @@ pub trait NativeRuntimeServices {
         _arguments: &[NativeValue],
     ) -> Result<NativeValue, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
-    }
-}
-
-#[derive(Default)]
-pub(super) struct NoopNativeIslandRuntimeServices;
-
-impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
-    fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {
-        Err(NativeServiceError::HostFailure)
-    }
-}
-
-#[derive(Default)]
-pub(super) struct NoopNativeRuntimeServices;
-
-impl NativeRuntimeServices for NoopNativeRuntimeServices {
-    fn collect_references(&mut self, _roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
-        Ok(())
     }
 }

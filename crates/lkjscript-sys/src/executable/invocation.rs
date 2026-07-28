@@ -39,6 +39,14 @@ impl RawReturn {
             (Self::Integer(_), ValueType::Resource(_)) => {
                 Err(InvocationError::UnsupportedSignature)
             }
+            (Self::Integer(value), ValueType::Unique(kind)) if value != 0 => {
+                Ok(NativeValue::Unique(NativeUnique::new(kind, value)))
+            }
+            (Self::Integer(_), ValueType::Unique(_)) => Err(InvocationError::UnsupportedSignature),
+            (Self::Integer(value), ValueType::Loan(kind)) if value != 0 => {
+                Ok(NativeValue::Loan(NativeLoan::new(kind, value)))
+            }
+            (Self::Integer(_), ValueType::Loan(_)) => Err(InvocationError::UnsupportedSignature),
             (Self::Integer(value), ValueType::Reference(reference_type)) => Ok(
                 NativeValue::Reference(NativeReference::new(reference_type, value)),
             ),
@@ -58,6 +66,8 @@ pub(super) fn native_value_word(value: NativeValue, expected: ValueType) -> Opti
         NativeValue::Unit => 0,
         NativeValue::Capability(kind) => capability_word(kind),
         NativeValue::Resource(resource) => resource.opaque_word(),
+        NativeValue::Unique(unique) => unique.opaque_word(),
+        NativeValue::Loan(loan) => loan.opaque_word(),
         NativeValue::Reference(reference) => reference.opaque_word(),
     })
 }
@@ -102,6 +112,8 @@ pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgumen
             NativeValue::Resource(resource) => {
                 Some(MachineArgument::Integer(resource.opaque_word()))
             }
+            NativeValue::Unique(unique) => Some(MachineArgument::Integer(unique.opaque_word())),
+            NativeValue::Loan(loan) => Some(MachineArgument::Integer(loan.opaque_word())),
             NativeValue::Reference(reference) => {
                 Some(MachineArgument::Integer(reference.opaque_word()))
             }

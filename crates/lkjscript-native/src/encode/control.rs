@@ -27,6 +27,8 @@ impl FunctionEncoder<'_> {
                     | ValueType::Bool
                     | ValueType::Capability(_)
                     | ValueType::Resource(_)
+                    | ValueType::Unique(_)
+                    | ValueType::Loan(_)
                     | ValueType::Reference(_) => {
                         self.load_rax(self.value_offset(*value)?)?;
                     }

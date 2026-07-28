@@ -7,9 +7,9 @@ use lkjscript_ir::{
 };
 use lkjscript_native::{
     AllocationClass, BackendLimits, BoolComparison, F64Comparison, FunctionBuilder,
-    HeapCallDescriptor, HeapOperation, I64Comparison, InstallableImage, LayoutIdentity, LocalId,
-    MachinePlanBuilder, NativeError, ReferenceType, RuntimeCallSlot, RuntimeOutcome, Signature,
-    SourceFunctionId, SourceOrigin, StoreClass, ValueType,
+    HeapCallDescriptor, HeapOperation, I64Comparison, InstallableImage, LayoutIdentity, LoanType,
+    LocalId, MachinePlanBuilder, NativeError, ReferenceType, RuntimeCallSlot, RuntimeOutcome,
+    Signature, SourceFunctionId, SourceOrigin, StoreClass, UniqueType, ValueType,
 };
 
 mod enum_lower;
@@ -110,6 +110,7 @@ impl std::error::Error for LoweringError {}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LoweringDomain {
     ResourceIsland,
+    UniqueIsland,
     Legacy,
 }
 

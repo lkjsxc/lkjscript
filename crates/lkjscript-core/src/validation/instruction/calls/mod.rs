@@ -116,5 +116,5 @@ pub(super) fn apply(
     Ok(())
 }
 
-include!("calls/arguments.rs");
-include!("calls/returns.rs");
+include!("arguments.rs");
+include!("returns.rs");

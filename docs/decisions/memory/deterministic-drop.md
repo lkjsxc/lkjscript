@@ -5,8 +5,9 @@
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
 **Accepted contract with a verified static/dead whole-place spine and Current
-exact byte-vector execution in the evaluator and reference VM; full promotion
-still requires every typed resource and native tier on every runtime outcome.**
+exact byte-vector execution in the evaluator, reference VM, and forced native
+tiers; full promotion still requires every typed resource on every runtime
+outcome.**
 Aggregate partial moves remain out of scope.
 
 The implemented spine gives each direct affine SSA place an exact closed drop
@@ -19,11 +20,12 @@ Explicit typed resource close is paired with its exact resource-drop event; an
 otherwise-live typed resource remains a compile error rather than receiving
 fabricated cleanup.
 
-Conditional flags, implicit typed-resource close, native byte-vector release,
-cleanup-failure aggregation, and routing around instruction-originated trap,
-resource-limit, deadline, host-failure, or propagated callee outcomes are
-not Current. Native tiers fail closed for byte-vector instructions; they do not claim
-collector-free generated execution.
+Forced native byte-vector execution performs exact explicit drop and invocation
+teardown release, including instruction-originated trap and resource-limit
+cleanup, and proves zero final owners/loans. General conditional flags, implicit
+typed-resource close, cleanup-failure aggregation, and routing typed resources
+around instruction-originated trap, deadline, host-failure, or propagated callee
+outcomes are not Current.
 
 ## Obligations
 

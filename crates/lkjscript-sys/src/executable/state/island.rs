@@ -51,6 +51,7 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) active_value_homes: usize,
     pub(in crate::executable) peak_active_value_homes: usize,
     pub(in crate::executable) resource_calls: u64,
+    pub(in crate::executable) unique_calls: u64,
     pub(in crate::executable) metadata_invalid: bool,
 }
 
@@ -99,6 +100,7 @@ impl<'a> IslandCallState<'a> {
             active_value_homes: 0,
             peak_active_value_homes: 0,
             resource_calls: 0,
+            unique_calls: 0,
             metadata_invalid: false,
         }
     }

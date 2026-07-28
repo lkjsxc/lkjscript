@@ -16,16 +16,17 @@ pub use encode::{encode, EncodingConfig};
 pub use image::{
     CodeAccounting, EntryMetadata, ExactStackMap, FrameFacts, FrameHome, FrameHomeKind,
     HeapRuntimeSite, ImageContracts, ImageIntegrityError, InstallableImage, NativeExecutionDomain,
-    NativeReference, NativeResource, NativeValue, OutcomeKind, OutcomeMapEntry, Relocation,
-    RelocationKind, RelocationTarget, RootLocation, Safepoint, SourceMapEntry, TrapMapEntry,
+    NativeLoan, NativeReference, NativeResource, NativeUnique, NativeValue, OutcomeKind,
+    OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget, RootLocation, Safepoint,
+    SourceMapEntry, TrapMapEntry,
 };
 pub use lkjscript_contracts::{CapabilityKind, ResourceKind};
 pub use plan::{
     AllocationClass, BlockId, BoolComparison, F64Comparison, FunctionBuilder, FunctionId,
     FunctionPlan, HeapCallDescriptor, HeapOperation, I64Comparison, InternalMachineArgument,
-    InternalMachineResult, InternalRuntimeSignature, LayoutIdentity, LocalId, MachinePlanBuilder,
-    PlanError, ReferenceType, RuntimeCallSlot, RuntimeOutcome, Signature, SourceFunctionId,
-    SourceOrigin, StoreClass, TrapCode, ValueId, ValueType,
+    InternalMachineResult, InternalRuntimeSignature, LayoutIdentity, LoanType, LocalId,
+    MachinePlanBuilder, PlanError, ReferenceType, RuntimeCallSlot, RuntimeOutcome, Signature,
+    SourceFunctionId, SourceOrigin, StoreClass, TrapCode, UniqueType, ValueId, ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 

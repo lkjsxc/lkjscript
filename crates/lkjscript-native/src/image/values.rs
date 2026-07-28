@@ -146,6 +146,8 @@ pub enum NativeValue {
     Unit,
     Capability(lkjscript_contracts::CapabilityKind),
     Resource(NativeResource),
+    Unique(NativeUnique),
+    Loan(NativeLoan),
     Reference(NativeReference),
 }
 
@@ -164,6 +166,8 @@ impl NativeValue {
             Self::Unit => ValueType::Unit,
             Self::Capability(kind) => ValueType::Capability(kind),
             Self::Resource(resource) => ValueType::Resource(resource.resource_kind()),
+            Self::Unique(unique) => ValueType::Unique(unique.unique_type()),
+            Self::Loan(loan) => ValueType::Loan(loan.loan_type()),
             Self::Reference(reference) => ValueType::Reference(reference.reference_type()),
         }
     }

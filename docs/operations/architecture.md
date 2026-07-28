@@ -36,10 +36,12 @@ plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
 and `ExecutableProgram` retains the complete plan. The independently recomputed
 direct-affine SSA inventory remains derived evidence. The public 62-record
 inventory reports Current tracing layouts and Accepted deterministic candidates.
-The first exact byte-vector family now has explicit end-borrow/drop execution
-and execution-owned `UniqueStore` backing in the evaluator and reference VM;
-native tiers reject it before entry. General regions, pools, broader unique
-storage, and collector removal remain Accepted Contract work.
+The first exact byte-vector family has explicit end-borrow/drop execution and
+execution-owned `UniqueStore` backing in the evaluator, reference VM, and forced
+native tiers. Native lowering assigns distinct unique/shared-loan/exclusive-loan
+machine identities and selects an invocation-owned bounded unique/loan runtime
+only after whole-group preflight. General regions, pools, broader unique storage,
+immutable bytes/path, and collector removal remain Accepted Contract work.
 
 Provider authority enters only through explicit closed capability parameters.
 Package verification bounds grants; bytecode records exact main requirements;
@@ -47,9 +49,12 @@ VM entry validates them before source effects. Acquired handles remain object
 capabilities and do not repeat provider parameters on every operation.
 Capability-bearing functions remain VM-only where a native tier lacks the exact
 value and operation contract; forced tiers reject before effects without
-fallback. The sole Current native resource operation is `standard-input` from
-exact `stdio` capability to borrowed `input-stream`, dispatched through a
-noncollecting invocation state and invocation-owned core resource table.
+fallback. The sole Current native resource operation remains `standard-input` from exact
+`stdio` capability to borrowed `input-stream`. It and the Current exact
+byte-vector subset use the noncollecting invocation state; the former uses the
+invocation-owned core resource table and the latter uses an invocation-owned
+bounded `UniqueStore` and loan table. Mixed resource/unique groups reject before
+effects until that composition is independently verified.
 
 Linux x86-64 callable baseline and forced proof-optimizing claims require real
 synchronous generated entry from verified SSA. Exact Current coverage and

@@ -96,6 +96,8 @@ pub(super) fn convert_to_f64(
         | ValueType::Unit
         | ValueType::Capability(_)
         | ValueType::Resource(_)
+        | ValueType::Unique(_)
+        | ValueType::Loan(_)
         | ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
     }
 }

@@ -148,6 +148,7 @@ impl InstalledImage {
             peak_active_value_homes: state.peak_active_value_homes,
             active_value_homes: state.active_value_homes,
             resource_calls: 0,
+            unique_calls: 0,
             collector_runtime: true,
         })
     }

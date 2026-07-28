@@ -1,5 +1,7 @@
 use super::*;
 
+mod signatures;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RuntimeCallSlot {
     IdentityI64,
@@ -10,6 +12,16 @@ pub enum RuntimeCallSlot {
     EnterFunction,
     /// Installs or reuses the invocation-owned borrowed standard-input resource.
     StdinHandle,
+    ByteVectorNew,
+    ByteVectorMove,
+    ByteVectorBorrowShared,
+    ByteVectorBorrowExclusive,
+    ByteSliceLength,
+    ByteSliceByteAt,
+    ByteSliceMutSetByte,
+    ByteSliceEnd,
+    ByteSliceMutEnd,
+    ByteVectorDrop,
     /// Collecting reference round trip used by the closed runtime contract.
     CollectReference,
     /// Generic verified-frame-home heap dispatch. Plans create it only through
@@ -62,35 +74,7 @@ impl RuntimeCallSlot {
     /// plan signature; use `internal_abi_signature` for their private ABI.
     #[must_use]
     pub fn plan_signature(self) -> Option<Signature> {
-        match self {
-            Self::IdentityI64 => Some(Signature {
-                parameters: vec![ValueType::I64],
-                result: ValueType::I64,
-            }),
-            Self::Poll => Some(Signature {
-                parameters: Vec::new(),
-                result: ValueType::Unit,
-            }),
-            Self::EnterFunction => Some(Signature {
-                parameters: vec![ValueType::I64],
-                result: ValueType::Unit,
-            }),
-            Self::StdinHandle => Some(Signature {
-                parameters: vec![ValueType::Capability(
-                    lkjscript_contracts::CapabilityKind::Stdio,
-                )],
-                result: ValueType::Resource(lkjscript_contracts::ResourceKind::InputStream),
-            }),
-            Self::CollectReference => Some(Signature {
-                parameters: vec![ValueType::Reference(ReferenceType::Buf)],
-                result: ValueType::Reference(ReferenceType::Buf),
-            }),
-            Self::HeapDispatch
-            | Self::ReserveFrame
-            | Self::RegisterFrame
-            | Self::PublishSafepoint
-            | Self::UnregisterFrame => None,
-        }
+        signatures::plan_signature(self)
     }
 
     #[must_use]
@@ -132,6 +116,16 @@ impl RuntimeCallSlot {
             | Self::Poll
             | Self::EnterFunction
             | Self::StdinHandle
+            | Self::ByteVectorNew
+            | Self::ByteVectorMove
+            | Self::ByteVectorBorrowShared
+            | Self::ByteVectorBorrowExclusive
+            | Self::ByteSliceLength
+            | Self::ByteSliceByteAt
+            | Self::ByteSliceMutSetByte
+            | Self::ByteSliceEnd
+            | Self::ByteSliceMutEnd
+            | Self::ByteVectorDrop
             | Self::CollectReference => None,
         }
     }
@@ -148,6 +142,16 @@ impl RuntimeCallSlot {
                 | Self::Poll
                 | Self::EnterFunction
                 | Self::StdinHandle
+                | Self::ByteVectorNew
+                | Self::ByteVectorMove
+                | Self::ByteVectorBorrowShared
+                | Self::ByteVectorBorrowExclusive
+                | Self::ByteSliceLength
+                | Self::ByteSliceByteAt
+                | Self::ByteSliceMutSetByte
+                | Self::ByteSliceEnd
+                | Self::ByteSliceMutEnd
+                | Self::ByteVectorDrop
                 | Self::CollectReference
         )
     }

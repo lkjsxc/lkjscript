@@ -86,35 +86,67 @@ fn lowering_domain(
     program: &lkjscript_ir::Program,
     functions: &[FunctionId],
 ) -> Result<LoweringDomain, LoweringError> {
-    for function in functions {
-        let function = source_function(program, *function)?;
-        if function
+    let mut resource = false;
+    let mut unique = false;
+    for id in functions {
+        let function = source_function(program, *id)?;
+        let types = function
             .signature
             .parameters
             .iter()
             .chain(std::iter::once(function.signature.result.as_ref()))
-            .any(contains_capability_or_resource)
-            || function.blocks.iter().any(|block| {
-                block
-                    .parameters
+            .chain(
+                function
+                    .blocks
                     .iter()
-                    .any(|value| contains_capability_or_resource(&value.ty))
-                    || block.instructions.iter().any(|instruction| {
-                        contains_capability_or_resource(&instruction.ty)
-                            || matches!(
-                                instruction.kind,
-                                InstructionKind::Runtime {
-                                    operation: RuntimeOp::StdinHandle,
-                                    ..
-                                }
-                            )
-                    })
-            })
-        {
-            return Ok(LoweringDomain::ResourceIsland);
+                    .flat_map(|block| block.parameters.iter().map(|value| &value.ty)),
+            )
+            .chain(
+                function
+                    .blocks
+                    .iter()
+                    .flat_map(|block| block.instructions.iter().map(|value| &value.ty)),
+            );
+        for ty in types {
+            resource |= contains_capability_or_resource(ty);
+            unique |= contains_unique(ty);
         }
+        resource |= function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                matches!(
+                    instruction.kind,
+                    InstructionKind::Runtime {
+                        operation: RuntimeOp::StdinHandle,
+                        ..
+                    }
+                )
+            })
+        });
     }
-    Ok(LoweringDomain::Legacy)
+    match (resource, unique) {
+        (true, true) => Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(functions[0]),
+            "native resource and unique families cannot share one verified group",
+        )),
+        (true, false) => Ok(LoweringDomain::ResourceIsland),
+        (false, true) => Ok(LoweringDomain::UniqueIsland),
+        (false, false) => Ok(LoweringDomain::Legacy),
+    }
+}
+
+fn contains_unique(ty: &SsaType) -> bool {
+    match ty {
+        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
+        SsaType::List(inner) => contains_unique(inner),
+        SsaType::Enum { arguments, .. } => arguments.iter().any(contains_unique),
+        SsaType::Function(signature) => signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(signature.result.as_ref()))
+            .any(contains_unique),
+        _ => false,
+    }
 }
 
 fn contains_capability_or_resource(ty: &SsaType) -> bool {

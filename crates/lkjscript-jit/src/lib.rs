@@ -13,7 +13,8 @@ use std::time::{Duration, Instant};
 
 use lkjscript_core::{
     Error as CoreError, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap, GcLimit,
-    HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, Trap, Value, MAX_BUFFER_BYTES,
+    HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, Trap, UniqueKeyWord, UniqueStore,
+    UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value, MAX_BUFFER_BYTES,
     MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_ir::{
@@ -23,13 +24,13 @@ use lkjscript_ir::{
 };
 use lkjscript_native::{
     BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation, HeapRuntimeSite,
-    ImageContracts, OutcomeMapEntry, ReferenceType, Relocation, RuntimeCallSlot, Safepoint,
-    SourceMapEntry, TrapMapEntry,
+    ImageContracts, LoanType, NativeLoan, NativeUnique, OutcomeMapEntry, ReferenceType, Relocation,
+    RuntimeCallSlot, Safepoint, SourceMapEntry, TrapMapEntry,
 };
 use lkjscript_sys::executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
-    InvocationOutcome, NativeInvocationConfig, NativeResourceLimitKind, NativeRoot,
-    NativeRuntimeServices, NativeServiceError,
+    InvocationOutcome, InvocationReport, NativeInvocationConfig, NativeResourceLimitKind,
+    NativeRoot, NativeRuntimeServices, NativeServiceError,
 };
 
 pub use lkjscript_ir::FunctionId;
@@ -65,7 +66,9 @@ pub use scalar::{
     native_type, EntryDecision, JitExecution, ScalarInvocation, ScalarInvocationOutcome,
     ScalarSignature,
 };
-pub use stats::{CompileStats, FunctionTierRecord, JitStats, NativeResourceStats};
+pub use stats::{
+    CompileStats, FunctionTierRecord, JitStats, NativeResourceStats, NativeUniqueStats,
+};
 
 enum ProgramAuthority {
     Baseline(VerifiedProgram),
@@ -116,7 +119,10 @@ pub struct JitSession {
     barrier_count: u64,
     collector_runtime_invocations: u64,
     resource_runtime_calls: u64,
+    unique_runtime_calls: u64,
     native_resources: NativeResourceStats,
+    native_unique: NativeUniqueStats,
+    returned_unique: Option<Vec<u8>>,
     next_resource_scope: u64,
     peak_native_frame_depth: usize,
     vm_to_native_transitions: u64,

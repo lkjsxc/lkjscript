@@ -73,6 +73,18 @@ pub(super) fn lower_runtime(
     }
     match operation {
         RuntimeOp::StdinHandle => builder.runtime_call(block, RuntimeCallSlot::StdinHandle, values),
+        RuntimeOp::OwnedBufNew => {
+            builder.runtime_call(block, RuntimeCallSlot::ByteVectorNew, values)
+        }
+        RuntimeOp::OwnedBufLen => {
+            builder.runtime_call(block, RuntimeCallSlot::ByteSliceLength, values)
+        }
+        RuntimeOp::OwnedBufRef => {
+            builder.runtime_call(block, RuntimeCallSlot::ByteSliceByteAt, values)
+        }
+        RuntimeOp::OwnedBufSet => {
+            builder.runtime_call(block, RuntimeCallSlot::ByteSliceMutSetByte, values)
+        }
         RuntimeOp::Add | RuntimeOp::Subtract | RuntimeOp::Multiply | RuntimeOp::Divide => {
             let [left, right] = two_values(&values)?;
             match value_type(value_types, arguments[0])? {
@@ -149,9 +161,11 @@ pub(super) fn lower_runtime(
                 ValueType::F64 => {
                     builder.f64_compare(block, F64Comparison::OrderedEqual, left, right)
                 }
-                ValueType::Capability(_) | ValueType::Resource(_) | ValueType::Reference(_) => {
-                    Err(lkjscript_native::PlanError::UnknownValue)
-                }
+                ValueType::Capability(_)
+                | ValueType::Resource(_)
+                | ValueType::Unique(_)
+                | ValueType::Loan(_)
+                | ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
             }
         }
         RuntimeOp::F64BitsEqual => {

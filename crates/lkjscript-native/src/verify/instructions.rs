@@ -131,7 +131,17 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
         RuntimeCallSlot::IdentityI64
         | RuntimeCallSlot::Poll
         | RuntimeCallSlot::EnterFunction
-        | RuntimeCallSlot::StdinHandle => {}
+        | RuntimeCallSlot::StdinHandle
+        | RuntimeCallSlot::ByteVectorNew
+        | RuntimeCallSlot::ByteVectorMove
+        | RuntimeCallSlot::ByteVectorBorrowShared
+        | RuntimeCallSlot::ByteVectorBorrowExclusive
+        | RuntimeCallSlot::ByteSliceLength
+        | RuntimeCallSlot::ByteSliceByteAt
+        | RuntimeCallSlot::ByteSliceMutSetByte
+        | RuntimeCallSlot::ByteSliceEnd
+        | RuntimeCallSlot::ByteSliceMutEnd
+        | RuntimeCallSlot::ByteVectorDrop => {}
         RuntimeCallSlot::HeapDispatch
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame

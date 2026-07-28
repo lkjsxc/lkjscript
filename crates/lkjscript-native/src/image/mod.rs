@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::plan::{
-    FunctionId, HeapCallDescriptor, ReferenceType, RuntimeCallSlot, Signature, SourceFunctionId,
-    SourceOrigin, TrapCode, ValueType,
+    FunctionId, HeapCallDescriptor, LoanType, ReferenceType, RuntimeCallSlot, Signature,
+    SourceFunctionId, SourceOrigin, TrapCode, UniqueType, ValueType,
 };
 
 mod access;
@@ -22,6 +22,7 @@ mod layouts;
 mod maps;
 #[cfg(test)]
 mod tests;
+mod tokens;
 mod values;
 
 use accounting::*;
@@ -32,6 +33,7 @@ pub use frames::*;
 pub use heap_sites::*;
 use layouts::*;
 pub use maps::*;
+pub use tokens::*;
 pub use values::*;
 
 #[derive(Debug)]

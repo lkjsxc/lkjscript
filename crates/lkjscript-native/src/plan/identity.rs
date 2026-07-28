@@ -39,6 +39,17 @@ pub enum ReferenceType {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum UniqueType {
+    ByteVector,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum LoanType {
+    ByteSlice,
+    ByteSliceMut,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ValueType {
     I64,
     F64,
@@ -46,6 +57,8 @@ pub enum ValueType {
     Unit,
     Capability(lkjscript_contracts::CapabilityKind),
     Resource(lkjscript_contracts::ResourceKind),
+    Unique(UniqueType),
+    Loan(LoanType),
     Reference(ReferenceType),
 }
 
@@ -59,7 +72,9 @@ impl ValueType {
             | Self::Bool
             | Self::Unit
             | Self::Capability(_)
-            | Self::Resource(_) => None,
+            | Self::Resource(_)
+            | Self::Unique(_)
+            | Self::Loan(_) => None,
         }
     }
 
@@ -76,6 +91,9 @@ impl ValueType {
             Self::Reference(ReferenceType::Buf) => LayoutIdentity::new(7),
             Self::Capability(kind) => LayoutIdentity::new(8 + kind as u32),
             Self::Resource(kind) => LayoutIdentity::new(16 + kind as u32),
+            Self::Unique(UniqueType::ByteVector) => LayoutIdentity::new(28),
+            Self::Loan(LoanType::ByteSlice) => LayoutIdentity::new(29),
+            Self::Loan(LoanType::ByteSliceMut) => LayoutIdentity::new(30),
             Self::Reference(ReferenceType::Product(layout))
             | Self::Reference(ReferenceType::List(layout, _))
             | Self::Reference(ReferenceType::Enum(layout, _)) => layout,

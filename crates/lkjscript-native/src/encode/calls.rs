@@ -39,8 +39,10 @@ impl FunctionEncoder<'_> {
                 | ValueType::Bool
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
+                | ValueType::Unique(_)
+                | ValueType::Loan(_)
                 | ValueType::Reference(_) => {
-                    let register = [6_u8, 2_u8]
+                    let register = [6_u8, 2_u8, 1_u8]
                         .get(integer_index)
                         .copied()
                         .ok_or(NativeError::Encode(EncodeError::UnsupportedSignature))?;
@@ -78,6 +80,8 @@ impl FunctionEncoder<'_> {
             | ValueType::Bool
             | ValueType::Capability(_)
             | ValueType::Resource(_)
+            | ValueType::Unique(_)
+            | ValueType::Loan(_)
             | ValueType::Reference(_) => {
                 self.store_rax(self.value_offset(output)?)?;
             }

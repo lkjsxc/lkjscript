@@ -79,7 +79,7 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     assert!(explain.stderr.is_empty());
     let text = String::from_utf8(explain.stdout).expect("explanation is UTF-8");
     assert!(text.contains("memory-identity=byte-vector"));
-    assert!(text.contains("current exact evaluator/VM family; native fail-closed"));
+    assert!(text.contains("current exact evaluator/VM/forced-native byte-vector subset"));
 
     let traced = Command::new(binary)
         .args(["memory", "traced", "--json"])

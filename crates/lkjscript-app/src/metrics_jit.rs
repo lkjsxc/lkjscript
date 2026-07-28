@@ -3,6 +3,7 @@ use lkjscript_jit::JitStats;
 use crate::metrics_json::string;
 
 pub fn render(stats: &JitStats) -> String {
+    let island = crate::metrics_jit_island::render(stats);
     let functions = stats
         .functions
         .iter()
@@ -108,7 +109,7 @@ pub fn render(stats: &JitStats) -> String {
             "\"allocation_bytes_estimate\":{},\"collections\":{},",
             "\"peak_live_heap_bytes_estimate\":{},\"maximum_roots\":{},",
             "\"runtime_heap_attempts\":{},\"runtime_heap_successes\":{},",
-            "\"barrier_count\":{},\"peak_native_frame_depth\":{},",
+            "\"barrier_count\":{},\"island\":{},\"peak_native_frame_depth\":{},",
             "\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},",
             "\"functions\":[{}],\"objects\":[{}]}}"
         ),
@@ -147,6 +148,7 @@ pub fn render(stats: &JitStats) -> String {
         stats.runtime_heap_attempts,
         stats.runtime_heap_successes,
         stats.barrier_count,
+        island,
         stats.peak_native_frame_depth,
         stats.vm_to_native_transitions,
         stats.native_to_vm_transitions,

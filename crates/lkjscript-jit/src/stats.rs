@@ -1,5 +1,8 @@
 use crate::*;
 
+mod unique;
+pub use unique::NativeUniqueStats;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NativeResourceStats {
     pub reservations: u64,
@@ -149,6 +152,8 @@ pub struct JitStats {
     pub collector_runtime_invocations: u64,
     pub resource_runtime_calls: u64,
     pub native_resources: NativeResourceStats,
+    pub native_unique: NativeUniqueStats,
+    pub unique_runtime_calls: u64,
     pub peak_native_frame_depth: usize,
     pub vm_to_native_transitions: u64,
     pub native_to_vm_transitions: u64,

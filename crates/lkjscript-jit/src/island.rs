@@ -2,8 +2,13 @@ use std::num::NonZeroU64;
 
 use crate::*;
 use lkjscript_core::{ProviderId, ResourceKey, ResourceTable, ResourceTableLimits, ScopeId};
-use lkjscript_native::{CapabilityKind, NativeResource, ResourceKind};
+use lkjscript_native::{
+    CapabilityKind, LoanType, NativeLoan, NativeResource, NativeUnique, ResourceKind,
+};
 use lkjscript_sys::executable::{NativeIslandRuntimeServices, NativeServiceError};
+
+mod unique;
+use unique::JitUniqueRuntime;
 
 struct BorrowedStandardInput;
 
@@ -13,11 +18,12 @@ pub(crate) struct JitIslandServices {
     provider: ProviderId,
     scope: ScopeId,
     stats: NativeResourceStats,
+    unique: JitUniqueRuntime,
 }
 
 impl JitIslandServices {
-    pub(crate) fn new(scope: ScopeId, max_handles: usize) -> Result<Self, EngineError> {
-        let max_handles = max_handles.min(u32::MAX as usize);
+    pub(crate) fn new(scope: ScopeId, config: &ExecutionConfig) -> Result<Self, EngineError> {
+        let max_handles = config.max_handles.min(u32::MAX as usize);
         let limits = ResourceTableLimits::new(
             max_handles.max(1),
             max_handles,
@@ -33,10 +39,24 @@ impl JitIslandServices {
             provider: ProviderId::for_capability(CapabilityKind::Stdio),
             scope,
             stats: NativeResourceStats::default(),
+            unique: JitUniqueRuntime::new(config)?,
         })
     }
 
-    pub(crate) fn finish(mut self) -> NativeResourceStats {
+    pub(crate) fn export_unique(
+        &mut self,
+        owner: NativeUnique,
+    ) -> Result<Vec<u8>, NativeServiceError> {
+        self.unique.export_owner(owner)
+    }
+
+    pub(crate) fn finish(
+        mut self,
+    ) -> (
+        NativeResourceStats,
+        NativeUniqueStats,
+        Option<ResourceLimitKind>,
+    ) {
         if let Some(key) = self.stdin.take() {
             if self
                 .table
@@ -52,7 +72,9 @@ impl JitIslandServices {
         self.stats.ordinary_obligations = table_stats.ordinary_obligations() as u64;
         self.stats.borrowed_obligations = table_stats.borrowed_open() as u64;
         self.stats.emergency_obligations = self.table.emergency_obligations().count() as u64;
-        self.stats
+        let last_resource = self.unique.last_resource();
+        let unique = self.unique.finish();
+        (self.stats, unique, last_resource)
     }
 
     fn native_stdin(&mut self) -> Result<NativeResource, NativeServiceError> {
@@ -86,6 +108,54 @@ impl JitIslandServices {
 impl NativeIslandRuntimeServices for JitIslandServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {
         self.native_stdin()
+    }
+
+    fn new_byte_vector(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.allocate(size)
+    }
+
+    fn move_byte_vector(
+        &mut self,
+        owner: NativeUnique,
+    ) -> Result<NativeUnique, NativeServiceError> {
+        self.unique.move_owner(owner)
+    }
+
+    fn borrow_byte_vector(
+        &mut self,
+        owner: NativeUnique,
+        kind: LoanType,
+    ) -> Result<NativeLoan, NativeServiceError> {
+        self.unique.borrow(owner, kind)
+    }
+
+    fn byte_slice_length(&mut self, loan: NativeLoan) -> Result<i64, NativeServiceError> {
+        self.unique.length(loan)
+    }
+
+    fn byte_slice_byte_at(
+        &mut self,
+        loan: NativeLoan,
+        index: i64,
+    ) -> Result<i64, NativeServiceError> {
+        self.unique.byte_at(loan, index)
+    }
+
+    fn byte_slice_mut_set_byte(
+        &mut self,
+        loan: NativeLoan,
+        index: i64,
+        byte: i64,
+    ) -> Result<(), NativeServiceError> {
+        self.unique.set_byte(loan, index, byte)
+    }
+
+    fn end_byte_vector_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError> {
+        self.unique.end_borrow(loan)
+    }
+
+    fn drop_byte_vector(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError> {
+        self.unique.drop_owner(owner)
     }
 }
 

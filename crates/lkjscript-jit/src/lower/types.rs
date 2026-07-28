@@ -63,13 +63,14 @@ pub(super) fn lower_type(
                 })?,
             )))
         }
-        SsaType::Bytes | SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
-            Err(LoweringError::new(
-                LoweringFailureCode::UnsupportedType,
-                Some(function),
-                "collector-free bytes and byte-vector native lowering is not yet installed",
-            ))
-        }
+        SsaType::Bytes => Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            "collector-free bytes native lowering is not yet installed",
+        )),
+        SsaType::ByteVector => Ok(ValueType::Unique(UniqueType::ByteVector)),
+        SsaType::ByteSlice => Ok(ValueType::Loan(LoanType::ByteSlice)),
+        SsaType::ByteSliceMut => Ok(ValueType::Loan(LoanType::ByteSliceMut)),
         _ => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
             Some(function),
@@ -97,6 +98,30 @@ pub(super) fn require_resource_island_type(
             LoweringFailureCode::UnsupportedType,
             Some(function),
             format!("type {ty:?} is reachable from a collector-free resource group"),
+        ))
+    }
+}
+
+pub(super) fn require_unique_island_type(
+    function: FunctionId,
+    ty: &SsaType,
+) -> Result<(), LoweringError> {
+    if matches!(
+        ty,
+        SsaType::Unit
+            | SsaType::Bool
+            | SsaType::I64
+            | SsaType::F64
+            | SsaType::ByteVector
+            | SsaType::ByteSlice
+            | SsaType::ByteSliceMut
+    ) {
+        Ok(())
+    } else {
+        Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            format!("type {ty:?} is reachable from a collector-free unique group"),
         ))
     }
 }

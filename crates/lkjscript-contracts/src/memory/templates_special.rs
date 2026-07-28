@@ -51,7 +51,7 @@ pub const fn affine_buffer(
         mutability: "exclusive borrow only",
         possible_aliases: "verified temporary loans",
         copyability: "affine",
-        current_ownership: "whole-place unique owner through evaluator and VM",
+        current_ownership: "whole-place unique owner through evaluator, VM, and forced native",
         escape_behavior: "explicit move or return",
         lifetime: "owner and inferred same-block loans",
         strong_cycles: "impossible",
@@ -65,12 +65,12 @@ pub const fn affine_buffer(
         current_trace_fields: "none",
         current_exact_roots: "none in evaluator/VM; native is fail-closed",
         object_identity: "runtime-local generation-bearing owner key",
-        current_placement: "evaluator/VM execution-owned deterministic unique store",
+        current_placement: "execution-owned unique store in evaluator, VM, and forced native",
         candidate_placements: "stack header plus unique allocation or owned region",
         reclamation_plan: "exact owner drop after final loan",
         producers,
         tests,
-        status: "current exact evaluator/VM family; native fail-closed",
+        status: "current exact evaluator/VM/forced-native byte-vector subset",
     }
 }
 

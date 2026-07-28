@@ -16,10 +16,6 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
             ),
         ),
         (
-            "owned-buffer.lkjscript",
-            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nbyte-slice-byte-at/\nborrow/\nb\n/borrow\n0\n/byte-slice-byte-at\n/let\n/main\n",
-        ),
-        (
             "bytes.lkjscript",
             "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nbytes-length/\nbytes-literal/\n00ff\n/bytes-literal\n/bytes-length\n/main\n",
         ),
@@ -36,28 +32,22 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
             error.code(),
             FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
         ));
-        if matches!(name, "owned-buffer.lkjscript" | "bytes.lkjscript") {
+        if name == "bytes.lkjscript" {
             let diagnostic = error.to_string();
             assert!(
-                diagnostic.contains("collector-free")
-                    || diagnostic.contains("byte-vector")
-                    || diagnostic.contains("ownership")
-                    || diagnostic.contains("bytes"),
-                "forced owned-buffer rejection was not ownership-specific: {diagnostic}"
+                diagnostic.contains("collector-free") || diagnostic.contains("bytes"),
+                "forced bytes rejection was not type-specific: {diagnostic}"
             );
             let proof = execute_optimizing(
                 program.ssa(),
                 &ExecutionConfig::default(),
                 JitConfig::default(),
             )
-            .expect_err("forced proof tier must reject missing native unique lowering");
-            assert!(
-                matches!(
-                    proof.code(),
-                    FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
-                ),
-                "forced proof rejection was not type/operation-specific: {proof}"
-            );
+            .expect_err("forced proof tier must reject missing native bytes lowering");
+            assert!(matches!(
+                proof.code(),
+                FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
+            ));
         }
     }
 

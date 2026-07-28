@@ -26,7 +26,15 @@ pub(super) fn place_init(
 ) -> Result<()> {
     let (place, slot) = place_and_slot(proto, instruction)?;
     let owner = local_bytes(state, slot, proto, instruction)?;
-    if state.unique_places.iter().any(|item| matches!(item, UniquePlaceState::Active { owner: Some(value), .. } if *value == owner)) {
+    if state.unique_places.iter().any(|item| {
+        matches!(
+            item,
+            UniquePlaceState::Active {
+                owner: Some(value),
+                ..
+            } if *value == owner
+        )
+    }) {
         return Err(error(
             proto,
             instruction,
@@ -84,7 +92,15 @@ pub(super) fn borrow(
 ) -> Result<()> {
     let slot = instruction_operand(proto, instruction)?;
     let owner = local_bytes(state, slot, proto, instruction)?;
-    if !state.unique_places.iter().any(|place| matches!(place, UniquePlaceState::Active { owner: Some(value), .. } if *value == owner)) {
+    if !state.unique_places.iter().any(|place| {
+        matches!(
+            place,
+            UniquePlaceState::Active {
+                owner: Some(value),
+                ..
+            } if *value == owner
+        )
+    }) {
         return Err(error(
             proto,
             instruction,
@@ -102,7 +118,18 @@ pub(super) fn drop_owner(
 ) -> Result<()> {
     let (place, slot) = place_and_slot(proto, instruction)?;
     let owner = local_bytes(state, slot, proto, instruction)?;
-    let exact = state.unique_places.get(place).is_some_and(|item| matches!(item, UniquePlaceState::Active { owner: Some(value), .. } | UniquePlaceState::Active { transferred: Some(value), .. } if *value == owner));
+    let exact = state.unique_places.get(place).is_some_and(|item| {
+        matches!(
+            item,
+            UniquePlaceState::Active {
+                owner: Some(value),
+                ..
+            } | UniquePlaceState::Active {
+                transferred: Some(value),
+                ..
+            } if *value == owner
+        )
+    });
     if !exact {
         return Err(error(
             proto,

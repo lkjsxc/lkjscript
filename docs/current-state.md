@@ -1,7 +1,6 @@
 # Current State
 
 ## Status
-
 <!-- LKJ-STATUS id=affine-resource-handles status=superseded -->
 <!-- LKJ-STATUS id=agent-work-state status=current -->
 <!-- LKJ-STATUS id=byte-text-ownership status=accepted-contract -->
@@ -15,6 +14,7 @@
 <!-- LKJ-STATUS id=memory-plan status=current -->
 <!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
+<!-- LKJ-STATUS id=native-byte-vector-island status=current -->
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->
 <!-- LKJ-STATUS id=opaque-paths status=current -->
@@ -38,7 +38,6 @@ results, and immutable AI-authorability records live only under
 Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Language and source
-
 - `.lkjscript` is the only accepted suffix. Source is marker-free with one exact
   contract digest; unknown or removed marker forms are ordinary syntax errors.
 - All language-owned and user-defined names use exact lowercase ASCII
@@ -63,7 +62,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
   operations reject `string` pathname operands.
 
 ## Modules and local packages
-
 - Every source file is a module identified only by its package-root-relative UTF-8 path.
 - Declarations are private by default. The `public` field is explicit; each
   `import/` records exact module paths and sorted declaration lists. Wildcards,
@@ -79,7 +77,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
   network, home-directory, and environment fallback resolution do not exist.
 
 ## Ownership and resources
-
 - `byte-vector`, whole-place `move`, `byte-slice`, and `byte-slice-mut` expose
   the existing bounded ownership foundation without `owned buf`, `ref buf`, or `ref-mut buf` source aliases.
 - The universal source type `handle` is removed. Eleven exact resource kinds
@@ -92,28 +89,27 @@ Git history. They do not provide aliases or acceptance fallbacks.
   discharge at explicit terminators, and pairs explicit `drop`, SQLite close,
   and SQLite finalize with exact resource-drop events.
 - Byte-vector cleanup is elaborated on normal lexical and source-level return,
-  break, continue, trap, and exit paths. Typed resources still require
-  move, return, or explicit close. Conditional flags, implicit resource close,
-  instruction-originated all-outcome routing, physical byte release, cleanup
-  failures, and generated native host execution remain accepted-contract work,
-  so deterministic drop and typed resources are not complete Current capabilities.
+  break, continue, trap, and exit paths. Forced native byte-vector execution
+  additionally releases any outstanding loan/owner after an instruction-originated
+  trap or resource failure. Typed resources still require move, return, or
+  explicit close. General conditional flags, implicit resource close, structured
+  cleanup-failure attachment, and generated owned-resource host execution remain
+  accepted-contract work, so deterministic drop and typed resources are not
+  complete Current capabilities.
 - The VM uses checked generation-bearing core resource-table tokens; evaluator
   executions use exact fake lifecycle providers without ambient host I/O. Forced
   baseline and proof JIT support only `standard-input`, installing or reusing a
   borrowed `input-stream` in an invocation-owned table and removing it at
   teardown. Owned native resource operations and evaluator dispatch remain incomplete.
-- Core provides a bounded deterministic unique store with opaque store-scoped,
-  generation-bearing typed keys for byte-vector, dynamic bytes, and path
-  layouts. The exact byte-vector constructor, move/borrow, byte-slice
-  length/read/write family and immutable bytes literals, length/read, checked
-  slice copy, clone, freeze, thaw, loan end, and owner drop use execution-owned
-  keys and bounded loan records in the SSA evaluator and validated reference VM.
-  Static bytes use immutable constant storage; dynamic bytes are affine. Both
-  engines release owners exactly once or transfer/snapshot one owned return;
-  native tiers reject both byte families in preflight.
+- Core provides deterministic unique storage for byte-vector, dynamic bytes, and
+  path layouts. Exact byte-vector owners and loans execute through evaluator, VM,
+  forced baseline, and forced proof tiers with typed ABI categories, bounded
+  runtime tables, and exactly-once release on every supported outcome.
+- Immutable bytes literals, length/read, slice copy, clone, freeze, and thaw use
+  static or execution-owned storage through evaluator and VM. Native tiers reject
+  bytes before entry; path and resource/unique mixing remain outside this subset.
 
 ## Compiler and execution
-
 - One validated source tree feeds module resolution, typed HIR, ownership and
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
 - Linux x86-64 baseline acceptance requires real synchronous native calls. The
@@ -126,7 +122,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   fallback, no collector-capable runtime call or safepoint metadata, and zero
   allocation, collection, root, and barrier counters. Collector-free scalar and
   supported resource groups use a distinct noncollecting sys dispatch and do
-  not construct or configure `GcHeap` or `JitHeapServices`.
+  not construct or configure `GcHeap` or `JitHeapServices`. The exact
+  byte-vector family uses that domain with closed allocation/move/borrow/view/
+  end-borrow/drop calls, zero roots/safepoints/heap dispatch/barriers, and zero
+  final live owners, loans, or release backlog.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
@@ -149,10 +148,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
   across every compiler/runtime authority remains an accepted target.
 
 ## Repository and agent platform
-
-- `lkjscript describe --json` and `semantic describe` expose the deterministic closed contract registry.
-- Capsule manifests, repository policy/provenance, graph/query outputs, capability status, and agent work state
-  use stable schemas plus exact contract digests.
+- `lkjscript describe --json` and `semantic describe` expose the deterministic
+  closed contract registry.
+- Capsule manifests, repository policy/provenance, graph/query outputs,
+  capability status, and agent work state use stable schemas plus exact contract
+  digests.
 - The repository graph remains bounded and evidence-backed. Agent checkpoints
   remain revision-checked, append-only, and fail closed on stale semantic or
   repository identities.
@@ -162,16 +162,14 @@ Git history. They do not provide aliases or acceptance fallbacks.
   historical evidence is explicitly excluded rather than rewritten.
 
 ## Accepted targets not claimed Current
-
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
 - complete typed-resource compiler-inserted exactly-once cleanup, evaluator
   resource-operation dispatch, bounded structured cleanup-failure attachment,
   and forced native owned-resource execution beyond borrowed `standard-input`;
-- full affine `byte-vector` corpus migration, ranged lexical byte slices,
-  borrowed `str`, native unique-byte lowering, and removal of transitional
-  `buf` after complete cross-engine replacement;
-- complete region/borrow/drop semantics for resources nested in products and collections;
+- full affine `byte-vector` corpus migration, native bytes lowering, ranged
+  lexical byte slices, borrowed `str`, and removal of transitional `buf`;
+- complete region/borrow/drop semantics for resource-bearing aggregates;
 - the selected collector-free deterministic cutover: inferred modes and loans,
   ordinary and sealed shared regions, pools, exact cleanup, migrated evaluator,
   VM and native storage, no-RC falsification, and deletion of all tracing paths;
@@ -182,11 +180,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - automatic baseline-to-proof promotion acceptance beyond its selected measured candidate;
 - portability acceptance beyond Linux x86-64.
 
-Immutable `bytes` is executable in the compiler, SSA evaluator, validated bytecode, and reference VM.
-The complete collector-free island remains Accepted until native unique lowering and the other listed
-island types are complete.
+Immutable `bytes` is executable in the compiler, evaluator, validated bytecode,
+and VM. The complete island remains Accepted until native bytes, path, owned
+resources, and the other listed island requirements are complete.
 ## Verification authority
-
 The canonical local gate is:
 
 ```sh

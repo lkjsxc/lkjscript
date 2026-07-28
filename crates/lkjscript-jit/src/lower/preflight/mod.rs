@@ -1,5 +1,8 @@
 use super::*;
 
+mod runtime;
+use runtime::*;
+
 pub(super) fn preflight_function(
     program: &lkjscript_ir::Program,
     function: &Function,
@@ -7,14 +10,16 @@ pub(super) fn preflight_function(
     domain: LoweringDomain,
 ) -> Result<(), LoweringError> {
     lower_signature(function.id, &function.signature, layouts)?;
-    if domain == LoweringDomain::ResourceIsland {
-        for ty in function
-            .signature
-            .parameters
-            .iter()
-            .chain(std::iter::once(function.signature.result.as_ref()))
-        {
-            require_resource_island_type(function.id, ty)?;
+    for ty in function
+        .signature
+        .parameters
+        .iter()
+        .chain(std::iter::once(function.signature.result.as_ref()))
+    {
+        match domain {
+            LoweringDomain::ResourceIsland => require_resource_island_type(function.id, ty)?,
+            LoweringDomain::UniqueIsland => require_unique_island_type(function.id, ty)?,
+            LoweringDomain::Legacy => {}
         }
     }
     if function.id.raw() >= 64 {
@@ -27,14 +32,26 @@ pub(super) fn preflight_function(
     for block in &function.blocks {
         for parameter in &block.parameters {
             lower_type(function.id, &parameter.ty, layouts)?;
-            if domain == LoweringDomain::ResourceIsland {
-                require_resource_island_type(function.id, &parameter.ty)?;
+            match domain {
+                LoweringDomain::ResourceIsland => {
+                    require_resource_island_type(function.id, &parameter.ty)?;
+                }
+                LoweringDomain::UniqueIsland => {
+                    require_unique_island_type(function.id, &parameter.ty)?;
+                }
+                LoweringDomain::Legacy => {}
             }
         }
         for instruction in &block.instructions {
             lower_type(function.id, &instruction.ty, layouts)?;
-            if domain == LoweringDomain::ResourceIsland {
-                require_resource_island_type(function.id, &instruction.ty)?;
+            match domain {
+                LoweringDomain::ResourceIsland => {
+                    require_resource_island_type(function.id, &instruction.ty)?;
+                }
+                LoweringDomain::UniqueIsland => {
+                    require_unique_island_type(function.id, &instruction.ty)?;
+                }
+                LoweringDomain::Legacy => {}
             }
             match &instruction.kind {
                 InstructionKind::Constant(constant) => match constant {
@@ -52,10 +69,9 @@ pub(super) fn preflight_function(
                     }
                 },
                 InstructionKind::Copy(_)
-                    if domain == LoweringDomain::ResourceIsland
-                        && matches!(instruction.ty, SsaType::Resource(_)) =>
+                    if matches!(instruction.ty, SsaType::Resource(_) | SsaType::ByteVector) =>
                 {
-                    return unsupported_operation(function.id, "copy of affine resource");
+                    return unsupported_operation(function.id, "copy of affine value");
                 }
                 InstructionKind::Copy(_) => {}
                 InstructionKind::PlaceInit { .. }
@@ -64,6 +80,19 @@ pub(super) fn preflight_function(
                 | InstructionKind::Drop { .. }
                 | InstructionKind::Move { .. }
                     if domain == LoweringDomain::ResourceIsland => {}
+                InstructionKind::PlaceInit { .. }
+                | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::EndBorrow { .. }
+                | InstructionKind::Drop {
+                    glue: lkjscript_ir::DropGlueIdentity::ByteVector,
+                    ..
+                }
+                | InstructionKind::Move { .. }
+                | InstructionKind::Borrow { .. }
+                    if domain == LoweringDomain::UniqueIsland => {}
+                InstructionKind::Drop { .. } if domain == LoweringDomain::UniqueIsland => {
+                    return unsupported_operation(function.id, "non-byte-vector drop glue");
+                }
                 InstructionKind::PlaceInit { .. }
                 | InstructionKind::PlaceEnd { .. }
                 | InstructionKind::EndBorrow { .. }
@@ -122,53 +151,6 @@ pub(super) fn preflight_function(
         }
     }
     Ok(())
-}
-
-pub(super) fn supported_runtime(operation: RuntimeOp, domain: LoweringDomain) -> bool {
-    if domain == LoweringDomain::ResourceIsland && operation == RuntimeOp::StdinHandle {
-        return true;
-    }
-    matches!(
-        operation,
-        RuntimeOp::Add
-            | RuntimeOp::Subtract
-            | RuntimeOp::Multiply
-            | RuntimeOp::Divide
-            | RuntimeOp::EqualValue
-            | RuntimeOp::F64BitsEqual
-            | RuntimeOp::Less
-            | RuntimeOp::LessEqual
-            | RuntimeOp::Greater
-            | RuntimeOp::GreaterEqual
-            | RuntimeOp::Not
-            | RuntimeOp::BitAnd
-            | RuntimeOp::BitOr
-            | RuntimeOp::BitXor
-            | RuntimeOp::SameObject
-            | RuntimeOp::ListEqual
-            | RuntimeOp::Cons
-            | RuntimeOp::Car
-            | RuntimeOp::Cdr
-            | RuntimeOp::IsEmptyList
-            | RuntimeOp::EmptyStr
-            | RuntimeOp::BufNew
-            | RuntimeOp::BufLen
-            | RuntimeOp::BufRef
-            | RuntimeOp::BufSet
-            | RuntimeOp::BufClone
-            | RuntimeOp::BufFromStr
-            | RuntimeOp::BufToStr
-            | RuntimeOp::BufSlice
-            | RuntimeOp::BufGetU32
-            | RuntimeOp::BufSetU32
-            | RuntimeOp::StrLen
-            | RuntimeOp::StrRef
-            | RuntimeOp::StrAppend
-            | RuntimeOp::StrSlice
-            | RuntimeOp::StrFromByte
-            | RuntimeOp::StrFromI64
-            | RuntimeOp::StrFromF64
-    )
 }
 
 pub(super) fn unsupported_operation<T>(

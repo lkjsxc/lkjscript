@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use lkjscript_native::{
     CapabilityKind, FunctionId, HeapRuntimeSite, ImageContracts, ImageIntegrityError,
-    InstallableImage, NativeExecutionDomain, NativeReference, NativeResource, NativeValue,
-    ReferenceType, RelocationTarget, ResourceKind, RuntimeCallSlot, Signature, StoreClass,
-    TrapCode, ValueType,
+    InstallableImage, LoanType, NativeExecutionDomain, NativeLoan, NativeReference, NativeResource,
+    NativeUnique, NativeValue, ReferenceType, RelocationTarget, ResourceKind, RuntimeCallSlot,
+    Signature, StoreClass, TrapCode, UniqueType, ValueType,
 };
 
 mod accounting;

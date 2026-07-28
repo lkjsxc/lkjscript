@@ -116,6 +116,8 @@ impl FunctionEncoder<'_> {
                 | ValueType::Bool
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
+                | ValueType::Unique(_)
+                | ValueType::Loan(_)
                 | ValueType::Reference(_) => {
                     let scratch = [SCRATCH_INTEGER_ARGUMENT_0, SCRATCH_INTEGER_ARGUMENT_1]
                         .get(integer_index)
