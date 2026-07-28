@@ -28,7 +28,7 @@ pub(super) fn verify(
             if !is_owned_buf(&declared.ty)
                 || !matches!(
                     value_type(types, *value)?,
-                    SsaType::Ref(_) | SsaType::RefMut(_)
+                    SsaType::ByteSlice | SsaType::ByteSliceMut
                 )
                 || instruction.ty != SsaType::Unit
             {
@@ -49,7 +49,7 @@ pub(super) fn verify(
                     crate::DropGlueIdentity::Resource(_)
                 ) | (
                     crate::DropEventKind::ExplicitClose,
-                    crate::DropGlueIdentity::LegacyTracedByteVector
+                    crate::DropGlueIdentity::ByteVector
                 )
             );
             if declared.drop_glue != Some(*glue)
@@ -68,8 +68,8 @@ pub(super) fn verify(
         }
         InstructionKind::Borrow { kind, value, .. } => {
             let expected = match kind {
-                crate::BorrowKind::Shared => SsaType::Ref(Box::new(SsaType::Buf)),
-                crate::BorrowKind::Mutable => SsaType::RefMut(Box::new(SsaType::Buf)),
+                crate::BorrowKind::Shared => SsaType::ByteSlice,
+                crate::BorrowKind::Mutable => SsaType::ByteSliceMut,
             };
             if !is_owned_buf(value_type(types, *value)?) || instruction.ty != expected {
                 return fail("SSA Borrow ownership or reference type mismatch");

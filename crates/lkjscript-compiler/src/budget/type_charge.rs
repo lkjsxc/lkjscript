@@ -20,11 +20,7 @@ pub(super) fn measure_type(root: &Type, charges: &mut TypeCharges) -> Result<()>
         checked_add(&mut charges.work, 1, ResourceCategory::TypeWork)?;
         let growth = match ty {
             Type::Never => 0,
-            Type::Owned(_)
-            | Type::Ref(_)
-            | Type::RefMut(_)
-            | Type::List(_)
-            | Type::Forall { .. } => 1,
+            Type::List(_) | Type::Forall { .. } => 1,
             Type::Enum { arguments, .. } => arguments.len(),
             Type::Fn { params, .. } => params
                 .len()
@@ -41,11 +37,7 @@ pub(super) fn measure_type(root: &Type, charges: &mut TypeCharges) -> Result<()>
             ResourceCategory::TypeNesting,
         )?;
         match ty {
-            Type::Owned(child)
-            | Type::Ref(child)
-            | Type::RefMut(child)
-            | Type::List(child)
-            | Type::Forall { body: child, .. } => stack.push(child),
+            Type::List(child) | Type::Forall { body: child, .. } => stack.push(child),
             Type::Enum { arguments, .. } => stack.extend(arguments),
             Type::Fn { params, ret } => {
                 stack.extend(params);

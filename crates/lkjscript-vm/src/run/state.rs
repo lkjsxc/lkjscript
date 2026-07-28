@@ -21,6 +21,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             exit_code: None,
             inputs,
             resources: ResourceTable::new(config.max_handles),
+            unique: unique::UniqueRuntime::new(&config),
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
             allocation_error: None,
@@ -36,7 +37,19 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
 
     pub(super) fn run_inner(&mut self) -> ExecutionOutcome {
         let stopped = self.run_loop();
+        let failed = stopped.is_err();
         let mut outcome = match stopped {
+            Ok(Stop::Returned(value))
+                if self.chunk.main().return_unique
+                    == Some(lkjscript_core::UniqueValueKind::ByteVector) =>
+            {
+                match self.unique.export_owner(value) {
+                    Ok(value) => ExecutionOutcome::Returned(value),
+                    Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
+                        "invalid returned VM byte-vector: {error}"
+                    ))),
+                }
+            }
             Ok(Stop::Returned(value)) => {
                 let arena = std::mem::take(&mut self.arena);
                 match arena.into_owned(value) {
@@ -49,6 +62,21 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             Ok(Stop::Exited(code)) => ExecutionOutcome::Exited(code),
             Err(error) => outcome_from_error(error),
         };
+
+        let unique_cleanup = if failed {
+            self.unique.cleanup()
+        } else {
+            self.unique.verify_empty().inspect_err(|_| {
+                let _cleanup = self.unique.cleanup();
+            })
+        };
+        if let Err(error) = unique_cleanup {
+            let prior = outcome.summary();
+            outcome = ExecutionOutcome::HostFailure(HostError::during_cleanup(
+                format!("unique byte cleanup {error}"),
+                prior,
+            ));
+        }
 
         let resource_teardown = self.resources.teardown();
         let restore_error = self
@@ -96,6 +124,10 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             ip: 0,
             stack_base: 0,
             locals_base: 0,
+            unique_places: vec![
+                unique::RuntimePlace::Inactive;
+                usize::from(self.chunk.main().unique_places)
+            ],
         });
         for kind in &self.inputs.capabilities {
             self.stack.push(Value::from_capability(*kind));

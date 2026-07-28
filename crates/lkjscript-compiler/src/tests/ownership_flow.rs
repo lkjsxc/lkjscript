@@ -92,7 +92,7 @@ fn static_byte_cleanup_covers_normal_and_explicit_trap_paths() {
             matches!(
                 instruction.kind,
                 lkjscript_ir::InstructionKind::Drop {
-                    glue: lkjscript_ir::DropGlueIdentity::LegacyTracedByteVector,
+                    glue: lkjscript_ir::DropGlueIdentity::ByteVector,
                     kind: lkjscript_ir::DropEventKind::ImplicitCleanup,
                     ..
                 }

@@ -35,9 +35,10 @@ forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
 and explain commands are Current descriptive evidence. The machine tracing
 ratchet and `memory traced` expose the exact nine allowed `HeapObj` families.
 
-The authoritative pre-backend HIR memory plan is Current. Deterministic
-whole-place drop, generation-safe resource tables, and the first collector-free
-value island remain Accepted Contracts. The whole runtime still uses a tracing
+The authoritative pre-backend HIR memory plan is Current. The verified
+whole-place drop spine and generation-safe resource tables remain foundations
+for Accepted Contracts. The first exact byte-vector execution family is Current
+in the evaluator and reference VM and remains fail-closed in native tiers. The whole runtime still uses a tracing
 collector for structural values; collector-free deterministic memory is not
 Current.
 
@@ -67,12 +68,13 @@ traced byte object.
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
 byte loans, and direct typed resources. Only the opaque memory-verified HIR
-wrapper enters SSA lowering. The verified static/dead SSA drop spine now carries
-closed glue identities, explicit loan-end/drop events, and rejects active-owner
-`place-end`. It elaborates legacy byte-vector cleanup on lexical and explicit
-source terminator paths and records explicit typed-resource close; conditional
-flags, implicit resource close, instruction-originated all-outcome routing, and
-physical byte release remain incomplete. VM resources use the core table through
+wrapper enters SSA lowering. The verified static/dead SSA drop spine carries closed glue identities,
+explicit loan-end/drop events, and rejects active-owner `place-end`. Exact
+byte-vector execution uses an execution-owned `UniqueStore` in the evaluator
+and VM, consumes that spine's explicit events, and performs deterministic
+cleanup on engine errors. Conditional flags, implicit resource close, and
+instruction-originated cleanup CFG routing remain incomplete; native
+byte-vector execution is rejected before entry. VM resources use the core table through
 reusable generation-bearing guest tokens, exact providers, one execution scope,
 reservations, invalidating close, and reverse emergency cleanup. Evaluator
 executions own the same table with deterministic fake lifecycle providers and no

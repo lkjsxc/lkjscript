@@ -9,6 +9,10 @@ required engine with zero collector interaction and zero fallback.** Forced
 native tiers currently cover the scalar set plus `stdio` capability to borrowed
 `input-stream`; this subset does not promote the complete island.
 
+The exact byte-vector/slice family is now collector-free in the independent
+SSA evaluator and validated reference VM. Native tiers reject that family in
+preflight, so this partial execution evidence does not promote the island.
+
 ## Type Set
 
 The minimum island is:
@@ -33,12 +37,11 @@ proof JIT cannot use tracing or fall back after eligibility succeeds.
 
 ## Execution Domains
 
-The independent evaluator uses abstract deterministic owners and fake providers.
-Each evaluator execution owns the core generation-safe resource table, but
-resource-operation dispatch and compiler-inserted cleanup remain absent. The VM
-uses typed scalar slots, unique storage, resource slots, and explicit cleanup.
-Native tiers consume the same memory-verified SSA and closed runtime
-call table. Island native frames contain owners, loans, flags, resources,
+The independent evaluator uses execution-owned deterministic byte-vector keys
+and fake resource providers; resource-operation dispatch remains absent. The VM
+uses typed scalar slots, unique storage, bounded loan records, resource slots,
+and explicit cleanup. Native tiers consume the same memory-verified SSA and closed
+runtime call table. Island native frames contain owners, loans, flags, resources,
 budgets, deadlines, outcomes, and transitions, but no collector root map or
 collection poll.
 

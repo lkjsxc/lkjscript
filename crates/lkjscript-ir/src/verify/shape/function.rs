@@ -62,7 +62,7 @@ pub(crate) fn verify_function(program: &Program, function: &Function) -> crate::
     verify_type(program, &function.signature.result, &type_parameters)?;
     if matches!(
         function.signature.result.as_ref(),
-        SsaType::Ref(_) | SsaType::RefMut(_)
+        SsaType::ByteSlice | SsaType::ByteSliceMut
     ) {
         return fail("SSA function cannot return a lexical reference in this slice");
     }

@@ -39,7 +39,7 @@ impl Analyzer {
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
                         self.validate_product_type(&return_type)
                             .map_err(|message| self.error(source, format!("main: {message}")))?;
-                        if matches!(return_type, Type::Ref(_) | Type::RefMut(_)) {
+                        if matches!(return_type, Type::ByteSlice | Type::ByteSliceMut) {
                             return Err(self.error(
                                 source,
                                 "main cannot return a lexical reference in the initial ownership slice",
@@ -113,7 +113,10 @@ impl Analyzer {
             self.validate_product_type(ty)
                 .map_err(|message| self.error(origin, format!("def {name}: {message}")))?;
         }
-        if matches!(parsed.signature_return, Type::Ref(_) | Type::RefMut(_)) {
+        if matches!(
+            parsed.signature_return,
+            Type::ByteSlice | Type::ByteSliceMut
+        ) {
             return Err(self.error(
                 origin,
                 format!("def {name}: lexical references cannot be returned in the initial ownership slice"),

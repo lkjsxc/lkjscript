@@ -4,18 +4,34 @@ impl Evaluator<'_> {
     pub(crate) fn instruction(
         &mut self,
         instruction: &Instruction,
-        values: &[Option<EvalValue>],
+        values: &mut [Option<EvalValue>],
         depth: usize,
     ) -> std::result::Result<EvalValue, Flow> {
         match &instruction.kind {
             InstructionKind::Constant(constant) => self.constant(constant),
-            InstructionKind::Copy(source)
-            | InstructionKind::Move { value: source, .. }
-            | InstructionKind::Borrow { value: source, .. } => value(values, *source).cloned(),
-            InstructionKind::PlaceInit { .. }
-            | InstructionKind::PlaceEnd { .. }
-            | InstructionKind::EndBorrow { .. }
-            | InstructionKind::Drop { .. } => Ok(EvalValue::Unit),
+            InstructionKind::Copy(source) => value(values, *source).cloned(),
+            InstructionKind::Move { value: source, .. } => take_value(values, *source),
+            InstructionKind::Borrow {
+                kind,
+                value: source,
+                ..
+            } => self.unique.borrow(
+                value(values, *source)?,
+                matches!(kind, crate::BorrowKind::Mutable),
+            ),
+            InstructionKind::EndBorrow { value: source, .. } => {
+                let view = take_value(values, *source)?;
+                self.unique.end_borrow(view)?;
+                Ok(EvalValue::Unit)
+            }
+            InstructionKind::Drop { value: source, .. } => {
+                let owner = take_value(values, *source)?;
+                self.unique.drop_owner(owner)?;
+                Ok(EvalValue::Unit)
+            }
+            InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
+                Ok(EvalValue::Unit)
+            }
             InstructionKind::FunctionRef(function) => Ok(EvalValue::Function(*function)),
             InstructionKind::Runtime {
                 operation,
@@ -45,7 +61,7 @@ impl Evaluator<'_> {
                         }
                     },
                 };
-                let arguments = values_for(values, arguments)?;
+                let arguments = values_for_call(values, arguments)?;
                 self.call(target, arguments, depth.saturating_add(1))
             }
             InstructionKind::ProductValue { product, fields } => {
@@ -169,22 +185,6 @@ impl Evaluator<'_> {
             }
         }
     }
-
-    pub(crate) fn constant(&mut self, constant: &Constant) -> std::result::Result<EvalValue, Flow> {
-        match constant {
-            Constant::Unit => Ok(EvalValue::Unit),
-            Constant::Bool(value) => Ok(EvalValue::Bool(*value)),
-            Constant::I64(value) => Ok(EvalValue::I64(*value)),
-            Constant::F64(value) => Ok(EvalValue::F64(*value)),
-            Constant::Str(value) => {
-                self.allocate()?;
-                Ok(EvalValue::Str(value.clone()))
-            }
-            Constant::Symbol(value) => {
-                self.allocate()?;
-                Ok(EvalValue::Symbol(value.clone()))
-            }
-            Constant::EmptyList => Ok(EvalValue::List(Vec::new())),
-        }
-    }
 }
+
+include!("instruction/constants.rs");

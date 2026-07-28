@@ -7,15 +7,12 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
     valid.functions.push(Function {
         id: FunctionId::new(1),
         name: "owned-id".into(),
-        signature: Signature::monomorphic(
-            vec![SsaType::Owned(Box::new(SsaType::Buf))],
-            SsaType::Owned(Box::new(SsaType::Buf)),
-        ),
+        signature: Signature::monomorphic(vec![SsaType::ByteVector], SsaType::ByteVector),
         places: vec![crate::PlaceMetadata {
             id: PlaceId::new(0),
             binding: crate::BindingId::new(0),
-            ty: SsaType::Owned(Box::new(SsaType::Buf)),
-            drop_glue: Some(DropGlueIdentity::LegacyTracedByteVector),
+            ty: SsaType::ByteVector,
+            drop_glue: Some(DropGlueIdentity::ByteVector),
         }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
@@ -23,13 +20,13 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
             id: BlockId::new(0),
             parameters: vec![BlockParameter {
                 id: ValueId::new(0),
-                ty: SsaType::Owned(Box::new(SsaType::Buf)),
+                ty: SsaType::ByteVector,
                 owner_place: Some(PlaceId::new(0)),
                 origin: Origin::SYNTHETIC,
             }],
             instructions: vec![Instruction {
                 id: ValueId::new(1),
-                ty: SsaType::Owned(Box::new(SsaType::Buf)),
+                ty: SsaType::ByteVector,
                 kind: InstructionKind::Move {
                     place: PlaceId::new(0),
                     value: ValueId::new(0),
@@ -101,7 +98,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
     duplicate_loan.functions[1].blocks[0].instructions = vec![
         Instruction {
             id: ValueId::new(1),
-            ty: SsaType::Ref(Box::new(SsaType::Buf)),
+            ty: SsaType::ByteSlice,
             kind: InstructionKind::Borrow {
                 place: PlaceId::new(0),
                 loan: LoanId::new(0),
@@ -112,7 +109,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
         },
         Instruction {
             id: ValueId::new(2),
-            ty: SsaType::Ref(Box::new(SsaType::Buf)),
+            ty: SsaType::ByteSlice,
             kind: InstructionKind::Borrow {
                 place: PlaceId::new(0),
                 loan: LoanId::new(0),
@@ -145,7 +142,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
             instructions: vec![
                 Instruction {
                     id: ValueId::new(1),
-                    ty: SsaType::Ref(Box::new(SsaType::Buf)),
+                    ty: SsaType::ByteSlice,
                     kind: InstructionKind::Borrow {
                         place: PlaceId::new(0),
                         loan: LoanId::new(0),
@@ -160,10 +157,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
                     kind: InstructionKind::Runtime {
                         operation: RuntimeOp::OwnedBufLen,
                         arguments: vec![ValueId::new(1)],
-                        signature: Signature::monomorphic(
-                            vec![SsaType::Ref(Box::new(SsaType::Buf))],
-                            SsaType::I64,
-                        ),
+                        signature: Signature::monomorphic(vec![SsaType::ByteSlice], SsaType::I64),
                     },
                     metadata: metadata(EffectSet::READS_MEMORY),
                 },

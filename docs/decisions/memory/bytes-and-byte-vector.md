@@ -2,9 +2,15 @@
 
 ## Status
 
-**Accepted contract; Current source still contains transitional `buf` and
-`bytes` remains a PLACEHOLDER until the complete cutover lands.** No alias is
-retained after migration.
+**Accepted contract with one executable evaluator/VM family.** The exact
+`new-byte-vector`, whole-place `move`, `borrow`, `borrow-mut`,
+`byte-slice-length`, `byte-slice-byte-at`, and
+`byte-slice-mut-set-byte` family uses deterministic unique storage in the SSA
+evaluator and reference VM. Baseline and proof native execution, ranged views,
+`bytes`, host byte operations, and the remaining byte-vector operations are not
+Current. Transitional `buf` remains a separate traced family; it is neither an
+alias nor a conversion path. `bytes` remains a `PLACEHOLDER` until its complete
+cutover lands.
 
 ## Byte-Vector
 
@@ -23,9 +29,12 @@ not reduce retained/live-byte metrics.
 ## Views
 
 `byte-slice` is a shared ranged non-owner carrying owner, start, length, and
-verified lifetime. `byte-slice-mut` is exclusive. Bounds and overlap are checked
-before effects. Views cannot be returned, captured, or stored in aggregates in
-this slice. Their last reachable use emits `end-borrow`.
+verified lifetime. `byte-slice-mut` is exclusive. The first executable family
+creates whole-owner bounded views; ranged source syntax remains non-Current.
+Bounds and overlap are checked before effects. Views cannot be returned,
+captured, or stored in aggregates in this slice. Their sole supported use ends
+the loan deterministically; trap cleanup ends an established loan before owner
+release.
 
 ## Immutable Bytes
 

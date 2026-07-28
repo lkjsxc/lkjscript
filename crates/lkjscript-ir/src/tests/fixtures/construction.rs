@@ -97,7 +97,7 @@ pub(crate) fn core_traits() -> Vec<TraitMetadata> {
 }
 
 pub(crate) fn owned_buf_type() -> SsaType {
-    SsaType::Owned(Box::new(SsaType::Buf))
+    SsaType::ByteVector
 }
 
 pub(crate) fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
@@ -105,7 +105,7 @@ pub(crate) fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
         id: PlaceId::new(id),
         binding: crate::BindingId::new(binding),
         ty: owned_buf_type(),
-        drop_glue: Some(DropGlueIdentity::LegacyTracedByteVector),
+        drop_glue: Some(DropGlueIdentity::ByteVector),
     }
 }
 
@@ -116,7 +116,7 @@ pub(crate) fn drop_byte(id: u32, place: u32, value: u32) -> Instruction {
         kind: InstructionKind::Drop {
             place: PlaceId::new(place),
             value: ValueId::new(value),
-            glue: DropGlueIdentity::LegacyTracedByteVector,
+            glue: DropGlueIdentity::ByteVector,
             kind: DropEventKind::ImplicitCleanup,
         },
         metadata: metadata(EffectSet::PURE),

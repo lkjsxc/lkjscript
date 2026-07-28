@@ -43,8 +43,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   contract digest; unknown or removed marker forms are ordinary syntax errors.
 - All language-owned and user-defined names use exact lowercase ASCII
   kebab-case. Word operations, structured signatures/imports, and
-  `string-literal/` are the only accepted source projections; removed spellings
-  are rejected from one typed registry.
+  `string-literal/` are the only accepted source projections; removed spellings are rejected from one typed registry.
 - Generic enums, exhaustive `match`, `never`, structured control, and explicit
   numeric conversions run through evaluator, VM, baseline JIT, and proof JIT
   where each engine supports the relevant operation set.
@@ -57,8 +56,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   authorities. Capability-bearing main and library APIs pass them explicitly;
   provider acquisition and ambient host services have no zero-argument form.
 - Packages declare a sorted capability union. Each target receives exact typed
-  main requirements before effects; capability values are unforgeable,
-  copyable, process-local, and never serialized.
+  main requirements before effects; capability values are unforgeable, copyable, process-local, and never serialized.
 - Linux runtime pathnames use immutable byte-preserving `path` values. Explicit
   constructors reject empty, relative, NUL-containing, and oversized paths;
   observation is either exact bytes or strict UTF-8. Filesystem and SQLite
@@ -66,8 +64,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Modules and local packages
 
-- Every source file is a module identified only by its package-root-relative
-  UTF-8 path.
+- Every source file is a module identified only by its package-root-relative UTF-8 path.
 - Declarations are private by default. The `public` field is explicit; each
   `import/` records exact module paths and sorted declaration lists. Wildcards,
   transitive visibility, ambient root search, dot-relative paths, collisions,
@@ -84,19 +81,18 @@ Git history. They do not provide aliases or acceptance fallbacks.
 ## Ownership and resources
 
 - `byte-vector`, whole-place `move`, `byte-slice`, and `byte-slice-mut` expose
-  the existing bounded ownership foundation without `owned buf`, `ref buf`, or
-  `ref-mut buf` source aliases.
+  the existing bounded ownership foundation without `owned buf`, `ref buf`, or `ref-mut buf` source aliases.
 - The universal source type `handle` is removed. Eleven exact resource kinds
   flow through source typing, HIR, verified SSA, bytecode validation, and VM
   resource-kind checks. Resources cannot use value/object equality, escape from
   `main`, or enter unsupported aggregates.
-- Exact drop glue for legacy byte-vector and all eleven resource kinds now
+- Exact drop glue for deterministic `byte-vector` and all eleven resource kinds
   reaches affine SSA place metadata. Verified SSA has explicit loan-end and
   whole-place-drop events, rejects owner-erasing `place-end`, proves static/dead
   discharge at explicit terminators, and pairs explicit `drop`, SQLite close,
   and SQLite finalize with exact resource-drop events.
-- Legacy byte-vector cleanup is elaborated on normal lexical and source-level
-  return, break, continue, trap, and exit paths. Typed resources still require
+- Byte-vector cleanup is elaborated on normal lexical and source-level return,
+  break, continue, trap, and exit paths. Typed resources still require
   move, return, or explicit close. Conditional flags, implicit resource close,
   instruction-originated all-outcome routing, physical byte release, cleanup
   failures, and generated native host execution remain accepted-contract work,
@@ -108,7 +104,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
   teardown. Owned native resource operations and evaluator dispatch remain incomplete.
 - Core provides a bounded deterministic unique store with opaque store-scoped,
   generation-bearing typed keys for byte-vector, dynamic bytes, and path
-  layouts. It is not yet integrated into source execution or native tiers.
+  layouts. The exact constructor, whole-place move/shared/exclusive borrow,
+  byte-slice length/read, mutable byte write, end-borrow, and owner-drop family
+  uses execution-owned keys and bounded loan records in the SSA evaluator and
+  validated reference VM. Both engines release owners exactly once on return,
+  explicit drop, and error cleanup; native tiers reject this family preflight.
 
 ## Compiler and execution
 

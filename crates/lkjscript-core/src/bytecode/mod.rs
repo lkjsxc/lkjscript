@@ -3,7 +3,7 @@ mod enum_metadata;
 
 pub use chunk::{
     Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
-    ResourceReturnKind,
+    ResourceReturnKind, UniqueValueKind,
 };
 pub use enum_metadata::{
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,

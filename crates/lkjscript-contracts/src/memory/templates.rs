@@ -95,9 +95,9 @@ pub const fn borrowed(
 ) -> MemoryObligation {
     MemoryObligation {
         identity,
-        authority: "source, HIR, SSA",
+        authority: "source, HIR, SSA, evaluator, validated bytecode, VM",
         semantic_type,
-        runtime_layout: "Current erased Buf stable-index handle",
+        runtime_layout: "bounded UniqueStore owner/range/loan token",
         value_semantics: "non-owning view",
         mutability,
         possible_aliases: "verified loan rules",
@@ -111,17 +111,17 @@ pub const fn borrowed(
         external_resources: "none",
         portability: "worker-local",
         contention: "single-owner",
-        allocation_frequency: "none logically; runtime handle erased",
+        allocation_frequency: "one bounded runtime loan record",
         size_class: "view metadata Target",
-        current_trace_fields: "underlying Buf is a traced leaf",
-        current_exact_roots: "underlying handle remains live",
+        current_trace_fields: "none",
+        current_exact_roots: "none in evaluator/VM; native is fail-closed",
         object_identity: "none",
-        current_placement: "verified loan, erased before VM execution",
+        current_placement: "verified lexical loan retained by evaluator/VM",
         candidate_placements: "stack view or register range",
         reclamation_plan: "owner destruction after final loan",
         producers,
         tests,
-        status: "current initial ownership slice",
+        status: "current exact evaluator/VM family; native fail-closed",
     }
 }
 

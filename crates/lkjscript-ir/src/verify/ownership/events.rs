@@ -68,12 +68,17 @@ pub(crate) fn process_drop(
     }
     match kind {
         DropEventKind::ImplicitCleanup => {
-            if state.owners.get(&place) != Some(&value)
-                || glue != DropGlueIdentity::LegacyTracedByteVector
-            {
-                return fail("SSA implicit Drop does not discharge its current byte owner");
+            let current = state.owners.get(&place) == Some(&value);
+            let transferred = !state.owners.contains_key(&place)
+                && state.affine.get(&value).is_some_and(|fact| {
+                    fact.provenance == AffineProvenance::Place(place) && fact.transferred
+                });
+            if (!current && !transferred) || glue != DropGlueIdentity::ByteVector {
+                return fail("SSA implicit Drop does not discharge its exact byte owner");
             }
-            state.owners.remove(&place);
+            if current {
+                state.owners.remove(&place);
+            }
             state.affine.remove(&value);
         }
         DropEventKind::ExplicitClose => {

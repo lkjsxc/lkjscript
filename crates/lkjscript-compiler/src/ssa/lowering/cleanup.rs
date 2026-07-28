@@ -98,7 +98,7 @@ impl FunctionBuilder<'_> {
             .and_then(|place| place.drop_glue)
             .ok_or_else(|| Error::msg("owned SSA place lost its HIR drop glue"))?;
         if let Some(value) = self.env.get(&binding).copied() {
-            if !matches!(glue, DropGlueIdentity::LegacyTracedByteVector) {
+            if !matches!(glue, DropGlueIdentity::ByteVector) {
                 return Err(Error::msg(format!(
                     "active typed resource reaches place-end without move, return, or explicit drop for binding {}",
                     binding.raw()
@@ -164,12 +164,7 @@ impl FunctionBuilder<'_> {
             let is_byte = self
                 .places
                 .get(place.index().unwrap_or(usize::MAX))
-                .is_some_and(|place| {
-                    matches!(
-                        place.drop_glue,
-                        Some(DropGlueIdentity::LegacyTracedByteVector)
-                    )
-                });
+                .is_some_and(|place| matches!(place.drop_glue, Some(DropGlueIdentity::ByteVector)));
             if is_byte {
                 self.end_owned_place(binding, expression_origin)?;
             }

@@ -8,12 +8,25 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         Op::LoadConst
         | Op::LoadLocal
         | Op::LoadGlobal
+        | Op::ByteVectorPlaceInit
+        | Op::ByteVectorMove
+        | Op::ByteVectorBorrow
+        | Op::ByteVectorBorrowMut
+        | Op::TakeUniqueLocal
+        | Op::LoadViewLocal
+        | Op::ByteVectorDropPlace
+        | Op::EndBorrowLocal
+        | Op::ByteVectorPlaceEnd
         | Op::False
         | Op::True
         | Op::Unit
         | Op::EmptyList
         | Op::EmptyStr => fixed(0, 0, 1),
         Op::StoreLocal | Op::StoreGlobal => fixed(1, 0, 0),
+        Op::StoreUniqueLocal | Op::StoreViewLocal => fixed(1, 1, 0),
+        Op::ByteSliceLen => fixed(1, 1, 1),
+        Op::ByteSliceRef => fixed(2, 2, 1),
+        Op::ByteSliceMutSet => fixed(3, 3, 1),
         Op::Add
         | Op::Sub
         | Op::Mul
@@ -95,6 +108,7 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SysNowMs
         | Op::SysSocket
         | Op::BufNew
+        | Op::ByteVectorNew
         | Op::BufLen
         | Op::BufClone
         | Op::SysIsatty

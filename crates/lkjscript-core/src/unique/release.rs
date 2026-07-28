@@ -8,6 +8,42 @@ impl UniqueStore {
         self.release(key.raw(), UniqueLayout::ByteVector)
     }
 
+    /// Transfers byte-vector backing out of this store while discharging the
+    /// exact slot obligation. The returned allocation has one Rust owner and
+    /// the key is stale after success.
+    pub fn take_byte_vector(&mut self, key: ByteVectorKey) -> Result<Vec<u8>, UniqueStoreError> {
+        let raw = key.raw();
+        let index = self.locate(raw, UniqueLayout::ByteVector)?;
+        let retained = match &self.slots[index].state {
+            SlotState::Occupied(payload) => payload.retained_bytes()?,
+            _ => return Err(UniqueStoreError::ArithmeticOverflow),
+        };
+        let retire = raw.generation >= self.limits.max_generation();
+        let next_stats = self.preflight_release(retained, retire)?;
+        let replacement = if retire {
+            SlotState::Retired
+        } else {
+            SlotState::Vacant {
+                next: self.free_head,
+            }
+        };
+        let removed = std::mem::replace(&mut self.slots[index].state, replacement);
+        let super::object::Payload::ByteVector(bytes) = (match removed {
+            SlotState::Occupied(payload) => payload,
+            state => {
+                self.slots[index].state = state;
+                return Err(UniqueStoreError::ArithmeticOverflow);
+            }
+        }) else {
+            return Err(UniqueStoreError::ArithmeticOverflow);
+        };
+        if !retire {
+            self.free_head = Some(raw.index);
+        }
+        self.stats = next_stats;
+        Ok(bytes)
+    }
+
     pub fn free_bytes(&mut self, key: BytesKey) -> Result<(), UniqueStoreError> {
         self.release(key.raw(), UniqueLayout::Bytes)
     }

@@ -1,15 +1,11 @@
 fn owner_mode(place: &PlaceMetadata) -> Option<MemoryMode> {
     let glue = place.drop_glue?;
     let (storage, destruction, identity) = match (&place.ty, glue) {
-        (SsaType::Owned(inner), DropGlueIdentity::LegacyTracedByteVector)
-            if **inner == SsaType::Buf =>
-        {
-            (
-                MemoryStorage::TransitionalTracedBuffer,
-                MemoryDestruction::DropGlue(glue),
-                MemoryIdentity::Value,
-            )
-        }
+        (SsaType::ByteVector, DropGlueIdentity::ByteVector) => (
+            MemoryStorage::DeterministicUnique,
+            MemoryDestruction::DropGlue(glue),
+            MemoryIdentity::Value,
+        ),
         (SsaType::Resource(kind), DropGlueIdentity::Resource(glue_kind)) if *kind == glue_kind => (
             MemoryStorage::ExternalSlot,
             MemoryDestruction::ExplicitExternalClose,

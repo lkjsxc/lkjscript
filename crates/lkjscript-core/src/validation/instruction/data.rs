@@ -37,11 +37,27 @@ pub(super) fn apply(
                     "local is not definitely initialized",
                 )
             })?;
+            if is_unique(kind) {
+                return Err(instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "unique owners/views require typed local opcodes",
+                ));
+            }
             state.stack.push(kind);
         }
         Op::StoreLocal => {
             let slot = instruction_operand(proto, instruction)?;
             let value = top(state, proto, instruction)?;
+            if is_unique(value) {
+                return Err(instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "unique owners/views require typed local opcodes",
+                ));
+            }
             let target = state.locals.get_mut(slot).ok_or_else(|| {
                 instruction_error(
                     proto,
@@ -76,7 +92,9 @@ pub(super) fn apply(
                         "global closure does not match declared prototype metadata",
                     ));
                 }
-            } else if matches!(value, Kind::Resource(_) | Kind::ResourceResult(_)) {
+            } else if matches!(value, Kind::Resource(_) | Kind::ResourceResult(_))
+                || is_unique(value)
+            {
                 return Err(instruction_error(
                     proto,
                     op,
@@ -95,10 +113,26 @@ pub(super) fn apply(
             *target = Some(value);
         }
         Op::Pop => {
-            let _value = pop(state, proto, instruction)?;
+            let value = pop(state, proto, instruction)?;
+            if is_unique(value) {
+                return Err(instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "Pop cannot erase a unique owner or live view",
+                ));
+            }
         }
         Op::Dup => {
             let value = top(state, proto, instruction)?;
+            if is_unique(value) {
+                return Err(instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "Dup cannot forge a unique owner or byte view",
+                ));
+            }
             state.stack.push(value);
         }
         Op::StdinHandle => {
@@ -128,4 +162,8 @@ pub(super) fn apply(
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }
     Ok(())
+}
+
+fn is_unique(kind: Kind) -> bool {
+    matches!(kind, Kind::ByteVector(_) | Kind::ByteSlice { .. })
 }

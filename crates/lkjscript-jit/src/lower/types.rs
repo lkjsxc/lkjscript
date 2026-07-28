@@ -63,11 +63,13 @@ pub(super) fn lower_type(
                 })?,
             )))
         }
-        SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => Err(LoweringError::new(
-            LoweringFailureCode::UnsupportedType,
-            Some(function),
-            "Owned/Ref/RefMut remain outside the generated GC-reference adapter",
-        )),
+        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
+            Err(LoweringError::new(
+                LoweringFailureCode::UnsupportedType,
+                Some(function),
+                "collector-free byte-vector native lowering is not yet installed",
+            ))
+        }
         _ => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
             Some(function),

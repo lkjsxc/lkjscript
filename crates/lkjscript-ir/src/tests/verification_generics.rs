@@ -97,7 +97,7 @@ fn verifier_rejects_generic_ownership_substitution() {
         "wrong generic ownership diagnostic: {error}"
     );
 
-    let reference = SsaType::Ref(Box::new(SsaType::Buf));
+    let reference = SsaType::ByteSlice;
     let reference_caller = Function {
         id: FunctionId::new(2),
         name: "generic-reference-caller".into(),

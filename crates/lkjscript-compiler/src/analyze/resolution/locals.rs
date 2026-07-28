@@ -28,7 +28,7 @@ impl Resolver<'_> {
                 "var {name}: resource-bearing aggregates cannot be stored"
             )));
         }
-        if matches!(declared_type, Type::Ref(_) | Type::RefMut(_)) {
+        if matches!(declared_type, Type::ByteSlice | Type::ByteSliceMut) {
             return Err(self.error(format!(
                 "var {name}: lexical references may only be inferred let bindings or parameters"
             )));

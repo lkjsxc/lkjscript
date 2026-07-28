@@ -11,6 +11,9 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         Type::F64 => T::F64 {},
         Type::Str => T::String {},
         Type::Buf => T::Buffer {},
+        Type::ByteVector => T::ByteVector {},
+        Type::ByteSlice => T::ByteSlice {},
+        Type::ByteSliceMut => T::ByteSliceMut {},
         Type::Path => T::Path {},
         Type::Capability(kind) => T::Capability {
             capability: kind.as_str().into(),
@@ -56,10 +59,6 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         }
         Type::Enum { .. } => return None,
         Type::Param(name) => T::Variable { name: name.clone() },
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => T::ByteVector {},
-        Type::Ref(inner) if inner.as_ref() == &Type::Buf => T::ByteSlice {},
-        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => T::ByteSliceMut {},
-        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => return None,
         Type::List(inner) => T::List {
             element: Box::new(type_expression(inner)?),
         },

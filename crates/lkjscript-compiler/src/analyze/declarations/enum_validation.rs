@@ -39,11 +39,6 @@ impl Analyzer {
             Type::Param(name) if !parameters.iter().any(|parameter| parameter == name) => {
                 return Err(format!("unbound type parameter {name}"));
             }
-            Type::Owned(inner) => Type::Owned(Box::new(self.resolve_enum_type(inner, parameters)?)),
-            Type::Ref(inner) => Type::Ref(Box::new(self.resolve_enum_type(inner, parameters)?)),
-            Type::RefMut(inner) => {
-                Type::RefMut(Box::new(self.resolve_enum_type(inner, parameters)?))
-            }
             Type::List(inner) => Type::List(Box::new(self.resolve_enum_type(inner, parameters)?)),
             Type::Fn { params, ret } => Type::Fn {
                 params: params
@@ -147,9 +142,7 @@ impl Analyzer {
                     self.walk_type(argument, depth, path, work)?;
                 }
             }
-            Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
-                self.walk_type(inner, depth, path, work)?;
-            }
+            Type::List(inner) => self.walk_type(inner, depth, path, work)?,
             Type::Fn { params, ret } => {
                 for parameter in params {
                     self.walk_type(parameter, depth, path, work)?;

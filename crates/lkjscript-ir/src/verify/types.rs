@@ -24,7 +24,7 @@ pub(crate) fn signature_contains_ownership(signature: &Signature) -> bool {
 
 pub(crate) fn contains_ownership_type(ty: &SsaType) -> bool {
     match ty {
-        SsaType::Owned(_) | SsaType::Ref(_) | SsaType::RefMut(_) => true,
+        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
         SsaType::List(inner) => contains_ownership_type(inner),
         SsaType::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
         SsaType::Function(signature) => {
@@ -36,7 +36,7 @@ pub(crate) fn contains_ownership_type(ty: &SsaType) -> bool {
 }
 
 pub(crate) fn is_owned_buf(ty: &SsaType) -> bool {
-    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
+    matches!(ty, SsaType::ByteVector)
 }
 
 pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
@@ -45,16 +45,14 @@ pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
 
 pub(crate) fn expected_drop_glue(ty: &SsaType) -> Option<crate::DropGlueIdentity> {
     match ty {
-        SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf => {
-            Some(crate::DropGlueIdentity::LegacyTracedByteVector)
-        }
+        SsaType::ByteVector => Some(crate::DropGlueIdentity::ByteVector),
         SsaType::Resource(kind) => Some(crate::DropGlueIdentity::Resource(*kind)),
         _ => None,
     }
 }
 
 pub(crate) fn is_affine(ty: &SsaType) -> bool {
-    is_owned_value(ty) || matches!(ty, SsaType::RefMut(inner) if inner.as_ref() == &SsaType::Buf)
+    is_owned_value(ty) || matches!(ty, SsaType::ByteSliceMut)
 }
 
 pub(crate) fn is_numeric(ty: &SsaType) -> bool {
@@ -104,12 +102,9 @@ pub(crate) fn verify_type_at(
             }
             Ok(())
         }
-        SsaType::Owned(inner) | SsaType::Ref(inner) | SsaType::RefMut(inner) => {
+        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
             if !ownership_allowed {
                 return fail("SSA ownership/reference type has an unsupported storage position");
-            }
-            if inner.as_ref() != &SsaType::Buf {
-                return fail("SSA ownership/reference type must contain exact Buf");
             }
             Ok(())
         }
@@ -160,7 +155,7 @@ pub(crate) fn verify_type_at(
             }
             if matches!(
                 signature.result.as_ref(),
-                SsaType::Ref(_) | SsaType::RefMut(_)
+                SsaType::ByteSlice | SsaType::ByteSliceMut
             ) {
                 return fail("SSA function type cannot return a lexical reference");
             }

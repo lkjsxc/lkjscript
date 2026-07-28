@@ -8,13 +8,13 @@ use lkjscript_core::{
     EnumMetadata as BytecodeEnumMetadata, EnumVariantMetadata as BytecodeEnumVariantMetadata,
     EnumVariantRef, Error, FunctionProto, Op, ProductFieldRef, ProductId as BytecodeProductId,
     ProductMetadata as BytecodeProductMetadata, ResourceReturnKind, Result,
-    RuntimeLayoutId as BytecodeLayoutId, VariantFieldId as BytecodeVariantFieldId,
+    RuntimeLayoutId as BytecodeLayoutId, UniqueValueKind, VariantFieldId as BytecodeVariantFieldId,
     VariantId as BytecodeVariantId,
 };
 use lkjscript_ir::{
     BlockId, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget,
-    Constant, Function, FunctionBytecodeLink, FunctionId, Instruction, InstructionKind, RuntimeOp,
-    SsaType, Terminator, ValueId, VerifiedProgram,
+    Constant, DropGlueIdentity, Function, FunctionBytecodeLink, FunctionId, Instruction,
+    InstructionKind, RuntimeOp, SsaType, Terminator, ValueId, VerifiedProgram,
 };
 
 mod constants;

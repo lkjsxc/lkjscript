@@ -10,6 +10,7 @@ use crate::{Error, HeapObj, ProductId, Result, RuntimeLayoutId, Value};
 pub struct OwnedValue {
     root: Value,
     heap: Vec<Option<HeapObj>>,
+    unique_byte_vector: Option<Vec<u8>>,
 }
 
 impl OwnedValue {
@@ -44,11 +45,26 @@ impl OwnedValue {
             visited[index] = true;
             object.trace(&mut |child| pending.push(child));
         }
-        Ok(Self { root, heap })
+        Ok(Self {
+            root,
+            heap,
+            unique_byte_vector: None,
+        })
+    }
+
+    /// Transfers one collector-free byte-vector result across the execution
+    /// boundary without retaining its runtime-local key or store.
+    #[doc(hidden)]
+    pub fn from_unique_byte_vector(bytes: Vec<u8>) -> Result<Self> {
+        Ok(Self {
+            root: Value::UNIT,
+            heap: Vec::new(),
+            unique_byte_vector: Some(bytes),
+        })
     }
 
     pub fn is_unit(&self) -> bool {
-        self.root.is_unit()
+        self.unique_byte_vector.is_none() && self.root.is_unit()
     }
 
     pub fn is_empty_list(&self) -> bool {
@@ -83,6 +99,10 @@ impl OwnedValue {
             HeapObj::Path(bytes) => Some(bytes),
             _ => None,
         }
+    }
+
+    pub fn as_byte_vector(&self) -> Option<&[u8]> {
+        self.unique_byte_vector.as_deref()
     }
 
     pub fn as_resource(&self) -> Option<u32> {
@@ -137,43 +157,4 @@ impl OwnedValue {
     }
 }
 
-impl fmt::Debug for OwnedValue {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_unit() {
-            return formatter.write_str("unit");
-        }
-        if self.is_empty_list() {
-            return formatter.write_str("empty-list");
-        }
-        if let Some(value) = self.as_bool() {
-            return value.fmt(formatter);
-        }
-        if let Some(value) = self.as_i64() {
-            return value.fmt(formatter);
-        }
-        if let Some(value) = self.as_f64() {
-            return value.fmt(formatter);
-        }
-        if let Some(value) = self.as_str() {
-            return value.fmt(formatter);
-        }
-        if let Some(value) = self.as_resource() {
-            return write!(formatter, "resource#{value}");
-        }
-        match self.object() {
-            Some(HeapObj::Pair { .. }) => formatter.write_str("#<owned-pair>"),
-            Some(HeapObj::Closure { proto, .. }) => write!(formatter, "#<owned-fn:{proto}>"),
-            Some(HeapObj::Builtin(id)) => write!(formatter, "#<owned-builtin:{id}>"),
-            Some(HeapObj::Buf(bytes)) => write!(formatter, "#<owned-buf:{}>", bytes.len()),
-            Some(HeapObj::Path(bytes)) => write!(formatter, "#<owned-path:{}>", bytes.len()),
-            Some(HeapObj::Product { product, .. }) => {
-                write!(formatter, "#<owned-product:{}>", product.raw())
-            }
-            Some(HeapObj::Enum { physical_tag, .. }) => {
-                write!(formatter, "#<owned-enum:{physical_tag}>")
-            }
-            Some(HeapObj::Str(_) | HeapObj::Symbol(_)) => formatter.write_str("#<owned-value>"),
-            None => self.root.fmt(formatter),
-        }
-    }
-}
+include!("owned_value/debug.rs");

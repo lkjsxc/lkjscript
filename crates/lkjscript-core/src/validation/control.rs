@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use super::{
     decode::instruction_error, instruction::apply_instruction, merge::merge_state, Kind, State,
+    UniquePlaceState,
 };
 use crate::{Chunk, DecodedInstruction, Error, FunctionProto, Result};
 
@@ -19,14 +20,33 @@ pub(super) fn validate_control_flow(
     let mut states = vec![None; instructions.len()];
     let mut locals = vec![None; usize::from(proto.locals)];
     for (index, slot) in locals.iter_mut().take(usize::from(proto.arity)).enumerate() {
-        *slot = Some(
-            proto
-                .parameter_resources
-                .get(index)
-                .copied()
-                .flatten()
-                .map_or(Kind::Any, Kind::Resource),
-        );
+        let resource = proto
+            .parameter_resources
+            .get(index)
+            .copied()
+            .flatten()
+            .map(Kind::Resource);
+        let unique = proto
+            .parameter_uniques
+            .get(index)
+            .copied()
+            .flatten()
+            .map(|kind| match kind {
+                crate::UniqueValueKind::ByteVector => {
+                    Kind::ByteVector(0x8000_0000 | u32::try_from(index).unwrap_or(u32::MAX))
+                }
+                crate::UniqueValueKind::ByteSlice => Kind::ByteSlice {
+                    owner: 0x9000_0000 | u32::try_from(index).unwrap_or(u32::MAX),
+                    mutable: false,
+                    used: false,
+                },
+                crate::UniqueValueKind::ByteSliceMut => Kind::ByteSlice {
+                    owner: 0x9000_0000 | u32::try_from(index).unwrap_or(u32::MAX),
+                    mutable: true,
+                    used: false,
+                },
+            });
+        *slot = resource.or(unique).or(Some(Kind::Any));
     }
     if is_main {
         for (slot, kind) in locals.iter_mut().zip(&chunk.required_capabilities) {
@@ -44,10 +64,35 @@ pub(super) fn validate_control_flow(
             .map(|prototype| prototype.map_or(Some(Kind::Any), |index| Some(Kind::Closure(index))))
             .collect()
     };
+    let mut unique_places = vec![UniquePlaceState::Inactive; usize::from(proto.unique_places)];
+    for (index, place) in proto.parameter_unique_places.iter().copied().enumerate() {
+        let Some(place) = place else {
+            continue;
+        };
+        let owner = match locals.get(index).copied().flatten() {
+            Some(Kind::ByteVector(owner)) => owner,
+            _ => {
+                return Err(Error::msg(
+                    "bytecode parameter owner-place metadata requires byte-vector type",
+                ))
+            }
+        };
+        let target = unique_places
+            .get_mut(usize::from(place))
+            .ok_or_else(|| Error::msg("bytecode parameter owner PlaceId is out of range"))?;
+        if !matches!(target, UniquePlaceState::Inactive) {
+            return Err(Error::msg("bytecode parameter owner PlaceId is duplicated"));
+        }
+        *target = UniquePlaceState::Active {
+            owner: Some(owner),
+            transferred: None,
+        };
+    }
     states[0] = Some(State {
         stack: Vec::new(),
         locals,
         globals,
+        unique_places,
     });
     let mut pending = VecDeque::from([0_usize]);
 

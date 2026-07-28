@@ -126,13 +126,6 @@ impl Analyzer {
                 }
                 Ok(())
             }
-            Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) => {
-                if inner.as_ref() == &Type::Buf {
-                    Ok(())
-                } else {
-                    Err("ownership types accept only exact Buf in this slice".into())
-                }
-            }
             Type::List(inner) => {
                 if contains_ownership_type(inner) {
                     return Err("ownership/reference types cannot be stored in List".into());

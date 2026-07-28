@@ -49,7 +49,7 @@ fn memory_mode(
             Some("path"),
             None,
         ),
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => (
+        Type::ByteVector => (
             MemoryMultiplicity::Affine,
             MemoryAliasing::Unique,
             MemoryStorage::LegacyTraced,
@@ -60,8 +60,8 @@ fn memory_mode(
             Some("buf"),
             Some(MemoryDropGlueId::new(0)),
         ),
-        Type::Ref(inner) if inner.as_ref() == &Type::Buf => borrowed(false),
-        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => borrowed(true),
+        Type::ByteSlice => borrowed(false),
+        Type::ByteSliceMut => borrowed(true),
         Type::Symbol => legacy_value("symbol", MemoryMultiplicity::ImmutableValue),
         Type::Resource(kind) => (
             MemoryMultiplicity::Affine,
@@ -86,17 +86,6 @@ fn memory_mode(
             MemoryIdentity::Value,
             MemoryPortability::WorkerLocal,
             MemoryContention::ImmutableShared,
-            None,
-            None,
-        ),
-        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => (
-            MemoryMultiplicity::Affine,
-            MemoryAliasing::Unique,
-            MemoryStorage::Stack,
-            MemoryDestruction::Trivial,
-            MemoryIdentity::Value,
-            MemoryPortability::WorkerLocal,
-            MemoryContention::SingleOwner,
             None,
             None,
         ),

@@ -12,14 +12,14 @@ fn place(ty: SsaType, drop_glue: Option<DropGlueIdentity>) -> PlaceMetadata {
 #[test]
 fn direct_affine_memory_modes_are_closed() {
     let owned = owner_mode(&place(
-        SsaType::Owned(Box::new(SsaType::Buf)),
-        Some(DropGlueIdentity::LegacyTracedByteVector),
+        SsaType::ByteVector,
+        Some(DropGlueIdentity::ByteVector),
     ))
     .unwrap_or_else(|| unreachable!());
-    assert_eq!(owned.storage, MemoryStorage::TransitionalTracedBuffer);
+    assert_eq!(owned.storage, MemoryStorage::DeterministicUnique);
     assert_eq!(
         owned.destruction,
-        MemoryDestruction::DropGlue(DropGlueIdentity::LegacyTracedByteVector)
+        MemoryDestruction::DropGlue(DropGlueIdentity::ByteVector)
     );
     let resource = owner_mode(&place(
         SsaType::Resource(lkjscript_contracts::ResourceKind::FileReader),

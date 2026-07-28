@@ -20,3 +20,4 @@ mod control;
 mod enums;
 mod metadata;
 mod types;
+mod unique;

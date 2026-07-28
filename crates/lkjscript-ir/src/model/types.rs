@@ -40,15 +40,22 @@ pub enum SsaType {
     F64,
     Str,
     Symbol,
+    /// Transitional traced mutable buffer.
     Buf,
+    /// Exact affine deterministic byte-vector owner.
+    ByteVector,
+    /// Exact shared bounded byte-vector view.
+    ByteSlice,
+    /// Exact exclusive bounded byte-vector view.
+    ByteSliceMut,
     Path,
     Capability(lkjscript_contracts::CapabilityKind),
-    Owned(Box<SsaType>),
-    Ref(Box<SsaType>),
-    RefMut(Box<SsaType>),
     Resource(lkjscript_contracts::ResourceKind),
     Product(ProductId),
-    Enum { id: EnumId, arguments: Vec<SsaType> },
+    Enum {
+        id: EnumId,
+        arguments: Vec<SsaType>,
+    },
     List(Box<SsaType>),
     Function(Box<Signature>),
     TypeParameter(String),

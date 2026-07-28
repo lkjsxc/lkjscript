@@ -9,15 +9,16 @@ pub enum Type {
     I64,
     F64,
     Str,
+    /// Transitional traced mutable buffer. It is not a byte-vector.
     Buf,
+    /// Exact affine owner in deterministic unique byte storage.
+    ByteVector,
+    /// Exact shared bounded view into a byte-vector.
+    ByteSlice,
+    /// Exact exclusive bounded view into a byte-vector.
+    ByteSliceMut,
     Path,
     Capability(CapabilityKind),
-    /// Initial ownership slice: only `Owned Buf` is well formed.
-    Owned(Box<Type>),
-    /// Initial ownership slice: only `Ref Buf` is well formed.
-    Ref(Box<Type>),
-    /// Initial ownership slice: only `RefMut Buf` is well formed.
-    RefMut(Box<Type>),
     Symbol,
     Resource(ResourceKind),
     /// Globally unique nominal product declaration name.
@@ -45,9 +46,7 @@ impl Type {
     pub fn contains_never(&self) -> bool {
         match self {
             Self::Never => true,
-            Self::Owned(inner) | Self::Ref(inner) | Self::RefMut(inner) | Self::List(inner) => {
-                inner.contains_never()
-            }
+            Self::List(inner) => inner.contains_never(),
             Self::Enum { arguments, .. } => arguments.iter().any(Self::contains_never),
             Self::Fn { params, ret } => {
                 params.iter().any(Self::contains_never) || ret.contains_never()
@@ -69,9 +68,6 @@ impl Type {
         match (got, expect) {
             (a, b) if a == b => true,
             (Type::Param(a), Type::Param(b)) => a == b,
-            (Type::Owned(g), Type::Owned(e))
-            | (Type::Ref(g), Type::Ref(e))
-            | (Type::RefMut(g), Type::RefMut(e)) => Self::unify_assignable(g, e),
             (
                 Type::Enum {
                     id: got_id,
@@ -105,9 +101,6 @@ impl Type {
     pub fn subst(&self, map: &HashMap<String, Type>) -> Type {
         match self {
             Type::Param(p) => map.get(p).cloned().unwrap_or_else(|| self.clone()),
-            Type::Owned(t) => Type::Owned(Box::new(t.subst(map))),
-            Type::Ref(t) => Type::Ref(Box::new(t.subst(map))),
-            Type::RefMut(t) => Type::RefMut(Box::new(t.subst(map))),
             Type::Enum {
                 id,
                 name,

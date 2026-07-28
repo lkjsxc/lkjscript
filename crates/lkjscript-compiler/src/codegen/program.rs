@@ -101,6 +101,10 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     chunk.main.arity = main_proto.arity;
     chunk.main.parameter_resources = main_proto.parameter_resources;
     chunk.main.return_resource = main_proto.return_resource;
+    chunk.main.parameter_uniques = main_proto.parameter_uniques;
+    chunk.main.parameter_unique_places = main_proto.parameter_unique_places;
+    chunk.main.return_unique = main_proto.return_unique;
+    chunk.main.unique_places = main_proto.unique_places;
     chunk.main.code.extend(main_proto.code);
     links.push(main_link);
     links.sort_by_key(|link| link.function);

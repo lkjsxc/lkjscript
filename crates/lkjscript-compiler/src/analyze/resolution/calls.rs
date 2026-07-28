@@ -116,7 +116,7 @@ impl Resolver<'_> {
         } else {
             if resolved_args
                 .iter()
-                .any(|argument| matches!(argument.ty, Type::RefMut(_)))
+                .any(|argument| matches!(argument.ty, Type::ByteSliceMut))
             {
                 return Err(
                     self.error("RefMut forwarding is unsupported in the initial ownership slice")

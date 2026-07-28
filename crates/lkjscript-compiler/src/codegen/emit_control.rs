@@ -75,8 +75,16 @@ impl Emitter<'_> {
         }
         for parameter in target_block.parameters.iter().rev() {
             let slot = self.slot(parameter.id)?;
-            self.proto.emit_op_u8(Op::StoreLocal, slot);
-            self.proto.emit(Op::Pop);
+            match parameter.ty {
+                SsaType::ByteVector => self.proto.emit_op_u8(Op::StoreUniqueLocal, slot),
+                SsaType::ByteSlice | SsaType::ByteSliceMut => {
+                    self.proto.emit_op_u8(Op::StoreViewLocal, slot);
+                }
+                _ => {
+                    self.proto.emit_op_u8(Op::StoreLocal, slot);
+                    self.proto.emit(Op::Pop);
+                }
+            }
         }
         Ok(())
     }

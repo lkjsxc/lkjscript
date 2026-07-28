@@ -51,12 +51,18 @@ pub(super) fn apply(
                     ));
                 }
                 validate_resource_arguments(callee_proto, &arguments, proto, instruction)?;
-                resource_return_kind(callee_proto.return_resource)
+                validate_unique_arguments(callee_proto, &arguments, proto, instruction)?;
+                call_return_kind(callee_proto, instruction)?
             } else {
-                if arguments
-                    .iter()
-                    .any(|kind| matches!(kind, Kind::Resource(_) | Kind::ResourceResult(_)))
-                {
+                if arguments.iter().any(|kind| {
+                    matches!(
+                        kind,
+                        Kind::Resource(_)
+                            | Kind::ResourceResult(_)
+                            | Kind::ByteVector(_)
+                            | Kind::ByteSlice { .. }
+                    )
+                }) {
                     return Err(instruction_error(
                         proto,
                         op,
@@ -78,7 +84,9 @@ pub(super) fn apply(
                 ));
             }
             let returned = pop(state, proto, instruction)?;
+            validate_unique_exit_state(state, proto, instruction)?;
             validate_resource_return(proto, returned, instruction, is_main)?;
+            validate_unique_return(proto, returned, instruction)?;
         }
         Op::MakeClosure => {
             let value = pop(state, proto, instruction)?;
@@ -108,75 +116,5 @@ pub(super) fn apply(
     Ok(())
 }
 
-fn validate_resource_arguments(
-    callee: &FunctionProto,
-    arguments: &[Kind],
-    caller: &FunctionProto,
-    instruction: DecodedInstruction,
-) -> Result<()> {
-    for (index, actual) in arguments.iter().copied().enumerate() {
-        let expected = callee.parameter_resources.get(index).copied().flatten();
-        match (expected, actual) {
-            (Some(expected), Kind::Resource(actual)) if expected == actual => {}
-            (Some(_), _) => {
-                return Err(instruction_error(
-                    caller,
-                    instruction.op(),
-                    instruction.offset(),
-                    "typed resource call argument does not match declared kind",
-                ));
-            }
-            (None, Kind::Resource(_) | Kind::ResourceResult(_)) => {
-                return Err(instruction_error(
-                    caller,
-                    instruction.op(),
-                    instruction.offset(),
-                    "typed resource call argument lacks parameter metadata",
-                ));
-            }
-            (None, _) => {}
-        }
-    }
-    Ok(())
-}
-
-fn resource_return_kind(kind: Option<crate::ResourceReturnKind>) -> Kind {
-    match kind {
-        Some(crate::ResourceReturnKind::Resource(kind)) => Kind::Resource(kind),
-        Some(crate::ResourceReturnKind::Result(kind)) => Kind::ResourceResult(kind),
-        None => Kind::Any,
-    }
-}
-
-fn validate_resource_return(
-    proto: &FunctionProto,
-    actual: Kind,
-    instruction: DecodedInstruction,
-    is_main: bool,
-) -> Result<()> {
-    if is_main && matches!(actual, Kind::Resource(_) | Kind::ResourceResult(_)) {
-        return Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "typed resources cannot escape from main bytecode",
-        ));
-    }
-    let expected = resource_return_kind(proto.return_resource);
-    match (proto.return_resource, expected == actual, actual) {
-        (Some(_), true, _) => Ok(()),
-        (Some(_), false, _) => Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "typed resource return does not match declared kind",
-        )),
-        (None, _, Kind::Resource(_) | Kind::ResourceResult(_)) => Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "typed resource return lacks function metadata",
-        )),
-        (None, _, _) => Ok(()),
-    }
-}
+include!("calls/arguments.rs");
+include!("calls/returns.rs");

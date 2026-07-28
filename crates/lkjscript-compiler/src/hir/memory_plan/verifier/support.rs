@@ -11,9 +11,9 @@ pub(super) fn callable_result(ty: &Type) -> Result<&Type> {
 
 pub(super) fn parameter_mode(ty: &Type, consumed: bool) -> MemoryParameterMode {
     match ty {
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => MemoryParameterMode::Consume,
-        Type::Ref(inner) if inner.as_ref() == &Type::Buf => MemoryParameterMode::BorrowShared,
-        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => MemoryParameterMode::BorrowExclusive,
+        Type::ByteVector => MemoryParameterMode::Consume,
+        Type::ByteSlice => MemoryParameterMode::BorrowShared,
+        Type::ByteSliceMut => MemoryParameterMode::BorrowExclusive,
         Type::Resource(_) if consumed => MemoryParameterMode::Consume,
         Type::Resource(_) => MemoryParameterMode::BorrowExclusive,
         _ => MemoryParameterMode::Copy,
@@ -22,8 +22,8 @@ pub(super) fn parameter_mode(ty: &Type, consumed: bool) -> MemoryParameterMode {
 
 pub(super) fn result_mode(ty: &Type) -> MemoryResultMode {
     match ty {
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => MemoryResultMode::Owned,
-        Type::Ref(_) | Type::RefMut(_) => MemoryResultMode::Borrowed,
+        Type::ByteVector => MemoryResultMode::Owned,
+        Type::ByteSlice | Type::ByteSliceMut => MemoryResultMode::Borrowed,
         Type::Resource(_) => MemoryResultMode::External,
         _ => MemoryResultMode::Trivial,
     }
@@ -55,9 +55,9 @@ pub(super) fn type_matches(expected: &Type, actual: &MemoryType) -> bool {
         | (Type::Path, MemoryType::Path)
         | (Type::Symbol, MemoryType::Symbol) => true,
         (Type::Capability(left), MemoryType::Capability(right)) => left == right,
-        (Type::Owned(inner), MemoryType::ByteVector) => inner.as_ref() == &Type::Buf,
-        (Type::Ref(inner), MemoryType::ByteSlice) => inner.as_ref() == &Type::Buf,
-        (Type::RefMut(inner), MemoryType::ByteSliceMut) => inner.as_ref() == &Type::Buf,
+        (Type::ByteVector, MemoryType::ByteVector)
+        | (Type::ByteSlice, MemoryType::ByteSlice)
+        | (Type::ByteSliceMut, MemoryType::ByteSliceMut) => true,
         (Type::Resource(left), MemoryType::Resource(right)) => left == right,
         (Type::Product(left), MemoryType::Product(right)) => left == right,
         (

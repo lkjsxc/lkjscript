@@ -10,18 +10,11 @@ impl std::fmt::Display for Type {
             Self::F64 => formatter.write_str("f64"),
             Self::Str => formatter.write_str("string"),
             Self::Buf => formatter.write_str("buf"),
+            Self::ByteVector => formatter.write_str("byte-vector"),
+            Self::ByteSlice => formatter.write_str("byte-slice"),
+            Self::ByteSliceMut => formatter.write_str("byte-slice-mut"),
             Self::Path => formatter.write_str("path"),
             Self::Capability(kind) => write!(formatter, "capability {}", kind.as_str()),
-            Self::Owned(inner) if inner.as_ref() == &Self::Buf => {
-                formatter.write_str("byte-vector")
-            }
-            Self::Ref(inner) if inner.as_ref() == &Self::Buf => formatter.write_str("byte-slice"),
-            Self::RefMut(inner) if inner.as_ref() == &Self::Buf => {
-                formatter.write_str("byte-slice-mut")
-            }
-            Self::Owned(inner) => write!(formatter, "owned {inner}"),
-            Self::Ref(inner) => write!(formatter, "ref {inner}"),
-            Self::RefMut(inner) => write!(formatter, "ref-mut {inner}"),
             Self::Symbol => formatter.write_str("symbol"),
             Self::Resource(kind) => formatter.write_str(kind.as_str()),
             Self::Product(name) => write!(formatter, "product {name}"),

@@ -175,6 +175,21 @@ impl Op {
         Self::PathFromBuf,
         Self::PathToBuf,
         Self::PathToStr,
+        Self::ByteVectorNew,
+        Self::ByteVectorPlaceInit,
+        Self::ByteVectorMove,
+        Self::ByteVectorBorrow,
+        Self::ByteVectorBorrowMut,
+        Self::StoreUniqueLocal,
+        Self::StoreViewLocal,
+        Self::TakeUniqueLocal,
+        Self::LoadViewLocal,
+        Self::ByteVectorDropPlace,
+        Self::ByteSliceLen,
+        Self::ByteSliceRef,
+        Self::ByteSliceMutSet,
+        Self::EndBorrowLocal,
+        Self::ByteVectorPlaceEnd,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {

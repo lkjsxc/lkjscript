@@ -8,7 +8,27 @@ impl Evaluator<'_> {
     ) -> std::result::Result<EvalValue, Flow> {
         use RuntimeOp as Op;
         match operation {
-            Op::BufNew | Op::OwnedBufNew => unary(&arguments, |size| {
+            Op::OwnedBufNew => unary(&arguments, |size| {
+                let size = usize::try_from(as_i64(size)?)
+                    .map_err(|_| Flow::Trap("new-byte-vector size out of range".into()))?;
+                if size > self.config.max_buffer_bytes || size > 1_000_000 {
+                    return Err(Flow::Trap("new-byte-vector size out of range".into()));
+                }
+                self.unique.allocate(size)
+            }),
+            Op::OwnedBufLen => unary(&arguments, |view| self.unique.len(view).map(EvalValue::I64)),
+            Op::OwnedBufRef => binary(&arguments, |view, index| {
+                let index = index_value(index, "byte-slice-byte-at")?;
+                self.unique.byte_at(view, index).map(EvalValue::I64)
+            }),
+            Op::OwnedBufSet => ternary(&arguments, |view, index, byte| {
+                let index = index_value(index, "byte-slice-mut-set-byte")?;
+                let byte = u8::try_from(as_i64(byte)?)
+                    .map_err(|_| Flow::Trap("byte-slice-mut byte out of range".into()))?;
+                self.unique.set_byte(view, index, byte)?;
+                Ok(EvalValue::Unit)
+            }),
+            Op::BufNew => unary(&arguments, |size| {
                 let size = usize::try_from(as_i64(size)?)
                     .map_err(|_| Flow::Trap("buf-new size out of range".into()))?;
                 if size > self.config.max_buffer_bytes || size > 1_000_000 {
@@ -16,13 +36,13 @@ impl Evaluator<'_> {
                 }
                 self.allocate_buffer(vec![0; size])
             }),
-            Op::BufLen | Op::OwnedBufLen => unary(&arguments, |buffer| {
+            Op::BufLen => unary(&arguments, |buffer| {
                 let buffer = as_buffer(buffer)?;
                 let length = i64::try_from(buffer.bytes.borrow().len())
                     .map_err(|_| Flow::Trap("buf-len out of range".into()))?;
                 Ok(EvalValue::I64(length))
             }),
-            Op::BufRef | Op::OwnedBufRef => binary(&arguments, |buffer, index| {
+            Op::BufRef => binary(&arguments, |buffer, index| {
                 let buffer = as_buffer(buffer)?;
                 let index = index_value(index, "buf-byte-at")?;
                 let byte = buffer
@@ -33,7 +53,7 @@ impl Evaluator<'_> {
                     .ok_or_else(|| Flow::Trap("buf-ref out of bounds".into()))?;
                 Ok(EvalValue::I64(i64::from(byte)))
             }),
-            Op::BufSet | Op::OwnedBufSet => ternary(&arguments, |buffer, index, byte| {
+            Op::BufSet => ternary(&arguments, |buffer, index, byte| {
                 let buffer = as_buffer(buffer)?;
                 let index = index_value(index, "buf-set-byte")?;
                 let byte = u8::try_from(as_i64(byte)?)

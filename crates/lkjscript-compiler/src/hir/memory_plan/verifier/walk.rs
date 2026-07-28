@@ -44,9 +44,7 @@ pub(super) fn collect(program: &hir::Program) -> Result<Facts<'_>> {
                 .binding(*parameter)
                 .ok_or_else(|| Error::msg("memory verifier parameter binding is missing"))?
                 .ty;
-            if resource_consumed(&function.body, *parameter)
-                || matches!(ty, Type::Owned(inner) if inner.as_ref() == &Type::Buf)
-            {
+            if resource_consumed(&function.body, *parameter) || matches!(ty, Type::ByteVector) {
                 add(&mut facts.obligations, 1)?;
             }
         }

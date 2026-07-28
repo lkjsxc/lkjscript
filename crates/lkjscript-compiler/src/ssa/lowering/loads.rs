@@ -77,7 +77,7 @@ impl FunctionBuilder<'_> {
 
     pub(in crate::ssa) fn forget_consumed_ref_mut_arguments(&mut self, arguments: &[Expr]) {
         for argument in arguments {
-            if !matches!(argument.ty, hir::Type::RefMut(_)) {
+            if !matches!(argument.ty, hir::Type::ByteSliceMut) {
                 continue;
             }
             if let ExprKind::Load(binding) = &argument.kind {

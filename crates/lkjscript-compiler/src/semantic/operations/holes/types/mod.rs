@@ -14,6 +14,9 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::F64 => "f64".into(),
         Type::Str => "string".into(),
         Type::Buf => "buf".into(),
+        Type::ByteVector => "byte-vector".into(),
+        Type::ByteSlice => "byte-slice".into(),
+        Type::ByteSliceMut => "byte-slice-mut".into(),
         Type::Path => "path".into(),
         Type::Capability(kind) => format!("capability {}", kind.as_str()),
         Type::Symbol => "symbol".into(),
@@ -44,12 +47,6 @@ pub(crate) fn canonical(ty: &Type) -> String {
             format!("enum {name} {arguments}")
         }
         Type::Param(name) => name.clone(),
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => "byte-vector".into(),
-        Type::Ref(inner) if inner.as_ref() == &Type::Buf => "byte-slice".into(),
-        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => "byte-slice-mut".into(),
-        Type::Owned(inner) => format!("owned {}", canonical(inner)),
-        Type::Ref(inner) => format!("ref {}", canonical(inner)),
-        Type::RefMut(inner) => format!("ref-mut {}", canonical(inner)),
         Type::List(inner) => format!("list {}", canonical(inner)),
         Type::Fn { params, ret } => {
             let parameters = params.iter().map(canonical).collect::<Vec<_>>().join(" ");
@@ -176,9 +173,9 @@ pub(super) fn ownership(ty: &Type) -> crate::semantic::schema::OwnershipAccess {
     use crate::semantic::schema::OwnershipAccess;
     match ty {
         Type::Never => OwnershipAccess::Unavailable,
-        Type::Owned(_) => OwnershipAccess::Move,
-        Type::Ref(_) => OwnershipAccess::SharedBorrow,
-        Type::RefMut(_) => OwnershipAccess::MutableBorrow,
+        Type::ByteVector => OwnershipAccess::Move,
+        Type::ByteSlice => OwnershipAccess::SharedBorrow,
+        Type::ByteSliceMut => OwnershipAccess::MutableBorrow,
         Type::Buf | Type::Resource(_) => OwnershipAccess::Unavailable,
         _ => OwnershipAccess::Copy,
     }

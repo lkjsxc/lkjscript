@@ -6,15 +6,12 @@ pub(in crate::operation) fn memory_signature(operation: Operation) -> Type {
         |success| crate::types::result_type(success, crate::types::system_error_type());
     match operation {
         Operation::BufNew => function(vec![Type::I64], Type::Buf),
-        Operation::OwnedBufNew => function(vec![Type::I64], Type::Owned(Box::new(Type::Buf))),
-        Operation::OwnedBufLen => function(vec![Type::Ref(Box::new(Type::Buf))], Type::I64),
-        Operation::OwnedBufRef => {
-            function(vec![Type::Ref(Box::new(Type::Buf)), Type::I64], Type::I64)
+        Operation::OwnedBufNew => function(vec![Type::I64], Type::ByteVector),
+        Operation::OwnedBufLen => function(vec![Type::ByteSlice], Type::I64),
+        Operation::OwnedBufRef => function(vec![Type::ByteSlice, Type::I64], Type::I64),
+        Operation::OwnedBufSet => {
+            function(vec![Type::ByteSliceMut, Type::I64, Type::I64], Type::Unit)
         }
-        Operation::OwnedBufSet => function(
-            vec![Type::RefMut(Box::new(Type::Buf)), Type::I64, Type::I64],
-            Type::Unit,
-        ),
         Operation::BufLen => function(vec![Type::Buf], Type::I64),
         Operation::BufRef | Operation::BufGetU32 => function(vec![Type::Buf, Type::I64], Type::I64),
         Operation::BufSet | Operation::BufSetU32 => {

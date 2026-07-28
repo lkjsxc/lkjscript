@@ -76,9 +76,9 @@ fn memory_type(ty: &Type) -> MemoryType {
         Type::Buf => MemoryType::Buffer,
         Type::Path => MemoryType::Path,
         Type::Capability(kind) => MemoryType::Capability(*kind),
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => MemoryType::ByteVector,
-        Type::Ref(inner) if inner.as_ref() == &Type::Buf => MemoryType::ByteSlice,
-        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => MemoryType::ByteSliceMut,
+        Type::ByteVector => MemoryType::ByteVector,
+        Type::ByteSlice => MemoryType::ByteSlice,
+        Type::ByteSliceMut => MemoryType::ByteSliceMut,
         Type::Symbol => MemoryType::Symbol,
         Type::Resource(kind) => MemoryType::Resource(*kind),
         Type::Product(name) => MemoryType::Product(name.clone()),
@@ -101,9 +101,5 @@ fn memory_type(ty: &Type) -> MemoryType {
             variables: vars.clone(),
             body: Box::new(memory_type(body)),
         },
-        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => {
-            // Type analysis rejects every other ownership constructor before planning.
-            MemoryType::Never
-        }
     }
 }

@@ -120,10 +120,7 @@ fn lowering_domain(
 fn contains_capability_or_resource(ty: &SsaType) -> bool {
     match ty {
         SsaType::Capability(_) | SsaType::Resource(_) => true,
-        SsaType::Owned(inner)
-        | SsaType::Ref(inner)
-        | SsaType::RefMut(inner)
-        | SsaType::List(inner) => contains_capability_or_resource(inner),
+        SsaType::List(inner) => contains_capability_or_resource(inner),
         SsaType::Enum { arguments, .. } => arguments.iter().any(contains_capability_or_resource),
         SsaType::Function(signature) => signature
             .parameters
@@ -137,6 +134,9 @@ fn contains_capability_or_resource(ty: &SsaType) -> bool {
         | SsaType::Str
         | SsaType::Symbol
         | SsaType::Buf
+        | SsaType::ByteVector
+        | SsaType::ByteSlice
+        | SsaType::ByteSliceMut
         | SsaType::Path
         | SsaType::Product(_)
         | SsaType::TypeParameter(_) => false,

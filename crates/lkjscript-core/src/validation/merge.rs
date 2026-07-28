@@ -40,6 +40,14 @@ pub(super) fn merge_state(
     for (existing, incoming) in current.globals.iter_mut().zip(&incoming.globals) {
         changed |= merge_slot(existing, *incoming, proto, predecessor, "global")?;
     }
+    if current.unique_places != incoming.unique_places {
+        return Err(instruction_error(
+            proto,
+            predecessor.op(),
+            predecessor.offset(),
+            "incompatible unique-place ownership state at CFG join",
+        ));
+    }
     Ok(changed)
 }
 

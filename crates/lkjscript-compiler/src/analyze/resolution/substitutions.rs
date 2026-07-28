@@ -72,10 +72,7 @@ impl Resolver<'_> {
                 }
                 Ok(())
             }
-            (Type::Owned(pattern), Type::Owned(got))
-            | (Type::Ref(pattern), Type::Ref(got))
-            | (Type::RefMut(pattern), Type::RefMut(got))
-            | (Type::List(pattern), Type::List(got)) => {
+            (Type::List(pattern), Type::List(got)) => {
                 self.bind_type_params(function, pattern, got, variables, substitutions)
             }
             (

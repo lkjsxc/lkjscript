@@ -69,10 +69,7 @@ pub(in crate::operation) fn bind_type_params(
             }
             Ok(())
         }
-        (Type::Owned(pattern), Type::Owned(argument))
-        | (Type::Ref(pattern), Type::Ref(argument))
-        | (Type::RefMut(pattern), Type::RefMut(argument))
-        | (Type::List(pattern), Type::List(argument)) => {
+        (Type::List(pattern), Type::List(argument)) => {
             bind_type_params(name, pattern, argument, variables, substitutions)
         }
         (
@@ -115,9 +112,9 @@ pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
         Type::Never
         | Type::Capability(_)
         | Type::Buf
-        | Type::Owned(_)
-        | Type::Ref(_)
-        | Type::RefMut(_)
+        | Type::ByteVector
+        | Type::ByteSlice
+        | Type::ByteSliceMut
         | Type::Resource(_)
         | Type::Product(_)
         | Type::Enum { .. }

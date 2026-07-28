@@ -36,8 +36,10 @@ plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
 and `ExecutableProgram` retains the complete plan. The independently recomputed
 direct-affine SSA inventory remains derived evidence. The public 62-record
 inventory reports Current tracing layouts and Accepted deterministic candidates.
-Explicit drops, regions, pools, unique storage, and collector removal remain
-Accepted Contract work.
+The first exact byte-vector family now has explicit end-borrow/drop execution
+and execution-owned `UniqueStore` backing in the evaluator and reference VM;
+native tiers reject it before entry. General regions, pools, broader unique
+storage, and collector removal remain Accepted Contract work.
 
 Provider authority enters only through explicit closed capability parameters.
 Package verification bounds grants; bytecode records exact main requirements;

@@ -98,8 +98,10 @@ pub(crate) fn process_ownership_instruction(
         }
         InstructionKind::Call { arguments, .. } => {
             for argument in arguments {
-                if matches!(value_type(types, *argument)?, SsaType::RefMut(_)) {
-                    return fail("SSA RefMut user-call forwarding is unavailable in this slice");
+                if matches!(value_type(types, *argument)?, SsaType::ByteSliceMut) {
+                    return fail(
+                        "SSA byte-slice-mut user-call forwarding is unavailable in this slice",
+                    );
                 }
             }
             consume_affine_arguments(arguments, state, types, true, false)?;

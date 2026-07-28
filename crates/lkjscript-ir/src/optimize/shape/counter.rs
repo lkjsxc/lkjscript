@@ -82,10 +82,7 @@ impl<'a> ShapeCounter<'a> {
             self.add_bounded(ShapeField::TypeNodes, 1)?;
             self.add_bounded(ShapeField::StringAndMetadataBytes, 1)?;
             match ty {
-                SsaType::Owned(inner)
-                | SsaType::Ref(inner)
-                | SsaType::RefMut(inner)
-                | SsaType::List(inner) => pending.push(inner),
+                SsaType::List(inner) => pending.push(inner),
                 SsaType::Enum { arguments, .. } => {
                     pending.extend(arguments);
                 }

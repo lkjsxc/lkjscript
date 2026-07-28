@@ -111,7 +111,7 @@ fn ownership_cfg_rejects_borrow_use_across_blocks() {
                 }],
                 instructions: vec![Instruction {
                     id: ValueId::new(1),
-                    ty: SsaType::Ref(Box::new(SsaType::Buf)),
+                    ty: SsaType::ByteSlice,
                     kind: InstructionKind::Borrow {
                         place: PlaceId::new(0),
                         loan: LoanId::new(0),
@@ -135,10 +135,7 @@ fn ownership_cfg_rejects_borrow_use_across_blocks() {
                     kind: InstructionKind::Runtime {
                         operation: RuntimeOp::OwnedBufLen,
                         arguments: vec![ValueId::new(1)],
-                        signature: Signature::monomorphic(
-                            vec![SsaType::Ref(Box::new(SsaType::Buf))],
-                            SsaType::I64,
-                        ),
+                        signature: Signature::monomorphic(vec![SsaType::ByteSlice], SsaType::I64),
                     },
                     metadata: metadata(EffectSet::READS_MEMORY),
                 }],

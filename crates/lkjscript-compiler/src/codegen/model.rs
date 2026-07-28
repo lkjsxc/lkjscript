@@ -8,6 +8,11 @@ pub(in crate::codegen) fn compile_function(
     prototype: Option<u32>,
 ) -> Result<(FunctionProto, FunctionBytecodeLink)> {
     let slots = allocate_locals(function)?;
+    let entry = function
+        .blocks
+        .iter()
+        .find(|block| block.id == function.entry)
+        .ok_or_else(|| Error::msg("SSA function entry block is missing"))?;
     let locals = u8::try_from(slots.len()).map_err(|_| {
         Error::msg(format!(
             "SSA function {} requires {} bytecode locals; limit is 255",
@@ -31,6 +36,33 @@ pub(in crate::codegen) fn compile_function(
             })
             .collect(),
         return_resource: resource_return_kind(&function.signature.result),
+        parameter_uniques: function
+            .signature
+            .parameters
+            .iter()
+            .map(unique_value_kind)
+            .collect(),
+        parameter_unique_places: entry
+            .parameters
+            .iter()
+            .zip(&function.signature.parameters)
+            .map(|(parameter, ty)| {
+                if ty != &SsaType::ByteVector {
+                    return Ok(None);
+                }
+                parameter
+                    .owner_place
+                    .map(|place| {
+                        u8::try_from(place.raw()).map_err(|_| {
+                            Error::msg("SSA parameter owner PlaceId exceeds bytecode u8")
+                        })
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>>>()?,
+        return_unique: unique_value_kind(&function.signature.result),
+        unique_places: u8::try_from(function.places.len())
+            .map_err(|_| Error::msg("SSA unique place count exceeds bytecode u8"))?,
         code: Vec::new(),
     };
     let mut emitter = Emitter {
@@ -86,6 +118,15 @@ pub(in crate::codegen) fn compile_function(
             instructions: emitter.instruction_links,
         },
     ))
+}
+
+fn unique_value_kind(ty: &SsaType) -> Option<UniqueValueKind> {
+    match ty {
+        SsaType::ByteVector => Some(UniqueValueKind::ByteVector),
+        SsaType::ByteSlice => Some(UniqueValueKind::ByteSlice),
+        SsaType::ByteSliceMut => Some(UniqueValueKind::ByteSliceMut),
+        _ => None,
+    }
 }
 
 fn resource_return_kind(ty: &SsaType) -> Option<ResourceReturnKind> {

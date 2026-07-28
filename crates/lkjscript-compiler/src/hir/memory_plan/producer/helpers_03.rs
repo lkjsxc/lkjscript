@@ -11,7 +11,7 @@ fn allocation_failure(effects: u16) -> MemoryAllocationFailure {
 }
 fn obligation_for_type(ty: &Type) -> Option<(MemoryObligationKind, MemoryDropGlueId)> {
     match ty {
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => {
+        Type::ByteVector => {
             Some((MemoryObligationKind::DropValue, MemoryDropGlueId::new(0)))
         }
         Type::Resource(kind) => Some((
@@ -28,7 +28,7 @@ fn drop_glues() -> Vec<MemoryDropGluePlan> {
     let mut glues = Vec::with_capacity(ResourceKind::ALL.len().saturating_add(1));
     glues.push(MemoryDropGluePlan {
         id: MemoryDropGlueId::new(0),
-        kind: MemoryDropGlueKind::LegacyTracedByteVector,
+        kind: MemoryDropGlueKind::ByteVector,
     });
     glues.extend(
         ResourceKind::ALL

@@ -99,12 +99,11 @@ impl Resolver<'_> {
                 | Type::Str
                 | Type::Path
                 | Type::Symbol => true,
-                Type::Ref(inner) if inner.as_ref() == &Type::Buf => true,
+                Type::ByteSlice => true,
                 Type::Never
                 | Type::Buf
-                | Type::Owned(_)
-                | Type::Ref(_)
-                | Type::RefMut(_)
+                | Type::ByteVector
+                | Type::ByteSliceMut
                 | Type::Resource(_)
                 | Type::Fn { .. }
                 | Type::Forall { .. }

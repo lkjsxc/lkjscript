@@ -61,12 +61,12 @@ fn memory_inventory_retains_verified_owner_and_loan_modes() {
     let obligations = &executable.memory_inventory().obligations;
     assert_eq!(obligations.len(), 2);
     assert!(obligations.iter().any(|obligation| {
-        obligation.mode.storage == lkjscript_ir::MemoryStorage::TransitionalTracedBuffer
+        obligation.mode.storage == lkjscript_ir::MemoryStorage::DeterministicUnique
             && obligation.mode.destruction
                 == lkjscript_ir::MemoryDestruction::DropGlue(
-                    lkjscript_ir::DropGlueIdentity::LegacyTracedByteVector,
+                    lkjscript_ir::DropGlueIdentity::ByteVector,
                 )
-            && obligation.drop_glue == Some(lkjscript_ir::DropGlueIdentity::LegacyTracedByteVector)
+            && obligation.drop_glue == Some(lkjscript_ir::DropGlueIdentity::ByteVector)
     }));
     assert!(obligations.iter().any(|obligation| {
         obligation.mode.aliasing == lkjscript_ir::MemoryAliasing::BorrowedShared

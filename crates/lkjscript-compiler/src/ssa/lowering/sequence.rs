@@ -7,10 +7,35 @@ impl FunctionBuilder<'_> {
         sequence_origin: hir::SourceId,
     ) -> Result<Option<ValueId>> {
         let mut result = None;
-        for expression in expressions {
+        for (index, expression) in expressions.iter().enumerate() {
             result = self.lower_expr(expression)?;
-            if result.is_none() {
+            let Some(value) = result else {
                 return Ok(None);
+            };
+            if index.saturating_add(1) < expressions.len() && expression.ty == hir::Type::ByteVector
+            {
+                let place = discarded_move_place(expression).ok_or_else(|| {
+                    Error::msg(
+                        "discarded byte-vector temporary requires an explicit whole-place Move",
+                    )
+                })?;
+                let glue = self
+                    .places
+                    .get(place.index().unwrap_or(usize::MAX))
+                    .and_then(|place| place.drop_glue)
+                    .ok_or_else(|| Error::msg("discarded byte-vector Move lost drop glue"))?;
+                let _drop = self.append(
+                    SsaType::Unit,
+                    InstructionKind::Drop {
+                        place,
+                        value,
+                        glue,
+                        kind: DropEventKind::ImplicitCleanup,
+                    },
+                    EffectSet::PURE,
+                    expression.origin,
+                )?;
+                result = Some(value);
             }
         }
         if let Some(result) = result {
@@ -55,5 +80,21 @@ impl FunctionBuilder<'_> {
             restore(&mut self.slots, binding, previous_slot);
         }
         Ok(result)
+    }
+}
+
+fn discarded_move_place(expression: &Expr) -> Option<SsaPlaceId> {
+    match &expression.kind {
+        ExprKind::Move { place, .. } => Some(SsaPlaceId::new(place.raw())),
+        ExprKind::Do(expressions) => expressions.last().and_then(discarded_move_place),
+        ExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let then_place = discarded_move_place(then_branch)?;
+            (discarded_move_place(else_branch)? == then_place).then_some(then_place)
+        }
+        _ => None,
     }
 }

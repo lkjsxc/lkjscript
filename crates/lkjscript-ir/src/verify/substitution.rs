@@ -20,10 +20,7 @@ pub(crate) fn bind_type<'a>(
             }
             Ok(())
         }
-        (SsaType::Owned(left), SsaType::Owned(right))
-        | (SsaType::Ref(left), SsaType::Ref(right))
-        | (SsaType::RefMut(left), SsaType::RefMut(right))
-        | (SsaType::List(left), SsaType::List(right)) => {
+        (SsaType::List(left), SsaType::List(right)) => {
             bind_type(left, right, permitted, substitutions)
         }
         (
@@ -74,9 +71,6 @@ pub(crate) fn substitute_type(ty: &SsaType, substitutions: &HashMap<&str, SsaTyp
             .get(name.as_str())
             .cloned()
             .unwrap_or_else(|| ty.clone()),
-        SsaType::Owned(item) => SsaType::Owned(Box::new(substitute_type(item, substitutions))),
-        SsaType::Ref(item) => SsaType::Ref(Box::new(substitute_type(item, substitutions))),
-        SsaType::RefMut(item) => SsaType::RefMut(Box::new(substitute_type(item, substitutions))),
         SsaType::List(item) => SsaType::List(Box::new(substitute_type(item, substitutions))),
         SsaType::Enum { id, arguments } => SsaType::Enum {
             id: *id,

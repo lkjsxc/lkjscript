@@ -112,7 +112,12 @@ pub(crate) fn transfer_edge(
                 }
                 next.affine.remove(argument);
                 let provenance = if fact.transferred {
-                    AffineProvenance::Transferred(parameter.id)
+                    match fact.provenance {
+                        AffineProvenance::Place(place) if state.active_places.contains(&place) => {
+                            AffineProvenance::Place(place)
+                        }
+                        _ => AffineProvenance::Transferred(parameter.id),
+                    }
                 } else {
                     match fact.provenance {
                         AffineProvenance::Fresh(_) => AffineProvenance::Fresh(parameter.id),

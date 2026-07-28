@@ -67,11 +67,11 @@ pub(in crate::ssa) fn lower_type(
         Type::F64 => SsaType::F64,
         Type::Str => SsaType::Str,
         Type::Buf => SsaType::Buf,
+        Type::ByteVector => SsaType::ByteVector,
+        Type::ByteSlice => SsaType::ByteSlice,
+        Type::ByteSliceMut => SsaType::ByteSliceMut,
         Type::Path => SsaType::Path,
         Type::Capability(kind) => SsaType::Capability(*kind),
-        Type::Owned(inner) => SsaType::Owned(Box::new(lower_type(inner, products)?)),
-        Type::Ref(inner) => SsaType::Ref(Box::new(lower_type(inner, products)?)),
-        Type::RefMut(inner) => SsaType::RefMut(Box::new(lower_type(inner, products)?)),
         Type::Symbol => SsaType::Symbol,
         Type::Resource(kind) => SsaType::Resource(*kind),
         Type::Product(name) => SsaType::Product(
@@ -95,8 +95,7 @@ pub(in crate::ssa) fn lower_type(
 }
 
 pub(in crate::ssa) fn is_owned_value(ty: &SsaType) -> bool {
-    matches!(ty, SsaType::Owned(inner) if inner.as_ref() == &SsaType::Buf)
-        || matches!(ty, SsaType::Resource(_))
+    matches!(ty, SsaType::ByteVector | SsaType::Resource(_))
 }
 
 pub(in crate::ssa) struct CleanupPlan {
@@ -143,9 +142,7 @@ impl CleanupPlan {
                 .and_then(|id| plan.drop_glues.iter().find(|glue| glue.id == id))
                 .ok_or_else(|| Error::msg("HIR drop obligation lost closed glue identity"))?;
             let glue = match glue.kind {
-                MemoryDropGlueKind::LegacyTracedByteVector => {
-                    DropGlueIdentity::LegacyTracedByteVector
-                }
+                MemoryDropGlueKind::ByteVector => DropGlueIdentity::ByteVector,
                 MemoryDropGlueKind::Resource(kind) => DropGlueIdentity::Resource(kind),
             };
             if place_glues.insert(SsaPlaceId::new(place), glue).is_some() {

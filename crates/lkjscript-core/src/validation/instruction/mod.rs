@@ -11,6 +11,7 @@ mod sqlite;
 mod system;
 mod system_types;
 mod types;
+mod unique;
 
 use super::{decode::instruction_error, Kind, State};
 use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
@@ -156,6 +157,21 @@ pub(super) fn apply_instruction(
         | Op::SysSqliteColumnText
         | Op::SysSqliteColumnBytes
         | Op::SysSqliteBackup => sqlite::apply(chunk, proto, instruction, state),
+        Op::ByteVectorNew
+        | Op::ByteVectorPlaceInit
+        | Op::ByteVectorMove
+        | Op::ByteVectorBorrow
+        | Op::ByteVectorBorrowMut
+        | Op::StoreUniqueLocal
+        | Op::StoreViewLocal
+        | Op::TakeUniqueLocal
+        | Op::LoadViewLocal
+        | Op::ByteVectorDropPlace
+        | Op::ByteVectorPlaceEnd
+        | Op::ByteSliceLen
+        | Op::ByteSliceRef
+        | Op::ByteSliceMutSet
+        | Op::EndBorrowLocal => unique::apply(chunk, proto, instruction, state),
         Op::MakeProduct
         | Op::LoadProductField
         | Op::WithProductField

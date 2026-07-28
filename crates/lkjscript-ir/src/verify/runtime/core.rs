@@ -72,18 +72,11 @@ pub(super) fn core_signature(
             &crate::prelude_contract::option(SsaType::Str),
         ),
         RuntimeOp::BufNew => exact(&[SsaType::I64], &SsaType::Buf),
-        RuntimeOp::OwnedBufNew => exact(&[SsaType::I64], &SsaType::Owned(Box::new(SsaType::Buf))),
-        RuntimeOp::OwnedBufLen => exact(&[SsaType::Ref(Box::new(SsaType::Buf))], &SsaType::I64),
-        RuntimeOp::OwnedBufRef => exact(
-            &[SsaType::Ref(Box::new(SsaType::Buf)), SsaType::I64],
-            &SsaType::I64,
-        ),
+        RuntimeOp::OwnedBufNew => exact(&[SsaType::I64], &SsaType::ByteVector),
+        RuntimeOp::OwnedBufLen => exact(&[SsaType::ByteSlice], &SsaType::I64),
+        RuntimeOp::OwnedBufRef => exact(&[SsaType::ByteSlice, SsaType::I64], &SsaType::I64),
         RuntimeOp::OwnedBufSet => exact(
-            &[
-                SsaType::RefMut(Box::new(SsaType::Buf)),
-                SsaType::I64,
-                SsaType::I64,
-            ],
+            &[SsaType::ByteSliceMut, SsaType::I64, SsaType::I64],
             &SsaType::Unit,
         ),
         RuntimeOp::BufLen => exact(&[SsaType::Buf], &SsaType::I64),

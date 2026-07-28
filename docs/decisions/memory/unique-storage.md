@@ -2,9 +2,13 @@
 
 ## Status
 
-**The safe core service is Current; evaluator, VM, JIT, and source integration
-are not Current.** This service is not a collector and does not decide liveness
-by tracing.
+**The safe core service and the exact first byte-vector evaluator/VM family are
+Current; native integration and the remaining source families are not
+Current.** `new-byte-vector`, whole-place move and whole-place shared/exclusive
+borrow, byte-slice length/read, byte-slice-mut write, deterministic loan end,
+and owner release use one execution-owned store in the evaluator and reference
+VM. Transitional `buf` remains independently traced. This service is not a
+collector and does not decide liveness by tracing.
 
 ## Representation
 
@@ -75,6 +79,9 @@ and cumulative allocated bytes.
 
 ## Limits And Completion
 
-At island completion there are no untransferred unique owners, live loans,
-cleanup flags, or release backlog. Explicit returned-owner objects may retain a
-slot for the host and release it on host-owner drop.
+At completion of each first-family evaluator/VM invocation there are no
+untransferred unique owners, live loans, cleanup flags, or release backlog.
+Normal lexical completion releases owners directly. Trap and early outcomes
+run deterministic execution cleanup before the store leak assertion; teardown
+only verifies the result. Explicit returned-owner transfer remains a bounded
+execution-boundary case and does not promote the wider collector-free island.

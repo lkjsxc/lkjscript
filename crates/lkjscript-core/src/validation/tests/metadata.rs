@@ -14,6 +14,10 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
         locals: 0,
         parameter_resources: Vec::new(),
         return_resource: None,
+        parameter_uniques: Vec::new(),
+        parameter_unique_places: Vec::new(),
+        return_unique: None,
+        unique_places: 0,
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     captures.main.code = vec![
@@ -59,6 +63,10 @@ fn global_closures_must_match_declared_prototypes() {
             locals: 0,
             parameter_resources: Vec::new(),
             return_resource: None,
+            parameter_uniques: Vec::new(),
+            parameter_unique_places: Vec::new(),
+            return_unique: None,
+            unique_places: 0,
             code: vec![Op::Unit as u8, Op::Return as u8],
         });
     }

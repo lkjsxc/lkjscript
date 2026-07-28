@@ -91,6 +91,12 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                     }
                 }
             }
+            let unique_places = initial_unique_places(
+                p,
+                vm.stack
+                    .get(args_start..args_start.saturating_add(argument_count))
+                    .ok_or_else(|| Error::msg("call unique argument range is out of bounds"))?,
+            )?;
             if is_tail_position(vm) {
                 let stack_base = vm.frames.last().map(|frame| frame.stack_base).unwrap_or(0);
                 let args = vm.stack[args_start..].to_vec();
@@ -105,6 +111,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                         ip: 0,
                         stack_base,
                         locals_base: stack_base,
+                        unique_places,
                     };
                 }
                 return Ok(());
@@ -117,6 +124,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 ip: 0,
                 stack_base: args_start,
                 locals_base: args_start,
+                unique_places,
             });
             Ok(())
         }
@@ -124,39 +132,35 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
     }
 }
 
-fn native_from_value(ty: ValueType, value: Value) -> Result<NativeValue> {
-    match ty {
-        ValueType::Unit if value.is_unit() => Ok(NativeValue::Unit),
-        ValueType::Bool => value
-            .as_bool()
-            .map(NativeValue::Bool)
-            .ok_or_else(|| Error::msg("native boundary expected Bool")),
-        ValueType::I64 => value
-            .as_i64()
-            .map(NativeValue::I64)
-            .ok_or_else(|| Error::msg("native boundary expected I64")),
-        ValueType::F64 => value
-            .as_f64_bits()
-            .map(NativeValue::F64Bits)
-            .ok_or_else(|| Error::msg("native boundary expected F64")),
-        ValueType::Unit => Err(Error::msg("native boundary expected Unit")),
-        ValueType::Capability(_) | ValueType::Resource(_) | ValueType::Reference(_) => Err(
-            Error::msg("VM/native adapter transfer is not enabled in automatic tiering"),
-        ),
+fn initial_unique_places(
+    proto: &lkjscript_core::FunctionProto,
+    arguments: &[Value],
+) -> Result<Vec<crate::run::unique::RuntimePlace>> {
+    let mut places =
+        vec![crate::run::unique::RuntimePlace::Inactive; usize::from(proto.unique_places)];
+    for (index, place) in proto.parameter_unique_places.iter().copied().enumerate() {
+        let Some(place) = place else {
+            continue;
+        };
+        let owner = arguments
+            .get(index)
+            .and_then(|value| value.as_opaque_unique_key())
+            .ok_or_else(|| Error::msg("byte-vector call parameter lacks unique owner payload"))?;
+        let target = places
+            .get_mut(usize::from(place))
+            .ok_or_else(|| Error::msg("byte-vector call parameter PlaceId is out of range"))?;
+        if !matches!(target, crate::run::unique::RuntimePlace::Inactive) {
+            return Err(Error::msg("duplicate byte-vector call parameter PlaceId"));
+        }
+        *target = crate::run::unique::RuntimePlace::Active {
+            owner: Some(owner),
+            transferred: None,
+        };
     }
+    Ok(places)
 }
 
-fn value_from_native(value: NativeValue) -> Result<Value> {
-    match value {
-        NativeValue::Unit => Ok(Value::UNIT),
-        NativeValue::Bool(value) => Ok(Value::from_bool(value)),
-        NativeValue::I64(value) => Ok(Value::from_i64(value)),
-        NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
-        NativeValue::Capability(_) | NativeValue::Resource(_) | NativeValue::Reference(_) => {
-            unreachable!("automatic tier returned an ineligible native adapter")
-        }
-    }
-}
+include!("execution/native.rs");
 
 fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {
     let Some(frame) = vm.frames.last() else {

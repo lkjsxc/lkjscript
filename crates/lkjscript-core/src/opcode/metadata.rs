@@ -56,8 +56,21 @@ const fn operand_width(op: Op) -> usize {
         | Op::WithProductField
         | Op::MakeEnum
         | Op::IsEnumVariant
-        | Op::LoadEnumField => 2,
-        Op::LoadLocal | Op::StoreLocal | Op::Call => 1,
+        | Op::LoadEnumField
+        | Op::ByteVectorPlaceInit
+        | Op::ByteVectorMove
+        | Op::ByteVectorDropPlace => 2,
+        Op::LoadLocal
+        | Op::StoreLocal
+        | Op::Call
+        | Op::ByteVectorBorrow
+        | Op::ByteVectorBorrowMut
+        | Op::StoreUniqueLocal
+        | Op::StoreViewLocal
+        | Op::TakeUniqueLocal
+        | Op::LoadViewLocal
+        | Op::EndBorrowLocal
+        | Op::ByteVectorPlaceEnd => 1,
         _ => 0,
     }
 }

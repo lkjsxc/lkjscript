@@ -72,7 +72,7 @@ pub(crate) fn expected_instruction_effects(
             signature,
             instantiation,
         } => {
-            if matches!(instruction.ty, SsaType::Ref(_) | SsaType::RefMut(_)) {
+            if matches!(instruction.ty, SsaType::ByteSlice | SsaType::ByteSliceMut) {
                 return fail("SSA user-call result cannot be a lexical reference in this slice");
             }
             verify_resolved_signature(signature, arguments, &instruction.ty, types)?;

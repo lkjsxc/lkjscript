@@ -22,6 +22,7 @@ pub enum MemoryLocality {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryStorage {
     TransitionalTracedBuffer,
+    DeterministicUnique,
     BorrowedView,
     ExternalSlot,
 }
@@ -38,7 +39,7 @@ pub enum MemoryContention {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DropGlueIdentity {
-    LegacyTracedByteVector,
+    ByteVector,
     Resource(lkjscript_contracts::ResourceKind),
 }
 

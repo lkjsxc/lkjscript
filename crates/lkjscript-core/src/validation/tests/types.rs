@@ -103,6 +103,10 @@ fn resource_call_and_return_metadata_is_enforced() {
         locals: 1,
         parameter_resources: vec![Some(crate::ResourceKind::FileReader)],
         return_resource: None,
+        parameter_uniques: Vec::new(),
+        parameter_unique_places: Vec::new(),
+        return_unique: None,
+        unique_places: 0,
         code: vec![Op::LoadLocal as u8, 0, 0, Op::Return as u8],
     });
     call.main.code.clear();
@@ -127,6 +131,10 @@ fn resource_call_and_return_metadata_is_enforced() {
         return_resource: Some(crate::ResourceReturnKind::Resource(
             crate::ResourceKind::FileReader,
         )),
+        parameter_uniques: Vec::new(),
+        parameter_unique_places: Vec::new(),
+        return_unique: None,
+        unique_places: 0,
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     let message = error(returned);

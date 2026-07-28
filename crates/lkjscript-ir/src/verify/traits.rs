@@ -72,11 +72,10 @@ pub(crate) fn auto_trait_holds(
             | SsaType::Str
             | SsaType::Path
             | SsaType::Symbol => Ok(true),
-            SsaType::Ref(inner) if inner.as_ref() == &SsaType::Buf => Ok(true),
+            SsaType::ByteSlice => Ok(true),
             SsaType::Buf
-            | SsaType::Owned(_)
-            | SsaType::Ref(_)
-            | SsaType::RefMut(_)
+            | SsaType::ByteVector
+            | SsaType::ByteSliceMut
             | SsaType::Resource(_)
             | SsaType::Function(_)
             | SsaType::TypeParameter(_) => Ok(false),

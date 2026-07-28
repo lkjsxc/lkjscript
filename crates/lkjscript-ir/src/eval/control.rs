@@ -53,13 +53,13 @@ impl Evaluator<'_> {
                 .ok_or_else(|| Flow::Trap("evaluator missing verified block".into()))?;
             for instruction in &block.instructions {
                 self.consume_fuel()?;
-                let value = self.instruction(instruction, &values, depth)?;
+                let value = self.instruction(instruction, &mut values, depth)?;
                 set_value(&mut values, instruction.id, value)?;
             }
             self.consume_fuel()?;
             match block.terminator {
                 Terminator::Branch { target, arguments } => {
-                    let arguments = values_for(&values, &arguments)?;
+                    let arguments = values_for_edge(&mut values, &arguments)?;
                     let target_block = function
                         .blocks
                         .iter()
@@ -81,7 +81,7 @@ impl Evaluator<'_> {
                     } else {
                         (false_target, false_arguments)
                     };
-                    let arguments = values_for(&values, &arguments)?;
+                    let arguments = values_for_edge(&mut values, &arguments)?;
                     let target_block = function
                         .blocks
                         .iter()
@@ -90,7 +90,13 @@ impl Evaluator<'_> {
                     assign_parameters(&mut values, &target_block.parameters, arguments)?;
                     current = target;
                 }
-                Terminator::Return(result) => return value(&values, result).cloned(),
+                Terminator::Return(result) => {
+                    return if matches!(value(&values, result)?, EvalValue::ByteVector(_)) {
+                        take_value(&mut values, result)
+                    } else {
+                        value(&values, result).cloned()
+                    };
+                }
                 Terminator::Trap { value: trap } => {
                     return Err(Flow::Trap(as_str(value(&values, trap)?)?.to_owned()))
                 }

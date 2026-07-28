@@ -46,6 +46,13 @@ pub enum Constant {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UniqueValueKind {
+    ByteVector,
+    ByteSlice,
+    ByteSliceMut,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceReturnKind {
     Resource(crate::ResourceKind),
     Result(crate::ResourceKind),
@@ -58,6 +65,10 @@ pub struct FunctionProto {
     pub locals: u8,
     pub parameter_resources: Vec<Option<crate::ResourceKind>>,
     pub return_resource: Option<ResourceReturnKind>,
+    pub parameter_uniques: Vec<Option<UniqueValueKind>>,
+    pub parameter_unique_places: Vec<Option<u8>>,
+    pub return_unique: Option<UniqueValueKind>,
+    pub unique_places: u8,
     pub code: Vec<u8>,
 }
 
@@ -94,6 +105,10 @@ impl Chunk {
                 locals: 0,
                 parameter_resources: Vec::new(),
                 return_resource: None,
+                parameter_uniques: Vec::new(),
+                parameter_unique_places: Vec::new(),
+                return_unique: None,
+                unique_places: 0,
                 code: Vec::new(),
             },
             required_capabilities: Vec::new(),

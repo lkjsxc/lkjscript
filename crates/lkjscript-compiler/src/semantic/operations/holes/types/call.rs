@@ -42,10 +42,7 @@ fn bind_parameters(pattern: &Type, actual: &Type, output: &mut HashMap<String, T
         (Type::Param(name), actual) => {
             output.entry(name.clone()).or_insert_with(|| actual.clone());
         }
-        (Type::Owned(left), Type::Owned(right))
-        | (Type::Ref(left), Type::Ref(right))
-        | (Type::RefMut(left), Type::RefMut(right))
-        | (Type::List(left), Type::List(right)) => bind_parameters(left, right, output),
+        (Type::List(left), Type::List(right)) => bind_parameters(left, right, output),
         (
             Type::Enum {
                 id: left_id,
@@ -88,9 +85,7 @@ fn simple_expression_type(node: &SourceNode) -> Option<Type> {
 fn contains_parameter(ty: &Type) -> bool {
     match ty {
         Type::Param(_) | Type::Forall { .. } => true,
-        Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
-            contains_parameter(inner)
-        }
+        Type::List(inner) => contains_parameter(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_parameter),
         Type::Fn { params, ret } => {
             params.iter().any(contains_parameter) || contains_parameter(ret)

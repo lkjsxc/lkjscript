@@ -87,6 +87,12 @@ pub(super) enum Kind {
     Closure(u32),
     List,
     Buf,
+    ByteVector(u32),
+    ByteSlice {
+        owner: u32,
+        mutable: bool,
+        used: bool,
+    },
     Path,
     Capability(crate::CapabilityKind),
     Resource(crate::ResourceKind),
@@ -109,6 +115,9 @@ impl std::fmt::Display for Kind {
             Self::Closure(_) => "function",
             Self::List => "list",
             Self::Buf => "buf",
+            Self::ByteVector(_) => "byte-vector",
+            Self::ByteSlice { mutable: false, .. } => "byte-slice",
+            Self::ByteSlice { mutable: true, .. } => "byte-slice-mut",
             Self::Path => "path",
             Self::Capability(_) => "capability",
             Self::Resource(_) => "resource",
@@ -123,6 +132,9 @@ impl std::fmt::Display for Kind {
             Self::Resource(kind) | Self::ResourceResult(kind) => {
                 write!(formatter, " {}", kind.as_str())
             }
+            Self::ByteVector(owner) | Self::ByteSlice { owner, .. } => {
+                write!(formatter, " owner {owner}")
+            }
             Self::Product(id) => write!(formatter, " {}", id.raw()),
             Self::Enum(_, Some(_)) => formatter.write_str(" variant"),
             Self::Enum(_, None) => Ok(()),
@@ -131,11 +143,21 @@ impl std::fmt::Display for Kind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum UniquePlaceState {
+    Inactive,
+    Active {
+        owner: Option<u32>,
+        transferred: Option<u32>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct State {
     pub(super) stack: Vec<Kind>,
     pub(super) locals: Vec<Option<Kind>>,
     pub(super) globals: Vec<Option<Kind>>,
+    pub(super) unique_places: Vec<UniquePlaceState>,
 }
 
 pub use entry::validate_chunk;

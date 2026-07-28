@@ -109,9 +109,9 @@ fn consuming_operation(operation: Operation) -> bool {
 }
 fn parameter_mode(ty: &Type, resource_consumed: bool) -> MemoryParameterMode {
     match ty {
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => MemoryParameterMode::Consume,
-        Type::Ref(inner) if inner.as_ref() == &Type::Buf => MemoryParameterMode::BorrowShared,
-        Type::RefMut(inner) if inner.as_ref() == &Type::Buf => MemoryParameterMode::BorrowExclusive,
+        Type::ByteVector => MemoryParameterMode::Consume,
+        Type::ByteSlice => MemoryParameterMode::BorrowShared,
+        Type::ByteSliceMut => MemoryParameterMode::BorrowExclusive,
         Type::Resource(_) if resource_consumed => MemoryParameterMode::Consume,
         Type::Resource(_) => MemoryParameterMode::BorrowExclusive,
         _ => MemoryParameterMode::Copy,
@@ -126,8 +126,10 @@ fn operation_parameter_mode(operation: Operation, ty: &Type) -> MemoryParameterM
 }
 fn result_mode(ty: &Type) -> MemoryResultMode {
     match ty {
-        Type::Owned(inner) if inner.as_ref() == &Type::Buf => MemoryResultMode::Owned,
-        Type::Ref(_) | Type::RefMut(_) => MemoryResultMode::Borrowed,
+        Type::ByteVector => MemoryResultMode::Owned,
+        Type::ByteSlice | Type::ByteSliceMut => {
+            MemoryResultMode::Borrowed
+        }
         Type::Resource(_) => MemoryResultMode::External,
         _ => MemoryResultMode::Trivial,
     }

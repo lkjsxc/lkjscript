@@ -9,9 +9,7 @@ pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut Has
         Type::Param(parameter) => {
             output.insert(parameter);
         }
-        Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
-            collect_type_params(inner, output)
-        }
+        Type::List(inner) => collect_type_params(inner, output),
         Type::Enum { arguments, .. } => {
             for argument in arguments {
                 collect_type_params(argument, output);
@@ -30,7 +28,7 @@ pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut Has
 
 pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
     match ty {
-        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) | Type::Resource(_) => true,
+        Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut | Type::Resource(_) => true,
         Type::List(inner) => contains_ownership_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
         Type::Fn { params, ret } => {
@@ -44,9 +42,7 @@ pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
 pub(in crate::analyze) fn contains_resource_type(ty: &Type) -> bool {
     match ty {
         Type::Resource(_) => true,
-        Type::Owned(inner) | Type::Ref(inner) | Type::RefMut(inner) | Type::List(inner) => {
-            contains_resource_type(inner)
-        }
+        Type::List(inner) => contains_resource_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_resource_type),
         Type::Fn { params, ret } => {
             params.iter().any(contains_resource_type) || contains_resource_type(ret)
@@ -58,8 +54,8 @@ pub(in crate::analyze) fn contains_resource_type(ty: &Type) -> bool {
 
 pub(in crate::analyze) fn contains_reference_type(ty: &Type) -> bool {
     match ty {
-        Type::Ref(_) | Type::RefMut(_) => true,
-        Type::Owned(inner) | Type::List(inner) => contains_reference_type(inner),
+        Type::ByteSlice | Type::ByteSliceMut => true,
+        Type::List(inner) => contains_reference_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_reference_type),
         Type::Fn { params, ret } => {
             params.iter().any(contains_reference_type) || contains_reference_type(ret)

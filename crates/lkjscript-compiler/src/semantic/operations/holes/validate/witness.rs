@@ -27,17 +27,17 @@ pub(super) fn scoped_witness(
             .and_then(super::super::types::source_name)?;
         let (actual, used) = super::super::types::parse_type_nodes(&params.children[index + 1..])?;
         let expression = if actual == *expected {
-            if matches!(actual, Type::Owned(_)) {
+            if matches!(actual, Type::ByteVector) {
                 Some(Expression::Move { name: name.into() })
             } else {
                 Some(Expression::NameReference { name: name.into() })
             }
         } else {
             match (&actual, expected) {
-                (Type::Owned(actual), Type::Ref(expected)) if actual == expected => {
+                (Type::ByteVector, Type::ByteSlice) => {
                     Some(Expression::Borrow { name: name.into() })
                 }
-                (Type::Owned(actual), Type::RefMut(expected)) if actual == expected => {
+                (Type::ByteVector, Type::ByteSliceMut) => {
                     Some(Expression::BorrowMut { name: name.into() })
                 }
                 _ => None,

@@ -10,6 +10,16 @@ pub(crate) fn value(
         .ok_or_else(|| Flow::Trap(format!("evaluator missing SSA value {}", id.raw())))
 }
 
+pub(crate) fn take_value(
+    values: &mut [Option<EvalValue>],
+    id: ValueId,
+) -> std::result::Result<EvalValue, Flow> {
+    values
+        .get_mut(id.index().unwrap_or(usize::MAX))
+        .and_then(Option::take)
+        .ok_or_else(|| Flow::Trap(format!("evaluator moved or missing SSA value {}", id.raw())))
+}
+
 pub(crate) fn set_value(
     values: &mut [Option<EvalValue>],
     id: ValueId,
@@ -27,6 +37,25 @@ pub(crate) fn values_for(
     ids: &[ValueId],
 ) -> std::result::Result<Vec<EvalValue>, Flow> {
     ids.iter().map(|id| value(values, *id).cloned()).collect()
+}
+
+pub(crate) fn values_for_call(
+    values: &mut [Option<EvalValue>],
+    ids: &[ValueId],
+) -> std::result::Result<Vec<EvalValue>, Flow> {
+    ids.iter()
+        .map(|id| match value(values, *id)? {
+            EvalValue::ByteVector(_) => take_value(values, *id),
+            other => Ok(other.clone()),
+        })
+        .collect()
+}
+
+pub(crate) fn values_for_edge(
+    values: &mut [Option<EvalValue>],
+    ids: &[ValueId],
+) -> std::result::Result<Vec<EvalValue>, Flow> {
+    values_for_call(values, ids)
 }
 
 pub(crate) fn assign_parameters(

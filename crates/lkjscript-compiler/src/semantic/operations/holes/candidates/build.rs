@@ -63,7 +63,7 @@ pub(super) fn literal_expressions(
 pub(super) fn binding_expression(entity: &ScopeEntity, expected: &Type) -> Option<Expression> {
     let actual = super::super::scope::parse_canonical(&entity.instantiated_type)?;
     if actual == *expected {
-        return Some(if matches!(actual, Type::Owned(_)) {
+        return Some(if matches!(actual, Type::ByteVector) {
             Expression::Move {
                 name: entity.name.clone(),
             }
@@ -74,16 +74,12 @@ pub(super) fn binding_expression(entity: &ScopeEntity, expected: &Type) -> Optio
         });
     }
     match (&actual, expected) {
-        (Type::Owned(actual), Type::Ref(expected)) if actual == expected => {
-            Some(Expression::Borrow {
-                name: entity.name.clone(),
-            })
-        }
-        (Type::Owned(actual), Type::RefMut(expected)) if actual == expected => {
-            Some(Expression::BorrowMut {
-                name: entity.name.clone(),
-            })
-        }
+        (Type::ByteVector, Type::ByteSlice) => Some(Expression::Borrow {
+            name: entity.name.clone(),
+        }),
+        (Type::ByteVector, Type::ByteSliceMut) => Some(Expression::BorrowMut {
+            name: entity.name.clone(),
+        }),
         _ => None,
     }
 }

@@ -128,8 +128,7 @@ fn verify_legacy_registration(plan: &HirMemoryPlan) -> Result<()> {
 
 fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
     if plan.drop_glues.len() != ResourceKind::ALL.len().saturating_add(1)
-        || plan.drop_glues.first().map(|glue| glue.kind)
-            != Some(MemoryDropGlueKind::LegacyTracedByteVector)
+        || plan.drop_glues.first().map(|glue| glue.kind) != Some(MemoryDropGlueKind::ByteVector)
     {
         return Err(Error::msg("HIR memory-plan drop-glue table is incomplete"));
     }

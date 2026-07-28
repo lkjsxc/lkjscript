@@ -14,7 +14,7 @@ pub(in crate::ownership) fn reject_unsupported_type_placement(ty: &Type) -> Resu
 
 pub(in crate::ownership) fn contains_ownership(ty: &Type) -> bool {
     match ty {
-        Type::Owned(_) | Type::Ref(_) | Type::RefMut(_) => true,
+        Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut => true,
         Type::List(inner) => contains_ownership(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership),
         Type::Fn { params, ret } => {
@@ -49,7 +49,7 @@ pub(in crate::ownership) fn expression_of_binding(
 }
 
 pub(in crate::ownership) fn is_owned(ty: &Type) -> bool {
-    matches!(ty, Type::Owned(inner) if inner.as_ref() == &Type::Buf)
+    matches!(ty, Type::ByteVector)
 }
 
 pub(in crate::ownership) fn is_affine_resource(ty: &Type) -> bool {
@@ -57,9 +57,9 @@ pub(in crate::ownership) fn is_affine_resource(ty: &Type) -> bool {
 }
 
 pub(in crate::ownership) fn is_ref(ty: &Type) -> bool {
-    matches!(ty, Type::Ref(inner) if inner.as_ref() == &Type::Buf)
+    matches!(ty, Type::ByteSlice)
 }
 
 pub(in crate::ownership) fn is_ref_mut(ty: &Type) -> bool {
-    matches!(ty, Type::RefMut(inner) if inner.as_ref() == &Type::Buf)
+    matches!(ty, Type::ByteSliceMut)
 }

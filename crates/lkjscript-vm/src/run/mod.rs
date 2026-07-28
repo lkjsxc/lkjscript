@@ -11,6 +11,8 @@ mod limits;
 mod numeric;
 mod product;
 mod state;
+mod unique;
+mod unique_ops;
 
 use std::time::{Duration, Instant};
 
@@ -35,6 +37,7 @@ pub(crate) struct Frame {
     pub ip: usize,
     pub stack_base: usize,
     pub locals_base: usize,
+    pub unique_places: Vec<unique::RuntimePlace>,
 }
 
 enum Stop {
@@ -120,6 +123,7 @@ pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) exit_code: Option<i32>,
     pub(crate) inputs: ExecutionInputs,
     pub(crate) resources: ResourceTable,
+    pub(crate) unique: unique::UniqueRuntime,
     config: ExecutionConfig,
     fuel_remaining: u64,
     output_bytes: usize,

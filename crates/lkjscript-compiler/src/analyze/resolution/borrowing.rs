@@ -12,12 +12,11 @@ impl Resolver<'_> {
         })?;
         let ty = self.analyzer.binding(binding)?.ty.clone();
         match ty {
-            Type::Owned(ref inner) if inner.as_ref() == &Type::Buf => {}
-            Type::Resource(_) => {}
-            Type::RefMut(_) => {
-                return Err(
-                    self.error("RefMut forwarding is unsupported in the initial ownership slice")
-                );
+            Type::ByteVector | Type::Resource(_) => {}
+            Type::ByteSliceMut => {
+                return Err(self.error(
+                    "byte-slice-mut forwarding is unsupported in the initial ownership slice",
+                ));
             }
             _ => {
                 return Err(
@@ -46,7 +45,7 @@ impl Resolver<'_> {
             ))
         })?;
         let owner_ty = self.analyzer.binding(binding)?.ty.clone();
-        if owner_ty != Type::Owned(Box::new(Type::Buf)) {
+        if owner_ty != Type::ByteVector {
             return Err(self.error(
                 "borrow target must have exact type byte-vector; reborrow and legacy Buf are unsupported",
             ));
@@ -55,8 +54,8 @@ impl Resolver<'_> {
         let loan = self.allocate_loan()?;
         let binding = self.binding_ref(binding)?;
         let ty = match kind {
-            BorrowKind::Shared => Type::Ref(Box::new(Type::Buf)),
-            BorrowKind::Mutable => Type::RefMut(Box::new(Type::Buf)),
+            BorrowKind::Shared => Type::ByteSlice,
+            BorrowKind::Mutable => Type::ByteSliceMut,
         };
         Ok(self.expression(
             ty,
