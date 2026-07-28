@@ -92,6 +92,32 @@ median ratios ranged from 3.358x to 3.811x. This rejects fixed CPU pinning as
 the general default. The artificial run has 7 measured samples and is retained
 under `interference/`.
 
+## Exact Commands
+
+```sh
+cargo run --locked --release -q -p lkjscript-app \
+  --bin lkjscript-resource-bench -- 15 4 kernel-managed
+cargo run --locked --release -q -p lkjscript-app \
+  --bin lkjscript-resource-bench -- 15 4 cpu-pinned
+cargo run --locked --release -q -p lkjscript-app \
+  --bin lkjscript-resource-bench -- 15 4 llc-domain-masked
+cargo run --locked --release -q -p lkjscript-app \
+  --bin lkjscript-resource-bench -- proof 30
+taskset -c 0 yes >/dev/null &
+noise=$!; trap 'kill $noise 2>/dev/null || true' EXIT; sleep 1
+cargo run --locked --release -q -p lkjscript-app \
+  --bin lkjscript-resource-bench -- 7 4 cpu-pinned
+kill "$noise" 2>/dev/null || true; wait "$noise" 2>/dev/null || true
+trap - EXIT
+cargo run --locked -p lkjscript-xtask -- quiet verify
+docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
+```
+
+The first five benchmark commands ran at the retained measurement commit. The
+canonical local and Docker gates passed on the integrated implementation; full
+runtime acceptance used the command list in
+`docs/operations/verification/current-local-gates.md`.
+
 ## Data Layout
 
 `summary.json` contains aggregate formulas and raw TSV SHA-256 identities.
