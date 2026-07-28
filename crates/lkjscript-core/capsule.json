@@ -4,23 +4,26 @@
   "id": "core",
   "root": "crates/lkjscript-core",
   "kind": "crate",
-  "purpose": "Provide bounded validated bytecode and safe deterministic runtime value storage.",
+  "purpose": "Provide bounded bytecode, generation-safe resources, and deterministic runtime value storage.",
   "layer": "semantic foundation",
   "concepts": [
     "validated bytecode",
     "limits",
     "runtime values",
+    "generation-safe resources",
     "deterministic unique storage"
   ],
   "facade": ["crates/lkjscript-core/src/lib.rs"],
   "allowed_dependencies": ["contracts"],
   "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
   "tests": [
+    "crates/lkjscript-core/src/resource_table/tests/mod.rs",
     "crates/lkjscript-core/src/unique/tests/mod.rs",
     "crates/lkjscript-core/src/validation/tests/mod.rs"
   ],
   "decisions": [
     "docs/decisions/execution/compiler-pipeline.md",
+    "docs/decisions/memory/generation-safe-resources.md",
     "docs/decisions/memory/unique-storage.md",
     "docs/decisions/platform/content-addressed-contracts.md"
   ],
@@ -34,6 +37,7 @@
     "invariants": [
       "memory-safe Rust",
       "checked resource limits",
+      "stale-safe resource identity",
       "generation-safe unique keys"
     ]
   }

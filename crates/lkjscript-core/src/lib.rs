@@ -1,8 +1,7 @@
 //! Pure language core: values, validated bytecode, limits, and outcomes.
 
 mod budget;
-mod chunk;
-mod enum_metadata;
+mod bytecode;
 mod error;
 mod gc;
 mod limits;
@@ -11,6 +10,7 @@ mod opcode;
 mod outcome;
 mod prelude;
 mod profile;
+mod resource_table;
 mod sha256;
 mod unique;
 mod validation;
@@ -22,13 +22,10 @@ pub use budget::{
     ReservationJournalRecord, ReservationState, ResourceCategory, ResourceDiagnostic,
     ResourceUsage, MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH,
 };
-pub use chunk::{
-    Chunk, ConstId, Constant, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
-    ResourceReturnKind,
-};
-pub use enum_metadata::{
-    EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
-    EnumVariantMetadata, EnumVariantRef, RuntimeLayoutId, VariantFieldId, VariantId,
+pub use bytecode::{
+    Chunk, ConstId, Constant, EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId,
+    EnumMetadata, EnumVariantMetadata, EnumVariantRef, FunctionProto, ProductFieldRef, ProductId,
+    ProductMetadata, ResourceReturnKind, RuntimeLayoutId, VariantFieldId, VariantId,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use gc::{GcConfig, GcHeap, GcLimit, GcStats};
@@ -47,6 +44,12 @@ pub use prelude::*;
 pub use profile::{
     InvalidCeiling, ResourceCeilings, ResourceProfile, ResourceProfileIdentity,
     ResourceProfileName, UnknownResourceProfile, RESOURCE_PROFILE_SCHEMA,
+};
+pub use resource_table::{
+    BorrowedReservation, EmergencyObligations, OwnedReservation, ProviderId,
+    ResourceCleanupAttempt, ResourceCleanupReport, ResourceKey, ResourceObservation,
+    ResourceOwnership, ResourceState, ResourceTable, ResourceTableConfigError, ResourceTableError,
+    ResourceTableLimit, ResourceTableLimits, ResourceTableStats, ScopeId,
 };
 pub use sha256::sha256;
 pub use unique::{

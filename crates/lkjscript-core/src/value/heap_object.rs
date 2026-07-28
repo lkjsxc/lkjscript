@@ -1,5 +1,5 @@
 use super::model::Value;
-use crate::chunk::ProductId;
+use crate::ProductId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeapObj {
