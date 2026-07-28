@@ -35,9 +35,21 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
         if name == "owned-buffer.lkjscript" {
             let diagnostic = error.to_string();
             assert!(
-                diagnostic.contains("reference") || diagnostic.contains("ownership"),
+                diagnostic.contains("collector-free")
+                    || diagnostic.contains("byte-vector")
+                    || diagnostic.contains("ownership"),
                 "forced owned-buffer rejection was not ownership-specific: {diagnostic}"
             );
+            let proof = execute_optimizing(
+                program.ssa(),
+                &ExecutionConfig::default(),
+                JitConfig::default(),
+            )
+            .expect_err("forced proof tier must reject missing native unique lowering");
+            assert!(matches!(
+                proof.code(),
+                FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
+            ));
         }
     }
 
