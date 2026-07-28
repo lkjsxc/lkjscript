@@ -94,6 +94,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   not claimed Current as a complete capability.
 - Opaque monotonic runtime tokens remain stale-safe, exact-kind checked, and
   disjoint from integers and borrowed standard input.
+- Core provides a bounded deterministic unique store with opaque store-scoped,
+  generation-bearing typed keys for byte-vector, dynamic bytes, and path
+  layouts. It is not yet integrated into source execution or native tiers.
 
 ## Compiler and execution
 
@@ -143,9 +146,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
-- complete typed-resource provider/state facts, reusable generation-bearing
-  slots, compiler-inserted exactly-once cleanup, evaluator providers, and forced
-  native host execution;
+- complete typed-resource provider/state facts, integration of reusable
+  generation-bearing slots, compiler-inserted exactly-once cleanup, evaluator
+  providers, and forced native host execution;
 - immutable `bytes`, full affine `byte-vector` corpus migration, ranged lexical
   byte slices, borrowed `str`, and removal of transitional `buf` after complete
   cross-engine replacement;

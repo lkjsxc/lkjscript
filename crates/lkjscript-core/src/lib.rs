@@ -12,6 +12,7 @@ mod outcome;
 mod prelude;
 mod profile;
 mod sha256;
+mod unique;
 mod validation;
 mod value;
 
@@ -48,5 +49,10 @@ pub use profile::{
     ResourceProfileName, UnknownResourceProfile, RESOURCE_PROFILE_SCHEMA,
 };
 pub use sha256::sha256;
+pub use unique::{
+    ByteVectorKey, BytesKey, InvalidUniqueStoreLimits, PathKey, StaticBytes, UniqueLayout,
+    UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits,
+    UniqueStoreStats,
+};
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{CapabilityKind, HeapObj, ResourceKind, Value, MAX_SMALL_I64, MIN_SMALL_I64};

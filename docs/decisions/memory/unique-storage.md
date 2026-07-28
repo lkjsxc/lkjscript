@@ -2,15 +2,16 @@
 
 ## Status
 
-**Accepted contract; implementation is not yet Current.** This service is not a
-collector and does not decide liveness by tracing.
+**The safe core service is Current; evaluator, VM, JIT, and source integration
+are not Current.** This service is not a collector and does not decide liveness
+by tracing.
 
 ## Representation
 
-`UniqueStore` owns bounded slots addressed by opaque `UniqueKey { index,
-generation }`. Each occupied slot has exactly one verified affine key and one
-closed `UniqueLayout` identity. Initial layouts are mutable byte-vector,
-immutable dynamic bytes, and immutable path bytes.
+`UniqueStore` owns bounded slots addressed by opaque keys containing store
+identity, slot index, and nonzero generation. Each occupied slot has exactly one
+verified affine key and one closed `UniqueLayout` identity. The layouts are
+mutable byte-vector, immutable dynamic bytes, and immutable path bytes.
 
 Payloads may use safe Rust `Vec<u8>` or `Box<[u8]>`. Rust allocation identity is
 not source identity. Native code initially carries the typed key, not a direct
@@ -37,7 +38,9 @@ safely. Generation exhaustion retires the slot rather than wrapping.
 
 Freeze transfers compatible mutable backing into immutable bytes. Thaw
 transfers uniquely owned dynamic bytes back into a vector. Neither operation
-copies when layout permits.
+copies when layout permits. Exact counters cover allocations, frees, transfers,
+live and peak objects and bytes, reuse, retirement, rejected stale and layout
+accesses, and cumulative allocated bytes.
 
 ## Limits And Completion
 

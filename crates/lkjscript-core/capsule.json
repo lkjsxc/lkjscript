@@ -4,21 +4,37 @@
   "id": "core",
   "root": "crates/lkjscript-core",
   "kind": "crate",
-  "purpose": "Provide bounded validated bytecode and shared runtime value contracts.",
+  "purpose": "Provide bounded validated bytecode and safe deterministic runtime value storage.",
   "layer": "semantic foundation",
-  "concepts": ["validated bytecode", "limits", "runtime values"],
+  "concepts": [
+    "validated bytecode",
+    "limits",
+    "runtime values",
+    "deterministic unique storage"
+  ],
   "facade": ["crates/lkjscript-core/src/lib.rs"],
   "allowed_dependencies": ["contracts"],
   "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
-  "tests": ["crates/lkjscript-core/src/validation/tests/mod.rs"],
-  "decisions": ["docs/decisions/execution/compiler-pipeline.md", "docs/decisions/platform/content-addressed-contracts.md"],
+  "tests": [
+    "crates/lkjscript-core/src/unique/tests/mod.rs",
+    "crates/lkjscript-core/src/validation/tests/mod.rs"
+  ],
+  "decisions": [
+    "docs/decisions/execution/compiler-pipeline.md",
+    "docs/decisions/memory/unique-storage.md",
+    "docs/decisions/platform/content-addressed-contracts.md"
+  ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-core"],
   "context_card": {
-    "goal": "Preserve bounded validated runtime primitives shared across execution tiers.",
+    "goal": "Preserve bounded validated primitives shared across execution tiers.",
     "interfaces": ["crates/lkjscript-core/src/lib.rs"],
-    "invariants": ["memory-safe Rust", "checked resource limits"]
+    "invariants": [
+      "memory-safe Rust",
+      "checked resource limits",
+      "generation-safe unique keys"
+    ]
   }
 }
