@@ -1,6 +1,5 @@
 //! CLI entry for the lkjscript language runtime.
 
-mod args;
 mod describe;
 mod disasm;
 mod engine;

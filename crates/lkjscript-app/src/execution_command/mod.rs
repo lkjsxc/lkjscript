@@ -9,10 +9,13 @@ use lkjscript_compiler::{
 use lkjscript_core::{ExecutionConfig, Limits};
 use lkjscript_jit::JitConfig;
 
-use crate::args;
 use crate::engine;
 use crate::metrics::{self, MetricReport};
 use crate::output;
+
+mod args;
+
+pub(crate) use args::{Engine, RunOptions};
 
 pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let options = args::parse_run(args)?;

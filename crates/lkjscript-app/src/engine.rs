@@ -8,7 +8,7 @@ use lkjscript_jit::{
 };
 use lkjscript_vm::{run_chunk, run_chunk_auto, ExecutionInputs};
 
-use crate::args::{Engine, RunOptions};
+use crate::execution_command::{Engine, RunOptions};
 
 pub struct Execution {
     pub outcome: ExecutionOutcome,
