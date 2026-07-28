@@ -74,6 +74,8 @@ support claim.
 18. `[verified: memory authority]` Claim collector-free execution only after no
     tracing liveness traversal, collector fallback, collecting safepoint,
     collector barrier, or collection metric remains in Current production code.
+19. `[machine: LKJ-MEMORY-TRACING-RATCHET]` Legacy traced object families form
+    one closed non-increasing registry; analysis failure never extends it.
 
 ## Read Order
 

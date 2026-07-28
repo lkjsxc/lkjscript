@@ -26,7 +26,9 @@ pub use domains::{
     VERIFIED_SSA_DIGEST,
 };
 pub use encoding::canonical_bytes;
-pub use memory::{memory_obligations, MemoryObligation};
+pub use memory::{
+    memory_obligations, LegacyTracedFamily, MemoryObligation, LEGACY_TRACED_FAMILIES,
+};
 pub use model::{
     ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,
     ContractItemKind, ContractName, FactOrdering, NameIdentity,

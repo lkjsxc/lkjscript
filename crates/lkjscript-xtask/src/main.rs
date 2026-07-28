@@ -9,6 +9,7 @@ mod sha256;
 mod sha256_tests;
 mod source_checks;
 mod structure;
+mod tracing_ratchet;
 mod util;
 mod verification;
 

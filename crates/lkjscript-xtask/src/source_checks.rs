@@ -24,7 +24,7 @@ pub fn check_sources(root: &Path) -> i32 {
         return 1;
     }
     files.sort();
-    let mut failures = 0;
+    let mut failures = crate::tracing_ratchet::check(root);
     if root.join("examples").exists() {
         eprintln!("obsolete examples/ directory; use src/examples/");
         failures += 1;
