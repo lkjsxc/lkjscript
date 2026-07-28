@@ -72,7 +72,9 @@ impl Operation {
             | Self::CopyBytesSlice
             | Self::CloneBytes
             | Self::FreezeByteVector
-            | Self::ThawBytes => memory_signature(self),
+            | Self::ThawBytes
+            | Self::ByteSliceReadU32LittleEndian
+            | Self::ByteSliceMutWriteU32LittleEndian => memory_signature(self),
             Self::StdinHandle
             | Self::SysIsatty
             | Self::DropResource

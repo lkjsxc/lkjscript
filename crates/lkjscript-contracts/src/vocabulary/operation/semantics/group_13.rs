@@ -49,6 +49,22 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
         OperationOwnership::ConsumesOwner,
         true,
     ),
+    record(
+        129,
+        2,
+        "fn inputs byte-slice i64 output i64",
+        OperationEffects(34),
+        OperationOwnership::Observes,
+        true,
+    ),
+    record(
+        130,
+        3,
+        "fn inputs byte-slice-mut i64 i64 output unit",
+        OperationEffects(36),
+        OperationOwnership::Mutates,
+        true,
+    ),
 ];
 
 const fn record(

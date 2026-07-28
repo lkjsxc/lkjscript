@@ -131,5 +131,7 @@ impl Operation {
         Self::CloneBytes,
         Self::FreezeByteVector,
         Self::ThawBytes,
+        Self::ByteSliceReadU32LittleEndian,
+        Self::ByteSliceMutWriteU32LittleEndian,
     ];
 }

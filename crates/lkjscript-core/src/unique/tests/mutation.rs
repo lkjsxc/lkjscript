@@ -73,6 +73,38 @@ fn resize_limit_and_capacity_failures_preserve_payload_and_metrics() {
 }
 
 #[test]
+fn little_endian_u32_access_is_exact_and_failure_atomic() {
+    let mut store = store_with(54, 1, 16, 1, 1, 2);
+    let key = store.allocate_byte_vector(vec![9; 8]).expect("vector");
+    let metrics = store.stats();
+
+    store
+        .write_byte_vector_u32_little_endian(key, 2, 0x7856_3412)
+        .expect("checked word write");
+    assert_eq!(
+        store.byte_vector(key),
+        Ok(&[9, 9, 0x12, 0x34, 0x56, 0x78, 9, 9][..])
+    );
+    assert_eq!(
+        store.read_byte_vector_u32_little_endian(key, 2),
+        Ok(0x7856_3412)
+    );
+    let before = store.byte_vector(key).expect("before rejection").to_vec();
+    assert_eq!(
+        store.write_byte_vector_u32_little_endian(key, 5, u32::MAX),
+        Err(UniqueStoreError::RangeOutOfBounds {
+            start: 5,
+            len: 4,
+            available: 8,
+        })
+    );
+    assert_eq!(store.byte_vector(key), Ok(before.as_slice()));
+    assert_eq!(store.stats(), metrics);
+    store.free_byte_vector(key).expect("free vector");
+    assert_eq!(store.assert_no_leaks(), Ok(()));
+}
+
+#[test]
 fn fill_and_overlapping_copy_are_memmove_like_and_atomic() {
     let mut store = store_with(53, 1, 16, 1, 1, 2);
     let key = store

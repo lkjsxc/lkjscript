@@ -44,6 +44,8 @@ pub(in crate::ssa) fn runtime_operation(operation: Operation) -> Result<RuntimeO
         Operation::CloneBytes => RuntimeOp::CloneBytes,
         Operation::FreezeByteVector => RuntimeOp::FreezeByteVector,
         Operation::ThawBytes => RuntimeOp::ThawBytes,
+        Operation::ByteSliceReadU32LittleEndian => RuntimeOp::ByteSliceReadU32Le,
+        Operation::ByteSliceMutWriteU32LittleEndian => RuntimeOp::ByteSliceMutWriteU32Le,
         Operation::BufClone => RuntimeOp::BufClone,
         Operation::BufFromStr => RuntimeOp::BufFromStr,
         Operation::BufToStr => RuntimeOp::BufToStr,

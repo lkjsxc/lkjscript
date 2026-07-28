@@ -102,9 +102,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   borrowed `input-stream` in an invocation-owned table and removing it at
   teardown. Owned native resource operations and evaluator dispatch remain incomplete.
 - Core provides deterministic unique storage for byte-vector, dynamic bytes, and
-  path layouts. Exact byte-vector owners and loans execute through evaluator, VM,
-  forced baseline, and forced proof tiers with typed ABI categories, bounded
-  runtime tables, and exactly-once release on every supported outcome.
+  path layouts. Exact byte-vector owners, loans, byte access, mutation, and
+  checked little-endian u32 read/write execute through evaluator, VM, forced
+  baseline, and forced proof tiers with typed ABI categories, bounded runtime
+  tables, and exactly-once release on every supported outcome.
 - Immutable bytes literals, length/read, slice copy, clone, freeze, and thaw use
   static or execution-owned storage through evaluator and VM. Native tiers reject
   bytes before entry; path and resource/unique mixing remain outside this subset.
@@ -124,7 +125,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   supported resource groups use a distinct noncollecting sys dispatch and do
   not construct or configure `GcHeap` or `JitHeapServices`. The exact
   byte-vector family uses that domain with closed allocation/move/borrow/view/
-  end-borrow/drop calls, zero roots/safepoints/heap dispatch/barriers, and zero
+  byte/u32 access/mutation/end-borrow/drop calls, zero roots/safepoints/heap
+  dispatch/barriers, and zero
   final live owners, loans, or release backlog.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public

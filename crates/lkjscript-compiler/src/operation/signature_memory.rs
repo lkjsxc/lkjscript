@@ -11,6 +11,12 @@ pub(in crate::operation) fn memory_signature(operation: Operation) -> Type {
         Operation::CloneBytes => function(vec![Type::Bytes], Type::Bytes),
         Operation::FreezeByteVector => function(vec![Type::ByteVector], Type::Bytes),
         Operation::ThawBytes => function(vec![Type::Bytes], Type::ByteVector),
+        Operation::ByteSliceReadU32LittleEndian => {
+            function(vec![Type::ByteSlice, Type::I64], Type::I64)
+        }
+        Operation::ByteSliceMutWriteU32LittleEndian => {
+            function(vec![Type::ByteSliceMut, Type::I64, Type::I64], Type::Unit)
+        }
         Operation::BufNew => function(vec![Type::I64], Type::Buf),
         Operation::OwnedBufNew => function(vec![Type::I64], Type::ByteVector),
         Operation::OwnedBufLen => function(vec![Type::ByteSlice], Type::I64),

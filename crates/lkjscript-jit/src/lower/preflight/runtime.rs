@@ -11,6 +11,8 @@ pub(super) fn supported_runtime(operation: RuntimeOp, domain: LoweringDomain) ->
                 | RuntimeOp::OwnedBufLen
                 | RuntimeOp::OwnedBufRef
                 | RuntimeOp::OwnedBufSet
+                | RuntimeOp::ByteSliceReadU32Le
+                | RuntimeOp::ByteSliceMutWriteU32Le
         )
     {
         return true;

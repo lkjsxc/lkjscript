@@ -137,6 +137,8 @@ pub enum Operation {
     CloneBytes,
     FreezeByteVector,
     ThawBytes,
+    ByteSliceReadU32LittleEndian,
+    ByteSliceMutWriteU32LittleEndian,
 }
 
 mod catalog;

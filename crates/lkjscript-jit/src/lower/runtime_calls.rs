@@ -82,8 +82,14 @@ pub(super) fn lower_runtime(
         RuntimeOp::OwnedBufRef => {
             builder.runtime_call(block, RuntimeCallSlot::ByteSliceByteAt, values)
         }
+        RuntimeOp::ByteSliceReadU32Le => {
+            builder.runtime_call(block, RuntimeCallSlot::ByteSliceReadU32Le, values)
+        }
         RuntimeOp::OwnedBufSet => {
             builder.runtime_call(block, RuntimeCallSlot::ByteSliceMutSetByte, values)
+        }
+        RuntimeOp::ByteSliceMutWriteU32Le => {
+            builder.runtime_call(block, RuntimeCallSlot::ByteSliceMutWriteU32Le, values)
         }
         RuntimeOp::Add | RuntimeOp::Subtract | RuntimeOp::Multiply | RuntimeOp::Divide => {
             let [left, right] = two_values(&values)?;

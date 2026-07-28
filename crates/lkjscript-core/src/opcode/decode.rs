@@ -186,6 +186,7 @@ impl Op {
         Self::CloneBytes, Self::FreezeByteVector, Self::ThawBytes,
         Self::BytesDropPlace, Self::BytesPlaceEnd, Self::BytesPlaceInit,
         Self::BytesMove, Self::BytesBorrow,
+        Self::ByteSliceReadU32Le, Self::ByteSliceMutWriteU32Le,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {

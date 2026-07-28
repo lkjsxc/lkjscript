@@ -30,9 +30,9 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         Op::StoreLocal | Op::StoreGlobal => fixed(1, 0, 0),
         Op::StoreUniqueLocal | Op::StoreViewLocal => fixed(1, 1, 0),
         Op::ByteSliceLen => fixed(1, 1, 1),
-        Op::ByteSliceRef | Op::BytesByteAt => fixed(2, 2, 1),
+        Op::ByteSliceRef | Op::ByteSliceReadU32Le | Op::BytesByteAt => fixed(2, 2, 1),
         Op::CopyBytesSlice => fixed(3, 3, 1),
-        Op::ByteSliceMutSet => fixed(3, 3, 1),
+        Op::ByteSliceMutSet | Op::ByteSliceMutWriteU32Le => fixed(3, 3, 1),
         Op::Add
         | Op::Sub
         | Op::Mul

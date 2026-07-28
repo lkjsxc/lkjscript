@@ -162,4 +162,6 @@ pub enum Op {
     BytesPlaceInit = 226,
     BytesMove = 227,
     BytesBorrow = 228,
+    ByteSliceReadU32Le = 229,
+    ByteSliceMutWriteU32Le = 230,
 }

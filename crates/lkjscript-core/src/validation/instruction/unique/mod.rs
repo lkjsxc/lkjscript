@@ -28,6 +28,8 @@ pub(super) fn apply(
         | Op::ByteSliceLen
         | Op::ByteSliceRef
         | Op::ByteSliceMutSet
+        | Op::ByteSliceReadU32Le
+        | Op::ByteSliceMutWriteU32Le
         | Op::EndBorrowLocal => views::apply(chunk, proto, instruction, state),
         _ => unreachable!("opcode dispatched to wrong unique validation family"),
     }

@@ -30,6 +30,7 @@ impl RuntimeOp {
             | Self::Cdr
             | Self::BufRef
             | Self::OwnedBufRef
+            | Self::ByteSliceReadU32Le
             | Self::BufGetU32
             | Self::StrRef
             | Self::StrSlice => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
@@ -40,7 +41,7 @@ impl RuntimeOp {
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::WRITES_MEMORY)
                 .union(EffectSet::MAY_TRAP),
-            Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet => {
+            Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet | Self::ByteSliceMutWriteU32Le => {
                 EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
             }
             Self::BytesLength | Self::BufLen | Self::OwnedBufLen | Self::StrLen => {

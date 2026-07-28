@@ -53,8 +53,18 @@ pub(super) fn runtime_slots() -> ContractItem {
             "(island-state,loan/byte-slice,i64)->i64",
         ),
         (
+            "byte-slice-read-u32-little-endian",
+            "ByteSliceReadU32Le",
+            "(island-state,loan/byte-slice,i64)->i64",
+        ),
+        (
             "byte-slice-mut-set-byte",
             "ByteSliceMutSetByte",
+            "(island-state,loan/byte-slice-mut,i64,i64)->unit",
+        ),
+        (
+            "byte-slice-mut-write-u32-little-endian",
+            "ByteSliceMutWriteU32Le",
             "(island-state,loan/byte-slice-mut,i64,i64)->unit",
         ),
         (

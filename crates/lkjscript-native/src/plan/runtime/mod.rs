@@ -18,7 +18,9 @@ pub enum RuntimeCallSlot {
     ByteVectorBorrowExclusive,
     ByteSliceLength,
     ByteSliceByteAt,
+    ByteSliceReadU32Le,
     ByteSliceMutSetByte,
+    ByteSliceMutWriteU32Le,
     ByteSliceEnd,
     ByteSliceMutEnd,
     ByteVectorDrop,
@@ -122,7 +124,9 @@ impl RuntimeCallSlot {
             | Self::ByteVectorBorrowExclusive
             | Self::ByteSliceLength
             | Self::ByteSliceByteAt
+            | Self::ByteSliceReadU32Le
             | Self::ByteSliceMutSetByte
+            | Self::ByteSliceMutWriteU32Le
             | Self::ByteSliceEnd
             | Self::ByteSliceMutEnd
             | Self::ByteVectorDrop
@@ -148,7 +152,9 @@ impl RuntimeCallSlot {
                 | Self::ByteVectorBorrowExclusive
                 | Self::ByteSliceLength
                 | Self::ByteSliceByteAt
+                | Self::ByteSliceReadU32Le
                 | Self::ByteSliceMutSetByte
+                | Self::ByteSliceMutWriteU32Le
                 | Self::ByteSliceEnd
                 | Self::ByteSliceMutEnd
                 | Self::ByteVectorDrop

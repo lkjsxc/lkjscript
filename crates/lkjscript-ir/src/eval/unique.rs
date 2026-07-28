@@ -6,6 +6,7 @@ use super::{EvalConfig, EvalValue, Flow};
 
 mod bytes;
 mod cleanup;
+mod word;
 
 use cleanup::map_store_error;
 

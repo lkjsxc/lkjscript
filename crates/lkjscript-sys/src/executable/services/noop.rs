@@ -39,11 +39,28 @@ impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
         Err(NativeServiceError::HostFailure)
     }
 
+    fn byte_slice_read_u32_little_endian(
+        &mut self,
+        _loan: NativeLoan,
+        _index: i64,
+    ) -> Result<i64, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
     fn byte_slice_mut_set_byte(
         &mut self,
         _loan: NativeLoan,
         _index: i64,
         _byte: i64,
+    ) -> Result<(), NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+
+    fn byte_slice_mut_write_u32_little_endian(
+        &mut self,
+        _loan: NativeLoan,
+        _index: i64,
+        _word: i64,
     ) -> Result<(), NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }

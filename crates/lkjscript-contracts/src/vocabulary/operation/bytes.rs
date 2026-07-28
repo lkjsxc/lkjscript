@@ -43,4 +43,18 @@ pub(super) const RECORDS: &[R] = &[
         C::ByteData,
         "consume or copy immutable bytes into byte-vector",
     ),
+    record(
+        129,
+        "byte-slice-read-u32-little-endian",
+        "byte-slice-read-u32-little-endian",
+        C::ByteData,
+        "read one checked little-endian u32 word",
+    ),
+    record(
+        130,
+        "byte-slice-mut-write-u32-little-endian",
+        "byte-slice-mut-write-u32-little-endian",
+        C::ByteData,
+        "write one checked little-endian u32 word",
+    ),
 ];

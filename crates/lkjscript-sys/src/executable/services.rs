@@ -121,11 +121,22 @@ pub trait NativeIslandRuntimeServices {
         loan: NativeLoan,
         index: i64,
     ) -> Result<i64, NativeServiceError>;
+    fn byte_slice_read_u32_little_endian(
+        &mut self,
+        loan: NativeLoan,
+        index: i64,
+    ) -> Result<i64, NativeServiceError>;
     fn byte_slice_mut_set_byte(
         &mut self,
         loan: NativeLoan,
         index: i64,
         byte: i64,
+    ) -> Result<(), NativeServiceError>;
+    fn byte_slice_mut_write_u32_little_endian(
+        &mut self,
+        loan: NativeLoan,
+        index: i64,
+        word: i64,
     ) -> Result<(), NativeServiceError>;
     fn end_byte_vector_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError>;
     fn drop_byte_vector(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError>;

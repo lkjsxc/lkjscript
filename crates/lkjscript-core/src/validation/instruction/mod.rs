@@ -183,6 +183,8 @@ pub(super) fn apply_instruction(
         | Op::ByteSliceLen
         | Op::ByteSliceRef
         | Op::ByteSliceMutSet
+        | Op::ByteSliceReadU32Le
+        | Op::ByteSliceMutWriteU32Le
         | Op::EndBorrowLocal => unique::apply(chunk, proto, instruction, state),
         Op::MakeProduct
         | Op::LoadProductField

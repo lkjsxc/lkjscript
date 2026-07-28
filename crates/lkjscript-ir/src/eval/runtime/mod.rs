@@ -47,6 +47,8 @@ impl Evaluator<'_> {
             | Op::OwnedBufRef
             | Op::BufSet
             | Op::OwnedBufSet
+            | Op::ByteSliceReadU32Le
+            | Op::ByteSliceMutWriteU32Le
             | Op::BufClone
             | Op::BufFromStr
             | Op::BufToStr

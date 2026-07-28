@@ -10,6 +10,7 @@ mod mutation;
 mod object;
 mod release;
 mod transfer;
+mod word;
 
 pub use error::{
     InvalidUniqueKeyWord, InvalidUniqueStoreLimits, UniqueStoreError, UniqueStoreLeak,

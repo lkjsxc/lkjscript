@@ -81,7 +81,7 @@ const fn record(
     }
 }
 
-pub const OPERATION_COUNT: usize = 129;
+pub const OPERATION_COUNT: usize = 131;
 
 pub fn operation_by_id(identity: OperationIdentity) -> Option<&'static OperationVocabularyRecord> {
     let index = identity.index();

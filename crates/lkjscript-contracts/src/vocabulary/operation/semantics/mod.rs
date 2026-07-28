@@ -85,7 +85,7 @@ pub const fn operation_semantics_by_id(
         100..=109 => Some(&group_10::RECORDS[index - 100]),
         110..=119 => Some(&group_11::RECORDS[index - 110]),
         120..=122 => Some(&group_12::RECORDS[index - 120]),
-        123..=128 => Some(&group_13::RECORDS[index - 123]),
+        123..=130 => Some(&group_13::RECORDS[index - 123]),
         _ => None,
     }
 }

@@ -1,5 +1,8 @@
 use super::*;
 
+mod word;
+pub(super) use word::*;
+
 pub(super) extern "C" fn runtime_island_byte_vector_new(
     state: *mut IslandCallState<'_>,
     size: u64,

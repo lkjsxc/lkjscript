@@ -4,10 +4,12 @@ use super::*;
 mod bytes_ops;
 #[path = "support.rs"]
 mod support;
+mod word;
 use support::*;
 
 pub(super) fn handles(op: u8) -> bool {
     bytes_ops::handles(op)
+        || word::handles(op)
         || matches!(
             Op::from_byte(op),
             Some(
@@ -33,6 +35,9 @@ pub(super) fn handles(op: u8) -> bool {
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
     if bytes_ops::handles(op) {
         return bytes_ops::dispatch(vm, op);
+    }
+    if word::handles(op) {
+        return word::dispatch(vm, op);
     }
     let op = Op::from_byte(op).ok_or_else(|| Error::msg("unknown unique opcode"))?;
     match op {

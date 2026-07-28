@@ -44,6 +44,8 @@ pub(in crate::codegen) fn runtime_opcode(operation: RuntimeOp) -> Op {
         RuntimeOp::CloneBytes => Op::CloneBytes,
         RuntimeOp::FreezeByteVector => Op::FreezeByteVector,
         RuntimeOp::ThawBytes => Op::ThawBytes,
+        RuntimeOp::ByteSliceReadU32Le => Op::ByteSliceReadU32Le,
+        RuntimeOp::ByteSliceMutWriteU32Le => Op::ByteSliceMutWriteU32Le,
         RuntimeOp::BufClone => Op::BufClone,
         RuntimeOp::BufFromStr => Op::BufFromStr,
         RuntimeOp::BufToStr => Op::BufToStr,

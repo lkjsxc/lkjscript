@@ -15,12 +15,12 @@ pub(super) fn apply(
             pop_used_view(state, false, proto, instruction)?;
             state.stack.push(Kind::I64);
         }
-        Op::ByteSliceRef => {
+        Op::ByteSliceRef | Op::ByteSliceReadU32Le => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             pop_used_view(state, false, proto, instruction)?;
             state.stack.push(Kind::I64);
         }
-        Op::ByteSliceMutSet => {
+        Op::ByteSliceMutSet | Op::ByteSliceMutWriteU32Le => {
             expect_pop(state, Kind::I64, proto, instruction)?;
             expect_pop(state, Kind::I64, proto, instruction)?;
             pop_used_view(state, true, proto, instruction)?;

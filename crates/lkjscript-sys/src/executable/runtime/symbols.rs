@@ -33,8 +33,14 @@ pub(in crate::executable) fn runtime_symbol(
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ByteSliceByteAt) => {
             runtime_island_byte_slice_byte_at as *const () as usize
         }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ByteSliceReadU32Le) => {
+            runtime_island_byte_slice_read_u32_little_endian as *const () as usize
+        }
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ByteSliceMutSetByte) => {
             runtime_island_byte_slice_mut_set_byte as *const () as usize
+        }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ByteSliceMutWriteU32Le) => {
+            runtime_island_byte_slice_mut_write_u32_little_endian as *const () as usize
         }
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ByteSliceEnd) => {
             runtime_island_byte_slice_end as *const () as usize

@@ -47,6 +47,8 @@ pub enum RuntimeOp {
     CloneBytes,
     FreezeByteVector,
     ThawBytes,
+    ByteSliceReadU32Le,
+    ByteSliceMutWriteU32Le,
     BufClone,
     BufFromStr,
     BufToStr,

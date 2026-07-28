@@ -19,11 +19,15 @@ pub(super) fn plan_signature(slot: RuntimeCallSlot) -> Option<Signature> {
         RuntimeCallSlot::ByteVectorBorrowShared => signature(vec![unique], shared),
         RuntimeCallSlot::ByteVectorBorrowExclusive => signature(vec![unique], exclusive),
         RuntimeCallSlot::ByteSliceLength => signature(vec![shared], ValueType::I64),
-        RuntimeCallSlot::ByteSliceByteAt => signature(vec![shared, ValueType::I64], ValueType::I64),
-        RuntimeCallSlot::ByteSliceMutSetByte => signature(
-            vec![exclusive, ValueType::I64, ValueType::I64],
-            ValueType::Unit,
-        ),
+        RuntimeCallSlot::ByteSliceByteAt | RuntimeCallSlot::ByteSliceReadU32Le => {
+            signature(vec![shared, ValueType::I64], ValueType::I64)
+        }
+        RuntimeCallSlot::ByteSliceMutSetByte | RuntimeCallSlot::ByteSliceMutWriteU32Le => {
+            signature(
+                vec![exclusive, ValueType::I64, ValueType::I64],
+                ValueType::Unit,
+            )
+        }
         RuntimeCallSlot::ByteSliceEnd => signature(vec![shared], ValueType::Unit),
         RuntimeCallSlot::ByteSliceMutEnd => signature(vec![exclusive], ValueType::Unit),
         RuntimeCallSlot::ByteVectorDrop => signature(vec![unique], ValueType::Unit),

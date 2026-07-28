@@ -4,13 +4,14 @@
 
 **Accepted contract with executable byte-vector and immutable-bytes evaluator/VM families.** The exact
 `new-byte-vector`, whole-place `move`, `borrow`, `borrow-mut`,
-`byte-slice-length`, `byte-slice-byte-at`, and
-`byte-slice-mut-set-byte` family uses deterministic unique storage in the SSA
-evaluator and reference VM. The immutable-bytes source projection and six
-operations below are also executable through typing, verified SSA, evaluator,
-independently validated bytecode, and VM. Baseline and proof native execution,
-ranged borrowed views, host byte operations, and the remaining byte-vector
-operations are not Current. Transitional `buf` remains a
+`byte-slice-length`, `byte-slice-byte-at`, `byte-slice-mut-set-byte`,
+`byte-slice-read-u32-little-endian`, and
+`byte-slice-mut-write-u32-little-endian` family uses deterministic unique
+storage in the SSA evaluator, reference VM, and forced native tiers. The
+immutable-bytes source projection and six operations below are also executable
+through typing, verified SSA, evaluator, independently validated bytecode, and
+VM. Native immutable bytes, ranged borrowed views, host byte operations, and
+the remaining byte-vector operations are not Current. Transitional `buf` remains a
 separate traced family; it is neither an alias nor a conversion path.
 
 ## Byte-Vector
@@ -28,6 +29,17 @@ and atomically published; shrinking length retains capacity and therefore does
 not reduce retained/live-byte metrics.
 
 ## Views
+
+The exact little-endian word operations are:
+
+- `byte-slice-read-u32-little-endian : fn inputs byte-slice i64 output i64`;
+- `byte-slice-mut-write-u32-little-endian : fn inputs byte-slice-mut i64 i64
+  output unit`.
+
+They require a complete four-byte range. Reads return the unsigned word as a
+nonnegative `i64`; writes accept exactly `0..=4294967295`. Index, range, and
+value checks complete before mutation. The byte order is explicitly
+little-endian and does not depend on the host.
 
 `byte-slice` is a shared ranged non-owner carrying owner, start, length, and
 verified lifetime. `byte-slice-mut` is exclusive. The first executable family

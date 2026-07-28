@@ -138,7 +138,9 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
         | RuntimeCallSlot::ByteVectorBorrowExclusive
         | RuntimeCallSlot::ByteSliceLength
         | RuntimeCallSlot::ByteSliceByteAt
+        | RuntimeCallSlot::ByteSliceReadU32Le
         | RuntimeCallSlot::ByteSliceMutSetByte
+        | RuntimeCallSlot::ByteSliceMutWriteU32Le
         | RuntimeCallSlot::ByteSliceEnd
         | RuntimeCallSlot::ByteSliceMutEnd
         | RuntimeCallSlot::ByteVectorDrop => {}

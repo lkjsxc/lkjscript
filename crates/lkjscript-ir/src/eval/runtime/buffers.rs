@@ -28,6 +28,20 @@ impl Evaluator<'_> {
                 self.unique.set_byte(view, index, byte)?;
                 Ok(EvalValue::Unit)
             }),
+            Op::ByteSliceReadU32Le => binary(&arguments, |view, index| {
+                let index = index_value(index, "byte-slice-read-u32-little-endian")?;
+                self.unique
+                    .read_u32_little_endian(view, index)
+                    .map(EvalValue::I64)
+            }),
+            Op::ByteSliceMutWriteU32Le => ternary(&arguments, |view, index, word| {
+                let index = index_value(index, "byte-slice-mut-write-u32-little-endian")?;
+                let word = u32::try_from(as_i64(word)?).map_err(|_| {
+                    Flow::Trap("byte-slice-mut-write-u32-little-endian value out of range".into())
+                })?;
+                self.unique.write_u32_little_endian(view, index, word)?;
+                Ok(EvalValue::Unit)
+            }),
             Op::BufNew => unary(&arguments, |size| {
                 let size = usize::try_from(as_i64(size)?)
                     .map_err(|_| Flow::Trap("buf-new size out of range".into()))?;

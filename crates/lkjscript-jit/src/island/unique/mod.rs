@@ -5,6 +5,7 @@ mod access;
 mod cleanup;
 #[cfg(test)]
 mod tests;
+mod word;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Loan {

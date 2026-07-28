@@ -79,6 +79,11 @@ pub(super) fn core_signature(
             &[SsaType::ByteSliceMut, SsaType::I64, SsaType::I64],
             &SsaType::Unit,
         ),
+        RuntimeOp::ByteSliceReadU32Le => exact(&[SsaType::ByteSlice, SsaType::I64], &SsaType::I64),
+        RuntimeOp::ByteSliceMutWriteU32Le => exact(
+            &[SsaType::ByteSliceMut, SsaType::I64, SsaType::I64],
+            &SsaType::Unit,
+        ),
         RuntimeOp::BytesLength => exact(&[SsaType::Bytes], &SsaType::I64),
         RuntimeOp::BytesByteAt => exact(&[SsaType::Bytes, SsaType::I64], &SsaType::I64),
         RuntimeOp::CopyBytesSlice => exact(
