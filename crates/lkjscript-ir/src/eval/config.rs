@@ -8,6 +8,7 @@ pub struct EvalConfig {
     pub max_buffer_bytes: usize,
     pub max_list_equal_steps: usize,
     pub max_resources: usize,
+    pub cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
     pub args: Vec<String>,
     pub capabilities: Vec<lkjscript_contracts::CapabilityKind>,
 }
@@ -23,6 +24,7 @@ impl Default for EvalConfig {
             max_buffer_bytes: 1_000_000,
             max_list_equal_steps: 1_000_000,
             max_resources: 4_096,
+            cleanup_failure_limits: lkjscript_core::CleanupFailureLimits::default(),
             args: Vec::new(),
             capabilities: Vec::new(),
         }

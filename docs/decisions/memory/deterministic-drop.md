@@ -5,9 +5,10 @@
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
 **Accepted contract with verified static/dead whole-place cleanup for exact
-byte owners and owned typed resources. Full promotion still requires
-conditional owners, every instruction-originated outcome, and the bounded
-cleanup-failure policy.** Aggregate partial moves remain out of scope.
+byte owners and owned typed resources. Bounded structured cleanup attachments
+are Current in the core outcome model and evaluator/VM teardown. Full promotion
+still requires conditional owners and every instruction-originated outcome.**
+Aggregate partial moves remain out of scope.
 
 The implemented spine gives each direct affine SSA place an exact closed drop
 identity, emits explicit loan-end and whole-place-drop events, rejects an
@@ -24,9 +25,11 @@ teardown release, including instruction-originated trap and resource-limit
 cleanup, and proves zero final owners/loans. Native owned-resource glue remains
 fail-closed at whole-group preflight. Conditional flags and typed-resource
 cleanup after instruction-originated trap, deadline, resource-limit, host
-failure, or propagated callee outcome are not Current. Cleanup-failure
-attachment also remains absent; Current safe sys owners expose close through
-infallible destruction.
+failure, or propagated callee outcome are not Current. Core, evaluator, and VM
+retain bounded ordered cleanup records without replacing the primary outcome;
+deterministic injected provider and borrowed-stream failures cover truncation
+and attachment. Current safe sys owners still expose close through infallible
+destruction.
 
 ## Obligations
 

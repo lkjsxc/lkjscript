@@ -11,6 +11,7 @@ pub(crate) struct EvalResources {
     #[cfg(test)]
     pub(super) providers: FakeProviders,
     pub(super) metrics: EvalResourceMetrics,
+    pub(super) cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
 }
 
 impl EvalResources {

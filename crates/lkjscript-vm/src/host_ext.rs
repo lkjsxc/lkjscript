@@ -6,9 +6,10 @@ use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lkjscript_core::{
-    CapabilityKind, Error, GcHeap as Arena, HeapObj, OwnedReservation, ProviderId, ResourceKey,
-    ResourceKind, ResourceOwnership, ResourceTable as CoreResourceTable, ResourceTableError,
-    ResourceTableLimits, ResourceTokenParts, Result, ScopeId, Value,
+    CapabilityKind, CleanupFailureLimits, CleanupFailures, Error, GcHeap as Arena, HeapObj,
+    OwnedReservation, ProviderId, ResourceKey, ResourceKind, ResourceOwnership,
+    ResourceTable as CoreResourceTable, ResourceTableError, ResourceTableLimits,
+    ResourceTokenParts, Result, ScopeId, Value,
 };
 use lkjscript_sys::OwnedFd;
 
@@ -98,7 +99,7 @@ pub struct ResourceTeardown {
     ordinary_obligations: usize,
     emergency_obligations: usize,
     cleanup_attempts: usize,
-    cleanup_error: Option<String>,
+    cleanup_failures: CleanupFailures,
 }
 
 pub struct ResourceTable {
@@ -107,6 +108,7 @@ pub struct ResourceTable {
     metrics: Cell<ResourceMetrics>,
     limit_exceeded: bool,
     scope_exhausted: bool,
+    cleanup_failure_limits: CleanupFailureLimits,
 }
 
 mod files;

@@ -80,5 +80,15 @@ pub fn outcome_exit_code(outcome: ExecutionOutcome) -> Result<ExitCode, String> 
             Err(format!("execution resource limit exceeded: {kind:?}"))
         }
         ExecutionOutcome::HostFailure(error) => Err(format!("host failure: {error}")),
+        ExecutionOutcome::CleanupFailed { primary, failures } => {
+            let primary_error = outcome_exit_code(*primary).err();
+            let cleanup = format!(
+                "cleanup failed: retained={} omitted={} omitted-bytes={}",
+                failures.retained().len(),
+                failures.omitted_failures(),
+                failures.omitted_message_bytes()
+            );
+            Err(primary_error.map_or(cleanup.clone(), |error| format!("{error}; {cleanup}")))
+        }
     }
 }

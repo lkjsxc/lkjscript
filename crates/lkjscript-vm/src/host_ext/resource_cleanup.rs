@@ -1,8 +1,8 @@
 use super::*;
 
 impl ResourceTeardown {
-    pub fn cleanup_error(&self) -> Option<&str> {
-        self.cleanup_error.as_deref()
+    pub const fn cleanup_failures(&self) -> &CleanupFailures {
+        &self.cleanup_failures
     }
 }
 
@@ -64,11 +64,18 @@ impl ResourceTable {
             Err(_) => self.table.stats().ordinary_obligations(),
         };
         let emergency_obligations = self.table.emergency_obligations().count();
-        let (cleanup_attempts, mut cleanup_error) =
-            match self.table.cleanup_owned_reverse(|_, payload| drop(payload)) {
-                Ok(report) => (report.count(), None),
-                Err(error) => (0, Some(error.to_string())),
-            };
+        let mut cleanup_failures = CleanupFailures::new(self.cleanup_failure_limits);
+        let cleanup_attempts = match self.table.cleanup_owned_reverse(|_, payload| drop(payload)) {
+            Ok(report) => report.count(),
+            Err(error) => {
+                cleanup_failures.push(
+                    lkjscript_core::CleanupPhase::Emergency,
+                    lkjscript_core::CleanupSubject::ResourceTable,
+                    error.to_string(),
+                );
+                0
+            }
+        };
         self.record_closed(cleanup_attempts);
         if let Err(error) = self.table.remove_borrowed(
             self.stdin_key.clone(),
@@ -76,11 +83,11 @@ impl ResourceTable {
             STDIO_PROVIDER,
             self.table.scope(),
         ) {
-            let message = format!("borrowed standard input removal failed: {error}");
-            cleanup_error = Some(match cleanup_error {
-                Some(prior) => format!("{prior}; {message}"),
-                None => message,
-            });
+            cleanup_failures.push(
+                lkjscript_core::CleanupPhase::RuntimeTeardown,
+                lkjscript_core::CleanupSubject::BorrowedResource(ResourceKind::InputStream),
+                format!("borrowed standard input removal failed: {error}"),
+            );
         }
         self.update_metrics(|metrics| {
             metrics.ordinary_obligations = ordinary_obligations;
@@ -91,7 +98,7 @@ impl ResourceTable {
             ordinary_obligations,
             emergency_obligations,
             cleanup_attempts,
-            cleanup_error,
+            cleanup_failures,
         }
     }
 }

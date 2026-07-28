@@ -27,5 +27,5 @@ pub(super) struct EvalResourceTeardown {
     pub(super) emergency_obligations: Vec<ResourceObservation>,
     pub(super) cleanup_attempts: Vec<EvalCleanupAttempt>,
     pub(super) remaining: ResourceTableStats,
-    pub(super) cleanup_error: Option<String>,
+    pub(super) cleanup_failures: lkjscript_core::CleanupFailures,
 }

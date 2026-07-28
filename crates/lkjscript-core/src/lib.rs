@@ -40,7 +40,11 @@ pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
-pub use outcome::{ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap};
+pub use outcome::{
+    CleanupFailure, CleanupFailureLimits, CleanupFailures, CleanupPhase, CleanupSubject,
+    ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap, DEFAULT_MAX_CLEANUP_FAILURES,
+    DEFAULT_MAX_CLEANUP_FAILURE_BYTES, MAX_CLEANUP_FAILURES, MAX_CLEANUP_FAILURE_BYTES,
+};
 pub use prelude::*;
 pub use profile::{
     InvalidCeiling, ResourceCeilings, ResourceProfile, ResourceProfileIdentity,

@@ -1,4 +1,6 @@
-use lkjscript_core::{ResourceKind, ResourceTableError};
+use lkjscript_core::{
+    CleanupFailures, CleanupPhase, CleanupSubject, ResourceKind, ResourceTableError,
+};
 
 use super::*;
 
@@ -13,9 +15,17 @@ impl EvalResources {
         let cleanup = self
             .table
             .cleanup_owned_reverse(|observation, payload| payload.validate(&observation));
-        let (cleanup_attempts, mut errors) = match cleanup {
-            Ok(report) => cleanup_records(report),
-            Err(error) => (Vec::new(), vec![error.to_string()]),
+        let mut cleanup_failures = CleanupFailures::new(self.cleanup_failure_limits);
+        let cleanup_attempts = match cleanup {
+            Ok(report) => cleanup_records(report, &mut cleanup_failures),
+            Err(error) => {
+                cleanup_failures.push(
+                    CleanupPhase::Emergency,
+                    CleanupSubject::EvaluatorProvider,
+                    error.to_string(),
+                );
+                Vec::new()
+            }
         };
         self.metrics.resources_closed = self
             .metrics
@@ -26,14 +36,14 @@ impl EvalResources {
             &mut self.standard_output,
             ResourceKind::OutputStream,
             &mut self.metrics,
-            &mut errors,
+            &mut cleanup_failures,
         );
         remove_standard_stream(
             &mut self.table,
             &mut self.standard_input,
             ResourceKind::InputStream,
             &mut self.metrics,
-            &mut errors,
+            &mut cleanup_failures,
         );
         self.metrics.ordinary_obligations = ordinary_obligations;
         self.metrics.emergency_obligations = emergency_obligations.len();
@@ -43,22 +53,25 @@ impl EvalResources {
             emergency_obligations,
             cleanup_attempts,
             remaining: self.table.stats(),
-            cleanup_error: (!errors.is_empty()).then(|| errors.join("; ")),
+            cleanup_failures,
         }
     }
 }
 
 fn cleanup_records(
     report: lkjscript_core::ResourceCleanupReport<Result<u64, String>>,
-) -> (Vec<EvalCleanupAttempt>, Vec<String>) {
+    failures: &mut CleanupFailures,
+) -> Vec<EvalCleanupAttempt> {
     let mut attempts = Vec::with_capacity(report.count());
-    let mut errors = Vec::new();
     for attempt in report.into_attempts() {
         let resource = attempt.resource().clone();
         let (owner, error) = match attempt.into_outcome() {
             Ok(owner) => (Some(owner), None),
             Err(error) => {
-                errors.push(error.clone());
+                let subject = resource
+                    .kind()
+                    .map_or(CleanupSubject::EvaluatorProvider, CleanupSubject::Resource);
+                failures.push(CleanupPhase::Emergency, subject, &error);
                 (None, Some(error))
             }
         };
@@ -68,7 +81,7 @@ fn cleanup_records(
             error,
         });
     }
-    (attempts, errors)
+    attempts
 }
 
 fn remove_standard_stream(
@@ -76,7 +89,7 @@ fn remove_standard_stream(
     resource: &mut Option<EvalResource>,
     kind: ResourceKind,
     metrics: &mut EvalResourceMetrics,
-    errors: &mut Vec<String>,
+    failures: &mut CleanupFailures,
 ) {
     let Some(resource) = resource.take() else {
         return;
@@ -89,11 +102,16 @@ fn remove_standard_stream(
             lkjscript_core::ResourceOwnership::Borrowed,
         ) {
             Ok(()) => metrics.borrowed_removed += 1,
-            Err(error) => errors.push(error),
+            Err(error) => failures.push(
+                CleanupPhase::RuntimeTeardown,
+                CleanupSubject::BorrowedResource(kind),
+                error,
+            ),
         },
-        Err(error) => errors.push(format!(
-            "borrowed {} removal failed: {error}",
-            kind.as_str()
-        )),
+        Err(error) => failures.push(
+            CleanupPhase::RuntimeTeardown,
+            CleanupSubject::BorrowedResource(kind),
+            format!("borrowed {} removal failed: {error}", kind.as_str()),
+        ),
     }
 }

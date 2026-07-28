@@ -45,13 +45,45 @@ pub fn outcome(outcome: &ExecutionOutcome) -> String {
             string(&format!("{kind:?}"))
         ),
         ExecutionOutcome::HostFailure(error) => format!(
-            "{{\"kind\":\"host-failure\",\"detail\":{},\"prior\":{}}}",
-            string(error.as_str()),
-            error
-                .prior_outcome()
-                .map_or_else(|| "null".to_string(), string)
+            "{{\"kind\":\"host-failure\",\"detail\":{}}}",
+            string(error.as_str())
+        ),
+        ExecutionOutcome::CleanupFailed { primary, failures } => format!(
+            "{{\"kind\":\"cleanup-failed\",\"primary\":{},\"cleanup\":{}}}",
+            self::outcome(primary),
+            cleanup(failures)
         ),
     }
+}
+
+fn cleanup(failures: &lkjscript_core::CleanupFailures) -> String {
+    let records = failures
+        .retained()
+        .iter()
+        .map(|failure| {
+            format!(
+                concat!(
+                    "{{\"phase\":{},\"subject\":{},\"detail\":{},",
+                    "\"omitted_message_bytes\":{}}}"
+                ),
+                string(failure.phase().as_str()),
+                string(failure.subject().as_str()),
+                string(failure.message()),
+                failure.omitted_message_bytes()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        concat!(
+            "{{\"retained\":[{}],\"retained_message_bytes\":{},",
+            "\"omitted_message_bytes\":{},\"omitted_failures\":{}}}"
+        ),
+        records,
+        failures.retained_message_bytes(),
+        failures.omitted_message_bytes(),
+        failures.omitted_failures()
+    )
 }
 
 pub fn string(value: &str) -> String {

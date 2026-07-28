@@ -92,10 +92,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
   suppresses implicit resource glue; evaluator fake owners and reference-VM
   bytecode use their core tables, while borrowed standard input is never closed.
   Forced native byte-vector execution additionally releases outstanding bytes
-  after instruction-originated failure. Conditional owners, instruction-originated
-  resource cleanup, bounded cleanup-failure attachment, and native owned-resource
-  execution remain accepted-contract work, so deterministic drop and typed
-  resources are not complete Current capabilities.
+  after instruction-originated failure. Core, evaluator, and VM teardown now
+  retain bounded ordered cleanup failures without replacing the primary outcome.
+  Conditional owners, instruction-originated resource cleanup, and native
+  owned-resource execution remain accepted-contract work, so deterministic drop
+  and typed resources are not complete Current capabilities.
 - The VM uses checked generation-bearing core resource-table tokens; evaluator
   executions use exact fake lifecycle providers without ambient host I/O. Forced
   baseline and proof JIT support only `standard-input`, installing or reusing a
@@ -165,8 +166,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
 - conditional and instruction-originated typed-resource cleanup, evaluator
-  resource-operation dispatch, bounded structured cleanup-failure attachment,
-  and forced native owned-resource execution beyond borrowed `standard-input`;
+  resource-operation dispatch, and forced native owned-resource execution beyond
+  borrowed `standard-input`;
 - full affine `byte-vector` corpus migration, ranged lexical byte slices,
   borrowed `str`, and removal of transitional `buf`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;

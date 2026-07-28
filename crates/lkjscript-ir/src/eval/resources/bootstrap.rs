@@ -8,12 +8,28 @@ use super::*;
 static NEXT_SCOPE: AtomicU64 = AtomicU64::new(1);
 
 impl EvalResources {
-    pub(crate) fn new(max_owned: usize) -> Result<Self, String> {
+    pub(crate) fn new(
+        max_owned: usize,
+        cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
+    ) -> Result<Self, String> {
         let scope = next_scope().ok_or_else(|| "evaluator resource scope exhausted".to_owned())?;
-        Self::with_scope(max_owned, scope)
+        Self::with_scope_and_cleanup_limits(max_owned, scope, cleanup_failure_limits)
     }
 
+    #[cfg(test)]
     pub(super) fn with_scope(max_owned: usize, scope: ScopeId) -> Result<Self, String> {
+        Self::with_scope_and_cleanup_limits(
+            max_owned,
+            scope,
+            lkjscript_core::CleanupFailureLimits::default(),
+        )
+    }
+
+    pub(super) fn with_scope_and_cleanup_limits(
+        max_owned: usize,
+        scope: ScopeId,
+        cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
+    ) -> Result<Self, String> {
         let max_slots = max_owned
             .checked_add(2)
             .ok_or_else(|| "evaluator resource slot limit overflow".to_owned())?;
@@ -48,6 +64,7 @@ impl EvalResources {
                 borrowed_installed: 2,
                 ..EvalResourceMetrics::default()
             },
+            cleanup_failure_limits,
         })
     }
 }

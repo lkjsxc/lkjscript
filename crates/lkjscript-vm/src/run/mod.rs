@@ -17,10 +17,10 @@ mod unique_ops;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    Constant, EnumConstructionRef, EnumFieldRef, EnumId, EnumVariantRef, Error, ErrorClass,
-    ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap as Arena, HeapObj, HostError, Op,
-    ProductFieldRef, ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
-    MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
+    CleanupFailures, CleanupPhase, CleanupSubject, Constant, EnumConstructionRef, EnumFieldRef,
+    EnumId, EnumVariantRef, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig,
+    GcHeap as Arena, HeapObj, HostError, Op, ProductFieldRef, ProductId, ResourceLimitKind, Result,
+    Trap, ValidatedChunk, Value, VariantId, MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
 };
 use lkjscript_jit::{
     EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,

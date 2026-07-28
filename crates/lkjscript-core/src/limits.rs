@@ -81,6 +81,7 @@ pub struct ExecutionConfig {
     pub max_logical_aggregate_constructions: u64,
     pub max_handles: usize,
     pub max_output_bytes: usize,
+    pub cleanup_failure_limits: crate::CleanupFailureLimits,
     /// A cooperative monotonic wall limit. Read/poll/wait operations are
     /// shortened to the remaining duration. Other host calls are checked
     /// immediately before and after because their current Linux wrappers do
@@ -102,6 +103,7 @@ impl Default for ExecutionConfig {
             max_logical_aggregate_constructions: 1_000_000,
             max_handles: 4_096,
             max_output_bytes: 64 * 1024 * 1024,
+            cleanup_failure_limits: crate::CleanupFailureLimits::default(),
             wall_time: Some(Duration::from_secs(30 * 60)),
             require_hard_deadline: false,
         }
@@ -138,6 +140,8 @@ mod tests {
         assert!(limits.max_logical_aggregate_constructions > 0);
         assert!(limits.max_handles > 0);
         assert!(limits.max_output_bytes > 0);
+        assert!(limits.cleanup_failure_limits.max_failures() > 0);
+        assert!(limits.cleanup_failure_limits.max_message_bytes() > 0);
         assert!(limits.wall_time.is_some());
     }
 }

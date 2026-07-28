@@ -3,12 +3,12 @@ use super::*;
 
 impl Default for ResourceTable {
     fn default() -> Self {
-        Self::new(4_096)
+        Self::new(4_096, CleanupFailureLimits::default())
     }
 }
 
 impl ResourceTable {
-    pub fn new(max_handles: usize) -> Self {
+    pub fn new(max_handles: usize, cleanup_failure_limits: CleanupFailureLimits) -> Self {
         let (scope, scope_exhausted) = match next_scope() {
             Some(scope) => (scope, false),
             None => (exhausted_scope(), true),
@@ -37,6 +37,7 @@ impl ResourceTable {
             metrics: Cell::new(ResourceMetrics::default()),
             limit_exceeded: false,
             scope_exhausted,
+            cleanup_failure_limits,
         }
     }
 
@@ -60,5 +61,15 @@ impl ResourceTable {
     #[cfg(test)]
     pub const fn scope_id(&self) -> ScopeId {
         self.table.scope()
+    }
+
+    #[cfg(test)]
+    pub fn inject_borrowed_cleanup_failure(&mut self) {
+        let _removed = self.table.remove_borrowed(
+            self.stdin_key.clone(),
+            ResourceKind::InputStream,
+            STDIO_PROVIDER,
+            self.table.scope(),
+        );
     }
 }

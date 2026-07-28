@@ -55,12 +55,52 @@ fn trap_and_exit_preserve_primary_outcomes_during_reverse_emergency_cleanup() {
         assert_eq!(resources.metrics.cleanup_attempts, 3);
         assert_eq!(resources.metrics.resources_closed, 3);
         assert_eq!(teardown.remaining.ordinary_obligations(), 0);
-        assert!(teardown.cleanup_error.is_none());
+        assert!(teardown.cleanup_failures.is_empty());
         assert!(teardown
             .cleanup_attempts
             .iter()
             .all(|attempt| attempt.owner.is_some() && attempt.error.is_none()));
     }
+}
+
+#[test]
+fn cleanup_failures_are_ordered_bounded_and_attached_to_primary() {
+    let limits = lkjscript_core::CleanupFailureLimits::new(1, 5).expect("test limits");
+    let mut resources = EvalResources::with_scope_and_cleanup_limits(4, scope(32), limits)
+        .expect("resource session");
+    let reader = resources
+        .acquire_owned(ResourceKind::FileReader, true)
+        .expect("reader");
+    let writer = resources
+        .acquire_owned(ResourceKind::FileWriter, true)
+        .expect("writer");
+    for resource in [&reader, &writer] {
+        resources
+            .table
+            .owned_mut(
+                &resource.key,
+                resource.kind,
+                resource.provider,
+                resource.scope,
+            )
+            .expect("owner")
+            .kind = ResourceKind::TerminalSession;
+    }
+
+    let primary = EvalOutcome::Trapped("primary".into());
+    let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary.clone());
+    assert_eq!(outcome.primary(), &primary);
+    let failures = outcome.cleanup_failures().expect("attached failures");
+    assert_eq!(failures.retained().len(), 1);
+    assert_eq!(
+        failures.retained()[0].subject(),
+        lkjscript_core::CleanupSubject::Resource(ResourceKind::FileWriter)
+    );
+    assert_eq!(failures.retained()[0].message().len(), 5);
+    assert_eq!(failures.omitted_failures(), 1);
+    assert!(failures.omitted_message_bytes() > 0);
+    assert_eq!(teardown.cleanup_attempts.len(), 2);
+    assert_eq!(teardown.remaining.ordinary_obligations(), 0);
 }
 
 #[test]

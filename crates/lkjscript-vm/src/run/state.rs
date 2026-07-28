@@ -20,7 +20,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             jit,
             exit_code: None,
             inputs,
-            resources: ResourceTable::new(config.max_handles),
+            resources: ResourceTable::new(config.max_handles, config.cleanup_failure_limits),
             unique: unique::UniqueRuntime::new(&config),
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
@@ -38,7 +38,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub(super) fn run_inner(&mut self) -> ExecutionOutcome {
         let stopped = self.run_loop();
         let failed = stopped.is_err();
-        let mut outcome = match stopped {
+        let outcome = match stopped {
             Ok(Stop::Returned(value))
                 if matches!(
                     self.chunk.main().return_unique,
@@ -89,12 +89,13 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 let _cleanup = self.unique.cleanup();
             })
         };
+        let mut cleanup_failures = CleanupFailures::new(self.config.cleanup_failure_limits);
         if let Err(error) = unique_cleanup {
-            let prior = outcome.summary();
-            outcome = ExecutionOutcome::HostFailure(HostError::during_cleanup(
+            cleanup_failures.push(
+                CleanupPhase::Emergency,
+                CleanupSubject::UniqueStorage,
                 format!("unique byte cleanup {error}"),
-                prior,
-            ));
+            );
         }
 
         let resource_teardown = self.resources.teardown();
@@ -110,24 +111,22 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             .contains(&lkjscript_core::CapabilityKind::Stdio)
             .then(crate::host::flush_out)
             .and_then(Result::err);
-        let mut cleanup_errors = Vec::new();
-        if let Some(error) = resource_teardown.cleanup_error() {
-            cleanup_errors.push(format!("resource cleanup {error}"));
-        }
+        cleanup_failures.append(resource_teardown.cleanup_failures().clone());
         if let Some(error) = restore_error {
-            cleanup_errors.push(error.to_string());
+            cleanup_failures.push(
+                CleanupPhase::RuntimeTeardown,
+                CleanupSubject::Terminal,
+                error.to_string(),
+            );
         }
         if let Some(error) = flush_error {
-            cleanup_errors.push(format!("stdout cleanup {error}"));
+            cleanup_failures.push(
+                CleanupPhase::RuntimeTeardown,
+                CleanupSubject::StandardOutput,
+                format!("stdout cleanup {error}"),
+            );
         }
-        if !cleanup_errors.is_empty() {
-            let prior = outcome.summary();
-            outcome = ExecutionOutcome::HostFailure(HostError::during_cleanup(
-                cleanup_errors.join("; "),
-                prior,
-            ));
-        }
-        outcome
+        outcome.with_cleanup_failures(cleanup_failures)
     }
 
     fn run_loop(&mut self) -> Result<Stop> {

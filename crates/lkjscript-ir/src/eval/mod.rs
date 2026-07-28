@@ -12,16 +12,8 @@ pub use resources::EvalResource;
 
 include!("value.rs");
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum EvalOutcome {
-    Returned(EvalValue),
-    Exited(i64),
-    Trapped(String),
-    UnsupportedOperation(RuntimeOp),
-    DeadlineExceeded,
-    ResourceLimitExceeded(String),
-    HostFailure(String),
-}
+pub use outcome::EvalOutcome;
+pub(crate) use outcome::Flow;
 
 pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
     let arguments = match capabilities::main_arguments(program, config) {
@@ -31,10 +23,11 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
     let Some(unique) = unique::EvalUniqueRuntime::new(config) else {
         return EvalOutcome::HostFailure("invalid evaluator unique-store limits".into());
     };
-    let resources = match resources::EvalResources::new(config.max_resources) {
-        Ok(resources) => resources,
-        Err(message) => return EvalOutcome::HostFailure(message),
-    };
+    let resources =
+        match resources::EvalResources::new(config.max_resources, config.cleanup_failure_limits) {
+            Ok(resources) => resources,
+            Err(message) => return EvalOutcome::HostFailure(message),
+        };
     let mut evaluator = Evaluator {
         static_bytes: collect_static_bytes(program),
         program,
@@ -47,33 +40,54 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         resources,
         unique,
     };
-    let primary = match evaluator.call(program.program().main, arguments, 0) {
+    let (primary, unique_cleanup_error) = match evaluator.call(program.program().main, arguments, 0)
+    {
         Ok(value @ EvalValue::ByteVector(_)) => match evaluator.unique.export_owner(value) {
-            Ok(bytes) => EvalOutcome::Returned(EvalValue::ReturnedByteVector(bytes)),
-            Err(flow) => flow.outcome(),
+            Ok(bytes) => (
+                EvalOutcome::Returned(EvalValue::ReturnedByteVector(bytes)),
+                None,
+            ),
+            Err(flow) => (
+                flow.outcome(),
+                evaluator.unique.cleanup().err().map(Flow::detail),
+            ),
         },
         Ok(value @ EvalValue::Bytes(_)) => match evaluator.unique.export_owner(value) {
-            Ok(bytes) => EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes)),
-            Err(flow) => flow.outcome(),
+            Ok(bytes) => (EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes)), None),
+            Err(flow) => (
+                flow.outcome(),
+                evaluator.unique.cleanup().err().map(Flow::detail),
+            ),
         },
-        Ok(EvalValue::StaticBytes(index)) => evaluator
-            .static_bytes
-            .get(index as usize)
-            .map(|bytes| EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes.to_vec())))
-            .unwrap_or_else(|| EvalOutcome::Trapped("invalid returned static bytes".into())),
+        Ok(EvalValue::StaticBytes(index)) => (
+            evaluator
+                .static_bytes
+                .get(index as usize)
+                .map(|bytes| EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes.to_vec())))
+                .unwrap_or_else(|| EvalOutcome::Trapped("invalid returned static bytes".into())),
+            None,
+        ),
         Ok(value) => match evaluator.unique.verify_empty() {
-            Ok(()) => EvalOutcome::Returned(value),
-            Err(flow) => {
-                let _cleanup = evaluator.unique.cleanup();
-                flow.outcome()
-            }
+            Ok(()) => (EvalOutcome::Returned(value), None),
+            Err(flow) => (
+                flow.outcome(),
+                evaluator.unique.cleanup().err().map(Flow::detail),
+            ),
         },
-        Err(flow) => match evaluator.unique.cleanup() {
-            Ok(()) => flow.outcome(),
-            Err(cleanup) => cleanup.outcome(),
-        },
+        Err(flow) => (
+            flow.outcome(),
+            evaluator.unique.cleanup().err().map(Flow::detail),
+        ),
     };
-    resources::finish_evaluation(&mut evaluator.resources, primary)
+    let mut cleanup_failures = lkjscript_core::CleanupFailures::new(config.cleanup_failure_limits);
+    if let Some(error) = unique_cleanup_error {
+        cleanup_failures.push(
+            lkjscript_core::CleanupPhase::Emergency,
+            lkjscript_core::CleanupSubject::UniqueStorage,
+            error,
+        );
+    }
+    resources::finish_evaluation(&mut evaluator.resources, primary, cleanup_failures)
 }
 
 pub(crate) struct Evaluator<'a> {
@@ -89,29 +103,6 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) unique: unique::EvalUniqueRuntime,
 }
 
-#[derive(Debug)]
-pub(crate) enum Flow {
-    Exit(i64),
-    Trap(String),
-    Unsupported(RuntimeOp),
-    Deadline,
-    Resource(String),
-    HostFailure(String),
-}
-
-impl Flow {
-    fn outcome(self) -> EvalOutcome {
-        match self {
-            Self::Exit(code) => EvalOutcome::Exited(code),
-            Self::Trap(message) => EvalOutcome::Trapped(message),
-            Self::Unsupported(operation) => EvalOutcome::UnsupportedOperation(operation),
-            Self::Deadline => EvalOutcome::DeadlineExceeded,
-            Self::Resource(kind) => EvalOutcome::ResourceLimitExceeded(kind),
-            Self::HostFailure(message) => EvalOutcome::HostFailure(message),
-        }
-    }
-}
-
 mod allocation;
 #[cfg(test)]
 mod boundary_tests;
@@ -120,6 +111,7 @@ mod config;
 mod control;
 mod instruction;
 mod numeric_conversion;
+mod outcome;
 mod resources;
 mod runtime;
 mod unique;

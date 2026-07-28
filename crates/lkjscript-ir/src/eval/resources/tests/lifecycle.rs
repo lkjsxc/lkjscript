@@ -58,7 +58,7 @@ fn all_resource_kinds_have_exact_fake_bindings() {
     assert_eq!(resources.metrics.borrowed_removed, 2);
     assert_eq!(teardown.remaining.ordinary_obligations(), 0);
     assert_eq!(teardown.remaining.borrowed_open(), 0);
-    assert!(teardown.cleanup_error.is_none());
+    assert!(teardown.cleanup_failures.is_empty());
 }
 
 #[test]

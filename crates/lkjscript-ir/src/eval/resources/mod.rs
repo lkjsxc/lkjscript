@@ -19,21 +19,28 @@ use super::EvalOutcome;
 pub(super) fn finish_evaluation(
     resources: &mut EvalResources,
     primary: EvalOutcome,
+    cleanup_failures: lkjscript_core::CleanupFailures,
 ) -> EvalOutcome {
-    finish_evaluation_with_report(resources, primary).0
+    finish_evaluation_with_failures(resources, primary, cleanup_failures).0
 }
 
+#[cfg(test)]
 fn finish_evaluation_with_report(
     resources: &mut EvalResources,
     primary: EvalOutcome,
 ) -> (EvalOutcome, EvalResourceTeardown) {
+    let failures = lkjscript_core::CleanupFailures::new(resources.cleanup_failure_limits);
+    finish_evaluation_with_failures(resources, primary, failures)
+}
+
+fn finish_evaluation_with_failures(
+    resources: &mut EvalResources,
+    primary: EvalOutcome,
+    mut cleanup_failures: lkjscript_core::CleanupFailures,
+) -> (EvalOutcome, EvalResourceTeardown) {
     let teardown = resources.teardown();
-    let outcome = match &teardown.cleanup_error {
-        Some(error) => EvalOutcome::HostFailure(format!(
-            "evaluator resource cleanup failed after {primary:?}: {error}"
-        )),
-        None => primary,
-    };
+    cleanup_failures.append(teardown.cleanup_failures.clone());
+    let outcome = primary.with_cleanup_failures(cleanup_failures);
     (outcome, teardown)
 }
 

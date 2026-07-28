@@ -98,8 +98,8 @@ native owned-resource execution remain absent.
 
 ## Accepted Next Sequence
 
-1. Complete conditional and instruction-originated all-outcome cleanup with
-   bounded cleanup-failure attachment.
+1. Complete conditional and instruction-originated all-outcome cleanup using
+   the implemented bounded cleanup-failure attachment.
 2. Add evaluator resource-operation dispatch and forced-native owned-resource
    execution beyond borrowed standard input.
 3. Verify whole-aggregate affine transfer/drop for ownership-bearing products

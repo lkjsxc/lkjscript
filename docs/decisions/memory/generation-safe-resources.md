@@ -8,9 +8,9 @@
 owned-resource glue in the compiler, evaluator, and reference VM.** All eleven
 kinds retain exact glue identities; borrowed `standard-input` is not guest-owned.
 The evaluator still has no resource-operation dispatch, and forced native tiers
-still implement only borrowed `standard-input`. Promotion remains blocked by
-conditional and instruction-originated cleanup, bounded failure attachment, and
-owned native resource execution.
+still implement only borrowed `standard-input`. Bounded cleanup attachments are
+Current for evaluator and VM teardown. Promotion remains blocked by conditional
+and instruction-originated cleanup and owned native resource execution.
 
 ## Key And Slot
 
@@ -67,9 +67,9 @@ attempts; excess records and message bytes are counted as omitted.
 
 Current safe Linux descriptor and SQLite owners report close only through
 infallible `Drop`, so production VM teardown has no provider-close failure to
-attach yet. Deterministic evaluator providers and failure injection must cover
-ordered attachment, truncation, and later-cleanup continuation before this
-contract is promoted.
+attach yet. Deterministic evaluator-provider and VM borrowed-stream failure
+injection covers ordered attachment, truncation, later-cleanup continuation,
+and retention of the primary outcome.
 
 ## Native Contract
 
@@ -88,6 +88,8 @@ implicit invalidating close, reuse, stale generations, generation exhaustion,
 failed acquisition, SQLite parent/child protection, reverse cleanup, and
 emergency teardown. Compiler tests cover one exact implicit owned-resource event, physical close
 opcode selection, and explicit-close suppression; an app smoke executes that
-path in the reference VM. Conditional and instruction-originated resource
-cleanup, evaluator resource-operation dispatch,
-and owned native resource support remain absent.
+path in the reference VM. Core and engine teardown tests cover bounded UTF-8
+messages, omitted counts and bytes, deterministic reverse order, later cleanup,
+and unchanged primary outcomes. Conditional and instruction-originated
+resource cleanup, evaluator resource-operation dispatch, and owned native
+resource support remain absent.
