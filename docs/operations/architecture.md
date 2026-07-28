@@ -30,11 +30,14 @@ construction. No sibling parser or raw public AST enters analysis. VM,
 baseline JIT, proof optimizer, future AOT tests, and Wasm must share verified
 semantic IR rather than reinterpret syntax.
 
-Executable programs now retain an independently recomputed direct-affine SSA
-inventory for byte-vector owners/loans and typed resources. The public 62-record
-memory inventory reports Current tracing layouts and Accepted deterministic
-candidates. General modes, storage plans, drops, regions, pools, and collector
-removal remain Accepted Contract work.
+Immediately after typed HIR, effects, and ownership, separate exhaustive
+producer and verifier traversals establish a dense content-addressed memory
+plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
+and `ExecutableProgram` retains the complete plan. The independently recomputed
+direct-affine SSA inventory remains derived evidence. The public 62-record
+inventory reports Current tracing layouts and Accepted deterministic candidates.
+Explicit drops, regions, pools, unique storage, and collector removal remain
+Accepted Contract work.
 
 Provider authority enters only through explicit closed capability parameters.
 Package verification bounds grants; bytecode records exact main requirements;

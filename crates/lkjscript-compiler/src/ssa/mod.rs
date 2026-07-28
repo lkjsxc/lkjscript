@@ -16,6 +16,7 @@ use lkjscript_ir::{
 };
 
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
+use crate::memory_plan::MemoryVerifiedHir;
 use crate::types::Type;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -27,18 +28,19 @@ pub(crate) struct SsaMetrics {
 
 #[cfg(test)]
 pub(crate) fn lower_program(program: &hir::Program) -> Result<VerifiedProgram> {
-    lower_program_with_metrics(program).map(|(program, _)| program)
+    let memory_verified = crate::memory_plan::verify_hir_memory(program)?;
+    lower_program_with_metrics(&memory_verified).map(|(program, _)| program)
 }
 
 pub(crate) fn lower_program_with_budget(
-    program: &hir::Program,
+    program: &MemoryVerifiedHir<'_>,
     ledger: &mut BudgetLedger,
 ) -> Result<VerifiedProgram> {
     lower_program_with_metrics_and_budget(program, ledger).map(|(program, _)| program)
 }
 
 pub(crate) fn lower_program_with_metrics_and_budget(
-    program: &hir::Program,
+    program: &MemoryVerifiedHir<'_>,
     ledger: &mut BudgetLedger,
 ) -> Result<(VerifiedProgram, SsaMetrics)> {
     let (program, metrics) = lower_program_with_metrics(program)?;
@@ -47,8 +49,9 @@ pub(crate) fn lower_program_with_metrics_and_budget(
 }
 
 pub(crate) fn lower_program_with_metrics(
-    program: &hir::Program,
+    memory_verified: &MemoryVerifiedHir<'_>,
 ) -> Result<(VerifiedProgram, SsaMetrics)> {
+    let program = memory_verified.hir();
     let construction_started = Instant::now();
     crate::analyze::verify_match_plans(program)?;
     let ssa = construct_program(program)?;

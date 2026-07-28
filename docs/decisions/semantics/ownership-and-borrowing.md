@@ -19,11 +19,12 @@ on every structured edge, resource state/provider proofs, and generated native
 host execution remain **Accepted Targets**, so the complete typed-resource
 contract is not Current.
 
-`ExecutableProgram` now retains an independently recomputed SSA inventory for
-this direct affine slice. It records unique owners, shared/exclusive loans,
-external resource identity, transitional traced buffer storage, and incomplete
-cleanup facts. General inference and deterministic storage remain governed by
-the [collector-free memory contract](../memory/collector-free-deterministic-memory.md)
+`ExecutableProgram` now retains the complete independently verified pre-backend
+HIR memory plan and an independently recomputed SSA inventory for this direct
+affine slice. The plan records every current HIR result, exact call signature,
+owner/place/loan, storage axis, tracing registration, and drop obligation. The
+SSA inventory remains derived evidence. Explicit cleanup and deterministic
+storage remain governed by the [collector-free memory contract](../memory/collector-free-deterministic-memory.md)
 and are not Current.
 
 ## Authority And Status Vocabulary

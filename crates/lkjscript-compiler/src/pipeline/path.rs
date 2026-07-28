@@ -67,7 +67,9 @@ pub fn compile_path_with_metrics_and_ledger(
         let effects_started = Instant::now();
         crate::effects::infer(&mut analyzed);
         let effect_analysis = effects_started.elapsed();
-        let (ssa, ssa_metrics) = lower_program_with_metrics_and_budget(&analyzed, ledger)?;
+        let memory_verified = crate::memory_plan::verify_hir_memory(&analyzed)?;
+        let (ssa, ssa_metrics) = lower_program_with_metrics_and_budget(&memory_verified, ledger)?;
+        let memory_plan = memory_verified.plan().clone();
         let memory_inventory = checked_memory_inventory(&ssa)?;
         let bytecode_started = Instant::now();
         let (chunk, bytecode_links) = compile_program(&ssa)?;
@@ -79,6 +81,7 @@ pub fn compile_path_with_metrics_and_ledger(
         let executable = ExecutableProgram {
             bytecode,
             ssa,
+            memory_plan,
             memory_inventory,
             bytecode_links,
             profile: identity,

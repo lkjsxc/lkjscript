@@ -6,6 +6,8 @@ mod budget;
 mod codegen;
 mod effects;
 mod hir;
+#[path = "hir/memory_plan/mod.rs"]
+pub mod memory_plan;
 mod operation;
 mod ownership;
 pub mod package;
@@ -20,6 +22,8 @@ use std::time::Duration;
 
 use lkjscript_core::ValidatedChunk;
 use lkjscript_ir::{BytecodeLinkMetadata, SsaMemoryInventory, VerifiedProgram};
+
+pub use memory_plan::HirMemoryPlan;
 
 pub use lkjscript_core::{
     BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
@@ -84,6 +88,7 @@ impl Default for CompileMetrics {
 pub struct ExecutableProgram {
     bytecode: ValidatedChunk,
     ssa: VerifiedProgram,
+    memory_plan: HirMemoryPlan,
     memory_inventory: SsaMemoryInventory,
     bytecode_links: BytecodeLinkMetadata,
     profile: ResourceProfileIdentity,
@@ -96,6 +101,10 @@ impl ExecutableProgram {
 
     pub fn ssa(&self) -> &VerifiedProgram {
         &self.ssa
+    }
+
+    pub fn memory_plan(&self) -> &HirMemoryPlan {
+        &self.memory_plan
     }
 
     pub fn memory_inventory(&self) -> &SsaMemoryInventory {

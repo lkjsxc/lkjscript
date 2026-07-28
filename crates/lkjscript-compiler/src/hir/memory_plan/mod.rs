@@ -1,0 +1,52 @@
+use lkjscript_core::Result;
+
+use crate::hir;
+
+mod encoding;
+mod model;
+mod producer;
+mod verifier;
+
+pub use model::*;
+
+use encoding::compute_plan_id;
+
+pub const MAX_MEMORY_PLAN_FUNCTIONS: u64 = 4_096;
+pub const MAX_MEMORY_PLAN_EXPRESSIONS: u64 = 16_384;
+pub const MAX_MEMORY_PLAN_ENTRIES: u64 = 65_536;
+pub const MAX_MEMORY_PLAN_USES: u64 = 65_536;
+pub const MAX_MEMORY_PLAN_LOANS: u64 = 16_384;
+pub const MAX_MEMORY_PLAN_CONSTANTS: u64 = 16_384;
+pub const MAX_MEMORY_PLAN_CALLS: u64 = 16_384;
+pub const MAX_MEMORY_PLAN_OBLIGATIONS: u64 = 32_768;
+pub const MAX_MEMORY_PLAN_VERIFIER_STEPS: u64 = 262_144;
+
+/// Opaque proof that one exact HIR program has a complete independently
+/// verified memory plan. SSA construction accepts only this wrapper.
+pub(crate) struct MemoryVerifiedHir<'a> {
+    hir: &'a hir::Program,
+    plan: HirMemoryPlan,
+}
+
+impl<'a> MemoryVerifiedHir<'a> {
+    pub(crate) fn hir(&self) -> &'a hir::Program {
+        self.hir
+    }
+
+    pub(crate) fn plan(&self) -> &HirMemoryPlan {
+        &self.plan
+    }
+}
+
+pub(crate) fn verify_hir_memory(program: &hir::Program) -> Result<MemoryVerifiedHir<'_>> {
+    let mut plan = producer::derive(program)?;
+    let verifier_steps = verifier::verify(program, &plan)?;
+    plan.work.verifier_steps = verifier_steps;
+    // Verifier work is evidence, not a semantic input, so the content identity
+    // remains stable before and after independent verification.
+    plan.id = compute_plan_id(&plan)?;
+    Ok(MemoryVerifiedHir { hir: program, plan })
+}
+
+#[cfg(test)]
+mod tests;

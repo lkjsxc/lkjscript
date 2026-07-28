@@ -2,18 +2,20 @@
 
 ## Status
 
-<!-- LKJ-STATUS id=memory-plan status=accepted-contract -->
+<!-- LKJ-STATUS id=memory-plan status=current -->
 
-**Accepted contract; implementation is not yet Current.** The existing SSA
-memory inventory is diagnostic evidence, not this authority.
+**Current for the complete HIR accepted by the Current compiler pipeline.** The
+closed plan is produced and independently verified before SSA lowering; the
+existing SSA memory inventory remains derived diagnostic evidence rather than
+semantic authority.
 
 ## Decision
 
-Every executable program receives one deterministic memory plan after typed HIR,
-effects, and capabilities and before backend lowering. The producer and the
-independent verifier are separate implementations. Only an opaque verified
-program crosses into SSA normalization, bytecode, evaluator, VM, or native
-lowering.
+Every executable program receives one deterministic memory plan immediately
+after typed HIR, effects, ownership, and capabilities and before SSA lowering.
+The producer and the independent verifier are separate exhaustive traversals.
+Only an opaque memory-verified HIR wrapper can enter SSA construction; no
+backend-facing path accepts unchecked HIR.
 
 The plan covers every value, constant, parameter, result, affine place, loan,
 and relevant call edge. Missing analysis is a compile error. It never selects
@@ -21,14 +23,15 @@ legacy tracing because analysis failed.
 
 ## Plan Identity
 
-`MemoryPlanId` is content-addressed by the memory-plan contract, source and HIR
-identity, function signatures, use/escape facts, value plans, borrow scopes,
-drop obligations, cleanup edges, and drop glue. Canonical encoding is ordered
-by dense semantic identity and never by map iteration, address, time, thread,
-or process state.
+`MemoryPlanId` is content-addressed by the plan schema, source and HIR identity,
+function signatures, use/escape facts, value plans, borrow scopes, drop
+obligations, and drop glue. Canonical encoding is ordered by dense semantic
+identity and never by map iteration, address, time, thread, or process state.
 
-Plan facts participate in verified SSA, bytecode, native image, and package
-identity.
+`ExecutableProgram` retains the exact ID and opaque verified plan authority gates
+SSA construction. Incorporating the plan ID into serialized SSA, bytecode,
+native-image, and package artifact identities remains accepted follow-on work;
+no artifact identity claim is made for that integration yet.
 
 ## Value Axes
 
@@ -86,15 +89,26 @@ island value cannot use `legacy-unknown`, `legacy-traced-shared`, or
 
 ## Budgets
 
-Profiles bound and precharge use edges, place projections, liveness work,
-escape work, borrow work, plans, drop obligations, drop flags, cleanup blocks,
-cleanup edges, drop glue, unique-slot metadata, and resource-slot metadata.
-Checked overflow is a structured resource failure.
+The Current pre-backend slice uses checked hard bounds for expression plans,
+use edges, loans, obligations, constants, calls, functions, and verifier work;
+all arithmetic is checked and exhaustion is a structured compile failure.
+Profile-owned precharges for future place projections, liveness fixed points,
+escape fixed points, drop flags, cleanup blocks/edges, unique-slot metadata,
+and resource-slot metadata remain part of the accepted complete deterministic
+cutover. Existing compiler profile ceilings are not weakened.
 
 ## Verification
 
-The verifier independently reconstructs the plan and proves complete coverage,
-function signature compatibility, availability, move and loan legality, escape,
-storage eligibility, drop coverage, glue identity, cleanup routing, and tracing
-registration. Diagnostic inventory is derived from the verified plan and cannot
-override it.
+The verifier independently traverses HIR and proves dense identities, complete
+expression/parameter/result/place/loan/constant/call coverage, exact function
+and direct-call memory signatures, use accounting, origin/type/effect agreement,
+storage-axis eligibility, drop-glue/type agreement, allocation-failure facts,
+and exact legacy-tracing registration. Producer failure or verifier mismatch is
+a compile error and never selects tracing.
+
+The Current plan does not promote SSA drop elaboration: `place-end` can still
+retire the Current compiler fact, and runtime cleanup is not yet explicit on all
+edges. Rejecting active-owner `place-end`, explicit end-borrow/drop events,
+all-outcome cleanup routing, and physical deterministic byte backing release
+remain governed by [Deterministic Drop](deterministic-drop.md). The diagnostic
+SSA inventory is derived evidence and cannot override the plan.

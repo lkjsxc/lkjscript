@@ -10,13 +10,16 @@ pub(super) fn compile_analyzed(
     limits: &Limits,
     ledger: &mut BudgetLedger,
 ) -> Result<ExecutableProgram> {
-    let ssa = lower_program_with_budget(analyzed, ledger)?;
+    let memory_verified = crate::memory_plan::verify_hir_memory(analyzed)?;
+    let ssa = lower_program_with_budget(&memory_verified, ledger)?;
+    let memory_plan = memory_verified.plan().clone();
     let memory_inventory = checked_memory_inventory(&ssa)?;
     let (chunk, bytecode_links) = compile_program(&ssa)?;
     let bytecode = validate_chunk(chunk, &limits.validation)?;
     Ok(ExecutableProgram {
         bytecode,
         ssa,
+        memory_plan,
         memory_inventory,
         bytecode_links,
         profile: ledger.profile().identity(),

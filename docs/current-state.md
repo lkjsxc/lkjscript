@@ -11,6 +11,7 @@
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
+<!-- LKJ-STATUS id=memory-plan status=current -->
 <!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=never-control status=current -->
@@ -121,8 +122,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
   `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
   exact roots, transitional ownership island, PLACEHOLDER `bytes`, and accepted
   deterministic candidates; it is derived evidence, not semantic authority.
-  Executable programs retain an independently recomputed direct-affine SSA
-  inventory for byte-vector owners/loans and typed resources.
+  Every executable program retains a content-addressed pre-backend HIR memory
+  plan covering every expression result, parameter/result, place, loan,
+  constant, and call. Separate exhaustive producer and verifier traversals run
+  before an opaque checked-HIR wrapper can enter SSA. The direct-affine SSA
+  inventory remains independently recomputed derived evidence.
 - `LKJ-MEMORY-TRACING-RATCHET` fails when the exact eleven registered
   `HeapObj` families change without an accepted registry update. `lkjscript
   memory traced [--json]` exposes the same sorted Current set. This intermediate

@@ -20,8 +20,8 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
 <!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
+<!-- LKJ-STATUS id=memory-plan status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
-<!-- LKJ-STATUS id=memory-plan status=accepted-contract -->
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
@@ -34,11 +34,11 @@ forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
 and explain commands are Current descriptive evidence. The machine tracing
 ratchet and `memory traced` expose the exact eleven allowed `HeapObj` families.
 
-The authoritative memory plan, deterministic whole-place drop,
-generation-safe resource table, and first collector-free value island are
-Accepted Contracts until executable acceptance passes. The whole runtime still
-uses a tracing collector for structural values; collector-free deterministic
-memory is not Current.
+The authoritative pre-backend HIR memory plan is Current. Deterministic
+whole-place drop, generation-safe resource tables, and the first collector-free
+value island remain Accepted Contracts. The whole runtime still uses a tracing
+collector for structural values; collector-free deterministic memory is not
+Current.
 
 ## Product Intent
 
@@ -62,13 +62,14 @@ and generated native stack maps. Wide VM i64/f64 values may be heap boxed.
 `buf` remains a traced mutable object, `bytes` is a source `PLACEHOLDER`, and
 `path` remains a traced byte object.
 
-`ExecutableProgram` retains a narrow independently recomputed SSA inventory for
-direct byte-vector owners represented through transitional `buf`, byte loans,
-and direct typed resources. It is not an authoritative pre-backend memory plan.
-`place-end` may still discard an active owner fact. VM resources still use
-monotonic opaque tokens, explicit close, and teardown safety. The replacement
-core table has reusable generation keys and deterministic cleanup accounting,
-but is not yet wired into VM/native execution or compiler cleanup edges.
+`ExecutableProgram` retains the complete content-addressed HIR plan plus a
+narrow independently recomputed SSA inventory for direct byte-vector owners,
+byte loans, and direct typed resources. Only the opaque memory-verified HIR
+wrapper enters SSA lowering. `place-end` may still discard an active owner fact.
+VM resources still use monotonic opaque tokens, explicit close, and teardown
+safety. The replacement core table has reusable generation keys and deterministic
+cleanup accounting, but is not yet wired into VM/native execution or compiler
+cleanup edges.
 
 ## Current Non-Memory Boundaries
 
@@ -86,16 +87,15 @@ but is not yet wired into VM/native execution or compiler cleanup edges.
 
 ## Accepted Next Sequence
 
-1. Establish the pre-backend authoritative memory plan and independent verifier.
-2. Elaborate exact whole-place cleanup for byte owners and all typed resources.
-3. Replace monotonic resource tokens with reusable generation-bearing slots.
-4. Add deterministic generation-safe unique byte storage.
-5. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
-6. Unbox complete i64 and exact-bit f64 in typed VM slots.
-7. Execute and verify the exact island through evaluator, VM, forced baseline,
+1. Elaborate exact whole-place cleanup for byte owners and all typed resources.
+2. Integrate the reusable generation-bearing resource table into VM and native.
+3. Integrate deterministic unique storage into evaluator, VM, and native.
+4. Implement bytes, byte-vector slices, path, and remove `buf` atomically.
+5. Unbox complete i64 and exact-bit f64 in typed VM slots.
+6. Execute and verify the exact island through evaluator, VM, forced baseline,
    and forced proof tiers with zero collector interaction and fallback.
-8. Expose compiler-derived plans, owners, loans, storage, and cleanup to agents.
-9. Ratchet remaining structural traced families downward.
+7. Expose compiler-derived plans, owners, loans, storage, and cleanup to agents.
+8. Ratchet remaining structural traced families downward.
 
 This order is an implementation contract, not a Current capability claim.
 
