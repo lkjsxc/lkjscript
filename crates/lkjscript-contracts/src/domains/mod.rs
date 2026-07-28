@@ -13,6 +13,7 @@ pub const AGENT_PROTOCOL: &str = "lkjscript.agent-protocol";
 pub const DIAGNOSTICS: &str = "lkjscript.diagnostics";
 pub const RESOURCE_CATEGORIES: &str = "lkjscript.resource-categories";
 pub const RESOURCE_PROFILES: &str = "lkjscript.resource-profiles";
+pub const SEMANTIC_RESOURCE_PLANE: &str = "lkjscript.semantic-resource-plane";
 pub const REPOSITORY_GRAPH: &str = "lkjscript.repository-graph";
 pub const CAPSULE_MANIFEST: &str = "lkjscript.capsule-manifest";
 pub const AGENT_WORK_STATE: &str = "lkjscript.agent-work-state";
@@ -81,6 +82,10 @@ pub const RESOURCE_PROFILES_DIGEST: ContractDigest = ContractDigest::from_bytes(
     0xf9, 0x77, 0x92, 0xd8, 0xb7, 0x1a, 0xf5, 0xd4, 0x33, 0x10, 0xbb, 0x50, 0x3f, 0x5d, 0x6e, 0x87,
     0x55, 0x56, 0x86, 0x5e, 0x7c, 0x86, 0xf4, 0x14, 0xef, 0xa5, 0x01, 0xdc, 0x3e, 0x27, 0x83, 0x0f,
 ]);
+pub const SEMANTIC_RESOURCE_PLANE_DIGEST: ContractDigest = ContractDigest::from_bytes([
+    0x5b, 0xd6, 0x03, 0x1c, 0x4e, 0x78, 0x4a, 0x2f, 0x86, 0x13, 0x95, 0x30, 0x70, 0xb8, 0x3f, 0x25,
+    0x9c, 0x0f, 0x87, 0x3c, 0x44, 0xcd, 0xd3, 0x0a, 0x29, 0xed, 0xd9, 0x94, 0x99, 0x3e, 0xf4, 0xe3,
+]);
 pub const SOURCE_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0xf8, 0x20, 0x81, 0xa0, 0x90, 0xe6, 0xd3, 0x66, 0x23, 0xbb, 0x58, 0x97, 0x2b, 0x8d, 0x21, 0x81,
     0x7d, 0x1d, 0xda, 0x95, 0xa4, 0x07, 0xc7, 0x56, 0x9c, 0xa0, 0xe1, 0xcc, 0xfa, 0x38, 0x67, 0xca,
@@ -98,7 +103,7 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     let semantic = add(&mut set, language::semantic_source(source, diagnostics))?;
     add(&mut set, language::agent_protocol(semantic))?;
     let categories = add(&mut set, platform::resource_categories())?;
-    add(&mut set, platform::resource_profiles(categories))?;
+    let profiles = add(&mut set, platform::resource_profiles(categories))?;
     add(&mut set, platform::repository_graph())?;
     add(&mut set, platform::capsule_manifest())?;
     add(&mut set, platform::agent_work_state(semantic))?;
@@ -106,6 +111,7 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     add(&mut set, execution::memory_obligations(language))?;
     let hir = add(&mut set, execution::typed_hir(language))?;
     let ssa = add(&mut set, execution::verified_ssa(hir))?;
+    add(&mut set, platform::semantic_resource_plane(profiles, ssa))?;
     add(&mut set, execution::bytecode(ssa))?;
     let runtime = add(&mut set, execution::runtime_calls())?;
     add(&mut set, execution::native_layout(ssa, runtime))?;
