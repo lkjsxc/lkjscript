@@ -49,6 +49,11 @@ fn help_and_optimizing_metrics_expose_the_current_contract() {
         "\"optimization_certificate_bytes_estimate\":",
         "\"optimization_metadata_bytes_estimate\":",
         "\"certificate_bytes_estimate\":",
+        "\"compile_resources\":",
+        "\"schema\":\"lkjscript.resource-profile\"",
+        "\"resource_categories\":",
+        "\"worker_threads\":",
+        "\"scheduler_work\":",
     ] {
         assert!(json.contains(field), "missing metrics field {field}");
     }

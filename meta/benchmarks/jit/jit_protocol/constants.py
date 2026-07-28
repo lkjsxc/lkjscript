@@ -2,7 +2,7 @@
 
 METRICS_PREFIX = b"LKJSCRIPT_METRICS "
 SCHEMA = "lkjscript.optimizing-jit-benchmark"
-CONTRACT = "11bbd59871b1a8164af16bba28eede6e9ae19c00db955ab789b0f7c542e3094e"
+CONTRACT = "a82216aef1db5f4a2acd25061eca9fa412164a01f9cb8e6dbc9f2169c3097ecd"
 DEFAULT_SEED = 0x4C4B4A534F505449
 CASE_NAMES = (
     "optimizing-workload-baseline",

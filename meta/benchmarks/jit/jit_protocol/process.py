@@ -11,7 +11,7 @@ from typing import Any
 
 from jit_protocol.constants import METRICS_PREFIX
 
-METRICS_CONTRACT = "11bbd59871b1a8164af16bba28eede6e9ae19c00db955ab789b0f7c542e3094e"
+METRICS_CONTRACT = "a82216aef1db5f4a2acd25061eca9fa412164a01f9cb8e6dbc9f2169c3097ecd"
 
 def clean_environment(metrics: bool) -> dict[str, str]:
     environment = os.environ.copy()

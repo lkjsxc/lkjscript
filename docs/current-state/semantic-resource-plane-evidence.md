@@ -14,8 +14,9 @@ Accepted Target in the semantic resource plane contract.
   bounded spin/park behavior, exactly-once task admission, stable failure
   publication, join, and zero-live-worker verification.
 - Runtime observations include queue wait, task time, wakeups, parks, queue high
-  water, same-group/cross-group/cross-NUMA steals, and exact outputs. These
-  observations do not change task legality or deterministic result merge.
+  water, same-group/cross-group/cross-NUMA steals, and exact outputs. Compiler
+  metrics expose the exact resource-profile identity and all category totals.
+  These observations do not change task legality or deterministic result merge.
 - Linux discovery intersects online CPUs, process/thread affinity, effective
   cpuset, and cgroup quota. It reports uncertain or unavailable facts instead of
   inventing values. Affinity changes use safe wrappers in `lkjscript-sys` and
