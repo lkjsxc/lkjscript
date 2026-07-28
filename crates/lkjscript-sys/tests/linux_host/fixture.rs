@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub struct Fixture {
     root: PathBuf,
@@ -12,7 +13,7 @@ impl Fixture {
             std::process::id(),
             unique()
         ));
-        fs::create_dir_all(&root)?;
+        fs::create_dir(&root)?;
         let fixture = Self { root };
         fixture.write("sys/devices/system/cpu/online", online)?;
         for cpu in cpus {
@@ -123,8 +124,11 @@ fn cpu_map(list: &str) -> std::io::Result<String> {
         .join(","))
 }
 
-fn unique() -> u128 {
-    std::time::SystemTime::now()
+fn unique() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos())
+        .map_or(0, |duration| duration.as_nanos());
+    let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+    format!("{time}-{sequence}")
 }

@@ -159,7 +159,7 @@
     { "id": "semantic-resource-runtime", "status": "current",
       "interface": "verified resource runtime and Linux observation",
       "authority": "docs/decisions/platform/semantic-resource-plane.md",
-      "evidence": "meta/results/resource-plane/README.md",
+      "evidence": "docs/current-state/semantic-resource-plane-evidence.md",
       "claimants": ["docs/current-state.md","docs/operations/agent-handoff.md"] },
     { "id": "semantic-session", "status": "current",
       "interface": "lkjscript semantic serve --stdio",
