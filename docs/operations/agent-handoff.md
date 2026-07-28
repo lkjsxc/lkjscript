@@ -64,9 +64,10 @@ and generated native stack maps. Wide VM i64/f64 values may be heap boxed.
 `ExecutableProgram` retains a narrow independently recomputed SSA inventory for
 direct byte-vector owners represented through transitional `buf`, byte loans,
 and direct typed resources. It is not an authoritative pre-backend memory plan.
-`place-end` may still discard an active owner fact. Resources use monotonic
-opaque tokens, explicit close, and teardown safety rather than compiler-inserted
-cleanup on every outcome.
+`place-end` may still discard an active owner fact. VM resources still use
+monotonic opaque tokens, explicit close, and teardown safety. The replacement
+core table has reusable generation keys and deterministic cleanup accounting,
+but is not yet wired into VM/native execution or compiler cleanup edges.
 
 ## Current Non-Memory Boundaries
 

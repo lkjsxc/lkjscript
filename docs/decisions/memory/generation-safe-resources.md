@@ -4,8 +4,11 @@
 
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 
-**Accepted contract; monotonic Current tokens do not satisfy it.** Promotion
-requires all eleven kinds, reusable slots, stale-key rejection, and exact drop.
+**Accepted end-to-end contract.** The host-independent core table implements
+all eleven kinds, reusable nonwrapping slots, provider/scope binding, stale-key
+rejection, reservations, invalidating close, reverse cleanup, and exact
+obligations. Current VM execution still uses monotonic tokens, so capability
+promotion and generated native support remain incomplete.
 
 ## Key And Slot
 

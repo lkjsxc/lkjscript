@@ -92,8 +92,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
   HIR and verified SSA. Exactly-once compiler-inserted cleanup and generated
   native host execution remain accepted-contract work, so typed resources are
   not claimed Current as a complete capability.
-- Opaque monotonic runtime tokens remain stale-safe, exact-kind checked, and
-  disjoint from integers and borrowed standard input.
+- Opaque monotonic VM tokens remain stale-safe, exact-kind checked, and
+  disjoint from integers and borrowed standard input. Core now provides the
+  replacement host-independent resource table with typed provider/scope-bound
+  generation keys, reservations, nonwrapping LIFO reuse, parent protection,
+  invalidating close, reverse cleanup, and exact obligation accounting. VM and
+  native integration remain incomplete.
 - Core provides a bounded deterministic unique store with opaque store-scoped,
   generation-bearing typed keys for byte-vector, dynamic bytes, and path
   layouts. It is not yet integrated into source execution or native tiers.
