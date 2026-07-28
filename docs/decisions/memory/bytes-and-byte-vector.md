@@ -106,9 +106,20 @@ receive source object identity.
 
 ## Path
 
-`path` is immutable exact Linux path bytes. Static or unique immutable storage
-and borrowing follow bytes semantics. Strict UTF-8 conversion remains separate.
-Filesystem and SQLite operations borrow path values.
+`path` is immutable exact Linux path bytes. The accepted cutover uses static
+artifact storage or one dynamic `UniqueStore::PathKey` owner. Ordinary
+observation, equality, filesystem, and SQLite uses borrow. A source copy is an
+explicit planned structural copy that publishes and accounts one new owner;
+whole-place move and return transfer the existing owner. Strict UTF-8 conversion
+remains separate. No accepted path owner is reference counted, traced, or
+aliased.
+
+The core store now provides bounded path construction, structural copy, exact
+value comparison, release, and returned-backing transfer with stale and wrong-
+layout rejection. Current evaluator/VM source paths still use `HeapObj::Path`.
+The constructor's `result path system-error` envelope is copyable/traced today;
+unique path bytes cannot enter it until whole-value aggregate transfer/drop is
+implemented or the affected contract and corpus are atomically rewritten.
 
 ## Transitional Removal
 

@@ -2,12 +2,13 @@
 
 ## Status
 
-**The safe core service and the exact first byte-vector evaluator/VM family are
-Current; native integration and the remaining source families are not
-Current.** `new-byte-vector`, whole-place move and whole-place shared/exclusive
-borrow, byte-slice length/read, byte-slice-mut write, deterministic loan end,
-and owner release use one execution-owned store in the evaluator and reference
-VM. Transitional `buf` remains independently traced. This service is not a
+**The safe core service and exact byte-vector and immutable-bytes evaluator/VM
+families are Current; collector-free path evaluator/VM/native integration and
+the remaining source families are not Current.** The core path layout supports
+bounded allocation, exact access and equality, structural copy, release, stale
+and wrong-layout rejection, and returned-backing transfer. Current source path
+values remain traced because their constructor result is an aliasable aggregate.
+Transitional `buf` remains independently traced. This service is not a
 collector and does not decide liveness by tracing.
 
 ## Representation
@@ -40,8 +41,9 @@ projection, not a direct pointer or collector handle.
 Before publication the store checks allocation count, requested and retained
 bytes, index, generation, layout, profile ceilings, and arithmetic. Partial
 construction remains private. Failure publishes no key and creates no drop
-obligation. Explicit dynamic-bytes clones and static-bytes thaw each perform one
-bounded copy and one accounted owner publication.
+obligation. Explicit dynamic-bytes clones, static-bytes thaw, path construction,
+and path structural copy each perform one bounded copy and one accounted owner
+publication.
 
 ## Access
 
@@ -83,5 +85,9 @@ At completion of each first-family evaluator/VM invocation there are no
 untransferred unique owners, live loans, cleanup flags, or release backlog.
 Normal lexical completion releases owners directly. Trap and early outcomes
 run deterministic execution cleanup before the store leak assertion; teardown
-only verifies the result. Explicit returned-owner transfer remains a bounded
+only verifies the result. Explicit byte-vector and bytes returned-owner transfer remains a bounded
 execution-boundary case and does not promote the wider collector-free island.
+Core path returned-backing transfer is executable foundation evidence only; no
+Current evaluator or VM path owner reaches that boundary. Path-bearing general
+aggregates and every native path group remain outside the collector-free subset,
+so neither the complete island nor whole-runtime collector removal is Current.

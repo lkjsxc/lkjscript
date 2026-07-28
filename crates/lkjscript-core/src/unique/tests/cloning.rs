@@ -37,6 +37,56 @@ fn dynamic_bytes_clones_publish_independent_exact_owners() {
 }
 
 #[test]
+fn path_structural_copy_has_independent_owner_exact_equality_and_return_transfer() {
+    let mut store = store_with(65, 2, 32, 2, 2, 3);
+    let source = store
+        .clone_path_slice(b"/tmp/exact-path")
+        .expect("source path");
+    let source_pointer = store.path(source).expect("source path bytes").as_ptr();
+    let clone = store.clone_path(source).expect("structural path copy");
+
+    assert!(store.paths_equal(source, clone).expect("path equality"));
+    assert_ne!(
+        store.path(clone).expect("clone path bytes").as_ptr(),
+        source_pointer
+    );
+    assert_eq!(store.stats().allocations, 2);
+    assert_eq!(store.stats().live_objects, 2);
+    assert_eq!(store.stats().live_bytes, 30);
+    assert_eq!(store.stats().allocated_bytes, 30);
+
+    store.free_path(source).expect("free source path");
+    assert_eq!(store.path(clone), Ok(&b"/tmp/exact-path"[..]));
+    let returned = store.take_path(clone).expect("return path backing");
+    assert_eq!(returned.as_ref(), b"/tmp/exact-path");
+    assert_eq!(store.stats().frees, 2);
+    assert_eq!(store.assert_no_leaks(), Ok(()));
+    assert_eq!(store.path(clone), Err(UniqueStoreError::StaleKey));
+}
+
+#[test]
+fn path_copy_limit_failure_preserves_owner_metrics_and_layout() {
+    let mut store = store_with(66, 2, 15, 2, 2, 3);
+    let source = store.clone_path_slice(b"/tmp/exact").expect("source path");
+    let before = store.stats();
+    assert_eq!(store.clone_path(source), Err(UniqueStoreError::ByteLimit));
+    assert_eq!(store.path(source), Ok(&b"/tmp/exact"[..]));
+    assert_eq!(store.stats(), before);
+
+    let bytes = store.allocate_bytes(Vec::new()).expect("wrong layout key");
+    assert_eq!(
+        store.import_path_key(bytes.packed_word()),
+        Err(UniqueStoreError::WrongLayout {
+            expected: UniqueLayout::Path,
+            actual: UniqueLayout::Bytes,
+        })
+    );
+    store.free_bytes(bytes).expect("free bytes");
+    store.free_path(source).expect("free source path");
+    assert_eq!(store.assert_no_leaks(), Ok(()));
+}
+
+#[test]
 fn static_thaw_is_one_accounted_copy_and_failures_publish_nothing() {
     let static_bytes = StaticBytes::new(b"static");
     let mut store = store_with(61, 1, 8, 1, 1, 2);
