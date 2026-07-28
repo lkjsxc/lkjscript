@@ -25,6 +25,7 @@ pub struct OwnerHomeTable {
     homes: BTreeMap<DataOwnerId, WorkerId>,
     live_loans: BTreeSet<DataOwnerId>,
     releases: BTreeMap<WorkerId, VecDeque<RemoteRelease>>,
+    pending_releases: BTreeSet<DataOwnerId>,
     owner_limit: usize,
     release_limit: usize,
     epoch: u64,
@@ -37,6 +38,7 @@ impl OwnerHomeTable {
             homes: BTreeMap::new(),
             live_loans: BTreeSet::new(),
             releases: BTreeMap::new(),
+            pending_releases: BTreeSet::new(),
             owner_limit,
             release_limit,
             epoch: 1,
@@ -113,10 +115,10 @@ impl OwnerHomeTable {
             return Err(ResourceError::new("release-home", "wrong owner home"));
         }
         let queue = self.releases.entry(home).or_default();
-        if queue.len() >= self.release_limit {
+        if queue.len() >= self.release_limit || !self.pending_releases.insert(release.owner) {
             return Err(ResourceError::new(
                 "release-capacity",
-                "remote release queue full",
+                "remote release queue full or owner already pending",
             ));
         }
         queue.push_back(release);
@@ -127,7 +129,24 @@ impl OwnerHomeTable {
         let Some(queue) = self.releases.get_mut(&home) else {
             return Vec::new();
         };
-        (0..limit).filter_map(|_| queue.pop_front()).collect()
+        let releases: Vec<_> = (0..limit).filter_map(|_| queue.pop_front()).collect();
+        for release in &releases {
+            self.pending_releases.remove(&release.owner);
+        }
+        releases
+    }
+    pub fn remove(&mut self, owner: DataOwnerId, proof: NoLiveLoanProof) -> ResourceResult<()> {
+        if proof.owner != owner || proof.epoch != self.epoch || self.live_loans.contains(&owner) {
+            return Err(ResourceError::new("owner-proof", "stale release proof"));
+        }
+        if self.pending_releases.contains(&owner) || self.homes.remove(&owner).is_none() {
+            return Err(ResourceError::new(
+                "owner-release",
+                "owner pending or unknown",
+            ));
+        }
+        self.epoch = self.epoch.saturating_add(1);
+        Ok(())
     }
     pub fn metrics(&self) -> OwnerMetrics {
         self.metrics

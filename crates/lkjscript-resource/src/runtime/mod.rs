@@ -12,7 +12,7 @@ pub trait TaskExecutor: Sync {
     type Output: Send;
     type Error: Clone + Send;
 
-    fn execute(&self, task: TaskId) -> Result<Self::Output, Self::Error>;
+    fn execute(&self, task: TaskId, worker: WorkerId) -> Result<Self::Output, Self::Error>;
 }
 
 pub trait WorkerBinder: Sync {

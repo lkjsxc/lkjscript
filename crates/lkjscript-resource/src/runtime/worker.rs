@@ -36,13 +36,14 @@ pub(super) fn worker_loop<E: TaskExecutor, B: WorkerBinder>(
 ) -> ResourceResult<()> {
     binder.bind(descriptor.id, &descriptor.allowed)?;
     update_active(shared, true)?;
-    let result = worker_tasks(index, spin_limit, shared, executor);
+    let result = worker_tasks(index, descriptor.id, spin_limit, shared, executor);
     update_active(shared, false)?;
     result
 }
 
 fn worker_tasks<E: TaskExecutor>(
     index: usize,
+    worker: crate::WorkerId,
     spin_limit: usize,
     shared: &Shared<E::Output, E::Error>,
     executor: &E,
@@ -65,7 +66,7 @@ fn worker_tasks<E: TaskExecutor>(
                     control.metrics.steals = control.metrics.steals.saturating_add(1);
                 }
             }
-            let ready = complete_task(shared, task, executor.execute(task))?;
+            let ready = complete_task(shared, task, executor.execute(task, worker))?;
             if !ready.is_empty() {
                 enqueue_many(shared, index, &ready)?;
             }

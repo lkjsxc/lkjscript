@@ -25,7 +25,11 @@ impl<'a> TaskExecutor for DiscoveryExecutor<'a> {
     type Output = RangeDiscovery<'a>;
     type Error = OptimizationError;
 
-    fn execute(&self, task: TaskId) -> Result<Self::Output, Self::Error> {
+    fn execute(
+        &self,
+        task: TaskId,
+        _worker: lkjscript_resource::WorkerId,
+    ) -> Result<Self::Output, Self::Error> {
         let range = self
             .ranges
             .get(task.slot as usize)

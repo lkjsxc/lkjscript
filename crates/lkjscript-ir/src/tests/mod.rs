@@ -5,7 +5,6 @@ mod optimization_budgets;
 mod optimization_certificates;
 mod optimization_checker;
 mod optimization_dominance;
-mod optimization_scheduled;
 mod ownership_aliases;
 mod ownership_budgets;
 mod ownership_edges;

@@ -12,6 +12,7 @@ mod runtime;
 mod runtime_support;
 mod scheduler;
 mod topology;
+mod unique_home;
 mod verify;
 
 pub use cpu::{CpuSet, MAX_CPU, MAX_CPUS, MAX_RANGES};
@@ -42,4 +43,5 @@ pub use topology::{
     CacheDomain, FactCertainty, FactSource, HardwareTopology, HostSchedulerRecord, Locality,
     NumaNode, ObservedFact, ProcessingUnit,
 };
+pub use unique_home::{HomedByteVector, PartitionedUniqueStore};
 pub use verify::TaskGraphVerifier;
