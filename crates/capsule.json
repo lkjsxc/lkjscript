@@ -8,7 +8,7 @@
   "layer": "workspace crates",
   "concepts": ["crate dependency direction", "shared workspace policy"],
   "facade": [],
-  "allowed_dependencies": ["app", "compiler", "contracts", "core", "ir", "jit", "native", "sys", "vm", "xtask"],
+  "allowed_dependencies": ["app", "compiler", "contracts", "core", "ir", "jit", "native", "resource", "sys", "vm", "xtask"],
   "forbidden_dependencies": [],
   "tests": ["crates/lkjscript-xtask/src/structure/graph_tests/mod.rs"],
   "decisions": ["docs/operations/architecture/crate-graph.md"],

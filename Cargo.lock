@@ -69,6 +69,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lkjscript-resource"
+version = "0.1.0"
+dependencies = [
+ "lkjscript-contracts",
+ "lkjscript-core",
+]
+
+[[package]]
 name = "lkjscript-sys"
 version = "0.1.0"
 dependencies = [
