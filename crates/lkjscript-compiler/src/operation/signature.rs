@@ -66,7 +66,13 @@ impl Operation {
             | Self::StrSlice
             | Self::StrFromByte
             | Self::StrFromI64
-            | Self::StrFromF64 => memory_signature(self),
+            | Self::StrFromF64
+            | Self::BytesLength
+            | Self::BytesByteAt
+            | Self::CopyBytesSlice
+            | Self::CloneBytes
+            | Self::FreezeByteVector
+            | Self::ThawBytes => memory_signature(self),
             Self::StdinHandle
             | Self::SysIsatty
             | Self::DropResource

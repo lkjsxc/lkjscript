@@ -40,6 +40,7 @@ pub enum MemoryContention {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DropGlueIdentity {
     ByteVector,
+    Bytes,
     Resource(lkjscript_contracts::ResourceKind),
 }
 

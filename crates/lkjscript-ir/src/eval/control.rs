@@ -91,7 +91,10 @@ impl Evaluator<'_> {
                     current = target;
                 }
                 Terminator::Return(result) => {
-                    return if matches!(value(&values, result)?, EvalValue::ByteVector(_)) {
+                    return if matches!(
+                        value(&values, result)?,
+                        EvalValue::Bytes(_) | EvalValue::ByteVector(_)
+                    ) {
                         take_value(&mut values, result)
                     } else {
                         value(&values, result).cloned()

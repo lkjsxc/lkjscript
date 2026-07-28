@@ -49,6 +49,30 @@ pub(super) fn parse_element(
                         )),
                     };
                 }
+                if name == "bytes-literal" {
+                    return match children.as_slice() {
+                        [SourceNode {
+                            kind: SyntaxKind::Bytes { value },
+                            ..
+                        }] => Ok((
+                            SourceNode {
+                                kind: SyntaxKind::Bytes {
+                                    value: value.clone(),
+                                },
+                                span,
+                                leading_trivia,
+                                before_close_trivia,
+                                children: Vec::new(),
+                            },
+                            cursor + 1,
+                        )),
+                        _ => Err(super::limits::syntax_error(
+                            origin,
+                            span,
+                            "bytes-literal/ must contain one hexadecimal payload",
+                        )),
+                    };
+                }
                 return Ok((
                     SourceNode {
                         kind: SyntaxKind::Call {

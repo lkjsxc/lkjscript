@@ -1,3 +1,4 @@
+mod bytes;
 mod core;
 mod host;
 mod memory;
@@ -80,7 +81,7 @@ const fn record(
     }
 }
 
-pub const OPERATION_COUNT: usize = 123;
+pub const OPERATION_COUNT: usize = 129;
 
 pub fn operation_by_id(identity: OperationIdentity) -> Option<&'static OperationVocabularyRecord> {
     let index = identity.index();
@@ -99,7 +100,11 @@ pub fn operation_by_id(identity: OperationIdentity) -> Option<&'static Operation
     if index < sqlite::RECORDS.len() {
         return sqlite::RECORDS.get(index);
     }
-    network::RECORDS.get(index - sqlite::RECORDS.len())
+    let index = index - sqlite::RECORDS.len();
+    if index < network::RECORDS.len() {
+        return network::RECORDS.get(index);
+    }
+    bytes::RECORDS.get(index - network::RECORDS.len())
 }
 
 pub fn operation_by_source_name(name: &str) -> Option<&'static OperationVocabularyRecord> {

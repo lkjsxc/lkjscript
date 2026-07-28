@@ -44,6 +44,9 @@ pub(super) fn preflight_function(
                     | Constant::F64(_)
                     | Constant::Str(_)
                     | Constant::EmptyList => {}
+                    Constant::StaticBytes(_) => {
+                        return unsupported_operation(function.id, "immutable bytes constant")
+                    }
                     Constant::Symbol(_) => {
                         return unsupported_operation(function.id, "Symbol constant")
                     }

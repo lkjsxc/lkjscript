@@ -79,6 +79,7 @@ fn literal_type(node: &SourceNode) -> Option<&'static str> {
         SyntaxKind::Bool { .. } => Some("bool"),
         SyntaxKind::Unit => Some("unit"),
         SyntaxKind::Str { .. } => Some("string"),
+        SyntaxKind::Bytes { .. } => Some("bytes"),
         SyntaxKind::Symbol { .. } | SyntaxKind::Call { .. } => None,
     }
 }

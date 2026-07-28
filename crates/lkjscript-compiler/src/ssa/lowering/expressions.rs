@@ -34,6 +34,11 @@ impl FunctionBuilder<'_> {
                 Constant::Str(value.clone()),
                 expression.origin,
             )?,
+            ExprKind::LitBytes(value) => self.constant(
+                SsaType::Bytes,
+                Constant::StaticBytes(value.clone()),
+                expression.origin,
+            )?,
             ExprKind::QuoteSymbol(value) => self.constant(
                 SsaType::Symbol,
                 Constant::Symbol(value.clone()),
@@ -49,6 +54,20 @@ impl FunctionBuilder<'_> {
                 kind,
                 binding,
             } => return self.lower_borrow(*place, *loan, *kind, *binding, ty, expression),
+            ExprKind::BorrowBytes {
+                place,
+                loan,
+                binding,
+            } => {
+                return self.lower_borrow(
+                    *place,
+                    *loan,
+                    hir::BorrowKind::Shared,
+                    *binding,
+                    ty,
+                    expression,
+                );
+            }
             ExprKind::Call {
                 callee,
                 args,

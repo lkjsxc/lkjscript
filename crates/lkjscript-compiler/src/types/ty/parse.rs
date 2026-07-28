@@ -20,7 +20,7 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
         )),
         "string" => Ok((Type::Str, i + 1)),
         "buf" => Ok((Type::Buf, i + 1)),
-        "bytes" => Err("PLACEHOLDER: immutable bytes is reserved but not Current".into()),
+        "bytes" => Ok((Type::Bytes, i + 1)),
         "byte-vector" => Ok((Type::ByteVector, i + 1)),
         "byte-slice" => Ok((Type::ByteSlice, i + 1)),
         "byte-slice-mut" => Ok((Type::ByteSliceMut, i + 1)),

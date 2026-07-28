@@ -107,7 +107,7 @@ impl<'a> Producer<'a> {
             local.place.raw(),
             &ty,
             source,
-            true,
+            !local.static_bytes,
         )
         .map(|_| ())
     }

@@ -25,7 +25,8 @@ pub(in crate::ownership) fn check_scopes_expr(
                     &later,
                     initializer_context,
                 )?;
-                if is_owned(&expression_of_binding(program, local.binding)?)
+                if (!local.static_bytes
+                    && is_owned(&expression_of_binding(program, local.binding)?))
                     || is_affine_resource(&expression_of_binding(program, local.binding)?)
                 {
                     state.initialized.insert(local.place, true);

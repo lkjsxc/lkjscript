@@ -99,6 +99,7 @@ pub enum MemoryConstantValue {
     Unit,
     EmptyList,
     String(String),
+    Bytes(Vec<u8>),
     Symbol(String),
 }
 

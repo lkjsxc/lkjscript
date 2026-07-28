@@ -14,6 +14,7 @@ pub struct MemoryLoanPlan {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryDropGlueKind {
     ByteVector,
+    Bytes,
     Resource(ResourceKind),
 }
 

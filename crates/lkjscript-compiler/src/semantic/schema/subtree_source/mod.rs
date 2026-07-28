@@ -50,6 +50,9 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
         | (Kind::StringLiteral, Some(Value::ImportPath { path: value })) => Ok(SyntaxKind::Str {
             value: value.clone(),
         }),
+        (Kind::BytesLiteral, Some(Value::Bytes { hexadecimal })) => Ok(SyntaxKind::Bytes {
+            value: decode_hexadecimal(hexadecimal)?,
+        }),
         (Kind::TypedHole, Some(Value::TypedHole { .. })) => Ok(call("hole")),
         (Kind::BuiltinCall, Some(Value::BuiltinOperation { operation })) => {
             Ok(call(operation.0.name()))
@@ -73,6 +76,29 @@ fn source_kind(kind: Kind, value: Option<&Value>) -> Result<SyntaxKind, String> 
             Ok(call(dual_type_marker(kind).unwrap_or_default()))
         }
         _ => Err("semantic node kind/value combination is invalid".into()),
+    }
+}
+
+fn decode_hexadecimal(value: &str) -> Result<Vec<u8>, String> {
+    if !value.len().is_multiple_of(2)
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("semantic bytes literal is not lowercase even hexadecimal".into());
+    }
+    Ok(value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| (hex(pair[0]) << 4) | hex(pair[1]))
+        .collect())
+}
+
+fn hex(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => byte - b'a' + 10,
+        _ => unreachable!("validated semantic hexadecimal"),
     }
 }
 

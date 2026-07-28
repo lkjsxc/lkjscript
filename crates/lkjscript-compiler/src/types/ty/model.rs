@@ -11,6 +11,8 @@ pub enum Type {
     Str,
     /// Transitional traced mutable buffer. It is not a byte-vector.
     Buf,
+    /// Exact immutable bytes, static or affine dynamic unique storage.
+    Bytes,
     /// Exact affine owner in deterministic unique byte storage.
     ByteVector,
     /// Exact shared bounded view into a byte-vector.

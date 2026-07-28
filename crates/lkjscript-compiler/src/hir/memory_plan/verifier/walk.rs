@@ -82,9 +82,10 @@ fn walk<'a>(
         | ExprKind::LitUnit
         | ExprKind::EmptyList
         | ExprKind::LitStr(_)
+        | ExprKind::LitBytes(_)
         | ExprKind::QuoteSymbol(_) => add(&mut facts.constants, 1)?,
         ExprKind::Load(_) | ExprKind::Move { .. } => add(&mut facts.uses, 1)?,
-        ExprKind::Borrow { .. } => {
+        ExprKind::Borrow { .. } | ExprKind::BorrowBytes { .. } => {
             add(&mut facts.uses, 1)?;
             add(&mut facts.loans, 1)?;
             add(&mut facts.obligations, 1)?;
@@ -145,7 +146,7 @@ fn walk<'a>(
         ExprKind::Let { bindings, body } => {
             for (index, binding) in bindings.iter().enumerate() {
                 add(&mut facts.places, 1)?;
-                if affine(&binding.value.ty) {
+                if affine(&binding.value.ty) && !binding.static_bytes {
                     add(&mut facts.obligations, 1)?;
                 }
                 walk(&binding.value, function, Some(id), index_u32(index)?, facts)?;

@@ -24,7 +24,7 @@ pub(crate) fn signature_contains_ownership(signature: &Signature) -> bool {
 
 pub(crate) fn contains_ownership_type(ty: &SsaType) -> bool {
     match ty {
-        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
+        SsaType::Bytes | SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
         SsaType::List(inner) => contains_ownership_type(inner),
         SsaType::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
         SsaType::Function(signature) => {
@@ -40,11 +40,12 @@ pub(crate) fn is_owned_buf(ty: &SsaType) -> bool {
 }
 
 pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
-    is_owned_buf(ty) || matches!(ty, SsaType::Resource(_))
+    is_owned_buf(ty) || matches!(ty, SsaType::Bytes | SsaType::Resource(_))
 }
 
 pub(crate) fn expected_drop_glue(ty: &SsaType) -> Option<crate::DropGlueIdentity> {
     match ty {
+        SsaType::Bytes => Some(crate::DropGlueIdentity::Bytes),
         SsaType::ByteVector => Some(crate::DropGlueIdentity::ByteVector),
         SsaType::Resource(kind) => Some(crate::DropGlueIdentity::Resource(*kind)),
         _ => None,
@@ -102,7 +103,7 @@ pub(crate) fn verify_type_at(
             }
             Ok(())
         }
-        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
+        SsaType::Bytes | SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
             if !ownership_allowed {
                 return fail("SSA ownership/reference type has an unsupported storage position");
             }

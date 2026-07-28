@@ -49,6 +49,17 @@ fn memory_mode(
             Some("path"),
             None,
         ),
+        Type::Bytes => (
+            MemoryMultiplicity::Affine,
+            MemoryAliasing::Unique,
+            MemoryStorage::UniqueSlot,
+            MemoryDestruction::DropGlue,
+            MemoryIdentity::Value,
+            MemoryPortability::WorkerLocal,
+            MemoryContention::SingleOwner,
+            None,
+            Some(bytes_glue()),
+        ),
         Type::ByteVector => (
             MemoryMultiplicity::Affine,
             MemoryAliasing::Unique,

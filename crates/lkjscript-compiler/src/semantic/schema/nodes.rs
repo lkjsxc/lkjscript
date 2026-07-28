@@ -38,6 +38,7 @@ pub(crate) enum SemanticNodeKind {
     I64Literal,
     F64Literal,
     StringLiteral,
+    BytesLiteral,
     NameReference,
     TypedHole,
     HoleIdentity,
@@ -127,6 +128,9 @@ pub(crate) enum SemanticNodeValue {
     },
     Text {
         value: String,
+    },
+    Bytes {
+        hexadecimal: String,
     },
     SourceName {
         name: String,

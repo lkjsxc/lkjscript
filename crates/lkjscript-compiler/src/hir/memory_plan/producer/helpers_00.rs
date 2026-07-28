@@ -109,7 +109,7 @@ fn consuming_operation(operation: Operation) -> bool {
 }
 fn parameter_mode(ty: &Type, resource_consumed: bool) -> MemoryParameterMode {
     match ty {
-        Type::ByteVector => MemoryParameterMode::Consume,
+        Type::Bytes | Type::ByteVector => MemoryParameterMode::Consume,
         Type::ByteSlice => MemoryParameterMode::BorrowShared,
         Type::ByteSliceMut => MemoryParameterMode::BorrowExclusive,
         Type::Resource(_) if resource_consumed => MemoryParameterMode::Consume,
@@ -126,7 +126,7 @@ fn operation_parameter_mode(operation: Operation, ty: &Type) -> MemoryParameterM
 }
 fn result_mode(ty: &Type) -> MemoryResultMode {
     match ty {
-        Type::ByteVector => MemoryResultMode::Owned,
+        Type::Bytes | Type::ByteVector => MemoryResultMode::Owned,
         Type::ByteSlice | Type::ByteSliceMut => {
             MemoryResultMode::Borrowed
         }
@@ -148,6 +148,7 @@ fn constant_value(kind: &ExprKind) -> Option<MemoryConstantValue> {
         ExprKind::LitUnit => Some(MemoryConstantValue::Unit),
         ExprKind::EmptyList => Some(MemoryConstantValue::EmptyList),
         ExprKind::LitStr(value) => Some(MemoryConstantValue::String(value.clone())),
+        ExprKind::LitBytes(value) => Some(MemoryConstantValue::Bytes(value.clone())),
         ExprKind::QuoteSymbol(value) => Some(MemoryConstantValue::Symbol(value.clone())),
         _ => None,
     }

@@ -3,7 +3,7 @@ use super::{Kind, State};
 use crate::validation::UniquePlaceState;
 use crate::{DecodedInstruction, FunctionProto, Result};
 
-pub(super) fn place_and_slot(
+pub(in crate::validation::instruction) fn place_and_slot(
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<(usize, usize)> {
@@ -33,7 +33,7 @@ pub(super) fn local_owner(
     }
 }
 
-pub(super) fn expect_place_owner(
+pub(in crate::validation::instruction) fn expect_place_owner(
     state: &State,
     place: usize,
     owner: u32,
@@ -106,7 +106,7 @@ pub(super) fn reject_live_loan(
     }
 }
 
-pub(super) fn error(
+pub(in crate::validation::instruction) fn error(
     proto: &FunctionProto,
     instruction: DecodedInstruction,
     message: &str,

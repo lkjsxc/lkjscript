@@ -102,6 +102,7 @@ impl Resolver<'_> {
                 bindings: vec![LocalDefinition {
                     binding: local.binding,
                     place: local.place,
+                    static_bytes: false,
                     slot: local.slot,
                     value,
                 }],

@@ -3,7 +3,10 @@ use crate::analyze::*;
 impl Resolver<'_> {
     pub(in crate::analyze) fn binding_ref(&self, binding: BindingId) -> Result<BindingRef> {
         let storage = match self.analyzer.binding(binding)?.kind {
-            BindingKind::Parameter | BindingKind::ImmutableLocal | BindingKind::MutableLocal => {
+            BindingKind::Parameter
+            | BindingKind::ImmutableLocal
+            | BindingKind::StaticBytesLocal
+            | BindingKind::MutableLocal => {
                 BindingStorage::Local(self.local_slots.get(&binding).copied().ok_or_else(|| {
                     self.error(format!("binding {} has no HIR local slot", binding.raw()))
                 })?)
@@ -61,9 +64,13 @@ impl Resolver<'_> {
             | ExprKind::LitUnit
             | ExprKind::EmptyList
             | ExprKind::LitStr(_)
+            | ExprKind::LitBytes(_)
             | ExprKind::MatchUnreachable { .. }
             | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
-            ExprKind::Load(_) | ExprKind::Move { .. } | ExprKind::Borrow { .. } => EffectSet::PURE,
+            ExprKind::Load(_)
+            | ExprKind::Move { .. }
+            | ExprKind::Borrow { .. }
+            | ExprKind::BorrowBytes { .. } => EffectSet::PURE,
             ExprKind::Call { args, .. } => fold_effects(args).union(EffectSet::CONSERVATIVE_CALL),
             ExprKind::Operation {
                 operation, args, ..

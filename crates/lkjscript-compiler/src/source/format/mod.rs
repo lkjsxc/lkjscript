@@ -51,6 +51,17 @@ fn format_node(node: &SourceNode, output: &mut String, emit_trivia: bool) {
                 format_trivia(&node.before_close_trivia, output);
             }
         }
+        SyntaxKind::Bytes { value } => {
+            output.push_str("bytes-literal/\n");
+            for byte in value {
+                use std::fmt::Write as _;
+                let _ = write!(output, "{byte:02x}");
+            }
+            output.push_str("\n/bytes-literal\n");
+            if emit_trivia {
+                format_trivia(&node.before_close_trivia, output);
+            }
+        }
         SyntaxKind::Symbol { name } => {
             output.push_str(name);
             output.push('\n');

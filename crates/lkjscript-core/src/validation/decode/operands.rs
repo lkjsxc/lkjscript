@@ -19,6 +19,7 @@ pub(super) fn validate_instruction_operands(
             | Op::StoreLocal
             | Op::ByteVectorBorrow
             | Op::ByteVectorBorrowMut
+            | Op::BytesBorrow
             | Op::StoreUniqueLocal
             | Op::StoreViewLocal
             | Op::TakeUniqueLocal
@@ -29,7 +30,12 @@ pub(super) fn validate_instruction_operands(
                     return operand_error(proto, op, at, "local index out of range");
                 }
             }
-            Op::ByteVectorPlaceInit | Op::ByteVectorMove | Op::ByteVectorDropPlace => {
+            Op::ByteVectorPlaceInit
+            | Op::ByteVectorMove
+            | Op::ByteVectorDropPlace
+            | Op::BytesPlaceInit
+            | Op::BytesMove
+            | Op::BytesDropPlace => {
                 let packed = operand_index(operand, proto, op, at)?;
                 let slot = packed & usize::from(u8::MAX);
                 let place = packed >> u8::BITS;
@@ -40,7 +46,7 @@ pub(super) fn validate_instruction_operands(
                     return operand_error(proto, op, at, "unique place index out of range");
                 }
             }
-            Op::ByteVectorPlaceEnd => {
+            Op::ByteVectorPlaceEnd | Op::BytesPlaceEnd => {
                 let place = operand_index(operand, proto, op, at)?;
                 if place >= usize::from(proto.unique_places) {
                     return operand_error(proto, op, at, "unique place index out of range");

@@ -25,13 +25,14 @@ pub(super) fn verify(
         }
         InstructionKind::EndBorrow { place, value, .. } => {
             let declared = place_by_id(function, *place)?;
-            if !is_owned_buf(&declared.ty)
-                || !matches!(
+            let vector_loan = is_owned_buf(&declared.ty)
+                && matches!(
                     value_type(types, *value)?,
                     SsaType::ByteSlice | SsaType::ByteSliceMut
-                )
-                || instruction.ty != SsaType::Unit
-            {
+                );
+            let bytes_loan =
+                declared.ty == SsaType::Bytes && value_type(types, *value)? == &SsaType::Bytes;
+            if (!vector_loan && !bytes_loan) || instruction.ty != SsaType::Unit {
                 return fail("SSA EndBorrow requires a matching byte loan and Unit result");
             }
         }
@@ -49,7 +50,7 @@ pub(super) fn verify(
                     crate::DropGlueIdentity::Resource(_)
                 ) | (
                     crate::DropEventKind::ExplicitClose,
-                    crate::DropGlueIdentity::ByteVector
+                    crate::DropGlueIdentity::ByteVector | crate::DropGlueIdentity::Bytes
                 )
             );
             if declared.drop_glue != Some(*glue)
@@ -67,6 +68,12 @@ pub(super) fn verify(
             }
         }
         InstructionKind::Borrow { kind, value, .. } => {
+            if value_type(types, *value)? == &SsaType::Bytes {
+                if *kind != crate::BorrowKind::Shared || instruction.ty != SsaType::Bytes {
+                    return fail("SSA immutable bytes borrow must be shared exact bytes");
+                }
+                return Ok(EffectSet::PURE);
+            }
             let expected = match kind {
                 crate::BorrowKind::Shared => SsaType::ByteSlice,
                 crate::BorrowKind::Mutable => SsaType::ByteSliceMut,

@@ -40,13 +40,32 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         let failed = stopped.is_err();
         let mut outcome = match stopped {
             Ok(Stop::Returned(value))
-                if self.chunk.main().return_unique
-                    == Some(lkjscript_core::UniqueValueKind::ByteVector) =>
+                if matches!(
+                    self.chunk.main().return_unique,
+                    Some(
+                        lkjscript_core::UniqueValueKind::Bytes
+                            | lkjscript_core::UniqueValueKind::ByteVector
+                    )
+                ) =>
             {
-                match self.unique.export_owner(value) {
+                let transferred = if let Some(index) = value.as_static_bytes() {
+                    self.chunk
+                        .constants()
+                        .get(usize::from(index))
+                        .and_then(|constant| match constant {
+                            lkjscript_core::Constant::StaticBytes(bytes) => {
+                                lkjscript_core::OwnedValue::from_unique_bytes(bytes.to_vec()).ok()
+                            }
+                            _ => None,
+                        })
+                        .ok_or_else(|| Error::msg("invalid returned static bytes constant"))
+                } else {
+                    self.unique.export_owner(value)
+                };
+                match transferred {
                     Ok(value) => ExecutionOutcome::Returned(value),
                     Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
-                        "invalid returned VM byte-vector: {error}"
+                        "invalid returned VM unique bytes owner: {error}"
                     ))),
                 }
             }

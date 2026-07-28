@@ -1,3 +1,5 @@
+use lkjscript_core::Limits;
+
 use crate::source::{SourceOrigin, SourceResult, Token, TokenKind};
 
 use super::lines::Line;
@@ -7,7 +9,11 @@ pub(super) struct Lexed {
     pub(super) trailing_trivia: Vec<String>,
 }
 
-pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lexed> {
+pub(super) fn lex(
+    lines: &[Line<'_>],
+    origin: &SourceOrigin,
+    limits: &Limits,
+) -> SourceResult<Lexed> {
     let mut output = Vec::new();
     let mut pending_trivia = Vec::new();
     let mut index = 0;
@@ -26,6 +32,9 @@ pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lex
                 origin,
                 std::mem::take(&mut pending_trivia),
             )?;
+            if name == "bytes-literal" {
+                decode_bytes_literal(&mut text_tokens, origin, limits)?;
+            }
             output.append(&mut text_tokens);
             index = next;
             continue;
@@ -66,8 +75,74 @@ pub(super) fn lex(lines: &[Line<'_>], origin: &SourceOrigin) -> SourceResult<Lex
 fn text_open_name(line: &str) -> Option<&'static str> {
     match line {
         "string-literal/" => Some("string-literal"),
+        "bytes-literal/" => Some("bytes-literal"),
         "name/" => Some("name"),
         "module/" => Some("module"),
         _ => None,
+    }
+}
+
+fn decode_bytes_literal(
+    tokens: &mut [Token],
+    origin: &SourceOrigin,
+    limits: &Limits,
+) -> SourceResult<()> {
+    let Some(Token {
+        kind: TokenKind::Str(payload),
+        span,
+        ..
+    }) = tokens.get_mut(1)
+    else {
+        return Err(super::limits::syntax_error(
+            origin,
+            crate::source::SourceSpan::zero(),
+            "bytes-literal/ has no payload token",
+        ));
+    };
+    if payload.contains('\n') {
+        return Err(super::limits::syntax_error(
+            origin,
+            *span,
+            "bytes-literal/ payload must occupy exactly one line",
+        ));
+    }
+    if payload.len() % 2 != 0 {
+        return Err(super::limits::syntax_error(
+            origin,
+            *span,
+            "bytes-literal/ payload must contain an even number of hexadecimal digits",
+        ));
+    }
+    if !payload
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(super::limits::syntax_error(
+            origin,
+            *span,
+            "bytes-literal/ payload accepts only lowercase hexadecimal digits",
+        ));
+    }
+    let decoded_len = payload.len() / 2;
+    if decoded_len > limits.validation.max_constant_data_bytes {
+        return Err(super::limits::resource_error(
+            origin,
+            *span,
+            "bytes-literal decoded payload exceeds the constant-data byte limit",
+        ));
+    }
+    let mut bytes = Vec::with_capacity(decoded_len);
+    for pair in payload.as_bytes().chunks_exact(2) {
+        bytes.push((hex(pair[0]) << 4) | hex(pair[1]));
+    }
+    tokens[1].kind = TokenKind::Bytes(bytes);
+    Ok(())
+}
+
+fn hex(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => byte - b'a' + 10,
+        _ => unreachable!("validated hexadecimal digit"),
     }
 }

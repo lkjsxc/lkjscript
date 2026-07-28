@@ -125,7 +125,16 @@ pub(crate) fn process_ownership_instruction(
             } else {
                 None
             };
-            consume_affine_arguments(arguments, state, types, false, closes)?;
+            let observes_bytes = matches!(
+                operation,
+                crate::RuntimeOp::BytesLength
+                    | crate::RuntimeOp::BytesByteAt
+                    | crate::RuntimeOp::CopyBytesSlice
+                    | crate::RuntimeOp::CloneBytes
+            );
+            if !observes_bytes {
+                consume_affine_arguments(arguments, state, types, false, closes)?;
+            }
             if let Some((place, value)) = pending {
                 if state.pending_drops.insert(place, value).is_some() {
                     return fail("SSA resource close duplicated a pending Drop event");
@@ -147,7 +156,16 @@ pub(crate) fn process_ownership_instruction(
         | InstructionKind::EnumField { .. } => {}
     }
 
-    if is_owned_value(&instruction.ty) && !matches!(instruction.kind, InstructionKind::Move { .. })
+    let static_bytes = matches!(
+        instruction.kind,
+        InstructionKind::Constant(crate::Constant::StaticBytes(_))
+    );
+    let borrowed_bytes = matches!(instruction.kind, InstructionKind::Borrow { .. })
+        && instruction.ty == SsaType::Bytes;
+    if is_owned_value(&instruction.ty)
+        && !matches!(instruction.kind, InstructionKind::Move { .. })
+        && !static_bytes
+        && !borrowed_bytes
     {
         state.affine.insert(
             instruction.id,

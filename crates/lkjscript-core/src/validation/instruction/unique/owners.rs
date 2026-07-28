@@ -139,12 +139,15 @@ fn store_owner(
 ) -> Result<()> {
     let slot = instruction_operand(proto, instruction)?;
     let value = pop(state, proto, instruction)?;
-    if !matches!(value, Kind::ByteVector(_)) {
+    if !matches!(value, Kind::Bytes(_) | Kind::ByteVector(_)) {
         return Err(error(
             proto,
             instruction,
-            "StoreUniqueLocal expects byte-vector",
+            "StoreUniqueLocal expects an exact dynamic unique owner",
         ));
+    }
+    if state.locals.get(slot) == Some(&Some(Kind::StaticBytes)) {
+        state.locals[slot] = None;
     }
     store_empty_local(state, slot, value, proto, instruction)
 }
@@ -155,9 +158,18 @@ fn take_owner(
     state: &mut State,
 ) -> Result<()> {
     let slot = instruction_operand(proto, instruction)?;
-    let owner = local_owner(state, slot, proto, instruction)?;
+    let value = state
+        .locals
+        .get(slot)
+        .copied()
+        .flatten()
+        .ok_or_else(|| error(proto, instruction, "unique local is empty"))?;
+    let owner = match value {
+        Kind::Bytes(owner) | Kind::ByteVector(owner) => owner,
+        _ => return Err(error(proto, instruction, "unique local has wrong type")),
+    };
     reject_live_loan(state, owner, proto, instruction)?;
     state.locals[slot] = None;
-    state.stack.push(Kind::ByteVector(owner));
+    state.stack.push(value);
     Ok(())
 }

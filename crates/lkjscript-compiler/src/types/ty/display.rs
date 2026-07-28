@@ -10,6 +10,7 @@ impl std::fmt::Display for Type {
             Self::F64 => formatter.write_str("f64"),
             Self::Str => formatter.write_str("string"),
             Self::Buf => formatter.write_str("buf"),
+            Self::Bytes => formatter.write_str("bytes"),
             Self::ByteVector => formatter.write_str("byte-vector"),
             Self::ByteSlice => formatter.write_str("byte-slice"),
             Self::ByteSliceMut => formatter.write_str("byte-slice-mut"),

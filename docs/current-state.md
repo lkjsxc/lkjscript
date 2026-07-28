@@ -104,11 +104,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   teardown. Owned native resource operations and evaluator dispatch remain incomplete.
 - Core provides a bounded deterministic unique store with opaque store-scoped,
   generation-bearing typed keys for byte-vector, dynamic bytes, and path
-  layouts. The exact constructor, whole-place move/shared/exclusive borrow,
-  byte-slice length/read, mutable byte write, end-borrow, and owner-drop family
-  uses execution-owned keys and bounded loan records in the SSA evaluator and
-  validated reference VM. Both engines release owners exactly once on return,
-  explicit drop, and error cleanup; native tiers reject this family preflight.
+  layouts. The exact byte-vector constructor, move/borrow, byte-slice
+  length/read/write family and immutable bytes literals, length/read, checked
+  slice copy, clone, freeze, thaw, loan end, and owner drop use execution-owned
+  keys and bounded loan records in the SSA evaluator and validated reference VM.
+  Static bytes use immutable constant storage; dynamic bytes are affine. Both
+  engines release owners exactly once or transfer/snapshot one owned return;
+  native tiers reject both byte families in preflight.
 
 ## Compiler and execution
 
@@ -131,8 +133,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Metrics use `lkjscript.metrics` and the full metrics contract digest.
 - `lkjscript memory inventory` exposes 62 sorted memory-obligation records under
   `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
-  exact roots, transitional ownership island, PLACEHOLDER `bytes`, and accepted
-  deterministic candidates; it is derived evidence, not semantic authority.
+  exact roots, executable evaluator/VM bytes island, and accepted deterministic
+  candidates; it is derived evidence, not semantic authority.
   Every executable program retains a content-addressed pre-backend HIR memory
   plan covering every expression result, parameter/result, place, loan,
   constant, and call. Separate exhaustive producer and verifier traversals run
@@ -148,11 +150,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Repository and agent platform
 
-- `lkjscript describe --json` and `semantic describe` expose the deterministic
-  closed contract registry.
-- Capsule manifests, repository policy/provenance, graph/query outputs,
-  capability status, and agent work state use stable schemas plus exact contract
-  digests.
+- `lkjscript describe --json` and `semantic describe` expose the deterministic closed contract registry.
+- Capsule manifests, repository policy/provenance, graph/query outputs, capability status, and agent work state
+  use stable schemas plus exact contract digests.
 - The repository graph remains bounded and evidence-backed. Agent checkpoints
   remain revision-checked, append-only, and fail closed on stale semantic or
   repository identities.
@@ -168,11 +168,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - complete typed-resource compiler-inserted exactly-once cleanup, evaluator
   resource-operation dispatch, bounded structured cleanup-failure attachment,
   and forced native owned-resource execution beyond borrowed `standard-input`;
-- immutable `bytes`, full affine `byte-vector` corpus migration, ranged lexical
-  byte slices, borrowed `str`, and removal of transitional `buf` after complete
-  cross-engine replacement;
-- complete region/borrow/drop semantics for resources nested in products and
-  collections;
+- full affine `byte-vector` corpus migration, ranged lexical byte slices,
+  borrowed `str`, native unique-byte lowering, and removal of transitional
+  `buf` after complete cross-engine replacement;
+- complete region/borrow/drop semantics for resources nested in products and collections;
 - the selected collector-free deterministic cutover: inferred modes and loans,
   ordinary and sealed shared regions, pools, exact cleanup, migrated evaluator,
   VM and native storage, no-RC falsification, and deletion of all tracing paths;
@@ -180,12 +179,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
-- automatic baseline-to-proof promotion acceptance beyond its selected
-  measured candidate;
+- automatic baseline-to-proof promotion acceptance beyond its selected measured candidate;
 - portability acceptance beyond Linux x86-64.
 
-The reserved immutable `bytes` parser path is explicitly reported as
-`PLACEHOLDER` until implemented. Other targets expose no inert endpoint.
+Immutable `bytes` is executable in the compiler, SSA evaluator, validated bytecode, and reference VM.
+The complete collector-free island remains Accepted until native unique lowering and the other listed
+island types are complete.
 ## Verification authority
 
 The canonical local gate is:

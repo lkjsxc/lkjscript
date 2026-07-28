@@ -1,7 +1,8 @@
 fn owner_mode(place: &PlaceMetadata) -> Option<MemoryMode> {
     let glue = place.drop_glue?;
     let (storage, destruction, identity) = match (&place.ty, glue) {
-        (SsaType::ByteVector, DropGlueIdentity::ByteVector) => (
+        (SsaType::Bytes, DropGlueIdentity::Bytes)
+        | (SsaType::ByteVector, DropGlueIdentity::ByteVector) => (
             MemoryStorage::DeterministicUnique,
             MemoryDestruction::DropGlue(glue),
             MemoryIdentity::Value,

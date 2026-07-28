@@ -17,7 +17,7 @@ pub(super) fn lex_text_block(
     let mut index = open + 1;
     while let Some(line) = lines.get(index) {
         if line.text == close {
-            if name != "string-literal" {
+            if name != "string-literal" && name != "bytes-literal" {
                 validate_single_line_text(name, &content, &lines[open], origin)?;
             }
             let text_start = lines

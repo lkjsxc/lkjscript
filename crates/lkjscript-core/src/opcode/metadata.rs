@@ -59,18 +59,23 @@ const fn operand_width(op: Op) -> usize {
         | Op::LoadEnumField
         | Op::ByteVectorPlaceInit
         | Op::ByteVectorMove
-        | Op::ByteVectorDropPlace => 2,
+        | Op::ByteVectorDropPlace
+        | Op::BytesPlaceInit
+        | Op::BytesMove
+        | Op::BytesDropPlace => 2,
         Op::LoadLocal
         | Op::StoreLocal
         | Op::Call
         | Op::ByteVectorBorrow
         | Op::ByteVectorBorrowMut
+        | Op::BytesBorrow
         | Op::StoreUniqueLocal
         | Op::StoreViewLocal
         | Op::TakeUniqueLocal
         | Op::LoadViewLocal
         | Op::EndBorrowLocal
-        | Op::ByteVectorPlaceEnd => 1,
+        | Op::ByteVectorPlaceEnd
+        | Op::BytesPlaceEnd => 1,
         _ => 0,
     }
 }

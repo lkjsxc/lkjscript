@@ -71,6 +71,15 @@ impl Resolver<'_> {
         }
 
         if let BindingKind::BuiltinOperation(operation) = kind {
+            if matches!(
+                operation,
+                Operation::BytesLength
+                    | Operation::BytesByteAt
+                    | Operation::CopyBytesSlice
+                    | Operation::CloneBytes
+            ) {
+                self.infer_bytes_borrow(&mut resolved_args)?;
+            }
             let argument_types: Vec<_> = resolved_args
                 .iter()
                 .map(|argument| argument.ty.clone())
@@ -134,5 +143,27 @@ impl Resolver<'_> {
                 },
             ))
         }
+    }
+
+    fn infer_bytes_borrow(&mut self, arguments: &mut [Expr]) -> Result<()> {
+        let Some(first) = arguments.first_mut() else {
+            return Err(self.error("bytes observer operation has no operand"));
+        };
+        let ExprKind::Load(reference) = &first.kind else {
+            return Ok(());
+        };
+        let reference = *reference;
+        let binding = self.analyzer.binding(reference.binding)?;
+        if binding.ty != Type::Bytes || binding.kind == BindingKind::StaticBytesLocal {
+            return Ok(());
+        }
+        let place = self.place(reference.binding)?;
+        let loan = self.allocate_loan()?;
+        first.kind = ExprKind::BorrowBytes {
+            place,
+            loan,
+            binding: reference,
+        };
+        Ok(())
     }
 }

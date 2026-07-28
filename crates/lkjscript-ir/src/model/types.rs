@@ -42,6 +42,8 @@ pub enum SsaType {
     Symbol,
     /// Transitional traced mutable buffer.
     Buf,
+    /// Exact immutable bytes value; constants are static and runtime values are affine.
+    Bytes,
     /// Exact affine deterministic byte-vector owner.
     ByteVector,
     /// Exact shared bounded byte-vector view.

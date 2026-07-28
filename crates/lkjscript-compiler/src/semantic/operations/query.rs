@@ -28,6 +28,7 @@ pub(crate) fn query(
         NodeKind::BoolLiteral => Some("bool"),
         NodeKind::UnitLiteral => Some("unit"),
         NodeKind::StringLiteral => Some("string"),
+        NodeKind::BytesLiteral => Some("bytes"),
         NodeKind::Symbol | NodeKind::Call => None,
     };
     let static_type = literal_type.map_or_else(

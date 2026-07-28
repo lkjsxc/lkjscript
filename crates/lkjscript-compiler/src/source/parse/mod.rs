@@ -42,7 +42,7 @@ pub(crate) fn parse_file(
     }
     let exact_source_sha256 = lkjscript_core::sha256(source.as_bytes());
     let lines = lines::source_lines(source);
-    let lexed = lex::lex(&lines, &origin)?;
+    let lexed = lex::lex(&lines, &origin, limits)?;
     limits::check_file_limits(&lexed.tokens, limits, &origin)?;
     let syntax = syntax::parse_tokens(&lexed.tokens, &origin)?;
     declarations::validate_top_level(&syntax, limits, &origin)?;

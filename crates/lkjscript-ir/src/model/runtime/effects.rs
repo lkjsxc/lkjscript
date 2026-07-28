@@ -4,7 +4,9 @@ impl RuntimeOp {
     pub const fn effects(self) -> EffectSet {
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
-            Self::BufFromStr
+            Self::CloneBytes
+            | Self::CopyBytesSlice
+            | Self::BufFromStr
             | Self::BufToStr
             | Self::BufSlice
             | Self::PathFromStr
@@ -23,17 +25,27 @@ impl RuntimeOp {
             | Self::BufNew
             | Self::OwnedBufNew
             | Self::BufClone => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
-            Self::Car
+            Self::BytesByteAt
+            | Self::Car
             | Self::Cdr
             | Self::BufRef
             | Self::OwnedBufRef
             | Self::BufGetU32
             | Self::StrRef
             | Self::StrSlice => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
+            Self::FreezeByteVector => EffectSet::READS_MEMORY
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP),
+            Self::ThawBytes => EffectSet::ALLOCATES
+                .union(EffectSet::READS_MEMORY)
+                .union(EffectSet::WRITES_MEMORY)
+                .union(EffectSet::MAY_TRAP),
             Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet => {
                 EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
             }
-            Self::BufLen | Self::OwnedBufLen | Self::StrLen => EffectSet::READS_MEMORY,
+            Self::BytesLength | Self::BufLen | Self::OwnedBufLen | Self::StrLen => {
+                EffectSet::READS_MEMORY
+            }
             Self::SysReadInto => EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::WRITES_MEMORY)

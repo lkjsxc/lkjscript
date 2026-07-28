@@ -74,6 +74,7 @@ pub(crate) fn auto_trait_holds(
             | SsaType::Symbol => Ok(true),
             SsaType::ByteSlice => Ok(true),
             SsaType::Buf
+            | SsaType::Bytes
             | SsaType::ByteVector
             | SsaType::ByteSliceMut
             | SsaType::Resource(_)

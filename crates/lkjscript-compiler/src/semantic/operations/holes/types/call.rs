@@ -70,6 +70,7 @@ fn simple_expression_type(node: &SourceNode) -> Option<Type> {
         SyntaxKind::I64 { .. } => Some(Type::I64),
         SyntaxKind::F64 { .. } => Some(Type::F64),
         SyntaxKind::Str { .. } => Some(Type::Str),
+        SyntaxKind::Bytes { .. } => Some(Type::Bytes),
         SyntaxKind::Call { name } if name == "none" => {
             let (inner, used) = super::parse_type_nodes(&node.children)?;
             (used == node.children.len()).then(|| crate::types::option_type(inner))

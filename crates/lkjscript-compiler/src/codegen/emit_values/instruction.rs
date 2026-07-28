@@ -14,6 +14,21 @@ impl Emitter<'_> {
                 let operand = self.place_slot(*place, *value)?;
                 self.proto.emit_op_u16(Op::ByteVectorPlaceInit, operand);
             }
+            InstructionKind::PlaceInit { place, value }
+                if instruction.ty == SsaType::Unit
+                    && self.value_type(*value)? == &SsaType::Bytes
+                    && !self.static_bytes_value(*value)? =>
+            {
+                let operand = self.place_slot(*place, *value)?;
+                self.proto.emit_op_u16(Op::BytesPlaceInit, operand);
+            }
+            InstructionKind::PlaceEnd { place }
+                if self.bytes_place(*place)? && !self.bytes_place_is_static(*place)? =>
+            {
+                let place = u8::try_from(place.raw())
+                    .map_err(|_| Error::msg("bytes PlaceId exceeds bytecode u8"))?;
+                self.proto.emit_op_u8(Op::BytesPlaceEnd, place);
+            }
             InstructionKind::PlaceEnd { place } if self.byte_vector_place(*place)? => {
                 let place = u8::try_from(place.raw())
                     .map_err(|_| Error::msg("byte-vector PlaceId exceeds bytecode u8"))?;
@@ -32,6 +47,22 @@ impl Emitter<'_> {
                 let operand = self.place_slot(*place, *value)?;
                 self.proto.emit_op_u16(Op::ByteVectorDropPlace, operand);
             }
+            InstructionKind::Drop {
+                place,
+                value,
+                glue: DropGlueIdentity::Bytes,
+                ..
+            } if !self.static_bytes_value(*value)? => {
+                let operand = self.place_slot(*place, *value)?;
+                self.proto.emit_op_u16(Op::BytesDropPlace, operand);
+            }
+            InstructionKind::Move { place, value }
+                if self.value_type(*value)? == &SsaType::Bytes
+                    && !self.static_bytes_value(*value)? =>
+            {
+                let operand = self.place_slot(*place, *value)?;
+                self.proto.emit_op_u16(Op::BytesMove, operand);
+            }
             InstructionKind::Move { place, value }
                 if self.value_type(*value)? == &SsaType::ByteVector =>
             {
@@ -40,13 +71,15 @@ impl Emitter<'_> {
             }
             InstructionKind::Borrow { kind, value, .. } => {
                 let slot = self.slot(*value)?;
-                self.proto.emit_op_u8(
+                let opcode = if self.value_type(*value)? == &SsaType::Bytes {
+                    Op::BytesBorrow
+                } else {
                     match kind {
                         lkjscript_ir::BorrowKind::Shared => Op::ByteVectorBorrow,
                         lkjscript_ir::BorrowKind::Mutable => Op::ByteVectorBorrowMut,
-                    },
-                    slot,
-                );
+                    }
+                };
+                self.proto.emit_op_u8(opcode, slot);
             }
             InstructionKind::Move { value, .. } => self.load(*value)?,
             InstructionKind::PlaceInit { .. }
@@ -69,16 +102,7 @@ impl Emitter<'_> {
             InstructionKind::F64FromI64Exact { value }
             | InstructionKind::F64FromI64Rounded { value }
             | InstructionKind::I64FromF64Exact { value }
-            | InstructionKind::I64FromF64Trunc { value } => {
-                self.load(*value)?;
-                self.proto.emit(match &instruction.kind {
-                    InstructionKind::F64FromI64Exact { .. } => Op::F64FromI64Exact,
-                    InstructionKind::F64FromI64Rounded { .. } => Op::F64FromI64Rounded,
-                    InstructionKind::I64FromF64Exact { .. } => Op::I64FromF64Exact,
-                    InstructionKind::I64FromF64Trunc { .. } => Op::I64FromF64Trunc,
-                    _ => return Err(Error::msg("numeric opcode lowering mismatch")),
-                });
-            }
+            | InstructionKind::I64FromF64Trunc { value } => self.emit_numeric(instruction, *value)?,
             InstructionKind::Call {
                 target, arguments, ..
             } => {

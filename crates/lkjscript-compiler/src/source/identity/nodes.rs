@@ -44,6 +44,10 @@ fn flatten_node(
         SyntaxKind::Bool { value } => (NodeKind::BoolLiteral, Some(value.to_string())),
         SyntaxKind::Unit => (NodeKind::UnitLiteral, None),
         SyntaxKind::Str { value } => (NodeKind::StringLiteral, Some(value.clone())),
+        SyntaxKind::Bytes { value } => (
+            NodeKind::BytesLiteral,
+            Some(value.iter().map(|byte| format!("{byte:02x}")).collect()),
+        ),
         SyntaxKind::Symbol { name } => (NodeKind::Symbol, Some(name.clone())),
         SyntaxKind::Call { name } => (NodeKind::Call, Some(name.clone())),
     };

@@ -4,6 +4,8 @@ use std::fmt;
 
 use super::CapabilityKind;
 
+mod bytes;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 enum ValueKind {
@@ -16,7 +18,12 @@ enum ValueKind {
     Capability,
     Resource,
     LegacyTraced,
-    OpaqueUniqueKey,
+    StaticBytes,
+    BytesKey,
+    ByteVectorKey,
+    BytesBorrow,
+    ByteSlice,
+    ByteSliceMut,
 }
 
 /// Safe closed value storage with one exact payload and an explicit category.
@@ -68,13 +75,6 @@ impl Value {
 
     pub const fn from_capability(kind: CapabilityKind) -> Self {
         Self::new(ValueKind::Capability, kind as u64)
-    }
-
-    /// Runtime-only storage for identities minted by an external uniqueness
-    /// authority. This category has no source constructor.
-    #[doc(hidden)]
-    pub const fn from_opaque_unique_key(key: u64) -> Self {
-        Self::new(ValueKind::OpaqueUniqueKey, key)
     }
 
     pub const fn is_invalid(self) -> bool {
@@ -136,14 +136,6 @@ impl Value {
             _ => None,
         }
     }
-
-    #[doc(hidden)]
-    pub const fn as_opaque_unique_key(self) -> Option<u64> {
-        match self.kind {
-            ValueKind::OpaqueUniqueKey => Some(self.payload),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Debug for Value {
@@ -175,8 +167,24 @@ impl fmt::Debug for Value {
         if let Some(index) = self.as_legacy_traced() {
             return write!(formatter, "legacy-traced#{index}");
         }
-        if let Some(key) = self.as_opaque_unique_key() {
-            return write!(formatter, "opaque-unique#{key}");
+        if let Some(index) = self.as_static_bytes() {
+            return write!(formatter, "static-bytes#{index}");
+        }
+        if let Some(key) = self.as_bytes_key() {
+            return write!(formatter, "bytes-key#{key}");
+        }
+        if let Some(key) = self.as_byte_vector_key() {
+            return write!(formatter, "byte-vector-key#{key}");
+        }
+        if let Some(token) = self.as_bytes_borrow() {
+            return write!(formatter, "bytes-borrow#{token}");
+        }
+        if let Some((token, mutable)) = self.as_byte_slice() {
+            return write!(
+                formatter,
+                "byte-slice{}#{token}",
+                if mutable { "-mut" } else { "" }
+            );
         }
         formatter.write_str("#<invalid-value-category>")
     }

@@ -11,7 +11,10 @@ pub(in crate::ownership) fn check_expr(
     expire_dead_loans(state, &uses(expression).union(future).copied().collect());
     reject_unsupported_type_placement(&expression.ty)?;
     match &expression.kind {
-        ExprKind::Load(_) | ExprKind::Move { .. } | ExprKind::Borrow { .. } => {
+        ExprKind::Load(_)
+        | ExprKind::Move { .. }
+        | ExprKind::Borrow { .. }
+        | ExprKind::BorrowBytes { .. } => {
             check_values_expr(program, expression, places, state, future, context)?;
         }
         ExprKind::Call { .. }

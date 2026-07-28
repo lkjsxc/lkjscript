@@ -1,6 +1,6 @@
 use super::templates::{borrowed, inline, traced};
 use super::templates_scalar::inline_scalar;
-use super::templates_special::{affine_buffer, inert_value};
+use super::templates_special::{affine_buffer, immutable_bytes};
 use super::MemoryObligation;
 
 pub(super) const VALUES: &[MemoryObligation] = &[
@@ -12,12 +12,7 @@ pub(super) const VALUES: &[MemoryObligation] = &[
         "constants and operations",
         "scalar differential suites",
     ),
-    inert_value(
-        "bytes",
-        "immutable byte sequence",
-        "static, stack, unique, region, sealed-shared-region, shared-node",
-        "reserved source type parser path",
-    ),
+    immutable_bytes(),
     borrowed(
         "byte-slice",
         "shared byte view",

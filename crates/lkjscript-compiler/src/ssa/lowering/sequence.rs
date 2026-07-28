@@ -62,7 +62,9 @@ impl FunctionBuilder<'_> {
             };
             let place_ty = lower_type(&binding.value.ty, self.product_ids)?;
             self.register_place(binding.place, binding.binding, place_ty)?;
-            self.initialize_owned_place(binding.binding, value, binding.value.origin)?;
+            if !binding.static_bytes {
+                self.initialize_owned_place(binding.binding, value, binding.value.origin)?;
+            }
             previous.push((
                 binding.binding,
                 self.env.insert(binding.binding, value),

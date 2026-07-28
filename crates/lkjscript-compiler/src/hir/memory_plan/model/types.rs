@@ -7,6 +7,7 @@ pub enum MemoryType {
     F64,
     String,
     Buffer,
+    Bytes,
     Path,
     Capability(CapabilityKind),
     ByteVector,
@@ -68,6 +69,7 @@ pub enum MemoryExpressionKind {
     UnitLiteral,
     EmptyList,
     StringLiteral,
+    BytesLiteral,
     Load {
         binding: u32,
         storage: MemoryBindingStorage,

@@ -5,10 +5,12 @@
 **Accepted contract with an initial ownership foundation.** Owned text is
 spelled `string`; `string-literal/` replaces the old `str/` marker. Direct
 `byte-vector`, `byte-slice`, and `byte-slice-mut` spellings expose the existing
-whole-place affine slice. Immutable `bytes` is an explicit `PLACEHOLDER`
-rejection, ranged views and borrowed `str` are non-Current, and transitional
-`buf` remains outside the destination. No old spelling aliases a destination
-type.
+whole-place affine slice. Immutable `bytes` has one accepted
+`bytes-literal/` lowercase hexadecimal projection and the exact evaluator/VM
+operation contract defined by
+[bytes and byte-vector ownership](../memory/bytes-and-byte-vector.md). Ranged
+borrowed views and borrowed `str` are non-Current, and transitional `buf`
+remains outside the destination. No old spelling aliases a destination type.
 
 ## Immutable bytes
 
@@ -48,9 +50,11 @@ UTF-8 and returns a typed result.
 
 ## Operations and migration
 
-Canonical names state ownership and units, for example `bytes-length`,
-`bytes-byte-at`, `byte-vector-length`, `byte-vector-set-byte`,
-`string-byte-length`, and `convert-bytes-to-string`. Bulk file, socket, hashing,
+Canonical names state ownership and units. The immutable family is exactly
+`bytes-length`, `bytes-byte-at`, `copy-bytes-slice`, `clone-bytes`,
+`freeze-byte-vector`, and `thaw-bytes`. Future vector operations include
+`byte-vector-length` and `byte-vector-set-byte`; text conversion includes
+`string-byte-length` and `convert-bytes-to-string`. Bulk file, socket, hashing,
 SQLite blob, editor, Brainfuck, and HTTP operations replace quadratic per-byte
 default paths only after complete equivalents are Current.
 

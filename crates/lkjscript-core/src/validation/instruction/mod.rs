@@ -1,5 +1,6 @@
 mod algebraic;
 mod buffers;
+mod bytes;
 mod calls;
 mod collections;
 mod data;
@@ -157,6 +158,17 @@ pub(super) fn apply_instruction(
         | Op::SysSqliteColumnText
         | Op::SysSqliteColumnBytes
         | Op::SysSqliteBackup => sqlite::apply(chunk, proto, instruction, state),
+        Op::BytesLength
+        | Op::BytesByteAt
+        | Op::CopyBytesSlice
+        | Op::CloneBytes
+        | Op::FreezeByteVector
+        | Op::ThawBytes
+        | Op::BytesDropPlace
+        | Op::BytesPlaceEnd
+        | Op::BytesPlaceInit
+        | Op::BytesMove
+        | Op::BytesBorrow => bytes::apply(chunk, proto, instruction, state),
         Op::ByteVectorNew
         | Op::ByteVectorPlaceInit
         | Op::ByteVectorMove

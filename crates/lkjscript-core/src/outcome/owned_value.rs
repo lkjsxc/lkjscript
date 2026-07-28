@@ -11,6 +11,7 @@ pub struct OwnedValue {
     root: Value,
     heap: Vec<Option<HeapObj>>,
     unique_byte_vector: Option<Vec<u8>>,
+    unique_bytes: Option<Vec<u8>>,
 }
 
 impl OwnedValue {
@@ -49,6 +50,7 @@ impl OwnedValue {
             root,
             heap,
             unique_byte_vector: None,
+            unique_bytes: None,
         })
     }
 
@@ -60,11 +62,22 @@ impl OwnedValue {
             root: Value::UNIT,
             heap: Vec::new(),
             unique_byte_vector: Some(bytes),
+            unique_bytes: None,
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn from_unique_bytes(bytes: Vec<u8>) -> Result<Self> {
+        Ok(Self {
+            root: Value::UNIT,
+            heap: Vec::new(),
+            unique_byte_vector: None,
+            unique_bytes: Some(bytes),
         })
     }
 
     pub fn is_unit(&self) -> bool {
-        self.unique_byte_vector.is_none() && self.root.is_unit()
+        self.unique_byte_vector.is_none() && self.unique_bytes.is_none() && self.root.is_unit()
     }
 
     pub fn is_empty_list(&self) -> bool {
@@ -103,6 +116,10 @@ impl OwnedValue {
 
     pub fn as_byte_vector(&self) -> Option<&[u8]> {
         self.unique_byte_vector.as_deref()
+    }
+
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        self.unique_bytes.as_deref()
     }
 
     pub fn as_resource(&self) -> Option<u32> {

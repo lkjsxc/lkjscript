@@ -10,6 +10,7 @@ pub enum Origin {
 pub enum BindingKind {
     Parameter,
     ImmutableLocal,
+    StaticBytesLocal,
     MutableLocal,
     Function,
     BuiltinOperation(Operation),

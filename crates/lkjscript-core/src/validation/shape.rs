@@ -147,35 +147,8 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         "metadata byte size",
     )?;
 
-    for (index, constant) in chunk.constants.iter().enumerate() {
-        encoded_bytes = checked_add(encoded_bytes, 1, "encoded byte size")?;
-        match constant {
-            Constant::I64(_) | Constant::F64(_) => {
-                encoded_bytes = checked_add(encoded_bytes, 8, "encoded byte size")?;
-            }
-            Constant::Str(text) | Constant::Symbol(text) => {
-                if text.len() > limits.max_constant_data_bytes {
-                    return Err(Error::msg(format!(
-                        "constant {index} has {} data bytes, limit {}",
-                        text.len(),
-                        limits.max_constant_data_bytes
-                    )));
-                }
-                encoded_bytes = checked_add(encoded_bytes, text.len(), "encoded byte size")?;
-            }
-            Constant::Proto(proto) => {
-                if usize::try_from(*proto)
-                    .ok()
-                    .is_none_or(|proto| proto >= chunk.protos.len())
-                {
-                    return Err(Error::msg(format!(
-                        "constant {index} references prototype {proto} out of range"
-                    )));
-                }
-                encoded_bytes = checked_add(encoded_bytes, 4, "encoded byte size")?;
-            }
-        }
-    }
+    (metadata_bytes, encoded_bytes) =
+        measure_constants(chunk, limits, metadata_bytes, encoded_bytes)?;
 
     if metadata_bytes > limits.max_metadata_bytes {
         return Err(Error::msg(format!(
@@ -192,6 +165,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
     Ok(())
 }
 
+include!("shape/constants.rs");
 include!("shape/prototypes.rs");
 
 fn checked_add(left: usize, right: usize, category: &str) -> Result<usize> {

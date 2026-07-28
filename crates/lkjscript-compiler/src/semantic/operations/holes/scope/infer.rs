@@ -11,6 +11,7 @@ pub(super) fn expression(node: &SourceNode, scope: &BTreeMap<String, ScopeEntity
         SyntaxKind::I64 { .. } => Some(Type::I64),
         SyntaxKind::F64 { .. } => Some(Type::F64),
         SyntaxKind::Str { .. } => Some(Type::Str),
+        SyntaxKind::Bytes { .. } => Some(Type::Bytes),
         SyntaxKind::Symbol { name } => scope
             .values()
             .find(|entry| entry.name == *name)

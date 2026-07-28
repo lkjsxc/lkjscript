@@ -102,6 +102,7 @@ impl Resolver<'_> {
                 Type::ByteSlice => true,
                 Type::Never
                 | Type::Buf
+                | Type::Bytes
                 | Type::ByteVector
                 | Type::ByteSliceMut
                 | Type::Resource(_)

@@ -8,9 +8,11 @@ pub(super) fn recompute_expr(expression: &mut Expr, summaries: &[Option<EffectSe
         | ExprKind::LitUnit
         | ExprKind::EmptyList
         | ExprKind::LitStr(_)
+        | ExprKind::LitBytes(_)
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
+        | ExprKind::BorrowBytes { .. }
         | ExprKind::MatchUnreachable { .. }
         | ExprKind::QuoteSymbol(_) => EffectSet::PURE,
         ExprKind::Call { callee, args, .. } => {

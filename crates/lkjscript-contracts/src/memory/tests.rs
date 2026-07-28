@@ -72,7 +72,7 @@ fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
         ResourceKind::ALL.len(),
     );
     let bytes = records.iter().find(|record| record.identity == "bytes");
-    assert!(matches!(bytes, Some(record) if record.status.contains("PLACEHOLDER")));
+    assert!(matches!(bytes, Some(record) if record.status.contains("current exact evaluator/VM")));
     let heap = records.iter().find(|record| record.identity == "gc-heap");
     assert!(matches!(heap, Some(record) if record.current_trace_fields.contains("trace")));
     assert!(matches!(heap, Some(record) if record.status.contains("current collector")));

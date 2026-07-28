@@ -36,6 +36,7 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         Err(message) => return EvalOutcome::HostFailure(message),
     };
     let mut evaluator = Evaluator {
+        static_bytes: collect_static_bytes(program),
         program,
         config,
         fuel: config.fuel,
@@ -51,6 +52,15 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
             Ok(bytes) => EvalOutcome::Returned(EvalValue::ReturnedByteVector(bytes)),
             Err(flow) => flow.outcome(),
         },
+        Ok(value @ EvalValue::Bytes(_)) => match evaluator.unique.export_owner(value) {
+            Ok(bytes) => EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes)),
+            Err(flow) => flow.outcome(),
+        },
+        Ok(EvalValue::StaticBytes(index)) => evaluator
+            .static_bytes
+            .get(index as usize)
+            .map(|bytes| EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes.to_vec())))
+            .unwrap_or_else(|| EvalOutcome::Trapped("invalid returned static bytes".into())),
         Ok(value) => match evaluator.unique.verify_empty() {
             Ok(()) => EvalOutcome::Returned(value),
             Err(flow) => {
@@ -68,6 +78,7 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
 
 pub(crate) struct Evaluator<'a> {
     pub(crate) program: &'a VerifiedProgram,
+    pub(crate) static_bytes: Vec<Box<[u8]>>,
     pub(crate) config: &'a EvalConfig,
     pub(crate) fuel: u64,
     pub(crate) allocations: u64,
@@ -115,3 +126,23 @@ mod unique;
 mod values;
 
 pub(crate) use values::*;
+
+fn collect_static_bytes(program: &VerifiedProgram) -> Vec<Box<[u8]>> {
+    let mut output: Vec<Box<[u8]>> = Vec::new();
+    for constant in program
+        .program()
+        .functions
+        .iter()
+        .flat_map(|function| &function.blocks)
+        .flat_map(|block| &block.instructions)
+        .filter_map(|instruction| match &instruction.kind {
+            InstructionKind::Constant(Constant::StaticBytes(bytes)) => Some(bytes),
+            _ => None,
+        })
+    {
+        if !output.iter().any(|known| known.as_ref() == constant) {
+            output.push(constant.clone().into_boxed_slice());
+        }
+    }
+    output
+}

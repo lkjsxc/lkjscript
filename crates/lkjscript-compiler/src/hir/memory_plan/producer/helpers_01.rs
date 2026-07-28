@@ -6,12 +6,23 @@ fn expression_kind(kind: &ExprKind) -> MemoryExpressionKind {
         ExprKind::LitUnit => MemoryExpressionKind::UnitLiteral,
         ExprKind::EmptyList => MemoryExpressionKind::EmptyList,
         ExprKind::LitStr(_) => MemoryExpressionKind::StringLiteral,
+        ExprKind::LitBytes(_) => MemoryExpressionKind::BytesLiteral,
         ExprKind::Load(binding) => MemoryExpressionKind::Load {
             binding: binding.binding.raw(),
             storage: binding_storage(binding.storage),
         },
         ExprKind::Move { place, binding } => MemoryExpressionKind::Move {
             place: place.raw(),
+            binding: binding.binding.raw(),
+        },
+        ExprKind::BorrowBytes {
+            place,
+            loan,
+            binding,
+        } => MemoryExpressionKind::Borrow {
+            place: place.raw(),
+            loan: loan.raw(),
+            kind: MemoryBorrowKind::Shared,
             binding: binding.binding.raw(),
         },
         ExprKind::Borrow {
@@ -74,6 +85,7 @@ fn memory_type(ty: &Type) -> MemoryType {
         Type::F64 => MemoryType::F64,
         Type::Str => MemoryType::String,
         Type::Buf => MemoryType::Buffer,
+        Type::Bytes => MemoryType::Bytes,
         Type::Path => MemoryType::Path,
         Type::Capability(kind) => MemoryType::Capability(*kind),
         Type::ByteVector => MemoryType::ByteVector,

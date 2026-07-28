@@ -73,6 +73,9 @@ impl<'a> Resolver<'a> {
             AstExpr::LitStr(value) => {
                 Ok(self.expression(Type::Str, ExprKind::LitStr(value.clone())))
             }
+            AstExpr::LitBytes(value) => {
+                Ok(self.expression(Type::Bytes, ExprKind::LitBytes(value.clone())))
+            }
             AstExpr::Symbol(name) => self.resolve_load(name),
             AstExpr::List(_) => Err(self.error("raw list literal needs typed construction")),
             AstExpr::Call { name, args } => self.resolve_call(name, args),

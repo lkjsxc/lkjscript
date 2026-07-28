@@ -99,9 +99,11 @@ fn expression(value: &Expr, program: &hir::Program, counts: &mut [u32]) -> Resul
         | ExprKind::LitUnit
         | ExprKind::EmptyList
         | ExprKind::LitStr(_)
+        | ExprKind::LitBytes(_)
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
+        | ExprKind::BorrowBytes { .. }
         | ExprKind::Continue { .. }
         | ExprKind::QuoteSymbol(_) => {}
     }

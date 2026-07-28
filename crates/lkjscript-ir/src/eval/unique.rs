@@ -1,12 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use lkjscript_core::{
-    UniqueKeyWord, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLimits,
-};
+use lkjscript_core::{UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId, UniqueStoreLimits};
 
 use super::{EvalConfig, EvalValue, Flow};
 
+mod bytes;
 mod cleanup;
+
+use cleanup::map_store_error;
 
 #[derive(Clone, Copy, Debug)]
 struct Loan {
@@ -18,7 +19,7 @@ struct Loan {
 
 pub(crate) struct EvalUniqueRuntime {
     store: UniqueStore,
-    owners: BTreeSet<u64>,
+    owners: BTreeMap<u64, UniqueLayout>,
     loans: BTreeMap<u64, Loan>,
     next_loan: u64,
 }
@@ -33,7 +34,7 @@ impl EvalUniqueRuntime {
                 .ok()?;
         Some(Self {
             store: UniqueStore::new(id, limits),
-            owners: BTreeSet::new(),
+            owners: BTreeMap::new(),
             loans: BTreeMap::new(),
             next_loan: 1,
         })
@@ -50,19 +51,36 @@ impl EvalUniqueRuntime {
             .allocate_byte_vector(bytes)
             .map_err(map_store_error)?;
         let word = key.packed_word();
-        if !self.owners.insert(word.get()) {
+        if self
+            .owners
+            .insert(word.get(), UniqueLayout::ByteVector)
+            .is_some()
+        {
             return Err(Flow::Trap("duplicate evaluator byte-vector owner".into()));
         }
         Ok(EvalValue::ByteVector(word))
     }
 
     pub(super) fn borrow(&mut self, owner: &EvalValue, mutable: bool) -> Result<EvalValue, Flow> {
-        let word = owner_word(owner)?;
-        let key = self
-            .store
-            .import_byte_vector_key(word)
-            .map_err(map_store_error)?;
-        let len = self.store.byte_vector(key).map_err(map_store_error)?.len();
+        let (word, len, bytes_borrow) = match owner {
+            EvalValue::ByteVector(word) => {
+                let key = self
+                    .store
+                    .import_byte_vector_key(*word)
+                    .map_err(map_store_error)?;
+                let len = self.store.byte_vector(key).map_err(map_store_error)?.len();
+                (*word, len, false)
+            }
+            EvalValue::Bytes(word) if !mutable => {
+                let key = self
+                    .store
+                    .import_bytes_key(*word)
+                    .map_err(map_store_error)?;
+                let len = self.store.bytes(key).map_err(map_store_error)?.len();
+                (*word, len, true)
+            }
+            _ => return Err(Flow::Trap("expected exact borrowable unique owner".into())),
+        };
         if self
             .loans
             .values()
@@ -84,7 +102,9 @@ impl EvalUniqueRuntime {
                 len,
             },
         );
-        Ok(if mutable {
+        Ok(if bytes_borrow {
+            EvalValue::BytesBorrow(token)
+        } else if mutable {
             EvalValue::ByteSliceMut(token)
         } else {
             EvalValue::ByteSlice(token)
@@ -166,28 +186,11 @@ impl EvalUniqueRuntime {
     }
 }
 
-pub(super) fn owner_word(value: &EvalValue) -> Result<UniqueKeyWord, Flow> {
-    match value {
-        EvalValue::ByteVector(word) => Ok(*word),
-        _ => Err(Flow::Trap("expected exact byte-vector owner".into())),
-    }
-}
-
 fn view_token(value: &EvalValue) -> Result<u64, Flow> {
     match value {
-        EvalValue::ByteSlice(token) | EvalValue::ByteSliceMut(token) => Ok(*token),
+        EvalValue::BytesBorrow(token)
+        | EvalValue::ByteSlice(token)
+        | EvalValue::ByteSliceMut(token) => Ok(*token),
         _ => Err(Flow::Trap("expected exact byte view".into())),
-    }
-}
-
-pub(super) fn map_store_error(error: UniqueStoreError) -> Flow {
-    match error {
-        UniqueStoreError::AllocationLimit | UniqueStoreError::ObjectLimit => {
-            Flow::Resource("allocations".into())
-        }
-        UniqueStoreError::ByteLimit
-        | UniqueStoreError::SlotLimit
-        | UniqueStoreError::StorageCapacity => Flow::Resource("heap bytes".into()),
-        _ => Flow::Trap(error.to_string()),
     }
 }

@@ -103,10 +103,12 @@ impl<'a> Producer<'a> {
             | ExprKind::LitUnit
             | ExprKind::EmptyList
             | ExprKind::LitStr(_)
+            | ExprKind::LitBytes(_)
             | ExprKind::QuoteSymbol(_)
             | ExprKind::Load(_)
             | ExprKind::Move { .. }
-            | ExprKind::Borrow { .. } => self.walk_leaf(
+            | ExprKind::Borrow { .. }
+            | ExprKind::BorrowBytes { .. } => self.walk_leaf(
                 expression,
                 expression_id,
                 expression_entry,

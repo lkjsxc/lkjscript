@@ -11,6 +11,38 @@ impl UniqueStore {
         self.allocate(Payload::Bytes(copy)).map(BytesKey::from_raw)
     }
 
+    pub fn clone_bytes_range(
+        &mut self,
+        key: BytesKey,
+        start: usize,
+        len: usize,
+    ) -> Result<BytesKey, UniqueStoreError> {
+        let index = self.locate(key.raw(), UniqueLayout::Bytes)?;
+        let copy = match &self.slots[index].state {
+            SlotState::Occupied(Payload::Bytes(bytes)) => {
+                let range = super::access::checked_range(start, len, bytes.len())?;
+                self.copy_bytes(&bytes[range])?
+            }
+            _ => return Err(UniqueStoreError::ArithmeticOverflow),
+        };
+        self.allocate(Payload::Bytes(copy)).map(BytesKey::from_raw)
+    }
+
+    pub fn clone_static_bytes(&mut self, bytes: &[u8]) -> Result<BytesKey, UniqueStoreError> {
+        let copy = self.copy_bytes(bytes)?;
+        self.allocate(Payload::Bytes(copy)).map(BytesKey::from_raw)
+    }
+
+    pub fn clone_static_bytes_range(
+        &mut self,
+        bytes: &[u8],
+        start: usize,
+        len: usize,
+    ) -> Result<BytesKey, UniqueStoreError> {
+        let range = super::access::checked_range(start, len, bytes.len())?;
+        self.clone_static_bytes(&bytes[range])
+    }
+
     pub fn clone_bytes_to_byte_vector(
         &mut self,
         key: BytesKey,
@@ -28,7 +60,11 @@ impl UniqueStore {
         &mut self,
         bytes: StaticBytes,
     ) -> Result<ByteVectorKey, UniqueStoreError> {
-        let copy = self.copy_bytes(bytes.as_slice())?;
+        self.thaw_bytes_slice(bytes.as_slice())
+    }
+
+    pub fn thaw_bytes_slice(&mut self, bytes: &[u8]) -> Result<ByteVectorKey, UniqueStoreError> {
+        let copy = self.copy_bytes(bytes)?;
         self.allocate(Payload::ByteVector(copy))
             .map(ByteVectorKey::from_raw)
     }

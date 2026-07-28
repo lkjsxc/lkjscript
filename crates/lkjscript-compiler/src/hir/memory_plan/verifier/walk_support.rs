@@ -2,7 +2,7 @@ use super::*;
 use crate::hir::{Expr, ExprKind, Operation};
 
 pub(super) fn affine(ty: &Type) -> bool {
-    matches!(ty, Type::ByteVector | Type::Resource(_))
+    matches!(ty, Type::Bytes | Type::ByteVector | Type::Resource(_))
 }
 
 pub(super) fn uses_binding(expression: &Expr, binding: BindingId) -> bool {

@@ -74,6 +74,7 @@ fn canonical_type(ty: &Type) -> String {
         Type::F64 => "f64".into(),
         Type::Str => "string".into(),
         Type::Buf => "buf".into(),
+        Type::Bytes => "bytes".into(),
         Type::ByteVector => "byte-vector".into(),
         Type::ByteSlice => "byte-slice".into(),
         Type::ByteSliceMut => "byte-slice-mut".into(),

@@ -63,11 +63,11 @@ pub(super) fn lower_type(
                 })?,
             )))
         }
-        SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
+        SsaType::Bytes | SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => {
             Err(LoweringError::new(
                 LoweringFailureCode::UnsupportedType,
                 Some(function),
-                "collector-free byte-vector native lowering is not yet installed",
+                "collector-free bytes and byte-vector native lowering is not yet installed",
             ))
         }
         _ => Err(LoweringError::new(

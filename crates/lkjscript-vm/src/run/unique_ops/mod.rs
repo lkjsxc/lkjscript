@@ -1,33 +1,39 @@
 use super::*;
 
+#[path = "bytes.rs"]
+mod bytes_ops;
 #[path = "support.rs"]
 mod support;
 use support::*;
 
 pub(super) fn handles(op: u8) -> bool {
-    matches!(
-        Op::from_byte(op),
-        Some(
-            Op::ByteVectorNew
-                | Op::ByteVectorPlaceInit
-                | Op::ByteVectorMove
-                | Op::ByteVectorBorrow
-                | Op::ByteVectorBorrowMut
-                | Op::StoreUniqueLocal
-                | Op::StoreViewLocal
-                | Op::TakeUniqueLocal
-                | Op::LoadViewLocal
-                | Op::ByteVectorDropPlace
-                | Op::ByteVectorPlaceEnd
-                | Op::ByteSliceLen
-                | Op::ByteSliceRef
-                | Op::ByteSliceMutSet
-                | Op::EndBorrowLocal
+    bytes_ops::handles(op)
+        || matches!(
+            Op::from_byte(op),
+            Some(
+                Op::ByteVectorNew
+                    | Op::ByteVectorPlaceInit
+                    | Op::ByteVectorMove
+                    | Op::ByteVectorBorrow
+                    | Op::ByteVectorBorrowMut
+                    | Op::StoreUniqueLocal
+                    | Op::StoreViewLocal
+                    | Op::TakeUniqueLocal
+                    | Op::LoadViewLocal
+                    | Op::ByteVectorDropPlace
+                    | Op::ByteVectorPlaceEnd
+                    | Op::ByteSliceLen
+                    | Op::ByteSliceRef
+                    | Op::ByteSliceMutSet
+                    | Op::EndBorrowLocal
+            )
         )
-    )
 }
 
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+    if bytes_ops::handles(op) {
+        return bytes_ops::dispatch(vm, op);
+    }
     let op = Op::from_byte(op).ok_or_else(|| Error::msg("unknown unique opcode"))?;
     match op {
         Op::ByteVectorNew => {
@@ -85,7 +91,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         Op::StoreUniqueLocal => {
             let slot = usize::from(vm.read_u8()?);
             let value = vm.pop()?;
-            vm.unique.validate_owner(value)?;
+            vm.unique.validate_any_owner(value)?;
+            if local(vm, slot).is_ok_and(|existing| existing.as_static_bytes().is_some()) {
+                clear_local(vm, slot)?;
+            }
             store_empty_local(vm, slot, value)?;
         }
         Op::StoreViewLocal => {
@@ -97,7 +106,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         Op::TakeUniqueLocal => {
             let slot = usize::from(vm.read_u8()?);
             let value = local(vm, slot)?;
-            vm.unique.ensure_unloaned(value)?;
+            vm.unique.ensure_any_unloaned(value)?;
             clear_local(vm, slot)?;
             vm.push(value);
         }

@@ -2,35 +2,6 @@ use super::super::{MemoryCallTarget, MemoryExpressionId};
 use super::*;
 use crate::hir::{BindingStorage, ExprKind};
 
-pub(super) fn verify_dense(plan: &HirMemoryPlan) -> Result<()> {
-    for (index, entry) in plan.entries.iter().enumerate() {
-        if entry.id.raw() != index_u32(index)? {
-            return Err(Error::msg("HIR memory-plan entries are not dense"));
-        }
-    }
-    for (index, item) in plan.uses.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
-            return Err(Error::msg("HIR memory-plan uses are not dense"));
-        }
-    }
-    for (index, item) in plan.constants.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
-            return Err(Error::msg("HIR memory-plan constants are not dense"));
-        }
-    }
-    for (index, item) in plan.calls.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
-            return Err(Error::msg("HIR memory-plan calls are not dense"));
-        }
-    }
-    for (index, item) in plan.obligations.iter().enumerate() {
-        if item.id.raw() != index_u32(index)? {
-            return Err(Error::msg("HIR memory-plan obligations are not dense"));
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn verify_work(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()> {
     let expected_entries = u64::try_from(facts.expressions.len())
         .ok()
@@ -50,9 +21,29 @@ pub(super) fn verify_work(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()>
         || plan.work.calls != facts.calls
         || plan.work.obligations != facts.obligations
     {
-        return Err(Error::msg(
-            "HIR memory-plan bounded work facts are incomplete",
-        ));
+        return Err(Error::msg(format!(
+            concat!(
+                "HIR memory-plan work mismatch: entries expected {}, got {}; functions expected {}, got {}; ",
+                "expressions expected {}, got {}; uses expected {}, got {}; loans expected {}, got {}; ",
+                "constants expected {}, got {}; calls expected {}, got {}; obligations expected {}, got {}"
+            ),
+            expected_entries,
+            plan.work.entries,
+            facts.bodies.len(),
+            plan.work.functions,
+            facts.expressions.len(),
+            plan.work.expressions,
+            facts.uses,
+            plan.work.uses,
+            facts.loans,
+            plan.work.loans,
+            facts.constants,
+            plan.work.constants,
+            facts.calls,
+            plan.work.calls,
+            facts.obligations,
+            plan.work.obligations,
+        )));
     }
     Ok(())
 }
@@ -113,9 +104,19 @@ pub(super) fn verify_entries(plan: &HirMemoryPlan) -> Result<()> {
         {
             return Err(Error::msg("borrowed HIR result escaped its function"));
         }
-        if matches!(entry.ty, MemoryType::ByteVector) {
-            if entry.drop_glue != Some(MemoryDropGlueId::new(0)) {
-                return Err(Error::msg("byte-vector memory plan has wrong drop glue"));
+        if matches!(entry.ty, MemoryType::ByteVector)
+            && entry.drop_glue != Some(MemoryDropGlueId::new(0))
+        {
+            return Err(Error::msg("byte-vector memory plan has wrong drop glue"));
+        }
+        if matches!(entry.ty, MemoryType::Bytes) {
+            let expected = if entry.mode.storage == MemoryStorage::Static {
+                None
+            } else {
+                Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32))
+            };
+            if entry.drop_glue != expected {
+                return Err(Error::msg("bytes memory plan has wrong drop glue"));
             }
         } else if let MemoryType::Resource(kind) = entry.ty {
             let expected = MemoryDropGlueId::new(1 + u32::from(kind as u8));

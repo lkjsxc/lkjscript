@@ -136,6 +136,7 @@ fn ownership(ownership: OperationOwnership) -> &'static str {
         OperationOwnership::Allocates => "allocates",
         OperationOwnership::Mutates => "mutates",
         OperationOwnership::ConsumesResource => "consumes-resource",
+        OperationOwnership::ConsumesOwner => "consumes-owner",
     }
 }
 

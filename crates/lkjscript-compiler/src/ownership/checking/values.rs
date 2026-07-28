@@ -24,7 +24,10 @@ pub(in crate::ownership) fn check_values_expr(
                     ));
                 }
             }
-            if is_owned(ty) {
+            let static_bytes = program
+                .binding(reference.binding)
+                .is_some_and(|binding| binding.kind == BindingKind::StaticBytesLocal);
+            if is_owned(ty) && !static_bytes {
                 return Err(Error::msg(
                     "byte-vector is affine and cannot be loaded or copied; use move/ name /move",
                 ));
@@ -66,6 +69,32 @@ pub(in crate::ownership) fn check_values_expr(
                 return Err(Error::msg("cannot move affine value while it is borrowed"));
             }
             state.initialized.insert(*place, false);
+        }
+        ExprKind::BorrowBytes {
+            place,
+            loan,
+            binding,
+        } => {
+            if places.get(&binding.binding) != Some(place) {
+                return Err(Error::msg(
+                    "bytes borrow has mismatched place/binding identity",
+                ));
+            }
+            if !state.initialized.get(place).copied().unwrap_or(false) {
+                return Err(Error::msg("cannot borrow dynamic bytes after move"));
+            }
+            if state.loans.values().flatten().any(|item| item.id == *loan) {
+                return Err(Error::msg("duplicate LoanId in bytes ownership facts"));
+            }
+            let live = state.loans.entry(*place).or_default();
+            if live.iter().any(|item| item.kind == BorrowKind::Mutable) {
+                return Err(Error::msg("dynamic bytes conflicts with an exclusive loan"));
+            }
+            live.push(Loan {
+                id: *loan,
+                kind: BorrowKind::Shared,
+                binding: None,
+            });
         }
         ExprKind::Borrow {
             place,

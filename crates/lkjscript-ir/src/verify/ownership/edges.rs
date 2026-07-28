@@ -21,7 +21,7 @@ pub(crate) fn consume_affine_arguments(
         }
         let resource = matches!(ty, SsaType::Resource(_));
         let Some(fact) = state.affine.get(argument) else {
-            if resource && !consume_handles {
+            if (resource && !consume_handles) || matches!(ty, SsaType::Bytes) {
                 continue;
             }
             return Err(IrError::new("SSA call uses an unavailable affine argument"));

@@ -73,7 +73,9 @@ pub(crate) fn process_drop(
                 && state.affine.get(&value).is_some_and(|fact| {
                     fact.provenance == AffineProvenance::Place(place) && fact.transferred
                 });
-            if (!current && !transferred) || glue != DropGlueIdentity::ByteVector {
+            if (!current && !transferred)
+                || !matches!(glue, DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes)
+            {
                 return fail("SSA implicit Drop does not discharge its exact byte owner");
             }
             if current {

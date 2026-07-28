@@ -39,7 +39,10 @@ fn store_view(
 ) -> Result<()> {
     let slot = instruction_operand(proto, instruction)?;
     let value = pop(state, proto, instruction)?;
-    if !matches!(value, Kind::ByteSlice { used: false, .. }) {
+    if !matches!(
+        value,
+        Kind::BytesBorrow { used: false, .. } | Kind::ByteSlice { used: false, .. }
+    ) {
         return Err(error(
             proto,
             instruction,
@@ -61,22 +64,24 @@ fn load_view(
         .copied()
         .flatten()
         .ok_or_else(|| error(proto, instruction, "byte view local is not initialized"))?;
-    let Kind::ByteSlice {
-        owner,
-        mutable,
-        used: false,
-    } = kind
-    else {
-        return Err(error(
-            proto,
-            instruction,
-            "byte view local is stale, already used, or has the wrong type",
-        ));
-    };
-    let used = Kind::ByteSlice {
-        owner,
-        mutable,
-        used: true,
+    let used = match kind {
+        Kind::BytesBorrow { owner, used: false } => Kind::BytesBorrow { owner, used: true },
+        Kind::ByteSlice {
+            owner,
+            mutable,
+            used: false,
+        } => Kind::ByteSlice {
+            owner,
+            mutable,
+            used: true,
+        },
+        _ => {
+            return Err(error(
+                proto,
+                instruction,
+                "byte view local is stale, already used, or has the wrong type",
+            ))
+        }
     };
     state.locals[slot] = Some(used);
     state.stack.push(used);
@@ -95,15 +100,18 @@ fn end_borrow(
         .copied()
         .flatten()
         .ok_or_else(|| error(proto, instruction, "EndBorrow local is not initialized"))?;
-    let Kind::ByteSlice {
-        owner, used: true, ..
-    } = value
-    else {
-        return Err(error(
-            proto,
-            instruction,
-            "EndBorrow expects one used exact byte view",
-        ));
+    let owner = match value {
+        Kind::BytesBorrow { owner, used: true }
+        | Kind::ByteSlice {
+            owner, used: true, ..
+        } => owner,
+        _ => {
+            return Err(error(
+                proto,
+                instruction,
+                "EndBorrow expects one used exact byte view",
+            ))
+        }
     };
     if owner & 0xf000_0000 == 0x9000_0000 {
         return Err(error(

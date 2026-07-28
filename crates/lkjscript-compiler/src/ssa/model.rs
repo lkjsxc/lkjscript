@@ -67,6 +67,7 @@ pub(in crate::ssa) fn lower_type(
         Type::F64 => SsaType::F64,
         Type::Str => SsaType::Str,
         Type::Buf => SsaType::Buf,
+        Type::Bytes => SsaType::Bytes,
         Type::ByteVector => SsaType::ByteVector,
         Type::ByteSlice => SsaType::ByteSlice,
         Type::ByteSliceMut => SsaType::ByteSliceMut,
@@ -95,7 +96,10 @@ pub(in crate::ssa) fn lower_type(
 }
 
 pub(in crate::ssa) fn is_owned_value(ty: &SsaType) -> bool {
-    matches!(ty, SsaType::ByteVector | SsaType::Resource(_))
+    matches!(
+        ty,
+        SsaType::Bytes | SsaType::ByteVector | SsaType::Resource(_)
+    )
 }
 
 pub(in crate::ssa) struct CleanupPlan {
@@ -143,6 +147,7 @@ impl CleanupPlan {
                 .ok_or_else(|| Error::msg("HIR drop obligation lost closed glue identity"))?;
             let glue = match glue.kind {
                 MemoryDropGlueKind::ByteVector => DropGlueIdentity::ByteVector,
+                MemoryDropGlueKind::Bytes => DropGlueIdentity::Bytes,
                 MemoryDropGlueKind::Resource(kind) => DropGlueIdentity::Resource(kind),
             };
             if place_glues.insert(SsaPlaceId::new(place), glue).is_some() {

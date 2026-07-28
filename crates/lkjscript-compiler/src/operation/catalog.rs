@@ -125,5 +125,11 @@ impl Operation {
         Self::Some,
         Self::IsSome,
         Self::UnwrapSome,
+        Self::BytesLength,
+        Self::BytesByteAt,
+        Self::CopyBytesSlice,
+        Self::CloneBytes,
+        Self::FreezeByteVector,
+        Self::ThawBytes,
     ];
 }

@@ -48,6 +48,22 @@ pub(super) fn parse_expr(
             index + 1,
         )),
         Some(Token {
+            kind: TokenKind::Bytes(value),
+            span,
+            leading_trivia,
+        }) => Ok((
+            SourceNode {
+                kind: SyntaxKind::Bytes {
+                    value: value.clone(),
+                },
+                span: *span,
+                leading_trivia: leading_trivia.clone(),
+                before_close_trivia: Vec::new(),
+                children: Vec::new(),
+            },
+            index + 1,
+        )),
+        Some(Token {
             kind: TokenKind::Open(name),
             ..
         }) => super::element::parse_element(tokens, index, name, origin),

@@ -10,7 +10,7 @@ fn only_explicit_legacy_traced_values_retain_heap_objects() {
         Value::from_f64_bits(0),
         Value::from_resource(0),
         Value::from_capability(CapabilityKind::Arguments),
-        Value::from_opaque_unique_key(0),
+        Value::from_byte_vector_key(0),
         Value::UNIT,
         Value::FALSE,
         Value::EMPTY_LIST,

@@ -24,6 +24,41 @@ impl<'a> Producer<'a> {
             ExprKind::Move { binding, .. } => {
                 self.add_use(expression_id, binding.binding, MemoryUseKind::Move)?;
             }
+            ExprKind::BorrowBytes {
+                place,
+                loan,
+                binding,
+            } => {
+                self.add_use(expression_id, binding.binding, MemoryUseKind::BorrowSource)?;
+                let entry = self.add_entry(
+                    MemorySubject::Loan {
+                        function: self.current_function,
+                        place: place.raw(),
+                        loan: loan.raw(),
+                        expression: expression_id,
+                    },
+                    &expression.ty,
+                    expression.effects.bits(),
+                    MemoryEscape::Local,
+                    MemoryOrigin {
+                        source: expression.origin.raw(),
+                        expression: Some(expression_id),
+                    },
+                )?;
+                self.charge_loans(1)?;
+                self.loans.push(MemoryLoanPlan {
+                    function: self.current_function,
+                    place: place.raw(),
+                    loan: loan.raw(),
+                    expression: expression_id,
+                    binding: loan_binding.map(BindingId::raw),
+                    kind: MemoryBorrowKind::Shared,
+                    semantic_uses: 0,
+                    end_after: expression_id,
+                    entry,
+                });
+                self.add_obligation(entry, MemoryObligationKind::EndBorrow, None)?;
+            }
             ExprKind::Borrow {
                 place,
                 loan,

@@ -23,6 +23,7 @@ pub(super) fn apply(
                 Constant::I64(_) => Kind::I64,
                 Constant::F64(_) => Kind::F64,
                 Constant::Str(_) => Kind::Str,
+                Constant::StaticBytes(_) => Kind::StaticBytes,
                 Constant::Symbol(_) => Kind::Symbol,
                 Constant::Proto(proto) => Kind::Proto(*proto),
             });

@@ -99,9 +99,23 @@ impl Resolver<'_> {
                 .checked_add(1)
                 .ok_or_else(|| self.error("local slot count overflow"))?;
             self.max_slots = self.max_slots.max(self.next_slot);
+            let static_bytes = matches!(&value.kind, ExprKind::LitBytes(_))
+                || matches!(
+                    &value.kind,
+                    ExprKind::Load(reference)
+                        if self
+                            .analyzer
+                            .binding(reference.binding)?
+                            .kind
+                            == BindingKind::StaticBytesLocal
+                );
             let binding_id = self.analyzer.add_binding(
                 name.clone(),
-                BindingKind::ImmutableLocal,
+                if static_bytes {
+                    BindingKind::StaticBytesLocal
+                } else {
+                    BindingKind::ImmutableLocal
+                },
                 value.ty.clone(),
                 Origin::Source(self.origin),
             )?;
@@ -121,6 +135,7 @@ impl Resolver<'_> {
             resolved_bindings.push(LocalDefinition {
                 binding: binding_id,
                 place,
+                static_bytes,
                 slot,
                 value,
             });

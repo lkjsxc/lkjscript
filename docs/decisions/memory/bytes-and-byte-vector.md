@@ -2,15 +2,16 @@
 
 ## Status
 
-**Accepted contract with one executable evaluator/VM family.** The exact
+**Accepted contract with executable byte-vector and immutable-bytes evaluator/VM families.** The exact
 `new-byte-vector`, whole-place `move`, `borrow`, `borrow-mut`,
 `byte-slice-length`, `byte-slice-byte-at`, and
 `byte-slice-mut-set-byte` family uses deterministic unique storage in the SSA
-evaluator and reference VM. Baseline and proof native execution, ranged views,
-`bytes`, host byte operations, and the remaining byte-vector operations are not
-Current. Transitional `buf` remains a separate traced family; it is neither an
-alias nor a conversion path. `bytes` remains a `PLACEHOLDER` until its complete
-cutover lands.
+evaluator and reference VM. The immutable-bytes source projection and six
+operations below are also executable through typing, verified SSA, evaluator,
+independently validated bytecode, and VM. Baseline and proof native execution,
+ranged borrowed views, host byte operations, and the remaining byte-vector
+operations are not Current. Transitional `buf` remains a
+separate traced family; it is neither an alias nor a conversion path.
 
 ## Byte-Vector
 
@@ -46,18 +47,56 @@ release.
 - multiple escaping owners use an explicit structural copy with plan and metric;
 - no per-object reference count and no tracing are used.
 
-Required operations cover length, indexed read, slicing, slice copy,
-byte-vector freeze, bytes thaw, and explicit clone.
+The one canonical literal projection is:
+
+```lkjscript
+bytes-literal/
+00ff10
+/bytes-literal
+```
+
+The payload is one line of lowercase hexadecimal with exactly two digits per
+byte. The empty payload is represented by an empty line between the markers.
+Whitespace, uppercase letters, odd digit counts, non-hexadecimal characters,
+multiple payload lines, and decoded data over the active constant-data ceiling
+are source errors before typing or effects. There is no quoted, escaped, text,
+list, or compatibility spelling.
+
+The exact operations and monomorphic signatures are:
+
+- `bytes-length : fn inputs bytes output i64`;
+- `bytes-byte-at : fn inputs bytes i64 output i64`;
+- `copy-bytes-slice : fn inputs bytes i64 i64 output bytes`;
+- `clone-bytes : fn inputs bytes output bytes`;
+- `freeze-byte-vector : fn inputs byte-vector output bytes`;
+- `thaw-bytes : fn inputs bytes output byte-vector`.
+
+Length and indexed observation borrow their operand for the call. Slice copy and
+clone borrow the input and publish one dynamic owner. Freeze consumes one
+byte-vector owner. Thaw consumes one dynamic-bytes owner, or copies a static
+literal once into a new byte-vector owner. A dynamic value passed to an
+ownership-consuming operation uses explicit `move/`; a static literal is
+copyable and needs no owner move. This slice has no borrowed `bytes` source type
+and no zero-copy ranged `bytes` result; `copy-bytes-slice` is the checked owned
+range operation.
+
+Negative indexes, negative range components, `start + length` overflow, and
+out-of-bounds access trap with the operation name and exact rejected values.
+Allocation, object, byte, slot, generation, retained-capacity, and host storage
+failures use the existing resource-limit or deterministic runtime-trap classes.
+Every bound and allocation preflight completes before ownership transfer or
+payload publication. Source-literal failures are structured source diagnostics;
+there is no runtime attempt and no effect.
 
 ## Freeze And Thaw
 
-Freeze consumes a vector and transfers compatible backing to dynamic bytes
-without copy. Thaw consumes uniquely owned dynamic bytes and transfers backing
-to a vector. Both preserve runtime-local packed slot/generation identity.
-Thawing static bytes performs one bounded, accounted allocation and copy.
-Explicit dynamic-bytes clone likewise publishes one independently releasable
-owner. Failed operations preserve exact ownership and establish no duplicate
-owner.
+`freeze-byte-vector` consumes a vector and transfers compatible backing to
+dynamic bytes without copy. `thaw-bytes` consumes uniquely owned dynamic bytes
+and transfers backing to a vector. Both preserve runtime-local packed
+slot/generation identity. Thawing static bytes performs one bounded, accounted
+allocation and copy. `clone-bytes` and `copy-bytes-slice` likewise publish one
+independently releasable dynamic owner after complete preflight. Failed
+operations preserve exact ownership and establish no duplicate owner.
 
 ## Host Boundaries
 

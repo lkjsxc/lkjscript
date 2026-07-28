@@ -1,7 +1,21 @@
 use std::collections::BTreeMap;
 
 use crate::verify::*;
-use crate::{Block, BlockId, Function, IrError, SsaType, Terminator};
+use crate::{Block, BlockId, Function, InstructionKind, IrError, SsaType, Terminator, ValueId};
+
+fn nonowned_bytes_value(function: &Function, value: ValueId) -> bool {
+    function.blocks.iter().any(|block| {
+        block.instructions.iter().any(|instruction| {
+            instruction.id == value
+                && instruction.ty == SsaType::Bytes
+                && matches!(
+                    instruction.kind,
+                    InstructionKind::Constant(crate::Constant::StaticBytes(_))
+                        | InstructionKind::Borrow { .. }
+                )
+        })
+    })
+}
 
 pub(crate) fn process_ownership_block(
     function: &Function,
@@ -34,6 +48,7 @@ pub(crate) fn process_ownership_block(
             let ended_borrow_operand =
                 matches!(instruction.kind, InstructionKind::EndBorrow { .. });
             if is_affine(value_type(types, operand)?)
+                && !nonowned_bytes_value(function, operand)
                 && !state.affine.contains_key(&operand)
                 && !pending_drop_operand
                 && !ended_borrow_operand

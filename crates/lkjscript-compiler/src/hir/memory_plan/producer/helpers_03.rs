@@ -14,6 +14,7 @@ fn obligation_for_type(ty: &Type) -> Option<(MemoryObligationKind, MemoryDropGlu
         Type::ByteVector => {
             Some((MemoryObligationKind::DropValue, MemoryDropGlueId::new(0)))
         }
+        Type::Bytes => Some((MemoryObligationKind::DropValue, bytes_glue())),
         Type::Resource(kind) => Some((
             MemoryObligationKind::DropResource(*kind),
             resource_glue(*kind),
@@ -24,8 +25,11 @@ fn obligation_for_type(ty: &Type) -> Option<(MemoryObligationKind, MemoryDropGlu
 pub(crate) const fn resource_glue(kind: ResourceKind) -> MemoryDropGlueId {
     MemoryDropGlueId::new(1 + kind as u32)
 }
+const fn bytes_glue() -> MemoryDropGlueId {
+    MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32)
+}
 fn drop_glues() -> Vec<MemoryDropGluePlan> {
-    let mut glues = Vec::with_capacity(ResourceKind::ALL.len().saturating_add(1));
+    let mut glues = Vec::with_capacity(ResourceKind::ALL.len().saturating_add(2));
     glues.push(MemoryDropGluePlan {
         id: MemoryDropGlueId::new(0),
         kind: MemoryDropGlueKind::ByteVector,
@@ -38,5 +42,9 @@ fn drop_glues() -> Vec<MemoryDropGluePlan> {
                 kind: MemoryDropGlueKind::Resource(kind),
             }),
     );
+    glues.push(MemoryDropGluePlan {
+        id: bytes_glue(),
+        kind: MemoryDropGlueKind::Bytes,
+    });
     glues
 }

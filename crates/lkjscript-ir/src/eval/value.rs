@@ -31,6 +31,12 @@ pub enum EvalValue {
     Symbol(String),
     /// Transitional traced evaluator buffer.
     Buf(EvalBuffer),
+    /// Evaluator-local immutable static constant index.
+    StaticBytes(u32),
+    /// Execution-owned deterministic immutable-bytes key.
+    Bytes(lkjscript_core::UniqueKeyWord),
+    /// Execution-owned shared immutable-bytes loan token.
+    BytesBorrow(u64),
     /// Execution-owned deterministic byte-vector key.
     ByteVector(lkjscript_core::UniqueKeyWord),
     /// Execution-owned shared loan token.
@@ -39,6 +45,8 @@ pub enum EvalValue {
     ByteSliceMut(u64),
     /// Byte-vector backing explicitly transferred across the evaluator boundary.
     ReturnedByteVector(Vec<u8>),
+    /// Immutable bytes snapshot transferred across the evaluator boundary.
+    ReturnedBytes(Vec<u8>),
     Path(Vec<u8>),
     Capability(lkjscript_contracts::CapabilityKind),
     Resource(EvalResource),
@@ -65,10 +73,14 @@ impl PartialEq for EvalValue {
                 left == right
             }
             (Self::Buf(left), Self::Buf(right)) => left == right,
+            (Self::StaticBytes(left), Self::StaticBytes(right)) => left == right,
+            (Self::Bytes(left), Self::Bytes(right)) => left == right,
+            (Self::BytesBorrow(left), Self::BytesBorrow(right)) => left == right,
             (Self::ByteVector(left), Self::ByteVector(right)) => left == right,
             (Self::ByteSlice(left), Self::ByteSlice(right))
             | (Self::ByteSliceMut(left), Self::ByteSliceMut(right)) => left == right,
             (Self::ReturnedByteVector(left), Self::ReturnedByteVector(right)) => left == right,
+            (Self::ReturnedBytes(left), Self::ReturnedBytes(right)) => left == right,
             (Self::Path(left), Self::Path(right)) => left == right,
             (Self::Capability(left), Self::Capability(right)) => left == right,
             (Self::Resource(_), Self::Resource(_)) => false,

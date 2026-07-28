@@ -69,7 +69,7 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     assert!(json.contains("\"schema\":\"lkjscript.memory-obligations\""));
     assert!(json.contains("\"identity\":\"gc-heap\""));
     assert!(json.contains("\"current_trace_fields\":\"HeapObj::trace from exact roots\""));
-    assert!(json.contains("PLACEHOLDER accepted contract"));
+    assert!(json.contains("static bytecode data or evaluator/VM unique store"));
 
     let explain = Command::new(binary)
         .args(["memory", "explain", "byte-vector"])

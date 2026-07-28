@@ -1,6 +1,35 @@
 use super::super::MemoryResultMode;
 use super::*;
 
+pub(super) fn verify_dense(plan: &HirMemoryPlan) -> Result<()> {
+    for (index, entry) in plan.entries.iter().enumerate() {
+        if entry.id.raw() != index_u32(index)? {
+            return Err(Error::msg("HIR memory-plan entries are not dense"));
+        }
+    }
+    for (index, item) in plan.uses.iter().enumerate() {
+        if item.id.raw() != index_u32(index)? {
+            return Err(Error::msg("HIR memory-plan uses are not dense"));
+        }
+    }
+    for (index, item) in plan.constants.iter().enumerate() {
+        if item.id.raw() != index_u32(index)? {
+            return Err(Error::msg("HIR memory-plan constants are not dense"));
+        }
+    }
+    for (index, item) in plan.calls.iter().enumerate() {
+        if item.id.raw() != index_u32(index)? {
+            return Err(Error::msg("HIR memory-plan calls are not dense"));
+        }
+    }
+    for (index, item) in plan.obligations.iter().enumerate() {
+        if item.id.raw() != index_u32(index)? {
+            return Err(Error::msg("HIR memory-plan obligations are not dense"));
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn callable_result(ty: &Type) -> Result<&Type> {
     match ty {
         Type::Fn { ret, .. } => Ok(ret),
@@ -11,7 +40,7 @@ pub(super) fn callable_result(ty: &Type) -> Result<&Type> {
 
 pub(super) fn parameter_mode(ty: &Type, consumed: bool) -> MemoryParameterMode {
     match ty {
-        Type::ByteVector => MemoryParameterMode::Consume,
+        Type::Bytes | Type::ByteVector => MemoryParameterMode::Consume,
         Type::ByteSlice => MemoryParameterMode::BorrowShared,
         Type::ByteSliceMut => MemoryParameterMode::BorrowExclusive,
         Type::Resource(_) if consumed => MemoryParameterMode::Consume,
@@ -22,7 +51,7 @@ pub(super) fn parameter_mode(ty: &Type, consumed: bool) -> MemoryParameterMode {
 
 pub(super) fn result_mode(ty: &Type) -> MemoryResultMode {
     match ty {
-        Type::ByteVector => MemoryResultMode::Owned,
+        Type::Bytes | Type::ByteVector => MemoryResultMode::Owned,
         Type::ByteSlice | Type::ByteSliceMut => MemoryResultMode::Borrowed,
         Type::Resource(_) => MemoryResultMode::External,
         _ => MemoryResultMode::Trivial,
@@ -33,6 +62,7 @@ pub(super) fn legacy_family(ty: &MemoryType) -> Option<&'static str> {
     match ty {
         MemoryType::String => Some("string"),
         MemoryType::Buffer | MemoryType::ByteVector => Some("buf"),
+        MemoryType::Bytes => None,
         MemoryType::Path => Some("path"),
         MemoryType::Symbol => Some("symbol"),
         MemoryType::Product(_) => Some("product"),
@@ -55,7 +85,8 @@ pub(super) fn type_matches(expected: &Type, actual: &MemoryType) -> bool {
         | (Type::Path, MemoryType::Path)
         | (Type::Symbol, MemoryType::Symbol) => true,
         (Type::Capability(left), MemoryType::Capability(right)) => left == right,
-        (Type::ByteVector, MemoryType::ByteVector)
+        (Type::Bytes, MemoryType::Bytes)
+        | (Type::ByteVector, MemoryType::ByteVector)
         | (Type::ByteSlice, MemoryType::ByteSlice)
         | (Type::ByteSliceMut, MemoryType::ByteSliceMut) => true,
         (Type::Resource(left), MemoryType::Resource(right)) => left == right,

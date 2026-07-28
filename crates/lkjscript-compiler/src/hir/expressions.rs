@@ -23,6 +23,7 @@ pub enum ExprKind {
     LitUnit,
     EmptyList,
     LitStr(String),
+    LitBytes(Vec<u8>),
     Load(BindingRef),
     Move {
         place: PlaceId,
@@ -32,6 +33,11 @@ pub enum ExprKind {
         place: PlaceId,
         loan: LoanId,
         kind: BorrowKind,
+        binding: BindingRef,
+    },
+    BorrowBytes {
+        place: PlaceId,
+        loan: LoanId,
         binding: BindingRef,
     },
     Call {
@@ -149,6 +155,7 @@ pub enum ExprKind {
 pub struct LocalDefinition {
     pub binding: BindingId,
     pub place: PlaceId,
+    pub static_bytes: bool,
     pub slot: u8,
     pub value: Expr,
 }

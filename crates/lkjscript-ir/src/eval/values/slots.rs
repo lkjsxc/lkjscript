@@ -45,7 +45,7 @@ pub(crate) fn values_for_call(
 ) -> std::result::Result<Vec<EvalValue>, Flow> {
     ids.iter()
         .map(|id| match value(values, *id)? {
-            EvalValue::ByteVector(_) => take_value(values, *id),
+            EvalValue::Bytes(_) | EvalValue::ByteVector(_) => take_value(values, *id),
             other => Ok(other.clone()),
         })
         .collect()

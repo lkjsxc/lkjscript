@@ -87,6 +87,12 @@ pub(super) enum Kind {
     Closure(u32),
     List,
     Buf,
+    StaticBytes,
+    Bytes(u32),
+    BytesBorrow {
+        owner: u32,
+        used: bool,
+    },
     ByteVector(u32),
     ByteSlice {
         owner: u32,
@@ -115,6 +121,9 @@ impl std::fmt::Display for Kind {
             Self::Closure(_) => "function",
             Self::List => "list",
             Self::Buf => "buf",
+            Self::StaticBytes => "static bytes",
+            Self::Bytes(_) => "dynamic bytes",
+            Self::BytesBorrow { .. } => "borrowed dynamic bytes",
             Self::ByteVector(_) => "byte-vector",
             Self::ByteSlice { mutable: false, .. } => "byte-slice",
             Self::ByteSlice { mutable: true, .. } => "byte-slice-mut",
@@ -132,7 +141,10 @@ impl std::fmt::Display for Kind {
             Self::Resource(kind) | Self::ResourceResult(kind) => {
                 write!(formatter, " {}", kind.as_str())
             }
-            Self::ByteVector(owner) | Self::ByteSlice { owner, .. } => {
+            Self::Bytes(owner)
+            | Self::BytesBorrow { owner, .. }
+            | Self::ByteVector(owner)
+            | Self::ByteSlice { owner, .. } => {
                 write!(formatter, " owner {owner}")
             }
             Self::Product(id) => write!(formatter, " {}", id.raw()),

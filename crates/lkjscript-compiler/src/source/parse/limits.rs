@@ -58,7 +58,7 @@ pub(super) fn check_file_limits(
                     depth = depth.saturating_sub(1);
                 }
             }
-            TokenKind::Atom(_) | TokenKind::Str(_) => {
+            TokenKind::Atom(_) | TokenKind::Str(_) | TokenKind::Bytes(_) => {
                 count_child(&mut child_stack, limits, origin, token.span)?;
             }
         }

@@ -106,6 +106,7 @@ pub const CONTEXTUAL_FORM_NAMES: &[&str] = &[
     "do",
     "quote",
     "string-literal",
+    "bytes-literal",
     "move",
     "borrow",
     "borrow-mut",

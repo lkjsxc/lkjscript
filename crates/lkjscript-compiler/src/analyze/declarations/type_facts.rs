@@ -28,7 +28,11 @@ pub(in crate::analyze) fn collect_type_params<'a>(ty: &'a Type, output: &mut Has
 
 pub(in crate::analyze) fn contains_ownership_type(ty: &Type) -> bool {
     match ty {
-        Type::ByteVector | Type::ByteSlice | Type::ByteSliceMut | Type::Resource(_) => true,
+        Type::Bytes
+        | Type::ByteVector
+        | Type::ByteSlice
+        | Type::ByteSliceMut
+        | Type::Resource(_) => true,
         Type::List(inner) => contains_ownership_type(inner),
         Type::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
         Type::Fn { params, ret } => {

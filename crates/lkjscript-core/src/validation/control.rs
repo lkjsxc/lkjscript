@@ -32,6 +32,9 @@ pub(super) fn validate_control_flow(
             .copied()
             .flatten()
             .map(|kind| match kind {
+                crate::UniqueValueKind::Bytes => {
+                    Kind::Bytes(0x8000_0000 | u32::try_from(index).unwrap_or(u32::MAX))
+                }
                 crate::UniqueValueKind::ByteVector => {
                     Kind::ByteVector(0x8000_0000 | u32::try_from(index).unwrap_or(u32::MAX))
                 }
@@ -70,10 +73,10 @@ pub(super) fn validate_control_flow(
             continue;
         };
         let owner = match locals.get(index).copied().flatten() {
-            Some(Kind::ByteVector(owner)) => owner,
+            Some(Kind::Bytes(owner) | Kind::ByteVector(owner)) => owner,
             _ => {
                 return Err(Error::msg(
-                    "bytecode parameter owner-place metadata requires byte-vector type",
+                    "bytecode parameter owner-place metadata requires exact unique owner type",
                 ))
             }
         };

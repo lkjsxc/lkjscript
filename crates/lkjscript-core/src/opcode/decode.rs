@@ -41,6 +41,7 @@ impl DecodedInstruction {
 }
 
 impl Op {
+    #[rustfmt::skip]
     pub const ALL: &'static [Self] = &[
         Self::Nop,
         Self::LoadConst,
@@ -175,21 +176,16 @@ impl Op {
         Self::PathFromBuf,
         Self::PathToBuf,
         Self::PathToStr,
-        Self::ByteVectorNew,
-        Self::ByteVectorPlaceInit,
-        Self::ByteVectorMove,
-        Self::ByteVectorBorrow,
-        Self::ByteVectorBorrowMut,
-        Self::StoreUniqueLocal,
-        Self::StoreViewLocal,
-        Self::TakeUniqueLocal,
-        Self::LoadViewLocal,
-        Self::ByteVectorDropPlace,
-        Self::ByteSliceLen,
-        Self::ByteSliceRef,
-        Self::ByteSliceMutSet,
-        Self::EndBorrowLocal,
-        Self::ByteVectorPlaceEnd,
+        Self::ByteVectorNew, Self::ByteVectorPlaceInit, Self::ByteVectorMove,
+        Self::ByteVectorBorrow, Self::ByteVectorBorrowMut,
+        Self::StoreUniqueLocal, Self::StoreViewLocal, Self::TakeUniqueLocal,
+        Self::LoadViewLocal, Self::ByteVectorDropPlace,
+        Self::ByteSliceLen, Self::ByteSliceRef, Self::ByteSliceMutSet,
+        Self::EndBorrowLocal, Self::ByteVectorPlaceEnd,
+        Self::BytesLength, Self::BytesByteAt, Self::CopyBytesSlice,
+        Self::CloneBytes, Self::FreezeByteVector, Self::ThawBytes,
+        Self::BytesDropPlace, Self::BytesPlaceEnd, Self::BytesPlaceInit,
+        Self::BytesMove, Self::BytesBorrow,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {

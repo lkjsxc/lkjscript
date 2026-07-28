@@ -36,6 +36,9 @@ pub(super) fn lower_instruction(
                 )?,
                 Vec::new(),
             ),
+            Constant::StaticBytes(_) => {
+                return unsupported_operation(function.id, "immutable bytes constant")
+            }
             Constant::Symbol(_) => return unsupported_operation(function.id, "Symbol constant"),
         },
         InstructionKind::Copy(value) | InstructionKind::Move { value, .. } => {

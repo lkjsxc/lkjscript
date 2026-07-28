@@ -3,7 +3,7 @@ use crate::{Chunk, DecodedInstruction, FunctionProto, Op, Result};
 
 mod owners;
 mod release;
-mod support;
+pub(super) mod support;
 mod views;
 
 pub(super) fn apply(

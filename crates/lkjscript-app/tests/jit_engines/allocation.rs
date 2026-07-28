@@ -19,6 +19,10 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
             "owned-buffer.lkjscript",
             "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nbyte-slice-byte-at/\nborrow/\nb\n/borrow\n0\n/byte-slice-byte-at\n/let\n/main\n",
         ),
+        (
+            "bytes.lkjscript",
+            "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nbytes-length/\nbytes-literal/\n00ff\n/bytes-literal\n/bytes-length\n/main\n",
+        ),
     ];
     for (name, source) in unsupported {
         let program = compile(source, name);
@@ -32,12 +36,13 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
             error.code(),
             FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
         ));
-        if name == "owned-buffer.lkjscript" {
+        if matches!(name, "owned-buffer.lkjscript" | "bytes.lkjscript") {
             let diagnostic = error.to_string();
             assert!(
                 diagnostic.contains("collector-free")
                     || diagnostic.contains("byte-vector")
-                    || diagnostic.contains("ownership"),
+                    || diagnostic.contains("ownership")
+                    || diagnostic.contains("bytes"),
                 "forced owned-buffer rejection was not ownership-specific: {diagnostic}"
             );
             let proof = execute_optimizing(
@@ -46,10 +51,13 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
                 JitConfig::default(),
             )
             .expect_err("forced proof tier must reject missing native unique lowering");
-            assert!(matches!(
-                proof.code(),
-                FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
-            ));
+            assert!(
+                matches!(
+                    proof.code(),
+                    FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
+                ),
+                "forced proof rejection was not type/operation-specific: {proof}"
+            );
         }
     }
 

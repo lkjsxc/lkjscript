@@ -158,7 +158,7 @@ mod tests {
         assert_eq!(first, json_inventory(digest, &records));
         assert!(first.contains("\"identity\":\"gc-heap\""));
         assert!(first.contains("\"current_trace_fields\":\"HeapObj::trace from exact roots\""));
-        assert!(first.contains("PLACEHOLDER"));
+        assert!(first.contains("static bytecode data or evaluator/VM unique store"));
         assert!(first.contains(&digest.to_hex()));
     }
 }

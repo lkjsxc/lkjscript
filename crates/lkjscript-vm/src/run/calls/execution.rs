@@ -142,10 +142,20 @@ fn initial_unique_places(
         let Some(place) = place else {
             continue;
         };
+        let kind = proto
+            .parameter_uniques
+            .get(index)
+            .copied()
+            .flatten()
+            .ok_or_else(|| Error::msg("owner-place parameter lacks unique kind metadata"))?;
         let owner = arguments
             .get(index)
-            .and_then(|value| value.as_opaque_unique_key())
-            .ok_or_else(|| Error::msg("byte-vector call parameter lacks unique owner payload"))?;
+            .and_then(|value| match kind {
+                lkjscript_core::UniqueValueKind::Bytes => value.as_bytes_key(),
+                lkjscript_core::UniqueValueKind::ByteVector => value.as_byte_vector_key(),
+                _ => None,
+            })
+            .ok_or_else(|| Error::msg("call parameter lacks exact unique owner payload"))?;
         let target = places
             .get_mut(usize::from(place))
             .ok_or_else(|| Error::msg("byte-vector call parameter PlaceId is out of range"))?;

@@ -60,9 +60,11 @@ pub(super) fn collect_direct_callees(
         | ExprKind::LitUnit
         | ExprKind::EmptyList
         | ExprKind::LitStr(_)
+        | ExprKind::LitBytes(_)
         | ExprKind::Load(_)
         | ExprKind::Move { .. }
         | ExprKind::Borrow { .. }
+        | ExprKind::BorrowBytes { .. }
         | ExprKind::MatchUnreachable { .. }
         | ExprKind::QuoteSymbol(_) => {}
         ExprKind::Call { callee, args, .. } => {

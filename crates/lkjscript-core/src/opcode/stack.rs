@@ -12,11 +12,16 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::ByteVectorMove
         | Op::ByteVectorBorrow
         | Op::ByteVectorBorrowMut
+        | Op::BytesBorrow
         | Op::TakeUniqueLocal
         | Op::LoadViewLocal
         | Op::ByteVectorDropPlace
         | Op::EndBorrowLocal
         | Op::ByteVectorPlaceEnd
+        | Op::BytesPlaceInit
+        | Op::BytesMove
+        | Op::BytesDropPlace
+        | Op::BytesPlaceEnd
         | Op::False
         | Op::True
         | Op::Unit
@@ -25,7 +30,8 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         Op::StoreLocal | Op::StoreGlobal => fixed(1, 0, 0),
         Op::StoreUniqueLocal | Op::StoreViewLocal => fixed(1, 1, 0),
         Op::ByteSliceLen => fixed(1, 1, 1),
-        Op::ByteSliceRef => fixed(2, 2, 1),
+        Op::ByteSliceRef | Op::BytesByteAt => fixed(2, 2, 1),
+        Op::CopyBytesSlice => fixed(3, 3, 1),
         Op::ByteSliceMutSet => fixed(3, 3, 1),
         Op::Add
         | Op::Sub
@@ -133,7 +139,11 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::F64FromI64Exact
         | Op::F64FromI64Rounded
         | Op::I64FromF64Exact
-        | Op::I64FromF64Trunc => fixed(1, 1, 1),
+        | Op::I64FromF64Trunc
+        | Op::BytesLength
+        | Op::CloneBytes
+        | Op::FreezeByteVector
+        | Op::ThawBytes => fixed(1, 1, 1),
         Op::Jump => fixed(0, 0, 0),
         Op::JumpIfFalse | Op::Exit | Op::Trap | Op::Pop | Op::Return => fixed(1, 1, 0),
         Op::MakeClosure => fixed(1, 1, 1),

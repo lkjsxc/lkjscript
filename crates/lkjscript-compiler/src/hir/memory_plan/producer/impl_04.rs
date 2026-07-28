@@ -2,7 +2,7 @@ impl<'a> Producer<'a> {
     fn add_constant(
         &mut self,
         expression: MemoryExpressionId,
-        _expression_entry: MemoryEntryId,
+        expression_entry: MemoryEntryId,
         ty: &Type,
         hir_expression: &Expr,
         value: MemoryConstantValue,
@@ -19,7 +19,7 @@ impl<'a> Producer<'a> {
             expression,
             value,
         });
-        self.add_entry(
+        let constant_entry = self.add_entry(
             MemorySubject::Constant {
                 constant: id,
                 expression,
@@ -32,6 +32,20 @@ impl<'a> Producer<'a> {
                 expression: Some(expression),
             },
         )?;
+        if matches!(ty, Type::Bytes) {
+            for entry_id in [expression_entry, constant_entry] {
+                let entry = self
+                    .entries
+                    .get_mut(entry_id.index().unwrap_or(usize::MAX))
+                    .ok_or_else(|| Error::msg("static bytes memory entry is missing"))?;
+                entry.mode.multiplicity = MemoryMultiplicity::Copy;
+                entry.mode.aliasing = MemoryAliasing::StaticShared;
+                entry.mode.storage = MemoryStorage::Static;
+                entry.mode.destruction = MemoryDestruction::Trivial;
+                entry.mode.contention = MemoryContention::ImmutableShared;
+                entry.drop_glue = None;
+            }
+        }
         Ok(())
     }
     fn add_call(

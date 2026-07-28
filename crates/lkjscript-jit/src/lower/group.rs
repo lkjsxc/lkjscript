@@ -134,6 +134,7 @@ fn contains_capability_or_resource(ty: &SsaType) -> bool {
         | SsaType::Str
         | SsaType::Symbol
         | SsaType::Buf
+        | SsaType::Bytes
         | SsaType::ByteVector
         | SsaType::ByteSlice
         | SsaType::ByteSliceMut

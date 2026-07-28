@@ -19,8 +19,11 @@ pub(in crate::ownership) fn check_arguments(
             UseContext::Ordinary
         };
         check_expr(program, argument, places, state, &later, context)?;
-        if let ExprKind::Borrow { place, loan, .. } = argument.kind {
-            temporary.push((place, loan));
+        match argument.kind {
+            ExprKind::Borrow { place, loan, .. } | ExprKind::BorrowBytes { place, loan, .. } => {
+                temporary.push((place, loan));
+            }
+            _ => {}
         }
     }
     for (place, loan) in temporary {

@@ -1,5 +1,7 @@
 #![allow(clippy::expect_used)]
 
+#[path = "ssa_equivalence/bytes.rs"]
+mod bytes;
 #[path = "ssa_equivalence/oracle.rs"]
 mod oracle;
 #[path = "ssa_equivalence/ownership.rs"]

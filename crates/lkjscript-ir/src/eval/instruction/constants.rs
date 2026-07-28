@@ -9,6 +9,13 @@ impl Evaluator<'_> {
                 self.allocate()?;
                 Ok(EvalValue::Str(value.clone()))
             }
+            Constant::StaticBytes(value) => self
+                .static_bytes
+                .iter()
+                .position(|bytes| bytes.as_ref() == value)
+                .and_then(|index| u32::try_from(index).ok())
+                .map(EvalValue::StaticBytes)
+                .ok_or_else(|| Flow::Trap("evaluator static bytes table mismatch".into())),
             Constant::Symbol(value) => {
                 self.allocate()?;
                 Ok(EvalValue::Symbol(value.clone()))

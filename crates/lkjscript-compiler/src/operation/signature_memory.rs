@@ -5,6 +5,12 @@ pub(in crate::operation) fn memory_signature(operation: Operation) -> Type {
     let system_result =
         |success| crate::types::result_type(success, crate::types::system_error_type());
     match operation {
+        Operation::BytesLength => function(vec![Type::Bytes], Type::I64),
+        Operation::BytesByteAt => function(vec![Type::Bytes, Type::I64], Type::I64),
+        Operation::CopyBytesSlice => function(vec![Type::Bytes, Type::I64, Type::I64], Type::Bytes),
+        Operation::CloneBytes => function(vec![Type::Bytes], Type::Bytes),
+        Operation::FreezeByteVector => function(vec![Type::ByteVector], Type::Bytes),
+        Operation::ThawBytes => function(vec![Type::Bytes], Type::ByteVector),
         Operation::BufNew => function(vec![Type::I64], Type::Buf),
         Operation::OwnedBufNew => function(vec![Type::I64], Type::ByteVector),
         Operation::OwnedBufLen => function(vec![Type::ByteSlice], Type::I64),

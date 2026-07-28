@@ -62,8 +62,9 @@ Current.
 The stable-index non-moving `GcHeap` still traces explicit legacy-traced
 reference values, exact roots, and generated native stack maps. Complete i64
 and exact-bit f64 values are inline and never collector allocated. `buf` remains
-a traced mutable object, `bytes` is a source `PLACEHOLDER`, and `path` remains a
-traced byte object.
+a traced mutable object, `bytes` uses static or deterministic unique storage in
+the evaluator/VM with native fail-closed rejection, and `path` remains a traced
+byte object.
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,

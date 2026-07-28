@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use lkjscript_core::{Error, Result};
 
 use crate::hir::{
-    BindingId, BorrowKind, Expr, ExprKind, Function, LoanId, Operation, PlaceId, Program,
+    BindingId, BindingKind, BorrowKind, Expr, ExprKind, Function, LoanId, Operation, PlaceId,
+    Program,
 };
 use crate::types::Type;
 

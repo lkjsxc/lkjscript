@@ -20,8 +20,8 @@ fn validate_unique_exit_state(
         .iter()
         .filter_map(|slot| *slot)
         .any(|kind| match kind {
-            Kind::ByteVector(_) => true,
-            Kind::ByteSlice { owner, .. } => owner & 0xf000_0000 != 0x9000_0000,
+            Kind::Bytes(_) | Kind::ByteVector(_) => true,
+            Kind::BytesBorrow { owner, .. } | Kind::ByteSlice { owner, .. } => owner & 0xf000_0000 != 0x9000_0000,
             _ => false,
         })
     {
@@ -41,9 +41,16 @@ fn validate_unique_return(
     instruction: DecodedInstruction,
 ) -> Result<()> {
     let valid = match (proto.return_unique, actual) {
+        (Some(crate::UniqueValueKind::Bytes), Kind::StaticBytes | Kind::Bytes(_)) => true,
         (Some(crate::UniqueValueKind::ByteVector), Kind::ByteVector(_)) => true,
         (Some(_), _) => false,
-        (None, Kind::ByteVector(_) | Kind::ByteSlice { .. }) => false,
+        (
+            None,
+            Kind::Bytes(_)
+            | Kind::BytesBorrow { .. }
+            | Kind::ByteVector(_)
+            | Kind::ByteSlice { .. },
+        ) => false,
         (None, _) => true,
     };
     if valid {
@@ -72,6 +79,7 @@ fn call_return_kind(proto: &FunctionProto, instruction: DecodedInstruction) -> R
                 )
             })?;
         return Ok(match kind {
+            crate::UniqueValueKind::Bytes => Kind::Bytes(owner),
             crate::UniqueValueKind::ByteVector => Kind::ByteVector(owner),
             crate::UniqueValueKind::ByteSlice | crate::UniqueValueKind::ByteSliceMut => {
                 return Err(instruction_error(

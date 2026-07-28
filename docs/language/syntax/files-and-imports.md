@@ -52,5 +52,6 @@ consults ambient state, or decodes with replacement.
 
 The ownership foundation exposes direct `byte-vector`, `byte-slice`, and
 `byte-slice-mut` spellings for the existing bounded whole-place affine slice.
-Immutable `bytes`, ranged views, and borrowed text `str` remain non-Current and
-must produce explicit PLACEHOLDER or rejection behavior until implemented.
+Immutable `bytes` uses the exact `bytes-literal/` lowercase hexadecimal
+projection and executes in the evaluator and VM. Ranged borrowed views and
+borrowed text `str` remain non-Current and are rejected.

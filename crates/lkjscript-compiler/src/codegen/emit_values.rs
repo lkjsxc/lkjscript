@@ -22,6 +22,8 @@ impl Emitter<'_> {
         let slot = self.slot(value)?;
         self.proto.emit_op_u8(
             match self.value_type(value)? {
+                SsaType::Bytes if self.borrowed_bytes_value(value)? => Op::LoadViewLocal,
+                SsaType::Bytes if !self.static_bytes_value(value)? => Op::TakeUniqueLocal,
                 SsaType::ByteVector => Op::TakeUniqueLocal,
                 SsaType::ByteSlice | SsaType::ByteSliceMut => Op::LoadViewLocal,
                 _ => Op::LoadLocal,
@@ -34,6 +36,12 @@ impl Emitter<'_> {
     pub(in crate::codegen) fn store_result(&mut self, value: ValueId) -> Result<()> {
         let slot = self.slot(value)?;
         match self.value_type(value)? {
+            SsaType::Bytes if self.borrowed_bytes_value(value)? => {
+                self.proto.emit_op_u8(Op::StoreViewLocal, slot);
+            }
+            SsaType::Bytes if !self.static_bytes_value(value)? => {
+                self.proto.emit_op_u8(Op::StoreUniqueLocal, slot);
+            }
             SsaType::ByteVector => self.proto.emit_op_u8(Op::StoreUniqueLocal, slot),
             SsaType::ByteSlice | SsaType::ByteSliceMut => {
                 self.proto.emit_op_u8(Op::StoreViewLocal, slot);
@@ -67,6 +75,58 @@ impl Emitter<'_> {
             .ok_or_else(|| Error::msg("SSA bytecode lowering lost a value type"))
     }
 
+    fn borrowed_bytes_value(&self, value: ValueId) -> Result<bool> {
+        Ok(self.function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                instruction.id == value
+                    && matches!(instruction.kind, InstructionKind::Borrow { .. })
+                    && instruction.ty == SsaType::Bytes
+            })
+        }))
+    }
+
+    fn static_bytes_value(&self, value: ValueId) -> Result<bool> {
+        let instruction = self.function.blocks.iter().find_map(|block| {
+            block
+                .instructions
+                .iter()
+                .find(|instruction| instruction.id == value)
+        });
+        Ok(matches!(
+            instruction.map(|instruction| &instruction.kind),
+            Some(InstructionKind::Constant(Constant::StaticBytes(_)))
+        ))
+    }
+
+    fn bytes_place_is_static(&self, place: lkjscript_ir::PlaceId) -> Result<bool> {
+        for instruction in self
+            .function
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+        {
+            if let InstructionKind::PlaceInit {
+                place: candidate,
+                value,
+            } = instruction.kind
+            {
+                if candidate == place {
+                    return self.static_bytes_value(value);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    fn bytes_place(&self, place: lkjscript_ir::PlaceId) -> Result<bool> {
+        self.function
+            .places
+            .iter()
+            .find(|metadata| metadata.id == place)
+            .map(|metadata| metadata.ty == SsaType::Bytes)
+            .ok_or_else(|| Error::msg("SSA bytecode lowering lost a PlaceId"))
+    }
+
     fn byte_vector_place(&self, place: lkjscript_ir::PlaceId) -> Result<bool> {
         self.function
             .places
@@ -80,6 +140,20 @@ impl Emitter<'_> {
         let place = u8::try_from(place.raw())
             .map_err(|_| Error::msg("byte-vector PlaceId exceeds bytecode u8"))?;
         Ok((u16::from(place) << 8) | u16::from(self.slot(value)?))
+    }
+}
+
+impl Emitter<'_> {
+    fn emit_numeric(&mut self, instruction: &Instruction, value: ValueId) -> Result<()> {
+        self.load(value)?;
+        self.proto.emit(match &instruction.kind {
+            InstructionKind::F64FromI64Exact { .. } => Op::F64FromI64Exact,
+            InstructionKind::F64FromI64Rounded { .. } => Op::F64FromI64Rounded,
+            InstructionKind::I64FromF64Exact { .. } => Op::I64FromF64Exact,
+            InstructionKind::I64FromF64Trunc { .. } => Op::I64FromF64Trunc,
+            _ => return Err(Error::msg("numeric opcode lowering mismatch")),
+        });
+        Ok(())
     }
 }
 

@@ -131,6 +131,12 @@ pub enum Operation {
     Some,
     IsSome,
     UnwrapSome,
+    BytesLength,
+    BytesByteAt,
+    CopyBytesSlice,
+    CloneBytes,
+    FreezeByteVector,
+    ThawBytes,
 }
 
 mod catalog;

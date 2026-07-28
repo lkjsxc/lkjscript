@@ -127,7 +127,7 @@ fn verify_legacy_registration(plan: &HirMemoryPlan) -> Result<()> {
 }
 
 fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
-    if plan.drop_glues.len() != ResourceKind::ALL.len().saturating_add(1)
+    if plan.drop_glues.len() != ResourceKind::ALL.len().saturating_add(2)
         || plan.drop_glues.first().map(|glue| glue.kind) != Some(MemoryDropGlueKind::ByteVector)
     {
         return Err(Error::msg("HIR memory-plan drop-glue table is incomplete"));
@@ -140,6 +140,11 @@ fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
         {
             return Err(Error::msg("HIR memory-plan resource drop glue mismatch"));
         }
+    }
+    let bytes = plan.drop_glues.last();
+    let bytes_id = MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32);
+    if bytes.map(|glue| (glue.id, glue.kind)) != Some((bytes_id, MemoryDropGlueKind::Bytes)) {
+        return Err(Error::msg("HIR memory-plan bytes drop glue mismatch"));
     }
     Ok(())
 }

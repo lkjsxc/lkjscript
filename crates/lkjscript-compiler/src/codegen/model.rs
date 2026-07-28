@@ -47,7 +47,7 @@ pub(in crate::codegen) fn compile_function(
             .iter()
             .zip(&function.signature.parameters)
             .map(|(parameter, ty)| {
-                if ty != &SsaType::ByteVector {
+                if !matches!(ty, SsaType::Bytes | SsaType::ByteVector) {
                     return Ok(None);
                 }
                 parameter
@@ -122,6 +122,7 @@ pub(in crate::codegen) fn compile_function(
 
 fn unique_value_kind(ty: &SsaType) -> Option<UniqueValueKind> {
     match ty {
+        SsaType::Bytes => Some(UniqueValueKind::Bytes),
         SsaType::ByteVector => Some(UniqueValueKind::ByteVector),
         SsaType::ByteSlice => Some(UniqueValueKind::ByteSlice),
         SsaType::ByteSliceMut => Some(UniqueValueKind::ByteSliceMut),

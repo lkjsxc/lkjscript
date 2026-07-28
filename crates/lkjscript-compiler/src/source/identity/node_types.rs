@@ -44,6 +44,7 @@ pub enum NodeKind {
     BoolLiteral,
     UnitLiteral,
     StringLiteral,
+    BytesLiteral,
     Symbol,
     Call,
 }

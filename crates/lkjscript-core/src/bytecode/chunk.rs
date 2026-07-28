@@ -40,6 +40,7 @@ pub enum Constant {
     I64(i64),
     F64(f64),
     Str(String),
+    StaticBytes(Box<[u8]>),
     Symbol(String),
     /// Prototype index for MakeClosure.
     Proto(u32),
@@ -47,6 +48,7 @@ pub enum Constant {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UniqueValueKind {
+    Bytes,
     ByteVector,
     ByteSlice,
     ByteSliceMut,

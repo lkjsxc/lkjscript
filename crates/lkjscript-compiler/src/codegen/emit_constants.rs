@@ -18,6 +18,13 @@ impl Emitter<'_> {
                 let constant = add_constant(self.chunk, BytecodeConstant::Str(value.clone()))?;
                 self.proto.emit_op_u16(Op::LoadConst, constant);
             }
+            Constant::StaticBytes(value) => {
+                let constant = add_constant(
+                    self.chunk,
+                    BytecodeConstant::StaticBytes(value.clone().into_boxed_slice()),
+                )?;
+                self.proto.emit_op_u16(Op::LoadConst, constant);
+            }
             Constant::Symbol(value) => {
                 let constant = add_constant(self.chunk, BytecodeConstant::Symbol(value.clone()))?;
                 self.proto.emit_op_u16(Op::LoadConst, constant);

@@ -10,6 +10,7 @@ pub(crate) enum Expr {
     LitBool(bool),
     LitUnit,
     LitStr(String),
+    LitBytes(Vec<u8>),
     Symbol(String),
     Call { name: String, args: Vec<Expr> },
     List(Vec<Expr>),
@@ -34,6 +35,7 @@ pub(crate) enum SyntaxKind {
     Bool { value: bool },
     Unit,
     Str { value: String },
+    Bytes { value: Vec<u8> },
     Symbol { name: String },
     Call { name: String },
 }
@@ -55,6 +57,7 @@ impl SourceNode {
             SyntaxKind::Bool { value } => Expr::LitBool(*value),
             SyntaxKind::Unit => Expr::LitUnit,
             SyntaxKind::Str { value } => Expr::LitStr(value.clone()),
+            SyntaxKind::Bytes { value } => Expr::LitBytes(value.clone()),
             SyntaxKind::Symbol { name } => Expr::Symbol(name.clone()),
             SyntaxKind::Call { name } => Expr::Call {
                 name: name.clone(),
@@ -70,6 +73,7 @@ pub(crate) enum TokenKind {
     Close(String),
     Atom(String),
     Str(String),
+    Bytes(Vec<u8>),
 }
 
 #[derive(Clone, Debug)]
