@@ -15,6 +15,10 @@ pub struct EvalResource {
 }
 
 impl EvalResource {
+    pub(crate) const fn kind(&self) -> ResourceKind {
+        self.kind
+    }
+
     pub(super) const fn new(
         key: ResourceKey,
         kind: ResourceKind,
@@ -102,7 +106,6 @@ pub(super) const fn provider_for_kind(kind: ResourceKind) -> ProviderId {
     ProviderId::for_capability(capability)
 }
 
-#[cfg(test)]
 pub(super) const fn ownership_for_kind(kind: ResourceKind) -> ResourceOwnership {
     match kind {
         ResourceKind::InputStream | ResourceKind::OutputStream => ResourceOwnership::Borrowed,

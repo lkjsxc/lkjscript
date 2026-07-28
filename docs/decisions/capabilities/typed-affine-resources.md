@@ -5,11 +5,18 @@
 **Accepted contract with implemented foundation.** Universal source `handle` is
 removed. Exact kinds now cross source typing, HIR, verified SSA, bytecode
 validation, and VM resource-kind checks. Core, VM, and evaluator lifecycle
-foundations enforce provider/state facts and reusable generations. The complete
-capability remains non-Current until exactly-once cleanup, evaluator resource
-operation dispatch, owned native host execution, malformed-input, and acceptance
-coverage are complete. Forced native support is currently only borrowed
-`standard-input`; an opaque runtime token alone does not qualify.
+foundations enforce provider/state facts and reusable generations. The evaluator
+Current slice dispatches borrowed `standard-input`, fake file and directory
+acquisition, fake SQLite connection and child-statement acquisition, and their
+typed consuming close or finalize operations through the generation-safe table.
+The fake provider performs no host effects; a bounded evaluation policy selects
+one exact resource kind whose acquisition and/or close fails deterministically.
+Unlisted evaluator host operations remain rejected as unsupported. The complete
+capability remains non-Current until exactly-once failure-edge cleanup, complete
+evaluator resource operation dispatch, owned native host execution,
+malformed-input, and acceptance coverage are complete. Forced native support is
+currently only borrowed `standard-input`; an opaque runtime token alone does not
+qualify.
 
 ## Closed initial kinds
 

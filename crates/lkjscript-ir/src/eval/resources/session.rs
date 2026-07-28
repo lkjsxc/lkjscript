@@ -1,6 +1,4 @@
-use lkjscript_core::ResourceTable;
-#[cfg(test)]
-use lkjscript_core::{ResourceOwnership, ResourceTableError, ScopeId};
+use lkjscript_core::{ResourceOwnership, ResourceTable, ResourceTableError, ScopeId};
 
 use super::*;
 
@@ -8,19 +6,41 @@ pub(crate) struct EvalResources {
     pub(super) table: ResourceTable<FakeOwner>,
     pub(super) standard_input: Option<EvalResource>,
     pub(super) standard_output: Option<EvalResource>,
-    #[cfg(test)]
     pub(super) providers: FakeProviders,
+    pub(super) policy: crate::eval::EvalResourcePolicy,
     pub(super) metrics: EvalResourceMetrics,
     pub(super) cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
 }
 
 impl EvalResources {
-    #[cfg(test)]
+    pub(crate) fn standard_input(&self) -> Result<EvalResource, String> {
+        self.standard_input
+            .clone()
+            .ok_or_else(|| "evaluator standard input is unavailable".to_owned())
+    }
+
+    pub(crate) fn acquire_configured(
+        &mut self,
+        kind: lkjscript_core::ResourceKind,
+    ) -> Result<EvalResource, String> {
+        self.acquire_owned(kind, self.policy.fail_acquisition != Some(kind))
+    }
+
+    pub(crate) fn prepare_statement_configured(
+        &mut self,
+        connection: &EvalResource,
+    ) -> Result<EvalResource, String> {
+        use lkjscript_core::ResourceKind::SqliteStatement;
+        self.prepare_statement(
+            connection,
+            self.policy.fail_acquisition != Some(SqliteStatement),
+        )
+    }
+
     pub(super) const fn scope(&self) -> ScopeId {
         self.table.scope()
     }
 
-    #[cfg(test)]
     pub(super) fn acquire_owned(
         &mut self,
         kind: lkjscript_core::ResourceKind,
@@ -48,7 +68,6 @@ impl EvalResources {
         ))
     }
 
-    #[cfg(test)]
     pub(super) fn prepare_statement(
         &mut self,
         connection: &EvalResource,
@@ -79,7 +98,20 @@ impl EvalResources {
         ))
     }
 
-    #[cfg(test)]
+    pub(crate) fn validate_borrowed(
+        &mut self,
+        resource: &EvalResource,
+        kind: lkjscript_core::ResourceKind,
+    ) -> Result<(), String> {
+        self.access_binding(
+            resource,
+            kind,
+            provider_for_kind(kind),
+            ResourceOwnership::Borrowed,
+        )
+        .map_err(|error| error.to_string())
+    }
+
     pub(super) fn access_binding(
         &mut self,
         resource: &EvalResource,
@@ -109,7 +141,6 @@ impl EvalResources {
     }
 }
 
-#[cfg(test)]
 fn commit_fake_acquisition(
     reservation: lkjscript_core::OwnedReservation<'_, FakeOwner>,
     payload: Result<FakeOwner, &'static str>,

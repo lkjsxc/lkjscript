@@ -10,24 +10,41 @@ static NEXT_SCOPE: AtomicU64 = AtomicU64::new(1);
 impl EvalResources {
     pub(crate) fn new(
         max_owned: usize,
+        policy: crate::eval::EvalResourcePolicy,
         cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
     ) -> Result<Self, String> {
         let scope = next_scope().ok_or_else(|| "evaluator resource scope exhausted".to_owned())?;
-        Self::with_scope_and_cleanup_limits(max_owned, scope, cleanup_failure_limits)
+        Self::with_scope_policy_and_cleanup_limits(max_owned, scope, policy, cleanup_failure_limits)
     }
 
     #[cfg(test)]
     pub(super) fn with_scope(max_owned: usize, scope: ScopeId) -> Result<Self, String> {
-        Self::with_scope_and_cleanup_limits(
+        Self::with_scope_policy_and_cleanup_limits(
             max_owned,
             scope,
+            crate::eval::EvalResourcePolicy::default(),
             lkjscript_core::CleanupFailureLimits::default(),
         )
     }
 
+    #[cfg(test)]
     pub(super) fn with_scope_and_cleanup_limits(
         max_owned: usize,
         scope: ScopeId,
+        cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
+    ) -> Result<Self, String> {
+        Self::with_scope_policy_and_cleanup_limits(
+            max_owned,
+            scope,
+            crate::eval::EvalResourcePolicy::default(),
+            cleanup_failure_limits,
+        )
+    }
+
+    pub(super) fn with_scope_policy_and_cleanup_limits(
+        max_owned: usize,
+        scope: ScopeId,
+        policy: crate::eval::EvalResourcePolicy,
         cleanup_failure_limits: lkjscript_core::CleanupFailureLimits,
     ) -> Result<Self, String> {
         let max_slots = max_owned
@@ -58,8 +75,8 @@ impl EvalResources {
             table,
             standard_input: Some(standard_input),
             standard_output: Some(standard_output),
-            #[cfg(test)]
             providers,
+            policy,
             metrics: EvalResourceMetrics {
                 borrowed_installed: 2,
                 ..EvalResourceMetrics::default()

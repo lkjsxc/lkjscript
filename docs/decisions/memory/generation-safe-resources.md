@@ -7,8 +7,11 @@
 **Accepted end-to-end contract with Current core lifecycle and static/dead
 owned-resource glue in the compiler, evaluator, and reference VM.** All eleven
 kinds retain exact glue identities; borrowed `standard-input` is not guest-owned.
-The evaluator still has no resource-operation dispatch, and forced native tiers
-still implement only borrowed `standard-input`. Statically decidable conditional
+The evaluator dispatches a closed fake-provider slice for borrowed standard
+input and terminal detection, file and directory acquisition, generic typed
+close, SQLite connection and child-statement acquisition, and SQLite close or
+finalize. Forced native tiers still implement only borrowed `standard-input`.
+Statically decidable conditional
 whole-place close/drop and bounded cleanup attachments are Current in the
 compiler and reference VM. Promotion remains blocked by instruction-originated
 cleanup and owned native resource execution.
@@ -36,8 +39,11 @@ and terminal resources cannot cross provider domains.
 
 Dispatch is a closed kind table, never a source string lookup. The VM derives
 stable provider identities from exact capability origins. The evaluator
-lifecycle harness derives the same identities for fake providers and creates a
-fresh abstract scope per execution without performing ambient host I/O.
+runtime derives the same identities for fake providers and creates a fresh
+abstract scope per execution without performing ambient host I/O. Evaluation
+configuration can fail acquisition or close for one exact resource kind;
+reservation cancellation, invalidation-before-provider-close, and parent-child
+checks remain table-enforced on both successful and failed results.
 
 ## Ownership
 
@@ -89,11 +95,14 @@ Core, VM, and evaluator lifecycle tests cover all kinds, wrong-kind access
 before effects, provider and scope mismatch, borrowed streams, explicit and
 implicit invalidating close, reuse, stale generations, generation exhaustion,
 failed acquisition, SQLite parent/child protection, reverse cleanup, and
-emergency teardown. Compiler tests cover one exact implicit owned-resource event, physical close
-opcode selection, and explicit-close suppression; an app smoke executes that
-path in the reference VM. A conditional resource-parameter fixture covers
-explicit versus implicit close in the VM. Core and engine teardown tests cover bounded UTF-8
-messages, omitted counts and bytes, deterministic reverse order, later cleanup,
-and unchanged primary outcomes. Conditional and instruction-originated
-resource cleanup, evaluator resource-operation dispatch, and owned native
-resource support remain absent.
+emergency teardown. Compiler tests cover one exact implicit owned-resource event,
+physical close opcode selection, and explicit-close suppression; an app smoke
+executes that path in the reference VM. Evaluator source tests cover borrowed
+standard input, successful and failed file acquisition, successful and failed
+generic close, SQLite connection/statement acquisition, finalize, close, and
+failed child acquisition without host I/O. A conditional resource-parameter
+fixture covers explicit versus implicit close in the VM. Core and engine teardown
+tests cover bounded UTF-8 messages, omitted counts and bytes, deterministic
+reverse order, later cleanup, and unchanged primary outcomes. Complete evaluator
+host-operation coverage, instruction-originated resource cleanup, and owned
+native resource support remain absent.

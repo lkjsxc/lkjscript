@@ -3,6 +3,7 @@ use super::*;
 mod buffers;
 mod bytes;
 mod paths;
+mod resources;
 mod scalars;
 mod sequences;
 mod strings;
@@ -64,6 +65,18 @@ impl Evaluator<'_> {
             Op::PathFromStr | Op::PathFromBuf | Op::PathToBuf | Op::PathToStr => {
                 self.runtime_paths(operation, arguments)
             }
+            Op::StdinHandle
+            | Op::SysIsatty
+            | Op::SysClose
+            | Op::SysOpenRead
+            | Op::SysOpenWrite
+            | Op::SysOpenAppend
+            | Op::SysOpenCreateNew
+            | Op::SysOpenDir
+            | Op::SysSqliteOpen
+            | Op::SysSqliteClose
+            | Op::SysSqlitePrepare
+            | Op::SysSqliteFinalize => self.runtime_resources(operation, arguments),
             Op::StrLen
             | Op::StrRef
             | Op::StrAppend

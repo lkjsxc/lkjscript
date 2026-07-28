@@ -22,7 +22,6 @@ impl FakeProviders {
         self.owner(kind, provider, scope, ResourceOwnership::Borrowed, None)
     }
 
-    #[cfg(test)]
     pub(super) fn acquire_owned(
         &mut self,
         kind: ResourceKind,

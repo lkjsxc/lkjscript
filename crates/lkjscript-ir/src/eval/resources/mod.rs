@@ -7,7 +7,6 @@ mod session;
 mod teardown;
 
 use metrics::{EvalCleanupAttempt, EvalResourceMetrics, EvalResourceTeardown};
-#[cfg(test)]
 use model::ownership_for_kind;
 pub use model::EvalResource;
 use model::{provider_for_kind, FakeOwner};

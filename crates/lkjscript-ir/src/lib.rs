@@ -13,7 +13,7 @@ mod verify;
 #[cfg(test)]
 mod tests;
 
-pub use eval::{evaluate, EvalConfig, EvalOutcome, EvalValue};
+pub use eval::{evaluate, EvalConfig, EvalOutcome, EvalResourcePolicy, EvalValue};
 pub use memory::{derive_memory_inventory, verify_memory_inventory};
 pub use model::{
     BindingId, Block, BlockId, BlockMetadata, BlockParameter, BorrowKind, BytecodeBlockLink,

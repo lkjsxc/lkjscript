@@ -13,12 +13,8 @@ impl Evaluator<'_> {
 fn reject_unsupported_host(operation: RuntimeOp) -> std::result::Result<EvalValue, Flow> {
     use RuntimeOp as Op;
     match operation {
-        Op::SysSqliteOpen
-        | Op::SysSqliteClose
-        | Op::SysSqliteBusyTimeout
+        Op::SysSqliteBusyTimeout
         | Op::SysSqliteExec
-        | Op::SysSqlitePrepare
-        | Op::SysSqliteFinalize
         | Op::SysSqliteReset
         | Op::SysSqliteClearBindings
         | Op::SysSqliteBindNull
@@ -42,20 +38,12 @@ fn reject_unsupported_host(operation: RuntimeOp) -> std::result::Result<EvalValu
         | Op::ReadByte
         | Op::WriteByte
         | Op::WriteStr
-        | Op::StdinHandle
-        | Op::SysIsatty
-        | Op::SysClose
         | Op::SysReadByte
         | Op::SysWriteByte
         | Op::SysReadInto
         | Op::SysWriteFrom
         | Op::SysTtyGuardSave
         | Op::SysTtyGuardClear
-        | Op::SysOpenRead
-        | Op::SysOpenWrite
-        | Op::SysOpenAppend
-        | Op::SysOpenCreateNew
-        | Op::SysOpenDir
         | Op::SysFsync
         | Op::SysTruncate
         | Op::SysRename
@@ -82,16 +70,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resource_operation_dispatch_remains_explicitly_unsupported() {
+    fn unimplemented_host_operation_dispatch_remains_explicitly_unsupported() {
         let operations = [
-            RuntimeOp::StdinHandle,
-            RuntimeOp::SysClose,
-            RuntimeOp::SysOpenRead,
+            RuntimeOp::SysReadByte,
             RuntimeOp::SysSocket,
             RuntimeOp::SysTtyGuardSave,
-            RuntimeOp::SysSqliteOpen,
-            RuntimeOp::SysSqlitePrepare,
-            RuntimeOp::SysSqliteFinalize,
+            RuntimeOp::SysSqliteStep,
+            RuntimeOp::SysSqliteColumnBytes,
         ];
         for operation in operations {
             assert!(matches!(

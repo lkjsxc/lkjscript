@@ -7,7 +7,7 @@ use crate::{
     RuntimeLayoutId, RuntimeOp, StructuredOutcome, Terminator, ValueId, VariantId, VerifiedProgram,
 };
 
-pub use config::EvalConfig;
+pub use config::{EvalConfig, EvalResourcePolicy};
 pub use resources::EvalResource;
 
 include!("value.rs");
@@ -23,11 +23,14 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
     let Some(unique) = unique::EvalUniqueRuntime::new(config) else {
         return EvalOutcome::HostFailure("invalid evaluator unique-store limits".into());
     };
-    let resources =
-        match resources::EvalResources::new(config.max_resources, config.cleanup_failure_limits) {
-            Ok(resources) => resources,
-            Err(message) => return EvalOutcome::HostFailure(message),
-        };
+    let resources = match resources::EvalResources::new(
+        config.max_resources,
+        config.resource_policy,
+        config.cleanup_failure_limits,
+    ) {
+        Ok(resources) => resources,
+        Err(message) => return EvalOutcome::HostFailure(message),
+    };
     let mut evaluator = Evaluator {
         static_bytes: collect_static_bytes(program),
         program,

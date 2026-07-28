@@ -1,6 +1,4 @@
-use lkjscript_core::ResourceKind;
-#[cfg(test)]
-use lkjscript_core::{ProviderId, ResourceTableError};
+use lkjscript_core::{ProviderId, ResourceKind, ResourceTableError};
 
 use super::*;
 
@@ -36,6 +34,17 @@ impl EvalResources {
         }
     }
 
+    pub(crate) fn close_configured(&mut self, resource: EvalResource) -> Result<(), String> {
+        if matches!(
+            resource.kind,
+            ResourceKind::SqliteConnection | ResourceKind::SqliteStatement
+        ) {
+            return Err("SQLite resources require close or finalize".into());
+        }
+        let kind = resource.kind;
+        self.close_binding(resource, kind, provider_for_kind(kind))
+    }
+
     #[cfg(test)]
     pub(super) fn close(&mut self, resource: EvalResource) -> Result<(), String> {
         if matches!(
@@ -48,8 +57,7 @@ impl EvalResources {
         self.close_binding(resource, kind, provider_for_kind(kind))
     }
 
-    #[cfg(test)]
-    pub(super) fn close_sqlite_connection(&mut self, resource: EvalResource) -> Result<(), String> {
+    pub(crate) fn close_sqlite_connection(&mut self, resource: EvalResource) -> Result<(), String> {
         self.close_binding(
             resource,
             ResourceKind::SqliteConnection,
@@ -57,8 +65,7 @@ impl EvalResources {
         )
     }
 
-    #[cfg(test)]
-    pub(super) fn finalize_statement(&mut self, resource: EvalResource) -> Result<(), String> {
+    pub(crate) fn finalize_statement(&mut self, resource: EvalResource) -> Result<(), String> {
         self.close_binding(
             resource,
             ResourceKind::SqliteStatement,
@@ -66,7 +73,6 @@ impl EvalResources {
         )
     }
 
-    #[cfg(test)]
     pub(super) fn close_binding(
         &mut self,
         resource: EvalResource,
@@ -74,12 +80,20 @@ impl EvalResources {
         provider: ProviderId,
     ) -> Result<(), String> {
         let scope = self.scope();
+        let fail_close = self.policy.fail_close == Some(kind);
         let result = self.table.close_owned_with(
             resource.key,
             kind,
             provider,
             scope,
-            |observation, payload| payload.validate(&observation).map(|_| ()),
+            |observation, payload| {
+                payload.validate(&observation)?;
+                if fail_close {
+                    Err("deterministic fake close failure".to_owned())
+                } else {
+                    Ok(())
+                }
+            },
         );
         match result {
             Ok(outcome) => {
@@ -111,7 +125,6 @@ impl EvalResources {
         }
     }
 
-    #[cfg(test)]
     pub(super) fn record_access_error(&mut self, error: &ResourceTableError) {
         if *error == ResourceTableError::StaleKey {
             self.metrics.stale_key_failures = self.metrics.stale_key_failures.saturating_add(1);

@@ -12,3 +12,5 @@ mod ownership;
 mod randomized;
 #[path = "ssa_equivalence/scalar.rs"]
 mod scalar;
+#[path = "ssa_equivalence/unique_outcomes.rs"]
+mod unique_outcomes;
