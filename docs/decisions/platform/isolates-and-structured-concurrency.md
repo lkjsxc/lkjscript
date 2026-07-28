@@ -7,9 +7,11 @@ tasks, isolates, or asynchronous sockets are implemented.
 
 ## Status
 
-The current runtime is single-owner and process-global host services prevent
-concurrent VM supervision. Isolates, tasks, channels, async syntax, `Send` and
-`Sync`, and the reactor are **Accepted Targets**, not Current behavior.
+The current language runtime is single-owner and process-global host services
+prevent concurrent VM supervision. The internal
+[semantic resource plane](semantic-resource-plane.md) is an Accepted Contract;
+source tasks, isolates, channels, async syntax, `Send` and `Sync`, and the
+reactor remain **Accepted Targets**, not Current behavior.
 
 ## Decision
 
@@ -24,11 +26,14 @@ isolates
 + compiler-derived Send and Sync
 ```
 
-A worker owns a local heap by default. A task may borrow only within a proven
-scope. Child tasks are joined or cancelled before their scope ends. Unique
-owned values may cross workers by move; immutable shared byte storage may be
-shared through an explicit type. Worker-local GC references are not `Send`.
-Shared mutation requires an explicit synchronized type.
+A worker owns bounded scratch and participates in deterministic memory homes;
+it does not gain a worker-local tracing heap. A task may borrow only within a
+proven scope. Child tasks are joined or cancelled before their scope ends.
+Unique owned values may cross workers only by verified boundary move with no
+live loan; immutable shared byte storage requires an explicit sharing contract.
+Task-access verification derives portability, dependencies, and result
+ownership. Legacy traced references are not portable. Shared mutation requires
+an explicit synchronized type.
 
 Ordinary source cannot assert `Send` or `Sync` unsafely. The compiler derives
 them from all fields, future enum payloads, closure captures, reference kinds,
@@ -37,15 +42,15 @@ GC ownership, synchronization wrappers, and unique containers.
 ## Accepted Sequence
 
 ```text
-ownership and derived Send/Sync
+internal verified task graph and deterministic scheduler
+  -> topology-aware bounded workers and deterministic memory homes
+  -> ownership and derived Send/Sync for source values
   -> Task, Future, Cancellation, and Deadline representations
-  -> structured task scopes
-  -> single-thread lightweight scheduler
+  -> source structured task scopes
   -> epoll reactor and timers
   -> bounded blocking pool
-  -> multi-worker isolates
   -> ownership-transfer bounded channels
-  -> work stealing only for Send tasks
+  -> source work stealing only for derived-portable tasks
 ```
 
 The source design will record one canonical line-oriented syntax for concepts
@@ -63,8 +68,9 @@ cancellation, resource limits, and backpressure.
 
 ## Deferred
 
-All syntax, scheduler, reactor, multi-worker GC, channels, work stealing, and
-`io_uring` are **Deferred** in the current JIT cycle.
+All source syntax, reactor, multi-worker legacy tracing, channels, and
+`io_uring` are **Deferred**. The internal semantic resource plane does not
+promote them.
 
 ## Rejected
 

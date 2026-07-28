@@ -14,6 +14,7 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
 <!-- LKJ-STATUS id=semantic-session status=current -->
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
@@ -75,12 +76,16 @@ closed glue identities, explicit loan-end/drop events, and rejects active-owner
 operations use bounded unique services in evaluator, VM, and forced native
 execution. Static/dead owned-resource exits receive exact implicit glue;
 evaluator fake owners and VM bytecode execute it through their core tables,
-while explicit close suppresses it. Conditional and instruction-originated
-resource cleanup remain incomplete. VM resources use
+while explicit close suppresses it. Conditional and exact interned
+instruction-failure cleanup now reach evaluator, validated bytecode, VM, forced
+baseline, and forced proof execution for each supported owner class. Failed
+pre-entry native calls clean transferred arguments separately. Bounded ordered
+cleanup failures attach without replacing the primary outcome. VM resources use
 reusable generation-bearing guest tokens, exact providers, one execution scope,
-reservations, invalidating close, and reverse emergency cleanup. Structured
-provider-close failure attachment, evaluator resource-operation dispatch, and
-native owned-resource execution remain absent.
+reservations, invalidating close, and reverse emergency cleanup. Evaluator fake
+providers dispatch the implemented standard-input, terminal, file/directory,
+and SQLite lifecycle subset. Broader evaluator operations and native owned
+resources remain absent.
 
 ## Current Non-Memory Boundaries
 
@@ -98,20 +103,20 @@ native owned-resource execution remain absent.
 
 ## Accepted Next Sequence
 
-1. Complete instruction-originated all-outcome cleanup using the implemented
-   static/dead/conditional drop classes and bounded cleanup-failure attachment.
-2. Add evaluator resource-operation dispatch and forced-native owned-resource
-   execution beyond borrowed standard input.
-3. Verify whole-aggregate affine transfer/drop for ownership-bearing products
-   and the `result path system-error` envelope.
-4. Migrate path and host byte boundaries, then remove transitional `buf`
-   atomically without aliases.
-5. Implement ordinary/sealed regions, pools, weak links, and an evidence-based
-   immutable-sharing policy.
-6. Integrate memory-plan identity into verified artifacts and expose complete
-   compiler-derived ownership evidence to agents.
-7. Ratchet all remaining structural traced families downward and remove
-   `GcHeap` only after the registry reaches zero.
+1. Implement the accepted semantic resource plane: bounded hardware topology,
+   read-only Linux scheduler observation, independently verified task graphs,
+   deterministic reference scheduling, and a session-owned worker runtime.
+2. Derive proof-edit discovery tasks per verified SSA function; merge journals
+   and certificates in stable ID order while retaining the independent checker.
+3. Integrate deterministic memory homes and actual collector-free generated
+   kernels, then retain same-commit policy evidence and select or reject a
+   production default honestly.
+4. Continue evaluator breadth and forced-native owned-resource execution beyond
+   borrowed standard input without delaying the scheduler slice.
+5. Verify aggregate-affine transfer/drop, migrate path and host byte boundaries,
+   and remove transitional `buf` atomically without aliases.
+6. Implement ordinary/sealed regions, pools, weak links, and evidence-based
+   immutable sharing; ratchet traced families to zero before removing `GcHeap`.
 
 This order is an implementation contract, not a Current capability claim.
 

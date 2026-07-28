@@ -24,6 +24,7 @@
 <!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
 <!-- LKJ-STATUS id=semantic-core-target status=accepted-target -->
+<!-- LKJ-STATUS id=semantic-resource-plane status=accepted-contract -->
 <!-- LKJ-STATUS id=semantic-session status=current -->
 <!-- LKJ-STATUS id=semantic-source status=current -->
 <!-- LKJ-STATUS id=typed-holes status=current -->
@@ -44,7 +45,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Generic enums, exhaustive `match`, `never`, structured control, and explicit
   numeric conversions run through evaluator, VM, baseline JIT, and proof JIT
   where each engine supports the relevant operation set.
-- Source, declaration, node, revision, and Semantic Source identities frame the full
+- Source, declaration, node, revision, and Semantic Source identities frame the
   Current source/semantic contract digest.
 - Semantic Source requests, sessions, diagnostics, typed holes, transactions,
   and publications require stable schema names plus exact full contract
@@ -58,9 +59,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   constructors reject empty, relative, NUL-containing, and oversized paths;
   observation is either exact bytes or strict UTF-8. Filesystem and SQLite
   operations reject `string` pathname operands.
-
 ## Modules and local packages
-- Every source file is a module identified only by its package-root-relative UTF-8 path.
+- Every source file is a module identified only by its package-root-relative
+  UTF-8 path.
 - Declarations are private by default. The `public` field is explicit; each
   `import/` records exact module paths and sorted declaration lists. Wildcards,
   transitive visibility, ambient root search, dot-relative paths, collisions,
@@ -73,7 +74,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - `lkjscript package lock` writes atomically. `package check`, `run`, and
   `disasm` reject missing, noncanonical, stale, or mismatched locks. Registry,
   network, home-directory, and environment fallback resolution do not exist.
-
 ## Ownership and resources
 - `byte-vector`, whole-place `move`, `byte-slice`, and `byte-slice-mut` expose
   the existing bounded ownership foundation without `owned buf`, `ref buf`, or `ref-mut buf` source aliases.
@@ -114,7 +114,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Immutable bytes literal/read/copy/clone/freeze/thaw operations execute through
   all four engines. Native static identities select verified image data; dynamic
   values remain affine. Path, owned resources, and mixed groups remain outside.
-
 ## Compiler and execution
 - One validated source tree feeds module resolution, typed HIR, ownership and
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
@@ -135,8 +134,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests. Runtime calls and public
   metrics use stable unnumbered names.
-- Metrics use `lkjscript.metrics` and the full metrics contract digest.
-- `lkjscript memory inventory` exposes 62 sorted memory-obligation records under
+- Metrics use `lkjscript.metrics` and its full contract digest. `lkjscript
+  memory inventory` exposes 62 sorted memory-obligation records under
   `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
   exact roots, executable evaluator/VM bytes island, and accepted deterministic
   candidates; it is derived evidence, not semantic authority.
@@ -150,8 +149,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   memory traced [--json]` exposes the same sorted Current set. This intermediate
   gate does not claim that the runtime collector is removed.
 - Resource categories and profiles use full category/profile/maxima/ceiling
-  digests. The selected ledger spans compiler phases; one request-owned ledger
-  across every compiler/runtime authority remains an accepted target.
+  digests. The selected compiler-phase ledger is Current; one request-owned
+  compiler/runtime ledger remains an accepted target.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.
@@ -165,7 +164,6 @@ Git history. They do not provide aliases or acceptance fallbacks.
   protocol, profile, ABI, and standalone generation names in Current-owned
   code, tests, fixtures, examples, config, and documentation. Immutable
   historical evidence is explicitly excluded rather than rewritten.
-
 ## Accepted targets not claimed Current
 - lowercase-vocabulary promotion is blocked only by removing transitional `buf`;
 - evaluator dispatch beyond the fake-provider slice and native owned resources
@@ -181,6 +179,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   candidate failed its measured adoption gate and was removed;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
 - automatic baseline-to-proof promotion acceptance beyond its selected measured candidate;
+- the semantic resource plane: bounded topology and Linux observation, verified
+  task graphs, deterministic and multi-worker scheduling, memory homes,
+  proof-discovery/native-kernel integrations, and measured policy selection;
 - portability acceptance beyond Linux x86-64.
 
 Immutable `bytes` is executable in the compiler, evaluator, validated bytecode,
@@ -194,7 +195,6 @@ The canonical local gate is:
 cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
 
-Runtime, forced-tier, Docker, retained-result validation, Miri, sanitizers,
-fuzzing, and performance gates are separate evidence classes. Exact commands,
-commit, environment, result, and untested gates must be reported; an unrun gate
-is never implied.
+Runtime, forced-tier, Docker, retained-result, Miri, sanitizer, fuzz, and
+performance gates are separate evidence. Exact commands, commit, environment,
+result, and untested gates must be reported; an unrun gate is never implied.

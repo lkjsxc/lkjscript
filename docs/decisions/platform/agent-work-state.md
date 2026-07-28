@@ -27,11 +27,12 @@ No generated task state is tracked.
 
 ## Closed canonical contract Snapshot
 
-The persisted [work-state schema](../../../meta/agent-state/work-state.schema.json) has identity
-`lkjscript.agent-work-state`, version `2`; the strict
-[checkpoint envelope](../../../meta/agent-state/checkpoint.schema.json) carries version 2 and its compare revision.
-Version 1 is historical and rejected without an alias. Administrative
-schema, version, task ID, and state revision fields accompany only these bounded facts:
+The persisted [work-state schema](../../../meta/agent-state/work-state.schema.json)
+has identity `lkjscript.agent-work-state`; the strict
+[checkpoint envelope](../../../meta/agent-state/checkpoint.schema.json) carries
+its expected compare revision. No numbered version field exists or is accepted.
+Administrative schema, contract, task ID, and state revision fields accompany
+only these bounded facts:
 
 - base and current repository revisions, goal, hard constraints, and selected capsule scope;
 - optional exact semantic-session identity/source revision plus bounded target

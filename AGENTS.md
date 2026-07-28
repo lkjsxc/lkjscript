@@ -13,9 +13,11 @@ proof-checked optimizing JIT. The language has one content-addressed semantic
 contract, explicit capabilities/effects, and value semantics. Current execution
 still uses an exact tracing heap during migration; the accepted destination is
 collector-free inferred ownership, borrowing, regions, sealed sharing, and
-pools. Reproducible packages/components and one semantic IR family feed a
-measured evaluator/VM/JIT/AOT/cache/Wasm
-portfolio. Current line-oriented source is the deterministic text projection;
+pools. One semantic resource plane separates compiler-verified task legality
+from measured topology, scheduling, and memory-home policy while Linux remains
+the system-wide scheduler. Reproducible packages/components and one semantic IR
+family feed a measured evaluator/VM/JIT/AOT/cache/Wasm portfolio. Current
+line-oriented source is the deterministic text projection;
 it is not the permanent editing identity.
 Linux x86-64 tier evidence requires real synchronous calls from verified SSA;
 code emission, disassembly, SSA scaffolding, or observation alone is
@@ -87,30 +89,31 @@ support claim.
 6. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
 7. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
 8. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
-9. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
-10. [Language](docs/language/README.md)
-11. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
-12. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
-13. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
-14. [Semantic core](docs/decisions/semantics/semantic-core.md)
-15. [Equality](docs/decisions/semantics/equality-families.md)
-16. [Products](docs/decisions/semantics/immutable-nominal-products.md)
-17. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
-18. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
-19. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
-20. [Authoritative memory plan](docs/decisions/memory/authoritative-memory-plan.md)
-21. [Deterministic drop](docs/decisions/memory/deterministic-drop.md)
-22. [Collector-free value island](docs/decisions/memory/collector-free-value-island.md)
-23. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
-24. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
-25. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
-26. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
-27. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
-28. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
-29. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
-30. [Agent state](docs/decisions/platform/agent-work-state.md)
-31. [Verification](docs/operations/verification.md)
-32. [Vision and evidence](docs/vision/README.md)
+9. [Semantic resource plane](docs/decisions/platform/semantic-resource-plane.md)
+10. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
+11. [Language](docs/language/README.md)
+12. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
+13. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
+14. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
+15. [Semantic core](docs/decisions/semantics/semantic-core.md)
+16. [Equality](docs/decisions/semantics/equality-families.md)
+17. [Products](docs/decisions/semantics/immutable-nominal-products.md)
+18. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
+19. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
+20. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
+21. [Authoritative memory plan](docs/decisions/memory/authoritative-memory-plan.md)
+22. [Deterministic drop](docs/decisions/memory/deterministic-drop.md)
+23. [Collector-free value island](docs/decisions/memory/collector-free-value-island.md)
+24. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
+25. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
+26. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
+27. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
+28. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
+29. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
+30. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
+31. [Agent state](docs/decisions/platform/agent-work-state.md)
+32. [Verification](docs/operations/verification.md)
+33. [Vision and evidence](docs/vision/README.md)
 
 ## Development Loop
 
