@@ -87,3 +87,41 @@ fn leak_assertion_reports_exact_live_obligation() {
     store.free_bytes(key).expect("bytes free");
     assert_eq!(store.assert_no_leaks(), Ok(()));
 }
+
+#[test]
+fn deterministic_operation_sequence_preserves_payloads_and_balance() {
+    let mut store = store_with(7, 16, 256, 16, 1_000, 1_000);
+    let mut live = Vec::new();
+    let mut state = 0x9e37_79b9_u32;
+    for _ in 0..512 {
+        state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        if live.is_empty() || live.len() < 16 && state & 1 == 0 {
+            let len = (state as usize % 8) + 1;
+            let bytes = vec![(state >> 8) as u8; len];
+            let key = store
+                .allocate_byte_vector(bytes.clone())
+                .expect("bounded deterministic allocation");
+            live.push((key, bytes));
+            continue;
+        }
+        let index = state as usize % live.len();
+        let (key, mut expected) = live.swap_remove(index);
+        assert_eq!(store.byte_vector(key), Ok(expected.as_slice()));
+        let byte = (state >> 16) as u8;
+        let offset = state as usize % expected.len();
+        store
+            .byte_vector_mut(key)
+            .expect("bounded deterministic mutation")[offset] = byte;
+        expected[offset] = byte;
+        assert_eq!(store.byte_vector(key), Ok(expected.as_slice()));
+        store
+            .free_byte_vector(key)
+            .expect("bounded deterministic release");
+    }
+    for (key, expected) in live {
+        assert_eq!(store.byte_vector(key), Ok(expected.as_slice()));
+        store.free_byte_vector(key).expect("final release");
+    }
+    assert_eq!(store.stats().allocations, store.stats().frees);
+    assert_eq!(store.assert_no_leaks(), Ok(()));
+}
