@@ -31,7 +31,9 @@ fn direct_affine_memory_modes_are_closed() {
     assert_eq!(resource.storage, MemoryStorage::ExternalSlot);
     assert_eq!(
         resource.destruction,
-        MemoryDestruction::ExplicitExternalClose
+        MemoryDestruction::DropGlue(DropGlueIdentity::Resource(
+            lkjscript_contracts::ResourceKind::FileReader
+        ))
     );
     assert!(owner_mode(&place(SsaType::Buf, None)).is_none());
 }

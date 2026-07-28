@@ -46,11 +46,16 @@ pub(super) fn verify(
             let bad_kind = matches!(
                 (kind, glue),
                 (
-                    crate::DropEventKind::ImplicitCleanup,
-                    crate::DropGlueIdentity::Resource(_)
-                ) | (
                     crate::DropEventKind::ExplicitClose,
                     crate::DropGlueIdentity::ByteVector | crate::DropGlueIdentity::Bytes
+                )
+            ) || matches!(
+                (kind, glue),
+                (
+                    crate::DropEventKind::ImplicitCleanup,
+                    crate::DropGlueIdentity::Resource(
+                        lkjscript_contracts::ResourceKind::InputStream
+                    )
                 )
             );
             if declared.drop_glue != Some(*glue)

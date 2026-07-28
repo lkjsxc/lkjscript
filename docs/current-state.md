@@ -87,14 +87,15 @@ Git history. They do not provide aliases or acceptance fallbacks.
   whole-place-drop events, rejects owner-erasing `place-end`, proves static/dead
   discharge at explicit terminators, and pairs explicit `drop`, SQLite close,
   and SQLite finalize with exact resource-drop events.
-- Byte-vector cleanup is elaborated on normal lexical and source-level return,
-  break, continue, trap, and exit paths. Forced native byte-vector execution
-  additionally releases any outstanding loan/owner after an instruction-originated
-  trap or resource failure. Typed resources still require move, return, or
-  explicit close. General conditional flags, implicit resource close, structured
-  cleanup-failure attachment, and generated owned-resource host execution remain
-  accepted-contract work, so deterministic drop and typed resources are not
-  complete Current capabilities.
+- Byte-vector and owned typed-resource cleanup is elaborated on normal lexical
+  and source-level return, break, continue, trap, and exit paths. Explicit close
+  suppresses implicit resource glue; evaluator fake owners and reference-VM
+  bytecode use their core tables, while borrowed standard input is never closed.
+  Forced native byte-vector execution additionally releases outstanding bytes
+  after instruction-originated failure. Conditional owners, instruction-originated
+  resource cleanup, bounded cleanup-failure attachment, and native owned-resource
+  execution remain accepted-contract work, so deterministic drop and typed
+  resources are not complete Current capabilities.
 - The VM uses checked generation-bearing core resource-table tokens; evaluator
   executions use exact fake lifecycle providers without ambient host I/O. Forced
   baseline and proof JIT support only `standard-input`, installing or reusing a
@@ -163,7 +164,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 ## Accepted targets not claimed Current
 - promotion of the implemented lowercase vocabulary to Current remains blocked
   only by the atomic removal of transitional `buf` source surfaces;
-- complete typed-resource compiler-inserted exactly-once cleanup, evaluator
+- conditional and instruction-originated typed-resource cleanup, evaluator
   resource-operation dispatch, bounded structured cleanup-failure attachment,
   and forced native owned-resource execution beyond borrowed `standard-input`;
 - full affine `byte-vector` corpus migration, ranged lexical byte slices,

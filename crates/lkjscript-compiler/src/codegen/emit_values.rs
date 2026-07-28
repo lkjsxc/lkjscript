@@ -158,3 +158,4 @@ impl Emitter<'_> {
 }
 
 include!("emit_values/instruction.rs");
+include!("emit_values/resource_drop.rs");

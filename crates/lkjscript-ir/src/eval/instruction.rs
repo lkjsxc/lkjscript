@@ -24,11 +24,19 @@ impl Evaluator<'_> {
                 self.unique.end_borrow(view)?;
                 Ok(EvalValue::Unit)
             }
-            InstructionKind::Drop { value: source, .. } => {
-                let owner = take_value(values, *source)?;
-                self.unique.drop_owner(owner)?;
-                Ok(EvalValue::Unit)
-            }
+            InstructionKind::Drop {
+                value: source,
+                glue: crate::DropGlueIdentity::Resource(kind),
+                kind: crate::DropEventKind::ImplicitCleanup,
+                ..
+            } => self.drop_resource(values, *source, *kind),
+            InstructionKind::Drop {
+                value: source,
+                glue: crate::DropGlueIdentity::Resource(_),
+                kind: crate::DropEventKind::ExplicitClose,
+                ..
+            } => Self::finish_explicit_resource_close(values, *source),
+            InstructionKind::Drop { value: source, .. } => self.drop_unique(values, *source),
             InstructionKind::PlaceInit { .. } | InstructionKind::PlaceEnd { .. } => {
                 Ok(EvalValue::Unit)
             }
@@ -188,3 +196,4 @@ impl Evaluator<'_> {
 }
 
 include!("instruction/constants.rs");
+include!("instruction/resource_drop.rs");

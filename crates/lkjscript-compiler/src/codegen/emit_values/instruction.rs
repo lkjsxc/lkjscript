@@ -39,23 +39,16 @@ impl Emitter<'_> {
                 self.proto.emit_op_u8(Op::EndBorrowLocal, slot);
             }
             InstructionKind::Drop {
-                place,
-                value,
-                glue: DropGlueIdentity::ByteVector,
-                ..
-            } => {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::ByteVectorDropPlace, operand);
+                place, value, glue, ..
+            } if matches!(glue, DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes) => {
+                self.emit_unique_drop(*place, *value, *glue)?;
             }
             InstructionKind::Drop {
-                place,
                 value,
-                glue: DropGlueIdentity::Bytes,
+                glue: DropGlueIdentity::Resource(kind),
+                kind: lkjscript_ir::DropEventKind::ImplicitCleanup,
                 ..
-            } if !self.static_bytes_value(*value)? => {
-                let operand = self.place_slot(*place, *value)?;
-                self.proto.emit_op_u16(Op::BytesDropPlace, operand);
-            }
+            } => self.emit_implicit_resource_drop(*value, *kind)?,
             InstructionKind::Move { place, value }
                 if self.value_type(*value)? == &SsaType::Bytes
                     && !self.static_bytes_value(*value)? =>

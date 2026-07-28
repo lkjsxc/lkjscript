@@ -9,7 +9,7 @@ fn owner_mode(place: &PlaceMetadata) -> Option<MemoryMode> {
         ),
         (SsaType::Resource(kind), DropGlueIdentity::Resource(glue_kind)) if *kind == glue_kind => (
             MemoryStorage::ExternalSlot,
-            MemoryDestruction::ExplicitExternalClose,
+            MemoryDestruction::DropGlue(glue),
             MemoryIdentity::External,
         ),
         _ => return None,

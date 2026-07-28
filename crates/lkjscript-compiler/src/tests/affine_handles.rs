@@ -19,12 +19,49 @@ fn cleanup() -> &'static str {
 }
 
 #[test]
-fn affine_handle_requires_explicit_cleanup() {
+fn affine_handle_receives_exact_implicit_cleanup() {
     let source = handle_main("unit");
-    let error = compile_source(&source, "handle-leak.lkjscript", &Limits::default())
-        .expect_err("unconsumed handle")
-        .to_string();
-    assert!(error.contains("must be returned, moved, or dropped"));
+    let program = compile_source(
+        &source,
+        "handle-implicit-drop.lkjscript",
+        &Limits::default(),
+    )
+    .expect("owned resource receives implicit cleanup");
+    let drops: Vec<_> = program
+        .ssa()
+        .program()
+        .functions
+        .iter()
+        .flat_map(|function| &function.blocks)
+        .flat_map(|block| &block.instructions)
+        .filter(|instruction| {
+            matches!(
+                instruction.kind,
+                lkjscript_ir::InstructionKind::Drop {
+                    glue: lkjscript_ir::DropGlueIdentity::Resource(
+                        lkjscript_core::ResourceKind::FileReader
+                    ),
+                    kind: lkjscript_ir::DropEventKind::ImplicitCleanup,
+                    ..
+                }
+            )
+        })
+        .collect();
+    assert_eq!(drops.len(), 1);
+    let ops: Vec<_> = program
+        .bytecode()
+        .main_instructions()
+        .iter()
+        .map(|instruction| instruction.op())
+        .collect();
+    assert!(ops.windows(3).any(|window| {
+        window
+            == [
+                lkjscript_core::Op::SysClose,
+                lkjscript_core::Op::Pop,
+                lkjscript_core::Op::Unit,
+            ]
+    }));
 }
 
 #[test]
@@ -55,23 +92,30 @@ fn affine_handle_cleanup_reaches_verified_ssa() {
     let source = handle_main(cleanup());
     let program = compile_source(&source, "handle-drop.lkjscript", &Limits::default())
         .expect("explicit drop");
-    assert!(program
-        .ssa()
-        .program()
-        .functions
-        .iter()
-        .flat_map(|function| &function.blocks)
-        .flat_map(|block| &block.instructions)
-        .any(|instruction| matches!(
-            instruction.kind,
-            lkjscript_ir::InstructionKind::Drop {
-                glue: lkjscript_ir::DropGlueIdentity::Resource(
-                    lkjscript_core::ResourceKind::FileReader
-                ),
-                kind: lkjscript_ir::DropEventKind::ExplicitClose,
-                ..
-            }
-        )));
+    let resource_drops: Vec<_> =
+        program
+            .ssa()
+            .program()
+            .functions
+            .iter()
+            .flat_map(|function| &function.blocks)
+            .flat_map(|block| &block.instructions)
+            .filter_map(|instruction| match instruction.kind {
+                lkjscript_ir::InstructionKind::Drop {
+                    glue:
+                        lkjscript_ir::DropGlueIdentity::Resource(
+                            lkjscript_core::ResourceKind::FileReader,
+                        ),
+                    kind,
+                    ..
+                } => Some(kind),
+                _ => None,
+            })
+            .collect();
+    assert_eq!(
+        resource_drops,
+        vec![lkjscript_ir::DropEventKind::ExplicitClose]
+    );
 }
 
 #[test]

@@ -44,6 +44,45 @@ fn owned_buf_borrows_moves_and_mutation_match_evaluator_and_vm() {
 }
 
 #[test]
+fn implicit_owned_resource_close_runs_in_reference_vm() {
+    let path = format!(
+        "/tmp/lkjscript-implicit-resource-drop-{}",
+        std::process::id()
+    );
+    std::fs::write(&path, b"resource").expect("create implicit-drop fixture");
+    let source = format!(
+        concat!(
+            "main/\nsig/\ninputs/\ncapability/\nfile-system\n/capability\n/inputs\n",
+            "output/\nunit\n/output\n/sig\nparams/\nfile-system\ncapability/\n",
+            "file-system\n/capability\n/params\nlet/\nbind/\nreader\nunwrap-ok/\n",
+            "open-file-reader/\nfile-system\nunwrap-ok/\nconvert-string-to-path/\n",
+            "string-literal/\n{}\n/string-literal\n/convert-string-to-path\n/unwrap-ok\n",
+            "/open-file-reader\n/unwrap-ok\n/bind\nunit\n/let\n/main\n"
+        ),
+        path
+    );
+    let program = compile_source(
+        &source,
+        "implicit-resource-drop.lkjscript",
+        &Limits::default(),
+    )
+    .expect("compile implicit resource close");
+    let outcome = run_chunk(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs {
+            arguments: Vec::new(),
+            capabilities: vec![lkjscript_core::CapabilityKind::FileSystem],
+        },
+        &ExecutionConfig::default(),
+    );
+    let _removed = std::fs::remove_file(path);
+    assert!(
+        matches!(outcome, ExecutionOutcome::Returned(_)),
+        "{outcome:?}"
+    );
+}
+
+#[test]
 fn byte_vector_trap_early_return_and_owner_return_cleanup_match() {
     let trap_source = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nb\nnew-byte-vector/\n2\n/new-byte-vector\n/bind\nbyte-slice-byte-at/\nborrow/\nb\n/borrow\n9\n/byte-slice-byte-at\n/let\n/main\n";
     let trapped = compile_source(

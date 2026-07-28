@@ -4,13 +4,13 @@
 
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 
-**Accepted end-to-end contract with Current core, VM, and evaluator lifecycle
-foundations.** They cover all eleven kinds, reusable nonwrapping slots,
-provider/scope binding, stale-key rejection, reservations, invalidating close,
-reverse emergency cleanup, and exact obligations. The evaluator uses fake
-owners without resource-operation dispatch. Forced native tiers implement only
-borrowed `standard-input` over an invocation-owned core table. Promotion remains
-blocked by compiler cleanup on every outcome and owned native resource execution.
+**Accepted end-to-end contract with Current core lifecycle and static/dead
+owned-resource glue in the compiler, evaluator, and reference VM.** All eleven
+kinds retain exact glue identities; borrowed `standard-input` is not guest-owned.
+The evaluator still has no resource-operation dispatch, and forced native tiers
+still implement only borrowed `standard-input`. Promotion remains blocked by
+conditional and instruction-originated cleanup, bounded failure attachment, and
+owned native resource execution.
 
 ## Key And Slot
 
@@ -48,12 +48,12 @@ the same verified per-kind glue.
 
 ## Teardown
 
-Ordinary successful execution will reach teardown with zero guest-owned
-resource obligations once compiler all-outcome cleanup is implemented. Current
-VM and evaluator teardown record that unmet ordinary invariant distinctly,
-observe exact emergency obligations, and run the core table's reverse owned
-cleanup before removing borrowed standard streams. It is a safety net, not
-normal semantics.
+Static successful lexical paths now execute exact implicit glue before teardown
+and therefore leave zero obligations for those owners. Instruction-originated
+outcomes can still reach teardown with obligations. VM and evaluator teardown
+record that unmet invariant distinctly and run reverse emergency cleanup before
+removing borrowed standard streams. It remains a safety net, not ordinary
+semantics.
 
 ## Failure
 
@@ -76,9 +76,11 @@ explicit close remain unsupported and reject preflight before effects.
 ## Verification
 
 Core, VM, and evaluator lifecycle tests cover all kinds, wrong-kind access
-before effects, provider and scope mismatch, borrowed streams, explicit close,
-reuse, stale generations, generation exhaustion, failed acquisition, SQLite
-parent/child protection, reverse cleanup, and emergency teardown. Native tests
-add exact borrowed reservation/reuse/removal and zero obligations in both forced
-tiers. Evaluator resource operations, compiler all-outcome cleanup, and owned
-native resource support remain absent.
+before effects, provider and scope mismatch, borrowed streams, explicit and
+implicit invalidating close, reuse, stale generations, generation exhaustion,
+failed acquisition, SQLite parent/child protection, reverse cleanup, and
+emergency teardown. Compiler tests cover one exact implicit owned-resource event, physical close
+opcode selection, and explicit-close suppression; an app smoke executes that
+path in the reference VM. Conditional and instruction-originated resource
+cleanup, evaluator resource-operation dispatch,
+and owned native resource support remain absent.

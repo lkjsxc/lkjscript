@@ -1,8 +1,41 @@
-use lkjscript_core::{ProviderId, ResourceKind, ResourceTableError};
+use lkjscript_core::ResourceKind;
+#[cfg(test)]
+use lkjscript_core::{ProviderId, ResourceTableError};
 
 use super::*;
 
 impl EvalResources {
+    pub(crate) fn drop_owned(
+        &mut self,
+        resource: EvalResource,
+        expected: ResourceKind,
+    ) -> Result<(), String> {
+        if expected == ResourceKind::InputStream
+            || resource.kind != expected
+            || resource.ownership != lkjscript_core::ResourceOwnership::Owned
+        {
+            return Err(format!(
+                "implicit {} drop does not match an owned evaluator resource",
+                expected.as_str()
+            ));
+        }
+        let scope = self.table.scope();
+        let closed = self.table.close_owned_with(
+            resource.key,
+            expected,
+            resource.provider,
+            scope,
+            |observation, payload| payload.validate(&observation).map(|_| ()),
+        );
+        match closed {
+            Ok(outcome) => {
+                self.metrics.resources_closed = self.metrics.resources_closed.saturating_add(1);
+                outcome
+            }
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
     #[cfg(test)]
     pub(super) fn close(&mut self, resource: EvalResource) -> Result<(), String> {
         if matches!(

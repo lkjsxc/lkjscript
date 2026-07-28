@@ -4,28 +4,29 @@
 
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
-**Accepted contract with a verified static/dead whole-place spine and Current
-exact byte-vector execution in the evaluator, reference VM, and forced native
-tiers; full promotion still requires every typed resource on every runtime
-outcome.**
-Aggregate partial moves remain out of scope.
+**Accepted contract with verified static/dead whole-place cleanup for exact
+byte owners and owned typed resources. Full promotion still requires
+conditional owners, every instruction-originated outcome, and the bounded
+cleanup-failure policy.** Aggregate partial moves remain out of scope.
 
 The implemented spine gives each direct affine SSA place an exact closed drop
 identity, emits explicit loan-end and whole-place-drop events, rejects an
 available owner at `place-end`, and verifies discharge before every explicit
-SSA terminator. It elaborates exact byte-vector cleanup on normal lexical exit and source-level
-return, break, continue, trap, and exit. The evaluator and VM consume the closed
-byte-vector glue with deterministic `UniqueStore` release and execution teardown.
-Explicit typed resource close is paired with its exact resource-drop event; an
-otherwise-live typed resource remains a compile error rather than receiving
-fabricated cleanup.
+SSA terminator. It elaborates exact byte-vector and owned typed-resource cleanup on normal
+lexical exit and source-level return, break, continue, trap, and exit. Explicit
+typed-resource close suppresses implicit close. The evaluator consumes exact
+resource glue through its fake core table, and bytecode lowering selects generic,
+SQLite-connection, or SQLite-statement close before place end in the reference
+VM. Borrowed standard input is rejected as a guest-owned obligation.
 
 Forced native byte-vector execution performs exact explicit drop and invocation
 teardown release, including instruction-originated trap and resource-limit
-cleanup, and proves zero final owners/loans. General conditional flags, implicit
-typed-resource close, cleanup-failure aggregation, and routing typed resources
-around instruction-originated trap, deadline, host-failure, or propagated callee
-outcomes are not Current.
+cleanup, and proves zero final owners/loans. Native owned-resource glue remains
+fail-closed at whole-group preflight. Conditional flags and typed-resource
+cleanup after instruction-originated trap, deadline, resource-limit, host
+failure, or propagated callee outcome are not Current. Cleanup-failure
+attachment also remains absent; Current safe sys owners expose close through
+infallible destruction.
 
 ## Obligations
 

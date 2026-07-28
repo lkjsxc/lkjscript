@@ -74,9 +74,10 @@ pub(crate) fn process_drop(
                     fact.provenance == AffineProvenance::Place(place) && fact.transferred
                 });
             if (!current && !transferred)
-                || !matches!(glue, DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes)
+                || glue
+                    == DropGlueIdentity::Resource(lkjscript_contracts::ResourceKind::InputStream)
             {
-                return fail("SSA implicit Drop does not discharge its exact byte owner");
+                return fail("SSA implicit Drop does not discharge its exact owned whole place");
             }
             if current {
                 state.owners.remove(&place);

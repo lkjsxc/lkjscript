@@ -49,7 +49,9 @@ fn forged_drop_glue_and_owner_erasing_place_end_are_rejected() {
     *glue = DropGlueIdentity::Resource(lkjscript_contracts::ResourceKind::FileReader);
     let error = verify(wrong_glue).expect_err("forged drop glue must fail");
     assert!(
-        error.to_string().contains("drop-glue") || error.to_string().contains("implicit Drop"),
+        error.to_string().contains("drop-glue")
+            || error.to_string().contains("implicit Drop")
+            || error.to_string().contains("mismatched place"),
         "{error}"
     );
 

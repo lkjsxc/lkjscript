@@ -1,5 +1,4 @@
 mod bootstrap;
-#[cfg(test)]
 mod close;
 mod metrics;
 mod model;

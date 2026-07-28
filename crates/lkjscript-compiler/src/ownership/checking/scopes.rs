@@ -156,12 +156,14 @@ fn require_resource_consumed(
     state: &State,
 ) -> Result<()> {
     let ty = expression_of_binding(program, binding)?;
-    if is_affine_resource(&ty) && state.initialized.get(&place) == Some(&true) {
+    if ty == Type::Resource(lkjscript_core::ResourceKind::InputStream)
+        && state.initialized.get(&place) == Some(&true)
+    {
         let name = program
             .binding(binding)
             .map_or("<unknown>", |binding| binding.name.as_str());
         Err(Error::msg(format!(
-            "affine typed resource local {name} ({binding:?}) must be returned, moved, or dropped before scope exit"
+            "borrowed standard-input resource local {name} ({binding:?}) cannot become a guest-owned cleanup obligation"
         )))
     } else {
         Ok(())

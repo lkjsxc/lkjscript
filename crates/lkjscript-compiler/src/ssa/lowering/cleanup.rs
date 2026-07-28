@@ -98,9 +98,9 @@ impl FunctionBuilder<'_> {
             .and_then(|place| place.drop_glue)
             .ok_or_else(|| Error::msg("owned SSA place lost its HIR drop glue"))?;
         if let Some(value) = self.env.get(&binding).copied() {
-            if !matches!(glue, DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes) {
+            if glue == DropGlueIdentity::Resource(lkjscript_core::ResourceKind::InputStream) {
                 return Err(Error::msg(format!(
-                    "active typed resource reaches place-end without move, return, or explicit drop for binding {}",
+                    "borrowed standard-input resource reaches guest-owned place-end for binding {}",
                     binding.raw()
                 )));
             }

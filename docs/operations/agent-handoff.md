@@ -71,16 +71,15 @@ narrow independently recomputed SSA inventory for direct byte-vector owners,
 byte loans, and direct typed resources. Only the opaque memory-verified HIR
 wrapper enters SSA lowering. The verified static/dead SSA drop spine carries closed glue identities,
 explicit loan-end/drop events, and rejects active-owner `place-end`. Exact
-byte-vector execution uses an execution-owned `UniqueStore` in the evaluator
-and VM, consumes that spine's explicit events, and performs deterministic
-cleanup on engine errors. Conditional flags, implicit resource close, and
-instruction-originated cleanup CFG routing remain incomplete; native
-byte-vector execution is rejected before entry. VM resources use the core table through
+byte-vector execution uses an execution-owned `UniqueStore` in the evaluator,
+VM, and forced native tiers. Static/dead owned-resource exits now
+receive exact implicit glue; evaluator fake owners and VM bytecode execute it
+through their core tables, while explicit close suppresses it. Conditional and
+instruction-originated resource cleanup remain incomplete. VM resources use
 reusable generation-bearing guest tokens, exact providers, one execution scope,
-reservations, invalidating close, and reverse emergency cleanup. Evaluator
-executions own the same table with deterministic fake lifecycle providers and no
-ambient host I/O. Structured provider-close failure attachment, evaluator
-resource-operation dispatch, and native execution remain absent.
+reservations, invalidating close, and reverse emergency cleanup. Structured
+provider-close failure attachment, evaluator resource-operation dispatch, and
+native owned-resource execution remain absent.
 
 ## Current Non-Memory Boundaries
 

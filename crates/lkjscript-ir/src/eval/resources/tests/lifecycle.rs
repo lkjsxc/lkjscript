@@ -62,6 +62,31 @@ fn all_resource_kinds_have_exact_fake_bindings() {
 }
 
 #[test]
+fn implicit_drop_glue_invalidates_owned_resource_before_payload_release() {
+    let mut resources = session(40);
+    let reader = resources
+        .acquire_owned(ResourceKind::FileReader, true)
+        .expect("acquire fake reader");
+    let stale = reader.clone();
+    resources
+        .drop_owned(reader, ResourceKind::FileReader)
+        .expect("exact implicit resource glue");
+    assert!(matches!(
+        resources.access_binding(
+            &stale,
+            ResourceKind::FileReader,
+            provider_for_kind(ResourceKind::FileReader),
+            ResourceOwnership::Owned,
+        ),
+        Err(ResourceTableError::StaleKey)
+    ));
+    assert_eq!(resources.metrics.resources_closed, 1);
+    let teardown = resources.teardown();
+    assert_eq!(teardown.ordinary_obligations, 0);
+    assert!(teardown.cleanup_attempts.is_empty());
+}
+
+#[test]
 fn borrowed_standard_streams_are_not_guest_owned() {
     let mut resources = session(11);
     let input = resources
