@@ -17,14 +17,15 @@ fn byte_vector_trap_early_return_and_owner_return_cleanup_match() {
         evaluate(trapped.ssa(), &EvalConfig::default()),
         EvalOutcome::Trapped(_)
     ));
-    assert!(matches!(
-        run_chunk(
-            trapped.bytecode(),
-            &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
-        ),
-        ExecutionOutcome::Trapped(_)
-    ));
+    let vm_trap = run_chunk(
+        trapped.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+    );
+    assert!(
+        matches!(vm_trap, ExecutionOutcome::Trapped(_)),
+        "{vm_trap:?}"
+    );
 
     let early_source = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlet/\nbind/\nb\nnew-byte-vector/\n2\n/new-byte-vector\n/bind\nreturn/\n7\n/return\n/let\n/main\n";
     assert_eq!(

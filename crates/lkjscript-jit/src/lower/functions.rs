@@ -112,6 +112,7 @@ pub(super) fn lower_function(
                 edges: edges[index],
                 blocks: &blocks,
                 locals: &locals,
+                value_types: &value_types,
             },
             builder,
             explicit_traps,

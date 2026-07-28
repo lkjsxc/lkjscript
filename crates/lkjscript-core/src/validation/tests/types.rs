@@ -107,6 +107,8 @@ fn resource_call_and_return_metadata_is_enforced() {
         parameter_unique_places: Vec::new(),
         return_unique: None,
         unique_places: 0,
+        failure_cleanups: Vec::new(),
+        failure_cleanup_ranges: Vec::new(),
         code: vec![Op::LoadLocal as u8, 0, 0, Op::Return as u8],
     });
     call.main.code.clear();
@@ -135,6 +137,8 @@ fn resource_call_and_return_metadata_is_enforced() {
         parameter_unique_places: Vec::new(),
         return_unique: None,
         unique_places: 0,
+        failure_cleanups: Vec::new(),
+        failure_cleanup_ranges: Vec::new(),
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     let message = error(returned);

@@ -27,6 +27,7 @@ pub(crate) fn bounded_call_program() -> Program {
                 name: "copy-value".into(),
                 signature: declared,
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: EffectSet::PURE,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -48,6 +49,7 @@ pub(crate) fn bounded_call_program() -> Program {
                 name: "main".into(),
                 signature: Signature::monomorphic(Vec::new(), SsaType::I64),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: EffectSet::PURE,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -79,6 +81,7 @@ pub(crate) fn bounded_call_program() -> Program {
                                 effects: EffectSet::PURE,
                                 safepoint: Safepoint::Required,
                                 failure: FailureBehavior::None,
+                                failure_cleanup: None,
                                 frame_state: Some(FrameState {
                                     bytecode_position: 1,
                                     locals: Vec::new(),

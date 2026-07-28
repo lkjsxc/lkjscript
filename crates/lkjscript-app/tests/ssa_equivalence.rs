@@ -4,12 +4,16 @@
 mod bytes;
 #[path = "ssa_equivalence/conditional_cleanup.rs"]
 mod conditional_cleanup;
+#[path = "ssa_equivalence/instruction_resource_cleanup.rs"]
+mod instruction_resource_cleanup;
 #[path = "ssa_equivalence/oracle.rs"]
 mod oracle;
 #[path = "ssa_equivalence/ownership.rs"]
 mod ownership;
 #[path = "ssa_equivalence/randomized.rs"]
 mod randomized;
+#[path = "ssa_equivalence/resource_dispatch.rs"]
+mod resource_dispatch;
 #[path = "ssa_equivalence/scalar.rs"]
 mod scalar;
 #[path = "ssa_equivalence/unique_outcomes.rs"]

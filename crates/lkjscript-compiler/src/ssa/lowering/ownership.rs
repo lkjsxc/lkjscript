@@ -38,21 +38,22 @@ impl FunctionBuilder<'_> {
         };
         let place = SsaPlaceId::new(place.raw());
         let loan = SsaLoanId::new(loan.raw());
+        let kind = match kind {
+            hir::BorrowKind::Shared => SsaBorrowKind::Shared,
+            hir::BorrowKind::Mutable => SsaBorrowKind::Mutable,
+        };
         let value = self.append(
             ty,
             InstructionKind::Borrow {
                 place,
                 loan,
-                kind: match kind {
-                    hir::BorrowKind::Shared => SsaBorrowKind::Shared,
-                    hir::BorrowKind::Mutable => SsaBorrowKind::Mutable,
-                },
+                kind,
                 value,
             },
             EffectSet::PURE,
             expression.origin,
         )?;
-        self.record_active_loan(loan, place, value)?;
+        self.record_active_loan(loan, place, kind, value)?;
         Ok(Some(value))
     }
 }

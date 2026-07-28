@@ -1,4 +1,7 @@
+mod cleanup;
 use super::*;
+use cleanup::end_borrow;
+pub(super) use cleanup::{cleanup_result, cleanup_state};
 
 mod word;
 pub(super) use word::*;
@@ -86,27 +89,35 @@ pub(super) extern "C" fn runtime_island_byte_slice_mut_set_byte(
 }
 
 pub(super) extern "C" fn runtime_island_byte_slice_end(state: *mut IslandCallState<'_>, loan: u64) {
-    end_borrow(state, NativeLoan::byte_slice(loan));
+    end_borrow(
+        state,
+        NativeLoan::byte_slice(loan),
+        RuntimeCallSlot::ByteSliceEnd,
+    );
 }
 
 pub(super) extern "C" fn runtime_island_byte_slice_mut_end(
     state: *mut IslandCallState<'_>,
     loan: u64,
 ) {
-    end_borrow(state, NativeLoan::byte_slice_mut(loan));
+    end_borrow(
+        state,
+        NativeLoan::byte_slice_mut(loan),
+        RuntimeCallSlot::ByteSliceMutEnd,
+    );
 }
 
 pub(super) extern "C" fn runtime_island_byte_vector_drop(
     state: *mut IslandCallState<'_>,
     owner: u64,
 ) {
-    let Some(state) = active_state(state) else {
+    let Some((state, primary)) = cleanup_state(state) else {
         return;
     };
     let result = state
         .services
         .drop_byte_vector(NativeUnique::byte_vector(owner));
-    unit_result(state, result);
+    cleanup_result(state, primary, RuntimeCallSlot::ByteVectorDrop, result);
 }
 
 fn borrow(state: *mut IslandCallState<'_>, owner: u64, kind: LoanType) -> u64 {
@@ -127,14 +138,6 @@ fn borrow(state: *mut IslandCallState<'_>, owner: u64, kind: LoanType) -> u64 {
             0
         }
     }
-}
-
-fn end_borrow(state: *mut IslandCallState<'_>, loan: NativeLoan) {
-    let Some(state) = active_state(state) else {
-        return;
-    };
-    let result = state.services.end_byte_vector_borrow(loan);
-    unit_result(state, result);
 }
 
 pub(super) fn active_state<'a>(

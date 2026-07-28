@@ -7,9 +7,6 @@ impl Evaluator<'_> {
         arguments: Vec<EvalValue>,
         depth: usize,
     ) -> std::result::Result<EvalValue, Flow> {
-        if depth >= self.config.max_frames {
-            return Err(Flow::Resource("frames".into()));
-        }
         let function = self
             .program
             .program()
@@ -18,12 +15,17 @@ impl Evaluator<'_> {
             .filter(|function| function.id == function_id)
             .cloned()
             .ok_or_else(|| Flow::Trap("evaluator missing verified function".into()))?;
+        if depth >= self.config.max_frames {
+            self.execute_unentered_argument_cleanup(arguments);
+            return Err(Flow::Resource("frames".into()));
+        }
         let entry = function
             .blocks
             .iter()
             .find(|block| block.id == function.entry)
             .ok_or_else(|| Flow::Trap("evaluator missing verified entry block".into()))?;
         if arguments.len() != entry.parameters.len() {
+            self.execute_unentered_argument_cleanup(arguments);
             return Err(Flow::Trap("evaluator function arity mismatch".into()));
         }
         let value_count = function
@@ -44,7 +46,6 @@ impl Evaluator<'_> {
         assign_parameters(&mut values, &entry.parameters, arguments)?;
         let mut current = function.entry;
         loop {
-            self.consume_fuel()?;
             let block = function
                 .blocks
                 .iter()
@@ -52,11 +53,36 @@ impl Evaluator<'_> {
                 .cloned()
                 .ok_or_else(|| Flow::Trap("evaluator missing verified block".into()))?;
             for instruction in &block.instructions {
-                self.consume_fuel()?;
-                let value = self.instruction(instruction, &mut values, depth)?;
+                if let Err(flow) = self.consume_fuel() {
+                    self.execute_unentered_instruction_cleanup(&function, instruction, &mut values);
+                    self.execute_failure_cleanup(
+                        &function,
+                        instruction.metadata.failure_cleanup,
+                        &mut values,
+                    );
+                    return Err(flow);
+                }
+                let value = match self.instruction(instruction, &mut values, depth) {
+                    Ok(value) => value,
+                    Err(flow) => {
+                        self.execute_failure_cleanup(
+                            &function,
+                            instruction.metadata.failure_cleanup,
+                            &mut values,
+                        );
+                        return Err(flow);
+                    }
+                };
                 set_value(&mut values, instruction.id, value)?;
             }
-            self.consume_fuel()?;
+            if let Err(flow) = self.consume_fuel() {
+                self.execute_failure_cleanup(
+                    &function,
+                    block.metadata.failure_cleanup,
+                    &mut values,
+                );
+                return Err(flow);
+            }
             match block.terminator {
                 Terminator::Branch { target, arguments } => {
                     let arguments = values_for_edge(&mut values, &arguments)?;

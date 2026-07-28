@@ -162,10 +162,18 @@ pub(crate) fn process_ownership_instruction(
     );
     let borrowed_bytes = matches!(instruction.kind, InstructionKind::Borrow { .. })
         && instruction.ty == SsaType::Bytes;
+    let borrowed_resource = matches!(
+        instruction.kind,
+        InstructionKind::Runtime {
+            operation: crate::RuntimeOp::StdinHandle,
+            ..
+        }
+    );
     if is_owned_value(&instruction.ty)
         && !matches!(instruction.kind, InstructionKind::Move { .. })
         && !static_bytes
         && !borrowed_bytes
+        && !borrowed_resource
     {
         state.affine.insert(
             instruction.id,

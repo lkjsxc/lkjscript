@@ -12,10 +12,10 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    Error as CoreError, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig, GcHeap, GcLimit,
-    HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, Trap, UniqueKeyWord, UniqueStore,
-    UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value, MAX_BUFFER_BYTES,
-    MAX_LIST_EQUAL_STEPS,
+    CleanupFailures, CleanupPhase, CleanupSubject, Error as CoreError, ErrorClass, ExecutionConfig,
+    ExecutionOutcome, GcConfig, GcHeap, GcLimit, HeapObj, HostError, OwnedValue, ProductId,
+    ResourceLimitKind, Trap, UniqueKeyWord, UniqueStore, UniqueStoreError, UniqueStoreId,
+    UniqueStoreLimits, Value, MAX_BUFFER_BYTES, MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_ir::{
     optimize, BytecodeLinkMetadata, OptimizationCertificate, OptimizationFailureCode,

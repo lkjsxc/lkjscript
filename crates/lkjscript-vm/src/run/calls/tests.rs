@@ -18,6 +18,8 @@ fn tail_call_reuses_the_current_frame() {
         parameter_unique_places: Vec::new(),
         return_unique: None,
         unique_places: 0,
+        failure_cleanups: Vec::new(),
+        failure_cleanup_ranges: Vec::new(),
         code: vec![Op::LoadLocal as u8, 0, Op::Return as u8],
     });
     chunk.protos.push(FunctionProto {
@@ -30,6 +32,8 @@ fn tail_call_reuses_the_current_frame() {
         parameter_unique_places: Vec::new(),
         return_unique: None,
         unique_places: 0,
+        failure_cleanups: Vec::new(),
+        failure_cleanup_ranges: Vec::new(),
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     let chunk =

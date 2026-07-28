@@ -49,6 +49,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 {
                     Ok(invocation) => {
                         vm.fuel_remaining = vm.fuel_remaining.saturating_sub(invocation.poll_count);
+                        vm.cleanup_failures.append(invocation.cleanup_failures);
                         match invocation.outcome {
                             ScalarInvocationOutcome::Returned(value) => {
                                 vm.stack.truncate(args_start);

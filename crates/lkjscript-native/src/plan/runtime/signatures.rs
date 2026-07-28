@@ -62,6 +62,7 @@ pub(super) fn plan_signature(slot: RuntimeCallSlot) -> Option<Signature> {
             ValueType::Reference(ReferenceType::Buf),
         ),
         RuntimeCallSlot::HeapDispatch
+        | RuntimeCallSlot::TakeRejectedEntry
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame
         | RuntimeCallSlot::PublishSafepoint

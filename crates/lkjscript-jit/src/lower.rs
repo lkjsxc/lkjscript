@@ -150,4 +150,5 @@ struct TerminatorContext<'a> {
     edges: EdgeBlocks,
     blocks: &'a [lkjscript_native::BlockId],
     locals: &'a [LocalId],
+    value_types: &'a [ValueType],
 }

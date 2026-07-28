@@ -81,6 +81,7 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
             .ok_or_else(|| IrError::new("SSA entry ownership state is missing"))?,
     )?;
 
+    let nonowned_affine = nonowned_affine_values(function);
     while let Some(block_id) = queue.pop_front() {
         queued.remove(&block_id);
         charge_ownership_work(&mut work, 1)?;
@@ -94,7 +95,8 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
         charge_ownership_work(&mut work, ownership_state_cells(state_ref)?)?;
         let state = state_ref.clone();
         let current = block_by_id(function, block_id)?;
-        let successors = process_ownership_block(function, current, state, types, &mut work)?;
+        let successors =
+            process_ownership_block(function, current, state, types, &nonowned_affine, &mut work)?;
         for (successor, successor_state) in successors {
             charge_ownership_work(&mut work, 1)?;
             let successor_index = successor

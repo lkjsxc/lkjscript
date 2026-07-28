@@ -1,4 +1,6 @@
+mod traits;
 use super::*;
+pub use traits::*;
 
 mod noop;
 pub(super) use noop::*;
@@ -11,6 +13,7 @@ pub struct NativeInvocationConfig {
     pub(super) max_active_values: usize,
     pub(super) max_native_stack_bytes: usize,
     pub(super) max_native_frame_bytes: usize,
+    pub(super) max_cleanup_failures: usize,
 }
 
 impl NativeInvocationConfig {
@@ -23,6 +26,7 @@ impl NativeInvocationConfig {
             max_active_values: usize::MAX,
             max_native_stack_bytes: DEFAULT_MAX_NATIVE_STACK_BYTES,
             max_native_frame_bytes: DEFAULT_MAX_NATIVE_FRAME_BYTES,
+            max_cleanup_failures: 32,
         }
     }
 
@@ -35,6 +39,12 @@ impl NativeInvocationConfig {
     #[must_use]
     pub const fn with_max_active_values(mut self, maximum: usize) -> Self {
         self.max_active_values = maximum;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_max_cleanup_failures(mut self, maximum: usize) -> Self {
+        self.max_cleanup_failures = maximum;
         self
     }
 
@@ -103,90 +113,24 @@ pub enum NativeServiceError {
     HostFailure,
 }
 
-/// Safe runtime boundary. Implementations receive only copied typed values and
-/// roots; frame addresses and stack traversal remain private to this crate.
-pub trait NativeIslandRuntimeServices {
-    fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError>;
-    fn new_byte_vector(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError>;
-    fn move_byte_vector(&mut self, owner: NativeUnique)
-        -> Result<NativeUnique, NativeServiceError>;
-    fn borrow_byte_vector(
-        &mut self,
-        owner: NativeUnique,
-        kind: LoanType,
-    ) -> Result<NativeLoan, NativeServiceError>;
-    fn byte_slice_length(&mut self, loan: NativeLoan) -> Result<i64, NativeServiceError>;
-    fn byte_slice_byte_at(
-        &mut self,
-        loan: NativeLoan,
-        index: i64,
-    ) -> Result<i64, NativeServiceError>;
-    fn byte_slice_read_u32_little_endian(
-        &mut self,
-        loan: NativeLoan,
-        index: i64,
-    ) -> Result<i64, NativeServiceError>;
-    fn byte_slice_mut_set_byte(
-        &mut self,
-        loan: NativeLoan,
-        index: i64,
-        byte: i64,
-    ) -> Result<(), NativeServiceError>;
-    fn byte_slice_mut_write_u32_little_endian(
-        &mut self,
-        loan: NativeLoan,
-        index: i64,
-        word: i64,
-    ) -> Result<(), NativeServiceError>;
-    fn end_byte_vector_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError>;
-    fn drop_byte_vector(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError>;
-    fn clone_static_bytes(&mut self, bytes: &[u8]) -> Result<NativeUnique, NativeServiceError>;
-    fn copy_static_bytes_slice(
-        &mut self,
-        bytes: &[u8],
-        start: i64,
-        len: i64,
-    ) -> Result<NativeUnique, NativeServiceError>;
-    fn thaw_static_bytes(&mut self, bytes: &[u8]) -> Result<NativeUnique, NativeServiceError>;
-    fn move_bytes(&mut self, owner: NativeUnique) -> Result<NativeUnique, NativeServiceError>;
-    fn borrow_bytes(&mut self, owner: NativeUnique) -> Result<NativeLoan, NativeServiceError>;
-    fn bytes_length(&mut self, loan: NativeLoan) -> Result<i64, NativeServiceError>;
-    fn bytes_byte_at(&mut self, loan: NativeLoan, index: i64) -> Result<i64, NativeServiceError>;
-    fn clone_bytes(&mut self, loan: NativeLoan) -> Result<NativeUnique, NativeServiceError>;
-    fn copy_bytes_slice(
-        &mut self,
-        loan: NativeLoan,
-        start: i64,
-        len: i64,
-    ) -> Result<NativeUnique, NativeServiceError>;
-    fn end_bytes_borrow(&mut self, loan: NativeLoan) -> Result<(), NativeServiceError>;
-    fn drop_bytes(&mut self, owner: NativeUnique) -> Result<(), NativeServiceError>;
-    fn freeze_byte_vector(
-        &mut self,
-        owner: NativeUnique,
-    ) -> Result<NativeUnique, NativeServiceError>;
-    fn thaw_bytes(&mut self, owner: NativeUnique) -> Result<NativeUnique, NativeServiceError>;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NativeCleanupFailure {
+    slot: RuntimeCallSlot,
+    error: NativeServiceError,
 }
 
-pub trait NativeRuntimeServices {
-    fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError>;
-
-    /// Optionally collect for a verified site. Sys writes any updated roots
-    /// back to generated homes before calling `heap_operation`.
-    fn prepare_heap_operation(
-        &mut self,
-        _site: &HeapRuntimeSite,
-        _arguments: &[NativeValue],
-        _roots: &mut [NativeRoot],
-    ) -> Result<bool, NativeServiceError> {
-        Ok(false)
+impl NativeCleanupFailure {
+    pub(super) const fn new(slot: RuntimeCallSlot, error: NativeServiceError) -> Self {
+        Self { slot, error }
     }
 
-    fn heap_operation(
-        &mut self,
-        _site: &HeapRuntimeSite,
-        _arguments: &[NativeValue],
-    ) -> Result<NativeValue, NativeServiceError> {
-        Err(NativeServiceError::HostFailure)
+    #[must_use]
+    pub const fn slot(self) -> RuntimeCallSlot {
+        self.slot
+    }
+
+    #[must_use]
+    pub const fn error(self) -> NativeServiceError {
+        self.error
     }
 }

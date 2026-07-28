@@ -123,6 +123,7 @@ fn forged_effectful_edit_and_all_optimization_budgets_fail_closed() {
             effects: allocation_effects,
             safepoint: Safepoint::Required,
             failure: FailureBehavior::TrapOrOutcome,
+            failure_cleanup: None,
             frame_state: Some(FrameState {
                 bytecode_position: 0,
                 locals: Vec::new(),

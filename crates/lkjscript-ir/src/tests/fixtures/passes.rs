@@ -14,6 +14,7 @@ pub(crate) fn pass_program() -> Program {
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
             places: Vec::new(),
+            failure_cleanups: Vec::new(),
             effects: EffectSet::PURE,
             entry: BlockId::new(0),
             blocks: vec![

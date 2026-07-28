@@ -14,6 +14,24 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
             ty: SsaType::ByteVector,
             drop_glue: Some(DropGlueIdentity::ByteVector),
         }],
+        failure_cleanups: vec![
+            FailureCleanupPlan {
+                id: FailureCleanupId::new(0),
+                actions: vec![FailureCleanupAction::DropOwner {
+                    place: Some(PlaceId::new(0)),
+                    value: ValueId::new(0),
+                    glue: DropGlueIdentity::ByteVector,
+                }],
+            },
+            FailureCleanupPlan {
+                id: FailureCleanupId::new(1),
+                actions: vec![FailureCleanupAction::DropOwner {
+                    place: None,
+                    value: ValueId::new(1),
+                    glue: DropGlueIdentity::ByteVector,
+                }],
+            },
+        ],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -31,10 +49,10 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
                     place: PlaceId::new(0),
                     value: ValueId::new(0),
                 },
-                metadata: metadata(EffectSet::PURE),
+                metadata: metadata_cleanup(EffectSet::PURE, 0),
             }],
             terminator: Terminator::Return(ValueId::new(1)),
-            metadata: block_metadata(),
+            metadata: block_metadata_cleanup(1),
         }],
         origin: Origin::SYNTHETIC,
     });
@@ -67,6 +85,15 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
             metadata: metadata(EffectSet::PURE),
         },
     ];
+    duplicate_place_end.functions[1]
+        .failure_cleanups
+        .truncate(1);
+    duplicate_place_end.functions[1].blocks[0].instructions[0]
+        .metadata
+        .failure_cleanup = Some(FailureCleanupId::new(0));
+    duplicate_place_end.functions[1].blocks[0]
+        .metadata
+        .failure_cleanup = None;
     duplicate_place_end.functions[1].blocks[0].terminator = Terminator::Return(ValueId::new(3));
     let end_error = verify(duplicate_place_end).expect_err("duplicate PlaceEnd must fail");
     assert!(
@@ -124,70 +151,5 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
     };
     assert!(verify(duplicate_loan).is_err());
 
-    let borrowed_function = |id: u32, name: &str| Function {
-        id: FunctionId::new(id),
-        name: name.into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::I64),
-        places: vec![owned_place(0, 0)],
-        effects: EffectSet::READS_MEMORY,
-        entry: BlockId::new(0),
-        blocks: vec![Block {
-            id: BlockId::new(0),
-            parameters: vec![BlockParameter {
-                id: ValueId::new(0),
-                ty: owned_buf_type(),
-                owner_place: Some(PlaceId::new(0)),
-                origin: Origin::SYNTHETIC,
-            }],
-            instructions: vec![
-                Instruction {
-                    id: ValueId::new(1),
-                    ty: SsaType::ByteSlice,
-                    kind: InstructionKind::Borrow {
-                        place: PlaceId::new(0),
-                        loan: LoanId::new(0),
-                        kind: BorrowKind::Shared,
-                        value: ValueId::new(0),
-                    },
-                    metadata: metadata(EffectSet::PURE),
-                },
-                Instruction {
-                    id: ValueId::new(2),
-                    ty: SsaType::I64,
-                    kind: InstructionKind::Runtime {
-                        operation: RuntimeOp::OwnedBufLen,
-                        arguments: vec![ValueId::new(1)],
-                        signature: Signature::monomorphic(vec![SsaType::ByteSlice], SsaType::I64),
-                    },
-                    metadata: metadata(EffectSet::READS_MEMORY),
-                },
-                Instruction {
-                    id: ValueId::new(3),
-                    ty: SsaType::Unit,
-                    kind: InstructionKind::EndBorrow {
-                        place: PlaceId::new(0),
-                        loan: LoanId::new(0),
-                        value: ValueId::new(1),
-                    },
-                    metadata: metadata(EffectSet::PURE),
-                },
-                drop_byte(4, 0, 0),
-                place_end(5, 0),
-            ],
-            terminator: Terminator::Return(ValueId::new(2)),
-            metadata: block_metadata(),
-        }],
-        origin: Origin::SYNTHETIC,
-    };
-    let mut cross_function_duplicate = one_block_program();
-    cross_function_duplicate.functions.extend([
-        borrowed_function(1, "borrow-one"),
-        borrowed_function(2, "borrow-two"),
-    ]);
-    let error = verify(cross_function_duplicate)
-        .expect_err("LoanIds must be unique across the whole public Program");
-    assert!(
-        error.to_string().contains("anywhere in the program"),
-        "{error}"
-    );
+    assert_cross_function_duplicate_loans();
 }

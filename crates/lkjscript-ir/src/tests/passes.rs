@@ -47,6 +47,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                 name: "answer".into(),
                 signature: signature.clone(),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: EffectSet::PURE,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -63,6 +64,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                 name: "main".into(),
                 signature: signature.clone(),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: call_effects,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -89,6 +91,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                                 effects: call_effects,
                                 safepoint: Safepoint::Required,
                                 failure: FailureBehavior::TrapOrOutcome,
+                                failure_cleanup: None,
                                 frame_state: Some(FrameState {
                                     bytecode_position: 1,
                                     locals: Vec::new(),

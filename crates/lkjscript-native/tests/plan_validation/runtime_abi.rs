@@ -18,6 +18,17 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
     );
     assert_eq!(reserve.result(), InternalMachineResult::InvocationContext);
     assert!(RuntimeCallSlot::ReserveFrame.plan_signature().is_none());
+    let rejected = RuntimeCallSlot::TakeRejectedEntry
+        .internal_abi_signature()
+        .ok_or_else(|| missing("missing rejected-entry ABI"))?;
+    assert_eq!(
+        rejected.parameters(),
+        &[InternalMachineArgument::InvocationContext]
+    );
+    assert_eq!(rejected.result(), InternalMachineResult::Integer);
+    assert!(RuntimeCallSlot::TakeRejectedEntry
+        .plan_signature()
+        .is_none());
     assert_eq!(
         RuntimeCallSlot::RegisterFrame
             .internal_abi_signature()
@@ -73,6 +84,45 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         Err(PlanError::EncoderOwnedRuntimeCall)
     );
     Ok(())
+}
+
+#[test]
+fn failure_cleanup_calls_are_typed_and_independently_verified(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let valid = failure_cleanup_plan(RuntimeCallSlot::ByteVectorDrop)?;
+    valid.verify(BackendLimits::default())?;
+
+    let wrong = failure_cleanup_plan(RuntimeCallSlot::ByteSliceEnd)?;
+    assert!(matches!(
+        wrong.verify(BackendLimits::default()),
+        Err(NativeError::Verification(VerificationError::TypeMismatch(
+            "failure cleanup runtime call"
+        )))
+    ));
+    Ok(())
+}
+
+fn failure_cleanup_plan(
+    slot: RuntimeCallSlot,
+) -> Result<MachinePlanBuilder, Box<dyn std::error::Error>> {
+    let mut plan = MachinePlanBuilder::new();
+    let unique = ValueType::Unique(UniqueType::ByteVector);
+    let function = plan.declare_function(
+        SourceFunctionId::new(39),
+        Signature::new(vec![unique], ValueType::Unit)?,
+    )?;
+    let mut builder = plan.function_builder(function)?;
+    let entry = builder.create_block()?;
+    builder.set_entry(entry)?;
+    let owner = builder.parameter(0)?;
+    let local = builder.create_local(unique)?;
+    builder.write_local(entry, local, owner)?;
+    let moved = builder.runtime_call(entry, RuntimeCallSlot::ByteVectorMove, vec![owner])?;
+    builder.set_instruction_failure_cleanup(moved, vec![FailureCleanupCall::new(slot, local)])?;
+    let unit = builder.unit(entry)?;
+    builder.return_value(entry, unit)?;
+    plan.define_function(builder.finish())?;
+    Ok(plan)
 }
 
 #[test]

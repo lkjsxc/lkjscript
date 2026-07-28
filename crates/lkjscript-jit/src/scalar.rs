@@ -38,10 +38,11 @@ pub enum ScalarInvocationOutcome {
     HostFailure,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ScalarInvocation {
     pub outcome: ScalarInvocationOutcome,
     pub poll_count: u64,
+    pub cleanup_failures: CleanupFailures,
 }
 
 pub(crate) fn scalar_to_execution(

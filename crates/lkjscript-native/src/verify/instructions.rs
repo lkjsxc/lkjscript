@@ -1,3 +1,6 @@
+mod failure;
+use failure::verify_failure_cleanup;
+
 use super::*;
 
 pub(super) fn verify_instruction(
@@ -10,6 +13,7 @@ pub(super) fn verify_instruction(
     for operand in instruction.operation.operands() {
         require_available(function, operand, available_values)?;
     }
+    verify_failure_cleanup(function, instruction, initialized_locals)?;
     match &instruction.operation {
         Operation::I64Const(_) => require_output(instruction, ValueType::I64, "I64 constant"),
         Operation::F64Const(_) => require_output(instruction, ValueType::F64, "F64 constant"),
@@ -163,6 +167,7 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
         | RuntimeCallSlot::FreezeByteVector
         | RuntimeCallSlot::ThawBytes => {}
         RuntimeCallSlot::HeapDispatch
+        | RuntimeCallSlot::TakeRejectedEntry
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame
         | RuntimeCallSlot::PublishSafepoint

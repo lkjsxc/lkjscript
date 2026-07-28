@@ -7,6 +7,14 @@ pub(crate) fn aliased_places() -> Function {
         name: "aliased-places".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
+        failure_cleanups: vec![FailureCleanupPlan {
+            id: FailureCleanupId::new(0),
+            actions: vec![FailureCleanupAction::DropOwner {
+                place: Some(PlaceId::new(0)),
+                value: ValueId::new(0),
+                glue: DropGlueIdentity::ByteVector,
+            }],
+        }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -24,7 +32,7 @@ pub(crate) fn aliased_places() -> Function {
                     place: PlaceId::new(1),
                     value: ValueId::new(0),
                 },
-                metadata: metadata(EffectSet::PURE),
+                metadata: metadata_cleanup(EffectSet::PURE, 0),
             }],
             terminator: Terminator::Return(ValueId::new(1)),
             metadata: block_metadata(),
@@ -39,6 +47,7 @@ pub(crate) fn missing_local_provenance() -> Function {
         name: "missing-local-provenance".into(),
         signature: Signature::monomorphic(Vec::new(), SsaType::Unit),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {

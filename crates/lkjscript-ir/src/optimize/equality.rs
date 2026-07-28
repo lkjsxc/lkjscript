@@ -22,6 +22,7 @@ pub(crate) fn exact_function_equal(left: &Function, right: &Function) -> bool {
         && left.name == right.name
         && left.signature == right.signature
         && left.places == right.places
+        && left.failure_cleanups == right.failure_cleanups
         && left.effects == right.effects
         && left.entry == right.entry
         && left.origin == right.origin

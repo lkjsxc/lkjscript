@@ -1,3 +1,8 @@
+mod emitter;
+mod failure;
+pub(in crate::codegen) use emitter::Emitter;
+use failure::*;
+
 use crate::codegen::*;
 
 pub(in crate::codegen) fn compile_function(
@@ -22,6 +27,7 @@ pub(in crate::codegen) fn compile_function(
     })?;
     let arity = u8::try_from(function.signature.parameters.len())
         .map_err(|_| Error::msg("SSA function arity exceeds bytecode u8"))?;
+    let (failure_cleanups, failure_cleanup_map) = compile_failure_cleanups(function, &slots)?;
     let proto = FunctionProto {
         name: function.name.clone(),
         arity,
@@ -63,6 +69,8 @@ pub(in crate::codegen) fn compile_function(
         return_unique: unique_value_kind(&function.signature.result),
         unique_places: u8::try_from(function.places.len())
             .map_err(|_| Error::msg("SSA unique place count exceeds bytecode u8"))?,
+        failure_cleanups,
+        failure_cleanup_ranges: Vec::new(),
         code: Vec::new(),
     };
     let mut emitter = Emitter {
@@ -76,6 +84,7 @@ pub(in crate::codegen) fn compile_function(
         patches: Vec::new(),
         block_links: Vec::new(),
         instruction_links: Vec::new(),
+        failure_cleanup_map,
     };
     for block in &function.blocks {
         let offset = emitter.offset()?;
@@ -86,6 +95,7 @@ pub(in crate::codegen) fn compile_function(
         });
         let tail_call = block.instructions.last().and_then(|instruction| {
             if matches!(&instruction.kind, InstructionKind::Call { .. })
+                && instruction.metadata.failure_cleanup.is_none()
                 && tail_path_returns(function, &block.terminator, instruction.id)
             {
                 Some(instruction.id)
@@ -100,11 +110,27 @@ pub(in crate::codegen) fn compile_function(
                 offset: u32::from(offset),
             });
             emitter.emit_instruction(instruction, tail_call != Some(instruction.id))?;
+            let end = emitter.offset()?;
+            let unentered_plan = emitter.intern_unentered_cleanup(instruction)?;
+            emitter.record_failure_range(
+                offset,
+                end,
+                instruction.metadata.failure_cleanup.map(|id| id.raw()),
+                unentered_plan,
+            )?;
         }
         if tail_call.is_some() {
             emitter.proto.emit(Op::Return);
         } else {
+            let offset = emitter.offset()?;
             emitter.emit_terminator(block.id, &block.terminator)?;
+            let end = emitter.offset()?;
+            emitter.record_failure_range(
+                offset,
+                end,
+                block.metadata.failure_cleanup.map(|id| id.raw()),
+                None,
+            )?;
         }
     }
     emitter.patch_jumps()?;
@@ -144,17 +170,4 @@ fn resource_return_kind(ty: &SsaType) -> Option<ResourceReturnKind> {
         }
         _ => None,
     }
-}
-
-pub(in crate::codegen) struct Emitter<'a> {
-    pub(in crate::codegen) chunk: &'a mut Chunk,
-    pub(in crate::codegen) globals: &'a HashMap<FunctionId, u16>,
-    pub(in crate::codegen) function: &'a Function,
-    pub(in crate::codegen) slots: HashMap<ValueId, u8>,
-    pub(in crate::codegen) code_base: u16,
-    pub(in crate::codegen) proto: FunctionProto,
-    pub(in crate::codegen) block_offsets: HashMap<BlockId, u16>,
-    pub(in crate::codegen) patches: Vec<(usize, BlockId)>,
-    pub(in crate::codegen) block_links: Vec<BytecodeBlockLink>,
-    pub(in crate::codegen) instruction_links: Vec<BytecodeInstructionLink>,
 }

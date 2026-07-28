@@ -1,5 +1,8 @@
 //! Bytecode chunk and function prototypes.
 
+mod failure;
+pub use failure::*;
+
 use crate::opcode::Op;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,20 +49,6 @@ pub enum Constant {
     Proto(u32),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UniqueValueKind {
-    Bytes,
-    ByteVector,
-    ByteSlice,
-    ByteSliceMut,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResourceReturnKind {
-    Resource(crate::ResourceKind),
-    Result(crate::ResourceKind),
-}
-
 #[derive(Debug, Clone)]
 pub struct FunctionProto {
     pub name: String,
@@ -71,6 +60,8 @@ pub struct FunctionProto {
     pub parameter_unique_places: Vec<Option<u8>>,
     pub return_unique: Option<UniqueValueKind>,
     pub unique_places: u8,
+    pub failure_cleanups: Vec<FailureCleanupPlan>,
+    pub failure_cleanup_ranges: Vec<FailureCleanupRange>,
     pub code: Vec<u8>,
 }
 
@@ -111,6 +102,8 @@ impl Chunk {
                 parameter_unique_places: Vec::new(),
                 return_unique: None,
                 unique_places: 0,
+                failure_cleanups: Vec::new(),
+                failure_cleanup_ranges: Vec::new(),
                 code: Vec::new(),
             },
             required_capabilities: Vec::new(),

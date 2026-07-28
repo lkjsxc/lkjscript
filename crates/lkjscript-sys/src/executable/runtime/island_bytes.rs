@@ -83,19 +83,19 @@ pub(super) extern "C" fn runtime_island_bytes_copy_slice(
 }
 
 pub(super) extern "C" fn runtime_island_bytes_end(state: *mut IslandCallState<'_>, loan: u64) {
-    let Some(state) = active_state(state) else {
+    let Some((state, primary)) = cleanup_state(state) else {
         return;
     };
     let result = state.services.end_bytes_borrow(NativeLoan::bytes(loan));
-    unit_result(state, result);
+    cleanup_result(state, primary, RuntimeCallSlot::BytesEndBorrow, result);
 }
 
 pub(super) extern "C" fn runtime_island_bytes_drop(state: *mut IslandCallState<'_>, owner: u64) {
-    let Some(state) = active_state(state) else {
+    let Some((state, primary)) = cleanup_state(state) else {
         return;
     };
     let result = state.services.drop_bytes(NativeUnique::bytes(owner));
-    unit_result(state, result);
+    cleanup_result(state, primary, RuntimeCallSlot::BytesDrop, result);
 }
 
 pub(super) extern "C" fn runtime_island_freeze_byte_vector(

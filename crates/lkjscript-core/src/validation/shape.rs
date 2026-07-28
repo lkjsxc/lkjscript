@@ -41,7 +41,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
             ));
         }
     }
-    validate_proto_shape(&chunk.main, "main")?;
+    validate_proto_shape(&chunk.main, "main", limits)?;
     if chunk.main.return_resource.is_some() {
         return Err(Error::msg(
             "bytecode main cannot declare a typed resource return",
@@ -74,7 +74,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
 
     let mut function_names = HashSet::with_capacity(chunk.protos.len());
     for proto in &chunk.protos {
-        validate_proto_shape(proto, "prototype")?;
+        validate_proto_shape(proto, "prototype", limits)?;
         if proto.name.is_empty() {
             return Err(Error::msg("bytecode prototype has an empty name"));
         }
@@ -108,6 +108,11 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         "metadata byte size",
     )?;
     metadata_bytes = checked_add(metadata_bytes, 3, "metadata byte size")?;
+    metadata_bytes = checked_add(
+        metadata_bytes,
+        failure_metadata_bytes(&chunk.main)?,
+        "metadata byte size",
+    )?;
     let mut encoded_bytes = chunk.main.code.len();
     for proto in &chunk.protos {
         metadata_bytes = checked_add(metadata_bytes, proto.name.len(), "metadata byte size")?;
@@ -125,6 +130,11 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
             "metadata byte size",
         )?;
         metadata_bytes = checked_add(metadata_bytes, 3, "metadata byte size")?;
+        metadata_bytes = checked_add(
+            metadata_bytes,
+            failure_metadata_bytes(proto)?,
+            "metadata byte size",
+        )?;
         encoded_bytes = checked_add(encoded_bytes, proto.code.len(), "encoded byte size")?;
     }
 

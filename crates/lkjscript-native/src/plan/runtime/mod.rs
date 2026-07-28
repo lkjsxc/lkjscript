@@ -9,6 +9,8 @@ pub enum RuntimeCallSlot {
     /// Cooperative deadline and native fuel poll. The execution context is the
     /// implicit first ABI argument; no language value is boxed for this call.
     Poll,
+    /// Consumes the marker set when a generated callee rejects before entry.
+    TakeRejectedEntry,
     /// Records entry to a source function for exact native-tier accounting.
     EnterFunction,
     /// Installs or reuses the invocation-owned borrowed standard-input resource.
@@ -66,6 +68,7 @@ pub enum InternalMachineArgument {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InternalMachineResult {
     Unit,
+    Integer,
     InvocationContext,
 }
 

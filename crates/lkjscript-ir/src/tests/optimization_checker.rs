@@ -52,6 +52,7 @@ fn enum_operations_and_metadata_are_proof_preserved_exactly() {
                 effects: EffectSet::ALLOCATES,
                 safepoint: Safepoint::Required,
                 failure: FailureBehavior::StructuredOutcome,
+                failure_cleanup: None,
                 frame_state: Some(FrameState {
                     bytecode_position: 0,
                     locals: Vec::new(),

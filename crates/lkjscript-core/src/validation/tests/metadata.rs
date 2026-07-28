@@ -18,6 +18,8 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
         parameter_unique_places: Vec::new(),
         return_unique: None,
         unique_places: 0,
+        failure_cleanups: Vec::new(),
+        failure_cleanup_ranges: Vec::new(),
         code: vec![Op::Unit as u8, Op::Return as u8],
     });
     captures.main.code = vec![
@@ -67,6 +69,8 @@ fn global_closures_must_match_declared_prototypes() {
             parameter_unique_places: Vec::new(),
             return_unique: None,
             unique_places: 0,
+            failure_cleanups: Vec::new(),
+            failure_cleanup_ranges: Vec::new(),
             code: vec![Op::Unit as u8, Op::Return as u8],
         });
     }

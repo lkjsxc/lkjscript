@@ -95,6 +95,8 @@ impl InstalledImage {
             active_value_homes: 0,
             resource_calls: state.resource_calls,
             unique_calls: state.unique_calls,
+            cleanup_failures: state.cleanup_failures,
+            omitted_cleanup_failures: state.omitted_cleanup_failures,
             collector_runtime: false,
         })
     }

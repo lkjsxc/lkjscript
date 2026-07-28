@@ -22,12 +22,12 @@ pub use image::{
 };
 pub use lkjscript_contracts::{CapabilityKind, ResourceKind};
 pub use plan::{
-    AllocationClass, BlockId, BoolComparison, F64Comparison, FunctionBuilder, FunctionId,
-    FunctionPlan, HeapCallDescriptor, HeapOperation, I64Comparison, InternalMachineArgument,
-    InternalMachineResult, InternalRuntimeSignature, LayoutIdentity, LoanType, LocalId,
-    MachinePlanBuilder, PlanError, ReferenceType, RuntimeCallSlot, RuntimeOutcome, Signature,
-    SourceFunctionId, SourceOrigin, StaticBytesIdentity, StoreClass, TrapCode, UniqueType, ValueId,
-    ValueType,
+    AllocationClass, BlockId, BoolComparison, F64Comparison, FailureCleanupCall, FunctionBuilder,
+    FunctionId, FunctionPlan, HeapCallDescriptor, HeapOperation, I64Comparison,
+    InternalMachineArgument, InternalMachineResult, InternalRuntimeSignature, LayoutIdentity,
+    LoanType, LocalId, MachinePlanBuilder, PlanError, ReferenceType, RuntimeCallSlot,
+    RuntimeOutcome, Signature, SourceFunctionId, SourceOrigin, StaticBytesIdentity, StoreClass,
+    TrapCode, UniqueType, ValueId, ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 

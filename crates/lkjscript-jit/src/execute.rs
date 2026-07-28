@@ -27,7 +27,8 @@ pub fn execute_forced_with_capabilities(
     session.compile_group(main)?;
     let arguments = capability_arguments(program, capabilities)?;
     let invocation = session.invoke_scalar(main, &arguments, execution)?;
-    let outcome = scalar_to_execution(&mut session, main, invocation.outcome)?;
+    let outcome = scalar_to_execution(&mut session, main, invocation.outcome)?
+        .with_cleanup_failures(invocation.cleanup_failures);
     let stats = session.stats();
     verify_forced_entry(&outcome, &stats, main, TierState::BaselineNative)?;
     if stats.optimizing_code_objects != 0 || stats.optimizing_native_entries != 0 {
@@ -73,7 +74,8 @@ pub fn execute_optimizing_with_capabilities(
     session.compile_group(main)?;
     let arguments = capability_arguments(program, capabilities)?;
     let invocation = session.invoke_scalar(main, &arguments, execution)?;
-    let outcome = scalar_to_execution(&mut session, main, invocation.outcome)?;
+    let outcome = scalar_to_execution(&mut session, main, invocation.outcome)?
+        .with_cleanup_failures(invocation.cleanup_failures);
     let stats = session.stats();
     verify_forced_entry(&outcome, &stats, main, TierState::OptimizedNative)?;
     if stats.baseline_code_objects != 0

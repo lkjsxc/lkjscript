@@ -17,6 +17,17 @@ pub(super) fn validate_control_flow(
         .enumerate()
         .map(|(index, instruction)| (instruction.offset(), index))
         .collect();
+    for range in &proto.failure_cleanup_ranges {
+        let start = usize::from(range.start);
+        let end = usize::from(range.end);
+        if !by_offset.contains_key(&start)
+            || (end != proto.code.len() && !by_offset.contains_key(&end))
+        {
+            return Err(Error::msg(
+                "bytecode failure-cleanup range is not instruction aligned",
+            ));
+        }
+    }
     let mut states = vec![None; instructions.len()];
     let mut locals = vec![None; usize::from(proto.locals)];
     for (index, slot) in locals.iter_mut().take(usize::from(proto.arity)).enumerate() {
@@ -108,6 +119,7 @@ pub(super) fn validate_control_flow(
             .get(index)
             .and_then(Clone::clone)
             .ok_or_else(|| Error::msg("validator CFG state is missing"))?;
+        super::failure_cleanup::validate_at_offset(proto, instruction.offset(), &state)?;
         apply_instruction(chunk, proto, instruction, &mut state, is_main)?;
 
         let successors = successors(proto, instructions, &by_offset, index, instruction)?;

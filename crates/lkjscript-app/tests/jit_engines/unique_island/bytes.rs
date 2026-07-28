@@ -143,7 +143,8 @@ fn bytes_failure_paths_preserve_owners_and_cleanup_without_collectors() {
     for (proof, execution) in forced_pair(&trap, &ExecutionConfig::default()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
-        assert_eq!(execution.stats.native_unique.cleanup_releases, 1);
+        assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);
+        assert_eq!(execution.stats.native_unique.cleanup_releases, 0);
     }
 
     let mixed = compile(

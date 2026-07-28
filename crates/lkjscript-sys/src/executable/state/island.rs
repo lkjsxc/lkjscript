@@ -52,6 +52,10 @@ pub(in crate::executable) struct IslandCallState<'a> {
     pub(in crate::executable) peak_active_value_homes: usize,
     pub(in crate::executable) resource_calls: u64,
     pub(in crate::executable) unique_calls: u64,
+    pub(in crate::executable) cleanup_failures: Vec<NativeCleanupFailure>,
+    pub(in crate::executable) omitted_cleanup_failures: usize,
+    pub(in crate::executable) maximum_cleanup_failures: usize,
+    pub(in crate::executable) entry_rejected: bool,
     pub(in crate::executable) metadata_invalid: bool,
 }
 
@@ -101,6 +105,10 @@ impl<'a> IslandCallState<'a> {
             peak_active_value_homes: 0,
             resource_calls: 0,
             unique_calls: 0,
+            cleanup_failures: Vec::new(),
+            omitted_cleanup_failures: 0,
+            maximum_cleanup_failures: config.max_cleanup_failures,
+            entry_rejected: false,
             metadata_invalid: false,
         }
     }

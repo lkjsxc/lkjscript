@@ -23,6 +23,7 @@ fn evaluator_executes_generic_enum_construction_and_tag_test() {
             effects: EffectSet::ALLOCATES,
             safepoint: Safepoint::Required,
             failure: FailureBehavior::StructuredOutcome,
+            failure_cleanup: None,
             frame_state: Some(FrameState {
                 bytecode_position: 1,
                 locals: Vec::new(),
@@ -109,6 +110,7 @@ fn enum_projection_program(project_variant: VariantId, field: VariantFieldId) ->
             effects: EffectSet::ALLOCATES,
             safepoint: Safepoint::Required,
             failure: FailureBehavior::StructuredOutcome,
+            failure_cleanup: None,
             frame_state: Some(FrameState {
                 bytecode_position: 1,
                 locals: Vec::new(),

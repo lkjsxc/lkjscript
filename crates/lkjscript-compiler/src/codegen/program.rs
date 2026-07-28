@@ -105,6 +105,8 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     chunk.main.parameter_unique_places = main_proto.parameter_unique_places;
     chunk.main.return_unique = main_proto.return_unique;
     chunk.main.unique_places = main_proto.unique_places;
+    chunk.main.failure_cleanups = main_proto.failure_cleanups;
+    chunk.main.failure_cleanup_ranges = main_proto.failure_cleanup_ranges;
     chunk.main.code.extend(main_proto.code);
     links.push(main_link);
     links.sort_by_key(|link| link.function);

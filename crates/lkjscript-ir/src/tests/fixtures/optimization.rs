@@ -25,6 +25,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
                 name: "step".into(),
                 signature: Signature::monomorphic(vec![SsaType::I64], SsaType::I64),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: checked,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -79,6 +80,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
                 name: "main".into(),
                 signature: Signature::monomorphic(Vec::new(), SsaType::I64),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: checked,
                 entry: BlockId::new(0),
                 blocks: vec![Block {
@@ -100,6 +102,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
                                 effects: checked,
                                 safepoint: Safepoint::Required,
                                 failure: FailureBehavior::Trap,
+                                failure_cleanup: None,
                                 frame_state: Some(FrameState {
                                     bytecode_position: 0,
                                     locals: Vec::new(),

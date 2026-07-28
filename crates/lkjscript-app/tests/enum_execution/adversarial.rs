@@ -97,6 +97,7 @@ fn inactive_projection_is_rejected_before_any_generated_access() {
             effects: EffectSet::READS_MEMORY,
             safepoint: Safepoint::None,
             failure: FailureBehavior::None,
+            failure_cleanup: None,
             frame_state: None,
         },
     });

@@ -25,6 +25,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
             places: Vec::new(),
+            failure_cleanups: Vec::new(),
             effects: checked,
             entry: BlockId::new(0),
             blocks: vec![
@@ -69,6 +70,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
             places: Vec::new(),
+            failure_cleanups: Vec::new(),
             effects: checked,
             entry: BlockId::new(0),
             blocks: vec![

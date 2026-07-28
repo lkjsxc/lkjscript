@@ -65,11 +65,26 @@ impl Operation {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FailureCleanupCall {
+    pub(crate) slot: RuntimeCallSlot,
+    pub(crate) local: LocalId,
+}
+
+impl FailureCleanupCall {
+    #[must_use]
+    pub const fn new(slot: RuntimeCallSlot, local: LocalId) -> Self {
+        Self { slot, local }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Instruction {
     pub(crate) output: ValueId,
     pub(crate) output_type: ValueType,
     pub(crate) operation: Operation,
+    pub(crate) failure_cleanup: Vec<FailureCleanupCall>,
+    pub(crate) unentered_cleanup: Vec<FailureCleanupCall>,
     pub(crate) source: Option<SourceOrigin>,
 }
 

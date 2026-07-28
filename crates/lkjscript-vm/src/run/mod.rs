@@ -6,6 +6,7 @@ mod data;
 mod dispatch;
 mod enum_value;
 mod ext_ops;
+mod failure_cleanup;
 mod host_ops;
 mod limits;
 mod numeric;
@@ -18,9 +19,10 @@ use std::time::{Duration, Instant};
 
 use lkjscript_core::{
     CleanupFailures, CleanupPhase, CleanupSubject, Constant, EnumConstructionRef, EnumFieldRef,
-    EnumId, EnumVariantRef, Error, ErrorClass, ExecutionConfig, ExecutionOutcome, GcConfig,
-    GcHeap as Arena, HeapObj, HostError, Op, ProductFieldRef, ProductId, ResourceLimitKind, Result,
-    Trap, ValidatedChunk, Value, VariantId, MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
+    EnumId, EnumVariantRef, Error, ErrorClass, ExecutionConfig, ExecutionOutcome,
+    FailureCleanupAction, GcConfig, GcHeap as Arena, HeapObj, HostError, Op, ProductFieldRef,
+    ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
+    MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
 };
 use lkjscript_jit::{
     EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,
@@ -128,6 +130,7 @@ pub struct Vm<'a, J: RuntimeTier> {
     fuel_remaining: u64,
     output_bytes: usize,
     allocation_error: Option<Error>,
+    cleanup_failures: CleanupFailures,
     logical_aggregate_constructions: u64,
     started: Instant,
 }

@@ -117,6 +117,7 @@ pub fn encode(
         RuntimeCallSlot::RegisterFrame => 35_u8,
         RuntimeCallSlot::PublishSafepoint => 36_u8,
         RuntimeCallSlot::UnregisterFrame => 37_u8,
+        RuntimeCallSlot::TakeRejectedEntry => 38_u8,
     });
 
     let image = InstallableImage::new(ImageParts {

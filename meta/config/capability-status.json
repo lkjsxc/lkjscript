@@ -174,7 +174,7 @@
       "evidence": "docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md",
       "claimants": ["docs/current-state.md","docs/operations/agent-handoff.md"] },
     { "id": "typed-resources", "status": "accepted-contract",
-      "interface": "exact-kind typing, VM checks, and evaluator fake-provider slice; failure-edge/native work pending",
+      "interface": "exact kinds and evaluator/VM failure cleanup; evaluator breadth and native ownership pending",
       "authority": "docs/decisions/capabilities/typed-affine-resources.md",
       "evidence": "docs/decisions/capabilities/typed-affine-resources.md",
       "claimants": ["docs/current-state.md"] },

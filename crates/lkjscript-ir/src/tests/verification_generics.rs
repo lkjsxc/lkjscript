@@ -13,6 +13,7 @@ fn verifier_rejects_generic_ownership_substitution() {
             result: Box::new(SsaType::TypeParameter("t".into())),
         },
         places: Vec::new(),
+        failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -34,6 +35,24 @@ fn verifier_rejects_generic_ownership_substitution() {
         name: "generic-owned-caller".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: vec![
+            FailureCleanupPlan {
+                id: FailureCleanupId::new(0),
+                actions: vec![FailureCleanupAction::DropOwner {
+                    place: Some(PlaceId::new(0)),
+                    value: ValueId::new(0),
+                    glue: DropGlueIdentity::ByteVector,
+                }],
+            },
+            FailureCleanupPlan {
+                id: FailureCleanupId::new(1),
+                actions: vec![FailureCleanupAction::DropOwner {
+                    place: None,
+                    value: ValueId::new(2),
+                    glue: DropGlueIdentity::ByteVector,
+                }],
+            },
+        ],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -52,7 +71,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                         place: PlaceId::new(0),
                         value: ValueId::new(0),
                     },
-                    metadata: metadata(EffectSet::PURE),
+                    metadata: metadata_cleanup(EffectSet::PURE, 0),
                 },
                 Instruction {
                     id: ValueId::new(2),
@@ -74,6 +93,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                         effects: EffectSet::PURE,
                         safepoint: Safepoint::Required,
                         failure: FailureBehavior::None,
+                        failure_cleanup: None,
                         frame_state: Some(FrameState {
                             bytecode_position: 0,
                             locals: Vec::new(),
@@ -83,7 +103,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                 },
             ],
             terminator: Terminator::Return(ValueId::new(2)),
-            metadata: block_metadata(),
+            metadata: block_metadata_cleanup(1),
         }],
         origin: Origin::SYNTHETIC,
     };
@@ -103,6 +123,7 @@ fn verifier_rejects_generic_ownership_substitution() {
         name: "generic-reference-caller".into(),
         signature: Signature::monomorphic(vec![reference.clone()], SsaType::I64),
         places: Vec::new(),
+        failure_cleanups: Vec::new(),
         effects: EffectSet::READS_MEMORY,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -137,6 +158,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                         effects: EffectSet::PURE,
                         safepoint: Safepoint::Required,
                         failure: FailureBehavior::None,
+                        failure_cleanup: None,
                         frame_state: Some(FrameState {
                             bytecode_position: 0,
                             locals: Vec::new(),

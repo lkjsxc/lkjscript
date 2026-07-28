@@ -47,6 +47,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
                 effects: EffectSet::PURE,
                 safepoint: IrSafepoint::None,
                 failure: FailureBehavior::None,
+                failure_cleanup: None,
                 frame_state: None,
             },
         }]
@@ -67,6 +68,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
             places: Vec::new(),
+            failure_cleanups: Vec::new(),
             effects,
             entry: BlockId::new(0),
             blocks: vec![Block {
@@ -77,6 +79,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
                 metadata: BlockMetadata {
                     loop_header: false,
                     origin: Origin::SYNTHETIC,
+                    failure_cleanup: None,
                     frame_state: None,
                 },
             }],

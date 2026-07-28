@@ -1,3 +1,6 @@
+mod enums;
+pub(crate) use enums::*;
+
 use crate::*;
 
 pub(crate) fn metadata(effects: EffectSet) -> InstructionMetadata {
@@ -10,16 +13,30 @@ pub(crate) fn metadata(effects: EffectSet) -> InstructionMetadata {
         } else {
             FailureBehavior::None
         },
+        failure_cleanup: None,
         frame_state: None,
     }
+}
+
+pub(crate) fn metadata_cleanup(effects: EffectSet, cleanup: u32) -> InstructionMetadata {
+    let mut metadata = metadata(effects);
+    metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    metadata
 }
 
 pub(crate) fn block_metadata() -> BlockMetadata {
     BlockMetadata {
         loop_header: false,
         origin: Origin::SYNTHETIC,
+        failure_cleanup: None,
         frame_state: None,
     }
+}
+
+pub(crate) fn block_metadata_cleanup(cleanup: u32) -> BlockMetadata {
+    let mut metadata = block_metadata();
+    metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    metadata
 }
 
 pub(crate) fn constant(id: u32, value: i64) -> Instruction {
@@ -62,6 +79,7 @@ pub(crate) fn one_block_program() -> Program {
             name: "main".into(),
             signature: Signature::monomorphic(Vec::new(), SsaType::I64),
             places: Vec::new(),
+            failure_cleanups: Vec::new(),
             effects: EffectSet::PURE,
             entry: BlockId::new(0),
             blocks: vec![Block {
@@ -123,6 +141,18 @@ pub(crate) fn drop_byte(id: u32, place: u32, value: u32) -> Instruction {
     }
 }
 
+pub(crate) fn drop_byte_cleanup(id: u32, place: u32, value: u32, cleanup: u32) -> Instruction {
+    let mut instruction = drop_byte(id, place, value);
+    instruction.metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    instruction
+}
+
+pub(crate) fn place_end_cleanup(id: u32, place: u32, cleanup: u32) -> Instruction {
+    let mut instruction = place_end(id, place);
+    instruction.metadata.failure_cleanup = Some(FailureCleanupId::new(cleanup));
+    instruction
+}
+
 pub(crate) fn place_end(id: u32, place: u32) -> Instruction {
     Instruction {
         id: ValueId::new(id),
@@ -138,49 +168,4 @@ pub(crate) fn ownership_program(function: Function) -> Program {
     let mut program = one_block_program();
     program.functions.push(function);
     program
-}
-
-pub(crate) fn enum_metadata() -> EnumMetadata {
-    EnumMetadata {
-        id: EnumId::new([1; 32]),
-        name: "Boxed".into(),
-        type_parameters: vec!["t".into()],
-        variants: vec![
-            EnumVariantMetadata {
-                id: VariantId::new([2; 32]),
-                name: "a".into(),
-                physical_tag: 1,
-                fields: vec![EnumFieldMetadata {
-                    id: VariantFieldId::new([3; 32]),
-                    name: "value".into(),
-                    ty: SsaType::TypeParameter("t".into()),
-                    indirect: false,
-                    traced: false,
-                }],
-            },
-            EnumVariantMetadata {
-                id: VariantId::new([4; 32]),
-                name: "b".into(),
-                physical_tag: 0,
-                fields: vec![EnumFieldMetadata {
-                    id: VariantFieldId::new([5; 32]),
-                    name: "value".into(),
-                    ty: SsaType::TypeParameter("t".into()),
-                    indirect: false,
-                    traced: false,
-                }],
-            },
-        ],
-        layout: EnumLayoutFacts {
-            identity: RuntimeLayoutId::new([6; 32]),
-            recursive: false,
-        },
-    }
-}
-
-pub(crate) fn enum_type() -> SsaType {
-    SsaType::Enum {
-        id: EnumId::new([1; 32]),
-        arguments: vec![SsaType::I64],
-    }
 }

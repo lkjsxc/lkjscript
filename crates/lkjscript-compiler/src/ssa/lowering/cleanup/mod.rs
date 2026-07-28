@@ -18,7 +18,7 @@ impl FunctionBuilder<'_> {
             .remove(&expression.raw())
             .unwrap_or_default();
         for loan in loans {
-            let active = self.active_loans.remove(&loan).ok_or_else(|| {
+            let active = self.active_loans.get(&loan).copied().ok_or_else(|| {
                 Error::msg(format!(
                     "HIR memory plan ends unavailable SSA LoanId {}",
                     loan.raw()
@@ -34,6 +34,7 @@ impl FunctionBuilder<'_> {
                 EffectSet::PURE,
                 expression_origin,
             )?;
+            self.active_loans.remove(&loan);
         }
         Ok(())
     }
@@ -42,11 +43,12 @@ impl FunctionBuilder<'_> {
         &mut self,
         loan: SsaLoanId,
         place: SsaPlaceId,
+        kind: SsaBorrowKind,
         value: ValueId,
     ) -> Result<()> {
         if self
             .active_loans
-            .insert(loan, ActiveLoan { place, value })
+            .insert(loan, ActiveLoan { place, kind, value })
             .is_some()
         {
             return Err(Error::msg("SSA lowering duplicated an active HIR loan"));
@@ -71,6 +73,7 @@ impl FunctionBuilder<'_> {
         if !matches!(glue, DropGlueIdentity::Resource(_)) {
             return Err(Error::msg("resource close has non-resource drop glue"));
         }
+        self.env.remove(&binding);
         let _event = self.append(
             SsaType::Unit,
             InstructionKind::Drop {
@@ -82,7 +85,6 @@ impl FunctionBuilder<'_> {
             EffectSet::PURE,
             expression_origin,
         )?;
-        self.env.remove(&binding);
         Ok(())
     }
 
@@ -155,30 +157,5 @@ impl FunctionBuilder<'_> {
         expression_origin: hir::SourceId,
     ) -> Result<()> {
         self.cleanup_places_to(0, expression_origin)
-    }
-
-    pub(in crate::ssa) fn cleanup_byte_places(
-        &mut self,
-        expression_origin: hir::SourceId,
-    ) -> Result<()> {
-        let bindings = self.active_place_bindings.clone();
-        for binding in bindings.into_iter().rev() {
-            let Some(place) = self.owned_place_for_binding(binding)? else {
-                continue;
-            };
-            let is_byte = self
-                .places
-                .get(place.index().unwrap_or(usize::MAX))
-                .is_some_and(|place| {
-                    matches!(
-                        place.drop_glue,
-                        Some(DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes)
-                    )
-                });
-            if is_byte {
-                self.end_owned_place(binding, expression_origin)?;
-            }
-        }
-        Ok(())
     }
 }

@@ -31,6 +31,9 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
 
     let mut returned_original = ownership_program(owned_branch_function(true));
     returned_original.functions[1].blocks[1].terminator = Terminator::Return(ValueId::new(0));
+    returned_original.functions[1].blocks[1]
+        .metadata
+        .failure_cleanup = None;
     let error = verify(returned_original)
         .expect_err("Move followed by Return of the original owner must fail");
     assert!(error.to_string().contains("unavailable affine"), "{error}");
@@ -40,6 +43,14 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
         name: "implicit-return".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: vec![FailureCleanupPlan {
+            id: FailureCleanupId::new(0),
+            actions: vec![FailureCleanupAction::DropOwner {
+                place: Some(PlaceId::new(0)),
+                value: ValueId::new(0),
+                glue: DropGlueIdentity::ByteVector,
+            }],
+        }],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -52,7 +63,7 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
             }],
             instructions: Vec::new(),
             terminator: Terminator::Return(ValueId::new(0)),
-            metadata: block_metadata(),
+            metadata: block_metadata_cleanup(0),
         }],
         origin: Origin::SYNTHETIC,
     };

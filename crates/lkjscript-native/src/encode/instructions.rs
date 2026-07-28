@@ -27,14 +27,14 @@ impl FunctionEncoder<'_> {
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
             Operation::I64Add(left, right) => {
-                self.emit_checked_i64_binary(instruction.output, *left, *right, 0x03, None)?;
+                self.emit_checked_i64_binary(instruction, *left, *right, 0x03, None)?;
             }
             Operation::I64Sub(left, right) => {
-                self.emit_checked_i64_binary(instruction.output, *left, *right, 0x2b, None)?;
+                self.emit_checked_i64_binary(instruction, *left, *right, 0x2b, None)?;
             }
             Operation::I64Mul(left, right) => {
                 self.emit_checked_i64_binary(
-                    instruction.output,
+                    instruction,
                     *left,
                     *right,
                     0xaf,
@@ -42,7 +42,7 @@ impl FunctionEncoder<'_> {
                 )?;
             }
             Operation::I64Div(left, right) => {
-                self.emit_checked_i64_division(instruction.output, *left, *right)?;
+                self.emit_checked_i64_division(instruction, *left, *right)?;
             }
             Operation::I64BitAnd(left, right) => {
                 self.emit_i64_bitwise(instruction.output, *left, *right, 0x23)?;
@@ -110,7 +110,7 @@ impl FunctionEncoder<'_> {
                     .ok_or(NativeError::Encode(EncodeError::InvalidCall))?
                     .clone();
                 self.emit_call(
-                    instruction.output,
+                    instruction,
                     &signature,
                     arguments,
                     RelocationTarget::Function(*callee),
@@ -122,7 +122,7 @@ impl FunctionEncoder<'_> {
                     .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
                 self.runtime_calls.insert(*slot);
                 self.emit_call(
-                    instruction.output,
+                    instruction,
                     &signature,
                     arguments,
                     RelocationTarget::Runtime(*slot),

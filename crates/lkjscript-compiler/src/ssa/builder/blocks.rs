@@ -1,3 +1,5 @@
+mod append;
+
 use crate::ssa::*;
 
 impl FunctionBuilder<'_> {
@@ -17,6 +19,7 @@ impl FunctionBuilder<'_> {
             metadata: BlockMetadata {
                 loop_header,
                 origin: block_origin,
+                failure_cleanup: None,
                 frame_state: None,
             },
         });
@@ -86,7 +89,9 @@ impl FunctionBuilder<'_> {
         let current = self
             .current
             .ok_or_else(|| Error::msg("cannot terminate an ended SSA path"))?;
+        let failure_cleanup = self.intern_failure_cleanup(&[])?;
         let block = self.block_mut(current)?;
+        block.metadata.failure_cleanup = failure_cleanup;
         if block.terminator.replace(terminator).is_some() {
             return Err(Error::msg("SSA block has duplicate terminators"));
         }
@@ -100,83 +105,5 @@ impl FunctionBuilder<'_> {
         }
         self.current = Some(block);
         Ok(())
-    }
-
-    pub(in crate::ssa) fn append(
-        &mut self,
-        ty: SsaType,
-        kind: InstructionKind,
-        effects: EffectSet,
-        expression_origin: hir::SourceId,
-    ) -> Result<ValueId> {
-        let current = self
-            .current
-            .ok_or_else(|| Error::msg("cannot append to an ended SSA path"))?;
-        let id = self.next_value(&ty)?;
-        let safepoint = if matches!(kind, InstructionKind::Call { .. })
-            || effects.contains(EffectSet::ALLOCATES)
-            || effects.contains(EffectSet::HOST_IO)
-        {
-            Safepoint::Required
-        } else {
-            Safepoint::None
-        };
-        let frame_state = if safepoint == Safepoint::Required {
-            Some(self.frame_state())
-        } else {
-            None
-        };
-        let metadata = InstructionMetadata {
-            origin: self.next_origin(expression_origin.raw()),
-            effects,
-            safepoint,
-            failure: failure_behavior(effects),
-            frame_state,
-        };
-        self.block_mut(current)?.instructions.push(Instruction {
-            id,
-            ty,
-            kind,
-            metadata,
-        });
-        Ok(id)
-    }
-
-    pub(in crate::ssa) fn next_origin(&mut self, source: u32) -> Origin {
-        let position = self.next_position;
-        self.next_position = self.next_position.saturating_add(1);
-        origin(source, position)
-    }
-
-    pub(in crate::ssa) fn frame_state(&self) -> FrameState {
-        FrameState {
-            bytecode_position: self.next_position,
-            locals: self
-                .env
-                .iter()
-                .filter_map(|(binding, value)| {
-                    self.slots.get(binding).map(|slot| FrameLocal {
-                        binding: SsaBindingId::new(binding.raw()),
-                        slot: *slot,
-                        value: *value,
-                    })
-                })
-                .collect(),
-            operand_stack: Vec::new(),
-        }
-    }
-
-    pub(in crate::ssa) fn constant(
-        &mut self,
-        ty: SsaType,
-        constant: Constant,
-        expression_origin: hir::SourceId,
-    ) -> Result<ValueId> {
-        self.append(
-            ty,
-            InstructionKind::Constant(constant),
-            EffectSet::PURE,
-            expression_origin,
-        )
     }
 }

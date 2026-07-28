@@ -112,7 +112,7 @@ impl FunctionBuilder<'_> {
         self.env = failure_env;
         self.slots = slots.clone();
         let message = self.constant(SsaType::Str, Constant::Str(trap.into()), source)?;
-        self.cleanup_byte_places(source)?;
+        self.cleanup_all_places(source)?;
         self.terminate(Terminator::Trap { value: message })?;
 
         self.switch_to(success)?;

@@ -1,9 +1,16 @@
-use std::collections::HashMap;
+mod rewrite;
+pub(crate) use rewrite::rewrite_function_values;
 
-use crate::{CallTarget, FrameState, InstructionKind, Program, Terminator, ValueId};
+use std::collections::{HashMap, HashSet};
+
+use crate::{
+    CallTarget, FailureCleanupAction, FailureCleanupId, FrameState, InstructionKind, Program,
+    Terminator, ValueId,
+};
 
 pub(crate) fn compact_values(program: &mut Program) -> crate::Result<()> {
     for function in &mut program.functions {
+        compact_failure_cleanups(function)?;
         let mut mapping = HashMap::new();
         let mut next = 0_u32;
         for block in &function.blocks {
@@ -28,9 +35,64 @@ pub(crate) fn compact_values(program: &mut Program) -> crate::Result<()> {
                 instruction.id = mapped_value(&mapping, instruction.id)?;
             }
         }
-        rewrite_function_values(function, |value| {
-            mapping.get(&value).copied().unwrap_or(value)
+        let mut missing_value = None;
+        rewrite_function_values(function, |value| match mapping.get(&value).copied() {
+            Some(mapped) => mapped,
+            None => {
+                missing_value.get_or_insert(value);
+                value
+            }
         });
+        if let Some(value) = missing_value {
+            return Err(crate::IrError::new(format!(
+                "pass lost failure-cleanup SSA value {}",
+                value.raw()
+            )));
+        }
+    }
+    super::compact_places(program)
+}
+
+fn compact_failure_cleanups(function: &mut crate::Function) -> crate::Result<()> {
+    let mut used = HashSet::new();
+    for block in &function.blocks {
+        used.extend(block.metadata.failure_cleanup);
+        for instruction in &block.instructions {
+            used.extend(instruction.metadata.failure_cleanup);
+        }
+    }
+    let mut mapping = HashMap::new();
+    let mut plans = Vec::with_capacity(used.len());
+    for plan in &function.failure_cleanups {
+        if used.contains(&plan.id) {
+            let raw = u32::try_from(plans.len())
+                .map_err(|_| crate::IrError::new("failure-cleanup plan count exceeds u32"))?;
+            let id = FailureCleanupId::new(raw);
+            mapping.insert(plan.id, id);
+            let mut plan = plan.clone();
+            plan.id = id;
+            plans.push(plan);
+        }
+    }
+    for block in &mut function.blocks {
+        remap_failure_cleanup(&mut block.metadata.failure_cleanup, &mapping)?;
+        for instruction in &mut block.instructions {
+            remap_failure_cleanup(&mut instruction.metadata.failure_cleanup, &mapping)?;
+        }
+    }
+    function.failure_cleanups = plans;
+    Ok(())
+}
+
+fn remap_failure_cleanup(
+    cleanup: &mut Option<FailureCleanupId>,
+    mapping: &HashMap<FailureCleanupId, FailureCleanupId>,
+) -> crate::Result<()> {
+    if let Some(id) = cleanup {
+        *id = mapping
+            .get(id)
+            .copied()
+            .ok_or_else(|| crate::IrError::new("pass lost failure-cleanup plan"))?;
     }
     Ok(())
 }
@@ -43,101 +105,4 @@ pub(crate) fn mapped_value(
         .get(&id)
         .copied()
         .ok_or_else(|| crate::IrError::new(format!("pass lost SSA value {}", id.raw())))
-}
-
-pub(crate) fn rewrite_function_values(
-    function: &mut crate::Function,
-    mut rewrite: impl FnMut(ValueId) -> ValueId,
-) {
-    for block in &mut function.blocks {
-        if let Some(frame) = &mut block.metadata.frame_state {
-            rewrite_frame(frame, &mut rewrite);
-        }
-        for instruction in &mut block.instructions {
-            match &mut instruction.kind {
-                InstructionKind::Constant(_)
-                | InstructionKind::PlaceEnd { .. }
-                | InstructionKind::FunctionRef(_) => {}
-                InstructionKind::Copy(value)
-                | InstructionKind::PlaceInit { value, .. }
-                | InstructionKind::EndBorrow { value, .. }
-                | InstructionKind::Drop { value, .. }
-                | InstructionKind::Move { value, .. }
-                | InstructionKind::Borrow { value, .. }
-                | InstructionKind::F64FromI64Exact { value }
-                | InstructionKind::F64FromI64Rounded { value }
-                | InstructionKind::I64FromF64Exact { value }
-                | InstructionKind::I64FromF64Trunc { value } => {
-                    *value = rewrite(*value);
-                }
-                InstructionKind::Runtime { arguments, .. }
-                | InstructionKind::Call { arguments, .. } => {
-                    for argument in arguments {
-                        *argument = rewrite(*argument);
-                    }
-                    if let InstructionKind::Call {
-                        target: CallTarget::Indirect(target),
-                        ..
-                    } = &mut instruction.kind
-                    {
-                        *target = rewrite(*target);
-                    }
-                }
-                InstructionKind::ProductValue { fields, .. }
-                | InstructionKind::EnumValue { fields, .. } => {
-                    for field in fields {
-                        *field = rewrite(*field);
-                    }
-                }
-                InstructionKind::ProductField { value, .. }
-                | InstructionKind::EnumIsVariant { value, .. }
-                | InstructionKind::EnumField { value, .. } => *value = rewrite(*value),
-                InstructionKind::WithProductField {
-                    value, replacement, ..
-                } => {
-                    *value = rewrite(*value);
-                    *replacement = rewrite(*replacement);
-                }
-            }
-            if let Some(frame) = &mut instruction.metadata.frame_state {
-                rewrite_frame(frame, &mut rewrite);
-            }
-        }
-        match &mut block.terminator {
-            Terminator::Branch { arguments, .. } => {
-                for argument in arguments {
-                    *argument = rewrite(*argument);
-                }
-            }
-            Terminator::ConditionalBranch {
-                condition,
-                true_arguments,
-                false_arguments,
-                ..
-            } => {
-                *condition = rewrite(*condition);
-                for argument in true_arguments.iter_mut().chain(false_arguments) {
-                    *argument = rewrite(*argument);
-                }
-            }
-            Terminator::Return(value) | Terminator::Trap { value } => {
-                *value = rewrite(*value);
-            }
-            Terminator::Exit { code } => *code = rewrite(*code),
-            Terminator::Outcome { detail, .. } => {
-                if let Some(detail) = detail {
-                    *detail = rewrite(*detail);
-                }
-            }
-        }
-    }
-}
-
-pub(crate) fn rewrite_frame(frame: &mut FrameState, rewrite: &mut impl FnMut(ValueId) -> ValueId) {
-    for local in &mut frame.locals {
-        local.value = rewrite(local.value);
-    }
-    for value in &mut frame.operand_stack {
-        *value = rewrite(*value);
-    }
 }

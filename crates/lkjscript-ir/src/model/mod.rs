@@ -13,12 +13,13 @@ mod types;
 pub use constant::Constant;
 pub use error::{IrError, Result};
 pub use ids::{
-    BindingId, BlockId, EnumId, FunctionId, ImplId, LoanId, PlaceId, ProductId, RuntimeLayoutId,
-    TraitId, ValueId, VariantFieldId, VariantId,
+    BindingId, BlockId, EnumId, FailureCleanupId, FunctionId, ImplId, LoanId, PlaceId, ProductId,
+    RuntimeLayoutId, TraitId, ValueId, VariantFieldId, VariantId,
 };
 pub use instruction::{
-    BlockParameter, BorrowKind, CallTarget, FailureBehavior, FrameLocal, FrameState, Instruction,
-    InstructionKind, InstructionMetadata, Safepoint,
+    BlockParameter, BorrowKind, CallTarget, FailureBehavior, FailureCleanupAction,
+    FailureCleanupPlan, FrameLocal, FrameState, Instruction, InstructionKind, InstructionMetadata,
+    Safepoint,
 };
 pub use memory::{
     DropEventKind, DropGlueIdentity, MemoryAliasing, MemoryContention, MemoryDestruction,

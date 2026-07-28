@@ -35,7 +35,6 @@ protocol experiments, candidate resource profiles, rejected performance
 results, and immutable AI-authorability records live only under
 `docs/history/`, `docs/vision/experiments/`, retained benchmark result trees, or
 Git history. They do not provide aliases or acceptance fallbacks.
-
 ## Language and source
 - `.lkjscript` is the only accepted suffix. Source is marker-free with one exact
   contract digest; unknown or removed marker forms are ordinary syntax errors.
@@ -89,17 +88,18 @@ Git history. They do not provide aliases or acceptance fallbacks.
   pairs explicit `drop`, SQLite close,
   and SQLite finalize with exact resource-drop events.
 - Byte-vector and owned typed-resource cleanup is elaborated on normal lexical
-  and source-level return, break, continue, trap, and exit paths. Explicit close
-  suppresses implicit resource glue; evaluator fake owners and reference-VM
-  bytecode use their core tables, while borrowed standard input is never closed.
-  Forced native byte-vector execution additionally releases outstanding bytes
-  after instruction-originated failure. Statically decidable conditional byte
-  owners execute through all four engines without fallback; conditional typed
-  resources execute explicit/implicit close in the VM. Core, evaluator, and VM
-  teardown retain bounded ordered cleanup failures without replacing the primary
-  outcome. Instruction-originated resource cleanup and native owned-resource
-  execution remain accepted-contract work, so deterministic drop and typed
-  resources are not complete Current capabilities.
+  and source-level return, break, continue, trap, and exit paths. Each live SSA
+  failure site names an exact interned cleanup plan independently reconstructed
+  by the ownership verifier. The evaluator and reference VM execute those plans
+  for instruction failure, fuel/deadline exhaustion, and propagated callee
+  outcomes; failed pre-entry calls clean transferred arguments separately.
+  Forced baseline and proof JITs execute the same verified plans for
+  collector-free byte owners without fallback. Statically decidable conditional
+  byte owners execute through all four engines, and conditional typed resources
+  execute explicit/implicit close in the VM. Bounded ordered cleanup failures
+  retain the unchanged primary outcome. Native owned-resource execution remains
+  fail-closed, so deterministic drop and typed resources are not complete
+  Current capabilities.
 - The VM uses checked generation-bearing core resource-table tokens. Evaluator
   fake providers perform no ambient I/O and dispatch borrowed standard input,
   terminal detection, file/directory acquisition and close, and SQLite
@@ -168,8 +168,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 
 ## Accepted targets not claimed Current
 - lowercase-vocabulary promotion is blocked only by removing transitional `buf`;
-- instruction cleanup, evaluator dispatch beyond the fake-provider slice, and
-  native owned resources beyond borrowed `standard-input`;
+- evaluator dispatch beyond the fake-provider slice and native owned resources
+  beyond borrowed `standard-input`;
 - full affine `byte-vector` corpus migration, ranged lexical byte slices,
   borrowed `str`, and removal of transitional `buf`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;

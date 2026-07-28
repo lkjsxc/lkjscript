@@ -41,6 +41,7 @@ fn projected_program() -> lkjscript_ir::VerifiedProgram {
         effects: EffectSet::READS_MEMORY,
         safepoint: Safepoint::None,
         failure: FailureBehavior::None,
+        failure_cleanup: None,
         frame_state: None,
     };
     let test_id = ValueId::new(constructor.id.raw() + 1);

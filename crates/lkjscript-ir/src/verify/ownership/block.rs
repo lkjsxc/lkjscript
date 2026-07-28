@@ -1,27 +1,22 @@
-use std::collections::BTreeMap;
+mod failure;
+mod nonowned;
+use failure::{expected_failure_cleanup, verify_failure_cleanup, verify_failure_cleanup_plan};
+pub(crate) use nonowned::nonowned_affine_values;
+
+use std::collections::{BTreeMap, HashSet};
 
 use crate::verify::*;
-use crate::{Block, BlockId, Function, InstructionKind, IrError, SsaType, Terminator, ValueId};
-
-fn nonowned_bytes_value(function: &Function, value: ValueId) -> bool {
-    function.blocks.iter().any(|block| {
-        block.instructions.iter().any(|instruction| {
-            instruction.id == value
-                && instruction.ty == SsaType::Bytes
-                && matches!(
-                    instruction.kind,
-                    InstructionKind::Constant(crate::Constant::StaticBytes(_))
-                        | InstructionKind::Borrow { .. }
-                )
-        })
-    })
-}
+use crate::{
+    Block, BlockId, FailureCleanupAction, FailureCleanupId, Function, Instruction, InstructionKind,
+    IrError, SsaType, Terminator, ValueId,
+};
 
 pub(crate) fn process_ownership_block(
     function: &Function,
     block: &Block,
     mut state: OwnershipState,
     types: &[SsaType],
+    nonowned_affine: &HashSet<ValueId>,
     work: &mut usize,
 ) -> crate::Result<Vec<(BlockId, OwnershipState)>> {
     let last_use = ownership_last_uses(block);
@@ -48,7 +43,7 @@ pub(crate) fn process_ownership_block(
             let ended_borrow_operand =
                 matches!(instruction.kind, InstructionKind::EndBorrow { .. });
             if is_affine(value_type(types, operand)?)
-                && !nonowned_bytes_value(function, operand)
+                && !nonowned_affine.contains(&operand)
                 && !state.affine.contains_key(&operand)
                 && !pending_drop_operand
                 && !ended_borrow_operand
@@ -62,6 +57,14 @@ pub(crate) fn process_ownership_block(
             }
         }
 
+        verify_failure_cleanup(
+            function,
+            instruction,
+            &state,
+            &live_loans,
+            types,
+            nonowned_affine,
+        )?;
         process_ownership_instruction(function, instruction, &mut state, &mut live_loans, types)?;
     }
 
@@ -71,6 +74,12 @@ pub(crate) fn process_ownership_block(
     if live_loans.values().any(|loans| !loans.is_empty()) {
         return fail("SSA live loan reaches a block terminator without EndBorrow");
     }
+    verify_failure_cleanup_plan(
+        function,
+        block.metadata.failure_cleanup,
+        &expected_failure_cleanup(function, &state, &live_loans, types, nonowned_affine, &[])?,
+        "block terminator",
+    )?;
     let terminal = !matches!(
         block.terminator,
         Terminator::Branch { .. } | Terminator::ConditionalBranch { .. }
@@ -79,9 +88,12 @@ pub(crate) fn process_ownership_block(
         || state
             .owners
             .values()
-            .any(|value| value_type(types, *value).is_ok_and(is_owned_buf));
+            .any(|value| value_type(types, *value).is_ok_and(is_owned_value));
     if terminal && !matches!(block.terminator, Terminator::Return(_)) && incomplete {
-        return fail("SSA structured terminator has incomplete whole-place cleanup");
+        return fail(format!(
+            "SSA structured terminator {:?} in block {} has incomplete cleanup owners {:?} pending {:?}",
+            block.terminator, block.id.raw(), state.owners, state.pending_drops
+        ));
     }
 
     match &block.terminator {
@@ -133,7 +145,7 @@ pub(crate) fn process_ownership_block(
                 || state
                     .owners
                     .values()
-                    .any(|owner| value_type(types, *owner).is_ok_and(is_owned_buf))
+                    .any(|owner| value_type(types, *owner).is_ok_and(is_owned_value))
             {
                 return fail("SSA Return has incomplete whole-place cleanup");
             }

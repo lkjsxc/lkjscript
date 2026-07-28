@@ -10,6 +10,10 @@ pub(crate) fn precheck_ownership_work_shape(function: &Function) -> crate::Resul
     charge_ownership_work(&mut work, function.signature.parameters.len())?;
     charge_ownership_work(&mut work, function.blocks.len())?;
     charge_ownership_work(&mut work, function.places.len())?;
+    charge_ownership_work(&mut work, function.failure_cleanups.len())?;
+    for plan in &function.failure_cleanups {
+        charge_ownership_work(&mut work, plan.actions.len())?;
+    }
     for block in &function.blocks {
         charge_ownership_work(&mut work, block.parameters.len())?;
         charge_ownership_work(&mut work, block.instructions.len())?;

@@ -25,6 +25,10 @@ impl RuntimeCallSlot {
                 ],
                 result: InternalMachineResult::InvocationContext,
             }),
+            Self::TakeRejectedEntry => Some(InternalRuntimeSignature {
+                parameters: &[InternalMachineArgument::InvocationContext],
+                result: InternalMachineResult::Integer,
+            }),
             Self::RegisterFrame | Self::UnregisterFrame => Some(InternalRuntimeSignature {
                 parameters: FRAME_PARAMETERS,
                 result: InternalMachineResult::Unit,

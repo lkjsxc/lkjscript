@@ -1,4 +1,6 @@
 use crate::*;
+mod cleanup;
+use cleanup::native_cleanup_failures;
 
 impl JitSession {
     pub fn invoke_scalar(
@@ -59,7 +61,8 @@ impl JitSession {
         self.returned_unique = None;
         let config = NativeInvocationConfig::new(execution.instruction_fuel, execution.wall_time)
             .with_max_active_frames(execution.max_frames)
-            .with_max_active_values(execution.max_stack_values);
+            .with_max_active_values(execution.max_stack_values)
+            .with_max_cleanup_failures(execution.cleanup_failure_limits.max_failures());
         if self.time_to_first_native_entry.is_none() {
             self.time_to_first_native_entry = self.metrics_started.map(|started| started.elapsed());
         }
@@ -158,6 +161,7 @@ impl JitSession {
         self.objects[object_index].native_entry_count = self.objects[object_index]
             .native_entry_count
             .saturating_add(invocation_entries);
+        let cleanup_failures = native_cleanup_failures(&report, execution);
         let outcome = match report.outcome() {
             InvocationOutcome::Returned(value) => ScalarInvocationOutcome::Returned(value),
             InvocationOutcome::Trapped(trap) => {
@@ -183,6 +187,7 @@ impl JitSession {
         Ok(ScalarInvocation {
             outcome,
             poll_count: report.poll_count(),
+            cleanup_failures,
         })
     }
 }

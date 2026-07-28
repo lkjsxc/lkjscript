@@ -11,12 +11,13 @@ acquisition, fake SQLite connection and child-statement acquisition, and their
 typed consuming close or finalize operations through the generation-safe table.
 The fake provider performs no host effects; a bounded evaluation policy selects
 one exact resource kind whose acquisition and/or close fails deterministically.
-Unlisted evaluator host operations remain rejected as unsupported. The complete
-capability remains non-Current until exactly-once failure-edge cleanup, complete
-evaluator resource operation dispatch, owned native host execution,
-malformed-input, and acceptance coverage are complete. Forced native support is
-currently only borrowed `standard-input`; an opaque runtime token alone does not
-qualify.
+Unlisted evaluator host operations remain rejected as unsupported. Exact
+instruction-failure cleanup is Current in the evaluator and VM, including
+fuel/deadline and propagated callee outcomes. The complete capability remains
+non-Current until evaluator resource-operation dispatch, owned native host
+execution, malformed-input, and acceptance coverage are complete. Forced native
+support is currently only borrowed `standard-input`; an opaque runtime token
+alone does not qualify.
 
 ## Closed initial kinds
 
@@ -94,8 +95,8 @@ The implemented bytecode foundation publishes exact resource parameter and
 resource-result metadata plus explicit global-to-prototype links. Validation
 rejects untyped `any` values at host-resource instructions, checks exact kinds
 at statically known calls and returns, and rejects resource flow through calls
-without metadata. This does not supply the pending cleanup or provider/state
-proofs.
+without metadata. Atomic instruction ranges now carry exact cleanup plans; this
+does not supply owned native cleanup or complete provider/state proofs.
 
 VM and forced native execution preflight complete reachable support, preserve
 ownership and exact roots, execute cleanup, produce real native entries, and

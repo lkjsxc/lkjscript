@@ -45,7 +45,8 @@ fn little_endian_u32_bounds_and_value_fail_before_mutation() {
     for (proof, execution) in forced_pair(&program, &ExecutionConfig::default()) {
         assert!(matches!(execution.outcome, ExecutionOutcome::Trapped(_)));
         assert_unique_metrics(&execution.stats, proof);
-        assert_eq!(execution.stats.native_unique.cleanup_releases, 1);
+        assert_eq!(execution.stats.native_unique.cleanup_attempts, 0);
+        assert_eq!(execution.stats.native_unique.cleanup_releases, 0);
         assert_eq!(execution.stats.native_unique.byte_writes, 0);
     }
 }

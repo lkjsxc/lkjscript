@@ -6,15 +6,17 @@ use lkjscript_core::{
     Chunk, Constant as BytecodeConstant, EnumConstructionRef,
     EnumFieldMetadata as BytecodeEnumFieldMetadata, EnumFieldRef, EnumId as BytecodeEnumId,
     EnumMetadata as BytecodeEnumMetadata, EnumVariantMetadata as BytecodeEnumVariantMetadata,
-    EnumVariantRef, Error, FunctionProto, Op, ProductFieldRef, ProductId as BytecodeProductId,
-    ProductMetadata as BytecodeProductMetadata, ResourceReturnKind, Result,
-    RuntimeLayoutId as BytecodeLayoutId, UniqueValueKind, VariantFieldId as BytecodeVariantFieldId,
-    VariantId as BytecodeVariantId,
+    EnumVariantRef, Error, FailureCleanupAction as BytecodeFailureCleanupAction,
+    FailureCleanupPlan as BytecodeFailureCleanupPlan, FailureCleanupRange, FunctionProto, Op,
+    ProductFieldRef, ProductId as BytecodeProductId, ProductMetadata as BytecodeProductMetadata,
+    ResourceReturnKind, Result, RuntimeLayoutId as BytecodeLayoutId, UniqueValueKind,
+    VariantFieldId as BytecodeVariantFieldId, VariantId as BytecodeVariantId,
 };
 use lkjscript_ir::{
     BlockId, BytecodeBlockLink, BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget,
-    Constant, DropGlueIdentity, Function, FunctionBytecodeLink, FunctionId, Instruction,
-    InstructionKind, RuntimeOp, SsaType, Terminator, ValueId, VerifiedProgram,
+    Constant, DropGlueIdentity, FailureCleanupAction as SsaFailureCleanupAction, Function,
+    FunctionBytecodeLink, FunctionId, Instruction, InstructionKind, RuntimeOp, SsaType, Terminator,
+    ValueId, VerifiedProgram,
 };
 
 mod constants;

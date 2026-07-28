@@ -73,8 +73,21 @@ pub(super) extern "C" fn runtime_island_reserve(
         } else {
             invocation.invalidate_frame();
         }
+        invocation.entry_rejected = invocation.status != 0;
     }
     state
+}
+
+pub(super) extern "C" fn runtime_island_take_rejected_entry(
+    state: *mut IslandCallState<'_>,
+) -> u64 {
+    // SAFETY: generated call-failure paths pass their live island context.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return 0;
+    };
+    let rejected = state.entry_rejected;
+    state.entry_rejected = false;
+    u64::from(rejected)
 }
 
 pub(super) extern "C" fn runtime_island_register(

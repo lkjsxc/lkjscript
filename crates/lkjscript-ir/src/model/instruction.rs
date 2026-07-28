@@ -35,7 +35,29 @@ pub struct InstructionMetadata {
     pub effects: EffectSet,
     pub safepoint: Safepoint,
     pub failure: FailureBehavior,
+    pub failure_cleanup: Option<FailureCleanupId>,
     pub frame_state: Option<FrameState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FailureCleanupAction {
+    EndBorrow {
+        place: PlaceId,
+        loan: LoanId,
+        kind: BorrowKind,
+        value: ValueId,
+    },
+    DropOwner {
+        place: Option<PlaceId>,
+        value: ValueId,
+        glue: DropGlueIdentity,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FailureCleanupPlan {
+    pub id: FailureCleanupId,
+    pub actions: Vec<FailureCleanupAction>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

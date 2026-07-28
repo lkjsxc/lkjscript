@@ -12,6 +12,9 @@ pub(in crate::executable) fn runtime_symbol(
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::EnterFunction) => {
             runtime_island_enter as *const () as usize
         }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::TakeRejectedEntry) => {
+            runtime_island_take_rejected_entry as *const () as usize
+        }
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StdinHandle) => {
             runtime_island_stdin as *const () as usize
         }

@@ -25,7 +25,7 @@ pub use comparisons::*;
 pub use error::PlanError;
 pub use heap::{AllocationClass, HeapCallDescriptor, HeapOperation, StoreClass};
 pub use identity::*;
-pub use ir::FunctionPlan;
 pub(crate) use ir::*;
+pub use ir::{FailureCleanupCall, FunctionPlan};
 pub use machine::{MachinePlanBuilder, StaticBytesIdentity};
 pub use runtime::*;

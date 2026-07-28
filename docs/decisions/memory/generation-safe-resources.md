@@ -11,10 +11,10 @@ The evaluator dispatches a closed fake-provider slice for borrowed standard
 input and terminal detection, file and directory acquisition, generic typed
 close, SQLite connection and child-statement acquisition, and SQLite close or
 finalize. Forced native tiers still implement only borrowed `standard-input`.
-Statically decidable conditional
-whole-place close/drop and bounded cleanup attachments are Current in the
-compiler and reference VM. Promotion remains blocked by instruction-originated
-cleanup and owned native resource execution.
+Statically decidable conditional whole-place close/drop, verified
+instruction-originated cleanup, and bounded cleanup attachments are Current in
+the compiler, evaluator, and reference VM. Promotion remains blocked by
+complete evaluator operation dispatch and owned native resource execution.
 
 ## Key And Slot
 
@@ -103,6 +103,7 @@ generic close, SQLite connection/statement acquisition, finalize, close, and
 failed child acquisition without host I/O. A conditional resource-parameter
 fixture covers explicit versus implicit close in the VM. Core and engine teardown
 tests cover bounded UTF-8 messages, omitted counts and bytes, deterministic
-reverse order, later cleanup, and unchanged primary outcomes. Complete evaluator
-host-operation coverage, instruction-originated resource cleanup, and owned
+reverse order, later cleanup, and unchanged primary outcomes. Evaluator and VM
+fuel interruption tests prove ordinary instruction plans close a live resource
+without emergency teardown. Complete evaluator host-operation coverage and owned
 native resource support remain absent.

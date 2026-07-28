@@ -5,6 +5,7 @@ mod decode;
 mod entry;
 mod entry_capabilities;
 mod enum_shape;
+mod failure_cleanup;
 mod instruction;
 mod merge;
 mod prelude_shape;

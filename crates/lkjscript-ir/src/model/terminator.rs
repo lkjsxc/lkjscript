@@ -4,6 +4,7 @@ use super::*;
 pub struct BlockMetadata {
     pub loop_header: bool,
     pub origin: Origin,
+    pub failure_cleanup: Option<FailureCleanupId>,
     pub frame_state: Option<FrameState>,
 }
 

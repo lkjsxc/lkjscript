@@ -1,4 +1,5 @@
 use super::*;
+mod failure;
 
 impl FunctionEncoder<'_> {
     pub(super) fn emit_terminator(&mut self, terminator: &Terminator) -> Result<(), NativeError> {

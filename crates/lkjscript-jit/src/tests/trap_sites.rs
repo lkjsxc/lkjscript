@@ -7,6 +7,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
         effects,
         safepoint,
         failure,
+        failure_cleanup: None,
         frame_state: (safepoint == IrSafepoint::Required).then_some(FrameState {
             bytecode_position: 0,
             locals: Vec::new(),
@@ -16,6 +17,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
     let block_metadata = || BlockMetadata {
         loop_header: false,
         origin: Origin::SYNTHETIC,
+        failure_cleanup: None,
         frame_state: None,
     };
     let callee_signature = Signature::monomorphic(vec![SsaType::Bool], SsaType::I64);
@@ -34,6 +36,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                 name: "choose".into(),
                 signature: callee_signature.clone(),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: EffectSet::MAY_TRAP,
                 entry: BlockId::new(0),
                 blocks: vec![
@@ -101,6 +104,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                 name: "main".into(),
                 signature: Signature::monomorphic(Vec::new(), SsaType::I64),
                 places: Vec::new(),
+                failure_cleanups: Vec::new(),
                 effects: EffectSet::MAY_TRAP,
                 entry: BlockId::new(0),
                 blocks: vec![Block {

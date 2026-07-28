@@ -8,6 +8,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
         name: "successor-reuse".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![
@@ -51,6 +52,24 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
         name: "duplicate-edge".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: vec![
+            FailureCleanupPlan {
+                id: FailureCleanupId::new(0),
+                actions: vec![FailureCleanupAction::DropOwner {
+                    place: Some(PlaceId::new(0)),
+                    value: ValueId::new(0),
+                    glue: DropGlueIdentity::ByteVector,
+                }],
+            },
+            FailureCleanupPlan {
+                id: FailureCleanupId::new(1),
+                actions: vec![FailureCleanupAction::DropOwner {
+                    place: None,
+                    value: ValueId::new(1),
+                    glue: DropGlueIdentity::ByteVector,
+                }],
+            },
+        ],
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![
@@ -69,13 +88,13 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                         place: PlaceId::new(0),
                         value: ValueId::new(0),
                     },
-                    metadata: metadata(EffectSet::PURE),
+                    metadata: metadata_cleanup(EffectSet::PURE, 0),
                 }],
                 terminator: Terminator::Branch {
                     target: BlockId::new(1),
                     arguments: vec![ValueId::new(1), ValueId::new(1)],
                 },
-                metadata: block_metadata(),
+                metadata: block_metadata_cleanup(1),
             },
             Block {
                 id: BlockId::new(1),
@@ -114,6 +133,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
         name: "loop-mismatch".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![
@@ -156,6 +176,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 metadata: BlockMetadata {
                     loop_header: true,
                     origin: Origin::SYNTHETIC,
+                    failure_cleanup: None,
                     frame_state: Some(FrameState {
                         bytecode_position: 0,
                         locals: Vec::new(),

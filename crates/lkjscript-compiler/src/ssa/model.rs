@@ -112,6 +112,7 @@ pub(in crate::ssa) struct CleanupPlan {
 #[derive(Clone, Copy)]
 pub(in crate::ssa) struct ActiveLoan {
     pub(in crate::ssa) place: SsaPlaceId,
+    pub(in crate::ssa) kind: SsaBorrowKind,
     pub(in crate::ssa) value: ValueId,
 }
 

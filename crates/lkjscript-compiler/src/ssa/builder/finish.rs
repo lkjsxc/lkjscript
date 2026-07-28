@@ -34,6 +34,7 @@ impl FunctionBuilder<'_> {
             name: self.name,
             signature: self.signature,
             places: self.places,
+            failure_cleanups: self.failure_cleanups,
             effects: self.function_effect,
             entry: self.entry,
             blocks,

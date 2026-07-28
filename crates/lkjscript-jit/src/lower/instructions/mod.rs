@@ -1,8 +1,13 @@
 use super::*;
+mod calls;
 mod constants;
+mod failure_cleanup;
 mod runtime_bytes;
 mod unique;
+use calls::{indirect_call, lower_direct_call};
 use constants::*;
+use failure_cleanup::lower_failure_cleanup;
+pub(in crate::lower) use failure_cleanup::lower_failure_cleanup_id;
 pub(in crate::lower) use runtime_bytes::lower_bytes_runtime;
 use unique::*;
 #[allow(clippy::too_many_arguments)]
@@ -76,24 +81,21 @@ pub(super) fn lower_instruction(
             target: CallTarget::Direct(callee),
             arguments,
             ..
-        } => {
-            builder
-                .runtime_call(block, RuntimeCallSlot::Poll, Vec::new())
-                .map_err(LoweringError::backend)?;
-            let arguments = read_values(builder, block, locals, arguments, function.id)?;
-            let callee = native_function(native_functions, *callee)?;
-            builder.call(block, callee, arguments)
-        }
+        } => lower_direct_call(
+            function,
+            instruction,
+            *callee,
+            arguments,
+            block,
+            locals,
+            value_types,
+            native_functions,
+            builder,
+        )?,
         InstructionKind::Call {
             target: CallTarget::Indirect(_),
             ..
-        } => {
-            return Err(LoweringError::new(
-                LoweringFailureCode::IndirectCall,
-                Some(function.id),
-                "indirect native calls are unsupported",
-            ));
-        }
+        } => return indirect_call(function.id),
         InstructionKind::ProductValue { product, fields } => {
             let arguments = read_values(builder, block, locals, fields, function.id)?;
             let inputs = fields
@@ -181,6 +183,12 @@ pub(super) fn lower_instruction(
     .map_err(LoweringError::backend)?;
     builder
         .set_instruction_source(output, SourceOrigin::new(instruction.metadata.origin.node))
+        .map_err(LoweringError::backend)?;
+    builder
+        .set_instruction_failure_cleanup(
+            output,
+            lower_failure_cleanup(function, instruction, locals, value_types)?,
+        )
         .map_err(LoweringError::backend)?;
     let local = value_local(locals, instruction.id, function.id)?;
     builder

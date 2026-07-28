@@ -116,7 +116,9 @@ standard input never receives guest-owned glue.
 
 Conditional cleanup is emitted on the exact live predecessor and ends the place
 on both edges; the verifier and bytecode unique-owner phi checks reject forged
-mismatches. Instruction-originated all-outcome resource cleanup remains
-governed by [Deterministic Drop](deterministic-drop.md) and is not Current.
-Bounded cleanup-failure attachment is Current. The diagnostic SSA inventory
-remains derived evidence and cannot override the plan.
+mismatches. Interned instruction-failure plans are independently reconstructed,
+preserved by normalization/proof optimization, lowered into atomic bytecode
+ranges, and executed by the evaluator and VM for exact byte/resource owners and
+by forced native tiers for byte owners. Native owned-resource cleanup remains
+fail-closed. Bounded cleanup-failure attachment is Current. The diagnostic SSA
+inventory remains derived evidence and cannot override the plan.

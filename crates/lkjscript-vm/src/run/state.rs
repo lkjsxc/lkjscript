@@ -1,3 +1,5 @@
+mod execution;
+
 use super::*;
 
 impl<'a, J: RuntimeTier> Vm<'a, J> {
@@ -25,6 +27,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
             allocation_error: None,
+            cleanup_failures: CleanupFailures::new(config.cleanup_failure_limits),
             logical_aggregate_constructions: 0,
             started: Instant::now(),
             config,
@@ -82,17 +85,20 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             Err(error) => outcome_from_error(error),
         };
 
-        let unique_cleanup = if failed {
-            self.unique.cleanup()
-        } else {
-            self.unique.verify_empty().inspect_err(|_| {
-                let _cleanup = self.unique.cleanup();
-            })
-        };
-        let mut cleanup_failures = CleanupFailures::new(self.config.cleanup_failure_limits);
+        let unique_cleanup = self.unique.verify_empty().inspect_err(|_| {
+            let _cleanup = self.unique.cleanup();
+        });
+        let mut cleanup_failures = std::mem::replace(
+            &mut self.cleanup_failures,
+            CleanupFailures::new(self.config.cleanup_failure_limits),
+        );
         if let Err(error) = unique_cleanup {
             cleanup_failures.push(
-                CleanupPhase::Emergency,
+                if failed {
+                    CleanupPhase::Emergency
+                } else {
+                    CleanupPhase::RuntimeTeardown
+                },
                 CleanupSubject::UniqueStorage,
                 format!("unique byte cleanup {error}"),
             );
@@ -127,64 +133,5 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             );
         }
         outcome.with_cleanup_failures(cleanup_failures)
-    }
-
-    fn run_loop(&mut self) -> Result<Stop> {
-        if self.inputs.capabilities != self.chunk.required_capabilities() {
-            return Err(Error::msg(format!(
-                "execution capability mismatch: required {:?}, received {:?}",
-                self.chunk.required_capabilities(),
-                self.inputs.capabilities
-            )));
-        }
-        self.frames.push(Frame {
-            proto: u32::MAX,
-            ip: 0,
-            stack_base: 0,
-            locals_base: 0,
-            unique_places: vec![
-                unique::RuntimePlace::Inactive;
-                usize::from(self.chunk.main().unique_places)
-            ],
-        });
-        for kind in &self.inputs.capabilities {
-            self.stack.push(Value::from_capability(*kind));
-        }
-        for _ in self.inputs.capabilities.len()..usize::from(self.chunk.main().locals) {
-            self.stack.push(Value::INVALID);
-        }
-        self.check_runtime_limits()?;
-        loop {
-            if let Some(code) = self.exit_code {
-                return Ok(Stop::Exited(code));
-            }
-            if self.frames.is_empty() {
-                return self.pop().map(Stop::Returned);
-            }
-            self.check_deadline()?;
-            if self.fuel_remaining == 0 {
-                return Err(Error::resource(
-                    ResourceLimitKind::InstructionFuel,
-                    "instruction fuel exhausted",
-                ));
-            }
-            self.fuel_remaining -= 1;
-            if self.arena.needs_collect() {
-                self.collect();
-            }
-            self.step()?;
-            if let Some(error) = self.allocation_error.take() {
-                return Err(error);
-            }
-            self.check_runtime_limits()?;
-        }
-    }
-}
-
-impl<'a> Vm<'a, JitSession> {
-    pub fn run_auto(mut self) -> (ExecutionOutcome, JitStats) {
-        let outcome = self.run_inner();
-        let stats = self.jit.stats();
-        (outcome, stats)
     }
 }

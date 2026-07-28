@@ -122,7 +122,6 @@ fn post_move_use_overlap_and_wrong_view_type_reject() {
         [Op::ByteVectorBorrowMut as u8, 0],
     );
     assert!(error(overlap).contains("conflicts with a live loan"));
-
     let mut wrong = unique_chunk();
     let borrow = wrong
         .main

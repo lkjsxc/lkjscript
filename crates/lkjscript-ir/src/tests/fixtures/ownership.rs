@@ -10,14 +10,14 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                 place: PlaceId::new(0),
                 value: ValueId::new(3),
             },
-            metadata: metadata(EffectSet::PURE),
+            metadata: metadata_cleanup(EffectSet::PURE, 3),
         }
     } else {
         Instruction {
             id: ValueId::new(5),
             ty: SsaType::Unit,
             kind: InstructionKind::Constant(Constant::Unit),
-            metadata: metadata(EffectSet::PURE),
+            metadata: metadata_cleanup(EffectSet::PURE, 3),
         }
     };
     Function {
@@ -25,6 +25,24 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
         name: "owned-branch".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: if equal_moves {
+            vec![
+                drop_plan(0, Some(0), 0),
+                drop_plan(1, Some(0), 2),
+                drop_plan(2, None, 4),
+                drop_plan(3, Some(0), 3),
+                drop_plan(4, None, 5),
+                drop_plan(5, None, 6),
+            ]
+        } else {
+            vec![
+                drop_plan(0, Some(0), 0),
+                drop_plan(1, Some(0), 2),
+                drop_plan(2, None, 4),
+                drop_plan(3, Some(0), 3),
+                drop_plan(4, None, 6),
+            ]
+        },
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![
@@ -40,7 +58,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                     id: ValueId::new(1),
                     ty: SsaType::Bool,
                     kind: InstructionKind::Constant(Constant::Bool(true)),
-                    metadata: metadata(EffectSet::PURE),
+                    metadata: metadata_cleanup(EffectSet::PURE, 0),
                 }],
                 terminator: Terminator::ConditionalBranch {
                     condition: ValueId::new(1),
@@ -49,7 +67,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                     false_target: BlockId::new(2),
                     false_arguments: vec![ValueId::new(0)],
                 },
-                metadata: block_metadata(),
+                metadata: block_metadata_cleanup(0),
             },
             Block {
                 id: BlockId::new(1),
@@ -66,13 +84,13 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                         place: PlaceId::new(0),
                         value: ValueId::new(2),
                     },
-                    metadata: metadata(EffectSet::PURE),
+                    metadata: metadata_cleanup(EffectSet::PURE, 1),
                 }],
                 terminator: Terminator::Branch {
                     target: BlockId::new(3),
                     arguments: vec![ValueId::new(4)],
                 },
-                metadata: block_metadata(),
+                metadata: block_metadata_cleanup(2),
             },
             Block {
                 id: BlockId::new(2),
@@ -91,7 +109,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                         ValueId::new(3)
                     }],
                 },
-                metadata: block_metadata(),
+                metadata: block_metadata_cleanup(if equal_moves { 4 } else { 3 }),
             },
             Block {
                 id: BlockId::new(3),
@@ -103,9 +121,20 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                 }],
                 instructions: Vec::new(),
                 terminator: Terminator::Return(ValueId::new(6)),
-                metadata: block_metadata(),
+                metadata: block_metadata_cleanup(if equal_moves { 5 } else { 4 }),
             },
         ],
         origin: Origin::SYNTHETIC,
+    }
+}
+
+fn drop_plan(id: u32, place: Option<u32>, value: u32) -> FailureCleanupPlan {
+    FailureCleanupPlan {
+        id: FailureCleanupId::new(id),
+        actions: vec![FailureCleanupAction::DropOwner {
+            place: place.map(PlaceId::new),
+            value: ValueId::new(value),
+            glue: DropGlueIdentity::ByteVector,
+        }],
     }
 }

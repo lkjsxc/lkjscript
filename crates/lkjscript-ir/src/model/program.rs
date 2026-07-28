@@ -25,6 +25,7 @@ pub struct Function {
     pub name: String,
     pub signature: Signature,
     pub places: Vec<PlaceMetadata>,
+    pub failure_cleanups: Vec<FailureCleanupPlan>,
     pub effects: EffectSet,
     pub entry: BlockId,
     pub blocks: Vec<Block>,

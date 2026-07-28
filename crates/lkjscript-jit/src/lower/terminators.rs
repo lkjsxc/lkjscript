@@ -11,13 +11,25 @@ pub(super) fn lower_terminator(
     let edges = context.edges;
     let blocks = context.blocks;
     let locals = context.locals;
+    let value_types = context.value_types;
+    let failure_cleanup = block.metadata.failure_cleanup;
     match &block.terminator {
         Terminator::Branch { target, arguments } => {
             let edge = edges.branch.ok_or_else(|| invalid_edges(function.id))?;
             builder
                 .branch(native_block, edge)
                 .map_err(LoweringError::backend)?;
-            lower_edge(function, edge, *target, arguments, blocks, locals, builder)?;
+            lower_edge(
+                function,
+                edge,
+                *target,
+                arguments,
+                failure_cleanup,
+                blocks,
+                locals,
+                value_types,
+                builder,
+            )?;
         }
         Terminator::ConditionalBranch {
             condition,
@@ -37,8 +49,10 @@ pub(super) fn lower_terminator(
                 when_true,
                 *true_target,
                 true_arguments,
+                failure_cleanup,
                 blocks,
                 locals,
+                value_types,
                 builder,
             )?;
             lower_edge(
@@ -46,8 +60,10 @@ pub(super) fn lower_terminator(
                 when_false,
                 *false_target,
                 false_arguments,
+                failure_cleanup,
                 blocks,
                 locals,
+                value_types,
                 builder,
             )?;
         }
@@ -86,13 +102,16 @@ pub(super) fn lower_terminator(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn lower_edge(
     function: &Function,
     edge: lkjscript_native::BlockId,
     target: lkjscript_ir::BlockId,
     arguments: &[ValueId],
+    failure_cleanup: Option<lkjscript_ir::FailureCleanupId>,
     blocks: &[lkjscript_native::BlockId],
     locals: &[LocalId],
+    value_types: &[ValueType],
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
     let target_index = target.index().ok_or_else(|| invalid_edges(function.id))?;
@@ -117,8 +136,14 @@ pub(super) fn lower_edge(
             .map_err(LoweringError::backend)?;
     }
     if target_block.metadata.loop_header {
-        builder
+        let poll = builder
             .runtime_call(edge, RuntimeCallSlot::Poll, Vec::new())
+            .map_err(LoweringError::backend)?;
+        builder
+            .set_instruction_failure_cleanup(
+                poll,
+                lower_failure_cleanup_id(function, failure_cleanup, locals, value_types)?,
+            )
             .map_err(LoweringError::backend)?;
     }
     builder

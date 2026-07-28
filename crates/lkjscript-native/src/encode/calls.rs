@@ -1,9 +1,10 @@
+mod failure;
 use super::*;
 
 impl FunctionEncoder<'_> {
     pub(super) fn emit_call(
         &mut self,
-        output: ValueId,
+        instruction: &Instruction,
         signature: &crate::Signature,
         arguments: &[ValueId],
         target: RelocationTarget,
@@ -12,7 +13,7 @@ impl FunctionEncoder<'_> {
         let roots = if self.execution_domain == NativeExecutionDomain::LegacyHeap {
             let certificate = self
                 .certified_call_roots
-                .get(output.index as usize)
+                .get(instruction.output.index as usize)
                 .and_then(Option::as_deref)
                 .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
             certified_root_locations(self.function, certificate)?
@@ -75,7 +76,7 @@ impl FunctionEncoder<'_> {
         }
         self.load_integer_register(1, self.context_offset())?;
         self.emit(&[0x83, 0x39, 0x00])?;
-        self.emit_conditional_jump(0x85, FixupTarget::StatusReturn)?;
+        self.emit_call_status_cleanup(instruction)?;
         match signature.result() {
             ValueType::I64
             | ValueType::Bool
@@ -85,12 +86,12 @@ impl FunctionEncoder<'_> {
             | ValueType::Unique(_)
             | ValueType::Loan(_)
             | ValueType::Reference(_) => {
-                self.store_rax(self.value_offset(output)?)?;
+                self.store_rax(self.value_offset(instruction.output)?)?;
             }
-            ValueType::F64 => self.store_xmm0(self.value_offset(output)?)?,
+            ValueType::F64 => self.store_xmm0(self.value_offset(instruction.output)?)?,
             ValueType::Unit => {
                 self.zero_rax()?;
-                self.store_rax(self.value_offset(output)?)?;
+                self.store_rax(self.value_offset(instruction.output)?)?;
             }
         }
         Ok(())
@@ -141,7 +142,7 @@ impl FunctionEncoder<'_> {
         ));
         self.load_integer_register(1, self.context_offset())?;
         self.emit(&[0x83, 0x39, 0x00])?;
-        self.emit_conditional_jump(0x85, FixupTarget::StatusReturn)
+        self.emit_status_cleanup(instruction)
     }
 
     pub(super) fn emit_publish_safepoint(&mut self, safepoint_id: u32) -> Result<(), NativeError> {

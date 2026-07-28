@@ -39,6 +39,7 @@ fn verifier_rejects_direct_malformed_id_use_dominance_edge_loop_and_metadata() {
                 effects: EffectSet::CONSERVATIVE_CALL,
                 safepoint: Safepoint::Required,
                 failure: FailureBehavior::TrapOrOutcome,
+                failure_cleanup: None,
                 frame_state: Some(FrameState {
                     bytecode_position: 0,
                     locals: Vec::new(),

@@ -1,4 +1,12 @@
-fn validate_proto_shape(proto: &FunctionProto, category: &str) -> Result<()> {
+#[path = "prototypes/failure.rs"]
+mod failure;
+use failure::*;
+
+fn validate_proto_shape(
+    proto: &FunctionProto,
+    category: &str,
+    limits: &ValidationLimits,
+) -> Result<()> {
     if proto.arity > proto.locals {
         return Err(Error::msg(format!(
             "bytecode {category} {} has arity {} greater than local count {}",
@@ -69,6 +77,7 @@ fn validate_proto_shape(proto: &FunctionProto, category: &str) -> Result<()> {
             proto.name
         )));
     }
+    validate_failure_cleanup_shape(proto, category, limits)?;
     if matches!(
         proto.return_unique,
         Some(crate::UniqueValueKind::ByteSlice | crate::UniqueValueKind::ByteSliceMut)

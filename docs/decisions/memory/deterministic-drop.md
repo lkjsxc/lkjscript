@@ -4,11 +4,12 @@
 
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
 
-**Accepted contract with verified static, dead, and conditional whole-place
-cleanup for exact byte owners and owned typed resources. Bounded structured
-cleanup attachments are Current in the core outcome model and evaluator/VM
-teardown. Full promotion still requires every instruction-originated outcome.**
-Aggregate partial moves remain out of scope.
+**Accepted contract with verified static, dead, conditional, and
+instruction-originated whole-place cleanup for exact byte owners and owned typed
+resources. Bounded structured cleanup attachments are Current.** Evaluator and
+VM cleanup cover all structured instruction outcomes; forced native cleanup is
+Current for collector-free byte owners. Native owned resources and aggregate
+partial moves remain out of scope for the Current slice.
 
 The implemented spine gives each direct affine SSA place an exact closed drop
 identity, emits explicit loan-end and whole-place-drop events, rejects an
@@ -20,14 +21,15 @@ resource glue through its fake core table, and bytecode lowering selects generic
 SQLite-connection, or SQLite-statement close before place end in the reference
 VM. Borrowed standard input is rejected as a guest-owned obligation.
 
-Forced native byte-vector execution performs exact explicit drop and invocation
-teardown release, including instruction-originated trap and resource-limit
-cleanup, and proves zero final owners/loans. Native owned-resource glue remains
-fail-closed at whole-group preflight. Branch-specific conditional cleanup is
-Current when each reachable edge proves a whole-place move, explicit close, or
-live owner; it inserts no flag when edge facts decide statically. Typed-resource
-cleanup after instruction-originated trap, deadline, resource-limit, host
-failure, or propagated callee outcome is not Current. Core, evaluator, and VM
+Forced native byte-vector execution performs exact explicit drop and verified
+instruction cleanup for trap, poll-fuel/resource-limit, and propagated callee
+outcomes, and proves zero final owners/loans without emergency release. Native
+owned-resource glue remains fail-closed at whole-group preflight.
+Branch-specific conditional cleanup is Current when each reachable edge proves
+a whole-place move, explicit close, or live owner; it inserts no flag when edge
+facts decide statically. Evaluator and VM typed-resource cleanup is Current for
+instruction-originated trap, deadline, resource-limit, host failure, and
+propagated callee outcome. Core, evaluator, VM, and forced native byte cleanup
 retain bounded ordered cleanup records without replacing the primary outcome;
 deterministic injected provider and borrowed-stream failures cover truncation
 and attachment. Current safe sys owners still expose close through infallible
@@ -65,8 +67,16 @@ fields remain rejected.
 
 Memory-complete SSA makes initialization, move, borrow, end-borrow, value drop,
 resource drop, conditional flag update/test, and cleanup transfer explicit.
-Each drop names a verified glue identity. Cleanup blocks are ordinary verified
-CFG and are shared by evaluator, VM, and native tiers.
+Each drop names a verified glue identity. Lexical cleanup blocks are ordinary
+verified CFG. Each fallible instruction with live cleanup work names one
+bounded, function-local, interned failure-cleanup plan; absence is the canonical
+empty plan. A plan ends live loans before it
+drops caller-retained owners in reverse initialization order; it excludes an
+unpublished result and any argument whose obligation transferred to a callee.
+The independent ownership verifier reconstructs the exact plan at the failure
+site and rejects missing, extra, duplicate, reordered, stale, or mismatched
+actions. Evaluator, bytecode/VM, baseline JIT, and proof JIT consume that one
+verified semantic plan; emergency teardown is not its representation.
 
 Optimizers preserve or reconstruct these facts. Dead-code elimination may
 remove an allocation and its drop only together while retaining logical charges
@@ -123,6 +133,6 @@ not Current in this slice.
 
 The verifier proves availability at each point, unique owner placement, move
 consumption, loan containment and conflicts, exactly-once loan end and drop,
-flag/dataflow correspondence, complete exit cleanup, non-reentry of cleanup
-blocks, glue/type match, resource kind/provider match, and preservation of
-logical charges.
+flag/dataflow correspondence, complete exit cleanup, exact bounded
+instruction-failure plans, non-reentry of cleanup blocks, glue/type match,
+resource kind/provider match, and preservation of logical charges.

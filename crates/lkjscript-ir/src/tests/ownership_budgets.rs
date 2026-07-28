@@ -19,6 +19,7 @@ fn ownership_verification_has_an_aggregate_state_work_bound() {
         name: "wide-ownership-state".into(),
         signature: Signature::monomorphic(parameters, SsaType::Unit),
         places,
+        failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
         entry: BlockId::new(0),
         blocks: vec![Block {
@@ -50,6 +51,7 @@ fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() 
         name: "too-many-blocks".into(),
         signature: Signature::monomorphic(Vec::new(), SsaType::Unit),
         places: Vec::new(),
+        failure_cleanups: Vec::new(),
         effects: EffectSet::MAY_TRAP,
         entry: BlockId::new(0),
         blocks: (0..=crate::SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION)
@@ -98,6 +100,7 @@ fn ownership_cfg_rejects_borrow_use_across_blocks() {
         name: "cross-block-loan".into(),
         signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::I64),
         places: vec![owned_place(0, 0)],
+        failure_cleanups: Vec::new(),
         effects: EffectSet::READS_MEMORY,
         entry: BlockId::new(0),
         blocks: vec![

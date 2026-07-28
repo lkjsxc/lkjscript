@@ -15,6 +15,8 @@ include!("value.rs");
 pub use outcome::EvalOutcome;
 pub(crate) use outcome::Flow;
 
+mod failure_cleanup;
+
 pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
     let arguments = match capabilities::main_arguments(program, config) {
         Ok(arguments) => arguments,
@@ -40,6 +42,7 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         logical_aggregate_constructions: 0,
         heap_bytes: 0,
         next_buffer_id: 1,
+        cleanup_failures: lkjscript_core::CleanupFailures::new(config.cleanup_failure_limits),
         resources,
         unique,
     };
@@ -82,7 +85,10 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
             evaluator.unique.cleanup().err().map(Flow::detail),
         ),
     };
-    let mut cleanup_failures = lkjscript_core::CleanupFailures::new(config.cleanup_failure_limits);
+    let mut cleanup_failures = std::mem::replace(
+        &mut evaluator.cleanup_failures,
+        lkjscript_core::CleanupFailures::new(config.cleanup_failure_limits),
+    );
     if let Some(error) = unique_cleanup_error {
         cleanup_failures.push(
             lkjscript_core::CleanupPhase::Emergency,
@@ -102,6 +108,7 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) logical_aggregate_constructions: u64,
     pub(crate) heap_bytes: usize,
     pub(crate) next_buffer_id: u64,
+    pub(crate) cleanup_failures: lkjscript_core::CleanupFailures,
     pub(crate) resources: resources::EvalResources,
     pub(crate) unique: unique::EvalUniqueRuntime,
 }

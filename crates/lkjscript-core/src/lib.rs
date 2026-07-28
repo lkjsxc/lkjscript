@@ -24,9 +24,9 @@ pub use budget::{
 };
 pub use bytecode::{
     Chunk, ConstId, Constant, EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId,
-    EnumMetadata, EnumVariantMetadata, EnumVariantRef, FunctionProto, ProductFieldRef, ProductId,
-    ProductMetadata, ResourceReturnKind, RuntimeLayoutId, UniqueValueKind, VariantFieldId,
-    VariantId,
+    EnumMetadata, EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupPlan,
+    FailureCleanupRange, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
+    ResourceReturnKind, RuntimeLayoutId, UniqueValueKind, VariantFieldId, VariantId,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use gc::{GcConfig, GcHeap, GcLimit, GcStats};
