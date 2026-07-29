@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
+  "id": "host",
+  "root": "crates/lkjscript-host",
+  "kind": "crate",
+  "purpose": "Provide typed clock, logging, cancellation, target, and durable-storage host contracts.",
+  "layer": "host capability boundary",
+  "concepts": ["typed host specification", "clock", "logging", "durable storage", "cancellation"],
+  "facade": ["crates/lkjscript-host/src/lib.rs"],
+  "allowed_dependencies": [],
+  "forbidden_dependencies": ["app", "compiler", "contracts", "core", "database", "ir", "jit", "native", "resource", "sys", "vm"],
+  "tests": ["crates/lkjscript-host/tests/durable.rs"],
+  "decisions": ["docs/operations/architecture.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "defines", "names": ["clock", "logging", "durable-storage"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-host"],
+  "context_card": {
+    "goal": "Keep implemented host effects typed, narrow, composable, and testable.",
+    "interfaces": ["crates/lkjscript-host/src/lib.rs"],
+    "invariants": ["safe Rust", "no external dependencies", "durability explicit at sync and replacement"]
+  }
+}
