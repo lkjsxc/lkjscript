@@ -10,6 +10,7 @@ COPY Cargo.toml Cargo.lock README.md AGENTS.md lkjscript.package.json lkjscript.
 COPY crates ./crates
 COPY meta/config ./meta/config
 COPY meta/agent-state ./meta/agent-state
+COPY meta/unsafe ./meta/unsafe
 COPY docs ./docs
 COPY src ./src
 COPY meta/scripts ./meta/scripts
