@@ -43,7 +43,10 @@ impl UnixControlServer {
 
     pub fn serve_one(
         &mut self,
-        mut handler: impl FnMut(&ControlRequest) -> Result<super::ControlSuccess, ControlFailure>,
+        mut handler: impl FnMut(
+            &ControlRequest,
+            lkjscript_host::LocalPrincipal,
+        ) -> Result<super::ControlSuccess, ControlFailure>,
     ) -> Result<ControlOperation, ControlError> {
         let (mut stream, _) = self.listener.accept().map_err(io_error)?;
         configure(&stream)?;
@@ -67,7 +70,7 @@ impl UnixControlServer {
                 None => {
                     let response = ControlResponse {
                         request_id: request.request_id,
-                        result: handler(&request),
+                        result: handler(&request, principal),
                     };
                     if self.replay.len() == MAX_REPLAY_ENTRIES {
                         return Err(ControlError::ReplayConflict);
@@ -82,7 +85,7 @@ impl UnixControlServer {
         } else {
             ControlResponse {
                 request_id: request.request_id,
-                result: handler(&request),
+                result: handler(&request, principal),
             }
         };
         write_frame(&mut stream, &encode_response_frame(&response)?)?;

@@ -36,7 +36,10 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                 .fact(fact(
                     "operations",
                     "control operations",
-                    "install list start stop restart remove invoke",
+                    concat!(
+                        "install list start stop restart remove invoke ",
+                        "session-register session-heartbeat session-unregister session-list",
+                    ),
                 ))
                 .fact(fact(
                     "database-tenant",

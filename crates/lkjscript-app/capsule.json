@@ -16,11 +16,13 @@
     "memory tracing ratchet",
     "runtime topology and scheduler observation",
     "isolated process worker",
-    "durable application control client"
+    "durable application control client",
+    "authenticated session broker"
   ],
   "facade": [
     "crates/lkjscript-app/src/main.rs",
-    "crates/lkjscript-app/src/runtime/process_cell/main.rs"
+    "crates/lkjscript-app/src/runtime/process_cell/main.rs",
+    "crates/lkjscript-app/src/runtime/session_broker/main.rs"
   ],
   "allowed_dependencies": [
     "compiler",
@@ -52,6 +54,7 @@
     "docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md",
     "docs/decisions/platform/modules-and-packages.md",
     "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md",
+    "docs/decisions/platform/runtime-foundation/authenticated-session-broker.md",
     "docs/decisions/platform/runtime-foundation/database-service-and-tenants.md",
     "docs/decisions/platform/runtime-foundation/isolated-process-cells.md",
     "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
@@ -91,6 +94,8 @@
       "lkjscript runtime plan",
       "lkjscript system describe|status|stop",
       "lkjscript system app install|list|start|stop|restart|remove|invoke",
+      "lkjscript system session list",
+      "lkjscript-session broker",
       "lkjscript-cell process protocol worker",
       "lkjscriptd daemon"
     ],
@@ -98,7 +103,8 @@
       "run and disasm require an exact local package lock",
       "backends consume shared typed IR",
       "Linux x86-64 claims require calls",
-      "application stdio never shares the worker protocol stream"
+      "application stdio never shares the worker protocol stream",
+      "session presence is kernel-authenticated and grants no display authority"
     ]
   }
 }

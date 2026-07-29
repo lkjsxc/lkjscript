@@ -63,9 +63,9 @@ application database now supplies tenant- and incarnation-bound providers; its
 transactions abort on lifecycle release. A fixed worker executes bounded Linux process cells with lossless outcomes,
 restart, stale rejection, and per-app crash isolation. Durable registry identity,
 desired state, authenticated lifecycle/invoke, and daemon restart reconstruction
-are Current for process apps. File, terminal, network, SQLite, stream-resource,
-and database process/VM operation cutover, session brokers, GUI, and SQLite
-replacement remain absent.
+are Current for process apps. Authenticated ephemeral session-broker presence is
+Current on Linux. File, terminal, network, SQLite, stream-resource, database
+process/VM operations, interactive cells, GUI, and SQLite replacement remain absent.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -143,8 +143,8 @@ resources remain absent.
 
 1. Complete file, stream, terminal, network, and database VM provider cutover,
    then separate residual SQLite and host I/O mechanisms where evidence supports it.
-2. Add authenticated session brokers and native GUI/accessibility applications
-   without presenting UI from system service contexts.
+2. Add broker-launched interactive cells and native GUI/accessibility
+   applications without presenting UI from system service contexts.
 3. Extend the Current database tenant lifecycle with request cancellation,
    page-budget accounting, measured checkpoint scheduling, and process-cell
    provider messages before SQLite migration or benchmarks.

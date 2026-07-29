@@ -37,11 +37,22 @@ pub enum ControlOperation {
         application: u64,
         arguments: Vec<String>,
     },
+    SessionRegister {
+        broker_instance: [u8; 32],
+        backend: SessionBackend,
+    },
+    SessionList,
+    SessionHeartbeat {
+        session: u64,
+    },
+    SessionUnregister {
+        session: u64,
+    },
 }
 
 impl ControlOperation {
     pub const fn modifies(&self) -> bool {
-        !matches!(Self::kind(self), 1 | 2 | 11)
+        !matches!(Self::kind(self), 1 | 2 | 11 | 21)
     }
 
     pub const fn kind(&self) -> u8 {
@@ -56,8 +67,28 @@ impl ControlOperation {
             Self::ApplicationRestart { .. } => 14,
             Self::ApplicationRemove { .. } => 15,
             Self::ApplicationInvoke { .. } => 16,
+            Self::SessionRegister { .. } => 20,
+            Self::SessionList => 21,
+            Self::SessionHeartbeat { .. } => 22,
+            Self::SessionUnregister { .. } => 23,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionBackend {
+    None,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ControlledSession {
+    pub session: u64,
+    pub broker_instance: [u8; 32],
+    pub process: u32,
+    pub user: u32,
+    pub group: u32,
+    pub backend: SessionBackend,
+    pub lease_deadline: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,6 +148,7 @@ pub enum ControlSuccess {
         clean_shutdown: bool,
         control_sequence: u64,
         applications: u32,
+        sessions: u16,
     },
     ShutdownAccepted,
     Application(ControlledApplication),
@@ -128,6 +160,11 @@ pub enum ControlSuccess {
         application: u64,
         outcome: ExecutionOutcome,
         output: Vec<u8>,
+    },
+    Session(ControlledSession),
+    Sessions(Vec<ControlledSession>),
+    SessionUnregistered {
+        session: u64,
     },
 }
 

@@ -38,6 +38,30 @@ fn application_control_frames_preserve_typed_payloads() -> Result<(), Box<dyn Er
         let frame = encode_request_frame(&request)?;
         assert_eq!(decode_request_frame(&frame), Ok(request));
     }
+    let session = ControlledSession {
+        session: 3,
+        broker_instance: [8; 32],
+        process: 99,
+        user: 1000,
+        group: 100,
+        backend: SessionBackend::None,
+        lease_deadline: 10_000,
+    };
+    for operation in [
+        ControlOperation::SessionRegister {
+            broker_instance: session.broker_instance,
+            backend: SessionBackend::None,
+        },
+        ControlOperation::SessionList,
+        ControlOperation::SessionHeartbeat { session: 3 },
+        ControlOperation::SessionUnregister { session: 3 },
+    ] {
+        let request = ControlRequest::current(12, [5; 32], operation)?;
+        assert_eq!(
+            decode_request_frame(&encode_request_frame(&request)?),
+            Ok(request)
+        );
+    }
     let application = ControlledApplication {
         application: 7,
         name: "counter".into(),
@@ -54,6 +78,9 @@ fn application_control_frames_preserve_typed_payloads() -> Result<(), Box<dyn Er
             outcome: lkjscript_core::ExecutionOutcome::Exited(0),
             output: b"frame".to_vec(),
         },
+        ControlSuccess::Session(session.clone()),
+        ControlSuccess::Sessions(vec![session]),
+        ControlSuccess::SessionUnregistered { session: 3 },
     ] {
         let response = ControlResponse {
             request_id: 11,
@@ -102,7 +129,8 @@ fn unix_control_authenticates_peer_and_replays_one_mutation() -> Result<(), Box<
     let server_count = Arc::clone(&count);
     let thread = std::thread::spawn(move || -> Result<(), ControlError> {
         for _ in 0..2 {
-            server.serve_one(|_| {
+            server.serve_one(|_, authenticated| {
+                assert_eq!(authenticated, principal);
                 let mut count = server_count.lock().map_err(|_| ControlFailure::Internal)?;
                 *count += 1;
                 Ok(ControlSuccess::ShutdownAccepted)

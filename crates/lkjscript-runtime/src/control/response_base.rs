@@ -21,12 +21,14 @@ fn encode_status(
     clean: bool,
     sequence: u64,
     applications: u32,
+    sessions: u16,
 ) {
     bytes.push(2);
     bytes.extend_from_slice(&coordinator.to_le_bytes());
     bytes.push(u8::from(clean));
     bytes.extend_from_slice(&sequence.to_le_bytes());
     bytes.extend_from_slice(&applications.to_le_bytes());
+    bytes.extend_from_slice(&sessions.to_le_bytes());
 }
 
 fn decode_description(input: &mut ResponseInput<'_>) -> Result<ControlSuccess, ControlFailure> {
@@ -51,11 +53,13 @@ fn decode_status(input: &mut ResponseInput<'_>) -> Result<ControlSuccess, Contro
     let clean_shutdown = input.boolean().map_err(|_| ControlFailure::Malformed)?;
     let control_sequence = input.u64().map_err(|_| ControlFailure::Malformed)?;
     let applications = input.u32().map_err(|_| ControlFailure::Malformed)?;
+    let sessions = input.u16().map_err(|_| ControlFailure::Malformed)?;
     Ok(ControlSuccess::Status {
         coordinator,
         clean_shutdown,
         control_sequence,
         applications,
+        sessions,
     })
 }
 

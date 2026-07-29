@@ -62,6 +62,7 @@ candidates are removed rather than retained as fallback paths.
 - [Isolated Process Cells](isolated-process-cells.md)
 - [Persistent Application Registry And Control](persistent-application-control.md)
 - [Database Service And Application Tenants](database-service-and-tenants.md)
+- [Authenticated Interactive Session Broker](authenticated-session-broker.md)
 - [Machine Coordinator And Local Control](machine-coordinator-daemon.md)
 - [Transactional Kernel](transactional-kernel.md)
 

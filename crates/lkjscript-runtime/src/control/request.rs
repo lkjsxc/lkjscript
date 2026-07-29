@@ -3,6 +3,7 @@ use lkjscript_contracts::ContractDigest;
 use super::framing::{array, body, frame};
 use super::{
     ApplicationInstallRequest, ControlError, ControlIdentity, ControlOperation, ControlRequest,
+    SessionBackend,
 };
 
 const HEADER_BYTES: usize = 81;
@@ -44,7 +45,8 @@ fn encode_operation(bytes: &mut Vec<u8>, operation: &ControlOperation) -> Result
         ControlOperation::Describe
         | ControlOperation::Status
         | ControlOperation::Shutdown
-        | ControlOperation::ApplicationList => {}
+        | ControlOperation::ApplicationList
+        | ControlOperation::SessionList => {}
         ControlOperation::ApplicationInstall(request) => encode_install(bytes, request)?,
         ControlOperation::ApplicationStart { application }
         | ControlOperation::ApplicationStop { application }
@@ -57,6 +59,20 @@ fn encode_operation(bytes: &mut Vec<u8>, operation: &ControlOperation) -> Result
             nonzero(bytes, *application)?;
             encode_arguments(bytes, arguments)?;
         }
+        ControlOperation::SessionRegister {
+            broker_instance,
+            backend,
+        } => {
+            if *broker_instance == [0; 32] {
+                return Err(ControlError::InvalidIdentity);
+            }
+            bytes.extend_from_slice(broker_instance);
+            bytes.push(match backend {
+                SessionBackend::None => 0,
+            });
+        }
+        ControlOperation::SessionHeartbeat { session }
+        | ControlOperation::SessionUnregister { session } => nonzero(bytes, *session)?,
     }
     Ok(())
 }
@@ -84,6 +100,26 @@ fn decode_operation(tag: u8, bytes: &[u8]) -> Result<ControlOperation, ControlEr
         16 => ControlOperation::ApplicationInvoke {
             application: input.nonzero()?,
             arguments: decode_arguments(&mut input)?,
+        },
+        20 => {
+            let broker_instance = input.array()?;
+            if broker_instance == [0; 32] {
+                return Err(ControlError::InvalidIdentity);
+            }
+            ControlOperation::SessionRegister {
+                broker_instance,
+                backend: match input.u8()? {
+                    0 => SessionBackend::None,
+                    _ => return Err(ControlError::Malformed("session backend")),
+                },
+            }
+        }
+        21 => ControlOperation::SessionList,
+        22 => ControlOperation::SessionHeartbeat {
+            session: input.nonzero()?,
+        },
+        23 => ControlOperation::SessionUnregister {
+            session: input.nonzero()?,
         },
         _ => return Err(ControlError::Malformed("unknown operation")),
     };

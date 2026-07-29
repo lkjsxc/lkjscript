@@ -10,7 +10,7 @@ provider-backed VM stdio/clock, and trusted arguments/stdio applications are
 also Current for their exact tests. Supervised process cells and durable process
 application control are Current for the exact Linux evidence below. One daemon-
 owned ordered database and incarnation-bound tenant attachment are Current.
-Database source/VM operations, session brokers, and GUI remain non-Current.
+[Session presence](session-broker-evidence.md) is Current; database VM operations, interactive cells, and GUI are not.
 
 ## Implemented Boundary
 
@@ -22,7 +22,7 @@ process under `/proc` once before replacement. Other hosts conservatively treat
 an existing lease as live.
 
 The coordinator opens `lkjscript.control-store` before any application database.
-Its journal and snapshot carry platform revision 7, the exact
+Its journal and snapshot carry platform revision 8, the exact
 `lkjscript.runtime-control` digest, explicit little-endian widths, monotonic
 sequence, bounded key/value payloads, and full SHA-256 checksums. Commit syncs
 before fact publication. Recovery replays idempotently, rejects corruption and
@@ -94,9 +94,9 @@ The application-control integration built `lkjscriptd`, `lkjscript-cell`, and
 `lkjscript`; started the daemon; installed, started, invoked, listed, stopped,
 and removed a real process application; killed and restarted the daemon; and
 observed unclean desired-state recovery plus an attached database tenant on the
-replacement incarnation. Exact describe output reports platform revision 7 and
-runtime-control digest
-`0305b8ccad1e1eabd0ebe43340f497cca5d8b2928daa1614eb85ebdab78d1c46`.
+replacement incarnation. Exact describe output now reports platform revision 8
+and runtime-control digest
+`5ca07048677f164ef9d25b8fc65a455b670e7e385b94d850692204fafe1a3305`.
 
 A separate CLI smoke generated all six service files, required each to be
 nonempty, removed them, and observed no remaining generated file.
@@ -192,7 +192,7 @@ and process-cell provider proxy framing remain outside this Current slice.
 - Shutdown is control-driven; OS signal mapping is not yet Current.
 - Only arguments, direct stdio, and clock operations use the composed VM host;
   database tenant attachment exists at the coordinator boundary, but database
-  process proxy and VM operations, session brokers, native windows, graphics,
+  process proxy and VM operations, interactive cells, native windows, graphics,
   accessibility, and GUI execution remain absent.
 - Persistent reconstruction is isolated-process only; trusted in-process code
   artifacts are not serialized by the registry.

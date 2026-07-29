@@ -5,8 +5,12 @@ use std::process::Command;
 
 #[path = "canonical/application_control.rs"]
 mod application_control;
+#[path = "canonical/application_control/support.rs"]
+mod application_control_support;
 #[path = "canonical/process_cells.rs"]
 mod process_cells;
+#[path = "canonical/session_broker.rs"]
+mod session_broker;
 
 #[test]
 fn help_and_optimizing_metrics_expose_the_current_contract() {

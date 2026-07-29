@@ -3,7 +3,7 @@ use lkjscript_contracts::ContractDigest;
 use super::framing::{array, body, frame};
 use super::{
     ControlError, ControlFailure, ControlResponse, ControlSuccess, ControlledApplication,
-    ControlledApplicationState,
+    ControlledApplicationState, ControlledSession,
 };
 
 const MAX_APPLICATIONS: usize = 1_024;
@@ -26,12 +26,14 @@ pub fn encode(response: &ControlResponse) -> Result<Vec<u8>, ControlError> {
             clean_shutdown,
             control_sequence,
             applications,
+            sessions,
         }) => encode_status(
             &mut body,
             *coordinator,
             *clean_shutdown,
             *control_sequence,
             *applications,
+            *sessions,
         ),
         Ok(ControlSuccess::ShutdownAccepted) => body.push(3),
         Ok(ControlSuccess::Application(application)) => {
@@ -57,6 +59,15 @@ pub fn encode(response: &ControlResponse) -> Result<Vec<u8>, ControlError> {
             outcome,
             output,
         }) => encode_invoked(&mut body, *application, outcome, output)?,
+        Ok(ControlSuccess::Session(session)) => {
+            body.push(20);
+            encode_session(&mut body, session)?;
+        }
+        Ok(ControlSuccess::Sessions(sessions)) => encode_sessions(&mut body, sessions)?,
+        Ok(ControlSuccess::SessionUnregistered { session }) => {
+            body.push(22);
+            put_nonzero(&mut body, *session)?;
+        }
         Err(failure) => encode_failure(&mut body, failure)?,
     }
     frame(body)
@@ -79,6 +90,11 @@ pub fn decode(frame_bytes: &[u8]) -> Result<ControlResponse, ControlError> {
             application: input.nonzero()?,
         }),
         13 => decode_invoked(&mut input),
+        20 => Ok(ControlSuccess::Session(decode_session(&mut input)?)),
+        21 => decode_sessions(&mut input),
+        22 => Ok(ControlSuccess::SessionUnregistered {
+            session: input.nonzero()?,
+        }),
         128 => Err(ControlFailure::Unauthorized),
         129 => decode_stale(&mut input),
         130 => Err(ControlFailure::ContractMismatch),
@@ -95,4 +111,5 @@ pub fn decode(frame_bytes: &[u8]) -> Result<ControlResponse, ControlError> {
 
 include!("response_base.rs");
 include!("response_application.rs");
+include!("response_session.rs");
 include!("response_input.rs");

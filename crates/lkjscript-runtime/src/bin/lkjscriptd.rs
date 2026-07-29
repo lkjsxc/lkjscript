@@ -42,6 +42,7 @@ mod linux {
             configuration.principal,
             storage,
             NonZeroUsize::new(256).ok_or("cache bound")?,
+            Arc::new(lkjscript_host::PortableClock::new()),
             Some(worker),
         )?;
         let database = database_service(&configuration.state_directory)?;
@@ -55,7 +56,9 @@ mod linux {
             control.path().display()
         );
         loop {
-            match control.serve_one(|request| coordinator.handle_control(request)) {
+            match control
+                .serve_one(|request, principal| coordinator.handle_control(request, principal))
+            {
                 Ok(ControlOperation::Shutdown) => break,
                 Ok(_) if configuration.once => break,
                 Ok(_) => {}

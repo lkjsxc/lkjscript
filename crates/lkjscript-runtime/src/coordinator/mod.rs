@@ -5,21 +5,24 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use lkjscript_contracts::PLATFORM_REVISION;
-use lkjscript_host::{DurableStorage, HostError};
+use lkjscript_host::{Clock, DurableStorage, HostError};
 
 use crate::{
-    ControlFailure, ControlIdentity, ControlOperation, ControlRequest, ControlStore,
-    ControlStoreError, ControlSuccess, CoordinatorIdentity, RuntimeError, RuntimeSystem,
+    ControlIdentity, ControlStore, ControlStoreError, CoordinatorIdentity, RuntimeError,
+    RuntimeSystem,
 };
 
 mod application_registry;
+mod control;
 mod database;
 mod lease;
+mod session;
 #[cfg(test)]
 mod tests;
 
 use application_registry::ManagedApplication;
 pub use lease::CoordinatorLease;
+use session::SessionRegistry;
 
 const BOOTSTRAP_KEY: &str = "system/bootstrap";
 const CLEAN_KEY: &str = "system/clean-shutdown";
@@ -74,6 +77,7 @@ pub struct CoordinatorStatus {
     pub previous_shutdown_clean: bool,
     pub control_sequence: u64,
     pub applications: usize,
+    pub sessions: usize,
 }
 
 pub struct MachineCoordinator<S> {
@@ -86,6 +90,8 @@ pub struct MachineCoordinator<S> {
     applications: BTreeMap<u64, ManagedApplication>,
     next_application: u64,
     database: Option<Arc<dyn lkjscript_host::DatabaseTenantFactory>>,
+    clock: Arc<dyn Clock>,
+    sessions: SessionRegistry,
 }
 
 impl<S: DurableStorage> MachineCoordinator<S> {
@@ -94,6 +100,7 @@ impl<S: DurableStorage> MachineCoordinator<S> {
         principal: u32,
         storage: S,
         max_cache_entries: NonZeroUsize,
+        clock: Arc<dyn Clock>,
         worker: Option<PathBuf>,
     ) -> Result<Self, CoordinatorError> {
         let mut store = ControlStore::open(storage)?;
@@ -122,6 +129,8 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             applications: BTreeMap::new(),
             next_application: 1,
             database: None,
+            clock,
+            sessions: SessionRegistry::new(),
         };
         coordinator.recover_applications()?;
         Ok(coordinator)
@@ -138,38 +147,12 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             previous_shutdown_clean: self.previous_shutdown_clean,
             control_sequence: self.store.sequence(),
             applications: self.applications.len(),
+            sessions: self.sessions.live_count(self.clock.monotonic_time()),
         })
     }
 
-    pub fn handle_control(
-        &mut self,
-        request: &ControlRequest,
-    ) -> Result<ControlSuccess, ControlFailure> {
-        match &request.operation {
-            ControlOperation::Describe => {
-                let identity = ControlIdentity::current().map_err(|_| ControlFailure::Internal)?;
-                Ok(ControlSuccess::Description {
-                    platform_revision: identity.platform_revision,
-                    contract_digest: identity.contract_digest,
-                    product: "lkjscript runtime".to_string(),
-                })
-            }
-            ControlOperation::Status => {
-                let status = self.status().map_err(|_| ControlFailure::Internal)?;
-                Ok(ControlSuccess::Status {
-                    coordinator: status.identity.get(),
-                    clean_shutdown: status.previous_shutdown_clean,
-                    control_sequence: status.control_sequence,
-                    applications: u32::try_from(status.applications)
-                        .map_err(|_| ControlFailure::Internal)?,
-                })
-            }
-            ControlOperation::Shutdown => Ok(ControlSuccess::ShutdownAccepted),
-            operation => self.application_control(operation),
-        }
-    }
-
     pub fn shutdown(&mut self) -> Result<(), CoordinatorError> {
+        self.sessions.clear();
         self.abort_all_databases()?;
         for application in self.applications.values_mut() {
             if let Some(incarnation) = application.incarnation.take() {

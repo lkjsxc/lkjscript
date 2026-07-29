@@ -21,6 +21,10 @@ path = "src/runtime/process_cell/main.rs"
 name = "lkjscriptd"
 path = "../lkjscript-runtime/src/bin/lkjscriptd.rs"
 
+[[bin]]
+name = "lkjscript-session"
+path = "src/runtime/session_broker/main.rs"
+
 [dependencies]
 lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }

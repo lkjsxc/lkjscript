@@ -2,6 +2,7 @@ use std::io::Write;
 
 use lkjscript_runtime::{
     ControlResponse, ControlSuccess, ControlledApplication, ControlledApplicationState,
+    ControlledSession,
 };
 
 pub(super) fn print(response: ControlResponse) -> Result<(), String> {
@@ -23,11 +24,13 @@ pub(super) fn print(response: ControlResponse) -> Result<(), String> {
             clean_shutdown,
             control_sequence,
             applications,
+            sessions,
         } => {
             println!("coordinator: {coordinator}");
             println!("previous-clean-shutdown: {clean_shutdown}");
             println!("control-sequence: {control_sequence}");
             println!("applications: {applications}");
+            println!("sessions: {sessions}");
         }
         ControlSuccess::ShutdownAccepted => println!("shutdown: accepted"),
         ControlSuccess::Application(application) => print_application(&application),
@@ -51,8 +54,27 @@ pub(super) fn print(response: ControlResponse) -> Result<(), String> {
                 .map_err(|error| format!("write application output: {error}"))?;
             eprintln!("application {application} outcome: {}", outcome.summary());
         }
+        ControlSuccess::Session(session) => print_session(&session),
+        ControlSuccess::Sessions(sessions) => {
+            for session in sessions {
+                print_session(&session);
+            }
+        }
+        ControlSuccess::SessionUnregistered { session } => {
+            println!("session: {session}");
+            println!("unregistered: true");
+        }
     }
     Ok(())
+}
+
+fn print_session(session: &ControlledSession) {
+    println!("session: {}", session.session);
+    println!("process: {}", session.process);
+    println!("user: {}", session.user);
+    println!("group: {}", session.group);
+    println!("backend: none");
+    println!("lease-deadline: {}", session.lease_deadline);
 }
 
 fn print_application(application: &ControlledApplication) {

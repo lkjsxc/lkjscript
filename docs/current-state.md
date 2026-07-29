@@ -159,8 +159,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   grants with private state and bounded quotas. Durable process-app install, list,
   lifecycle, invoke, and restart recovery use authenticated control. The daemon-owned
   ordered database gives each running incarnation an isolated tenant provider and
-  aborts it on lifecycle release. Database source/VM operations, other VM host families,
-  session brokers, GUI, and non-Linux transports are not Current.
+  aborts it on lifecycle release. Authenticated ephemeral session presence is Current.
+  Database VM operations, interactive cells, GUI, and non-Linux transports are not Current.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic closed contract registry.
 - Capsule manifests, repository policy/provenance, graph/query outputs,

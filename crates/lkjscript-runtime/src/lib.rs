@@ -18,7 +18,7 @@ pub use control::{
     decode_request_frame, decode_response_frame, encode_request_frame, encode_response_frame,
     ApplicationInstallRequest, ControlError, ControlFailure, ControlIdentity, ControlOperation,
     ControlRequest, ControlResponse, ControlSuccess, ControlledApplication,
-    ControlledApplicationState, MAX_CONTROL_FRAME_BYTES,
+    ControlledApplicationState, ControlledSession, SessionBackend, MAX_CONTROL_FRAME_BYTES,
 };
 #[cfg(target_os = "linux")]
 pub use control::{UnixControlClient, UnixControlServer};

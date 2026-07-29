@@ -122,7 +122,11 @@ mod tests {
         assert_eq!(first.iter().count(), FILES.len());
         let joined = first.iter().map(|(_, content)| content).collect::<String>();
         assert!(joined.contains("lkjscriptd --foreground"));
-        assert!(joined.contains("lkjscript-session"));
+        assert!(joined.contains("User=1000"));
+        assert!(joined.contains("StateDirectory=lkjscript"));
+        assert!(joined.contains(
+            "lkjscript-session --foreground --endpoint /var/lib/lkjscript/control.sock --backend none"
+        ));
         assert!(joined.contains("Session 0") || joined.contains("service never presents UI"));
         let directory =
             std::env::temp_dir().join(format!("lkjscript-services-{}", std::process::id()));

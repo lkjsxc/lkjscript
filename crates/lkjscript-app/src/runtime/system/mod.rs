@@ -24,6 +24,11 @@ pub(super) fn command(arguments: &[String]) -> Result<ExitCode, String> {
 fn command_linux(arguments: &[String]) -> Result<ExitCode, String> {
     let (operation, endpoint) = if arguments.get(1).map(String::as_str) == Some("app") {
         application::parse(arguments)?
+    } else if let [_, session, list, flag, endpoint] = arguments {
+        if session != "session" || list != "list" || flag != "--endpoint" {
+            return Err(usage());
+        }
+        (ControlOperation::SessionList, endpoint.clone())
     } else {
         match arguments {
             [_, operation, flag, endpoint] if flag == "--endpoint" => {
@@ -115,7 +120,7 @@ fn service_command(arguments: &[String]) -> Option<Result<ExitCode, String>> {
 fn usage() -> String {
     "usage: lkjscript system describe|status|stop --endpoint SOCKET; \
      system app install|list|start|stop|restart|remove|invoke ...; \
-     system install --output DIR --principal UID --coordinator ID; \
+     system session list --endpoint SOCKET; system install --output DIR --principal UID --coordinator ID; \
      system uninstall --output DIR"
         .into()
 }

@@ -3,17 +3,19 @@ use super::ServiceConfiguration;
 pub(super) fn linux_system(configuration: ServiceConfiguration) -> String {
     format!(
         "[Unit]\nDescription=lkjscript machine coordinator\nAfter=local-fs.target\n\n\
-         [Service]\nType=simple\nExecStart=/usr/bin/lkjscriptd --foreground \
-         --state-dir /var/lib/lkjscript --principal {} --coordinator {}\n\
-         Restart=on-failure\nRestartSec=2s\nNoNewPrivileges=true\nPrivateTmp=true\n\
-         ProtectSystem=strict\nReadWritePaths=/var/lib/lkjscript\n\n[Install]\nWantedBy=multi-user.target\n",
-        configuration.principal, configuration.coordinator
+         [Service]\nType=simple\nUser={}\nStateDirectory=lkjscript\n\
+         ExecStart=/usr/bin/lkjscriptd --foreground --state-dir /var/lib/lkjscript \
+         --principal {} --coordinator {}\nRestart=on-failure\nRestartSec=2s\n\
+         NoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=strict\n\
+         ReadWritePaths=/var/lib/lkjscript\n\n[Install]\nWantedBy=multi-user.target\n",
+        configuration.principal, configuration.principal, configuration.coordinator
     )
 }
 
 pub(super) fn linux_session() -> String {
     "[Unit]\nDescription=lkjscript interactive session broker\nPartOf=graphical-session.target\n\n\
-     [Service]\nType=simple\nExecStart=/usr/bin/lkjscript-session --foreground\nRestart=on-failure\n\
+     [Service]\nType=simple\nExecStart=/usr/bin/lkjscript-session --foreground \
+     --endpoint /var/lib/lkjscript/control.sock --backend none\nRestart=on-failure\n\
      NoNewPrivileges=true\n\n[Install]\nWantedBy=graphical-session.target\n"
         .to_string()
 }
@@ -51,7 +53,9 @@ pub(super) fn macos_agent() -> String {
      \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
      <plist version=\"1.0\"><dict>\n<key>Label</key><string>org.lkjscript.session</string>\n\
      <key>ProgramArguments</key><array>\n<string>/usr/local/libexec/lkjscript-session</string>\n\
-     <string>--foreground</string>\n</array>\n<key>RunAtLoad</key><true/>\n</dict></plist>\n"
+     <string>--foreground</string><string>--endpoint</string>\n\
+     <string>/Library/Application Support/lkjscript/control.sock</string>\n\
+     <string>--backend</string><string>none</string>\n</array>\n<key>RunAtLoad</key><true/>\n</dict></plist>\n"
         .to_string()
 }
 

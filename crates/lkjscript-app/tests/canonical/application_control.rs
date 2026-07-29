@@ -1,9 +1,6 @@
 use std::path::Path;
 
-#[path = "application_control/support.rs"]
-mod support;
-
-use support::{cli, invoke, lifecycle, Daemon};
+use super::application_control_support::{cli, invoke, lifecycle, Daemon};
 
 #[cfg(target_os = "linux")]
 #[test]

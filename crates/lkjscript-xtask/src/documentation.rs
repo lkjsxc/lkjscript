@@ -34,6 +34,7 @@ pub fn check(root: &Path) -> i32 {
         "docs/decisions/platform/runtime-foundation/isolated-process-cells.md",
         "docs/decisions/platform/runtime-foundation/persistent-application-control.md",
         "docs/decisions/platform/runtime-foundation/database-service-and-tenants.md",
+        "docs/decisions/platform/runtime-foundation/authenticated-session-broker.md",
         "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
         "docs/decisions/platform/semantic-source-and-agent-protocol.md",
         "docs/decisions/platform/resource-budget-profiles.md",
