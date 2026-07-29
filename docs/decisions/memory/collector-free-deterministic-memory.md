@@ -3,18 +3,23 @@
 ## Status
 
 <!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
+<!-- LKJ-STATUS id=collector-free-strings status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-products status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-enums status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-lists status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-closures status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-runtime status=accepted-target -->
+<!-- LKJ-STATUS id=no-tracing-runtime status=accepted-target -->
 
-**Accepted contract; production cutover is not Current.** The Current VM and
-native tiers still use the stable-index, non-moving tracing `GcHeap`. The
-Current inventory command records that fact. No collector-free claim is valid
-until every production object family is migrated and the no-tracing gate is
-clean.
+**Accepted contract; production cutover is not Current.** The Current VM and native tiers still use the
+stable-index, non-moving tracing `GcHeap`. The Current inventory records that fact. No collector-free claim is
+valid until every production object family is migrated and the no-tracing gate is clean.
 
 ## Decision
 
-[Research evidence](research-evidence.md) records adoption and uncertainty;
-[plans](authoritative-memory-plan.md), [drop](deterministic-drop.md), and the
-[first island](collector-free-value-island.md) refine the initial executable cut.
+[Research evidence](research-evidence.md), [plans](authoritative-memory-plan.md),
+[drop](deterministic-drop.md), [structural domains](structural-ownership-domains.md), and the
+[first island](collector-free-value-island.md) record the selected mechanisms and executable cut.
 
 The selected destination is one deterministic memory architecture with no
 tracing liveness traversal or collector fallback. The compiler tries, in order:
@@ -43,10 +48,9 @@ pool, scope, task, artifact, resource, or static lifetime. Reference counting
 is deterministic ownership, but its metadata, traffic, release work, overflow,
 and cycle restrictions remain explicit costs.
 
-A terminating execution is leak-free when each non-static allocation is
-reclaimed exactly once, transferred to an explicit returned owner, or retained
-by a still-live owner with defined later destruction. Process exit is not
-ordinary reclamation.
+A terminating execution is leak-free when each non-static allocation is reclaimed exactly once,
+transferred to an explicit returned owner, or retained by a still-live owner with defined later
+destruction. Process exit is not ordinary reclamation.
 
 ## Source Contract
 
@@ -57,10 +61,9 @@ eligible precise sharing. Mutable unique values and external resources are
 affine. Explicit `move`, `borrow`, `borrow-mut`, and `drop` remain only where
 semantic intent differs.
 
-Borrowed returns remain rejected until a separately checked interface contract
-can prove them. Public interfaces carry canonical derived ownership, returned
-owner, portability, and memory-ABI facts without exposing physical allocator
-syntax.
+Borrowed returns remain rejected until a separately checked interface contract can prove them.
+Public interfaces carry canonical derived ownership, returned owner, portability, and memory-ABI
+facts without exposing physical allocator syntax.
 
 ## Derived Modes
 
