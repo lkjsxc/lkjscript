@@ -93,21 +93,6 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         Ok(Some(i32::try_from(milliseconds).unwrap_or(i32::MAX)))
     }
 
-    pub(crate) fn wait_for_stdin(&self) -> Result<()> {
-        let Some(timeout) = self.deadline_timeout_ms()? else {
-            return Ok(());
-        };
-        let ready = lkjscript_sys::poll_fd(lkjscript_sys::STDIN_FD, timeout)
-            .map_err(|error| Error::host(format!("read-byte poll: {error}")))?;
-        if ready {
-            Ok(())
-        } else {
-            Err(Error::deadline(
-                "execution wall deadline exceeded during read-byte",
-            ))
-        }
-    }
-
     pub(crate) fn record_output(&mut self, bytes: usize) -> Result<()> {
         let total = self.output_bytes.checked_add(bytes).ok_or_else(|| {
             Error::resource(

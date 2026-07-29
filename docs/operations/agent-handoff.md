@@ -48,10 +48,11 @@ exclusive state-directory lease, durable database-independent journal/snapshot,
 kernel-authenticated Unix control, describe/status/stop CLI, and deterministic
 Linux, Windows, macOS, session, and container service definitions. Only the
 Linux foreground process and Unix transport executed; privileged installation
-and non-Linux adapters did not. Application execution remains the inherited
-capability-free in-process experiment with coordinator-scoped incarnations.
-Process cells, session brokers, VM provider cutover, database attachment,
-relational storage, GUI, and SQLite replacement remain absent.
+and non-Linux adapters did not. Trusted in-process VMs now compose app-private
+host environments and execute exact arguments, direct stdio, and clock grants;
+portable relative paths and directory/database provider contracts exist. File,
+terminal, network, SQLite, and stream-resource VM cutover, process cells,
+session brokers, database attachment, GUI, and SQLite replacement remain absent.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -127,8 +128,8 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Cut VM host effects from `lkjscript-sys` to typed providers, then split the
-   remaining topology, executable-memory, SQLite, and native-call mechanisms.
+1. Complete file, stream, terminal, network, and database VM provider cutover,
+   then split remaining topology, executable-memory, SQLite, and native calls.
 2. Add `lkjscriptd`, durable bootstrap control, authenticated local control, and
    process cells before admitting untrusted or capability-bearing applications.
 3. Integrate database tenants, transactions, cancellation, buffer pages, and

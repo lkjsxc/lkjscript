@@ -49,6 +49,7 @@ pub fn command(args: &[String]) -> Result<ExitCode, String> {
     let inputs = lkjscript_vm::ExecutionInputs {
         arguments: options.script_args.clone(),
         capabilities: required.to_vec(),
+        host: lkjscript_host::HostEnvironment::portable(),
     };
     let execution_config = ExecutionConfig::default();
     let jit_config = JitConfig {

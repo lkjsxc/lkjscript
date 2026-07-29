@@ -145,6 +145,7 @@ fn fake_evaluator_and_reference_vm_run_typed_resource_acquisition_and_cleanup() 
         &lkjscript_vm::ExecutionInputs {
             arguments: Vec::new(),
             capabilities: vec![lkjscript_core::CapabilityKind::FileSystem],
+            host: lkjscript_host::HostEnvironment::default(),
         },
         &ExecutionConfig::default(),
     );

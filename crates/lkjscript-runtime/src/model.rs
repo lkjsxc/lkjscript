@@ -73,8 +73,10 @@ impl ApplicationManifest {
                 "container identity must contain 1..=128 bytes",
             ));
         }
-        if !self.capabilities.is_empty() {
-            return Err(RuntimeError::UnsafeCapabilities);
+        if !self.capabilities.windows(2).all(|pair| pair[0] < pair[1]) {
+            return Err(RuntimeError::InvalidManifest(
+                "capabilities must be sorted and unique",
+            ));
         }
         if self.restart.max_attempts() > MAX_RESTART_ATTEMPTS {
             return Err(RuntimeError::InvalidManifest(
@@ -170,9 +172,14 @@ pub struct InvocationOutcome {
     pub outcome: ExecutionOutcome,
 }
 
-pub(crate) fn private_inputs(arguments: Vec<String>) -> ExecutionInputs {
+pub(crate) fn private_inputs(
+    arguments: Vec<String>,
+    capabilities: Vec<CapabilityKind>,
+    host: lkjscript_host::HostEnvironment,
+) -> ExecutionInputs {
     ExecutionInputs {
         arguments,
-        capabilities: Vec::new(),
+        capabilities,
+        host,
     }
 }

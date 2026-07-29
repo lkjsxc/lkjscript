@@ -29,6 +29,7 @@ pub fn check(root: &Path) -> i32 {
         "docs/decisions/platform/agent-work-state.md",
         "docs/decisions/platform/runtime-foundation/platform-revision.md",
         "docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md",
+        "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md",
         "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
         "docs/decisions/platform/semantic-source-and-agent-protocol.md",
         "docs/decisions/platform/resource-budget-profiles.md",

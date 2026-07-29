@@ -24,8 +24,9 @@ fn push_i64_result<J: RuntimeTier>(
     push_language_result(vm, kind, result);
 }
 
-fn sleep_result(milliseconds: u64) -> Result<Value> {
-    lkjscript_sys::sleep_ms(milliseconds)
+fn sleep_result(clock: &dyn lkjscript_host::Clock, milliseconds: u64) -> Result<Value> {
+    clock
+        .sleep(std::time::Duration::from_millis(milliseconds))
         .map(|()| Value::UNIT)
         .map_err(|error| lkjscript_core::Error::msg(format!("sys-wait-ms: {error}")))
 }

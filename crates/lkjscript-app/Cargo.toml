@@ -18,6 +18,7 @@ lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-ir = { path = "../lkjscript-ir" }
+lkjscript-host = { path = "../lkjscript-host" }
 lkjscript-jit = { path = "../lkjscript-jit" }
 lkjscript-resource = { path = "../lkjscript-resource" }
 lkjscript-runtime = { path = "../lkjscript-runtime" }

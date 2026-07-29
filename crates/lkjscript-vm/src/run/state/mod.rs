@@ -117,12 +117,18 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             .contains(&lkjscript_core::CapabilityKind::Terminal)
             .then(crate::host_term::restore_tty)
             .and_then(Result::err);
-        let flush_error = self
+        let flush_error = if self
             .inputs
             .capabilities
             .contains(&lkjscript_core::CapabilityKind::Stdio)
-            .then(crate::host::flush_out)
-            .and_then(Result::err);
+        {
+            match self.inputs.host.stdio.as_ref() {
+                Some(provider) => crate::host::flush_out(provider.as_ref()).err(),
+                None => Some(Error::host("stdio capability has no granted provider")),
+            }
+        } else {
+            None
+        };
         cleanup_failures.append(resource_teardown.cleanup_failures().clone());
         if let Some(error) = restore_error {
             cleanup_failures.push(

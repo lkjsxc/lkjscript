@@ -9,6 +9,7 @@ mod execution;
 mod ids;
 mod invoke;
 mod model;
+mod providers;
 mod service;
 mod state;
 mod system;

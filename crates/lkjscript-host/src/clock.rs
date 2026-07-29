@@ -11,6 +11,7 @@ pub struct WallTime(pub u64);
 pub trait Clock: Send + Sync {
     fn monotonic_time(&self) -> MonotonicTime;
     fn wall_time(&self) -> HostResult<WallTime>;
+    fn sleep(&self, duration: std::time::Duration) -> HostResult<()>;
 }
 
 #[derive(Debug)]
@@ -45,5 +46,10 @@ impl Clock for PortableClock {
         Ok(WallTime(
             u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX),
         ))
+    }
+
+    fn sleep(&self, duration: std::time::Duration) -> HostResult<()> {
+        std::thread::sleep(duration);
+        Ok(())
     }
 }

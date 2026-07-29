@@ -16,23 +16,24 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.ensure_host_deadline_support("print", false)?;
             let value = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
+            let provider = stdio(vm)?;
             let text = display_value(&vm.arena, vm.chunk, value)?;
             vm.record_output(text.len())?;
-            write_output(text.as_bytes(), "print")?;
+            write_output(provider.as_ref(), text.as_bytes(), "print")?;
             vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::Flush as u8 => {
             vm.ensure_host_deadline_support("flush", false)?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
-            flush_out()?;
+            flush_out(stdio(vm)?.as_ref())?;
             vm.push(Value::UNIT);
             Ok(())
         }
         x if x == Op::ReadByte as u8 => {
+            vm.ensure_host_deadline_support("read-byte", false)?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
-            vm.wait_for_stdin()?;
-            let number = read_byte()?;
+            let number = read_byte(stdio(vm)?.as_ref())?;
             let value = Value::from_i64(number);
             vm.push(value);
             Ok(())
@@ -43,7 +44,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
             let byte = vm.as_i64(value)?;
             vm.record_output(1)?;
-            vm.push(write_byte(byte)?);
+            vm.push(write_byte(stdio(vm)?.as_ref(), byte)?);
             Ok(())
         }
         x if x == Op::WriteStr as u8 => {
@@ -52,9 +53,19 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
             let length = crate::host_ext::as_str(&vm.arena, value)?.len();
             vm.record_output(length)?;
-            vm.push(write_str(&vm.arena, value)?);
+            vm.push(write_str(stdio(vm)?.as_ref(), &vm.arena, value)?);
             Ok(())
         }
         _ => unreachable!("opcode family checked"),
     }
+}
+
+fn stdio<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+) -> Result<std::sync::Arc<dyn lkjscript_host::StdioProvider>> {
+    vm.inputs
+        .host
+        .stdio
+        .clone()
+        .ok_or_else(|| Error::host("stdio capability has no granted provider"))
 }

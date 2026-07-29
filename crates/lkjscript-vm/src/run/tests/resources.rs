@@ -156,5 +156,6 @@ fn capability_inputs(kind: lkjscript_core::CapabilityKind) -> crate::ExecutionIn
     crate::ExecutionInputs {
         arguments: Vec::new(),
         capabilities: vec![kind],
+        host: lkjscript_host::HostEnvironment::portable(),
     }
 }

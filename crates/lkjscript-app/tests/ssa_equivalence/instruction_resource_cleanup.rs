@@ -95,6 +95,7 @@ fn instruction_failure_closes_live_vm_resource_without_emergency_teardown() {
                             lkjscript_core::CapabilityKind::FileSystem,
                             lkjscript_core::CapabilityKind::Stdio,
                         ],
+                        host: lkjscript_host::HostEnvironment::portable(),
                     },
                     &ExecutionConfig {
                         instruction_fuel: *fuel,
@@ -113,6 +114,7 @@ fn instruction_failure_closes_live_vm_resource_without_emergency_teardown() {
                 lkjscript_core::CapabilityKind::FileSystem,
                 lkjscript_core::CapabilityKind::Stdio,
             ],
+            host: lkjscript_host::HostEnvironment::portable(),
         },
         &ExecutionConfig {
             instruction_fuel: completion_fuel / 2,

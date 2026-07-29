@@ -11,7 +11,8 @@ pub enum QuotaKind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuntimeError {
     InvalidManifest(&'static str),
-    UnsafeCapabilities,
+    CapabilityNotGranted(lkjscript_core::CapabilityKind),
+    UnsupportedCapability(lkjscript_core::CapabilityKind),
     ApplicationNotFound(ApplicationId),
     PackageCacheFull,
     PackageNotCached(PackageContentId),
@@ -36,8 +37,18 @@ impl fmt::Display for RuntimeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidManifest(message) => write!(formatter, "invalid manifest: {message}"),
-            Self::UnsafeCapabilities => formatter
-                .write_str("in-process applications must require and receive no capabilities"),
+            Self::CapabilityNotGranted(kind) => {
+                write!(
+                    formatter,
+                    "application capability is not granted: {}",
+                    kind.as_str()
+                )
+            }
+            Self::UnsupportedCapability(kind) => write!(
+                formatter,
+                "application provider is unavailable for capability: {}",
+                kind.as_str()
+            ),
             Self::ApplicationNotFound(id) => {
                 write!(formatter, "application {} not found", id.get())
             }

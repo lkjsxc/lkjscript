@@ -72,11 +72,13 @@ fn two_apps_invoke_concurrently_and_a_trap_is_isolated() -> Result<(), Box<dyn E
         manifest(ApplicationKind::Command, 1, 4),
         package(1)?,
         chunk(false)?,
+        lkjscript_host::HostEnvironment::default(),
     )?;
     let bad = system.install(
         manifest(ApplicationKind::Service, 1, 4),
         package(2)?,
         chunk(true)?,
+        lkjscript_host::HostEnvironment::default(),
     )?;
     let good_incarnation = system.start(good)?;
     let bad_incarnation = system.start(bad)?;
@@ -109,6 +111,7 @@ fn restart_changes_incarnation_and_rejects_stale_identity() -> Result<(), Box<dy
         manifest(ApplicationKind::Command, 1, 4),
         package(3)?,
         chunk(false)?,
+        lkjscript_host::HostEnvironment::default(),
     )?;
     let first = system.start(app)?;
     let second = system.restart(first)?;
@@ -130,6 +133,7 @@ fn restart_changes_incarnation_and_rejects_stale_identity() -> Result<(), Box<dy
         manifest(ApplicationKind::Command, 1, 1),
         package(9)?,
         chunk(false)?,
+        lkjscript_host::HostEnvironment::default(),
     )?;
     let foreign_incarnation = foreign.start(foreign_app)?;
     assert!(matches!(
@@ -146,6 +150,7 @@ fn ticket_admission_has_no_starvation_and_enforces_total_quota() -> Result<(), B
         manifest(ApplicationKind::Service, 1, 8),
         package(4)?,
         chunk(false)?,
+        lkjscript_host::HostEnvironment::default(),
     )?;
     let incarnation = system.start(app)?;
     let requests = (0..8)

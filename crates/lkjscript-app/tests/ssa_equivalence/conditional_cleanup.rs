@@ -32,6 +32,7 @@ fn conditional_resource_close_executes_exactly_once_in_vm() {
             &ExecutionInputs {
                 arguments: Vec::new(),
                 capabilities: vec![CapabilityKind::FileSystem],
+                host: lkjscript_host::HostEnvironment::default(),
             },
             &ExecutionConfig::default(),
         );

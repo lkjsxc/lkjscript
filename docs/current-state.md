@@ -154,9 +154,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - The exact Linux [OS-resident runtime foundation](current-state/os-resident-runtime-evidence.md)
   has a persistent foreground `lkjscriptd`, exclusive lease, durable independent
   control store, authenticated Unix control, CLI, and generated service definitions.
-  Application execution remains a private capability-free in-process experiment;
-  process cells, database attachment, session brokers, GUI, and non-Linux daemon
-  transports are not Current. The ordered database kernel remains experimental.
+  Trusted private VMs now admit arguments, provider-backed stdio, and provider-backed
+  clock grants; other VM host families, process cells, database attachment, session
+  brokers, GUI, and non-Linux transports are not Current. The database remains experimental.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.

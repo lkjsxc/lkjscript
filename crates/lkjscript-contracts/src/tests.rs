@@ -190,10 +190,8 @@ fn compiled_source_digests_match_descriptors() {
 
 #[test]
 fn digest_text_is_full_lowercase_sha256() {
-    let value = digest(&descriptor(vec![ContractItem::new(
-        "item",
-        ContractItemKind::Type,
-    )]));
+    let item = ContractItem::new("item", ContractItemKind::Type);
+    let value = digest(&descriptor(vec![item]));
     let text = value.to_hex();
     assert_eq!(text.len(), 64);
     assert_eq!(ContractDigest::from_hex(&text), Some(value));

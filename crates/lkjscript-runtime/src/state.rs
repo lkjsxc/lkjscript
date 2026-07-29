@@ -44,6 +44,7 @@ pub(crate) struct AppRecord {
     pub(crate) manifest: ApplicationManifest,
     pub(crate) package: PackageContentId,
     pub(crate) chunk: Option<Arc<ValidatedChunk>>,
+    pub(crate) host: lkjscript_host::HostEnvironment,
     pub(crate) lifecycle: Lifecycle,
     pub(crate) incarnation_counter: u64,
     pub(crate) instance: Option<InstanceRuntime>,

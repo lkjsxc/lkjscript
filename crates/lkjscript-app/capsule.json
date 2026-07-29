@@ -23,6 +23,7 @@
     "compiler",
     "contracts",
     "core",
+    "host",
     "ir",
     "jit",
     "native",
@@ -44,6 +45,7 @@
     "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/modules-and-packages.md",
+    "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md",
     "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
     "docs/decisions/platform/semantic-resource-plane.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"

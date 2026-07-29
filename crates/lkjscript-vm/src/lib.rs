@@ -11,10 +11,11 @@ use lkjscript_jit::{JitSession, JitStats};
 
 pub use run::{NoTier, Vm};
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct ExecutionInputs {
     pub arguments: Vec<String>,
     pub capabilities: Vec<CapabilityKind>,
+    pub host: lkjscript_host::HostEnvironment,
 }
 
 pub fn run_chunk(

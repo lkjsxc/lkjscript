@@ -13,7 +13,7 @@
     "JIT promotion"
   ],
   "facade": ["crates/lkjscript-vm/src/lib.rs"],
-  "allowed_dependencies": ["core", "jit", "sys"],
+  "allowed_dependencies": ["core", "host", "jit", "sys"],
   "forbidden_dependencies": ["app", "compiler"],
   "tests": [
     "crates/lkjscript-vm/src/host_ext/tests/mod.rs",
@@ -22,7 +22,8 @@
   "decisions": [
     "docs/decisions/execution/execution-portfolio.md",
     "docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md",
-    "docs/decisions/memory/generation-safe-resources.md"
+    "docs/decisions/memory/generation-safe-resources.md",
+    "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md"
   ],
   "unsafe_boundary": { "status": "crosses", "boundaries": ["sys.native-call"] },
   "capability": { "status": "uses", "names": ["host I/O", "executable memory"] },

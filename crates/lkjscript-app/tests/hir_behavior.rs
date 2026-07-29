@@ -148,6 +148,7 @@ fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
             &lkjscript_vm::ExecutionInputs {
                 arguments: vec!["hello".into()],
                 capabilities: vec![lkjscript_core::CapabilityKind::Arguments],
+                host: lkjscript_host::HostEnvironment::default(),
             },
             &ExecutionConfig::default(),
         ))

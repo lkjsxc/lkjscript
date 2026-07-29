@@ -11,7 +11,7 @@
   "allowed_dependencies": ["contracts", "core", "host", "vm"],
   "forbidden_dependencies": ["app", "compiler", "database", "ir", "jit", "native", "resource", "sys"],
   "tests": ["crates/lkjscript-runtime/src/control/tests.rs", "crates/lkjscript-runtime/src/control_store/tests.rs", "crates/lkjscript-runtime/src/coordinator/lease.rs", "crates/lkjscript-runtime/src/coordinator/mod.rs", "crates/lkjscript-runtime/src/service/mod.rs", "crates/lkjscript-runtime/src/tests/cache.rs", "crates/lkjscript-runtime/src/tests/mod.rs"],
-  "decisions": ["docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md", "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md", "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md", "docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "defines", "names": ["runtime authority", "application lifecycle", "local control"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
@@ -19,6 +19,6 @@
   "context_card": {
     "goal": "Persist and control one daemon authority while supervising bounded applications without cross-app mutable state.",
     "interfaces": ["crates/lkjscript-runtime/src/lib.rs"],
-    "invariants": ["unsupported capability-bearing apps fail closed", "each invocation owns private VM state", "live code leases are never evicted"]
+    "invariants": ["only implemented provider grants are admitted", "each invocation owns private VM state", "live code leases are never evicted"]
   }
 }

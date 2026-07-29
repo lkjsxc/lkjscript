@@ -39,12 +39,17 @@ registered separately.
 
 ## Implemented Portable Slice
 
-`lkjscript-host` composes only implemented clock, logging, cancellation, and
-durable-storage families. The standard provider preserves native paths in the
+`lkjscript-host` composes implemented stdio, clock, logging, cancellation,
+directory, database-interface, and durable-storage families. Validated VM direct
+stdio and clock operations consume app-private provider references; file,
+terminal, network, SQLite, and stream-resource cutover remains incomplete. The
+standard durable provider preserves native paths in the
 control boundary, uses checked relative object names, syncs data, and syncs a
 parent directory after atomic replacement where the host supports that call.
-The fake provider supplies deterministic time/storage observations and injected
-short-write, disk-full, sync, corruption, and crash behavior. Explicit target
+Portable application paths are normalized relative segments resolved only by a
+directory provider. Buffered stdio and fake durable storage provide deterministic
+observations and injected short-write, disk-full, sync, corruption, and crash
+behavior. Explicit target
 facts do not alter language semantics. Host/database build and a transactional
 fake-storage probe execute for `wasm32-wasip1`; VM/runtime-system do not build
 there.

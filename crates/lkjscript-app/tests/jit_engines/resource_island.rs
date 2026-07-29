@@ -21,6 +21,7 @@ fn borrowed_standard_input_runs_in_forced_noncollecting_resource_island() {
         &ExecutionInputs {
             arguments: Vec::new(),
             capabilities: capabilities.to_vec(),
+            host: lkjscript_host::HostEnvironment::portable(),
         },
         &ExecutionConfig::default(),
     );

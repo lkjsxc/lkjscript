@@ -29,14 +29,15 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         x if x == Op::SysNowMs as u8 => {
             vm.require_capability(lkjscript_core::CapabilityKind::Clock)?;
-            let result = lkjscript_sys::now_ms_monotonic()
-                .map_err(|error| lkjscript_core::Error::msg(format!("sys-now-ms: {error}")));
+            let result = i64::try_from(clock(vm)?.monotonic_time().0 / 1_000_000)
+                .map_err(|_| lkjscript_core::Error::msg("sys-now-ms: value out of range"));
             push_i64_result(vm, lkjscript_core::SystemErrorKind::Time, result);
             Ok(true)
         }
         x if x == Op::SysWaitMs as u8 => {
             let duration = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Clock)?;
+            let clock = clock(vm)?;
             let milliseconds = vm
                 .as_i64(duration)
                 .map_err(|_| lkjscript_core::Error::msg("sys-wait-ms: expected I64 duration"));
@@ -50,7 +51,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                         let requested = std::time::Duration::from_millis(milliseconds);
                         if requested > remaining {
                             let sleep_ms = u64::try_from(remaining.as_millis()).unwrap_or(u64::MAX);
-                            match lkjscript_sys::sleep_ms(sleep_ms) {
+                            match clock.sleep(std::time::Duration::from_millis(sleep_ms)) {
                                 Ok(()) => {
                                     return Err(lkjscript_core::Error::deadline(
                                         "execution wall deadline exceeded during sys-wait-ms",
@@ -61,10 +62,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                                 }
                             }
                         } else {
-                            sleep_result(milliseconds)
+                            sleep_result(clock.as_ref(), milliseconds)
                         }
                     } else {
-                        sleep_result(milliseconds)
+                        sleep_result(clock.as_ref(), milliseconds)
                     }
                 }
                 Err(error) => Err(error),
@@ -74,4 +75,12 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
         }
         _ => Ok(false),
     }
+}
+
+fn clock<J: RuntimeTier>(vm: &Vm<'_, J>) -> Result<std::sync::Arc<dyn lkjscript_host::Clock>> {
+    vm.inputs
+        .host
+        .clock
+        .clone()
+        .ok_or_else(|| lkjscript_core::Error::host("clock capability has no granted provider"))
 }

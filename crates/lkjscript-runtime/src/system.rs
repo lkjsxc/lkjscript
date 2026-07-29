@@ -14,7 +14,6 @@ use crate::{
 pub struct RuntimeSystem {
     pub(crate) inner: Arc<Inner>,
 }
-
 impl RuntimeSystem {
     pub fn new(identity: CoordinatorIdentity, max_cache_entries: NonZeroUsize) -> Self {
         Self {
@@ -25,11 +24,9 @@ impl RuntimeSystem {
             }),
         }
     }
-
     pub fn identity(&self) -> CoordinatorIdentity {
         self.inner.identity
     }
-
     pub(crate) fn lock_state(&self) -> Result<MutexGuard<'_, State>, RuntimeError> {
         self.inner
             .state
@@ -42,10 +39,16 @@ impl RuntimeSystem {
         manifest: ApplicationManifest,
         package: PackageContentId,
         chunk: Arc<ValidatedChunk>,
+        host: lkjscript_host::HostEnvironment,
     ) -> Result<ApplicationId, RuntimeError> {
         manifest.validate()?;
-        if !chunk.required_capabilities().is_empty() {
-            return Err(RuntimeError::UnsafeCapabilities);
+        for capability in chunk.required_capabilities() {
+            if manifest.capabilities.binary_search(capability).is_err() {
+                return Err(RuntimeError::CapabilityNotGranted(*capability));
+            }
+            if !crate::providers::supports(*capability, &host) {
+                return Err(RuntimeError::UnsupportedCapability(*capability));
+            }
         }
         let mut state = self.lock_state()?;
         let application = ApplicationId::from_nonzero(state.allocate()?);
@@ -56,6 +59,7 @@ impl RuntimeSystem {
                 manifest,
                 package,
                 chunk: Some(lease),
+                host,
                 lifecycle: Lifecycle::Installed,
                 incarnation_counter: 0,
                 instance: None,
@@ -96,9 +100,15 @@ impl RuntimeSystem {
         app.lifecycle = lifecycle.transition(Lifecycle::Loading)?;
         app.lifecycle = app.lifecycle.transition(Lifecycle::Starting)?;
         app.incarnation_counter = next_incarnation.get();
+        let capabilities = app
+            .chunk
+            .as_ref()
+            .ok_or(RuntimeError::PackageNotCached(app.package))?
+            .required_capabilities()
+            .to_vec();
         app.instance = Some(InstanceRuntime::new(
             incarnation,
-            private_inputs(Vec::new()),
+            private_inputs(Vec::new(), capabilities, app.host.clone()),
         ));
         app.lifecycle = app.lifecycle.transition(Lifecycle::Running)?;
         Ok(incarnation)
@@ -184,7 +194,6 @@ impl RuntimeSystem {
     pub fn cache_contains(&self, package: PackageContentId) -> Result<bool, RuntimeError> {
         Ok(self.lock_state()?.cache.contains(package))
     }
-
     pub fn cache_len(&self) -> Result<usize, RuntimeError> {
         Ok(self.lock_state()?.cache.len())
     }
