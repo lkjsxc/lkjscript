@@ -143,10 +143,10 @@ costs.
 The Current low-level foundation implements its closed typed scalar machine
 plan, verifier, deterministic stack-slot x86-64 encoder, relocations, ABI/frame
 and scalar-stack-map metadata, opaque installable image, and bounded safe
-`lkjscript-sys` RW-to-RX installation/invocation. Boundary tests call generated
+`lkjscript-executable` RW-to-RX installation/invocation. Boundary tests call generated
 multi-block, loop, direct-call, allowlisted-runtime-call, exact I64/F64,
 trap/exit code. Safe APIs expose no arbitrary bytes, addresses, mappings, or
-function pointers; unsafe memory and invocation remain in `lkjscript-sys`.
+function pointers; unsafe memory and invocation remain in `lkjscript-executable`.
 
 The foundation itself remains source/SSA-independent. The separate
 `lkjscript-jit` adapter now consumes only `VerifiedProgram` for baseline or the

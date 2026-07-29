@@ -14,6 +14,7 @@ Implementation Contracts, Accepted Targets, Deferred work, and Rejected paths.
 - [resource budget profiles](resource-budget-profiles.md), including Accepted
   Current core hierarchical pre-allocation and Accepted logical metering
 - [bounded repository topology](bounded-repository-topology.md)
+- [narrow unsafe mechanism crates](runtime-foundation/unsafe-mechanism-crates.md)
 - [repository intelligence graph and context](repository-intelligence-graph.md)
 - [agent work state](agent-work-state.md)
 - [modules and packages](modules-and-packages.md)

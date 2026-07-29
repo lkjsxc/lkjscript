@@ -19,8 +19,8 @@ the explicitly named probes are experimental.
   consume one resolved typed IR family.
 - Current execution, tracing-memory limits, resource support, and native-tier
   evidence remain those in [Current State](../../../current-state.md).
-- `LKJ-UNSAFE-BOUNDARY` enforces an exact bounded registry for the inherited
-  unsafe-containing sys files; no unsafe code moved in this slice.
+- `LKJ-UNSAFE-BOUNDARY` enforces exact executable, Linux-host, residual sys,
+  SQLite, and local peer-identity mechanism boundaries.
 - No persistent coordinator, local control transport, process cell, session
   broker, GUI cell, Component Model ABI, transactional service, Cranelift
   backend, LeanStore integration, or DuckDB vector engine is Current.
@@ -55,6 +55,7 @@ candidates are removed rather than retained as fallback paths.
 ## Capsule Map
 
 - [Global Platform Revision](platform-revision.md)
+- [Narrow Unsafe Mechanism Crates](unsafe-mechanism-crates.md)
 - [Portable Host and Targets](portable-host-and-targets.md)
 - [OS-Resident Runtime System](os-resident-runtime-system.md)
 - [Application Cells And Host Providers](application-cells-and-host-providers.md)

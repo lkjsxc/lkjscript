@@ -1,6 +1,6 @@
 use super::*;
+use lkjscript_executable::NativeIslandRuntimeServices;
 use lkjscript_native::{LoanType, NativeLoan};
-use lkjscript_sys::executable::NativeIslandRuntimeServices;
 
 impl NativeIslandRuntimeServices for JitIslandServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {

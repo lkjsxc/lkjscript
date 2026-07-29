@@ -9,12 +9,12 @@ presenting the selection as an implemented JIT.
 
 **Current Foundation and Current Scalar Integration.** The repository-owned,
 source-independent Linux x86-64 scalar machine-plan verifier, encoder, opaque
-installable image, and safe bounded `lkjscript-sys` W^X boundary remain the
+installable image, and safe bounded `lkjscript-executable` W^X boundary remain the
 backend foundation. A separate narrow `lkjscript-jit` adapter now consumes only
 verified typed SSA for baseline or opaque proof-verified optimized SSA for
 optimizing code and provides callable host-independent code objects, tier state,
 and `vm`/`auto`/`baseline-jit`/`optimizing-jit` engines. The closed
-machine-plan/sys boundary supports exact canonical native contract typed stable references, active
+machine-plan/executable boundary supports exact canonical native contract typed stable references, active
 frames, host-independent source allocation/recursion, and shared baseline or
 optimizing lowering. Synchronous automatic optimizing promotion is an
 **Accepted Implementation Selection** but remains outside current coverage.
@@ -37,7 +37,7 @@ verified typed SSA
   -> closed backend target-lowering machine plan
   -> owned x86-64 byte encoder and relocations
   -> opaque uninstalled native image plus exact metadata
-  -> safe lkjscript-sys W^X installation
+  -> safe lkjscript-executable W^X installation
   -> bounded native code object
 ```
 
@@ -52,7 +52,7 @@ operations, arbitrary call targets, or unchecked control flow.
 Pure encoding, relocation descriptions, frame layout, and metadata construction
 remain separate from host effects. Executable allocation, permission changes,
 instruction-cache handling where needed, lifetime, and native entry remain
-unsafe implementation details confined behind a safe `lkjscript-sys` API whose
+unsafe implementation details confined behind a safe `lkjscript-executable` API whose
 safe inputs cannot install arbitrary bytes. The temporary experiment's raw
 pointer calls and executable mappings are not that API.
 
@@ -160,7 +160,7 @@ semantic/native/runtime ABI versions.
 It does not own executable memory, tier state, the VM, GC, host services, or CLI
 policy.
 
-`lkjscript-sys` accepts only that opaque image. On Linux x86-64 it validates
+`lkjscript-executable` accepts only that opaque image. On Linux x86-64 it validates
 versions, metadata, typed entries, symbolic relocation targets, and configured
 per-object and aggregate limits; maps RW, copies and relocates, changes the
 mapping to RX, and never patches after sealing. Installed mappings expose only typed invocation,

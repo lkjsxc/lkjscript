@@ -6,10 +6,10 @@
       "responsibility": "Enter verified generated Linux code with checked call frames and stack state.",
       "safe_caller_contract": "Callers provide a verified image, ABI-compatible values, and owned mappings.",
       "files": [
-        "crates/lkjscript-sys/src/executable/platform/linux/abi_call.rs",
-        "crates/lkjscript-sys/src/executable/platform/linux/invocation.rs",
-        "crates/lkjscript-sys/src/executable/platform/linux/mod.rs",
-        "crates/lkjscript-sys/src/executable/platform/linux/stack.rs"
+        "crates/mechanisms/lkjscript-executable/src/executable/platform/linux/abi_call.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/platform/linux/invocation.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/platform/linux/mod.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/platform/linux/stack.rs"
       ]
     },
     {
@@ -17,7 +17,7 @@
       "responsibility": "Allocate, protect, publish, and release Linux executable mappings.",
       "safe_caller_contract": "Callers publish bounded complete machine code before executable access.",
       "files": [
-        "crates/lkjscript-sys/src/executable/platform/linux/mapping.rs"
+        "crates/mechanisms/lkjscript-executable/src/executable/platform/linux/mapping.rs"
       ]
     },
     {
@@ -27,12 +27,12 @@
       "files": [
         "crates/lkjscript-sys/src/fd.rs",
         "crates/lkjscript-sys/src/file.rs",
-        "crates/lkjscript-sys/src/linux_host/linux_abi.rs",
         "crates/lkjscript-sys/src/poll.rs",
         "crates/lkjscript-sys/src/random.rs",
         "crates/lkjscript-sys/src/socket.rs",
         "crates/lkjscript-sys/src/time.rs",
-        "crates/lkjscript-sys/src/tty.rs"
+        "crates/lkjscript-sys/src/tty.rs",
+        "crates/mechanisms/lkjscript-linux-host/src/linux_host/linux_abi.rs"
       ]
     },
     {
@@ -48,13 +48,13 @@
       "responsibility": "Serve verified native runtime calls and exact root, heap, and island state.",
       "safe_caller_contract": "Verified call IDs and checked handles preserve layout, lifetime, and alias rules.",
       "files": [
-        "crates/lkjscript-sys/src/executable/runtime.rs",
-        "crates/lkjscript-sys/src/executable/runtime/island.rs",
-        "crates/lkjscript-sys/src/executable/runtime/island_unique.rs",
-        "crates/lkjscript-sys/src/executable/runtime/island_unique/cleanup.rs",
-        "crates/lkjscript-sys/src/executable/state/collection.rs",
-        "crates/lkjscript-sys/src/executable/state/heap.rs",
-        "crates/lkjscript-sys/src/executable/state/roots.rs"
+        "crates/mechanisms/lkjscript-executable/src/executable/runtime.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/runtime/island.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/runtime/island_unique.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/runtime/island_unique/cleanup.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/state/collection.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/state/heap.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/state/roots.rs"
       ]
     },
     {

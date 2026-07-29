@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
+  "id": "mechanisms",
+  "root": "crates/mechanisms",
+  "kind": "collection",
+  "purpose": "Collect narrow reviewed host mechanism crates without granting ambient authority.",
+  "layer": "host mechanisms",
+  "concepts": ["executable memory", "native call bridge", "Linux host observation"],
+  "facade": [],
+  "allowed_dependencies": ["executable", "linux-host"],
+  "forbidden_dependencies": ["app", "compiler", "core", "database", "jit", "runtime", "vm"],
+  "tests": ["crates/mechanisms/lkjscript-executable/tests/executable.rs", "crates/mechanisms/lkjscript-linux-host/tests/linux_host.rs"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md"],
+  "unsafe_boundary": { "status": "confined", "boundaries": ["meta/unsafe/registry.json"] },
+  "capability": { "status": "none", "names": [] },
+  "provenance": { "class": "authored", "source": "Rust workspace mechanism crates" },
+  "verification": ["cargo test --locked -p lkjscript-executable -p lkjscript-linux-host"],
+  "context_card": {
+    "goal": "Keep unrelated reviewed host mechanisms in dependency-minimal crates.",
+    "interfaces": [],
+    "invariants": ["no application semantics", "no compatibility re-exports", "every unsafe file has one registered boundary"]
+  }
+}

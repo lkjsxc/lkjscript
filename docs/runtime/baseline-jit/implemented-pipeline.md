@@ -14,7 +14,7 @@ Canonical source is resolved and normalized once:
 ```text
 canonical source -> typed HIR -> VerifiedProgram SSA
   -> deterministic baseline adapter -> verified lkjscript-native machine plan
-  -> encoded image and symbolic relocations -> bounded lkjscript-sys RW/RX install
+  -> encoded image and symbolic relocations -> bounded lkjscript-executable RW/RX install
   -> actual System V AMD64 entry call
 ```
 

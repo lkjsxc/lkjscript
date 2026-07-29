@@ -117,6 +117,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
 - Linux x86-64 baseline acceptance requires real synchronous native calls. The
   forced proof JIT accepts only proof-checked optimized SSA and has no VM fallback.
+  `lkjscript-executable` owns W^X, entry, native bridging, and tests; JIT no longer reaches these through sys.
+  `lkjscript-linux-host` owns app topology/affinity; residual sys owns only host I/O/path/socket/tty/time/SQLite.
 - The reference VM uses a safe closed 16-byte value with complete inline i64
   and exact-bit f64 payloads. Scalar constants, stack/locals, operations,
   conversions, calls, returns, host adapters, and JIT transitions allocate no
@@ -164,16 +166,14 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Capsule manifests, repository policy/provenance, graph/query outputs,
   capability status, and agent work state use stable schemas plus exact contract digests.
 - The repository graph remains bounded and evidence-backed. Agent checkpoints
-  remain revision-checked, append-only, and fail closed on stale semantic or
-  repository identities.
+  remain revision-checked, append-only, and fail closed on stale semantic or repository identities.
 - The machine `LKJ-DOC-GENERATION` rule rejects numbered language, schema,
   protocol, profile, ABI, and standalone generation names in Current-owned
   code, tests, fixtures, examples, config, and documentation. Immutable
   historical evidence is explicitly excluded rather than rewritten.
 ## Accepted targets not claimed Current
 - lowercase-vocabulary promotion is blocked only by removing transitional `buf`;
-- evaluator dispatch beyond the fake-provider slice and native owned resources
-  beyond borrowed `standard-input`;
+- evaluator dispatch beyond the fake-provider slice and native owned resources beyond borrowed `standard-input`;
 - full affine `byte-vector` corpus migration, ranged lexical byte slices,
   borrowed `str`, and removal of transitional `buf`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;

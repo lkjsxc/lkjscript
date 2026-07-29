@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
+  "id": "linux-host",
+  "root": "crates/mechanisms/lkjscript-linux-host",
+  "kind": "crate",
+  "purpose": "Observe bounded Linux topology and perform checked worker affinity changes.",
+  "layer": "host mechanism",
+  "concepts": ["Linux topology", "scheduler observation", "worker affinity"],
+  "facade": ["crates/mechanisms/lkjscript-linux-host/README.md", "crates/mechanisms/lkjscript-linux-host/src/lib.rs"],
+  "allowed_dependencies": ["contracts", "resource"],
+  "forbidden_dependencies": ["app", "compiler", "executable", "jit", "sys", "vm"],
+  "tests": ["crates/mechanisms/lkjscript-linux-host/tests/linux_binder.rs", "crates/mechanisms/lkjscript-linux-host/tests/linux_host.rs", "crates/mechanisms/lkjscript-linux-host/tests/linux_host_bounds.rs"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md", "docs/decisions/platform/semantic-resource-plane.md"],
+  "unsafe_boundary": { "status": "confined", "boundaries": ["linux-host-io"] },
+  "capability": { "status": "defines", "names": ["Linux host observation", "worker affinity"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-linux-host"],
+  "context_card": {
+    "goal": "Keep Linux topology and affinity separate from general host I/O.",
+    "interfaces": ["crates/mechanisms/lkjscript-linux-host/src/lib.rs"],
+    "invariants": ["bounded read-only discovery", "checked affinity masks", "no process registry authority"]
+  }
+}

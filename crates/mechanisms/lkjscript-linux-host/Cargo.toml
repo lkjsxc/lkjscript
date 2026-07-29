@@ -1,9 +1,13 @@
 [package]
-name = "lkjscript-sys"
+name = "lkjscript-linux-host"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+lkjscript-contracts = { path = "../../lkjscript-contracts" }
+lkjscript-resource = { path = "../../lkjscript-resource" }
 
 [lints.rust]
 unsafe_code = "allow"

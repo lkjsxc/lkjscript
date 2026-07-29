@@ -25,7 +25,7 @@
     "docs/decisions/memory/generation-safe-resources.md",
     "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md"
   ],
-  "unsafe_boundary": { "status": "crosses", "boundaries": ["sys.native-call"] },
+  "unsafe_boundary": { "status": "crosses", "boundaries": ["linux-host-io", "sqlite-ffi"] },
   "capability": { "status": "uses", "names": ["host I/O", "executable memory"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-vm"],

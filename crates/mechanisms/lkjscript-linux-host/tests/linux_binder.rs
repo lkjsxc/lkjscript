@@ -1,5 +1,5 @@
+use lkjscript_linux_host::{current_thread_affinity, LinuxWorkerBinder};
 use lkjscript_resource::{CpuSet, PlacementMode, WorkerBinder, WorkerId};
-use lkjscript_sys::{current_thread_affinity, LinuxWorkerBinder};
 
 #[test]
 fn kernel_managed_is_noop_and_pinned_binder_reads_back_exactly(

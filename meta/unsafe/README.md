@@ -24,8 +24,10 @@ The relation is bidirectionally exact:
 - every registered path is a regular Rust file containing an `unsafe` token.
 
 A boundary may be located outside `lkjscript-sys` after architecture and safe
-caller-contract review. The Current registry contains only inherited
-`lkjscript-sys` files; this slice moves no unsafe code.
+caller-contract review. The Current registry confines executable and native
+runtime files to `lkjscript-executable`, the Linux affinity ABI to
+`lkjscript-linux-host`, residual host/SQLite files to `lkjscript-sys`, and peer
+identity to `lkjscript-host`.
 
 ## Command
 

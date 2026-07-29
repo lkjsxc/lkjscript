@@ -10,29 +10,33 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 ## Crate Graph
 
 ```text
-lkjscript-ir      lkjscript-core      lkjscript-native
-      ^                 ^                    ^
-      |                 |                    |
-      +--- compiler ----+--- lkjscript-jit --+--- lkjscript-sys
-               ^                   ^                    ^
-               |                   |                    |
-               +------ app --------+------ vm ----------+
-               |
-               +------ xtask
+jit -> executable -> native -> contracts
+ |         app -> linux-host -> contracts + resource
+ |          |                       |
+ +-> ir + core + resource           +-> core
+
+vm -> core + host + jit + sys
+runtime -> contracts + core + host + vm
+app -> contracts + core + compiler + ir + host + jit + linux-host + resource + runtime + vm
 ```
 
-The actual product dependency edges are:
+The exact internal product dependency edges are:
 
-- `lkjscript-ir` and `lkjscript-native` have no dependencies
-- `lkjscript-compiler -> lkjscript-ir + lkjscript-core`
-- `lkjscript-sys -> lkjscript-native`
-- `lkjscript-jit -> ir + core + native + sys`
-- `lkjscript-vm -> core + jit + sys`
-- `lkjscript-app -> compiler + ir + core + jit + vm`
-- `lkjscript-xtask -> compiler + core`
+- `lkjscript-contracts`, `lkjscript-host`, and `lkjscript-sys` have no dependencies;
+- `lkjscript-core -> contracts`; `lkjscript-native -> contracts`;
+- `lkjscript-resource -> contracts + core`; `lkjscript-ir -> contracts + core + resource`;
+- `lkjscript-compiler -> contracts + core + ir`;
+- `lkjscript-executable -> native`;
+- `lkjscript-linux-host -> contracts + resource`;
+- `lkjscript-jit -> core + executable + ir + native + resource`;
+- `lkjscript-vm -> core + host + jit + sys`;
+- `lkjscript-runtime -> contracts + core + host + vm`;
+- `lkjscript-database -> host`;
+- `lkjscript-app -> contracts + core + compiler + ir + host + jit + linux-host + resource + runtime + vm`;
+- `lkjscript-xtask -> contracts + compiler + core`.
 
-The app test target also uses `lkjscript-ir` for evaluator/VM differential
-checks. No workspace crate has a third-party Rust dependency.
+The app test target additionally uses `lkjscript-native`. No workspace crate has
+a third-party Rust dependency.
 ## Ownership Map
 
 | Concern | Primary location | Entry symbols |
@@ -52,7 +56,9 @@ checks. No workspace crate has a third-party Rust dependency.
 | VM loop | `crates/lkjscript-vm/src/run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-core/src/gc/` | pure session-owned non-reusing stable-index `GcHeap`, transactional estimated-byte-accounted mutation, transitive snapshots, bounded counters/collection policy, VM and forced-JIT use | <!-- LKJ-EXACT-DATA -->
 | Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
-| Linux FFI and W^X | `crates/lkjscript-sys/src/` | owned file/socket/time/ioctl wrappers, safe bounded executable installation/invocation, private raw active-frame chain, copied typed-root service callback | <!-- LKJ-EXACT-DATA -->
+| Executable/native runtime mechanisms | `crates/mechanisms/lkjscript-executable/src/` | safe bounded W^X installation/invocation, private active-frame chain, typed-root and island callbacks | <!-- LKJ-EXACT-DATA -->
+| Linux topology/affinity mechanisms | `crates/mechanisms/lkjscript-linux-host/src/` | bounded topology and scheduler observation, checked affinity and worker binding | <!-- LKJ-EXACT-DATA -->
+| Residual host and SQLite mechanisms | `crates/lkjscript-sys/src/` | owned file/path/socket/time/poll/random/terminal wrappers and SQLite FFI | <!-- LKJ-EXACT-DATA -->
 | Repository gates | `crates/lkjscript-xtask/src/` | `quiet verify`, source/tree/doc checks |
 | Language library | `src/std/` | imported `std/...` definitions |
 | Validation package | `src/lib/lkjedit/` | editor state and control loop |

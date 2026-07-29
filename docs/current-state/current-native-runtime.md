@@ -34,22 +34,22 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   transitional `buf`, product, list, option, result, and monomorphic host-independent enum
   semantics and direct recursive SCC groups to `lkjscript-native`, installs
   bounded owned non-Send code objects through
-  `lkjscript-sys`, and actually invokes generated System V AMD64 entries;
+  `lkjscript-executable`, and actually invokes generated System V AMD64 entries;
   scalar/direct native behavior stays unboxed and unchanged
 - Native runtime ABI: semantic/runtime versions remain 1 and native canonical native contract is
   required. Enum-identified `EnterFunctionV1` and `PollV1` calls record entries
   and enforce cooperative fuel/deadlines; generated canonical native contract prologues call the
   encoder-owned `ReserveFrameV1` after only minimal ABI setup and before frame
-  subtraction/initialization. Sys validates descriptor bytes, configured
+  subtraction/initialization. The executable crate validates descriptor bytes, configured
   aggregate/per-frame limits, active-frame capacity, the exact configured
   active value/home/root budget, and guarded current pthread stack bounds. The
-  sys invocation caches immutable current-thread stack bounds once, then checks
+  executable invocation caches immutable current-thread stack bounds once, then checks
   each generated reservation without repeating pthread attribute queries.
   Registration itself records source-function entry and consumes the mandatory
   entry poll before body effects, avoiding two duplicate runtime calls; backedge
   polls remain explicit. Verified transitive may-collect summaries suppress caller
   publication calls for non-collecting scalar closures while retaining exact
-  empty maps. Sys tracks exact reservation/release across nested frames. Collecting calls publish
+  empty maps. The executable crate tracks exact reservation/release across nested frames. Collecting calls publish
   a dense safepoint, and every structured return/trap/exit/deadline/resource/host
   edge unregisters before status returns to the execution owner
 - Engine modes: explicit `vm`, `baseline-jit`, `optimizing-jit`, and `auto` work; ordinary `run`
@@ -96,7 +96,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   every direct/runtime call. The encoder consumes the certificate, and private
   structural image requirements prevent omitted/stale public maps from
   validating. `CollectReferenceV1` exercises exact non-empty Buf roots while
-  Poll/Enter stay non-collecting. `lkjscript-sys` alone retains raw active-frame
+  Poll/Enter stay non-collecting. `lkjscript-executable` alone retains raw active-frame
   addresses, validates the installed image/chain/maps, grows root capacity
   dynamically under an aggregate cap, copies typed roots to safe runtime
   services, writes back handles, and reports exact stack/frame/root outcomes.
@@ -105,7 +105,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   input/result/layout/allocation/store facts, including nominal product field,
   List/Option/Result payload, and enum/variant/field/layout/tag/substitution
   identities, plus arbitrary bounded typed arguments/result homes, source
-  identity, and safepoint; sys copies
+  identity, and safepoint; the executable crate copies
   values/roots into safe `GcHeap` services, writes roots back, re-materializes
   moved arguments, and writes exact results. Caller/callee chains, dead-root
   exclusion, bounds,

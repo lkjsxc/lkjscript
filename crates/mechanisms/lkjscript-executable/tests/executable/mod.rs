@@ -1,13 +1,13 @@
 #![allow(clippy::panic)]
 
+use lkjscript_executable::{
+    ExecutableInstaller, ExecutableLimitKind, ExecutableLimits, InstallError, InvocationError,
+    InvocationOutcome, NativeInvocationConfig,
+};
 use lkjscript_native::{
     encode, BackendLimits, EncodingConfig, F64Comparison, FunctionId, I64Comparison,
     ImageContracts, InstallableImage, MachinePlanBuilder, NativeValue, RuntimeCallSlot, Signature,
     SourceFunctionId, TrapCode, ValueType,
-};
-use lkjscript_sys::executable::{
-    ExecutableInstaller, ExecutableLimitKind, ExecutableLimits, InstallError, InvocationError,
-    InvocationOutcome, NativeInvocationConfig,
 };
 
 #[derive(Clone, Copy)]

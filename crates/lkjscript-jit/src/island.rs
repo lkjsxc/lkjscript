@@ -2,8 +2,8 @@ use std::num::NonZeroU64;
 
 use crate::*;
 use lkjscript_core::{ProviderId, ResourceKey, ResourceTable, ResourceTableLimits, ScopeId};
+use lkjscript_executable::NativeServiceError;
 use lkjscript_native::{CapabilityKind, NativeResource, NativeUnique, ResourceKind};
-use lkjscript_sys::executable::NativeServiceError;
 
 mod services;
 mod unique;

@@ -19,8 +19,10 @@ a self-owned, eventually JIT-fast stack.
 
 1. **No third-party Rust crates** unless an ADR explicitly allows one.
    Rust `std` / `core` remain allowed.
-2. **`unsafe` only in `lkjscript-sys`** — owned Linux-first syscall / libc
-   extern wrappers. All other crates keep `unsafe_code = "forbid"`.
+2. **`unsafe` only in registered mechanism files** — executable/native-runtime
+   mechanisms live in `lkjscript-executable`, topology/affinity in
+   `lkjscript-linux-host`, residual host/SQLite FFI in `lkjscript-sys`, and peer
+   identity in `lkjscript-host`. Safe callers keep `unsafe_code = "forbid"`.
 3. **Fat-opcode freeze** — do not add new high-level host features. New
    capability should land as `.lkjscript` under `src/std` or `src/lib`, or as
    thinner primitives after an ADR.

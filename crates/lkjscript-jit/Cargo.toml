@@ -7,10 +7,10 @@ publish.workspace = true
 
 [dependencies]
 lkjscript-core = { path = "../lkjscript-core" }
+lkjscript-executable = { path = "../mechanisms/lkjscript-executable" }
 lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-native = { path = "../lkjscript-native" }
 lkjscript-resource = { path = "../lkjscript-resource" }
-lkjscript-sys = { path = "../lkjscript-sys" }
 
 [lints]
 workspace = true

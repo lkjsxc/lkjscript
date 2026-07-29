@@ -1,14 +1,14 @@
 #![allow(clippy::panic)]
 
+use lkjscript_executable::{
+    ExecutableInstaller, ExecutableLimits, InvocationOutcome, NativeInvocationConfig,
+    NativeResourceLimitKind, NativeRoot, NativeRuntimeServices, NativeServiceError,
+};
 use lkjscript_native::{
     encode, AllocationClass, BackendLimits, EncodingConfig, FunctionId, HeapCallDescriptor,
     HeapOperation, HeapRuntimeSite, ImageContracts, InstallableImage, LayoutIdentity,
     MachinePlanBuilder, NativeReference, NativeValue, ReferenceType, RuntimeCallSlot,
     RuntimeOutcome, Signature, SourceFunctionId, StoreClass, TrapCode, ValueType,
-};
-use lkjscript_sys::executable::{
-    ExecutableInstaller, ExecutableLimits, InvocationOutcome, NativeInvocationConfig,
-    NativeResourceLimitKind, NativeRoot, NativeRuntimeServices, NativeServiceError,
 };
 
 #[derive(Clone, Copy)]

@@ -4,21 +4,21 @@
   "id": "sys",
   "root": "crates/lkjscript-sys",
   "kind": "crate",
-  "purpose": "Confine Linux host effects and unsafe executable-memory operations behind safe APIs.",
+  "purpose": "Confine residual host I/O, path, socket, terminal, time, and SQLite mechanisms.",
   "layer": "host boundary",
-  "concepts": ["executable memory", "Linux syscalls", "safe host API", "Linux resource topology", "worker affinity"],
+  "concepts": ["host I/O", "Linux syscalls", "safe host API", "SQLite FFI"],
   "facade": ["crates/lkjscript-sys/src/lib.rs"],
-  "allowed_dependencies": ["contracts", "native", "resource"],
-  "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
-  "tests": ["crates/lkjscript-sys/tests/executable.rs", "crates/lkjscript-sys/tests/linux_binder.rs", "crates/lkjscript-sys/tests/linux_host.rs", "crates/lkjscript-sys/tests/linux_host_bounds.rs", "crates/lkjscript-sys/tests/native_references.rs"],
-  "decisions": ["docs/decisions/jit/callable-baseline-jit.md", "docs/decisions/jit/native-references-and-gc-stack-maps.md"],
-  "unsafe_boundary": { "status": "confined", "boundaries": ["linux-executable-entry", "linux-executable-memory", "linux-host-io", "native-runtime-bridge", "sqlite-ffi"] },
-  "capability": { "status": "defines", "names": ["executable memory", "host I/O"] },
+  "allowed_dependencies": [],
+  "forbidden_dependencies": ["app", "compiler", "executable", "jit", "linux-host", "vm"],
+  "tests": ["crates/lkjscript-sys/src/sqlite/tests.rs"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md", "docs/decisions/capabilities/sqlite-capabilities.md"],
+  "unsafe_boundary": { "status": "confined", "boundaries": ["linux-host-io", "sqlite-ffi"] },
+  "capability": { "status": "defines", "names": ["host I/O", "SQLite FFI"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-sys"],
   "context_card": {
-    "goal": "Retain audited Linux mechanisms while callers migrate to typed host contracts.",
+    "goal": "Retain audited residual host and SQLite mechanisms behind safe APIs.",
     "interfaces": ["crates/lkjscript-sys/src/lib.rs"],
-    "invariants": ["every unsafe file is registry-mapped", "safe API upholds Rust safety"]
+    "invariants": ["every unsafe file is registry-mapped", "no executable or topology facade"]
   }
 }

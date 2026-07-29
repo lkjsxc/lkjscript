@@ -1,6 +1,6 @@
 use lkjscript_contracts::SEMANTIC_RESOURCE_PLANE_DIGEST;
+use lkjscript_linux_host::{ConfigValue, LinuxFactSource, LinuxHostSnapshot, SchedExtState};
 use lkjscript_resource::{CpuSet, PlacementMode};
-use lkjscript_sys::{ConfigValue, LinuxFactSource, LinuxHostSnapshot, SchedExtState};
 
 pub(super) fn header(schema: &str, snapshot: &LinuxHostSnapshot) -> String {
     format!(

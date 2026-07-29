@@ -21,7 +21,7 @@ process under `/proc` once before replacement. Other hosts conservatively treat
 an existing lease as live.
 
 The coordinator opens `lkjscript.control-store` before any application database.
-Its journal and snapshot carry platform revision 5, the exact
+Its journal and snapshot carry platform revision 6, the exact
 `lkjscript.runtime-control` digest, explicit little-endian widths, monotonic
 sequence, bounded key/value payloads, and full SHA-256 checksums. Commit syncs
 before fact publication. Recovery replays idempotently, rejects corruption and
@@ -90,7 +90,7 @@ manifest/cell-class mismatch rejection.
 A real process smoke built `lkjscriptd` and `lkjscript`, started the daemon,
 waited for its Unix endpoint, ran describe and status through the CLI, requested
 shutdown, joined the daemon, and observed a zero-byte journal plus a 193-byte
-durable snapshot. The latest smoke reported coordinator 904, platform revision 5,
+durable snapshot. The latest smoke reported coordinator 904, platform revision 6,
 and exact control digest `a96c48822a427343654b0c34b469feaaf8dd2b72437ed622c65e501fca524063`,
 clean previous shutdown, control sequence 2, and zero applications.
 

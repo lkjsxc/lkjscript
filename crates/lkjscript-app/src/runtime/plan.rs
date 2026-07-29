@@ -1,5 +1,5 @@
+use lkjscript_linux_host::LinuxHostSnapshot;
 use lkjscript_resource::{ExecutionResourcePlan, PlanCaps, ResourcePlanner};
-use lkjscript_sys::LinuxHostSnapshot;
 
 use super::args::PlanOptions;
 

@@ -3,11 +3,11 @@
 mod fixture;
 
 use fixture::Fixture;
-use lkjscript_resource::FactCertainty;
-use lkjscript_sys::{
+use lkjscript_linux_host::{
     current_thread_affinity, discover_linux_host, discover_linux_host_at, AffinityGuard,
     ConfigValue, SchedExtState,
 };
+use lkjscript_resource::FactCertainty;
 
 fn rich_fixture() -> std::io::Result<Fixture> {
     let fixture = Fixture::new(&[0, 1, 2, 3], "0-2", "0-2")?;

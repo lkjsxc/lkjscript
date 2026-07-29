@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::process::ExitCode;
 
 use lkjscript_contracts::SEMANTIC_RESOURCE_PLANE_DIGEST;
-use lkjscript_sys::{discover_linux_host, ConfigValue, LinuxHostSnapshot};
+use lkjscript_linux_host::{discover_linux_host, ConfigValue, LinuxHostSnapshot};
 
 mod args;
 mod json;

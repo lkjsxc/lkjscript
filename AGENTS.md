@@ -53,8 +53,9 @@ support claim.
 7. `[machine: LKJ-UNSAFE-BOUNDARY, Rust lint, and crate graph]` Keep pure
    compiler/runtime state apart from host effects. Every unsafe-containing Rust
    file has one stable registry boundary and reviewed safe caller contract.
-   Current entries include the reviewed host peer-identity boundary and inherited
-   `lkjscript-sys` mechanisms; no catch-all unsafe crate is privileged.
+   Current entries include the reviewed host peer-identity boundary, narrow
+   executable and Linux-host mechanisms, and residual `lkjscript-sys` host/SQLite
+   mechanisms; no catch-all unsafe crate is privileged.
 8. `[verified: evidence review]` Never claim an unrun command. Record commit,
    environment, exact command, result, and explicit untested gates.
 9. `[verified: focused tests]` Delete a test only when equal or stronger focused
@@ -95,35 +96,36 @@ support claim.
 4. [Content-addressed contracts](docs/decisions/platform/content-addressed-contracts.md)
 5. [Platform revision](docs/decisions/platform/runtime-foundation/platform-revision.md)
 6. [OS-resident runtime system](docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md)
-7. [AI-native platform](docs/decisions/platform/ai-native-platform.md)
-8. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
-9. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
-10. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
-11. [Semantic resource plane](docs/decisions/platform/semantic-resource-plane.md)
-12. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
-13. [Language](docs/language/README.md)
-14. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
-15. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
-16. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
-17. [Semantic core](docs/decisions/semantics/semantic-core.md)
-18. [Equality](docs/decisions/semantics/equality-families.md)
-19. [Products](docs/decisions/semantics/immutable-nominal-products.md)
-20. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
-21. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
-22. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
-23. [Authoritative memory plan](docs/decisions/memory/authoritative-memory-plan.md)
-24. [Deterministic drop](docs/decisions/memory/deterministic-drop.md)
-25. [Collector-free value island](docs/decisions/memory/collector-free-value-island.md)
-26. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
-27. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
-28. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
-29. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
-30. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
-31. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
-32. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
-33. [Agent state](docs/decisions/platform/agent-work-state.md)
-34. [Verification](docs/operations/verification.md)
-35. [Vision and evidence](docs/vision/README.md)
+7. [Unsafe mechanism crates](docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md)
+8. [AI-native platform](docs/decisions/platform/ai-native-platform.md)
+9. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
+10. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
+11. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
+12. [Semantic resource plane](docs/decisions/platform/semantic-resource-plane.md)
+13. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
+14. [Language](docs/language/README.md)
+15. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
+16. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
+17. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
+18. [Semantic core](docs/decisions/semantics/semantic-core.md)
+19. [Equality](docs/decisions/semantics/equality-families.md)
+20. [Products](docs/decisions/semantics/immutable-nominal-products.md)
+21. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
+22. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
+23. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
+24. [Authoritative memory plan](docs/decisions/memory/authoritative-memory-plan.md)
+25. [Deterministic drop](docs/decisions/memory/deterministic-drop.md)
+26. [Collector-free value island](docs/decisions/memory/collector-free-value-island.md)
+27. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
+28. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
+29. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
+30. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
+31. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
+32. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
+33. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
+34. [Agent state](docs/decisions/platform/agent-work-state.md)
+35. [Verification](docs/operations/verification.md)
+36. [Vision and evidence](docs/vision/README.md)
 
 ## Development Loop
 

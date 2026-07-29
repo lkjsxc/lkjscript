@@ -16,7 +16,7 @@ Frame and collection-dispatch calls are enum identified; objects with any
 mismatched contract are rejected rather than reinterpreted.
 
 `lkjscript-native` owns pure typed handle, frame-home, liveness, exact-map, and
-bounded generic heap-site metadata. `lkjscript-sys` alone retains installed
+bounded generic heap-site metadata. `lkjscript-executable` alone retains installed
 metadata beside the active invocation, holds raw generated-frame addresses,
 validates every active map and heap argument/result home, and copies typed
 values/handles into the safe `NativeRuntimeServices` callback.
@@ -112,7 +112,7 @@ unwinding heuristics and conservative stack walking are not semantic root
 mechanisms.
 
 Any raw stack address needed to implement registration and root access remains
-inside `lkjscript-sys`. Safe callers receive only owned descriptors, bounded
+inside `lkjscript-executable`. Safe callers receive only owned descriptors, bounded
 invocation objects, and structured outcomes.
 ## Stack Maps
 

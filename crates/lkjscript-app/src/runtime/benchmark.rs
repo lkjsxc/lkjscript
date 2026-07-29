@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::time::Instant;
 
+use lkjscript_linux_host::{discover_linux_host, LinuxWorkerBinder};
 use lkjscript_resource::*;
-use lkjscript_sys::{discover_linux_host, LinuxWorkerBinder};
 
 #[path = "benchmark/graph.rs"]
 mod graph;

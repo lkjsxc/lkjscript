@@ -25,7 +25,7 @@ A callable code object records at least:
 Linux x86-64 executable memory follows W^X: allocate writable, emit and
 relocate, transition to executable and non-writable, then execute. Pages are
 never writable and executable simultaneously. Unsafe OS interaction remains in
-`lkjscript-sys`; its safe API upholds Rust safety for every caller.
+`lkjscript-executable`; its safe API upholds Rust safety for every caller.
 
 The code cache has configurable limits for executable bytes, code-object count,
 compilation time, active or queued work, and metadata bytes. Start with bounded

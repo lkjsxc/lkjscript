@@ -60,8 +60,11 @@ bounded `UniqueStore` and loan table. Mixed resource/unique groups reject before
 effects until that composition is independently verified.
 
 Linux x86-64 callable baseline and forced proof-optimizing claims require real
-synchronous generated entry from verified SSA. Exact Current coverage and
-historical evidence remain in [Current State](../current-state.md).
+synchronous generated entry from verified SSA. JIT reaches that mechanism only
+through `lkjscript-executable`; app topology and binder paths reach
+`lkjscript-linux-host` directly. No compatibility alias remains in sys. Exact
+Current coverage and historical evidence remain in [Current State](../current-state.md).
+Non-Linux execution remains untested and is not a Current support claim.
 
 ## Repository-Intelligence Flow
 
@@ -82,6 +85,12 @@ and task snapshots are written under `target/`.
 
 The accepted ownership boundaries are:
 
+- `lkjscript-executable`: safe facade over registered W^X installation,
+  synchronous generated entry, native-reference frames, and runtime bridging;
+- `lkjscript-linux-host`: safe facade over bounded Linux topology, scheduler,
+  affinity, and worker-binding mechanisms;
+- residual `lkjscript-sys`: host I/O, path, socket, terminal, random, poll, time,
+  and SQLite FFI used by the VM, with no executable or Linux-host re-exports;
 - `lkjscript-xtask`: topology policy, strict manifests, rule IDs, link checks,
   canonical audit/graph construction, and repository fixtures;
 - Semantic Source/compiler boundary: source/entity/node/hole identity, derived

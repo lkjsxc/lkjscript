@@ -3,7 +3,7 @@
 mod fixture;
 
 use fixture::Fixture;
-use lkjscript_sys::{discover_linux_host_at, ConfigValue, LinuxFactSource, SchedExtState};
+use lkjscript_linux_host::{discover_linux_host_at, ConfigValue, LinuxFactSource, SchedExtState};
 
 #[test]
 fn rejects_malformed_oversize_and_affinity_mismatch_files() -> Result<(), Box<dyn std::error::Error>>

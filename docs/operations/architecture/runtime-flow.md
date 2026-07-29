@@ -42,7 +42,7 @@ The current native flow is:
 forced main or hot scalar VM function entry
   -> verified scalar or host-independent reference eligibility and reachable SCC group
   -> synchronous typed-SSA lowering at a safepoint
-  -> bounded W^X callable canonical native contract baseline code object
+  -> bounded W^X callable canonical native contract code object via lkjscript-executable
   -> one invocation-time pthread stack-bounds query
   -> cached descriptor/budget/bounds frame reservation before each stack subtraction
   -> initialized registered frame and verifier-certified exact scalar or typed-reference call map

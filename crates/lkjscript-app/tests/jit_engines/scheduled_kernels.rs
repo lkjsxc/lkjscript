@@ -2,8 +2,8 @@ use crate::canonical::{compile, f64_loop};
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::VerifiedProgram;
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig, JitExecution};
+use lkjscript_linux_host::{discover_linux_host, LinuxWorkerBinder};
 use lkjscript_resource::*;
-use lkjscript_sys::{discover_linux_host, LinuxWorkerBinder};
 
 struct KernelExecutor<'a> {
     scalar: &'a VerifiedProgram,

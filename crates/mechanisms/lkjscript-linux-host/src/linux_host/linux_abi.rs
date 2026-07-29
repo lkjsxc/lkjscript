@@ -1,6 +1,8 @@
 //! The complete unsafe Linux affinity ABI boundary.
 
-use crate::fd::errno;
+fn errno() -> i32 {
+    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
+}
 
 extern "C" {
     fn getpid() -> i32;

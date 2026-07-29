@@ -42,13 +42,11 @@ impl<'a> NativeCallState<'a> {
         let (native_stack_low, native_stack_high) =
             platform::native_stack_bounds().unwrap_or((0, 0));
         let (deadline_ms, status) = match config.wall_time {
-            Some(duration) => match crate::now_ms_monotonic() {
-                Ok(now) => {
-                    let delta = i64::try_from(duration.as_millis()).unwrap_or(i64::MAX);
-                    (now.saturating_add(delta), 0)
-                }
-                Err(_) => (-1, 5),
-            },
+            Some(duration) => {
+                let now = crate::now_ms_monotonic();
+                let delta = i64::try_from(duration.as_millis()).unwrap_or(i64::MAX);
+                (now.saturating_add(delta), 0)
+            }
             None => (-1, 0),
         };
         Ok(Self {
@@ -101,12 +99,8 @@ impl<'a> NativeCallState<'a> {
             return;
         }
         self.poll_fuel_remaining -= 1;
-        if self.deadline_ms >= 0 {
-            match crate::now_ms_monotonic() {
-                Ok(now) if now >= self.deadline_ms => self.status = 3,
-                Ok(_) => {}
-                Err(_) => self.status = 5,
-            }
+        if self.deadline_ms >= 0 && crate::now_ms_monotonic() >= self.deadline_ms {
+            self.status = 3;
         }
     }
 }

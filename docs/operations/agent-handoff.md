@@ -43,6 +43,14 @@ scheduled native kernels, shared sealed-image invocation, and retained policy
 evidence. Owner compute/kernel managed is the runtime default; proof discovery
 remains sequential by default.
 
+Unsafe mechanism ownership is decomposed without aliases. `lkjscript-executable`
+owns executable installation, generated entry, native references, and runtime
+bridging and is consumed directly by JIT. `lkjscript-linux-host` owns bounded
+Linux topology, scheduler, affinity, and binding and is consumed directly by the
+app. Residual `lkjscript-sys` retains only host I/O/path/socket/tty/random/poll/
+time and SQLite FFI used by the VM. Linux x86-64 remains Current; non-Linux
+execution remains untested.
+
 The Linux x86-64 runtime foundation now has real foreground `lkjscriptd`, an
 exclusive state-directory lease, durable database-independent journal/snapshot,
 kernel-authenticated Unix control, describe/status/stop CLI, and deterministic
@@ -133,7 +141,7 @@ resources remain absent.
 ## Accepted Next Sequence
 
 1. Complete file, stream, terminal, network, and database VM provider cutover,
-   then split remaining topology, executable-memory, SQLite, and native calls.
+   then separate residual SQLite and host I/O mechanisms where evidence supports it.
 2. Add authenticated session brokers and native GUI/accessibility applications
    without presenting UI from system service contexts.
 3. Integrate database tenants, transactions, cancellation, buffer pages, and

@@ -61,7 +61,9 @@ docker compose -f meta/docker-compose.yml --profile verify run --build --rm veri
 - `crates/lkjscript-vm`: interpreter, heap, host operations, and auto entry transfer
 - `crates/lkjscript-native`: source-independent closed Linux x86-64 scalar foundation
 - `crates/lkjscript-jit`: verified scalar SSA adapter, code objects, and tier state
-- `crates/lkjscript-sys`: owned Linux FFI/W^X boundary and the only unsafe Rust
+- `crates/mechanisms/lkjscript-executable`: reviewed W^X, generated-entry, and native-runtime mechanisms
+- `crates/mechanisms/lkjscript-linux-host`: reviewed Linux topology, scheduler, and affinity mechanisms
+- `crates/lkjscript-sys`: residual reviewed host I/O, path, socket, tty, random, poll, time, and SQLite FFI
 - `crates/lkjscript-app`: command-line product
 - `crates/lkjscript-xtask`: repository honesty gates
 - `src/std`: language-level standard library

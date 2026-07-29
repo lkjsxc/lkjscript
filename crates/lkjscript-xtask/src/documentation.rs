@@ -25,6 +25,7 @@ pub fn check(root: &Path) -> i32 {
         "docs/decisions/README.md",
         "docs/decisions/platform/ai-native-platform.md",
         "docs/decisions/platform/bounded-repository-topology.md",
+        "docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md",
         "docs/decisions/platform/repository-intelligence-graph.md",
         "docs/decisions/platform/agent-work-state.md",
         "docs/decisions/platform/runtime-foundation/platform-revision.md",

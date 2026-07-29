@@ -29,10 +29,10 @@
     "host",
     "ir",
     "jit",
+    "linux-host",
     "native",
     "resource",
     "runtime",
-    "sys",
     "vm"
   ],
   "forbidden_dependencies": [
@@ -48,6 +48,7 @@
     "docs/decisions/execution/execution-portfolio.md",
     "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
+    "docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md",
     "docs/decisions/platform/modules-and-packages.md",
     "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md",
     "docs/decisions/platform/runtime-foundation/isolated-process-cells.md",

@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
+  "id": "executable",
+  "root": "crates/mechanisms/lkjscript-executable",
+  "kind": "crate",
+  "purpose": "Install verified native images and invoke generated entries behind safe APIs.",
+  "layer": "native mechanism",
+  "concepts": ["executable memory", "generated entry", "native runtime bridge"],
+  "facade": ["crates/mechanisms/lkjscript-executable/README.md", "crates/mechanisms/lkjscript-executable/src/lib.rs"],
+  "allowed_dependencies": ["native"],
+  "forbidden_dependencies": ["app", "compiler", "jit", "linux-host", "sys", "vm"],
+  "tests": ["crates/mechanisms/lkjscript-executable/tests/executable.rs", "crates/mechanisms/lkjscript-executable/tests/native_references.rs"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/unsafe-mechanism-crates.md", "docs/decisions/jit/callable-baseline-jit.md"],
+  "unsafe_boundary": { "status": "confined", "boundaries": ["linux-executable-entry", "linux-executable-memory", "native-runtime-bridge"] },
+  "capability": { "status": "defines", "names": ["executable memory"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-executable"],
+  "context_card": {
+    "goal": "Keep executable effects separate from native planning and residual host I/O.",
+    "interfaces": ["crates/mechanisms/lkjscript-executable/src/lib.rs"],
+    "invariants": ["verified native image input", "bounded W^X mapping", "synchronous generated entry"]
+  }
+}

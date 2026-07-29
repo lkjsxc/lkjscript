@@ -87,7 +87,7 @@ Pure scalar operations remain in generated code. At least one versioned runtime
 call is exercised by the completion workload.
 ## Executable Memory, Code Objects, And GC
 
-Executable memory is owned by safe `lkjscript-sys` wrappers whose safe input
+Executable memory is owned by safe `lkjscript-executable` wrappers whose safe input
 cannot express arbitrary unsafe machine code. Installation is strictly:
 
 ```text

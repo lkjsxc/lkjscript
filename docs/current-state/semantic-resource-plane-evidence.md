@@ -19,7 +19,7 @@ Accepted Target in the semantic resource plane contract.
   These observations do not change task legality or deterministic result merge.
 - Linux discovery intersects online CPUs, process/thread affinity, effective
   cpuset, and cgroup quota. It reports uncertain or unavailable facts instead of
-  inventing values. Affinity changes use safe wrappers in `lkjscript-sys` and
+  inventing values. Affinity changes use safe wrappers in `lkjscript-linux-host` and
   require readback.
 - The CLI exposes deterministic JSON topology, host scheduler, and resource-plan
   evidence for kernel-managed, CPU-pinned, and LLC-domain-masked plans.

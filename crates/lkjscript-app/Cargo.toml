@@ -28,9 +28,9 @@ lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-host = { path = "../lkjscript-host" }
 lkjscript-jit = { path = "../lkjscript-jit" }
+lkjscript-linux-host = { path = "../mechanisms/lkjscript-linux-host" }
 lkjscript-resource = { path = "../lkjscript-resource" }
 lkjscript-runtime = { path = "../lkjscript-runtime" }
-lkjscript-sys = { path = "../lkjscript-sys" }
 lkjscript-vm = { path = "../lkjscript-vm" }
 
 

@@ -1,9 +1,12 @@
 [package]
-name = "lkjscript-sys"
+name = "lkjscript-executable"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+lkjscript-native = { path = "../../lkjscript-native" }
 
 [lints.rust]
 unsafe_code = "allow"

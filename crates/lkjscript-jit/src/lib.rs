@@ -17,6 +17,11 @@ use lkjscript_core::{
     ResourceLimitKind, Trap, UniqueKeyWord, UniqueStore, UniqueStoreError, UniqueStoreId,
     UniqueStoreLimits, Value, MAX_BUFFER_BYTES, MAX_LIST_EQUAL_STEPS,
 };
+use lkjscript_executable::{
+    ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
+    InvocationOutcome, InvocationReport, NativeInvocationConfig, NativeResourceLimitKind,
+    NativeRoot, NativeRuntimeServices, NativeServiceError,
+};
 use lkjscript_ir::{
     optimize, optimize_scheduled, BytecodeLinkMetadata, OptimizationCertificate,
     OptimizationFailureCode, OptimizationLimits, OptimizationStats, Signature as IrSignature,
@@ -26,11 +31,6 @@ use lkjscript_native::{
     BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation, HeapRuntimeSite,
     ImageContracts, LoanType, NativeLoan, NativeUnique, OutcomeMapEntry, ReferenceType, Relocation,
     RuntimeCallSlot, Safepoint, SourceMapEntry, TrapMapEntry,
-};
-use lkjscript_sys::executable::{
-    ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
-    InvocationOutcome, InvocationReport, NativeInvocationConfig, NativeResourceLimitKind,
-    NativeRoot, NativeRuntimeServices, NativeServiceError,
 };
 
 pub use lkjscript_ir::FunctionId;

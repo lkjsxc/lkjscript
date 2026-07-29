@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
+use lkjscript_linux_host::LinuxHostSnapshot;
 use lkjscript_resource::ExecutionResourcePlan;
-use lkjscript_sys::LinuxHostSnapshot;
 
 use super::json_support::*;
 

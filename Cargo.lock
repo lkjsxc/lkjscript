@@ -18,10 +18,10 @@ dependencies = [
  "lkjscript-host",
  "lkjscript-ir",
  "lkjscript-jit",
+ "lkjscript-linux-host",
  "lkjscript-native",
  "lkjscript-resource",
  "lkjscript-runtime",
- "lkjscript-sys",
  "lkjscript-vm",
 ]
 
@@ -55,6 +55,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lkjscript-executable"
+version = "0.0.0"
+dependencies = [
+ "lkjscript-native",
+]
+
+[[package]]
 name = "lkjscript-host"
 version = "0.0.0"
 
@@ -72,10 +79,18 @@ name = "lkjscript-jit"
 version = "0.0.0"
 dependencies = [
  "lkjscript-core",
+ "lkjscript-executable",
  "lkjscript-ir",
  "lkjscript-native",
  "lkjscript-resource",
- "lkjscript-sys",
+]
+
+[[package]]
+name = "lkjscript-linux-host"
+version = "0.0.0"
+dependencies = [
+ "lkjscript-contracts",
+ "lkjscript-resource",
 ]
 
 [[package]]
@@ -106,11 +121,6 @@ dependencies = [
 [[package]]
 name = "lkjscript-sys"
 version = "0.0.0"
-dependencies = [
- "lkjscript-contracts",
- "lkjscript-native",
- "lkjscript-resource",
-]
 
 [[package]]
 name = "lkjscript-vm"
