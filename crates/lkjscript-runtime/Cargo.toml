@@ -1,9 +1,9 @@
 [package]
 name = "lkjscript-runtime"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
-publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [dependencies]
 lkjscript-core = { path = "../lkjscript-core" }
@@ -18,5 +18,3 @@ unwrap_used = "deny"
 
 [lints.rust]
 unsafe_code = "forbid"
-
-[workspace]

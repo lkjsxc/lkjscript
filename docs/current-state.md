@@ -61,8 +61,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   observation is either exact bytes or strict UTF-8. Filesystem and SQLite
   operations reject `string` pathname operands.
 ## Modules and local packages
-- Every source file is a module identified only by its package-root-relative
-  UTF-8 path.
+- Every source file is a module identified only by its package-root-relative UTF-8 path.
 - Declarations are private by default. The `public` field is explicit; each
   `import/` records exact module paths and sorted declaration lists. Wildcards,
   transitive visibility, ambient root search, dot-relative paths, collisions,
@@ -151,6 +150,11 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - The measured semantic resource runtime, Linux observation, owner homes,
   scheduled optimizer/native integrations, and selected defaults are Current.
   See [exact evidence](current-state/semantic-resource-plane-evidence.md).
+- Experimental safe-Rust host, multi-app node, and database crates provide
+  composable providers, private capability-free VMs, generation-safe lifecycle,
+  fair bounded admission, immutable leases, tenant ordering, single-writer
+  serializability, snapshots, checksummed WAL, recovery, and checkpoints. They
+  are not source surfaces, a persistent node, VM host cutover, or SQLite replacement.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.
@@ -182,19 +186,15 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - the semantic resource plane beyond its Current runtime slice: elastic/adaptive
   locality, blocking pools, real multi-domain adoption, and source structured
   concurrency;
-- portability acceptance beyond Linux x86-64.
-
-Immutable `bytes` is executable in the compiler, evaluator, validated bytecode,
-VM, forced baseline, and forced proof tiers for the exact listed subset. The
-complete island remains Accepted until path, owned resources, transitional
-legacy removal, and the other listed island requirements are complete.
+- portability beyond Linux x86-64; host/database build for `wasm32-wasip1`
+  and a fake-storage recovery probe runs, but VM/node do not build there;
+Immutable `bytes` executes in all four tiers for the exact listed subset. The
+complete island remains Accepted until the other listed requirements are complete.
 ## Verification authority
 The canonical local gate is:
-
 ```sh
 cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
-
 Runtime, forced-tier, Docker, retained-result, Miri, sanitizer, fuzz, and
 performance gates are separate evidence. Exact commands, commit, environment,
 result, and untested gates must be reported; an unrun gate is never implied.

@@ -64,8 +64,11 @@ impl ApplicationManifest {
                 "name must contain 1..=64 bytes",
             ));
         }
-        if matches!(&self.scope, DeploymentScope::PerContainer { container } if container.is_empty() || container.len() > 128)
-        {
+        if matches!(
+            &self.scope,
+            DeploymentScope::PerContainer { container }
+                if container.is_empty() || container.len() > 128
+        ) {
             return Err(RuntimeError::InvalidManifest(
                 "container identity must contain 1..=128 bytes",
             ));

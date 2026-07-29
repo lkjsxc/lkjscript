@@ -12,13 +12,13 @@
   "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
   "tests": ["crates/lkjscript-sys/tests/executable.rs", "crates/lkjscript-sys/tests/linux_binder.rs", "crates/lkjscript-sys/tests/linux_host.rs", "crates/lkjscript-sys/tests/linux_host_bounds.rs", "crates/lkjscript-sys/tests/native_references.rs"],
   "decisions": ["docs/decisions/jit/callable-baseline-jit.md", "docs/decisions/jit/native-references-and-gc-stack-maps.md"],
-  "unsafe_boundary": { "status": "confined", "boundaries": ["sys.executable-memory", "sys.linux-affinity", "sys.native-call"] },
+  "unsafe_boundary": { "status": "confined", "boundaries": ["linux-executable-entry", "linux-executable-memory", "linux-host-io", "native-runtime-bridge", "sqlite-ffi"] },
   "capability": { "status": "defines", "names": ["executable memory", "host I/O"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-sys"],
   "context_card": {
-    "goal": "Keep all unsafe Rust confined while preserving safe caller contracts.",
+    "goal": "Retain audited Linux mechanisms while callers migrate to typed host contracts.",
     "interfaces": ["crates/lkjscript-sys/src/lib.rs"],
-    "invariants": ["unsafe is confined here", "safe API upholds Rust safety"]
+    "invariants": ["every unsafe file is registry-mapped", "safe API upholds Rust safety"]
   }
 }

@@ -31,7 +31,8 @@ fn main() -> ExitCode {
         Some("structure") => structure::run(&root, &args[1..]),
         _ => {
             eprintln!(
-                "usage: lkjscript-xtask [agent ...|check-docs|check-tree|check-sources|check-unsafe|quiet ...|structure ...]"
+                "usage: lkjscript-xtask \
+                 [agent ...|check-docs|check-tree|check-sources|check-unsafe|quiet ...|structure ...]"
             );
             2
         }

@@ -2,8 +2,9 @@
 
 ## Status
 
-**Accepted Contract.** The runtime node and cells are not Current. This cycle
-may implement only bounded lifecycle and immutable-image-sharing experiments.
+**Accepted Contract with Experimental Implementation.** The capability-free
+in-process node slice is implemented and tested; no persistent node, local
+control transport, process cell, capability-bearing app, or support claim is Current.
 
 ## Current Inherited State
 
@@ -53,10 +54,13 @@ The design principle is adopted from:
 Their object models, collectors, archive formats, and process assumptions are
 rejected as lkjscript contracts.
 
-## This Cycle's Experiment
+## Implemented Experiment
 
-A successful probe demonstrates exact lifecycle validation, bounded supervision,
-deterministic cancellation order, immutable image identity checks, zero mutable
-cross-cell aliases, and complete resource-ledger discharge. It does not claim
-multi-process distribution, automatic recovery, rolling upgrade, hot code
-loading, or portability acceptance.
+`lkjscript-runtime` installs, starts, stops, restarts, removes, lists, and invokes
+private capability-free VM instances. Generation-safe IDs reject stale calls;
+bounded tickets prevent admission starvation; per-app quotas and metrics remain
+private; immutable validated chunks use live leases; and concurrent tests prove
+one app trap leaves another runnable. Cancellation blocks new admission but does
+not interrupt an executing VM. Restart policy is metadata, not automatic
+supervision. Process cells, persistence, local control, upgrades, database
+attachment, and portability acceptance remain unimplemented.

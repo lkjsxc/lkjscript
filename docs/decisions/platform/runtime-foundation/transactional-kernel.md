@@ -2,9 +2,9 @@
 
 ## Status
 
-**Accepted Contract.** No transactional runtime kernel is Current. A bounded,
-deterministic, in-memory prototype is experimental this cycle. Persistent and
-high-performance engines remain candidates, not dependencies.
+**Accepted Contract with Experimental Implementation.** A bounded safe-Rust
+ordered kernel is durable and tested, but it is not yet a node service, source
+capability, relational engine, SQLite replacement, or Current public format.
 
 ## Current Inherited State
 
@@ -53,10 +53,15 @@ this cycle's control-plane kernel because lifecycle and small ordered metadata
 transactions need deterministic latency and simple conflict evidence before
 batch throughput. Deferral does not reject future vectorized query operators.
 
-## Experimental Acceptance
+## Implemented Experiment
 
-The prototype passes only if exact and limit-plus-one fixtures cover all bounds,
-conflicts and injected failures replay byte-identically, abort publishes no
-state, and upper layers cannot bypass the ordered transaction API. Performance
-adoption additionally requires comparison with complete alternatives. Until
-then, no persistent format or public API is Current.
+`lkjscript-database` provides tenant-prefixed byte ordering, snapshot reads, one
+serialized writer, atomic commit/abort, get/put/delete/range, bounded logical
+write buffering, canonical little-endian checksummed WAL frames, sync-before-
+success, replay, truncated-tail handling, uncommitted discard, and atomic
+checkpoints over `DurableStorage`. Fake storage injects short write, disk full,
+sync failure, crash, truncation, and tail corruption. Model and reopen tests pass;
+a create/commit/checkpoint/reopen/read probe executes under `wasm32-wasip1`.
+There is no page-oriented B+tree, MVCC writer concurrency, node-owned page cache,
+node tenant lifecycle, migration, or fair SQLite benchmark. The format and API
+remain experimental until those missing guarantees and comparisons pass.

@@ -43,6 +43,12 @@ scheduled native kernels, shared sealed-image invocation, and retained policy
 evidence. Owner compute/kernel managed is the runtime default; proof discovery
 remains sequential by default.
 
+Experimental safe-Rust crates now provide typed portable host/storage contracts,
+a concurrent capability-free VM node slice, and a durable multi-tenant ordered
+kernel with snapshot readers, one serialized writer, checksummed WAL, replay,
+and checkpoints. They are not source APIs, a persistent control node, process
+cells, a VM host cutover, relational storage, or a SQLite replacement.
+
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
 homes are Current substrate. They are not selected by HIR or an execution tier.
@@ -116,14 +122,16 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Continue evaluator breadth and forced-native owned-resource execution beyond
-   borrowed standard input.
-2. Verify aggregate-affine transfer/drop, migrate path and host byte boundaries,
-   and remove transitional `buf` atomically without aliases.
-3. Integrate structural domains through HIR/SSA and all tiers, run the no-RC
-   experiment, and ratchet traced families to zero before removing `GcHeap`.
-4. Validate cross-LLC/NUMA resource policies on real multi-domain hardware
-   before considering elastic locality or adaptive switching Current.
+1. Cut VM host effects from `lkjscript-sys` to typed providers, then split the
+   remaining topology, executable-memory, SQLite, and native-call mechanisms.
+2. Add persistent local control and authenticated process cells before admitting
+   untrusted or capability-bearing multi-app execution.
+3. Integrate database tenants, transactions, cancellation, buffer pages, and
+   checkpoints into node lifecycle before SQLite migration or benchmarks.
+4. Continue aggregate/path migration and the six-family tracing ratchet without
+   weakening existing memory, resource, forced-tier, or Linux x86-64 evidence.
+5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the current
+   WASI database probe is not platform acceptance.
 
 This order is an implementation contract, not a Current capability claim.
 

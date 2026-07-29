@@ -11,7 +11,7 @@
   "allowed_dependencies": ["host"],
   "forbidden_dependencies": ["app", "compiler", "contracts", "core", "ir", "jit", "native", "resource", "sys", "vm"],
   "tests": ["crates/lkjscript-database/tests/model.rs", "crates/lkjscript-database/tests/recovery.rs", "crates/lkjscript-database/tests/transactions.rs"],
-  "decisions": ["docs/operations/architecture.md"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/transactional-kernel.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "uses", "names": ["durable-storage"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },

@@ -1,0 +1,62 @@
+{
+  "schema": "lkjscript.target-matrix",
+  "contract": "5d4c139fd67c33f6f929c3584bceec6f3fdd2e32ac27365a3eb9422abdb3a242",
+  "targets": [
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "instruction_set": "x86-64",
+      "operating_system_abi": "linux-gnu",
+      "status": "accepted",
+      "vm": "executed",
+      "native_backend": "owned-baseline-and-proof-executed",
+      "node": "experimental-in-process-slice",
+      "evidence": [
+        "baseline gates passed at 3971756d29e01fa8f8ea4abd95a2e311df152099"
+      ]
+    },
+    {
+      "target": "aarch64-unknown-linux-gnu",
+      "instruction_set": "aarch64",
+      "operating_system_abi": "linux-gnu",
+      "status": "unsupported",
+      "vm": "not-built-or-executed",
+      "native_backend": "absent",
+      "node": "not-built-or-executed",
+      "evidence": []
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "instruction_set": "aarch64",
+      "operating_system_abi": "macos",
+      "status": "unsupported",
+      "vm": "not-built-or-executed",
+      "native_backend": "absent",
+      "node": "not-built-or-executed",
+      "evidence": []
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "instruction_set": "x86-64",
+      "operating_system_abi": "windows-msvc",
+      "status": "unsupported",
+      "vm": "not-built-or-executed",
+      "native_backend": "absent",
+      "node": "not-built-or-executed",
+      "evidence": []
+    },
+    {
+      "target": "wasm32-wasip1",
+      "instruction_set": "wasm32",
+      "operating_system_abi": "wasi-preview1",
+      "status": "experimental",
+      "vm": "not-built-or-executed",
+      "native_backend": "not-applicable",
+      "node": "not-built-or-executed",
+      "evidence": [
+        "lkjscript-host and lkjscript-database built for wasm32-wasip1",
+        "transactional fake-storage create, commit, close, reopen, and read executed under Node WASI",
+        "runtime-node and VM build rejected by missing unsupported Mapping invocation; no VM support claim"
+      ]
+    }
+  ]
+}

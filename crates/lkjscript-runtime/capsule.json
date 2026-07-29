@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.capsule",
+  "contract": "5ba1387b990cfafbf24bac7b3e0a5b9cbb93e43c2cf87d3d643612a4f944789e",
+  "id": "runtime",
+  "root": "crates/lkjscript-runtime",
+  "kind": "crate",
+  "purpose": "Supervise isolated capability-free VM applications and immutable code leases.",
+  "layer": "runtime node",
+  "concepts": ["application lifecycle", "in-process execution cell", "generation-safe identity", "bounded admission", "immutable code leases"],
+  "facade": ["crates/lkjscript-runtime/src/lib.rs"],
+  "allowed_dependencies": ["core", "vm"],
+  "forbidden_dependencies": ["app", "compiler", "contracts", "database", "host", "ir", "jit", "native", "resource", "sys"],
+  "tests": ["crates/lkjscript-runtime/src/tests.rs"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/runtime-node.md"],
+  "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
+  "capability": { "status": "defines", "names": ["runtime node", "application lifecycle"] },
+  "provenance": { "class": "authored", "source": "Rust crate source" },
+  "verification": ["cargo test --locked -p lkjscript-runtime"],
+  "context_card": {
+    "goal": "Prove bounded multi-application VM supervision without cross-app mutable state.",
+    "interfaces": ["crates/lkjscript-runtime/src/lib.rs"],
+    "invariants": ["capability-bearing apps fail closed", "each invocation owns private VM state", "live code leases are never evicted"]
+  }
+}

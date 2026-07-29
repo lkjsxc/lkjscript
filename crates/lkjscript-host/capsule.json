@@ -11,7 +11,7 @@
   "allowed_dependencies": [],
   "forbidden_dependencies": ["app", "compiler", "contracts", "core", "database", "ir", "jit", "native", "resource", "sys", "vm"],
   "tests": ["crates/lkjscript-host/tests/durable.rs"],
-  "decisions": ["docs/operations/architecture.md"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/portable-host-and-targets.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "defines", "names": ["clock", "logging", "durable-storage"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },

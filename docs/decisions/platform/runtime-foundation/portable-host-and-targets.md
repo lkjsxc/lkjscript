@@ -2,9 +2,10 @@
 
 ## Status
 
-**Accepted Contract.** Linux x86-64 remains the only Current acceptance host.
-The optional cell probe described here is experimental; all other named
-backends are external, deferred, or rejected as stated.
+**Accepted Contract with Experimental Implementation.** Linux x86-64 remains
+the only Current acceptance host. Safe-Rust target, clock, logging,
+cancellation, and durable-storage contracts are implemented; VM host cutover,
+optimized providers, and other native targets remain absent.
 
 ## Current Inherited State
 
@@ -34,6 +35,17 @@ exists and contains such a token. The scanner ignores comments and
 string/character literals. Registry locations may extend beyond
 `lkjscript-sys` after architecture and caller-contract review. The Current
 registry contains only inherited sys locations; this slice moved no unsafe code.
+
+## Implemented Portable Slice
+
+`lkjscript-host` composes only implemented clock, logging, cancellation, and
+durable-storage families. The standard provider preserves native paths in the
+control boundary, uses checked relative object names, syncs data, and syncs a
+parent directory after atomic replacement where the host supports that call.
+The fake provider supplies deterministic time/storage observations and injected
+short-write, disk-full, sync, corruption, and crash behavior. Explicit target
+facts do not alter language semantics. Host/database build and a transactional
+fake-storage probe execute for `wasm32-wasip1`; VM/node do not build there.
 
 ## Optional Wasmtime Cell Reference
 

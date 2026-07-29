@@ -46,6 +46,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lkjscript-database"
+version = "0.1.0"
+dependencies = [
+ "lkjscript-host",
+]
+
+[[package]]
+name = "lkjscript-host"
+version = "0.1.0"
+
+[[package]]
 name = "lkjscript-ir"
 version = "0.1.0"
 dependencies = [
@@ -78,6 +89,14 @@ version = "0.1.0"
 dependencies = [
  "lkjscript-contracts",
  "lkjscript-core",
+]
+
+[[package]]
+name = "lkjscript-runtime"
+version = "0.1.0"
+dependencies = [
+ "lkjscript-core",
+ "lkjscript-vm",
 ]
 
 [[package]]

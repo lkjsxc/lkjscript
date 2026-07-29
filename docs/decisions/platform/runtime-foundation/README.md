@@ -39,11 +39,12 @@ experimental this cycle.
 
 ## This Cycle's Experimental Slices
 
-- specify and test exact lifecycle transitions for an in-process runtime node;
-- prototype a deterministic in-memory ordered-key transaction kernel;
-- measure optional Wasmtime-backed cell construction, limits, and interruption;
-- compare immutable image sharing with per-cell mutable state; and
-- evaluate LeanStore-inspired OLTP layout hypotheses without adding LeanStore.
+- implement and test exact lifecycle transitions for capability-free private VMs;
+- implement a durable single-writer ordered-key kernel and deterministic faults;
+- execute its fake-storage commit/reopen probe on `wasm32-wasip1`;
+- share immutable validated chunks while retaining per-app mutable state; and
+- retain Wasmtime, Cranelift, LeanStore, and vector engines as reviewed inputs
+  with no production dependency.
 
 Experiments produce retained evidence, not compatibility promises. Failed
 candidates are removed rather than retained as fallback paths.
