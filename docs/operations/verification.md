@@ -9,7 +9,8 @@ gates without claiming unimplemented checks.
 
 Current formatting, Clippy, workspace tests, source closure/tree, documentation,
 registered capability-status consistency, placeholder, retained-result,
-`structure`, repository graph/context, agent-state, complete Semantic Source
+exact unsafe-boundary registry, `structure`, repository graph/context,
+agent-state, complete Semantic Source
 Schema with its exact legacy contract base, typed holes/legal actions and transactions,
 the canonical source contract enum construction, exhaustive match, Never/control, and explicit
 numeric conversion through evaluator, VM, forced baseline, and forced proof,
@@ -38,6 +39,22 @@ to satisfy the old checker.
 authored text file for at most 200 physical lines, 32 KiB, and ordinary lines
 at most 120 Unicode scalars; every authored directory for at most 16 immediate
 tracked entries; path depth; local links; and stale old paths.
+
+## Current Unsafe Boundary Gate
+
+The implemented command is:
+
+```sh
+cargo run --locked -p lkjscript-xtask -- check-unsafe
+```
+
+`LKJ-UNSAFE-BOUNDARY` scans authored Rust code for exact `unsafe` tokens while
+ignoring comments and string/character literals. It enforces both directions:
+every matching file occurs once in `meta/unsafe/registry.json`, and every
+registered path exists and matches. The registry has at most 16 stable boundary
+entries, each with a reviewed safe caller contract and at most 16 sorted unique
+files. Locations beyond `lkjscript-sys` are permitted by the contract, but none
+exist in the Current registry. The command runs in `quiet verify`.
 
 ## Current Structure Gate
 

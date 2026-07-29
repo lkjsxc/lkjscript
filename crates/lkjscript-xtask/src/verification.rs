@@ -18,6 +18,7 @@ pub fn quiet(root: &Path, args: &[String]) -> i32 {
 
 fn verify(root: &Path) -> i32 {
     if crate::documentation::check(root) != 0
+        || crate::unsafe_check::run(root) != 0
         || crate::source_checks::check_tree(root) != 0
         || crate::source_checks::check_sources(root) != 0
         || cargo(root, &["fmt", "--all", "--", "--check"], "cargo fmt") != 0

@@ -10,6 +10,7 @@ mod sha256_tests;
 mod source_checks;
 mod structure;
 mod tracing_ratchet;
+mod unsafe_check;
 mod util;
 mod verification;
 
@@ -25,11 +26,12 @@ fn main() -> ExitCode {
         Some("check-docs") => documentation::check(&root),
         Some("check-tree") => source_checks::check_tree(&root),
         Some("check-sources") => source_checks::check_sources(&root),
+        Some("check-unsafe") => unsafe_check::run(&root),
         Some("quiet") => verification::quiet(&root, &args[1..]),
         Some("structure") => structure::run(&root, &args[1..]),
         _ => {
             eprintln!(
-                "usage: lkjscript-xtask [agent ...|check-docs|check-tree|check-sources|quiet ...|structure ...]"
+                "usage: lkjscript-xtask [agent ...|check-docs|check-tree|check-sources|check-unsafe|quiet ...|structure ...]"
             );
             2
         }

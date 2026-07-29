@@ -47,11 +47,10 @@ support claim.
    artifact limit before its aggregate checked replacement is Current.
 6. `[machine: LKJ-REPO-*]` Authored files and directories obey the
    [bounded-topology contract](docs/decisions/platform/bounded-repository-topology.md).
-7. `[verified: Rust lint, crate graph, and unsafe-boundary review]` Keep pure
+7. `[machine: LKJ-UNSAFE-BOUNDARY, Rust lint, and crate graph]` Keep pure
    compiler/runtime state apart from host effects. Every unsafe-containing Rust
-   file must have one stable boundary identity and a reviewed safe caller
-   contract before unsafe code may move beyond its Current `lkjscript-sys`
-   locations.
+   file has one stable registry boundary and reviewed safe caller contract.
+   Registry locations may extend beyond `lkjscript-sys`; Current entries do not.
 8. `[verified: evidence review]` Never claim an unrun command. Record commit,
    environment, exact command, result, and explicit untested gates.
 9. `[verified: focused tests]` Delete a test only when equal or stronger focused

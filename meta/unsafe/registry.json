@@ -1,0 +1,64 @@
+{
+  "schema": "lkjscript.unsafe-boundary-registry",
+  "boundaries": [
+    {
+      "id": "linux-executable-entry",
+      "responsibility": "Enter verified generated Linux code with checked call frames and stack state.",
+      "safe_caller_contract": "Callers provide a verified image, ABI-compatible values, and owned mappings.",
+      "files": [
+        "crates/lkjscript-sys/src/executable/platform/linux/abi_call.rs",
+        "crates/lkjscript-sys/src/executable/platform/linux/invocation.rs",
+        "crates/lkjscript-sys/src/executable/platform/linux/mod.rs",
+        "crates/lkjscript-sys/src/executable/platform/linux/stack.rs"
+      ]
+    },
+    {
+      "id": "linux-executable-memory",
+      "responsibility": "Allocate, protect, publish, and release Linux executable mappings.",
+      "safe_caller_contract": "Callers publish bounded complete machine code before executable access.",
+      "files": [
+        "crates/lkjscript-sys/src/executable/platform/linux/mapping.rs"
+      ]
+    },
+    {
+      "id": "linux-host-io",
+      "responsibility": "Translate checked safe host operations to Linux and libc calls.",
+      "safe_caller_contract": "Wrappers validate buffers, paths, descriptors, lengths, and ownership.",
+      "files": [
+        "crates/lkjscript-sys/src/fd.rs",
+        "crates/lkjscript-sys/src/file.rs",
+        "crates/lkjscript-sys/src/linux_host/linux_abi.rs",
+        "crates/lkjscript-sys/src/poll.rs",
+        "crates/lkjscript-sys/src/random.rs",
+        "crates/lkjscript-sys/src/socket.rs",
+        "crates/lkjscript-sys/src/time.rs",
+        "crates/lkjscript-sys/src/tty.rs"
+      ]
+    },
+    {
+      "id": "native-runtime-bridge",
+      "responsibility": "Serve verified native runtime calls and exact root, heap, and island state.",
+      "safe_caller_contract": "Verified call IDs and checked handles preserve layout, lifetime, and alias rules.",
+      "files": [
+        "crates/lkjscript-sys/src/executable/runtime.rs",
+        "crates/lkjscript-sys/src/executable/runtime/island.rs",
+        "crates/lkjscript-sys/src/executable/runtime/island_unique.rs",
+        "crates/lkjscript-sys/src/executable/runtime/island_unique/cleanup.rs",
+        "crates/lkjscript-sys/src/executable/state/collection.rs",
+        "crates/lkjscript-sys/src/executable/state/heap.rs",
+        "crates/lkjscript-sys/src/executable/state/roots.rs"
+      ]
+    },
+    {
+      "id": "sqlite-ffi",
+      "responsibility": "Own SQLite pointers and translate its C interface to checked Rust results.",
+      "safe_caller_contract": "Connection and statement wrappers own live pointers and validate value buffers.",
+      "files": [
+        "crates/lkjscript-sys/src/sqlite/connection.rs",
+        "crates/lkjscript-sys/src/sqlite/ffi.rs",
+        "crates/lkjscript-sys/src/sqlite/statement.rs",
+        "crates/lkjscript-sys/src/sqlite/values.rs"
+      ]
+    }
+  ]
+}

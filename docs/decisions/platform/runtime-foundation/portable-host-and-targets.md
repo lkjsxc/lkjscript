@@ -25,14 +25,15 @@ is adopted **only as an external component ABI reference**. It is rejected as
 lkjscript's internal type system, object model, package identity, or semantic
 IR. Core language values and effects remain authoritative.
 
-## Unsafe Boundary Contract
+## Current Unsafe Boundary Slice
 
-Every authored Rust file containing a lexical `unsafe` code token must appear
-exactly once in a bounded machine-readable registry under one stable boundary
-identity. Every registered file must exist and contain such a token. The scan
-ignores comments and string/character literals. Registry locations may extend
-beyond `lkjscript-sys` after architecture and caller-contract review; this cycle
-moves no unsafe code and registers only inherited sys locations.
+`LKJ-UNSAFE-BOUNDARY` now enforces the accepted bounded machine-readable
+registry. Every authored Rust file containing a lexical `unsafe` code token
+appears exactly once under one stable boundary identity; every registered file
+exists and contains such a token. The scanner ignores comments and
+string/character literals. Registry locations may extend beyond
+`lkjscript-sys` after architecture and caller-contract review. The Current
+registry contains only inherited sys locations; this slice moved no unsafe code.
 
 ## Optional Wasmtime Cell Reference
 

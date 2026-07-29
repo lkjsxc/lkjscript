@@ -19,6 +19,8 @@ experimental this cycle.
   consume one resolved typed IR family.
 - Current execution, tracing-memory limits, resource support, and native-tier
   evidence remain those in [Current State](../../../current-state.md).
+- `LKJ-UNSAFE-BOUNDARY` enforces an exact bounded registry for the inherited
+  unsafe-containing sys files; no unsafe code moved in this slice.
 - No runtime node, portable Wasm cell, Component Model ABI, transactional
   kernel, Cranelift backend, LeanStore integration, or DuckDB vector engine is
   Current.
