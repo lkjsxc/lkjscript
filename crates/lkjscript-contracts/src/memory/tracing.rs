@@ -34,8 +34,4 @@ pub const LEGACY_TRACED_FAMILIES: &[LegacyTracedFamily] = &[
         identity: "string",
         heap_variant: "Str",
     },
-    LegacyTracedFamily {
-        identity: "symbol",
-        heap_variant: "Symbol",
-    },
 ];

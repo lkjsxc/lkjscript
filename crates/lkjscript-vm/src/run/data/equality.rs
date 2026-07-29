@@ -1,10 +1,11 @@
 use super::*;
 
-fn maybe_i64(value: Value) -> Option<i64> {
-    value.as_i64()
-}
-
-fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Result<bool> {
+fn value_equal(
+    arena: &lkjscript_core::GcHeap,
+    chunk: &lkjscript_core::ValidatedChunk,
+    left: Value,
+    right: Value,
+) -> Result<bool> {
     let mut pending = vec![(left, right)];
     let mut steps = 0_usize;
     while let Some((left, right)) = pending.pop() {
@@ -27,8 +28,8 @@ fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Res
                 _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
         }
-        let left_i64 = maybe_i64(left);
-        let right_i64 = maybe_i64(right);
+        let left_i64 = left.as_i64();
+        let right_i64 = right.as_i64();
         if left_i64.is_some() || right_i64.is_some() {
             match (left_i64, right_i64) {
                 (Some(left), Some(right)) if left == right => continue,
@@ -45,11 +46,22 @@ fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Res
                 _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
         }
+        let left_symbol = left.as_symbol();
+        let right_symbol = right.as_symbol();
+        if left_symbol.is_some() || right_symbol.is_some() {
+            match (left_symbol, right_symbol) {
+                (Some(left), Some(right)) => {
+                    if symbol_text(chunk, left)? == symbol_text(chunk, right)? {
+                        continue;
+                    }
+                    return Ok(false);
+                }
+                _ => return Err(Error::msg("equal-value runtime type mismatch")),
+            }
+        }
         match (arena.get(left)?, arena.get(right)?) {
             (HeapObj::Str(left), HeapObj::Str(right)) if left == right => {}
             (HeapObj::Str(_), HeapObj::Str(_)) => return Ok(false),
-            (HeapObj::Symbol(left), HeapObj::Symbol(right)) if left == right => {}
-            (HeapObj::Symbol(_), HeapObj::Symbol(_)) => return Ok(false),
             (HeapObj::Path(left), HeapObj::Path(right)) if left == right => {}
             (HeapObj::Path(_), HeapObj::Path(_)) => return Ok(false),
             (
@@ -92,10 +104,17 @@ fn value_equal(arena: &lkjscript_core::GcHeap, left: Value, right: Value) -> Res
     Ok(true)
 }
 
+fn symbol_text(chunk: &lkjscript_core::ValidatedChunk, symbol: u32) -> Result<&str> {
+    match chunk.constants().get(symbol as usize) {
+        Some(lkjscript_core::Constant::Symbol(text)) => Ok(text),
+        _ => Err(Error::msg("invalid symbol constant index")),
+    }
+}
+
 pub(crate) fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
-    let equal = value_equal(&vm.arena, left, right)?;
+    let equal = value_equal(&vm.arena, vm.chunk, left, right)?;
     vm.push(Value::from_bool(equal));
     Ok(())
 }
@@ -129,6 +148,7 @@ fn list_node(arena: &lkjscript_core::GcHeap, value: Value) -> Result<Option<(Val
 
 pub(crate) fn list_values_equal(
     arena: &lkjscript_core::GcHeap,
+    chunk: &lkjscript_core::ValidatedChunk,
     mut left: Value,
     mut right: Value,
     limit: usize,
@@ -148,7 +168,7 @@ pub(crate) fn list_values_equal(
             return Err(Error::msg("list-equal step limit exceeded"));
         }
         steps += 1;
-        if !value_equal(arena, left_car, right_car)? {
+        if !value_equal(arena, chunk, left_car, right_car)? {
             return Ok(false);
         }
         left = left_cdr;
@@ -159,7 +179,7 @@ pub(crate) fn list_values_equal(
 pub(crate) fn list_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
-    let equal = list_values_equal(&vm.arena, left, right, MAX_LIST_EQUAL_STEPS)?;
+    let equal = list_values_equal(&vm.arena, vm.chunk, left, right, MAX_LIST_EQUAL_STEPS)?;
     vm.push(Value::from_bool(equal));
     Ok(())
 }

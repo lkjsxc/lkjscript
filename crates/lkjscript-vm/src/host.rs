@@ -2,9 +2,9 @@
 
 use std::io::{self, Read, Write};
 
-use lkjscript_core::{Error, GcHeap as Arena, HeapObj, Result, Value};
+use lkjscript_core::{Constant, Error, GcHeap as Arena, HeapObj, Result, ValidatedChunk, Value};
 
-pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
+pub fn display_value(arena: &Arena, chunk: &ValidatedChunk, v: Value) -> Result<String> {
     if v.is_invalid() {
         return Err(Error::msg("invalid VM value escaped initialized storage"));
     }
@@ -29,12 +29,14 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if let Some(prototype) = v.as_function() {
         return Ok(format!("#<fn:{prototype}>"));
     }
+    if let Some(symbol) = v.as_symbol() {
+        return Ok(symbol_text(chunk, symbol)?.to_owned());
+    }
     match arena.get(v)? {
         HeapObj::Str(s) => Ok(s.clone()),
-        HeapObj::Symbol(s) => Ok(s.clone()),
         HeapObj::Pair { car, cdr } => {
-            let a = display_value(arena, *car)?;
-            let d = display_value(arena, *cdr)?;
+            let a = display_value(arena, chunk, *car)?;
+            let d = display_value(arena, chunk, *cdr)?;
             Ok(format!("({a} . {d})"))
         }
         HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
@@ -44,22 +46,35 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
             layout,
             physical_tag,
             active_payload,
-        } => display_enum(arena, layout.bytes(), *physical_tag, active_payload),
+        } => display_enum(arena, chunk, layout.bytes(), *physical_tag, active_payload),
     }
 }
 
-fn display_enum(arena: &Arena, layout: [u8; 32], tag: u16, payload: &[Value]) -> Result<String> {
+fn symbol_text(chunk: &ValidatedChunk, symbol: u32) -> Result<&str> {
+    match chunk.constants().get(symbol as usize) {
+        Some(Constant::Symbol(text)) => Ok(text),
+        _ => Err(Error::msg("invalid symbol constant index")),
+    }
+}
+
+fn display_enum(
+    arena: &Arena,
+    chunk: &ValidatedChunk,
+    layout: [u8; 32],
+    tag: u16,
+    payload: &[Value],
+) -> Result<String> {
     if layout == lkjscript_core::OPTION_LAYOUT {
         return match (tag, payload) {
-            (0, [value]) => Ok(format!("some({})", display_value(arena, *value)?)),
+            (0, [value]) => Ok(format!("some({})", display_value(arena, chunk, *value)?)),
             (1, []) => Ok("none".into()),
             _ => Err(Error::msg("malformed option value")),
         };
     }
     if layout == lkjscript_core::RESULT_LAYOUT {
         return match (tag, payload) {
-            (0, [value]) => Ok(format!("ok({})", display_value(arena, *value)?)),
-            (1, [value]) => Ok(format!("err({})", display_value(arena, *value)?)),
+            (0, [value]) => Ok(format!("ok({})", display_value(arena, chunk, *value)?)),
+            (1, [value]) => Ok(format!("err({})", display_value(arena, chunk, *value)?)),
             _ => Err(Error::msg("malformed result value")),
         };
     }
@@ -86,7 +101,7 @@ fn display_enum(arena: &Arena, layout: [u8; 32], tag: u16, payload: &[Value]) ->
         return match payload {
             [offset] => Ok(format!(
                 "utf8-error {name}({})",
-                display_value(arena, *offset)?
+                display_value(arena, chunk, *offset)?
             )),
             _ => Err(Error::msg("malformed utf8-error payload")),
         };
@@ -105,7 +120,7 @@ fn display_enum(arena: &Arena, layout: [u8; 32], tag: u16, payload: &[Value]) ->
         };
         let mut fields = Vec::with_capacity(payload.len());
         for value in payload {
-            fields.push(display_value(arena, *value)?);
+            fields.push(display_value(arena, chunk, *value)?);
         }
         return Ok(format!("system-error {name}({})", fields.join(", ")));
     }

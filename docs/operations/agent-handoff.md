@@ -35,8 +35,8 @@ packages, canonical Semantic Source and local sessions, explicit capabilities,
 generic ADTs and structured control, validated VM, callable baseline JIT, and
 forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
 and explain commands are Current descriptive evidence. The machine tracing
-ratchet and `memory traced` expose the exact seven allowed `HeapObj` families;
-builtin storage is removed and capture-free functions are inline prototype IDs.
+ratchet and `memory traced` expose the exact six allowed `HeapObj` families;
+builtin storage is removed, and capture-free functions and symbols use artifact IDs.
 The measured semantic resource runtime is Current: Linux observation, verified
 task graphs, six real policies, owner homes, forced scheduled proof discovery,
 scheduled native kernels, shared sealed-image invocation, and retained policy
@@ -46,8 +46,8 @@ remains sequential by default.
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
 homes are Current substrate. They are not selected by HIR or an execution tier.
-Exact byte-vector, byte-slice, immutable-bytes, and capture-free-function
-subsets execute without collector interaction or fallback. The whole runtime still
+Exact byte-vector, byte-slice, immutable-bytes, capture-free-function, and
+symbol subsets execute without collector interaction. The whole runtime still
 traces the remaining structural values; collector-free deterministic memory is
 not Current.
 

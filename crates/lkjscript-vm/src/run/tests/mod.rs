@@ -23,4 +23,5 @@ mod capabilities;
 mod enums;
 mod execution;
 mod resources;
+mod symbols;
 mod teardown;

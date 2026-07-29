@@ -16,7 +16,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.ensure_host_deadline_support("print", false)?;
             let value = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
-            let text = display_value(&vm.arena, value)?;
+            let text = display_value(&vm.arena, vm.chunk, value)?;
             vm.record_output(text.len())?;
             write_output(text.as_bytes(), "print")?;
             vm.push(Value::UNIT);

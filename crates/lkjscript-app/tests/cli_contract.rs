@@ -136,8 +136,9 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     let json = String::from_utf8(traced.stdout).expect("tracing ratchet is UTF-8");
     assert!(json.contains("\"schema\":\"lkjscript.memory-tracing-ratchet\""));
     assert!(json.contains("\"identity\":\"buf\",\"heap_variant\":\"Buf\""));
-    assert!(json.contains("\"identity\":\"symbol\",\"heap_variant\":\"Symbol\""));
+    assert!(json.contains("\"identity\":\"string\",\"heap_variant\":\"Str\""));
     assert!(!json.contains("\"identity\":\"builtin\""));
     assert!(!json.contains("\"identity\":\"closure\""));
-    assert_eq!(json.matches("\"heap_variant\":").count(), 7);
+    assert!(!json.contains("\"identity\":\"symbol\""));
+    assert_eq!(json.matches("\"heap_variant\":").count(), 6);
 }

@@ -4,8 +4,8 @@
 
 **Current only for the safe internal runtime substrate and resource-plane
 adapter.** No source, HIR, SSA, bytecode, VM, native, or JIT structural family
-selects these domains yet. Builtin heap storage is removed and capture-free
-functions are inline prototype IDs; seven traced representation families remain.
+selects these domains yet. Builtin storage is removed; capture-free functions
+and symbols use inline artifact IDs. Six traced representation families remain.
 
 ## Implemented Facts
 

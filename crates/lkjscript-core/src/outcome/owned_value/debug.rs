@@ -37,7 +37,7 @@ impl fmt::Debug for OwnedValue {
             Some(HeapObj::Enum { physical_tag, .. }) => {
                 write!(formatter, "#<owned-enum:{physical_tag}>")
             }
-            Some(HeapObj::Str(_) | HeapObj::Symbol(_)) => formatter.write_str("#<owned-value>"),
+            Some(HeapObj::Str(_)) => formatter.write_str("#<owned-value>"),
             None => self.root.fmt(formatter),
         }
     }

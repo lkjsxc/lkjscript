@@ -79,6 +79,9 @@ fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
     let closure = records.iter().find(|record| record.identity == "closure");
     assert!(matches!(closure, Some(record) if record.current_trace_fields == "none"));
     assert!(matches!(closure, Some(record) if record.runtime_layout.contains("Value::Function")));
+    let symbol = records.iter().find(|record| record.identity == "symbol");
+    assert!(matches!(symbol, Some(record) if record.current_trace_fields == "none"));
+    assert!(matches!(symbol, Some(record) if record.runtime_layout.contains("Value::Symbol")));
     let heap = records.iter().find(|record| record.identity == "gc-heap");
     assert!(matches!(heap, Some(record) if record.current_trace_fields.contains("trace")));
     assert!(matches!(heap, Some(record) if record.status.contains("current collector")));

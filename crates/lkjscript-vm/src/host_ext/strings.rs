@@ -2,7 +2,7 @@ use super::*;
 
 pub fn as_str(arena: &Arena, value: Value) -> Result<&str> {
     match arena.get(value)? {
-        HeapObj::Str(text) | HeapObj::Symbol(text) => Ok(text.as_str()),
+        HeapObj::Str(text) => Ok(text.as_str()),
         _ => Err(Error::msg("expected string")),
     }
 }

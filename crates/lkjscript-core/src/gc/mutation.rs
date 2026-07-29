@@ -85,7 +85,6 @@ impl GcHeap {
 fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
     match (old, new) {
         (HeapObj::Str(_), HeapObj::Str(_))
-        | (HeapObj::Symbol(_), HeapObj::Symbol(_))
         | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
         | (HeapObj::Buf(_), HeapObj::Buf(_)) => true,
         (
@@ -127,7 +126,6 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
     }
     match object {
         HeapObj::Str(text) => HeapObj::Str(clone_string(text, text.capacity())),
-        HeapObj::Symbol(text) => HeapObj::Symbol(clone_string(text, text.capacity())),
         HeapObj::Pair { car, cdr } => HeapObj::Pair {
             car: *car,
             cdr: *cdr,

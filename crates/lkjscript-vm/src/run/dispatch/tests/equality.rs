@@ -1,5 +1,24 @@
 use super::*;
 
+fn symbol_vm() -> Vm<'static, NullJit> {
+    let mut chunk = lkjscript_core::Chunk::new();
+    chunk.constants.extend([
+        lkjscript_core::Constant::Symbol("same".into()),
+        lkjscript_core::Constant::Symbol("same".into()),
+        lkjscript_core::Constant::Symbol("different".into()),
+    ]);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    let chunk = lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
+        .expect("symbol comparison chunk validates");
+    Vm::new(
+        Box::leak(Box::new(chunk)),
+        NullJit,
+        crate::ExecutionInputs::default(),
+        ExecutionConfig::default(),
+    )
+}
+
 fn generic_enum(layout: [u8; 32], tag: u16, payload: Vec<Value>) -> HeapObj {
     HeapObj::Enum {
         layout: lkjscript_core::RuntimeLayoutId::new(layout),
@@ -33,12 +52,25 @@ fn value_equality_is_exact_and_category_checked() {
     let text_left = test_alloc(&mut vm, HeapObj::Str("same".into()));
     let text_right = test_alloc(&mut vm, HeapObj::Str("same".into()));
     assert!(compare(&mut vm, Op::EqualValue, text_left, text_right));
-    let symbol_left = test_alloc(&mut vm, HeapObj::Symbol("same".into()));
-    let symbol_right = test_alloc(&mut vm, HeapObj::Symbol("same".into()));
-    assert!(compare(&mut vm, Op::EqualValue, symbol_left, symbol_right));
-    vm.push(text_left);
-    vm.push(symbol_left);
-    assert!(dispatch(&mut vm, Op::EqualValue as u8).is_err());
+    let mut symbols = symbol_vm();
+    let symbol_left = Value::from_symbol(0);
+    let symbol_right = Value::from_symbol(1);
+    assert!(compare(
+        &mut symbols,
+        Op::EqualValue,
+        symbol_left,
+        symbol_right
+    ));
+    assert!(!compare(
+        &mut symbols,
+        Op::EqualValue,
+        symbol_left,
+        Value::from_symbol(2)
+    ));
+    let text = test_alloc(&mut symbols, HeapObj::Str("same".into()));
+    symbols.push(text);
+    symbols.push(symbol_left);
+    assert!(dispatch(&mut symbols, Op::EqualValue as u8).is_err());
 }
 #[test]
 fn generic_option_and_result_value_equality_is_structural() {

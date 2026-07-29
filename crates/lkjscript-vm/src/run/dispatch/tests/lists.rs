@@ -18,10 +18,10 @@ fn list_equality_is_structural_bounded_and_rejects_improper_lists() {
     assert!(!compare(&mut vm, Op::ListEqual, first, shorter));
     let one_again = i64_list(&mut vm, &[1]);
     assert_eq!(
-        list_values_equal(&vm.arena, shorter, one_again, 1).ok(),
+        list_values_equal(&vm.arena, vm.chunk, shorter, one_again, 1).ok(),
         Some(true)
     );
-    assert!(list_values_equal(&vm.arena, first, same, 1).is_err());
+    assert!(list_values_equal(&vm.arena, vm.chunk, first, same, 1).is_err());
 
     let improper_car = test_i64(&mut vm, 1);
     let improper_cdr = test_i64(&mut vm, 2);
@@ -57,7 +57,14 @@ fn list_equality_accepts_exact_global_limit_and_rejects_one_more() {
         );
     }
     assert_eq!(
-        list_values_equal(&vm.arena, at_limit, at_limit, MAX_LIST_EQUAL_STEPS).ok(),
+        list_values_equal(
+            &vm.arena,
+            vm.chunk,
+            at_limit,
+            at_limit,
+            MAX_LIST_EQUAL_STEPS,
+        )
+        .ok(),
         Some(true)
     );
     let over_limit = test_alloc(
@@ -67,5 +74,12 @@ fn list_equality_accepts_exact_global_limit_and_rejects_one_more() {
             cdr: at_limit,
         },
     );
-    assert!(list_values_equal(&vm.arena, over_limit, over_limit, MAX_LIST_EQUAL_STEPS).is_err());
+    assert!(list_values_equal(
+        &vm.arena,
+        vm.chunk,
+        over_limit,
+        over_limit,
+        MAX_LIST_EQUAL_STEPS,
+    )
+    .is_err());
 }

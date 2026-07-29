@@ -163,7 +163,7 @@ fn gc_limit_error(limit: GcLimit) -> Error {
 pub(super) fn estimated_object_bytes(object: &HeapObj) -> usize {
     let base = std::mem::size_of::<HeapObj>();
     let dynamic = match object {
-        HeapObj::Str(text) | HeapObj::Symbol(text) => text.capacity(),
+        HeapObj::Str(text) => text.capacity(),
         HeapObj::Pair { .. } => 0,
         HeapObj::Buf(bytes) | HeapObj::Path(bytes) => bytes.capacity(),
         HeapObj::Product { fields, .. } => fields

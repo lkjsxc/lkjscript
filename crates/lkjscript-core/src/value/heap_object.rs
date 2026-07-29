@@ -4,7 +4,6 @@ use crate::ProductId;
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeapObj {
     Str(String),
-    Symbol(String),
     Pair {
         car: Value,
         cdr: Value,

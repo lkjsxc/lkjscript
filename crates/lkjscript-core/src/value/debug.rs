@@ -28,6 +28,9 @@ impl fmt::Debug for Value {
         if let Some(prototype) = self.as_function() {
             return write!(formatter, "function#{prototype}");
         }
+        if let Some(constant) = self.as_symbol() {
+            return write!(formatter, "symbol#{constant}");
+        }
         if let Some(kind) = self.as_capability() {
             return write!(formatter, "capability#{}", kind.as_str());
         }

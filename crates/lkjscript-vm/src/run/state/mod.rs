@@ -74,7 +74,13 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             }
             Ok(Stop::Returned(value)) => {
                 let arena = std::mem::take(&mut self.arena);
-                match arena.into_owned(value) {
+                let retained = arena.into_owned(value).and_then(|owned| {
+                    owned.retain_symbols(|index| match self.chunk.constants().get(index as usize) {
+                        Some(lkjscript_core::Constant::Symbol(text)) => Ok(text.as_str()),
+                        _ => Err(Error::msg("invalid returned symbol constant index")),
+                    })
+                });
+                match retained {
                     Ok(value) => ExecutionOutcome::Returned(value),
                     Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
                         "invalid returned VM value: {error}"

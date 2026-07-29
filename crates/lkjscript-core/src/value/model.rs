@@ -16,6 +16,7 @@ enum ValueKind {
     Capability,
     Resource,
     Function,
+    Symbol,
     LegacyTraced,
     StaticBytes,
     BytesKey,
@@ -76,6 +77,10 @@ impl Value {
         Self::new(ValueKind::Function, prototype as u64)
     }
 
+    pub const fn from_symbol(constant: u32) -> Self {
+        Self::new(ValueKind::Symbol, constant as u64)
+    }
+
     pub const fn from_capability(kind: CapabilityKind) -> Self {
         Self::new(ValueKind::Capability, kind as u64)
     }
@@ -134,6 +139,13 @@ impl Value {
     pub const fn as_function(self) -> Option<u32> {
         match self.kind {
             ValueKind::Function => Some(self.payload as u32),
+            _ => None,
+        }
+    }
+
+    pub const fn as_symbol(self) -> Option<u32> {
+        match self.kind {
+            ValueKind::Symbol => Some(self.payload as u32),
             _ => None,
         }
     }

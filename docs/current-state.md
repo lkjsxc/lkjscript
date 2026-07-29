@@ -141,9 +141,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   constant, and call. Separate exhaustive producer and verifier traversals run
   before an opaque checked-HIR wrapper can enter SSA. The direct-affine SSA
   inventory remains independently recomputed derived evidence.
-- `LKJ-MEMORY-TRACING-RATCHET` protects the exact seven registered `HeapObj`
-  families exposed by `lkjscript memory traced [--json]`. Builtin is removed,
-  and capture-free functions are inline IDs. The [substrate](current-state/structural-memory-evidence.md)
+- `LKJ-MEMORY-TRACING-RATCHET` protects the exact six registered `HeapObj`
+  families exposed by `lkjscript memory traced [--json]`. Builtin is removed;
+  functions and symbols use artifact IDs. The [substrate](current-state/structural-memory-evidence.md)
   is not generally tier-selected and does not support collector removal.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
@@ -173,7 +173,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - complete region/borrow/drop semantics for resource-bearing aggregates;
 - structural domains, ordinary/sealed regions, and typed pools have a Current
   internal substrate; inferred selection, tier migration, no-RC falsification,
-  seven-family tracing removal, and final collector deletion remain targets;
+  six-family tracing removal, and final collector deletion remain targets;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;

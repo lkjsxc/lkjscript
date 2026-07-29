@@ -12,6 +12,7 @@ pub struct OwnedValue {
     heap: Vec<Option<HeapObj>>,
     unique_byte_vector: Option<Vec<u8>>,
     unique_bytes: Option<Vec<u8>>,
+    symbols: Vec<Option<String>>,
 }
 
 impl OwnedValue {
@@ -51,6 +52,7 @@ impl OwnedValue {
             heap,
             unique_byte_vector: None,
             unique_bytes: None,
+            symbols: Vec::new(),
         })
     }
 
@@ -63,6 +65,7 @@ impl OwnedValue {
             heap: Vec::new(),
             unique_byte_vector: Some(bytes),
             unique_bytes: None,
+            symbols: Vec::new(),
         })
     }
 
@@ -73,6 +76,7 @@ impl OwnedValue {
             heap: Vec::new(),
             unique_byte_vector: None,
             unique_bytes: Some(bytes),
+            symbols: Vec::new(),
         })
     }
 
@@ -101,8 +105,11 @@ impl OwnedValue {
     }
 
     pub fn as_str(&self) -> Option<&str> {
+        if let Some(index) = self.root.as_symbol() {
+            return self.symbols.get(index as usize)?.as_deref();
+        }
         match self.object()? {
-            HeapObj::Str(text) | HeapObj::Symbol(text) => Some(text),
+            HeapObj::Str(text) => Some(text),
             _ => None,
         }
     }
@@ -178,4 +185,5 @@ impl OwnedValue {
     }
 }
 
+include!("owned_value/symbols.rs");
 include!("owned_value/debug.rs");

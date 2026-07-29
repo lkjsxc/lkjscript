@@ -9,6 +9,8 @@ mod mutation;
 #[cfg(test)]
 mod root_tests;
 mod snapshot;
+#[cfg(test)]
+mod symbol_tests;
 
 pub use model::{GcConfig, GcHeap, GcLimit, GcStats};
 

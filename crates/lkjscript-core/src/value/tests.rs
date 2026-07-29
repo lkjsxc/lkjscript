@@ -54,6 +54,17 @@ fn function_prototypes_round_trip_inline_without_category_aliasing() {
 }
 
 #[test]
+fn symbol_constants_round_trip_without_reference_aliasing() {
+    for constant in [0, 1, u32::MAX] {
+        let value = Value::from_symbol(constant);
+        assert_eq!(value.as_symbol(), Some(constant));
+        assert!(value.as_i64().is_none());
+        assert!(value.as_legacy_traced().is_none());
+        assert_eq!(format!("{value:?}"), format!("symbol#{constant}"));
+    }
+}
+
+#[test]
 fn complete_i64_range_round_trips_inline() {
     for number in [
         i64::MIN,
