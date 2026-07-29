@@ -24,13 +24,14 @@ pub use control::{UnixControlClient, UnixControlServer};
 pub use control_store::{ControlStore, ControlStoreError, RecoveryReport};
 pub use coordinator::{CoordinatorError, CoordinatorLease, CoordinatorStatus, MachineCoordinator};
 pub use error::{QuotaKind, RuntimeError};
+pub use execution::protocol as process_cell_protocol;
 pub use ids::{
     ApplicationId, ApplicationIncarnationId, CoordinatorIdentity, ExecutionCellId, PackageContentId,
 };
 pub use model::{
-    ApplicationKind, ApplicationManifest, ApplicationStatus, DeploymentScope, InvocationMetrics,
-    InvocationOutcome, InvocationRequest, Lifecycle, ProcessCellState, ResourceAccounting,
-    ResourceQuota, RestartPolicy, MAX_LOG_ENTRIES, MAX_RESTART_ATTEMPTS,
+    ApplicationKind, ApplicationManifest, ApplicationStatus, DeploymentScope, ExecutionCellClass,
+    InvocationMetrics, InvocationOutcome, InvocationRequest, Lifecycle, ProcessCellState,
+    ResourceAccounting, ResourceQuota, RestartPolicy, MAX_LOG_ENTRIES, MAX_RESTART_ATTEMPTS,
 };
 pub use service::{ServiceBundle, ServiceConfiguration, ServiceError};
 pub use system::RuntimeSystem;

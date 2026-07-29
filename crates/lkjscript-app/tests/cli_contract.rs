@@ -3,6 +3,9 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+#[path = "canonical/process_cells.rs"]
+mod process_cells;
+
 #[test]
 fn help_and_optimizing_metrics_expose_the_current_contract() {
     let binary = env!("CARGO_BIN_EXE_lkjscript");

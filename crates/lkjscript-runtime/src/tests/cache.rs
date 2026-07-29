@@ -34,6 +34,38 @@ fn cache_never_evicts_a_live_application_lease() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn manifest_and_installed_execution_cell_class_must_match_before_effects(
+) -> Result<(), Box<dyn Error>> {
+    let system = system(2, 2)?;
+    let mut isolated = manifest(ApplicationKind::Command, 1, 1);
+    isolated.cell = ExecutionCellClass::IsolatedProcess {
+        entry: lkjscript_host::ApplicationPath::parse("main.lkjscript")?,
+    };
+    assert!(matches!(
+        system.install(
+            isolated,
+            package(24)?,
+            chunk(false)?,
+            lkjscript_host::HostEnvironment::default(),
+        ),
+        Err(RuntimeError::ExecutionCellClassMismatch)
+    ));
+    assert!(matches!(
+        system.install_isolated(
+            manifest(ApplicationKind::Command, 1, 1),
+            package(25)?,
+            std::path::Path::new("."),
+            std::path::Path::new("worker"),
+            lkjscript_host::HostEnvironment::default(),
+        ),
+        Err(RuntimeError::ExecutionCellClassMismatch)
+    ));
+    assert!(system.list()?.is_empty());
+    assert_eq!(system.cache_len()?, 0);
+    Ok(())
+}
+
+#[test]
 fn arguments_and_stdio_providers_execute_in_private_vm_inputs() -> Result<(), Box<dyn Error>> {
     let system = system(1, 2)?;
     let arguments_chunk = capability_chunk(lkjscript_core::CapabilityKind::Arguments, false)?;

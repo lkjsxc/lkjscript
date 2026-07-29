@@ -7,8 +7,9 @@ state-directory lease, database-independent control store, authenticated Unix
 control, describe/status/stop client, and deterministic service-definition
 slice named here. App-private host environments, portable application paths,
 provider-backed VM stdio/clock, and trusted arguments/stdio applications are
-also Current for their exact tests. Application persistence, process cells,
-database attachment, session brokers, and GUI remain non-Current.
+also Current for their exact tests. Supervised isolated process cells are Current
+for the exact Linux evidence below. Application persistence, database attachment,
+session brokers, and GUI remain non-Current.
 
 ## Implemented Boundary
 
@@ -20,7 +21,7 @@ process under `/proc` once before replacement. Other hosts conservatively treat
 an existing lease as live.
 
 The coordinator opens `lkjscript.control-store` before any application database.
-Its journal and snapshot carry platform revision 2, the exact
+Its journal and snapshot carry platform revision 4, the exact
 `lkjscript.runtime-control` digest, explicit little-endian widths, monotonic
 sequence, bounded key/value payloads, and full SHA-256 checksums. Commit syncs
 before fact publication. Recovery replays idempotently, rejects corruption and
@@ -71,7 +72,9 @@ Executed on Linux x86-64 at the implementing worktree:
 
 ```text
 cargo test --locked -p lkjscript-host
+cargo test --locked -p lkjscript-core outcome::codec
 cargo test --locked -p lkjscript-runtime
+cargo test --locked -p lkjscript-app --test cli_contract process_cells
 cargo run --locked -p lkjscript-xtask -- check-unsafe
 cargo clippy --locked -p lkjscript-host -p lkjscript-runtime -p lkjscript-app --all-targets -- -D warnings
 ```
@@ -80,14 +83,14 @@ The runtime suite covered first boot, clean and unclean reopen, commit,
 checkpoint, truncated-tail repair, complete-record corruption, sync failure,
 stale platform revision, lease exclusion, exact frames, malformed prefixes,
 stale/digest rejection, Unix peer credentials, idempotent replay, service
-bundle generation/removal, and inherited multi-application capability-free VM
-isolation.
+bundle generation/removal, private trusted VMs, bounded process framing, and
+manifest/cell-class mismatch rejection.
 
 A real process smoke built `lkjscriptd` and `lkjscript`, started the daemon,
 waited for its Unix endpoint, ran describe and status through the CLI, requested
 shutdown, joined the daemon, and observed a zero-byte journal plus a 193-byte
-durable snapshot. It reported coordinator 1, platform revision 2, exact control
-digest `c1e75935fad3733a76a21a5c6f97023c0934cd23856f63d625b6c36465ea642f`,
+durable snapshot. It reported coordinator 904, platform revision 4, exact control
+digest `754118950895d44b32a89a23ac895188b41baf663f44b23e81b2764758e07b8d`,
 clean previous shutdown, control sequence 2, and zero applications.
 
 A separate CLI smoke generated all six service files, required each to be
@@ -115,6 +118,30 @@ unsupported filesystem grant failed before application publication. The
 argument and stdio applications both executed validated bytecode through real
 VM entry.
 
+## Isolated Process Cells
+
+A manifest now declares `trusted-in-process` or `isolated-process` with one
+normalized relative package entry. Installation rejects a code/class mismatch,
+escaping or non-file entries, unavailable providers, and an unbound worker
+before application publication. The application cannot select its executable.
+
+The fixed `lkjscript-cell` worker receives a cleared environment and private
+pipes, validates platform revision and runtime-control digest, verifies the
+package lock, compiles the entry once, and runs a fresh validated VM for each
+invocation. Four-byte length frames and all fields are bounded. Application
+stdio uses a worker-private buffer and is relayed to the app-private parent
+provider; it cannot corrupt protocol output. A lossless core codec transports
+all closed execution outcomes and rejects unknown tags, trailing bytes,
+inconsistent cleanup accounting, and oversized data.
+
+Focused Linux x86-64 integration executed the factorial hello application twice
+in one worker, observed exact output and flush counts, stopped it, restarted it
+with a new incarnation and process, and rejected the stale incarnation. A second
+test started two applications, sent `SIGKILL` to one worker, observed only that
+application enter `failed`, then invoked and stopped the surviving application.
+Existing ticket admission, per-app concurrent/total quotas, metrics, and bounded
+logs run before both cell classes.
+
 ## Exact Limits
 
 - The coordinator currently admits one configured Linux principal only.
@@ -123,7 +150,9 @@ VM entry.
 - Shutdown is control-driven; OS signal mapping is not yet Current.
 - Application registry facts are not yet reconstructed into runnable code.
 - Only arguments, direct stdio, and clock operations use the composed VM host;
-  process cells, tenant attachment, session brokers, native windows, graphics,
-  accessibility, and GUI execution remain absent.
+  tenant attachment, session brokers, native windows, graphics, accessibility,
+  and GUI execution remain absent.
+- Process apps are not yet persisted or reconstructed by `lkjscriptd`, and the
+  daemon service definitions do not yet bind a worker executable path.
 - No Miri, sanitizer, fuzz campaign, non-Linux build, or non-x86 execution was
   run for this slice.

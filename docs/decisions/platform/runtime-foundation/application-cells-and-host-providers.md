@@ -69,17 +69,18 @@ boundary.
 ## Isolated Process Cell
 
 A capability-bearing application uses an isolated process cell until its exact
-in-process boundary is independently proven. The coordinator launches a fixed
-cell executable, not an arbitrary package command. Authority enters through an
-inherited authenticated channel and application-private handles or proxies;
-command-line data and environment variables grant nothing.
+in-process boundary is independently proven. The Current Linux x86-64 cut
+launches the fixed `lkjscript-cell` executable, not an arbitrary package command,
+with a cleared environment and private framed pipes. Application stdio is
+buffered in the worker and relayed through the app-private parent provider.
 
-Bootstrap binds platform revision, process-cell contract digest, coordinator,
-principal, application, incarnation, package digest, cell class, grants,
-resource profile, and one-time channel identity. The cell validates all facts
-before loading code, reports ready/health, emits bounded heartbeats and outcome,
-accepts cancellation, and reports cleanup. Unknown, partial, stale, replayed,
-or oversized messages fail closed.
+Current bootstrap binds platform revision, runtime-control digest, coordinator,
+application, incarnation, package digest, canonical package entry, grants, and
+execution limits. The worker verifies and compiles once before ready. Unknown,
+partial, stale, or oversized messages fail closed, and outcomes preserve the
+closed semantic result rather than a debug summary. Principal impersonation,
+heartbeats, live cancellation messages, and provider proxies remain Accepted
+Target. See [Isolated Process Cells](isolated-process-cells.md).
 
 The coordinator launches app code in the target principal context. If the
 coordinator has elevated installation identity and cannot establish that

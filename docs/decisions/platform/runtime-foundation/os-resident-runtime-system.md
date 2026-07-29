@@ -9,10 +9,10 @@ applications without requiring one process or one address space.
 
 **Accepted Contract with a Current Linux Coordinator Foundation.** The focused
 foreground daemon, exclusive lease, bootstrap store, authenticated Unix control,
-CLI, and service-definition slice are Current by their named evidence. The
-inherited capability-free application runtime remains experimental. Process
-cells, session brokers, GUI execution, database attachment, and other native
-transports become Current only with their own execution evidence.
+CLI, service definitions, app-private trusted VMs, and Linux isolated process
+cells are Current by their named evidence. Persistent app reconstruction,
+session brokers, GUI execution, database attachment, and other native transports
+become Current only with their own execution evidence.
 
 ## Product Authority
 
@@ -124,8 +124,9 @@ transactions, applies bounded restart policy, and leaves daemon control and
 other applications usable. Exact process, database, GUI, and platform execution
 evidence is required before each corresponding Current claim.
 
-The inherited experiment installed, started, stopped, restarted, removed,
-listed, and invoked private capability-free VMs with bounded admission and
-immutable chunk leases. It was not a daemon or persistence boundary. Git
-history preserves that experiment; the obsolete public node and application
+The Current application core installs, starts, stops, restarts, removes, lists,
+and invokes trusted VMs or fixed-worker process cells with bounded admission.
+Process outcomes are lossless, restart changes incarnation and process, and one
+killed worker does not contaminate another app. Application facts are not yet
+reconstructed by the daemon after restart. Obsolete public node and application
 generation names provide no alias.

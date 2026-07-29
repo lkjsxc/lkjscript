@@ -50,9 +50,11 @@ Linux, Windows, macOS, session, and container service definitions. Only the
 Linux foreground process and Unix transport executed; privileged installation
 and non-Linux adapters did not. Trusted in-process VMs now compose app-private
 host environments and execute exact arguments, direct stdio, and clock grants;
-portable relative paths and directory/database provider contracts exist. File,
-terminal, network, SQLite, and stream-resource VM cutover, process cells,
-session brokers, database attachment, GUI, and SQLite replacement remain absent.
+portable relative paths and directory/database provider contracts exist. A
+fixed worker executes bounded Linux process cells with lossless outcomes,
+restart, stale rejection, and per-app crash isolation. File, terminal, network,
+SQLite, and stream-resource VM cutover, persistent app reconstruction, session
+brokers, database attachment, GUI, and SQLite replacement remain absent.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -130,8 +132,8 @@ resources remain absent.
 
 1. Complete file, stream, terminal, network, and database VM provider cutover,
    then split remaining topology, executable-memory, SQLite, and native calls.
-2. Add `lkjscriptd`, durable bootstrap control, authenticated local control, and
-   process cells before admitting untrusted or capability-bearing applications.
+2. Persist package/application registry facts and expose trusted/process cell
+   install, list, start, stop, restart, and remove through local control.
 3. Integrate database tenants, transactions, cancellation, buffer pages, and
    checkpoints into application-incarnation lifecycle before SQLite migration
    or benchmarks.

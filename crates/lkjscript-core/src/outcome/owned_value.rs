@@ -186,4 +186,5 @@ impl OwnedValue {
 }
 
 include!("owned_value/symbols.rs");
+include!("owned_value/wire.rs");
 include!("owned_value/debug.rs");

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use lkjscript_core::{ExecutionConfig, ValidatedChunk};
 use lkjscript_vm::ExecutionInputs;
@@ -12,7 +12,8 @@ use crate::{
 pub(crate) struct Admission {
     pub(crate) incarnation: ApplicationIncarnationId,
     pub(crate) cell: ExecutionCellId,
-    pub(crate) chunk: Arc<ValidatedChunk>,
+    pub(crate) chunk: Option<Arc<ValidatedChunk>>,
+    pub(crate) process: Option<Arc<Mutex<crate::execution::process::ProcessCell>>>,
     pub(crate) inputs: ExecutionInputs,
     pub(crate) config: ExecutionConfig,
 }
@@ -112,7 +113,7 @@ impl RuntimeSystem {
                 .map_err(|_| RuntimeError::StateUnavailable)?;
         }
         let serial = state.allocate()?;
-        let (instance_id, chunk, mut inputs, config) = {
+        let (instance_id, chunk, process, mut inputs, config) = {
             let app = state
                 .apps
                 .get(&application)
@@ -126,11 +127,8 @@ impl RuntimeSystem {
                 })?;
             (
                 instance.id,
-                Arc::clone(
-                    app.chunk
-                        .as_ref()
-                        .ok_or(RuntimeError::PackageNotCached(app.package))?,
-                ),
+                app.chunk.clone(),
+                instance.process.clone(),
                 instance.inputs.clone(),
                 app.manifest.quota.execution.clone(),
             )
@@ -154,6 +152,7 @@ impl RuntimeSystem {
             incarnation,
             cell,
             chunk,
+            process,
             inputs,
             config,
         })

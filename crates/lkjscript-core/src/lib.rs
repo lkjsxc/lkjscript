@@ -41,9 +41,10 @@ pub use numeric_conversion::{
 };
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{
-    CleanupFailure, CleanupFailureLimits, CleanupFailures, CleanupPhase, CleanupSubject,
-    ExecutionOutcome, HostError, OwnedValue, ResourceLimitKind, Trap, DEFAULT_MAX_CLEANUP_FAILURES,
-    DEFAULT_MAX_CLEANUP_FAILURE_BYTES, MAX_CLEANUP_FAILURES, MAX_CLEANUP_FAILURE_BYTES,
+    decode_execution_outcome, encode_execution_outcome, CleanupFailure, CleanupFailureLimits,
+    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, HostError, OwnedValue,
+    ResourceLimitKind, Trap, DEFAULT_MAX_CLEANUP_FAILURES, DEFAULT_MAX_CLEANUP_FAILURE_BYTES,
+    MAX_CLEANUP_FAILURES, MAX_CLEANUP_FAILURE_BYTES,
 };
 pub use prelude::*;
 pub use profile::{

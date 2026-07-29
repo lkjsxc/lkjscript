@@ -14,10 +14,12 @@
     "integration execution",
     "memory inventory",
     "memory tracing ratchet",
-    "runtime topology and scheduler observation"
+    "runtime topology and scheduler observation",
+    "isolated process worker"
   ],
   "facade": [
-    "crates/lkjscript-app/src/main.rs"
+    "crates/lkjscript-app/src/main.rs",
+    "crates/lkjscript-app/src/runtime/process_cell/main.rs"
   ],
   "allowed_dependencies": [
     "compiler",
@@ -36,6 +38,7 @@
     "xtask"
   ],
   "tests": [
+    "crates/lkjscript-app/tests/cli_contract.rs",
     "crates/lkjscript-app/tests/jit_engines.rs",
     "crates/lkjscript-app/tests/ssa_equivalence.rs",
     "crates/lkjscript-app/tests/semantic_cli.rs"
@@ -46,6 +49,7 @@
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/modules-and-packages.md",
     "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md",
+    "docs/decisions/platform/runtime-foundation/isolated-process-cells.md",
     "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
     "docs/decisions/platform/semantic-resource-plane.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
@@ -80,12 +84,14 @@
       "lkjscript runtime topology",
       "lkjscript runtime host-scheduler",
       "lkjscript runtime plan",
-      "lkjscript system describe|status|stop"
+      "lkjscript system describe|status|stop",
+      "lkjscript-cell process protocol worker"
     ],
     "invariants": [
       "run and disasm require an exact local package lock",
       "backends consume shared typed IR",
-      "Linux x86-64 claims require calls"
+      "Linux x86-64 claims require calls",
+      "application stdio never shares the worker protocol stream"
     ]
   }
 }

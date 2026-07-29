@@ -13,12 +13,14 @@
     "generation-safe resources",
     "deterministic unique storage",
     "ordinary and sealed regions",
-    "typed generational pools"
+    "typed generational pools",
+    "lossless execution outcome codec"
   ],
   "facade": ["crates/lkjscript-core/src/lib.rs"],
   "allowed_dependencies": ["contracts"],
   "forbidden_dependencies": ["app", "compiler", "jit", "vm"],
   "tests": [
+    "crates/lkjscript-core/src/outcome/codec/tests.rs",
     "crates/lkjscript-core/src/resource_table/tests/mod.rs",
     "crates/lkjscript-core/src/structural/unique/tests/mod.rs",
     "crates/lkjscript-core/src/validation/tests/mod.rs",
@@ -34,7 +36,8 @@
     "docs/decisions/memory/structural-ownership-domains.md",
     "docs/decisions/memory/typed-generational-pools.md",
     "docs/decisions/memory/unique-storage.md",
-    "docs/decisions/platform/content-addressed-contracts.md"
+    "docs/decisions/platform/content-addressed-contracts.md",
+    "docs/decisions/platform/runtime-foundation/isolated-process-cells.md"
   ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
@@ -49,7 +52,8 @@
       "stale-safe resource identity",
       "generation-safe unique keys",
       "graph-independent region release",
-      "typed pool generation safety"
+      "typed pool generation safety",
+      "closed execution outcomes round-trip exactly"
     ]
   }
 }

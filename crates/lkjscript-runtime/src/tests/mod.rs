@@ -33,6 +33,7 @@ fn manifest(kind: ApplicationKind, concurrent: usize, total: u64) -> Application
         name: format!("test-{kind:?}"),
         kind,
         scope: DeploymentScope::Standalone,
+        cell: ExecutionCellClass::TrustedInProcess,
         capabilities: Vec::new(),
         quota: ResourceQuota {
             max_concurrent_invocations: NonZeroUsize::new(concurrent).unwrap_or(NonZeroUsize::MIN),

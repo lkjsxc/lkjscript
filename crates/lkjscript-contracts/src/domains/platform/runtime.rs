@@ -22,6 +22,32 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                     "bounds",
                     "closed key value and record maxima",
                 )),
+            ContractItem::new("application-cell", ContractItemKind::Type)
+                .fact(fact(
+                    "class",
+                    "execution cell class",
+                    "trusted-in-process or isolated-process",
+                ))
+                .fact(fact(
+                    "manifest",
+                    "manifest",
+                    "entry grants quotas and restart policy",
+                ))
+                .fact(fact(
+                    "process-frame",
+                    "process frame",
+                    "bounded exact little-endian length",
+                ))
+                .fact(fact(
+                    "identity",
+                    "identity",
+                    "coordinator application incarnation execution-cell",
+                ))
+                .fact(fact(
+                    "outcome",
+                    "outcome",
+                    "lossless closed ExecutionOutcome",
+                )),
             ContractItem::new("local-control", ContractItemKind::Type)
                 .fact(fact("schema", "schema", "lkjscript.local-control"))
                 .fact(fact(

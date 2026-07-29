@@ -58,6 +58,7 @@ candidates are removed rather than retained as fallback paths.
 - [Portable Host and Targets](portable-host-and-targets.md)
 - [OS-Resident Runtime System](os-resident-runtime-system.md)
 - [Application Cells And Host Providers](application-cells-and-host-providers.md)
+- [Isolated Process Cells](isolated-process-cells.md)
 - [Machine Coordinator And Local Control](machine-coordinator-daemon.md)
 - [Transactional Kernel](transactional-kernel.md)
 

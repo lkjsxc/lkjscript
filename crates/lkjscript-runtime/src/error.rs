@@ -13,6 +13,8 @@ pub enum RuntimeError {
     InvalidManifest(&'static str),
     CapabilityNotGranted(lkjscript_core::CapabilityKind),
     UnsupportedCapability(lkjscript_core::CapabilityKind),
+    ExecutionCellClassMismatch,
+    ProcessCell(String),
     ApplicationNotFound(ApplicationId),
     PackageCacheFull,
     PackageNotCached(PackageContentId),
@@ -49,6 +51,10 @@ impl fmt::Display for RuntimeError {
                 "application provider is unavailable for capability: {}",
                 kind.as_str()
             ),
+            Self::ExecutionCellClassMismatch => {
+                formatter.write_str("application manifest and installed cell class differ")
+            }
+            Self::ProcessCell(message) => write!(formatter, "isolated process cell: {message}"),
             Self::ApplicationNotFound(id) => {
                 write!(formatter, "application {} not found", id.get())
             }

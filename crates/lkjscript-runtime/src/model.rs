@@ -24,6 +24,14 @@ pub enum ApplicationKind {
     Interactive,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExecutionCellClass {
+    TrustedInProcess,
+    IsolatedProcess {
+        entry: lkjscript_host::ApplicationPath,
+    },
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RestartPolicy {
     Never,
@@ -52,6 +60,7 @@ pub struct ApplicationManifest {
     pub name: String,
     pub kind: ApplicationKind,
     pub scope: DeploymentScope,
+    pub cell: ExecutionCellClass,
     pub capabilities: Vec<CapabilityKind>,
     pub quota: ResourceQuota,
     pub restart: RestartPolicy,
@@ -129,7 +138,11 @@ impl Lifecycle {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProcessCellState {
-    DeferredUnavailable,
+    NotApplicable,
+    Stopped,
+    Starting,
+    Running { process: u32 },
+    Exited,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
