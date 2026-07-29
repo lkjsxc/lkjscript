@@ -25,6 +25,9 @@ impl GcHeap {
     }
 
     pub fn into_owned(mut self, root: Value) -> Result<OwnedValue> {
+        if root.as_legacy_traced().is_none() {
+            return OwnedValue::from_vm_snapshot(root, Vec::new());
+        }
         self.collect(&[root]);
         OwnedValue::from_vm_snapshot(root, self.objs)
     }
