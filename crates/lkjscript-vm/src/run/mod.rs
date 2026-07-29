@@ -141,6 +141,23 @@ pub(crate) fn test_chunk() -> ValidatedChunk {
     let mut chunk = lkjscript_core::Chunk::new();
     chunk.main.emit(lkjscript_core::Op::Unit);
     chunk.main.emit(lkjscript_core::Op::Return);
+    chunk.protos.push(lkjscript_core::FunctionProto {
+        name: "test-function".into(),
+        arity: 0,
+        locals: 0,
+        parameter_resources: Vec::new(),
+        return_resource: None,
+        parameter_uniques: Vec::new(),
+        parameter_unique_places: Vec::new(),
+        return_unique: None,
+        unique_places: 0,
+        failure_cleanups: Vec::new(),
+        failure_cleanup_ranges: Vec::new(),
+        code: vec![
+            lkjscript_core::Op::Unit as u8,
+            lkjscript_core::Op::Return as u8,
+        ],
+    });
     lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
         .expect("VM unit-test chunk validates")
 }

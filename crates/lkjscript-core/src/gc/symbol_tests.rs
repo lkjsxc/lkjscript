@@ -19,6 +19,11 @@ fn returned_snapshots_retain_reachable_symbol_text_without_heap_objects() {
         .expect("owned symbol");
     assert_eq!(owned.as_str(), Some("retained"));
     assert_eq!(owned.snapshot_object_count(), 0);
+    let same_text = heap
+        .snapshot(Value::from_symbol(9))
+        .and_then(|value| value.retain_symbols(|_| Ok("retained")))
+        .expect("same owned symbol text");
+    assert_eq!(owned, same_text);
 
     let mut heap = GcHeap::default();
     let root = heap

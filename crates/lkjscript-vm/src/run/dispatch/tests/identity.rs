@@ -25,7 +25,7 @@ fn object_identity_is_limited_to_buffers_and_resources() {
     vm.push(integer);
     assert!(dispatch(&mut vm, Op::SameObject as u8).is_err());
 
-    let closure = Value::from_function(0);
+    let closure = vm.chunk.function_value(0).expect("function value");
     vm.push(closure);
     vm.push(closure);
     assert!(dispatch(&mut vm, Op::EqualValue as u8).is_err());

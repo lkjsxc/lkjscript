@@ -53,19 +53,20 @@ fn value_equality_is_exact_and_category_checked() {
     let text_right = test_alloc(&mut vm, HeapObj::Str("same".into()));
     assert!(compare(&mut vm, Op::EqualValue, text_left, text_right));
     let mut symbols = symbol_vm();
-    let symbol_left = Value::from_symbol(0);
-    let symbol_right = Value::from_symbol(1);
+    let symbol_left = symbols.chunk.symbol_value(0).expect("left symbol");
+    let symbol_right = symbols.chunk.symbol_value(1).expect("right symbol");
     assert!(compare(
         &mut symbols,
         Op::EqualValue,
         symbol_left,
         symbol_right
     ));
+    let different = symbols.chunk.symbol_value(2).expect("different symbol");
     assert!(!compare(
         &mut symbols,
         Op::EqualValue,
         symbol_left,
-        Value::from_symbol(2)
+        different
     ));
     let text = test_alloc(&mut symbols, HeapObj::Str("same".into()));
     symbols.push(text);

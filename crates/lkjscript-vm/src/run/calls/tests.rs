@@ -53,7 +53,7 @@ fn tail_call_reuses_the_current_frame() {
     });
     let argument = Value::from_i64(42);
     vm.push(argument);
-    vm.push(Value::from_function(0));
+    vm.push(vm.chunk.function_value(0).expect("function value"));
 
     call(&mut vm, 1).expect("tail call");
 

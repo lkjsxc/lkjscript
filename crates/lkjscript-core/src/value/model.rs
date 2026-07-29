@@ -73,11 +73,11 @@ impl Value {
         Self::new(ValueKind::Resource, index as u64)
     }
 
-    pub const fn from_function(prototype: u32) -> Self {
+    pub(crate) const fn from_function(prototype: u32) -> Self {
         Self::new(ValueKind::Function, prototype as u64)
     }
 
-    pub const fn from_symbol(constant: u32) -> Self {
+    pub(crate) const fn from_symbol(constant: u32) -> Self {
         Self::new(ValueKind::Symbol, constant as u64)
     }
 

@@ -33,7 +33,9 @@ The unused `HeapObj::Builtin` representation has also been removed: operation
 identity is validated bytecode/static registry data, and no runtime allocation
 site existed. Capture-free function values carry an inline validated prototype
 ID; captured closure graphs remain unsupported. Symbol constants carry bounded
-artifact indexes and returned snapshots copy only reachable symbol text.
+artifact indexes and returned snapshots copy only reachable symbol text. The
+Current validated constant-byte ceiling bounds that text; artifact identity and
+result transfer do not consume tracing-heap allocation or live-byte limits.
 Transitional buffers, paths, and the remaining structural values are the exact
 six registered legacy families. Collector infrastructure remains available only
 to those families, and the complete collector-free value island is not yet

@@ -16,7 +16,7 @@ pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         .map_err(|_| Error::msg("MakeClosure expects proto index"))?;
     let proto_id =
         u32::try_from(proto_id).map_err(|_| Error::msg("MakeClosure proto index out of range"))?;
-    vm.push(Value::from_function(proto_id));
+    vm.push(vm.chunk.function_value(proto_id)?);
     Ok(())
 }
 

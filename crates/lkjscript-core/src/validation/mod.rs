@@ -12,7 +12,10 @@ mod prelude_shape;
 mod shape;
 mod shape_products;
 
-use crate::{Chunk, Constant, DecodedInstruction, EnumId, FunctionProto, ProductId, VariantId};
+use crate::{
+    Chunk, Constant, DecodedInstruction, EnumId, Error, FunctionProto, ProductId, Result, Value,
+    VariantId,
+};
 
 #[derive(Debug, Clone)]
 pub struct ValidatedChunk {
@@ -28,6 +31,21 @@ impl ValidatedChunk {
 
     pub fn protos(&self) -> &[FunctionProto] {
         &self.chunk.protos
+    }
+
+    pub fn function_value(&self, prototype: u32) -> Result<Value> {
+        self.chunk
+            .protos
+            .get(prototype as usize)
+            .ok_or_else(|| Error::msg("function prototype index is out of range"))?;
+        Ok(Value::from_function(prototype))
+    }
+
+    pub fn symbol_value(&self, constant: u32) -> Result<Value> {
+        match self.chunk.constants.get(constant as usize) {
+            Some(Constant::Symbol(_)) => Ok(Value::from_symbol(constant)),
+            _ => Err(Error::msg("symbol constant index is invalid")),
+        }
     }
 
     pub fn main(&self) -> &FunctionProto {

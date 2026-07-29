@@ -8,13 +8,12 @@ fn returned_symbol_retains_text_after_artifact_release() {
         chunk.main.emit_op_u16(Op::LoadConst, symbol.0);
         chunk.main.emit(Op::Return);
         let chunk = validate_chunk(chunk, &ValidationLimits::default()).expect("symbol validates");
-        Vm::new(
-            &chunk,
-            NullJit,
-            crate::ExecutionInputs::default(),
-            ExecutionConfig::default(),
-        )
-        .run()
+        let config = ExecutionConfig {
+            max_heap_bytes: 0,
+            max_allocations: 0,
+            ..ExecutionConfig::default()
+        };
+        Vm::new(&chunk, NullJit, crate::ExecutionInputs::default(), config).run()
     };
     assert!(matches!(
         returned,

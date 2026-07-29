@@ -114,11 +114,9 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 u16::try_from(id)
                     .map_err(|_| Error::msg("static bytes constant index exceeds u16"))?,
             )),
-            Constant::Symbol(_) => {
-                Ok(Value::from_symbol(u32::try_from(id).map_err(|_| {
-                    Error::msg("symbol constant index exceeds u32")
-                })?))
-            }
+            Constant::Symbol(_) => self.chunk.symbol_value(
+                u32::try_from(id).map_err(|_| Error::msg("symbol constant index exceeds u32"))?,
+            ),
             Constant::Proto(proto) => Ok(Value::from_i64(i64::from(*proto))),
         }
     }
