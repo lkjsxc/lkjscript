@@ -63,6 +63,16 @@ pub fn verify(entry: &Path) -> Result<(PathBuf, Manifest)> {
     Ok((root, manifest))
 }
 
+pub fn verify_content(
+    entry: &Path,
+) -> Result<(PathBuf, Manifest, lkjscript_contracts::ContractDigest)> {
+    let (root, manifest) = verify(entry)?;
+    let (locked, _) = encoding::read(&root)?;
+    let identity = lkjscript_contracts::ContractDigest::from_hex(&locked.root)
+        .ok_or_else(|| Error::msg("package lock root is not a full lowercase SHA-256"))?;
+    Ok((root, manifest, identity))
+}
+
 pub fn target(entry: &Path, name: &str) -> Result<PathBuf> {
     let (root, manifest) = verify(entry)?;
     let target = manifest

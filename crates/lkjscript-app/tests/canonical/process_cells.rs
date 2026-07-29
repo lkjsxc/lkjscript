@@ -44,8 +44,12 @@ fn root() -> PathBuf {
         .expect("workspace root")
 }
 
-fn package(byte: u8) -> PackageContentId {
-    PackageContentId::new([byte; 32]).expect("package identity")
+fn package() -> PackageContentId {
+    let digest = lkjscript_contracts::ContractDigest::from_hex(
+        "c1f030631e6c746ae957d40deb188187f7a96db56f3d9864ad177b040595e936",
+    )
+    .expect("workspace package identity");
+    PackageContentId::new(digest.as_bytes()).expect("package identity")
 }
 
 #[test]
@@ -58,7 +62,7 @@ fn isolated_cell_executes_restarts_and_relays_private_stdio() {
     let app = system
         .install_isolated(
             manifest("isolated-hello"),
-            package(71),
+            package(),
             &root(),
             Path::new(env!("CARGO_BIN_EXE_lkjscript-cell")),
             host(&stdio),
@@ -106,6 +110,33 @@ fn isolated_cell_executes_restarts_and_relays_private_stdio() {
     system.stop(second).expect("stop restarted cell");
 }
 
+#[test]
+fn isolated_cell_rejects_mismatched_package_content_before_ready() {
+    let system = RuntimeSystem::new(
+        lkjscript_runtime::CoordinatorIdentity::new(703).expect("coordinator"),
+        NonZeroUsize::new(2).expect("cache"),
+    );
+    let stdio = lkjscript_host::BufferedStdio::default();
+    let app = system
+        .install_isolated(
+            manifest("wrong-package"),
+            PackageContentId::new([99; 32]).expect("wrong package identity"),
+            &root(),
+            Path::new(env!("CARGO_BIN_EXE_lkjscript-cell")),
+            host(&stdio),
+        )
+        .expect("install mismatched package");
+    assert!(matches!(
+        system.start(app),
+        Err(RuntimeError::ProcessCell(_))
+    ));
+    assert_eq!(
+        system.status(app).expect("failed app").lifecycle,
+        Lifecycle::Failed
+    );
+    assert!(stdio.output().expect("no output").is_empty());
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn one_process_cell_crash_does_not_contaminate_another_application() {
@@ -118,7 +149,7 @@ fn one_process_cell_crash_does_not_contaminate_another_application() {
     let first = system
         .install_isolated(
             manifest("crash-cell"),
-            package(72),
+            package(),
             &root(),
             Path::new(env!("CARGO_BIN_EXE_lkjscript-cell")),
             host(&first_stdio),
@@ -127,7 +158,7 @@ fn one_process_cell_crash_does_not_contaminate_another_application() {
     let second = system
         .install_isolated(
             manifest("survivor-cell"),
-            package(73),
+            package(),
             &root(),
             Path::new(env!("CARGO_BIN_EXE_lkjscript-cell")),
             host(&second_stdio),

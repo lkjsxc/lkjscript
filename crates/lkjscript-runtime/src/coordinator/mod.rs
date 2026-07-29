@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 
 use lkjscript_contracts::PLATFORM_REVISION;
 use lkjscript_host::{DurableStorage, HostError};
@@ -9,8 +11,12 @@ use crate::{
     ControlStoreError, ControlSuccess, CoordinatorIdentity, RuntimeError, RuntimeSystem,
 };
 
+mod application_registry;
 mod lease;
+#[cfg(test)]
+mod tests;
 
+use application_registry::ManagedApplication;
 pub use lease::CoordinatorLease;
 
 const BOOTSTRAP_KEY: &str = "system/bootstrap";
@@ -23,6 +29,8 @@ pub enum CoordinatorError {
     Host(HostError),
     IdentityMismatch,
     InvalidBootstrap,
+    InvalidApplicationRegistry,
+    WorkerUnavailable,
 }
 
 impl fmt::Display for CoordinatorError {
@@ -33,6 +41,10 @@ impl fmt::Display for CoordinatorError {
             Self::Host(error) => write!(output, "coordinator host: {error}"),
             Self::IdentityMismatch => output.write_str("durable coordinator identity mismatch"),
             Self::InvalidBootstrap => output.write_str("invalid durable coordinator bootstrap"),
+            Self::InvalidApplicationRegistry => {
+                output.write_str("invalid durable application registry")
+            }
+            Self::WorkerUnavailable => output.write_str("process-cell worker is unavailable"),
         }
     }
 }
@@ -66,6 +78,9 @@ pub struct MachineCoordinator<S> {
     previous_shutdown_clean: bool,
     store: ControlStore<S>,
     runtime: RuntimeSystem,
+    worker: Option<PathBuf>,
+    applications: BTreeMap<u64, ManagedApplication>,
+    next_application: u64,
 }
 
 impl<S: DurableStorage> MachineCoordinator<S> {
@@ -74,6 +89,7 @@ impl<S: DurableStorage> MachineCoordinator<S> {
         principal: u32,
         storage: S,
         max_cache_entries: NonZeroUsize,
+        worker: Option<PathBuf>,
     ) -> Result<Self, CoordinatorError> {
         let mut store = ControlStore::open(storage)?;
         let bootstrap = bootstrap(identity)?;
@@ -91,13 +107,18 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             Some(_) => return Err(CoordinatorError::InvalidBootstrap),
         };
         store.put(CLEAN_KEY.to_string(), b"false".to_vec())?;
-        Ok(Self {
+        let mut coordinator = Self {
             identity,
             principal,
             previous_shutdown_clean,
             store,
             runtime: RuntimeSystem::new(identity, max_cache_entries),
-        })
+            worker,
+            applications: BTreeMap::new(),
+            next_application: 1,
+        };
+        coordinator.recover_applications()?;
+        Ok(coordinator)
     }
 
     pub fn runtime(&self) -> &RuntimeSystem {
@@ -110,15 +131,15 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             principal: self.principal,
             previous_shutdown_clean: self.previous_shutdown_clean,
             control_sequence: self.store.sequence(),
-            applications: self.runtime.list()?.len(),
+            applications: self.applications.len(),
         })
     }
 
     pub fn handle_control(
-        &self,
+        &mut self,
         request: &ControlRequest,
     ) -> Result<ControlSuccess, ControlFailure> {
-        match request.operation {
+        match &request.operation {
             ControlOperation::Describe => {
                 let identity = ControlIdentity::current().map_err(|_| ControlFailure::Internal)?;
                 Ok(ControlSuccess::Description {
@@ -129,20 +150,25 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             }
             ControlOperation::Status => {
                 let status = self.status().map_err(|_| ControlFailure::Internal)?;
-                let applications =
-                    u32::try_from(status.applications).map_err(|_| ControlFailure::Internal)?;
                 Ok(ControlSuccess::Status {
                     coordinator: status.identity.get(),
                     clean_shutdown: status.previous_shutdown_clean,
                     control_sequence: status.control_sequence,
-                    applications,
+                    applications: u32::try_from(status.applications)
+                        .map_err(|_| ControlFailure::Internal)?,
                 })
             }
             ControlOperation::Shutdown => Ok(ControlSuccess::ShutdownAccepted),
+            operation => self.application_control(operation),
         }
     }
 
     pub fn shutdown(&mut self) -> Result<(), CoordinatorError> {
+        for application in self.applications.values_mut() {
+            if let Some(incarnation) = application.incarnation.take() {
+                self.runtime.stop(incarnation)?;
+            }
+        }
         self.store.put(CLEAN_KEY.to_string(), b"true".to_vec())?;
         self.store.checkpoint()?;
         Ok(())
@@ -159,32 +185,4 @@ fn bootstrap(identity: CoordinatorIdentity) -> Result<Vec<u8>, CoordinatorError>
     bytes.extend_from_slice(&PLATFORM_REVISION.to_le_bytes());
     bytes.extend_from_slice(&control.contract_digest.as_bytes());
     Ok(bytes)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::error::Error;
-
-    use lkjscript_host::FakeDurableStorage;
-
-    use super::*;
-
-    #[test]
-    fn coordinator_recovers_clean_and_unclean_boots_without_database() -> Result<(), Box<dyn Error>>
-    {
-        let storage = FakeDurableStorage::new();
-        let identity = CoordinatorIdentity::new(7).ok_or("identity")?;
-        let mut first =
-            MachineCoordinator::start(identity, 1000, storage.clone(), NonZeroUsize::MIN)?;
-        assert!(first.status()?.previous_shutdown_clean);
-        first.shutdown()?;
-        storage.crash();
-        let second = MachineCoordinator::start(identity, 1000, storage.clone(), NonZeroUsize::MIN)?;
-        assert!(second.status()?.previous_shutdown_clean);
-        drop(second);
-        storage.crash();
-        let third = MachineCoordinator::start(identity, 1000, storage, NonZeroUsize::MIN)?;
-        assert!(!third.status()?.previous_shutdown_clean);
-        Ok(())
-    }
 }

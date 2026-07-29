@@ -52,9 +52,11 @@ and non-Linux adapters did not. Trusted in-process VMs now compose app-private
 host environments and execute exact arguments, direct stdio, and clock grants;
 portable relative paths and directory/database provider contracts exist. A
 fixed worker executes bounded Linux process cells with lossless outcomes,
-restart, stale rejection, and per-app crash isolation. File, terminal, network,
-SQLite, and stream-resource VM cutover, persistent app reconstruction, session
-brokers, database attachment, GUI, and SQLite replacement remain absent.
+restart, stale rejection, and per-app crash isolation. Durable registry identity,
+desired state, authenticated lifecycle/invoke, and daemon restart reconstruction
+are Current for process apps. File, terminal, network, SQLite, and stream-resource
+VM cutover, session brokers, database attachment, GUI, and SQLite replacement
+remain absent.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -132,8 +134,8 @@ resources remain absent.
 
 1. Complete file, stream, terminal, network, and database VM provider cutover,
    then split remaining topology, executable-memory, SQLite, and native calls.
-2. Persist package/application registry facts and expose trusted/process cell
-   install, list, start, stop, restart, and remove through local control.
+2. Add authenticated session brokers and native GUI/accessibility applications
+   without presenting UI from system service contexts.
 3. Integrate database tenants, transactions, cancellation, buffer pages, and
    checkpoints into application-incarnation lifecycle before SQLite migration
    or benchmarks.

@@ -35,11 +35,13 @@ mod linux {
         let lease = CoordinatorLease::acquire(&configuration.state_directory, identity)?;
         lease.sync()?;
         let storage = PortableDurableStorage::new(&configuration.state_directory)?;
+        let worker = process_worker()?;
         let mut coordinator = MachineCoordinator::start(
             identity,
             configuration.principal,
             storage,
             NonZeroUsize::new(256).ok_or("cache bound")?,
+            Some(worker),
         )?;
         let socket = configuration.state_directory.join("control.sock");
         let mut control = UnixControlServer::bind(socket, configuration.principal)?;
@@ -62,6 +64,18 @@ mod linux {
         drop(control);
         drop(lease);
         Ok(())
+    }
+
+    fn process_worker() -> Result<PathBuf, Box<dyn Error>> {
+        let executable = std::env::current_exe()?;
+        let directory = executable
+            .parent()
+            .ok_or("lkjscriptd has no executable directory")?;
+        let worker = directory.join("lkjscript-cell").canonicalize()?;
+        if !worker.is_file() {
+            return Err("lkjscript-cell sibling is not a file".into());
+        }
+        Ok(worker)
     }
 
     struct Configuration {

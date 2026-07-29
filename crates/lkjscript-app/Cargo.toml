@@ -17,6 +17,10 @@ path = "src/runtime/benchmark.rs"
 name = "lkjscript-cell"
 path = "src/runtime/process_cell/main.rs"
 
+[[bin]]
+name = "lkjscriptd"
+path = "../lkjscript-runtime/src/bin/lkjscriptd.rs"
+
 [dependencies]
 lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }

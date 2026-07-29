@@ -16,8 +16,9 @@ mod system;
 
 pub use control::{
     decode_request_frame, decode_response_frame, encode_request_frame, encode_response_frame,
-    ControlError, ControlFailure, ControlIdentity, ControlOperation, ControlRequest,
-    ControlResponse, ControlSuccess, MAX_CONTROL_FRAME_BYTES,
+    ApplicationInstallRequest, ControlError, ControlFailure, ControlIdentity, ControlOperation,
+    ControlRequest, ControlResponse, ControlSuccess, ControlledApplication,
+    ControlledApplicationState, MAX_CONTROL_FRAME_BYTES,
 };
 #[cfg(target_os = "linux")]
 pub use control::{UnixControlClient, UnixControlServer};
@@ -31,7 +32,8 @@ pub use ids::{
 pub use model::{
     ApplicationKind, ApplicationManifest, ApplicationStatus, DeploymentScope, ExecutionCellClass,
     InvocationMetrics, InvocationOutcome, InvocationRequest, Lifecycle, ProcessCellState,
-    ResourceAccounting, ResourceQuota, RestartPolicy, MAX_LOG_ENTRIES, MAX_RESTART_ATTEMPTS,
+    ResourceAccounting, ResourceQuota, RestartPolicy, RuntimeAccounting, RuntimeLimits,
+    MAX_LOG_ENTRIES, MAX_RESTART_ATTEMPTS,
 };
 pub use service::{ServiceBundle, ServiceConfiguration, ServiceError};
 pub use system::RuntimeSystem;

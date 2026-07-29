@@ -6,19 +6,19 @@
   "kind": "crate",
   "purpose": "Provide the daemon, durable control, service adapters, and supervised application core.",
   "layer": "runtime authority",
-  "concepts": ["machine coordinator", "durable control store", "authenticated local control", "application lifecycle", "incarnation identity", "immutable code leases", "isolated process cells", "bounded process protocol"],
+  "concepts": ["machine coordinator", "durable control store", "authenticated local control", "application registry", "desired application state", "shared fair admission", "hierarchical quotas", "application lifecycle", "incarnation identity", "immutable code leases", "isolated process cells", "bounded process protocol"],
   "facade": ["crates/lkjscript-runtime/src/lib.rs"],
   "allowed_dependencies": ["contracts", "core", "host", "vm"],
   "forbidden_dependencies": ["app", "compiler", "database", "ir", "jit", "native", "resource", "sys"],
   "tests": ["crates/lkjscript-runtime/src/control/tests.rs", "crates/lkjscript-runtime/src/execution/protocol/tests.rs", "crates/lkjscript-runtime/src/control_store/tests.rs", "crates/lkjscript-runtime/src/coordinator/lease.rs", "crates/lkjscript-runtime/src/coordinator/mod.rs", "crates/lkjscript-runtime/src/service/mod.rs", "crates/lkjscript-runtime/src/tests/cache.rs", "crates/lkjscript-runtime/src/tests/mod.rs"],
-  "decisions": ["docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md", "docs/decisions/platform/runtime-foundation/isolated-process-cells.md", "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md", "docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md", "docs/decisions/platform/runtime-foundation/isolated-process-cells.md", "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md", "docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md", "docs/decisions/platform/runtime-foundation/persistent-application-control.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "defines", "names": ["runtime authority", "application lifecycle", "local control"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
   "verification": ["cargo test --locked -p lkjscript-runtime"],
   "context_card": {
-    "goal": "Persist and control one daemon authority while supervising bounded applications without cross-app mutable state.",
+    "goal": "Persist and control one daemon authority and runnable app registry without cross-app mutable state.",
     "interfaces": ["crates/lkjscript-runtime/src/lib.rs"],
-    "invariants": ["only implemented provider grants are admitted", "each invocation owns private VM state", "isolated protocol identity and bounds fail closed", "live code leases are never evicted"]
+    "invariants": ["only implemented provider grants are admitted", "each invocation owns private VM state", "isolated protocol identity and bounds fail closed", "durable app recovery skips no malformed record", "coordinator and app quotas gate every invocation", "live code leases are never evicted"]
   }
 }

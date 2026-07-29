@@ -39,6 +39,20 @@ incarnation safe, quota charged, and closed by structured cleanup. Raw host
 paths, descriptors, pointers, database files, and capability secrets never
 become source values.
 
+## Resource Admission
+
+One FIFO coordinator ticket orders invocation admission across all applications.
+Admission must satisfy the coordinator concurrent/total ceiling and the app's
+concurrent/total quota before one private invocation receives its execution
+fuel, stack, frame, heap, allocation, handle, output, cleanup, and wall limits.
+Completion or cell-boundary failure returns the coordinator active reservation.
+No application owns a private worker pool or bypass lane.
+
+`RuntimeAccounting` reports coordinator active, total, peak concurrent, and
+configured limits. Focused multi-app evidence sets the coordinator concurrent
+ceiling to one, admits one invocation from each of two applications without
+starvation, observes peak one, then enforces the coordinator total ceiling.
+
 ## Portable Application Paths
 
 An application-visible path is relative, UTF-8, segmented, and normalized. It

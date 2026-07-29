@@ -22,6 +22,22 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                     "bounds",
                     "closed key value and record maxima",
                 )),
+            ContractItem::new("application-registry", ContractItemKind::Type)
+                .fact(fact(
+                    "identity",
+                    "registry identity",
+                    "monotonic nonzero u64",
+                ))
+                .fact(fact(
+                    "record",
+                    "durable record",
+                    "package entry grants quotas desired-state",
+                ))
+                .fact(fact(
+                    "operations",
+                    "control operations",
+                    "install list start stop restart remove invoke",
+                )),
             ContractItem::new("application-cell", ContractItemKind::Type)
                 .fact(fact(
                     "class",
@@ -47,6 +63,11 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                     "outcome",
                     "outcome",
                     "lossless closed ExecutionOutcome",
+                ))
+                .fact(fact(
+                    "resource-hierarchy",
+                    "resource hierarchy",
+                    "coordinator application invocation quotas and fair tickets",
                 )),
             ContractItem::new("local-control", ContractItemKind::Type)
                 .fact(fact("schema", "schema", "lkjscript.local-control"))

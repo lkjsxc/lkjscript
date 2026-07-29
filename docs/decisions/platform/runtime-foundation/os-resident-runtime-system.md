@@ -10,8 +10,8 @@ applications without requiring one process or one address space.
 **Accepted Contract with a Current Linux Coordinator Foundation.** The focused
 foreground daemon, exclusive lease, bootstrap store, authenticated Unix control,
 CLI, service definitions, app-private trusted VMs, and Linux isolated process
-cells are Current by their named evidence. Persistent app reconstruction,
-session brokers, GUI execution, database attachment, and other native transports
+cells and durable process-app reconstruction are Current by their evidence.
+Session brokers, GUI execution, database attachment, and other native transports
 become Current only with their own execution evidence.
 
 ## Product Authority
@@ -127,6 +127,7 @@ evidence is required before each corresponding Current claim.
 The Current application core installs, starts, stops, restarts, removes, lists,
 and invokes trusted VMs or fixed-worker process cells with bounded admission.
 Process outcomes are lossless, restart changes incarnation and process, and one
-killed worker does not contaminate another app. Application facts are not yet
-reconstructed by the daemon after restart. Obsolete public node and application
-generation names provide no alias.
+killed worker does not contaminate another app. Stable registry identities,
+desired running state, and exact package bindings reconstruct through daemon
+restart. Trusted in-process artifacts are not persisted. Obsolete public node
+and application generation names provide no alias.

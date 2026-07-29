@@ -155,14 +155,14 @@ Git history. They do not provide aliases or acceptance fallbacks.
   has a persistent foreground `lkjscriptd`, exclusive lease, durable independent
   control store, authenticated Unix control, CLI, and generated service definitions.
   Trusted VMs and supervised Linux process cells admit arguments, stdio, and clock
-  grants with private state and bounded quotas. Persistent app reconstruction,
-  other VM host families, database attachment, session brokers, GUI,
-  and non-Linux transports are not Current. The database remains experimental.
+  grants with private state and bounded quotas. Durable process-app install, list,
+  lifecycle, invoke, and restart recovery use authenticated control. Other VM host
+  families, database attachment, session brokers, GUI, and non-Linux transports
+  are not Current. The database remains experimental.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic closed contract registry.
 - Capsule manifests, repository policy/provenance, graph/query outputs,
-  capability status, and agent work state use stable schemas plus exact contract
-  digests.
+  capability status, and agent work state use stable schemas plus exact contract digests.
 - The repository graph remains bounded and evidence-backed. Agent checkpoints
   remain revision-checked, append-only, and fail closed on stale semantic or
   repository identities.

@@ -74,7 +74,7 @@ impl UnixControlServer {
                     }
                     self.replay.insert(
                         request.idempotency_id,
-                        (request.operation, response.clone()),
+                        (request.operation.clone(), response.clone()),
                     );
                     response
                 }
@@ -86,7 +86,7 @@ impl UnixControlServer {
             }
         };
         write_frame(&mut stream, &encode_response_frame(&response)?)?;
-        Ok(request.operation)
+        Ok(request.operation.clone())
     }
 }
 

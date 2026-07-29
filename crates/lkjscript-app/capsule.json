@@ -15,7 +15,8 @@
     "memory inventory",
     "memory tracing ratchet",
     "runtime topology and scheduler observation",
-    "isolated process worker"
+    "isolated process worker",
+    "durable application control client"
   ],
   "facade": [
     "crates/lkjscript-app/src/main.rs",
@@ -51,6 +52,7 @@
     "docs/decisions/platform/runtime-foundation/application-cells-and-host-providers.md",
     "docs/decisions/platform/runtime-foundation/isolated-process-cells.md",
     "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
+    "docs/decisions/platform/runtime-foundation/persistent-application-control.md",
     "docs/decisions/platform/semantic-resource-plane.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
   ],
@@ -85,7 +87,9 @@
       "lkjscript runtime host-scheduler",
       "lkjscript runtime plan",
       "lkjscript system describe|status|stop",
-      "lkjscript-cell process protocol worker"
+      "lkjscript system app install|list|start|stop|restart|remove|invoke",
+      "lkjscript-cell process protocol worker",
+      "lkjscriptd daemon"
     ],
     "invariants": [
       "run and disasm require an exact local package lock",

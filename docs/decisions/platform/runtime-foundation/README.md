@@ -59,6 +59,7 @@ candidates are removed rather than retained as fallback paths.
 - [OS-Resident Runtime System](os-resident-runtime-system.md)
 - [Application Cells And Host Providers](application-cells-and-host-providers.md)
 - [Isolated Process Cells](isolated-process-cells.md)
+- [Persistent Application Registry And Control](persistent-application-control.md)
 - [Machine Coordinator And Local Control](machine-coordinator-daemon.md)
 - [Transactional Kernel](transactional-kernel.md)
 

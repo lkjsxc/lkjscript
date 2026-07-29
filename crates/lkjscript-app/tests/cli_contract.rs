@@ -3,6 +3,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+#[path = "canonical/application_control.rs"]
+mod application_control;
 #[path = "canonical/process_cells.rs"]
 mod process_cells;
 

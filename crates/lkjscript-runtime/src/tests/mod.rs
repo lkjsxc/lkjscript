@@ -6,6 +6,7 @@ use lkjscript_core::{validate_chunk, Chunk, Constant, ExecutionOutcome, Op, Vali
 
 use super::*;
 
+mod admission;
 mod cache;
 
 fn package(tag: u8) -> Result<PackageContentId, Box<dyn Error>> {

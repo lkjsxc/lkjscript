@@ -10,6 +10,8 @@ use crate::{
 pub const MAX_RESTART_ATTEMPTS: u32 = 1_024;
 pub const MAX_LOG_ENTRIES: usize = 64;
 
+include!("system/runtime_limits.rs");
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeploymentScope {
     System { principal: u32 },

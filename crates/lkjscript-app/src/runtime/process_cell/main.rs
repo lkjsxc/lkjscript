@@ -105,7 +105,11 @@ fn prepare(bootstrap: &ProcessBootstrap) -> Result<lkjscript_compiler::Executabl
     if canonical != entry {
         return Err("worker package entry must be canonical".into());
     }
-    let (_, manifest) = lkjscript_compiler::package::verify(entry).map_err(|e| e.to_string())?;
+    let (_, manifest, package) =
+        lkjscript_compiler::package::verify_content(entry).map_err(|e| e.to_string())?;
+    if package.as_bytes() != bootstrap.package {
+        return Err("worker package content identity mismatch".into());
+    }
     let profile = manifest
         .resource_profile
         .as_deref()

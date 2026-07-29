@@ -102,6 +102,7 @@ Current on Linux x86-64. Focused tests execute validated Semantic Source twice,
 replace the worker on restart, reject stale incarnation use, kill one worker,
 and continue executing another application.
 
-Daemon-persistent isolated-app reconstruction, control commands, service-time
-worker path configuration, non-Linux execution, OS sandbox profiles, and
-provider families beyond arguments, direct stdio, and clock are not Current.
+Daemon-persistent isolated-app reconstruction and application control are
+Current for the fixed sibling worker and exact registry evidence. Non-Linux
+execution, OS sandbox profiles, trusted-artifact reconstruction, and provider
+families beyond arguments, direct stdio, and clock are not Current.

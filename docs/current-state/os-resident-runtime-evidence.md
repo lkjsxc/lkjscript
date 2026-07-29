@@ -7,9 +7,9 @@ state-directory lease, database-independent control store, authenticated Unix
 control, describe/status/stop client, and deterministic service-definition
 slice named here. App-private host environments, portable application paths,
 provider-backed VM stdio/clock, and trusted arguments/stdio applications are
-also Current for their exact tests. Supervised isolated process cells are Current
-for the exact Linux evidence below. Application persistence, database attachment,
-session brokers, and GUI remain non-Current.
+also Current for their exact tests. Supervised process cells and durable process
+application control are Current for the exact Linux evidence below. Database
+attachment, session brokers, and GUI remain non-Current.
 
 ## Implemented Boundary
 
@@ -21,7 +21,7 @@ process under `/proc` once before replacement. Other hosts conservatively treat
 an existing lease as live.
 
 The coordinator opens `lkjscript.control-store` before any application database.
-Its journal and snapshot carry platform revision 4, the exact
+Its journal and snapshot carry platform revision 5, the exact
 `lkjscript.runtime-control` digest, explicit little-endian widths, monotonic
 sequence, bounded key/value payloads, and full SHA-256 checksums. Commit syncs
 before fact publication. Recovery replays idempotently, rejects corruption and
@@ -41,8 +41,9 @@ user identity. A request field cannot supply principal authority.
 
 Frames have one exact bounded length, platform revision, contract digest,
 nonzero request identity, idempotency digest, and closed operation. Current
-operations are `describe`, `status`, and `shutdown`. Unknown, partial, oversized,
-stale, wrong-digest, malformed, and replay-conflicting frames fail closed.
+operations include describe/status/shutdown plus application install, list,
+start, stop, restart, remove, and invoke. Unknown, partial, oversized, stale,
+wrong-digest, malformed, and replay-conflicting frames fail closed.
 A bounded cache returns the prior result for an exact modifying replay.
 
 `lkjscript system describe|status|stop --endpoint PATH` is a real client of the
@@ -89,8 +90,8 @@ manifest/cell-class mismatch rejection.
 A real process smoke built `lkjscriptd` and `lkjscript`, started the daemon,
 waited for its Unix endpoint, ran describe and status through the CLI, requested
 shutdown, joined the daemon, and observed a zero-byte journal plus a 193-byte
-durable snapshot. It reported coordinator 904, platform revision 4, exact control
-digest `754118950895d44b32a89a23ac895188b41baf663f44b23e81b2764758e07b8d`,
+durable snapshot. The latest smoke reported coordinator 904, platform revision 5,
+and exact control digest `a96c48822a427343654b0c34b469feaaf8dd2b72437ed622c65e501fca524063`,
 clean previous shutdown, control sequence 2, and zero applications.
 
 A separate CLI smoke generated all six service files, required each to be
@@ -139,8 +140,26 @@ in one worker, observed exact output and flush counts, stopped it, restarted it
 with a new incarnation and process, and rejected the stale incarnation. A second
 test started two applications, sent `SIGKILL` to one worker, observed only that
 application enter `failed`, then invoked and stopped the surviving application.
-Existing ticket admission, per-app concurrent/total quotas, metrics, and bounded
-logs run before both cell classes.
+One FIFO coordinator ticket plus coordinator/app concurrent and total ceilings
+run before both cell classes. Focused two-app evidence observed global peak one,
+no starvation, exact total rejection, per-app metrics, and bounded logs.
+
+## Durable Application Control
+
+The bootstrap store now retains stable monotonic registry identities, full
+package digests, canonical package roots, normalized entries, grants, quotas,
+and desired stopped/running state. Recovery validates every record in identity
+order, reconstructs each process application with the daemon's fixed sibling
+worker, and starts desired-running records. It fails coordinator startup rather
+than skipping malformed or unstartable records.
+
+Authenticated local control and `lkjscript system app` implement install, list,
+start, stop, restart, remove, and invoke. Invoke returns the exact closed outcome
+and only that invocation's bounded buffered stdout. Focused Linux evidence
+installed registry identity 1, invoked real validated source, killed and
+restarted the daemon from the same state directory, observed unclean recovery,
+and recovered the app as running with a
+new worker, invoked it again, then stopped and removed it.
 
 ## Exact Limits
 
@@ -148,11 +167,10 @@ logs run before both cell classes.
 - No Windows named pipe or macOS native control execution exists.
 - Generated service definitions were not installed or started with privilege.
 - Shutdown is control-driven; OS signal mapping is not yet Current.
-- Application registry facts are not yet reconstructed into runnable code.
 - Only arguments, direct stdio, and clock operations use the composed VM host;
   tenant attachment, session brokers, native windows, graphics, accessibility,
   and GUI execution remain absent.
-- Process apps are not yet persisted or reconstructed by `lkjscriptd`, and the
-  daemon service definitions do not yet bind a worker executable path.
+- Persistent reconstruction is isolated-process only; trusted in-process code
+  artifacts are not serialized by the registry.
 - No Miri, sanitizer, fuzz campaign, non-Linux build, or non-x86 execution was
   run for this slice.

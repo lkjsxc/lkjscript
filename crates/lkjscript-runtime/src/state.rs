@@ -22,14 +22,16 @@ pub(crate) struct Inner {
 pub(crate) struct State {
     pub(crate) apps: BTreeMap<ApplicationId, AppRecord>,
     pub(crate) cache: CodeCache,
+    pub(crate) global: GlobalAdmission,
     next_id: Option<NonZeroU64>,
 }
 
 impl State {
-    pub(crate) fn new(max_cache_entries: NonZeroUsize) -> Self {
+    pub(crate) fn new(max_cache_entries: NonZeroUsize, limits: crate::RuntimeLimits) -> Self {
         Self {
             apps: BTreeMap::new(),
             cache: CodeCache::new(max_cache_entries),
+            global: GlobalAdmission::new(limits),
             next_id: Some(NonZeroU64::MIN),
         }
     }
@@ -40,6 +42,8 @@ impl State {
         Ok(id)
     }
 }
+
+include!("system/global.rs");
 
 pub(crate) struct AppRecord {
     pub(crate) manifest: ApplicationManifest,

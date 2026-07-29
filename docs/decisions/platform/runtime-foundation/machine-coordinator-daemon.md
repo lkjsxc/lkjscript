@@ -11,7 +11,7 @@ store, authenticated local protocol, and installable service boundary.
 
 **Current on Linux x86-64** for the focused foreground coordinator, exclusive
 lease, control journal/snapshot, kernel-peer-authenticated Unix transport,
-describe/status/stop client, and deterministic service-definition generation
+application lifecycle/invocation client, and deterministic service generation
 covered by [exact evidence](../../../current-state/os-resident-runtime-evidence.md).
 Windows and macOS definitions remain experimental until built and executed on
 native hosts. Privileged installation is never implied by file generation.

@@ -17,10 +17,18 @@ pub struct RuntimeSystem {
 
 impl RuntimeSystem {
     pub fn new(identity: CoordinatorIdentity, max_cache_entries: NonZeroUsize) -> Self {
+        Self::with_limits(identity, max_cache_entries, crate::RuntimeLimits::default())
+    }
+
+    pub fn with_limits(
+        identity: CoordinatorIdentity,
+        max_cache_entries: NonZeroUsize,
+        limits: crate::RuntimeLimits,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 identity,
-                state: std::sync::Mutex::new(State::new(max_cache_entries)),
+                state: std::sync::Mutex::new(State::new(max_cache_entries, limits)),
                 admission_changed: std::sync::Condvar::new(),
             }),
         }
@@ -53,6 +61,10 @@ impl RuntimeSystem {
             .iter()
             .map(|(id, app)| app.status(self.inner.identity, *id))
             .collect())
+    }
+
+    pub fn accounting(&self) -> Result<crate::RuntimeAccounting, RuntimeError> {
+        Ok(self.lock_state()?.global.accounting())
     }
 
     pub fn cache_contains(&self, package: PackageContentId) -> Result<bool, RuntimeError> {

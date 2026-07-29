@@ -17,6 +17,54 @@ fn request_and_response_frames_are_exact_and_closed() -> Result<(), Box<dyn Erro
 }
 
 #[test]
+fn application_control_frames_preserve_typed_payloads() -> Result<(), Box<dyn Error>> {
+    let operations = [
+        ControlOperation::ApplicationInstall(ApplicationInstallRequest {
+            name: "counter".into(),
+            package: [3; 32],
+            package_root: "/tmp/counter".into(),
+            entry: "main.lkjscript".into(),
+            capabilities: vec![lkjscript_core::CapabilityKind::Stdio],
+            max_concurrent_invocations: 2,
+            max_total_invocations: 9,
+        }),
+        ControlOperation::ApplicationInvoke {
+            application: 7,
+            arguments: vec!["one".into(), "two".into()],
+        },
+    ];
+    for operation in operations {
+        let request = ControlRequest::current(11, [4; 32], operation)?;
+        let frame = encode_request_frame(&request)?;
+        assert_eq!(decode_request_frame(&frame), Ok(request));
+    }
+    let application = ControlledApplication {
+        application: 7,
+        name: "counter".into(),
+        desired_running: true,
+        state: ControlledApplicationState::Running,
+        incarnation: Some(2),
+        process: Some(100),
+    };
+    for result in [
+        ControlSuccess::Applications(vec![application]),
+        ControlSuccess::ApplicationInvoked {
+            application: 7,
+            outcome: lkjscript_core::ExecutionOutcome::Exited(0),
+            output: b"frame".to_vec(),
+        },
+    ] {
+        let response = ControlResponse {
+            request_id: 11,
+            result: Ok(result),
+        };
+        let frame = encode_response_frame(&response)?;
+        assert_eq!(decode_response_frame(&frame), Ok(response));
+    }
+    Ok(())
+}
+
+#[test]
 fn malformed_stale_and_wrong_digest_requests_fail_closed() -> Result<(), Box<dyn Error>> {
     let request = ControlRequest::current(1, [0; 32], ControlOperation::Status)?;
     let frame = encode_request_frame(&request)?;

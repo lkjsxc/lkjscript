@@ -17,6 +17,7 @@ impl RuntimeSystem {
         outcome: &ExecutionOutcome,
     ) -> Result<(), RuntimeError> {
         let mut state = self.lock_state()?;
+        state.global.complete();
         if let Some(instance) = state
             .apps
             .get_mut(&admission.incarnation.application())
@@ -87,6 +88,7 @@ impl RuntimeSystem {
 
     fn fail_cell(&self, admission: &Admission, error: &str) -> Result<(), RuntimeError> {
         let mut state = self.lock_state()?;
+        state.global.complete();
         if let Some(app) = state
             .apps
             .get_mut(&admission.incarnation.application())

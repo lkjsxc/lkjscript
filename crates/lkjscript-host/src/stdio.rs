@@ -65,6 +65,13 @@ impl BufferedStdio {
         Ok(self.lock()?.flushes)
     }
 
+    pub fn drain_output(&self) -> HostResult<(Vec<u8>, u64)> {
+        let mut state = self.lock()?;
+        let output = std::mem::take(&mut state.output);
+        let flushes = std::mem::take(&mut state.flushes);
+        Ok((output, flushes))
+    }
+
     fn lock(&self) -> HostResult<std::sync::MutexGuard<'_, BufferedState>> {
         self.state.lock().map_err(|_| HostError::Io {
             operation: "lock buffered stdio".to_string(),

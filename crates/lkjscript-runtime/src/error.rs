@@ -6,6 +6,7 @@ use crate::{ApplicationId, ApplicationIncarnationId, Lifecycle, PackageContentId
 pub enum QuotaKind {
     ConcurrentInvocations,
     TotalInvocations,
+    CoordinatorTotalInvocations,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

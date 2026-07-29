@@ -19,7 +19,7 @@ pub(crate) struct Admission {
 }
 
 impl RuntimeSystem {
-    fn advance_ticket(state: &mut State, application: ApplicationId) {
+    fn advance_tickets(state: &mut State, application: ApplicationId) {
         if let Some(instance) = state
             .apps
             .get_mut(&application)
@@ -27,6 +27,7 @@ impl RuntimeSystem {
         {
             instance.serving_ticket = instance.serving_ticket.saturating_add(1);
         }
+        state.global.advance();
     }
 
     pub(crate) fn admit(
@@ -36,6 +37,10 @@ impl RuntimeSystem {
     ) -> Result<Admission, RuntimeError> {
         let application = incarnation.application();
         let mut state = self.lock_state()?;
+        let global_ticket = state.global.next_ticket;
+        let next_global_ticket = global_ticket
+            .checked_add(1)
+            .ok_or(RuntimeError::IdentifierSpaceExhausted)?;
         let ticket = {
             let app = state
                 .apps
@@ -61,8 +66,21 @@ impl RuntimeSystem {
                 .ok_or(RuntimeError::IdentifierSpaceExhausted)?;
             ticket
         };
+        state.global.next_ticket = next_global_ticket;
         loop {
-            let (current, lifecycle, serving, total, max_total, active, max_concurrent) = {
+            let (
+                current,
+                lifecycle,
+                serving,
+                total,
+                max_total,
+                active,
+                max_concurrent,
+                global_total,
+                global_max_total,
+                global_active,
+                global_max_concurrent,
+            ) = {
                 let app = state
                     .apps
                     .get(&application)
@@ -77,11 +95,16 @@ impl RuntimeSystem {
                 (
                     app.incarnation(self.inner.identity, application),
                     app.lifecycle,
-                    instance.serving_ticket == ticket,
+                    instance.serving_ticket == ticket
+                        && state.global.serving_ticket == global_ticket,
                     instance.total,
                     app.manifest.quota.max_total_invocations.get(),
                     instance.active,
                     app.manifest.quota.max_concurrent_invocations.get(),
+                    state.global.total,
+                    state.global.limits.max_total_invocations.get(),
+                    state.global.active,
+                    state.global.limits.max_concurrent_invocations.get(),
                 )
             };
             if current != Some(incarnation) {
@@ -91,7 +114,7 @@ impl RuntimeSystem {
                 });
             }
             if lifecycle != Lifecycle::Running && serving {
-                Self::advance_ticket(&mut state, application);
+                Self::advance_tickets(&mut state, application);
                 self.inner.admission_changed.notify_all();
                 return Err(RuntimeError::IllegalTransition {
                     from: lifecycle,
@@ -99,11 +122,22 @@ impl RuntimeSystem {
                 });
             }
             if lifecycle == Lifecycle::Running && serving && total >= max_total {
-                Self::advance_ticket(&mut state, application);
+                Self::advance_tickets(&mut state, application);
                 self.inner.admission_changed.notify_all();
                 return Err(RuntimeError::QuotaExceeded(QuotaKind::TotalInvocations));
             }
-            if lifecycle == Lifecycle::Running && serving && active < max_concurrent {
+            if lifecycle == Lifecycle::Running && serving && global_total >= global_max_total {
+                Self::advance_tickets(&mut state, application);
+                self.inner.admission_changed.notify_all();
+                return Err(RuntimeError::QuotaExceeded(
+                    QuotaKind::CoordinatorTotalInvocations,
+                ));
+            }
+            if lifecycle == Lifecycle::Running
+                && serving
+                && active < max_concurrent
+                && global_active < global_max_concurrent
+            {
                 break;
             }
             state = self
@@ -135,6 +169,7 @@ impl RuntimeSystem {
         };
         let cell = ExecutionCellId::new(instance_id, serial);
         inputs.arguments = arguments;
+        state.global.admitted();
         if let Some(instance) = state
             .apps
             .get_mut(&application)
