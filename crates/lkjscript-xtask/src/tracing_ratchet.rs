@@ -7,18 +7,22 @@ const RULE: &str = "LKJ-MEMORY-TRACING-RATCHET";
 
 pub fn check(root: &Path) -> usize {
     let path = root.join("crates/lkjscript-core/src/value/heap_object.rs");
-    let source = match fs::read_to_string(&path) {
-        Ok(source) => source,
-        Err(error) => {
-            eprintln!("{RULE} cannot read {}: {error}", path.display());
-            return 1;
-        }
-    };
-    let observed = match heap_variants(&source) {
-        Ok(variants) => variants,
-        Err(error) => {
-            eprintln!("{RULE} {}: {error}", path.display());
-            return 1;
+    let observed = if LEGACY_TRACED_FAMILIES.is_empty() && !path.exists() {
+        Vec::new()
+    } else {
+        let source = match fs::read_to_string(&path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("{RULE} cannot read {}: {error}", path.display());
+                return 1;
+            }
+        };
+        match heap_variants(&source) {
+            Ok(variants) => variants,
+            Err(error) => {
+                eprintln!("{RULE} {}: {error}", path.display());
+                return 1;
+            }
         }
     };
     let mut expected: Vec<_> = LEGACY_TRACED_FAMILIES

@@ -9,51 +9,39 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 
 ## Current Foundations And Accepted Next Contracts
 
-The immediate implementation sequence has progressed as follows:
+Current foundations include bounded repository and work-state services;
+canonical Semantic Source and local sessions; exact modules, local packages,
+capabilities, generic ADTs, structured control, typed HIR, verified SSA,
+validated bytecode, VM, callable baseline native execution, and forced proof
+native execution. Deterministic byte-vector and bytes owners cross all four
+engines. The authoritative HIR memory plan independently rejects false traced
+classification for those owners and for static function/symbol artifacts.
 
-1. bounded repository topology, strict manifests, rule IDs, and generated audit
-   JSON are Current;
-2. bounded repository graph/context nodes, edges, identities, and profiles are Current;
-3. externalized agent work state with exact Git/state preconditions, action and
-   command facts, content references, atomic replacement, and compaction is Current; and
-4. complete Semantic Source Schema with its preserved legacy contract base, bounded
-   one-shot operations, typed holes/legal actions, and the framed local session
-   are Current, superseding and rejecting legacy contract input identities;
-5. compiler Resource resource profile and hole/transaction pre-allocation are Current
-   without changing the removed legacy source contract limits;
-6. the canonical source contract identity, homogeneous closures, Schema marker facts, exact
-   compiler-owned check/diff/publish, atomic recovery, corpus migration, and
-   ordinary-compilation cutover are Current;
-7. generic enum declarations/type facts plus exact construction, independent
-   layout/runtime identities, verified SSA/evaluator, validated bytecode, boxed
-   active-payload GC values, reference VM execution, enum construction
-   precharging, exhaustive source match, and forced Linux x86-64 baseline/proof
-   JIT are Current;
-8. the canonical source contract Never/structured control, typed loop/while SSA block parameters,
-   dynamic trap values, all-four-engine differentials, and precise Semantic
-   Source/hole control facts and actions are Current;
-9. the four explicit numeric conversions and the generic `Option`/`Result`
-   prelude with closed `NumericError`, `Utf8Error`, and `SystemError` are Current
-   through generic enum IR/runtime paths and zero-fallback typed-error differentials; and
-10. broader host-native enum transitions, protocol-level semantic migration,
-   nonzero query caching, whole-pipeline pre-allocation, and shared request
-   ledgers remain next.
+The internal structural substrate now includes ordinary and sealed regions,
+typed pools, owner homes, and a compact stale-safe structural root table. The
+six registered traced families remain `buf`, `enum`, `pair`, `path`, `product`,
+and `string`; no collector-free-runtime claim follows.
 
-The authorities are [Bounded Repository
-Topology](../decisions/platform/bounded-repository-topology.md), [Repository
-Intelligence Graph And Context](../decisions/platform/repository-intelligence-graph.md),
-[Agent Work State](../decisions/platform/agent-work-state.md), [Semantic Source
-And Agent Protocol](../decisions/platform/semantic-source-and-agent-protocol.md),
-and [Resource Budget Profiles](../decisions/platform/resource-budget-profiles.md).
-All five authorities now describe Current bounded slices. Their explicitly
-broader Schema, profile, daemon, package, and runtime targets remain Accepted,
-not Current.
+The Linux runtime has an authenticated foreground coordinator, durable process
+applications, isolated VM process cells, app-private stdio/clock providers, a
+daemon-owned tenant database, and authenticated session presence. Database VM
+operations, broker-launched interactive cells, and GUI remain absent.
 
-The previously selected process-local synchronous automatic baseline-to-proof
-promotion remains an **Accepted Implementation Selection** and valid later
-experiment. Its threshold gate and default-disabled policy remain unchanged.
-Broader proof passes, OSR, background compilation, guards, deoptimization, AOT,
-caches, optional local PGO, and non-Linux targets remain non-Current.
+The accepted immediate sequence is deterministic structural memory only:
+
+1. complete aggregate ownership, automatic borrowing, destination, and region
+   facts in independently verified HIR and SSA;
+2. migrate the six families monotonically through evaluator, VM, baseline, and
+   proof execution, including returns and process codecs;
+3. use headless state, daemon, database, editor, HTTP, and existing terminal
+   workloads as acceptance evidence; and
+4. at zero families, delete collector mechanics and activate the implemented
+   `LKJ-RUNTIME-NO-TRACING-COLLECTOR` closure.
+
+The previously selected synchronous automatic baseline-to-proof promotion
+remains an **Accepted Implementation Selection** for a later cycle. OSR,
+background compilation, AOT, caches, local PGO, GUI, and product expansion do
+not preempt the memory cutover.
 ## Rejected
 
 Mandatory uploaded telemetry, hidden forced-engine fallback, incomplete artifact
@@ -65,11 +53,10 @@ and removed; only a materially different candidate may reopen that target.
 Current-process bounded JIT counters remain local, ephemeral, and not telemetry.
 ## Deferred
 
-Production AOT, content-addressed native caches, optional explicit local PGO,
-automatic optimizing promotion, OSR, package installation/update/manifests/
-locks/registry, supervisor/scheduler, adaptive or generational GC, background
-JIT compilation, guarded runtime specialization/deoptimization, non-Linux native
-backends, browser, general HTTP server/framework, and GUI runtime are later
-cycles. Local PGO is optional and is considered only after common SSA/AOT and
-complete artifact identity; no uploaded telemetry is accepted. These documents
-are decisions or experiments, not capability claims.
+Production AOT, native caches, optional explicit local PGO, automatic proof
+promotion, OSR, remote package registry/update, adaptive scheduling, background
+JIT compilation, guarded specialization/deoptimization, non-Linux native
+backends, browser, general HTTP framework, and GUI runtime are later cycles.
+Tracing, generational tracing, and cycle collection are rejected as migration
+fallbacks rather than deferred options. These documents are decisions or
+experiments, not capability claims.

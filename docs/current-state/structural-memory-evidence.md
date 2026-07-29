@@ -17,6 +17,12 @@ and symbols use inline artifact IDs. Six traced representation families remain.
   before reuse, exhausted slots retire, and release capacity is preflighted.
 - Typed roots bind domain, root class, slot generation, layout identity, and
   semantic type identity. Safe constructors cannot fabricate a live key.
+- `StructuralRootTable` projects a typed root to one compact session-private
+  64-bit slot/generation key. Entries retain exact runtime, layout, semantic
+  type, owner state, and stale-safe shared or exclusive loans. Move, drop,
+  sealed release, and static unregistration reject live loans, advance the slot
+  generation before reuse, and return the typed root to its domain authority;
+  the table never decides liveness or serializes a key.
 - Ordinary typed regions use bounded aligned `Vec<T>` chunks and a separate
   fallible large-object path. Internal edge records may cycle. Release follows
   only child and side-drop ledgers; it does not inspect payload values.
@@ -42,7 +48,10 @@ and symbols use inline artifact IDs. Six traced representation families remain.
   epoch exhaustion fails before changing home or loan state.
 - Unused builtin heap storage is removed. Capture-free functions use checked
   inline prototype IDs. Symbols use checked artifact IDs; returned snapshots
-  retain only reachable canonicalized symbol text.
+  retain only reachable canonicalized symbol text. The authoritative HIR plan
+  and its independent verifier now require those artifact values to use static
+  trivial storage and byte-vector to use deterministic unique storage; none may
+  consume a tracing-family registration.
 
 ## Focused Evidence
 
@@ -88,10 +97,59 @@ rejection, atomic seal failure, weak upgrade, pool retirement and deterministic
 destruction, cyclic ECS graphs, pending remote-release authority, worker-queue
 cleanup, and epoch exhaustion with no partial mutation.
 
+## Compact Root-Table Evidence
+
+Environment: Linux x86-64, locked Rust workspace, starting revision `90c6058`.
+Commands actually run for the compact table, HIR authority repair, and final
+zero-registry guard:
+
+```text
+cargo test --locked -p lkjscript-core --all-targets
+cargo clippy --locked -p lkjscript-core -p lkjscript-contracts --all-targets -- -D warnings
+cargo test --locked -p lkjscript-compiler --all-targets
+cargo clippy --locked -p lkjscript-compiler --all-targets -- -D warnings
+cargo test --locked -p lkjscript-xtask no_tracing
+cargo test --locked -p lkjscript-xtask tracing_ratchet
+cargo run --locked -p lkjscript-xtask -- check-sources
+cargo run --locked -p lkjscript-xtask -- check-docs
+cargo run --locked -p lkjscript-xtask -- structure check
+cargo run --locked -p lkjscript-xtask -- quiet verify
+docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
+CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
+  -p lkjscript-core --test structural_roots --test structural_root_sharing
+CARGO_TARGET_DIR=target/lkjscript/sanitizers/address \
+  RUSTFLAGS='-Zsanitizer=address' RUSTDOCFLAGS='-Zsanitizer=address' \
+  cargo +nightly test --locked -p lkjscript-core \
+  --test structural_roots --test structural_root_sharing \
+  --target x86_64-unknown-linux-gnu
+CARGO_TARGET_DIR=target/lkjscript/sanitizers/leak \
+  RUSTFLAGS='-Zsanitizer=leak' RUSTDOCFLAGS='-Zsanitizer=leak' \
+  cargo +nightly test --locked -p lkjscript-core \
+  --test structural_roots --test structural_root_sharing \
+  --target x86_64-unknown-linux-gnu
+CARGO_TARGET_DIR=target/lkjscript/sanitizers/thread-std \
+  RUSTFLAGS='-Zsanitizer=thread' RUSTDOCFLAGS='-Zsanitizer=thread' \
+  cargo +nightly test -Zbuild-std --locked -p lkjscript-core \
+  --test structural_roots --test structural_root_sharing \
+  --target x86_64-unknown-linux-gnu
+CARGO_TARGET_DIR=target/lkjscript/cross cargo build --locked \
+  -p lkjscript-host -p lkjscript-database --target wasm32-wasip1
+```
+
+The table tests cover compact-key category separation, wrong runtime/layout/type,
+duplicate owner rejection, shared and exclusive conflict, live-loan release
+rejection, move/drop state, root and loan slot reuse, generation retirement,
+capacity failure without partial state, sealed region-level leases, and empty
+completion. The final no-tracing gate is implemented but remains inactive while
+the six-family registry is nonempty. Address, leak, and thread sanitizers and
+Miri passed the focused table tests. Rust nightly does not provide an undefined
+sanitizer, `cargo-fuzz` and repository fuzz harnesses are absent, and the WASI
+probe built but could not execute because `wasmtime` is unavailable.
+
 ## Explicit Limits
 
 - The structural contract digest is
-  `86e15c020b2f93eae0d278a272139c37acd9668d77487db3277783b246db4b4a`.
+  `c5430a7a987bc4ce23e5b76210a9c446fd1dfb4e4047b059f907c4c48037aa74`.
 - Pool borrowing is currently bounded by Rust references inside the safe core;
   cross-call runtime loan slots remain a backend integration target.
 - No sealed compact image is implemented.

@@ -21,9 +21,10 @@ the explicitly named probes are experimental.
   evidence remain those in [Current State](../../../current-state.md).
 - `LKJ-UNSAFE-BOUNDARY` enforces exact executable, Linux-host, residual sys,
   SQLite, and local peer-identity mechanism boundaries.
-- No persistent coordinator, local control transport, process cell, session
-  broker, GUI cell, Component Model ABI, transactional service, Cranelift
-  backend, LeanStore integration, or DuckDB vector engine is Current.
+- The persistent Linux coordinator, authenticated Unix control, durable process
+  applications, isolated VM cells, tenant database attachment, and ephemeral
+  session presence are Current. GUI/interactive cells, Component Model ABI,
+  Cranelift, LeanStore, and a DuckDB vector engine are not Current.
 
 ## Accepted Contracts
 
@@ -44,8 +45,8 @@ the explicitly named probes are experimental.
 - the inherited capability-free private VM lifecycle and immutable chunk lease;
 - the inherited durable single-writer ordered kernel and deterministic faults;
 - the inherited retained `wasm32-wasip1` fake-storage probe;
-- daemon control, process-cell, tenant, and interactive-cell vertical slices as
-  they gain named execution evidence; and
+- broker-launched interactive-cell and GUI slices only after the structural
+  memory cutover and their own named execution evidence; and
 - retained Wasmtime, Cranelift, LeanStore, and vector research with no production
   dependency.
 

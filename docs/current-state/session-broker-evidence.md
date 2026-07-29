@@ -20,7 +20,7 @@ and group; requests carry none of those authority fields.
 
 ## Exact Protocol
 
-Runtime control at platform revision 8 and digest
+Runtime control at platform revision 9 and digest
 `5ca07048677f164ef9d25b8fc65a455b670e7e385b94d850692204fafe1a3305`
 contains register, heartbeat, unregister, and list operations. Register carries
 a nonzero 32-byte non-secret broker-instance digest and backend `none`.

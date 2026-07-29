@@ -103,7 +103,10 @@ only establishes its fail-closed migration foundation.
 The structural substrate uses nonwrapping domain/root generations, bounded
 fallible capacity, typed layout and semantic identities, ledger-only iterative
 release, sealed region-level ownership and weak upgrade, typed cyclic pools,
-and exact resource-plane homes. See the [focused evidence](../current-state/structural-memory-evidence.md).
+and exact resource-plane homes. A compact session-private root table now binds
+64-bit slot/generation keys to complete typed roots, exact owner state, and
+stale-safe loans without deciding liveness. See the
+[focused evidence](../current-state/structural-memory-evidence.md).
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
@@ -141,16 +144,18 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Complete file, stream, terminal, network, and database VM provider cutover,
-   then separate residual SQLite and host I/O mechanisms where evidence supports it.
-2. Add broker-launched interactive cells and native GUI/accessibility
-   applications without presenting UI from system service contexts.
-3. Extend the Current database tenant lifecycle with request cancellation,
-   page-budget accounting, measured checkpoint scheduling, and process-cell
-   provider messages before SQLite migration or benchmarks.
-4. Continue aggregate/path migration and the six-family tracing ratchet without
-   weakening existing memory, resource, forced-tier, or Linux x86-64 evidence.
-5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the current
+1. Promote the compact structural root table and authoritative HIR plan through
+   ownership, borrow, region, destination, and independently verified SSA facts.
+2. Complete aggregate whole-value transfer, then migrate `buf`, path, string,
+   product, enum, and pair monotonically through evaluator, VM, and both forced
+   native tiers. Remove each `HeapObj` variant with its registry entry.
+3. Use headless long-lived state and existing daemon/database/process workloads
+   for boundary evidence. The reported GUI cycle is absent and must not be
+   recreated before the no-tracing cutover.
+4. At zero families, delete collector code and enable the automatically guarded
+   no-tracing closure; only then resume provider, interactive, and database
+   product expansion.
+5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the Current
    WASI database probe is not platform acceptance.
 
 This order is an implementation contract, not a Current capability claim.

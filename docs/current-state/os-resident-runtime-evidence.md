@@ -22,7 +22,7 @@ process under `/proc` once before replacement. Other hosts conservatively treat
 an existing lease as live.
 
 The coordinator opens `lkjscript.control-store` before any application database.
-Its journal and snapshot carry platform revision 8, the exact
+Its journal and snapshot carry platform revision 9, the exact
 `lkjscript.runtime-control` digest, explicit little-endian widths, monotonic
 sequence, bounded key/value payloads, and full SHA-256 checksums. Commit syncs
 before fact publication. Recovery replays idempotently, rejects corruption and
@@ -94,7 +94,7 @@ The application-control integration built `lkjscriptd`, `lkjscript-cell`, and
 `lkjscript`; started the daemon; installed, started, invoked, listed, stopped,
 and removed a real process application; killed and restarted the daemon; and
 observed unclean desired-state recovery plus an attached database tenant on the
-replacement incarnation. Exact describe output now reports platform revision 8
+replacement incarnation. Exact describe output now reports platform revision 9
 and runtime-control digest
 `5ca07048677f164ef9d25b8fc65a455b670e7e385b94d850692204fafe1a3305`.
 

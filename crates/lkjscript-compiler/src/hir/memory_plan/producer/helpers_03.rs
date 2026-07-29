@@ -1,3 +1,29 @@
+#[allow(clippy::type_complexity)]
+fn static_value(
+    multiplicity: MemoryMultiplicity,
+) -> (
+    MemoryMultiplicity,
+    MemoryAliasing,
+    MemoryStorage,
+    MemoryDestruction,
+    MemoryIdentity,
+    MemoryPortability,
+    MemoryContention,
+    Option<&'static str>,
+    Option<MemoryDropGlueId>,
+) {
+    (
+        multiplicity,
+        MemoryAliasing::StaticShared,
+        MemoryStorage::Static,
+        MemoryDestruction::Trivial,
+        MemoryIdentity::Value,
+        MemoryPortability::WorkerLocal,
+        MemoryContention::ImmutableShared,
+        None,
+        None,
+    )
+}
 fn allocation_failure(effects: u16) -> MemoryAllocationFailure {
     let allocates = effects & crate::hir::EffectSet::ALLOCATES.bits() != 0;
     let trap = effects & crate::hir::EffectSet::MAY_TRAP.bits() != 0;

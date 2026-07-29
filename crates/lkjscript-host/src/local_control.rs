@@ -9,6 +9,7 @@ use std::os::fd::AsRawFd;
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixStream;
 
+#[cfg(target_os = "linux")]
 use crate::{HostError, HostResult};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

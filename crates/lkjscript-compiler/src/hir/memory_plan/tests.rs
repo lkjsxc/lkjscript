@@ -78,6 +78,34 @@ fn owned_main(result: &str, body: &str) -> String {
 }
 
 #[test]
+fn deterministic_byte_vector_is_never_registered_as_transitional_buf() {
+    let source = owned_main("byte-vector", "move/\nb\n/move");
+    let program = crate::compile_source(
+        &source,
+        "unique-byte-vector-plan.lkjscript",
+        &Limits::default(),
+    );
+    let Ok(program) = program else {
+        panic!("byte-vector memory-plan fixture must compile");
+    };
+    let entries: Vec<_> = program
+        .memory_plan()
+        .entries
+        .iter()
+        .filter(|entry| matches!(entry.ty, super::MemoryType::ByteVector))
+        .collect();
+    assert!(!entries.is_empty());
+    for entry in entries {
+        assert_eq!(entry.mode.multiplicity, super::MemoryMultiplicity::Affine);
+        assert_eq!(entry.mode.aliasing, super::MemoryAliasing::Unique);
+        assert_eq!(entry.mode.storage, super::MemoryStorage::UniqueSlot);
+        assert_eq!(entry.mode.destruction, super::MemoryDestruction::DropGlue);
+        assert!(entry.legacy_family.is_none());
+        assert_eq!(entry.drop_glue.map(|glue| glue.raw()), Some(0));
+    }
+}
+
+#[test]
 fn complete_numeric_scalars_are_planned_inline_without_legacy_tracing() {
     let source = concat!(
         "main/\nsig/\ninputs/\n/inputs\noutput/\nf64\n/output\n/sig\n",

@@ -5,19 +5,23 @@ use lkjscript_core::{Error, ResourceKind, Result};
 use crate::hir::{self, BindingId, Type};
 
 use super::{
-    compute_plan_id, HirMemoryPlan, MemoryDropClass, MemoryDropGlueId, MemoryDropGlueKind,
-    MemoryEscape, MemoryFunctionId, MemoryObligationKind, MemoryParameterMode, MemoryStorage,
-    MemorySubject, MemoryType, HIR_MEMORY_PLAN_SCHEMA, MAX_MEMORY_PLAN_VERIFIER_STEPS,
+    compute_plan_id, HirMemoryPlan, MemoryAliasing, MemoryContention, MemoryDestruction,
+    MemoryDropClass, MemoryDropGlueId, MemoryDropGlueKind, MemoryEscape, MemoryFunctionId,
+    MemoryIdentity, MemoryMultiplicity, MemoryObligationKind, MemoryParameterMode, MemoryPlanEntry,
+    MemoryPortability, MemoryStorage, MemorySubject, MemoryType, HIR_MEMORY_PLAN_SCHEMA,
+    MAX_MEMORY_PLAN_VERIFIER_STEPS,
 };
 
 mod check;
 mod drop_class;
+mod modes;
 mod support;
 mod walk;
 mod walk_support;
 
 use check::*;
 use drop_class::*;
+use modes::*;
 use support::*;
 use walk::*;
 use walk_support::*;

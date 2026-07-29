@@ -3,6 +3,7 @@
 use super::CapabilityKind;
 
 mod bytes;
+mod structural;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -18,6 +19,7 @@ enum ValueKind {
     Function,
     Symbol,
     LegacyTraced,
+    StructuralRoot,
     StaticBytes,
     BytesKey,
     ByteVectorKey,

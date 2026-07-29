@@ -6,13 +6,11 @@
   {"id":"agent-work-state", "status":"current", "interface":"lkjscript.agent-work-state",
     "authority":"docs/decisions/platform/agent-work-state.md",
     "evidence":"docs/decisions/platform/agent-work-state.md", "claimants":["docs/current-state.md",
-    "docs/operations/agent-handoff.md"]},
-  {"id":"aggregate-affine-values", "status":"accepted-contract",
+    "docs/operations/agent-handoff.md"]}, {"id":"aggregate-affine-values", "status":"accepted-contract",
     "interface":"whole-value aggregate move borrow and drop",
     "authority":"docs/decisions/memory/aggregate-affine-values.md",
     "evidence":"docs/decisions/memory/aggregate-affine-values.md", "claimants":[
-    "docs/decisions/memory/aggregate-affine-values.md"]},
-  {"id":"byte-text-ownership", "status":"accepted-contract",
+    "docs/decisions/memory/aggregate-affine-values.md"]}, {"id":"byte-text-ownership", "status":"accepted-contract",
     "interface":"bytes byte-vector byte-slice byte-slice-mut string str path",
     "authority":"docs/decisions/semantics/byte-and-text-ownership.md",
     "evidence":"docs/decisions/semantics/byte-and-text-ownership.md", "claimants":["docs/current-state.md"]},
@@ -43,8 +41,7 @@
     "authority":"docs/decisions/memory/collector-free-deterministic-memory.md",
     "evidence":"docs/decisions/memory/collector-free-deterministic-memory.md", "claimants":[
     "docs/decisions/memory/collector-free-deterministic-memory.md"]},
-  {"id":"collector-free-runtime", "status":"accepted-target",
-    "interface":"complete collector-free execution runtime",
+  {"id":"collector-free-runtime", "status":"accepted-target", "interface":"complete collector-free execution runtime",
     "authority":"docs/decisions/memory/collector-free-deterministic-memory.md",
     "evidence":"docs/decisions/memory/collector-free-deterministic-memory.md", "claimants":[
     "docs/decisions/memory/collector-free-deterministic-memory.md"]},
@@ -100,8 +97,7 @@
     "interface":"forced baseline/proof exact byte-vector byte-slice byte-slice-mut island",
     "authority":"docs/decisions/memory/collector-free-value-island.md",
     "evidence":"crates/lkjscript-app/tests/jit_engines/unique_island/mod.rs", "claimants":["docs/current-state.md",
-    "docs/decisions/memory/collector-free-value-island.md"]},
-  {"id":"native-bytes-island", "status":"current",
+    "docs/decisions/memory/collector-free-value-island.md"]}, {"id":"native-bytes-island", "status":"current",
     "interface":"forced baseline/proof exact static and dynamic immutable bytes island",
     "authority":"docs/decisions/memory/collector-free-value-island.md",
     "evidence":"crates/lkjscript-app/tests/jit_engines/unique_island/bytes.rs", "claimants":[
@@ -112,8 +108,8 @@
     "docs/decisions/semantics/never-and-control.md"]},
   {"id":"no-tracing-runtime", "status":"accepted-target", "interface":"LKJ-RUNTIME-NO-TRACING-COLLECTOR",
     "authority":"docs/decisions/memory/collector-free-deterministic-memory.md",
-    "evidence":"docs/decisions/memory/collector-free-deterministic-memory.md", "claimants":[
-    "docs/decisions/memory/collector-free-deterministic-memory.md"]},
+    "evidence":"crates/lkjscript-xtask/src/no_tracing.rs", "claimants":[
+    "docs/decisions/memory/collector-free-deterministic-memory.md", "docs/decisions/memory/tracing-ratchet.md"]},
   {"id":"numeric-conversions", "status":"current",
     "interface":"explicit I64/F64 conversions through all four engines",
     "authority":"docs/decisions/semantics/numeric-conversions.md", "evidence":"docs/operations/verification.md",
@@ -145,8 +141,7 @@
     "authority":"docs/decisions/platform/resource-budget-profiles.md",
     "evidence":"docs/decisions/platform/resource-budget-profiles/hierarchical-preallocation.md", "claimants":[
     "docs/current-state.md", "docs/operations/agent-handoff.md"]},
-  {"id":"resource-profile-shared-ledger", "status":"accepted-target",
-    "interface":"request-owned hierarchical ledger",
+  {"id":"resource-profile-shared-ledger", "status":"accepted-target", "interface":"request-owned hierarchical ledger",
     "authority":"docs/decisions/platform/resource-budget-profiles.md",
     "evidence":"docs/decisions/platform/resource-budget-profiles-candidate.md", "claimants":[
     "docs/current-state.md", "docs/operations/agent-handoff.md"]},
@@ -178,8 +173,11 @@
     "interface":"safe internal typed deterministic ownership domains",
     "authority":"docs/decisions/memory/structural-ownership-domains.md",
     "evidence":"crates/lkjscript-resource/tests/structural_home.rs", "claimants":[
-    "docs/decisions/memory/structural-ownership-domains.md"]},
-  {"id":"typed-capabilities", "status":"current",
+    "docs/decisions/memory/structural-ownership-domains.md"]}, {"id":"structural-root-values", "status":"current",
+    "interface":"safe internal compact typed structural root table",
+    "authority":"docs/decisions/memory/structural-ownership-domains.md",
+    "evidence":"crates/lkjscript-core/tests/structural_roots.rs", "claimants":[
+    "docs/decisions/memory/structural-ownership-domains.md"]}, {"id":"typed-capabilities", "status":"current",
     "interface":"explicit closed Capability values and exact package grants",
     "authority":"docs/decisions/capabilities/typed-capabilities.md", "evidence":"docs/current-state.md",
     "claimants":["docs/current-state.md"]},

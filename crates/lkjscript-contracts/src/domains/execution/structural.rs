@@ -21,6 +21,24 @@ pub(crate) fn structural_ownership_domains(memory: ContractDigest) -> ContractDe
                 .fact(fact("semantic-type", "exact semantic type identity")),
         )
         .item(
+            ContractItem::new("structural-value-key", ContractItemKind::Type)
+                .fact(fact("table", "selected runtime-local root table"))
+                .fact(fact("slot", "bounded private root slot"))
+                .fact(fact("generation", "nonzero nonwrapping generation"))
+                .fact(fact(
+                    "serialization",
+                    "forbidden outside one runtime session",
+                )),
+        )
+        .item(
+            ContractItem::new("root-table", ContractItemKind::Rule)
+                .fact(fact("entry", "complete typed root and ownership state"))
+                .fact(fact("loans", "stale-safe shared and exclusive tokens"))
+                .fact(fact("move", "old key invalidated before slot reuse"))
+                .fact(fact("release", "typed root returned to domain authority"))
+                .fact(fact("liveness", "never decided by the root table")),
+        )
+        .item(
             ContractItem::new("domain-classes", ContractItemKind::Rule)
                 .semantic_order()
                 .fact(fact("static", "static"))

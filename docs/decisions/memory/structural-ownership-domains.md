@@ -3,6 +3,7 @@
 ## Status
 
 <!-- LKJ-STATUS id=structural-ownership-domains status=current -->
+<!-- LKJ-STATUS id=structural-root-values status=current -->
 
 **Current for the safe core substrate and resource-plane owner-home adapter.**
 It does not migrate a language family, change an execution backend, or support
@@ -30,11 +31,29 @@ Reuse changes generation before publication. Exhausted slots retire permanently;
 wrap cannot validate a stale key. Reservations, arithmetic, and capacity are
 checked before mutation or publication.
 
+## Runtime Root Table
+
+A dynamic execution session may project a typed `RootKey` to one compact
+`StructuralValueKey`. The 64-bit key carries only a table-local slot and
+nonzero generation. The selected table binds runtime identity; its entry binds
+the complete domain, root, layout, semantic type, and ownership state.
+
+Slots advance generation before reuse and retire instead of wrapping. Owned
+roots cannot be duplicated. Shared and exclusive loans use separate stale-safe
+tokens and exact conflict checks. A move, drop, sealed release, or static
+unregistration requires no live loan and invalidates the old key before reuse.
+Table removal returns the typed root to the domain authority that performs the
+actual release; the table never determines liveness.
+
+Keys are invocation-private runtime plumbing. They are not source identities,
+addresses, serializable values, or substitutes for domain ownership.
+
 ## State And Validation
 
-Domain transitions are closed and checked. Partially initialized state is
-private. Independent validation reconstructs live slots, roots, dependency and
-drop ledgers, region-level ownership, and metrics without deciding liveness.
+Domain and root-table transitions are closed and checked. Partially initialized
+state is private. Independent validation reconstructs live slots, roots, loans,
+dependency and drop ledgers, region-level ownership, and metrics without
+deciding liveness.
 
 Optional debug facts may record live roots, state transitions, poisoning,
 ownership events, and leaks. Debug tracking is observation only. Runtime storage

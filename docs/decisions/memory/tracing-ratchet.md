@@ -3,6 +3,7 @@
 ## Status
 
 <!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
+<!-- LKJ-STATUS id=no-tracing-runtime status=accepted-target -->
 
 **Current intermediate migration gate; it is not the final
 no-tracing-collector gate.** `check-sources` verifies the exact registry and
@@ -43,7 +44,11 @@ Current.
 
 ## Final Gate
 
-`LKJ-RUNTIME-NO-TRACING-COLLECTOR` remains disabled until the registry is empty
-and collector code, roots, barriers, stack maps, polls, metrics, and tests are
-removed. Passing the intermediate ratchet cannot support a whole-runtime
-collector-free claim.
+`LKJ-RUNTIME-NO-TRACING-COLLECTOR` is implemented as the zero-registry closure
+of `check-sources` and remains disabled while any family is registered. At zero
+it rejects collector directories; `LegacyTraced`, `HeapObj`, and `GcHeap`;
+collector services, root materialization, collecting safepoints, barriers,
+configuration, and metrics. Deterministic dependency validation, release
+worklists, typed pools, root tables, and debug observation are not liveness
+tracing and remain permitted. Passing the intermediate ratchet cannot support a
+whole-runtime collector-free claim.

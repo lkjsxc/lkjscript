@@ -13,10 +13,11 @@ proof-checked optimizing JIT. The accepted product is one daemon-first
 OS-resident runtime authority with subordinate application cells and session
 brokers; standalone is only an explicit bootstrap, recovery, diagnosis, CI, or
 development path. The language has one content-addressed semantic
-contract, explicit capabilities/effects, and value semantics. Current execution
-still uses an exact tracing heap during migration; the accepted destination is
-collector-free inferred ownership, borrowing, regions, sealed sharing, and
-pools. One semantic resource plane separates compiler-verified task legality
+contract, explicit capabilities/effects, and value semantics. Current unique
+islands and a compact typed structural-root table coexist with an exact tracing
+heap during migration; the accepted destination is collector-free inferred
+ownership, borrowing, regions, sealed sharing, and pools. One semantic resource
+plane separates compiler-verified task legality
 from measured topology, scheduling, and memory-home policy while Linux remains
 the system-wide scheduler. Reproducible packages/components and one semantic IR
 family feed a measured evaluator/VM/JIT/AOT/cache/Wasm portfolio. Current

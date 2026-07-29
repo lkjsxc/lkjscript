@@ -77,11 +77,11 @@ partial frame, deadline expiry, cancellation, and disconnect fail closed.
 Modifying requests retain their result under a bounded idempotency key so a
 retry cannot repeat an effect.
 
-Bootstrap `describe` and `status` need only the fixed envelope shape. Current
-application operations are install, list, status, start, stop, restart, invoke,
-logs, remove, grant, revoke, and quota. Current database operations are status,
-tenant-list, tenant-create, tenant-drop, and checkpoint only when their service
-slice is implemented. Inert operation variants are forbidden.
+Bootstrap `describe`, `status`, and shutdown use the fixed envelope. Current
+application operations are install, list, start, stop, restart, invoke, and
+remove. Current session operations are register, list, heartbeat, and
+unregister. Application status/log, grant, revoke, quota update, and database
+control operations remain absent; inert variants are forbidden.
 
 ## Authentication And Transport
 

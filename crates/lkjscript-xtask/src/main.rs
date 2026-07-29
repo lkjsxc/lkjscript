@@ -4,6 +4,7 @@ mod agent;
 mod documentation;
 mod documentation_status;
 mod model;
+mod no_tracing;
 mod sha256;
 #[cfg(test)]
 mod sha256_tests;

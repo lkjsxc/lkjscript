@@ -11,8 +11,9 @@ applications without requiring one process or one address space.
 foreground daemon, exclusive lease, bootstrap store, authenticated Unix control,
 CLI, service definitions, app-private trusted VMs, and Linux isolated process
 cells and durable process-app reconstruction are Current by their evidence.
-Session brokers, GUI execution, database attachment, and other native transports
-become Current only with their own execution evidence.
+Authenticated ephemeral session presence and database tenant attachment are
+also Current. Broker-launched applications, GUI execution, database VM/proxy
+operations, and other native transports remain non-Current.
 
 ## Product Authority
 
@@ -77,12 +78,12 @@ quiescence. Mutable memory is never migrated implicitly.
 
 ## Cells And Sharing
 
-Current cell classes are `trusted-in-process`, `isolated-process`, and
-`interactive-process`. A trusted in-process cell is legal only for verified
-code and reviewed in-process-safe providers. Capability-bearing applications
-use isolated process cells until their exact in-process provider boundary is
-independently proven. Interactive cells run in an authenticated user session
-and own their native main-thread event loop and frame loop.
+Current cell classes are `trusted-in-process` and `isolated-process`. A trusted
+in-process cell is legal only for verified code and reviewed in-process-safe
+providers. Capability-bearing applications use isolated process cells until
+their exact in-process provider boundary is independently proven.
+`interactive-process` remains an Accepted Target: it must run in an
+authenticated user session and own its native main-thread event and frame loop.
 
 Immutable content-addressed source closures, HIR, verified SSA, proof-checked
 SSA, code images, literals, and metadata may be shared under bounded leases.

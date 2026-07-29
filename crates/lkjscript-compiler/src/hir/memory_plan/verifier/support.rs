@@ -61,14 +61,14 @@ pub(super) fn result_mode(ty: &Type) -> MemoryResultMode {
 pub(super) fn legacy_family(ty: &MemoryType) -> Option<&'static str> {
     match ty {
         MemoryType::String => Some("string"),
-        MemoryType::Buffer | MemoryType::ByteVector => Some("buf"),
-        MemoryType::Bytes => None,
+        MemoryType::Buffer => Some("buf"),
+        MemoryType::Bytes | MemoryType::ByteVector => None,
         MemoryType::Path => Some("path"),
-        MemoryType::Symbol => Some("symbol"),
+        MemoryType::Symbol => None,
         MemoryType::Product(_) => Some("product"),
         MemoryType::Enum { .. } => Some("enum"),
         MemoryType::List(_) => Some("pair"),
-        MemoryType::Function { .. } | MemoryType::ForAll { .. } => Some("closure"),
+        MemoryType::Function { .. } | MemoryType::ForAll { .. } => None,
         _ => None,
     }
 }

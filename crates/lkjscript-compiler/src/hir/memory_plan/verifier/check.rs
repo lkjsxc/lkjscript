@@ -97,37 +97,6 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
     Ok(())
 }
 
-pub(super) fn verify_entries(plan: &HirMemoryPlan) -> Result<()> {
-    for entry in &plan.entries {
-        if entry.mode.escape == MemoryEscape::Returned
-            && matches!(entry.ty, MemoryType::ByteSlice | MemoryType::ByteSliceMut)
-        {
-            return Err(Error::msg("borrowed HIR result escaped its function"));
-        }
-        if matches!(entry.ty, MemoryType::ByteVector)
-            && entry.drop_glue != Some(MemoryDropGlueId::new(0))
-        {
-            return Err(Error::msg("byte-vector memory plan has wrong drop glue"));
-        }
-        if matches!(entry.ty, MemoryType::Bytes) {
-            let expected = if entry.mode.storage == MemoryStorage::Static {
-                None
-            } else {
-                Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32))
-            };
-            if entry.drop_glue != expected {
-                return Err(Error::msg("bytes memory plan has wrong drop glue"));
-            }
-        } else if let MemoryType::Resource(kind) = entry.ty {
-            let expected = MemoryDropGlueId::new(1 + u32::from(kind as u8));
-            if entry.drop_glue != Some(expected) {
-                return Err(Error::msg("resource memory plan has wrong drop glue"));
-            }
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn verify_calls(
     program: &hir::Program,
     plan: &HirMemoryPlan,

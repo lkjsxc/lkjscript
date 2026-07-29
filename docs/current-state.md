@@ -139,14 +139,14 @@ Git history. They do not provide aliases or acceptance fallbacks.
   exact roots, executable evaluator/VM bytes island, and accepted deterministic
   candidates; it is derived evidence, not semantic authority.
   Every executable program retains a content-addressed pre-backend HIR memory
-  plan covering every expression result, parameter/result, place, loan,
-  constant, and call. Separate exhaustive producer and verifier traversals run
-  before an opaque checked-HIR wrapper can enter SSA. The direct-affine SSA
-  inventory remains independently recomputed derived evidence.
+  plan covering every result, place, loan, constant, and call. Independent
+  production and verification require byte-vector unique storage and static
+  artifact values before checked HIR enters SSA. The direct-affine SSA inventory
+  remains independently recomputed derived evidence.
 - `LKJ-MEMORY-TRACING-RATCHET` protects the exact six registered `HeapObj`
-  families exposed by `lkjscript memory traced [--json]`. Builtin is removed;
-  functions and symbols use artifact IDs. The [substrate](current-state/structural-memory-evidence.md)
-  is not generally tier-selected and does not support collector removal.
+  families exposed by `lkjscript memory traced [--json]`. The internal
+  [substrate](current-state/structural-memory-evidence.md) includes a compact
+  stale-safe root table; it is not tier-selected and does not remove tracing.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
   compiler/runtime ledger remains an accepted target.

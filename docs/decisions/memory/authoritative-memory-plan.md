@@ -103,7 +103,10 @@ The verifier independently traverses HIR and proves dense identities, complete
 expression/parameter/result/place/loan/constant/call coverage, exact function
 and direct-call memory signatures, use accounting, origin/type/effect agreement,
 storage-axis eligibility, drop-glue/type agreement, allocation-failure facts,
-and exact legacy-tracing registration. Producer failure or verifier mismatch is
+and exact legacy-tracing registration. It independently requires byte-vector
+owners to use deterministic `unique-slot` storage and capture-free function and
+symbol artifacts to use static trivial storage; none may claim a traced family.
+Producer failure or verifier mismatch is
 a compile error and never selects tracing.
 
 The plan now drives a verified static/dead/conditional SSA drop spine. Exact

@@ -64,10 +64,12 @@ pub use structural::{
     RegionMetrics, RegionOwner, RegionRef, RegionReleaseReport, RegionStore, RootClass, RootKey,
     SealFailure, SealedBorrow, SealedBuilder, SealedOwner, SealedRef, SealedRegionMetrics,
     SealedRegionStore, SealedReleaseReport, SealedUpgrade, SemanticTypeIdentity, StaticBytes,
-    StructuralError, StructuralLimit, StructuralLimits, StructuralRuntime, StructuralRuntimeId,
-    StructuralRuntimeMetrics, TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore,
-    UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats,
-    WeakSealedRef,
+    StructuralBorrow, StructuralBorrowKey, StructuralError, StructuralLimit, StructuralLimits,
+    StructuralRootOwnership, StructuralRootState, StructuralRootTable, StructuralRootTableError,
+    StructuralRootTableLimit, StructuralRootTableLimits, StructuralRootTableStats,
+    StructuralRuntime, StructuralRuntimeId, StructuralRuntimeMetrics, StructuralValueKey,
+    TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId,
+    UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
 };
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{CapabilityKind, HeapObj, ResourceKind, Value};
