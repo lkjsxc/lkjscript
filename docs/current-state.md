@@ -150,11 +150,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - The measured semantic resource runtime, Linux observation, owner homes,
   scheduled optimizer/native integrations, and selected defaults are Current.
   See [exact evidence](current-state/semantic-resource-plane-evidence.md).
-- Experimental safe-Rust host, multi-app node, and database crates provide
-  composable providers, private capability-free VMs, generation-safe lifecycle,
+- Experimental safe-Rust host, runtime-system core, and database crates provide
+  composable providers, private capability-free VMs, incarnation-safe lifecycle,
   fair bounded admission, immutable leases, tenant ordering, single-writer
   serializability, snapshots, checksummed WAL, recovery, and checkpoints. They
-  are not source surfaces, a persistent node, VM host cutover, or SQLite replacement.
+  are not source surfaces, `lkjscriptd`, durable control, process cells, a
+  session broker, a VM host cutover, database attachment, GUI, or SQLite replacement.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.
@@ -187,7 +188,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   locality, blocking pools, real multi-domain adoption, and source structured
   concurrency;
 - portability beyond Linux x86-64; host/database build for `wasm32-wasip1`
-  and a fake-storage recovery probe runs, but VM/node do not build there;
+  and a fake-storage recovery probe runs, but VM/runtime-system do not build there;
 Immutable `bytes` executes in all four tiers for the exact listed subset. The
 complete island remains Accepted until the other listed requirements are complete.
 ## Verification authority
@@ -195,6 +196,5 @@ The canonical local gate is:
 ```sh
 cargo run --locked -p lkjscript-xtask -- quiet verify
 ```
-Runtime, forced-tier, Docker, retained-result, Miri, sanitizer, fuzz, and
-performance gates are separate evidence. Exact commands, commit, environment,
-result, and untested gates must be reported; an unrun gate is never implied.
+Runtime, Docker, retained-result, safety, fuzz, and performance gates are separate.
+Report exact commands, commit, environment, result, and untested gates; an unrun gate is never implied.

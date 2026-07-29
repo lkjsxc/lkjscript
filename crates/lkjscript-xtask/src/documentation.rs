@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::util::walk;
 
 mod generations;
+mod platform_revision;
 
 pub fn check(root: &Path) -> i32 {
     let required = [
@@ -26,6 +27,8 @@ pub fn check(root: &Path) -> i32 {
         "docs/decisions/platform/bounded-repository-topology.md",
         "docs/decisions/platform/repository-intelligence-graph.md",
         "docs/decisions/platform/agent-work-state.md",
+        "docs/decisions/platform/runtime-foundation/platform-revision.md",
+        "docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md",
         "docs/decisions/platform/semantic-source-and-agent-protocol.md",
         "docs/decisions/platform/resource-budget-profiles.md",
         "docs/decisions/execution/compiler-pipeline.md",
@@ -59,6 +62,7 @@ pub fn check(root: &Path) -> i32 {
     failures += crate::documentation_status::check(root);
     failures += inert_markers(root);
     failures += generations::check(root);
+    failures += platform_revision::check(root);
     i32::from(failures > 0)
 }
 

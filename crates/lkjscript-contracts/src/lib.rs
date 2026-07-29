@@ -7,6 +7,7 @@ mod domains;
 mod encoding;
 mod memory;
 mod model;
+mod platform;
 mod registry;
 mod resource;
 mod sha256;
@@ -34,6 +35,7 @@ pub use model::{
     ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,
     ContractItemKind, ContractName, FactOrdering, NameIdentity,
 };
+pub use platform::{PublicContractIdentity, PLATFORM_REVISION};
 pub use registry::{require_exact, ContractMismatch, ContractSet, RegisteredContract};
 pub use resource::ResourceKind;
 pub use sha256::sha256;

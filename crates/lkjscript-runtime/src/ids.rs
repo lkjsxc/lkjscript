@@ -24,7 +24,7 @@ macro_rules! scalar_id {
     };
 }
 
-scalar_id!(NodeIdentity);
+scalar_id!(CoordinatorIdentity);
 scalar_id!(ApplicationId);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -45,61 +45,54 @@ impl PackageContentId {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ApplicationGenerationId {
+pub struct ApplicationIncarnationId {
+    coordinator: CoordinatorIdentity,
     application: ApplicationId,
-    generation: NonZeroU64,
+    incarnation: NonZeroU64,
 }
 
-impl ApplicationGenerationId {
-    pub(crate) const fn new(application: ApplicationId, generation: NonZeroU64) -> Self {
+impl ApplicationIncarnationId {
+    pub(crate) const fn new(
+        coordinator: CoordinatorIdentity,
+        application: ApplicationId,
+        incarnation: NonZeroU64,
+    ) -> Self {
         Self {
+            coordinator,
             application,
-            generation,
+            incarnation,
         }
+    }
+
+    pub const fn coordinator(self) -> CoordinatorIdentity {
+        self.coordinator
     }
 
     pub const fn application(self) -> ApplicationId {
         self.application
     }
 
-    pub const fn generation(self) -> u64 {
-        self.generation.get()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ApplicationInstanceId {
-    generation: ApplicationGenerationId,
-    serial: NonZeroU64,
-}
-
-impl ApplicationInstanceId {
-    pub(crate) const fn new(generation: ApplicationGenerationId, serial: NonZeroU64) -> Self {
-        Self { generation, serial }
-    }
-
-    pub const fn generation(self) -> ApplicationGenerationId {
-        self.generation
-    }
-
-    pub const fn serial(self) -> u64 {
-        self.serial.get()
+    pub const fn incarnation(self) -> u64 {
+        self.incarnation.get()
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExecutionCellId {
-    instance: ApplicationInstanceId,
+    incarnation: ApplicationIncarnationId,
     serial: NonZeroU64,
 }
 
 impl ExecutionCellId {
-    pub(crate) const fn new(instance: ApplicationInstanceId, serial: NonZeroU64) -> Self {
-        Self { instance, serial }
+    pub(crate) const fn new(incarnation: ApplicationIncarnationId, serial: NonZeroU64) -> Self {
+        Self {
+            incarnation,
+            serial,
+        }
     }
 
-    pub const fn instance(self) -> ApplicationInstanceId {
-        self.instance
+    pub const fn incarnation(self) -> ApplicationIncarnationId {
+        self.incarnation
     }
 
     pub const fn serial(self) -> u64 {

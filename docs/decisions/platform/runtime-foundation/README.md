@@ -8,9 +8,9 @@ this cycle's experiments to Current behavior.
 ## Status
 
 **Accepted Contract.** The inherited implementation remains Current exactly as
-listed below. Portable cells, runtime nodes, and the transactional kernel are
-accepted architectural contracts. Only the explicitly named probes are
-experimental this cycle.
+listed below. The OS-resident daemon authority, subordinate cells, portable host
+providers, and transactional kernel are accepted architectural contracts. Only
+the explicitly named probes are experimental.
 
 ## Current Inherited State
 
@@ -21,38 +21,42 @@ experimental this cycle.
   evidence remain those in [Current State](../../../current-state.md).
 - `LKJ-UNSAFE-BOUNDARY` enforces an exact bounded registry for the inherited
   unsafe-containing sys files; no unsafe code moved in this slice.
-- No runtime node, portable Wasm cell, Component Model ABI, transactional
-  kernel, Cranelift backend, LeanStore integration, or DuckDB vector engine is
-  Current.
+- No persistent coordinator, local control transport, process cell, session
+  broker, GUI cell, Component Model ABI, transactional service, Cranelift
+  backend, LeanStore integration, or DuckDB vector engine is Current.
 
 ## Accepted Contracts
 
 1. Separate semantic target identity from host execution policy.
-2. Compose bounded cells under a supervised runtime node; do not introduce
-   ambient authority or an independent language semantics.
-3. Put durable mutable runtime metadata behind one deterministic transactional
-   kernel with an ordered key-value foundation and explicit upper layers.
-4. Share only immutable, content-addressed runtime images across cells.
-5. Keep the Component Model at the external ABI boundary.
-6. Require every third-party implementation candidate to pass the repository's
+2. Use one `lkjscriptd` authority and bounded subordinate application cells;
+   never introduce ambient authority or independent language semantics.
+3. Keep bootstrap control metadata in a dedicated journal independent of the
+   application database.
+4. Layer the application database service over the ordered transactional
+   kernel with exact tenant and transaction ownership.
+5. Share only immutable, content-addressed runtime images across cells.
+6. Keep Wasm and the Component Model at later external boundaries.
+7. Require every third-party implementation candidate to pass the repository's
    dependency, correctness, resource, and measurement gates before adoption.
 
 ## This Cycle's Experimental Slices
 
-- implement and test exact lifecycle transitions for capability-free private VMs;
-- implement a durable single-writer ordered-key kernel and deterministic faults;
-- execute its fake-storage commit/reopen probe on `wasm32-wasip1`;
-- share immutable validated chunks while retaining per-app mutable state; and
-- retain Wasmtime, Cranelift, LeanStore, and vector engines as reviewed inputs
-  with no production dependency.
+- the inherited capability-free private VM lifecycle and immutable chunk lease;
+- the inherited durable single-writer ordered kernel and deterministic faults;
+- the inherited retained `wasm32-wasip1` fake-storage probe;
+- daemon control, process-cell, tenant, and interactive-cell vertical slices as
+  they gain named execution evidence; and
+- retained Wasmtime, Cranelift, LeanStore, and vector research with no production
+  dependency.
 
 Experiments produce retained evidence, not compatibility promises. Failed
 candidates are removed rather than retained as fallback paths.
 
 ## Capsule Map
 
+- [Global Platform Revision](platform-revision.md)
 - [Portable Host and Targets](portable-host-and-targets.md)
-- [Runtime Node](runtime-node.md)
+- [OS-Resident Runtime System](os-resident-runtime-system.md)
 - [Transactional Kernel](transactional-kernel.md)
 
 ## Metadata Claim Rejected as Evidence

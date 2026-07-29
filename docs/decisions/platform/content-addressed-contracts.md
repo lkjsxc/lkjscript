@@ -33,7 +33,13 @@ Git commits and immutable evidence preserve history. An old program uses the
 exact historical compiler that accepted it; the Current compiler is not a
 museum of former grammars.
 
-## Contract Identity
+## Platform Revision And Contract Identity
+
+The sole public lkjscript compatibility number is the nonzero `u64` in
+[`meta/platform-revision`](../../../meta/platform-revision), governed by
+[Global Platform Revision](runtime-foundation/platform-revision.md). It orders coherent platform
+states but never authorizes bytes. Cargo crate versions are fixed private
+metadata and subsystem versions do not exist.
 
 A `ContractDigest` is the full SHA-256 digest of canonical descriptor bytes.
 It answers whether exact structures, operations, semantics, ownership,

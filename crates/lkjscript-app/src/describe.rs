@@ -63,8 +63,9 @@ pub fn semantic() -> Result<ExitCode, String> {
         .get(lkjscript_contracts::SEMANTIC_SOURCE)
         .ok_or_else(|| "Semantic Source contract is not registered".to_string())?;
     println!(
-        "schema={} contract={} operations={}",
+        "schema={} platform-revision={} contract={} operations={}",
         lkjscript_contracts::SEMANTIC_SOURCE,
+        lkjscript_contracts::PLATFORM_REVISION,
         semantic.digest(),
         SEMANTIC_OPERATIONS.join(",")
     );
@@ -72,7 +73,11 @@ pub fn semantic() -> Result<ExitCode, String> {
 }
 
 fn print_human(contracts: &ContractSet) {
-    println!("compiler: lkjscript {}", env!("CARGO_PKG_VERSION"));
+    println!("compiler: lkjscript");
+    println!(
+        "platform-revision: {}",
+        lkjscript_contracts::PLATFORM_REVISION
+    );
     println!("target: linux-x86-64");
     println!("contracts:");
     for contract in contracts.iter() {
@@ -91,12 +96,17 @@ fn print_human(contracts: &ContractSet) {
 }
 
 fn json_description(contracts: &ContractSet) -> String {
+    let digest = description_digest(contracts);
     let mut output = String::from("{\"schema\":\"lkjscript.describe\",");
-    push_string(
+    push_u64(
         &mut output,
-        "compiler",
-        concat!("lkjscript@", env!("CARGO_PKG_VERSION")),
+        "platform_revision",
+        lkjscript_contracts::PLATFORM_REVISION,
     );
+    output.push(',');
+    push_string(&mut output, "contract_digest", &digest.to_hex());
+    output.push(',');
+    push_string(&mut output, "compiler", "lkjscript");
     output.push(',');
     push_string(&mut output, "target", "linux-x86-64");
     output.push_str(",\"contracts\":[");
@@ -144,6 +154,23 @@ fn push_string(output: &mut String, name: &str, value: &str) {
     output.push('"');
 }
 
+fn push_u64(output: &mut String, name: &str, value: u64) {
+    output.push('"');
+    output.push_str(name);
+    output.push_str("\":");
+    output.push_str(&value.to_string());
+}
+
+fn description_digest(contracts: &ContractSet) -> lkjscript_contracts::ContractDigest {
+    let mut bytes = b"lkjscript.describe\0platform-revision\0contract-digest\0".to_vec();
+    for contract in contracts.iter() {
+        bytes.extend_from_slice(contract.descriptor().name.as_str().as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(&contract.digest().as_bytes());
+    }
+    lkjscript_contracts::ContractDigest::from_bytes(lkjscript_contracts::sha256(&bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,6 +183,11 @@ mod tests {
         let first = json_description(&contracts);
         assert_eq!(first, json_description(&contracts));
         assert!(first.contains("\"schema\":\"lkjscript.describe\""));
+        assert!(first.contains(&format!(
+            "\"platform_revision\":{}",
+            lkjscript_contracts::PLATFORM_REVISION
+        )));
+        assert!(first.contains("\"contract_digest\":\""));
         assert!(contracts
             .iter()
             .all(|contract| first.contains(&contract.digest().to_hex())));

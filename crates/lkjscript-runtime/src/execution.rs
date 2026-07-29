@@ -3,11 +3,11 @@ use lkjscript_vm::run_chunk;
 
 use crate::invoke::Admission;
 use crate::{
-    ApplicationGenerationId, InvocationOutcome, InvocationRequest, Node, RuntimeError,
+    ApplicationIncarnationId, InvocationOutcome, InvocationRequest, RuntimeError, RuntimeSystem,
     MAX_LOG_ENTRIES,
 };
 
-impl Node {
+impl RuntimeSystem {
     fn complete(
         &self,
         admission: &Admission,
@@ -16,9 +16,10 @@ impl Node {
         let mut state = self.lock_state()?;
         if let Some(instance) = state
             .apps
-            .get_mut(&admission.generation.application())
+            .get_mut(&admission.incarnation.application())
             .filter(|app| {
-                app.generation(admission.generation.application()) == Some(admission.generation)
+                app.incarnation(self.inner.identity, admission.incarnation.application())
+                    == Some(admission.incarnation)
             })
             .and_then(|app| app.instance.as_mut())
         {
@@ -42,15 +43,15 @@ impl Node {
 
     pub fn invoke(
         &self,
-        generation: ApplicationGenerationId,
+        incarnation: ApplicationIncarnationId,
         arguments: Vec<String>,
     ) -> Result<InvocationOutcome, RuntimeError> {
-        let admission = self.admit(generation, arguments)?;
+        let admission = self.admit(incarnation, arguments)?;
         let outcome = run_chunk(&admission.chunk, &admission.inputs, &admission.config);
         self.complete(&admission, &outcome)?;
         Ok(InvocationOutcome {
             execution_cell: admission.cell,
-            generation,
+            incarnation,
             outcome,
         })
     }
@@ -66,7 +67,7 @@ impl Node {
             let handles: Vec<_> = requests
                 .into_iter()
                 .map(|request| {
-                    scope.spawn(move || self.invoke(request.generation, request.arguments))
+                    scope.spawn(move || self.invoke(request.incarnation, request.arguments))
                 })
                 .collect();
             handles

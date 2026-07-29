@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{ApplicationGenerationId, ApplicationId, Lifecycle, PackageContentId};
+use crate::{ApplicationId, ApplicationIncarnationId, Lifecycle, PackageContentId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotaKind {
@@ -19,9 +19,9 @@ pub enum RuntimeError {
         from: Lifecycle,
         to: Lifecycle,
     },
-    StaleGeneration {
-        requested: ApplicationGenerationId,
-        current: Option<ApplicationGenerationId>,
+    StaleIncarnation {
+        requested: ApplicationIncarnationId,
+        current: Option<ApplicationIncarnationId>,
     },
     QuotaExceeded(QuotaKind),
     AtLeastTwoInvocationsRequired,
@@ -44,10 +44,10 @@ impl fmt::Display for RuntimeError {
             Self::IllegalTransition { from, to } => {
                 write!(formatter, "illegal lifecycle transition {from:?} -> {to:?}")
             }
-            Self::StaleGeneration { requested, current } => write!(
+            Self::StaleIncarnation { requested, current } => write!(
                 formatter,
-                "stale generation {} (current: {current:?})",
-                requested.generation()
+                "stale application incarnation {} (current: {current:?})",
+                requested.incarnation()
             ),
             Self::QuotaExceeded(kind) => write!(formatter, "quota exceeded: {kind:?}"),
             Self::AtLeastTwoInvocationsRequired => {

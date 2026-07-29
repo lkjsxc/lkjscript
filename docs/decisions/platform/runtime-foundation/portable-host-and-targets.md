@@ -45,11 +45,13 @@ parent directory after atomic replacement where the host supports that call.
 The fake provider supplies deterministic time/storage observations and injected
 short-write, disk-full, sync, corruption, and crash behavior. Explicit target
 facts do not alter language semantics. Host/database build and a transactional
-fake-storage probe execute for `wasm32-wasip1`; VM/node do not build there.
+fake-storage probe execute for `wasm32-wasip1`; VM/runtime-system do not build
+there.
 
-## Optional Wasmtime Cell Reference
+## Deferred Wasmtime Cell Reference
 
-Wasmtime is an experimental reference for an optional isolated cell because its
+Wasmtime remains a strategic but Deferred reference for a later optional
+isolated cell. This cycle does not add or expand Wasm execution. Its
 official material documents:
 
 - [fast instance reuse](https://docs.wasmtime.dev/examples-fast-instantiation.html);

@@ -4,8 +4,7 @@ use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
 use lkjscript_vm::ExecutionInputs;
 
 use crate::{
-    ApplicationGenerationId, ApplicationId, ApplicationInstanceId, ExecutionCellId,
-    PackageContentId, RuntimeError,
+    ApplicationId, ApplicationIncarnationId, ExecutionCellId, PackageContentId, RuntimeError,
 };
 
 pub const MAX_RESTART_ATTEMPTS: u32 = 1_024;
@@ -13,8 +12,8 @@ pub const MAX_LOG_ENTRIES: usize = 64;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeploymentScope {
-    PerUser { user: u32 },
-    PerContainer { container: String },
+    System { principal: u32 },
+    Container { principal: u32, container: String },
     Standalone,
 }
 
@@ -22,6 +21,7 @@ pub enum DeploymentScope {
 pub enum ApplicationKind {
     Command,
     Service,
+    Interactive,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,7 +66,7 @@ impl ApplicationManifest {
         }
         if matches!(
             &self.scope,
-            DeploymentScope::PerContainer { container }
+            DeploymentScope::Container { container, .. }
                 if container.is_empty() || container.len() > 128
         ) {
             return Err(RuntimeError::InvalidManifest(
@@ -149,8 +149,7 @@ pub struct ApplicationStatus {
     pub application: ApplicationId,
     pub package: PackageContentId,
     pub lifecycle: Lifecycle,
-    pub generation: Option<ApplicationGenerationId>,
-    pub instance: Option<ApplicationInstanceId>,
+    pub incarnation: Option<ApplicationIncarnationId>,
     pub cancelled: bool,
     pub metrics: InvocationMetrics,
     pub resources: ResourceAccounting,
@@ -160,14 +159,14 @@ pub struct ApplicationStatus {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvocationRequest {
-    pub generation: ApplicationGenerationId,
+    pub incarnation: ApplicationIncarnationId,
     pub arguments: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InvocationOutcome {
     pub execution_cell: ExecutionCellId,
-    pub generation: ApplicationGenerationId,
+    pub incarnation: ApplicationIncarnationId,
     pub outcome: ExecutionOutcome,
 }
 

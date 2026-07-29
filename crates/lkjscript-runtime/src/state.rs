@@ -7,13 +7,13 @@ use lkjscript_vm::ExecutionInputs;
 
 use crate::cache::CodeCache;
 use crate::{
-    ApplicationGenerationId, ApplicationId, ApplicationInstanceId, ApplicationManifest,
-    ApplicationStatus, InvocationMetrics, Lifecycle, NodeIdentity, PackageContentId,
-    ProcessCellState, ResourceAccounting, RuntimeError,
+    ApplicationId, ApplicationIncarnationId, ApplicationManifest, ApplicationStatus,
+    CoordinatorIdentity, InvocationMetrics, Lifecycle, PackageContentId, ProcessCellState,
+    ResourceAccounting, RuntimeError,
 };
 
 pub(crate) struct Inner {
-    pub(crate) identity: NodeIdentity,
+    pub(crate) identity: CoordinatorIdentity,
     pub(crate) state: Mutex<State>,
     pub(crate) admission_changed: Condvar,
 }
@@ -45,21 +45,28 @@ pub(crate) struct AppRecord {
     pub(crate) package: PackageContentId,
     pub(crate) chunk: Option<Arc<ValidatedChunk>>,
     pub(crate) lifecycle: Lifecycle,
-    pub(crate) generation_number: u64,
+    pub(crate) incarnation_counter: u64,
     pub(crate) instance: Option<InstanceRuntime>,
 }
 
 impl AppRecord {
-    pub(crate) fn generation(&self, app: ApplicationId) -> Option<ApplicationGenerationId> {
-        NonZeroU64::new(self.generation_number)
-            .map(|generation| ApplicationGenerationId::new(app, generation))
+    pub(crate) fn incarnation(
+        &self,
+        coordinator: CoordinatorIdentity,
+        app: ApplicationId,
+    ) -> Option<ApplicationIncarnationId> {
+        NonZeroU64::new(self.incarnation_counter)
+            .map(|incarnation| ApplicationIncarnationId::new(coordinator, app, incarnation))
     }
 
-    pub(crate) fn status(&self, app: ApplicationId) -> ApplicationStatus {
-        let generation = self.generation(app);
-        let (instance, cancelled, metrics, resources, logs) = match &self.instance {
+    pub(crate) fn status(
+        &self,
+        coordinator: CoordinatorIdentity,
+        app: ApplicationId,
+    ) -> ApplicationStatus {
+        let incarnation = self.incarnation(coordinator, app);
+        let (cancelled, metrics, resources, logs) = match &self.instance {
             Some(runtime) => (
-                Some(runtime.id),
                 runtime.cancelled,
                 runtime.metrics,
                 ResourceAccounting {
@@ -69,7 +76,6 @@ impl AppRecord {
                 runtime.logs.iter().cloned().collect(),
             ),
             None => (
-                None,
                 false,
                 InvocationMetrics::default(),
                 ResourceAccounting {
@@ -83,8 +89,7 @@ impl AppRecord {
             application: app,
             package: self.package,
             lifecycle: self.lifecycle,
-            generation,
-            instance,
+            incarnation,
             cancelled,
             metrics,
             resources,
@@ -95,7 +100,7 @@ impl AppRecord {
 }
 
 pub(crate) struct InstanceRuntime {
-    pub(crate) id: ApplicationInstanceId,
+    pub(crate) id: ApplicationIncarnationId,
     pub(crate) inputs: ExecutionInputs,
     pub(crate) cancelled: bool,
     pub(crate) logs: VecDeque<String>,
@@ -107,7 +112,7 @@ pub(crate) struct InstanceRuntime {
 }
 
 impl InstanceRuntime {
-    pub(crate) fn new(id: ApplicationInstanceId, inputs: ExecutionInputs) -> Self {
+    pub(crate) fn new(id: ApplicationIncarnationId, inputs: ExecutionInputs) -> Self {
         Self {
             id,
             inputs,

@@ -6,17 +6,17 @@ use lkjscript_core::ValidatedChunk;
 use crate::model::private_inputs;
 use crate::state::{AppRecord, Inner, InstanceRuntime, State};
 use crate::{
-    ApplicationGenerationId, ApplicationId, ApplicationInstanceId, ApplicationManifest,
-    ApplicationStatus, Lifecycle, NodeIdentity, PackageContentId, RuntimeError,
+    ApplicationId, ApplicationIncarnationId, ApplicationManifest, ApplicationStatus,
+    CoordinatorIdentity, Lifecycle, PackageContentId, RuntimeError,
 };
 
 #[derive(Clone)]
-pub struct Node {
+pub struct RuntimeSystem {
     pub(crate) inner: Arc<Inner>,
 }
 
-impl Node {
-    pub fn new(identity: NodeIdentity, max_cache_entries: NonZeroUsize) -> Self {
+impl RuntimeSystem {
+    pub fn new(identity: CoordinatorIdentity, max_cache_entries: NonZeroUsize) -> Self {
         Self {
             inner: Arc::new(Inner {
                 identity,
@@ -26,7 +26,7 @@ impl Node {
         }
     }
 
-    pub fn identity(&self) -> NodeIdentity {
+    pub fn identity(&self) -> CoordinatorIdentity {
         self.inner.identity
     }
 
@@ -57,7 +57,7 @@ impl Node {
                 package,
                 chunk: Some(lease),
                 lifecycle: Lifecycle::Installed,
-                generation_number: 0,
+                incarnation_counter: 0,
                 instance: None,
             },
         );
@@ -67,9 +67,9 @@ impl Node {
     pub fn start(
         &self,
         application: ApplicationId,
-    ) -> Result<ApplicationGenerationId, RuntimeError> {
+    ) -> Result<ApplicationIncarnationId, RuntimeError> {
         let mut state = self.lock_state()?;
-        let (lifecycle, next_generation) = {
+        let (lifecycle, next_incarnation) = {
             let app = state
                 .apps
                 .get(&application)
@@ -81,42 +81,42 @@ impl Node {
                 });
             }
             let next = app
-                .generation_number
+                .incarnation_counter
                 .checked_add(1)
                 .and_then(NonZeroU64::new)
                 .ok_or(RuntimeError::IdentifierSpaceExhausted)?;
             (app.lifecycle, next)
         };
-        let instance_serial = state.allocate()?;
-        let generation = ApplicationGenerationId::new(application, next_generation);
-        let instance_id = ApplicationInstanceId::new(generation, instance_serial);
+        let incarnation =
+            ApplicationIncarnationId::new(self.inner.identity, application, next_incarnation);
         let app = state
             .apps
             .get_mut(&application)
             .ok_or(RuntimeError::ApplicationNotFound(application))?;
         app.lifecycle = lifecycle.transition(Lifecycle::Loading)?;
         app.lifecycle = app.lifecycle.transition(Lifecycle::Starting)?;
-        app.generation_number = next_generation.get();
+        app.incarnation_counter = next_incarnation.get();
         app.instance = Some(InstanceRuntime::new(
-            instance_id,
+            incarnation,
             private_inputs(Vec::new()),
         ));
         app.lifecycle = app.lifecycle.transition(Lifecycle::Running)?;
-        Ok(generation)
+        Ok(incarnation)
     }
 
-    pub fn stop(&self, generation: ApplicationGenerationId) -> Result<(), RuntimeError> {
-        let application = generation.application();
+    pub fn stop(&self, incarnation: ApplicationIncarnationId) -> Result<(), RuntimeError> {
+        let application = incarnation.application();
         let mut state = self.lock_state()?;
         loop {
             let app = state
                 .apps
                 .get_mut(&application)
                 .ok_or(RuntimeError::ApplicationNotFound(application))?;
-            if app.generation(application) != Some(generation) {
-                return Err(RuntimeError::StaleGeneration {
-                    requested: generation,
-                    current: app.generation(application),
+            let current = app.incarnation(self.inner.identity, application);
+            if current != Some(incarnation) {
+                return Err(RuntimeError::StaleIncarnation {
+                    requested: incarnation,
+                    current,
                 });
             }
             if app.lifecycle == Lifecycle::Running {
@@ -144,10 +144,10 @@ impl Node {
 
     pub fn restart(
         &self,
-        generation: ApplicationGenerationId,
-    ) -> Result<ApplicationGenerationId, RuntimeError> {
-        self.stop(generation)?;
-        self.start(generation.application())
+        incarnation: ApplicationIncarnationId,
+    ) -> Result<ApplicationIncarnationId, RuntimeError> {
+        self.stop(incarnation)?;
+        self.start(incarnation.application())
     }
 
     pub fn remove(&self, application: ApplicationId) -> Result<(), RuntimeError> {
@@ -168,13 +168,17 @@ impl Node {
         state
             .apps
             .get(&application)
-            .map(|app| app.status(application))
+            .map(|app| app.status(self.inner.identity, application))
             .ok_or(RuntimeError::ApplicationNotFound(application))
     }
 
     pub fn list(&self) -> Result<Vec<ApplicationStatus>, RuntimeError> {
         let state = self.lock_state()?;
-        Ok(state.apps.iter().map(|(id, app)| app.status(*id)).collect())
+        Ok(state
+            .apps
+            .iter()
+            .map(|(id, app)| app.status(self.inner.identity, *id))
+            .collect())
     }
 
     pub fn cache_contains(&self, package: PackageContentId) -> Result<bool, RuntimeError> {

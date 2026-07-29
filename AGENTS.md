@@ -9,7 +9,10 @@ Define the working contract for automated engineering in this repository.
 `lkjscript` is an AI-primary, statically typed, memory-safe language and
 platform implemented today by a small Rust compiler, verified typed SSA,
 reference bytecode VM, callable Linux x86-64 baseline JIT, and forced
-proof-checked optimizing JIT. The language has one content-addressed semantic
+proof-checked optimizing JIT. The accepted product is one daemon-first
+OS-resident runtime authority with subordinate application cells and session
+brokers; standalone is only an explicit bootstrap, recovery, diagnosis, CI, or
+development path. The language has one content-addressed semantic
 contract, explicit capabilities/effects, and value semantics. Current execution
 still uses an exact tracing heap during migration; the accepted destination is
 collector-free inferred ownership, borrowing, regions, sealed sharing, and
@@ -79,6 +82,9 @@ support claim.
     collector barrier, or collection metric remains in Current production code.
 19. `[machine: LKJ-MEMORY-TRACING-RATCHET]` Legacy traced object families form
     one closed non-increasing registry; analysis failure never extends it.
+20. `[machine: LKJ-PLATFORM-REVISION]` Use the sole nonzero monotonic integer in
+    `meta/platform-revision` plus exact contract digests; public contract changes
+    increment it and lkjscript subsystems never own independent versions.
 
 ## Read Order
 
@@ -86,35 +92,37 @@ support claim.
 2. [Capability status](docs/operations/status-authority.md)
 3. [Architecture](docs/operations/architecture.md)
 4. [Content-addressed contracts](docs/decisions/platform/content-addressed-contracts.md)
-5. [AI-native platform](docs/decisions/platform/ai-native-platform.md)
-6. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
-7. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
-8. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
-9. [Semantic resource plane](docs/decisions/platform/semantic-resource-plane.md)
-10. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
-11. [Language](docs/language/README.md)
-12. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
-13. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
-14. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
-15. [Semantic core](docs/decisions/semantics/semantic-core.md)
-16. [Equality](docs/decisions/semantics/equality-families.md)
-17. [Products](docs/decisions/semantics/immutable-nominal-products.md)
-18. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
-19. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
-20. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
-21. [Authoritative memory plan](docs/decisions/memory/authoritative-memory-plan.md)
-22. [Deterministic drop](docs/decisions/memory/deterministic-drop.md)
-23. [Collector-free value island](docs/decisions/memory/collector-free-value-island.md)
-24. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
-25. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
-26. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
-27. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
-28. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
-29. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
-30. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
-31. [Agent state](docs/decisions/platform/agent-work-state.md)
-32. [Verification](docs/operations/verification.md)
-33. [Vision and evidence](docs/vision/README.md)
+5. [Platform revision](docs/decisions/platform/runtime-foundation/platform-revision.md)
+6. [OS-resident runtime system](docs/decisions/platform/runtime-foundation/os-resident-runtime-system.md)
+7. [AI-native platform](docs/decisions/platform/ai-native-platform.md)
+8. [Bounded topology](docs/decisions/platform/bounded-repository-topology.md)
+9. [Semantic Source and protocol](docs/decisions/platform/semantic-source-and-agent-protocol.md)
+10. [Resource profiles](docs/decisions/platform/resource-budget-profiles.md)
+11. [Semantic resource plane](docs/decisions/platform/semantic-resource-plane.md)
+12. [Execution portfolio](docs/decisions/execution/execution-portfolio.md)
+13. [Language](docs/language/README.md)
+14. [Canonical lowercase vocabulary](docs/decisions/semantics/canonical-lowercase-word-vocabulary.md)
+15. [Byte and text ownership](docs/decisions/semantics/byte-and-text-ownership.md)
+16. [Typed affine resources](docs/decisions/capabilities/typed-affine-resources.md)
+17. [Semantic core](docs/decisions/semantics/semantic-core.md)
+18. [Equality](docs/decisions/semantics/equality-families.md)
+19. [Products](docs/decisions/semantics/immutable-nominal-products.md)
+20. [Compiler pipeline](docs/decisions/execution/compiler-pipeline.md)
+21. [Ownership](docs/decisions/semantics/ownership-and-borrowing.md)
+22. [Collector-free memory](docs/decisions/memory/collector-free-deterministic-memory.md)
+23. [Authoritative memory plan](docs/decisions/memory/authoritative-memory-plan.md)
+24. [Deterministic drop](docs/decisions/memory/deterministic-drop.md)
+25. [Collector-free value island](docs/decisions/memory/collector-free-value-island.md)
+26. [Traits](docs/decisions/semantics/traits-and-static-dispatch.md)
+27. [Native roots](docs/decisions/jit/native-references-and-gc-stack-maps.md)
+28. [Runtime JIT](docs/decisions/jit/runtime-jit-instead-of-offline-pgo.md)
+29. [Callable baseline JIT](docs/decisions/jit/callable-baseline-jit.md)
+30. [Allocation JIT](docs/decisions/jit/allocation-capable-baseline-jit.md)
+31. [Proof JIT](docs/decisions/jit/proof-based-optimizing-jit.md)
+32. [Repository graph](docs/decisions/platform/repository-intelligence-graph.md)
+33. [Agent state](docs/decisions/platform/agent-work-state.md)
+34. [Verification](docs/operations/verification.md)
+35. [Vision and evidence](docs/vision/README.md)
 
 ## Development Loop
 

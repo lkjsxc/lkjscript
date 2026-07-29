@@ -44,10 +44,12 @@ evidence. Owner compute/kernel managed is the runtime default; proof discovery
 remains sequential by default.
 
 Experimental safe-Rust crates now provide typed portable host/storage contracts,
-a concurrent capability-free VM node slice, and a durable multi-tenant ordered
-kernel with snapshot readers, one serialized writer, checksummed WAL, replay,
-and checkpoints. They are not source APIs, a persistent control node, process
-cells, a VM host cutover, relational storage, or a SQLite replacement.
+a concurrent capability-free runtime-system core, and a durable multi-tenant
+ordered kernel with snapshot readers, one serialized writer, checksummed WAL,
+replay, and checkpoints. Public application identity now uses coordinator-scoped
+incarnations. These are not source APIs, `lkjscriptd`, durable local control,
+process cells, a session broker, a VM host cutover, relational storage, GUI, or
+a SQLite replacement.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -124,10 +126,11 @@ resources remain absent.
 
 1. Cut VM host effects from `lkjscript-sys` to typed providers, then split the
    remaining topology, executable-memory, SQLite, and native-call mechanisms.
-2. Add persistent local control and authenticated process cells before admitting
-   untrusted or capability-bearing multi-app execution.
+2. Add `lkjscriptd`, durable bootstrap control, authenticated local control, and
+   process cells before admitting untrusted or capability-bearing applications.
 3. Integrate database tenants, transactions, cancellation, buffer pages, and
-   checkpoints into node lifecycle before SQLite migration or benchmarks.
+   checkpoints into application-incarnation lifecycle before SQLite migration
+   or benchmarks.
 4. Continue aggregate/path migration and the six-family tracing ratchet without
    weakening existing memory, resource, forced-tier, or Linux x86-64 evidence.
 5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the current

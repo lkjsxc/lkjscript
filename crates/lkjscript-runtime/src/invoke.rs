@@ -5,19 +5,19 @@ use lkjscript_vm::ExecutionInputs;
 
 use crate::state::State;
 use crate::{
-    ApplicationGenerationId, ApplicationId, ExecutionCellId, Lifecycle, Node, QuotaKind,
-    RuntimeError,
+    ApplicationId, ApplicationIncarnationId, ExecutionCellId, Lifecycle, QuotaKind, RuntimeError,
+    RuntimeSystem,
 };
 
 pub(crate) struct Admission {
-    pub(crate) generation: ApplicationGenerationId,
+    pub(crate) incarnation: ApplicationIncarnationId,
     pub(crate) cell: ExecutionCellId,
     pub(crate) chunk: Arc<ValidatedChunk>,
     pub(crate) inputs: ExecutionInputs,
     pub(crate) config: ExecutionConfig,
 }
 
-impl Node {
+impl RuntimeSystem {
     fn advance_ticket(state: &mut State, application: ApplicationId) {
         if let Some(instance) = state
             .apps
@@ -30,20 +30,21 @@ impl Node {
 
     pub(crate) fn admit(
         &self,
-        generation: ApplicationGenerationId,
+        incarnation: ApplicationIncarnationId,
         arguments: Vec<String>,
     ) -> Result<Admission, RuntimeError> {
-        let application = generation.application();
+        let application = incarnation.application();
         let mut state = self.lock_state()?;
         let ticket = {
             let app = state
                 .apps
                 .get_mut(&application)
                 .ok_or(RuntimeError::ApplicationNotFound(application))?;
-            if app.generation(application) != Some(generation) {
-                return Err(RuntimeError::StaleGeneration {
-                    requested: generation,
-                    current: app.generation(application),
+            let current = app.incarnation(self.inner.identity, application);
+            if current != Some(incarnation) {
+                return Err(RuntimeError::StaleIncarnation {
+                    requested: incarnation,
+                    current,
                 });
             }
             let instance = app
@@ -73,7 +74,7 @@ impl Node {
                         to: Lifecycle::Running,
                     })?;
                 (
-                    app.generation(application),
+                    app.incarnation(self.inner.identity, application),
                     app.lifecycle,
                     instance.serving_ticket == ticket,
                     instance.total,
@@ -82,9 +83,9 @@ impl Node {
                     app.manifest.quota.max_concurrent_invocations.get(),
                 )
             };
-            if current != Some(generation) {
-                return Err(RuntimeError::StaleGeneration {
-                    requested: generation,
+            if current != Some(incarnation) {
+                return Err(RuntimeError::StaleIncarnation {
+                    requested: incarnation,
                     current,
                 });
             }
@@ -150,7 +151,7 @@ impl Node {
         }
         self.inner.admission_changed.notify_all();
         Ok(Admission {
-            generation,
+            incarnation,
             cell,
             chunk,
             inputs,
