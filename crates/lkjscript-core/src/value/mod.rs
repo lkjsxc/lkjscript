@@ -1,3 +1,4 @@
+mod debug;
 mod heap_object;
 mod model;
 

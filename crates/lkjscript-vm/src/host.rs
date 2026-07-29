@@ -26,6 +26,9 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
     if let Some(resource) = v.as_resource() {
         return Ok(format!("resource#{resource}"));
     }
+    if let Some(prototype) = v.as_function() {
+        return Ok(format!("#<fn:{prototype}>"));
+    }
     match arena.get(v)? {
         HeapObj::Str(s) => Ok(s.clone()),
         HeapObj::Symbol(s) => Ok(s.clone()),
@@ -34,7 +37,6 @@ pub fn display_value(arena: &Arena, v: Value) -> Result<String> {
             let d = display_value(arena, *cdr)?;
             Ok(format!("({a} . {d})"))
         }
-        HeapObj::Closure { proto, .. } => Ok(format!("#<fn:{proto}>")),
         HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
         HeapObj::Path(path) => Ok(format!("#<path:{}>", path.len())),
         HeapObj::Product { product, .. } => Ok(format!("#<product:{}>", product.raw())),

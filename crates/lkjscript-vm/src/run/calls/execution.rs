@@ -2,9 +2,8 @@ use super::*;
 
 pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
     let callee = vm.pop()?;
-    let obj = vm.arena.get(callee)?.clone();
-    match obj {
-        HeapObj::Closure { proto, .. } => {
+    match callee.as_function() {
+        Some(proto) => {
             let p = vm
                 .chunk
                 .protos()
@@ -129,7 +128,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
             });
             Ok(())
         }
-        _ => Err(Error::msg("call expects closure")),
+        None => Err(Error::msg("call expects closure")),
     }
 }
 

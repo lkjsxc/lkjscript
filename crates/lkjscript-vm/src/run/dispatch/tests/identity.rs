@@ -25,13 +25,7 @@ fn object_identity_is_limited_to_buffers_and_resources() {
     vm.push(integer);
     assert!(dispatch(&mut vm, Op::SameObject as u8).is_err());
 
-    let closure = test_alloc(
-        &mut vm,
-        HeapObj::Closure {
-            proto: 0,
-            captures: Vec::new(),
-        },
-    );
+    let closure = Value::from_function(0);
     vm.push(closure);
     vm.push(closure);
     assert!(dispatch(&mut vm, Op::EqualValue as u8).is_err());

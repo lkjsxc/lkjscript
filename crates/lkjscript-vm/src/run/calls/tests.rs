@@ -53,14 +53,7 @@ fn tail_call_reuses_the_current_frame() {
     });
     let argument = Value::from_i64(42);
     vm.push(argument);
-    let callee = vm
-        .arena
-        .alloc(HeapObj::Closure {
-            proto: 0,
-            captures: Vec::new(),
-        })
-        .expect("test closure allocation");
-    vm.push(callee);
+    vm.push(Value::from_function(0));
 
     call(&mut vm, 1).expect("tail call");
 

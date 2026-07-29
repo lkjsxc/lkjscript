@@ -87,7 +87,6 @@ fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
         (HeapObj::Str(_), HeapObj::Str(_))
         | (HeapObj::Symbol(_), HeapObj::Symbol(_))
         | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
-        | (HeapObj::Closure { .. }, HeapObj::Closure { .. })
         | (HeapObj::Buf(_), HeapObj::Buf(_)) => true,
         (
             HeapObj::Product {
@@ -132,10 +131,6 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
         HeapObj::Pair { car, cdr } => HeapObj::Pair {
             car: *car,
             cdr: *cdr,
-        },
-        HeapObj::Closure { proto, captures } => HeapObj::Closure {
-            proto: *proto,
-            captures: clone_values(captures, captures.capacity()),
         },
         HeapObj::Buf(bytes) | HeapObj::Path(bytes) => {
             let mut clone = Vec::with_capacity(bytes.capacity());

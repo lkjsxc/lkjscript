@@ -126,6 +126,10 @@ impl OwnedValue {
         self.root.as_resource()
     }
 
+    pub fn as_function(&self) -> Option<u32> {
+        self.root.as_function()
+    }
+
     pub fn enum_identity(&self) -> Option<(RuntimeLayoutId, u16)> {
         match self.object()? {
             HeapObj::Enum {

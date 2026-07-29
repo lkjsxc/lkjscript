@@ -138,5 +138,6 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     assert!(json.contains("\"identity\":\"buf\",\"heap_variant\":\"Buf\""));
     assert!(json.contains("\"identity\":\"symbol\",\"heap_variant\":\"Symbol\""));
     assert!(!json.contains("\"identity\":\"builtin\""));
-    assert_eq!(json.matches("\"heap_variant\":").count(), 8);
+    assert!(!json.contains("\"identity\":\"closure\""));
+    assert_eq!(json.matches("\"heap_variant\":").count(), 7);
 }

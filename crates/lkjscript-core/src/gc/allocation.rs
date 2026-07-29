@@ -165,9 +165,6 @@ pub(super) fn estimated_object_bytes(object: &HeapObj) -> usize {
     let dynamic = match object {
         HeapObj::Str(text) | HeapObj::Symbol(text) => text.capacity(),
         HeapObj::Pair { .. } => 0,
-        HeapObj::Closure { captures, .. } => captures
-            .capacity()
-            .saturating_mul(std::mem::size_of::<Value>()),
         HeapObj::Buf(bytes) | HeapObj::Path(bytes) => bytes.capacity(),
         HeapObj::Product { fields, .. } => fields
             .capacity()

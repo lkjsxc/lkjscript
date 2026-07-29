@@ -9,10 +9,6 @@ pub enum HeapObj {
         car: Value,
         cdr: Value,
     },
-    Closure {
-        proto: u32,
-        captures: Vec<Value>,
-    },
     Buf(Vec<u8>),
     Path(Vec<u8>),
     Product {
@@ -32,11 +28,6 @@ impl HeapObj {
             HeapObj::Pair { car, cdr } => {
                 mark(*car);
                 mark(*cdr);
-            }
-            HeapObj::Closure { captures, .. } => {
-                for c in captures {
-                    mark(*c);
-                }
             }
             HeapObj::Product { fields, .. } => {
                 for field in fields {

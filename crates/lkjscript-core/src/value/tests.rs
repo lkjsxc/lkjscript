@@ -42,6 +42,18 @@ fn reference_and_key_categories_remain_disjoint_for_equal_payloads() {
 }
 
 #[test]
+fn function_prototypes_round_trip_inline_without_category_aliasing() {
+    for prototype in [0, 1, u32::MAX] {
+        let value = Value::from_function(prototype);
+        assert_eq!(value.as_function(), Some(prototype));
+        assert!(value.as_i64().is_none());
+        assert!(value.as_resource().is_none());
+        assert!(value.as_legacy_traced().is_none());
+        assert_eq!(format!("{value:?}"), format!("function#{prototype}"));
+    }
+}
+
+#[test]
 fn complete_i64_range_round_trips_inline() {
     for number in [
         i64::MIN,

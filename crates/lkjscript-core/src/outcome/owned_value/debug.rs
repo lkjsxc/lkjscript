@@ -24,9 +24,11 @@ impl fmt::Debug for OwnedValue {
         if let Some(value) = self.as_resource() {
             return write!(formatter, "resource#{value}");
         }
+        if let Some(prototype) = self.as_function() {
+            return write!(formatter, "#<owned-fn:{prototype}>");
+        }
         match self.object() {
             Some(HeapObj::Pair { .. }) => formatter.write_str("#<owned-pair>"),
-            Some(HeapObj::Closure { proto, .. }) => write!(formatter, "#<owned-fn:{proto}>"),
             Some(HeapObj::Buf(bytes)) => write!(formatter, "#<owned-buf:{}>", bytes.len()),
             Some(HeapObj::Path(bytes)) => write!(formatter, "#<owned-path:{}>", bytes.len()),
             Some(HeapObj::Product { product, .. }) => {
