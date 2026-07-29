@@ -8,8 +8,9 @@ control, describe/status/stop client, and deterministic service-definition
 slice named here. App-private host environments, portable application paths,
 provider-backed VM stdio/clock, and trusted arguments/stdio applications are
 also Current for their exact tests. Supervised process cells and durable process
-application control are Current for the exact Linux evidence below. Database
-attachment, session brokers, and GUI remain non-Current.
+application control are Current for the exact Linux evidence below. One daemon-
+owned ordered database and incarnation-bound tenant attachment are Current.
+Database source/VM operations, session brokers, and GUI remain non-Current.
 
 ## Implemented Boundary
 
@@ -21,7 +22,7 @@ process under `/proc` once before replacement. Other hosts conservatively treat
 an existing lease as live.
 
 The coordinator opens `lkjscript.control-store` before any application database.
-Its journal and snapshot carry platform revision 6, the exact
+Its journal and snapshot carry platform revision 7, the exact
 `lkjscript.runtime-control` digest, explicit little-endian widths, monotonic
 sequence, bounded key/value payloads, and full SHA-256 checksums. Commit syncs
 before fact publication. Recovery replays idempotently, rejects corruption and
@@ -74,12 +75,14 @@ Executed on Linux x86-64 at the implementing worktree:
 ```text
 cargo test --locked -p lkjscript-host
 cargo test --locked -p lkjscript-core outcome::codec
+cargo test --locked -p lkjscript-database
 cargo test --locked -p lkjscript-runtime
+cargo test --locked -p lkjscript-app --test cli_contract application_control
 cargo test --locked -p lkjscript-app --test cli_contract process_cells
 cargo run --locked -p lkjscript-xtask -- check-unsafe
-cargo clippy --locked -p lkjscript-host -p lkjscript-runtime -p lkjscript-app --all-targets -- -D warnings
+cargo clippy --locked -p lkjscript-host -p lkjscript-database \
+  -p lkjscript-runtime -p lkjscript-app --all-targets -- -D warnings
 ```
-
 The runtime suite covered first boot, clean and unclean reopen, commit,
 checkpoint, truncated-tail repair, complete-record corruption, sync failure,
 stale platform revision, lease exclusion, exact frames, malformed prefixes,
@@ -87,12 +90,13 @@ stale/digest rejection, Unix peer credentials, idempotent replay, service
 bundle generation/removal, private trusted VMs, bounded process framing, and
 manifest/cell-class mismatch rejection.
 
-A real process smoke built `lkjscriptd` and `lkjscript`, started the daemon,
-waited for its Unix endpoint, ran describe and status through the CLI, requested
-shutdown, joined the daemon, and observed a zero-byte journal plus a 193-byte
-durable snapshot. The latest smoke reported coordinator 904, platform revision 6,
-and exact control digest `a96c48822a427343654b0c34b469feaaf8dd2b72437ed622c65e501fca524063`,
-clean previous shutdown, control sequence 2, and zero applications.
+The application-control integration built `lkjscriptd`, `lkjscript-cell`, and
+`lkjscript`; started the daemon; installed, started, invoked, listed, stopped,
+and removed a real process application; killed and restarted the daemon; and
+observed unclean desired-state recovery plus an attached database tenant on the
+replacement incarnation. Exact describe output reports platform revision 7 and
+runtime-control digest
+`0305b8ccad1e1eabd0ebe43340f497cca5d8b2928daa1614eb85ebdab78d1c46`.
 
 A separate CLI smoke generated all six service files, required each to be
 nonempty, removed them, and observed no remaining generated file.
@@ -103,8 +107,10 @@ nonempty, removed them, and observed no remaining generated file.
 directory, and database-provider families in one cloneable app-private
 `HostEnvironment`. `ApplicationPath` accepts only bounded normalized relative
 segments. Portable directory conformance covers contained read, write, list,
-and remove. The database family is a typed interface only; its runtime binding
-is not Current in this slice.
+and remove. The ordered database now implements the typed family with tenant-
+bound read/write handles, immutable snapshots, exact ranges, single-writer
+commit, abort, and abort-all. Provider identity binds tenant and incarnation;
+foreign, stale, missing, and read-only handles fail before database effects.
 
 The validated VM routes direct print, flush, read-byte, write-byte, write-string,
 monotonic time, and wait operations through granted stdio or clock providers.
@@ -159,7 +165,24 @@ and only that invocation's bounded buffered stdout. Focused Linux evidence
 installed registry identity 1, invoked real validated source, killed and
 restarted the daemon from the same state directory, observed unclean recovery,
 and recovered the app as running with a
-new worker, invoked it again, then stopped and removed it.
+new worker and attached database tenant, invoked it again, then stopped,
+observed tenant detachment, and removed it.
+
+## Database Tenant Lifecycle
+
+After bootstrap control recovery, `lkjscriptd` opens or creates one ordered
+database under the state directory and attaches its factory to the coordinator.
+Stable registry identity derives the tenant; each running incarnation receives
+a fresh provider identity. Start and restart attach before control success.
+Stop, restart, remove, process failure, shutdown, and provider drop abort active
+transactions. Clean shutdown then checkpoints; abrupt death recovers the WAL.
+
+Focused provider evidence proved immutable pre-commit snapshots, post-commit
+visibility, cross-tenant isolation, stale/foreign handle rejection, abort-all
+rollback, and writer release. The complete database suite also proved exact
+model agreement, synchronized WAL recovery, torn-tail handling, atomic
+checkpoint close, and failed-I/O nonpublication. Language database operations
+and process-cell provider proxy framing remain outside this Current slice.
 
 ## Exact Limits
 
@@ -168,8 +191,9 @@ new worker, invoked it again, then stopped and removed it.
 - Generated service definitions were not installed or started with privilege.
 - Shutdown is control-driven; OS signal mapping is not yet Current.
 - Only arguments, direct stdio, and clock operations use the composed VM host;
-  tenant attachment, session brokers, native windows, graphics, accessibility,
-  and GUI execution remain absent.
+  database tenant attachment exists at the coordinator boundary, but database
+  process proxy and VM operations, session brokers, native windows, graphics,
+  accessibility, and GUI execution remain absent.
 - Persistent reconstruction is isolated-process only; trusted in-process code
   artifacts are not serialized by the registry.
 - No Miri, sanitizer, fuzz campaign, non-Linux build, or non-x86 execution was

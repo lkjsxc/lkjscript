@@ -79,8 +79,17 @@ fn daemon_persists_restarts_and_controls_runnable_application(
     assert!(listed.contains("application: 1"));
     assert!(listed.contains("desired: running"));
     assert!(listed.contains("state: running"));
+    assert!(listed.contains("database: attached"));
     assert_eq!(invoke(&endpoint)?.stdout, b"3628800");
     assert!(lifecycle(&endpoint, "stop")?.status.success());
+    let stopped = cli(&[
+        "system".into(),
+        "app".into(),
+        "list".into(),
+        "--endpoint".into(),
+        endpoint.clone(),
+    ])?;
+    assert!(String::from_utf8(stopped.stdout)?.contains("database: detached"));
     assert!(lifecycle(&endpoint, "remove")?.status.success());
     recovered.stop()?;
     std::fs::remove_dir_all(state)?;

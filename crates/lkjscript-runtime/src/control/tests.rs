@@ -45,6 +45,7 @@ fn application_control_frames_preserve_typed_payloads() -> Result<(), Box<dyn Er
         state: ControlledApplicationState::Running,
         incarnation: Some(2),
         process: Some(100),
+        database_attached: true,
     };
     for result in [
         ControlSuccess::Applications(vec![application]),

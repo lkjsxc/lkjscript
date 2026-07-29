@@ -14,11 +14,13 @@ impl<S: DurableStorage> MachineCoordinator<S> {
     stdio
         .drain_output()
         .map_err(|error| rejected(&error.to_string()))?;
-    let outcome = self
-        .runtime
-        .invoke(incarnation, arguments)
-        .map_err(|error| rejected(&error.to_string()))?
-        .outcome;
+    let outcome = match self.runtime.invoke(incarnation, arguments) {
+        Ok(outcome) => outcome.outcome,
+        Err(error) => {
+            let _ = self.abort_application_database(id);
+            return Err(rejected(&error.to_string()));
+        }
+    };
     let (output, _) = stdio
         .drain_output()
         .map_err(|error| rejected(&error.to_string()))?;
@@ -63,6 +65,7 @@ fn application_view(
         state: state(&status),
         incarnation: status.incarnation.map(|value| value.incarnation()),
         process,
+        database_attached: managed.database.is_some(),
     })
 }
 

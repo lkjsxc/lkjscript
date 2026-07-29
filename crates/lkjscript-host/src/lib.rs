@@ -28,7 +28,8 @@ pub use path::{
     MAX_APPLICATION_PATH_SEGMENT_BYTES,
 };
 pub use providers::{
-    DatabaseProvider, DatabaseTransactionId, DirectoryProvider, HostEnvironment, StdioProvider,
+    DatabaseProvider, DatabaseTenantFactory, DatabaseTransactionId, DirectoryProvider,
+    HostEnvironment, StdioProvider,
 };
 pub use spec::{
     Architecture, CallingConventionId, Endianness, ExecutablePolicy, ExecutionBackendId, HostSpec,

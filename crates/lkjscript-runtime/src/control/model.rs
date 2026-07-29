@@ -102,6 +102,7 @@ pub struct ControlledApplication {
     pub state: ControlledApplicationState,
     pub incarnation: Option<u64>,
     pub process: Option<u32>,
+    pub database_attached: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

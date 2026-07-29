@@ -37,6 +37,11 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                     "operations",
                     "control operations",
                     "install list start stop restart remove invoke",
+                ))
+                .fact(fact(
+                    "database-tenant",
+                    "database tenant",
+                    "stable registry tenant with incarnation-bound provider",
                 )),
             ContractItem::new("application-cell", ContractItemKind::Type)
                 .fact(fact(

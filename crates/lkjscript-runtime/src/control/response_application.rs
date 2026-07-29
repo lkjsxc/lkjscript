@@ -26,6 +26,7 @@ fn encode_application(
         Some(_) => return Err(ControlError::InvalidIdentity),
         None => bytes.push(0),
     }
+    bytes.push(u8::from(application.database_attached));
     Ok(())
 }
 
@@ -52,6 +53,7 @@ fn decode_application(input: &mut ResponseInput<'_>) -> Result<ControlledApplica
         }
         _ => return Err(ControlError::Malformed("application process option")),
     };
+    let database_attached = input.boolean()?;
     Ok(ControlledApplication {
         application,
         name,
@@ -59,6 +61,7 @@ fn decode_application(input: &mut ResponseInput<'_>) -> Result<ControlledApplica
         state,
         incarnation,
         process,
+        database_attached,
     })
 }
 

@@ -73,6 +73,14 @@ fn print_application(application: &ControlledApplication) {
         }
     );
     println!("state: {state}");
+    println!(
+        "database: {}",
+        if application.database_attached {
+            "attached"
+        } else {
+            "detached"
+        }
+    );
     if let Some(incarnation) = application.incarnation {
         println!("incarnation: {incarnation}");
     }

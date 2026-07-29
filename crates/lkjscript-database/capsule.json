@@ -6,12 +6,12 @@
   "kind": "crate",
   "purpose": "Provide a durable ordered multi-tenant key/value database vertical slice.",
   "layer": "durable service",
-  "concepts": ["single-writer serializable transactions", "reader snapshots", "canonical WAL", "atomic checkpoint"],
+  "concepts": ["single-writer serializable transactions", "reader snapshots", "canonical WAL", "atomic checkpoint", "tenant-bound typed provider"],
   "facade": ["crates/lkjscript-database/src/lib.rs"],
   "allowed_dependencies": ["host"],
   "forbidden_dependencies": ["app", "compiler", "contracts", "core", "ir", "jit", "native", "resource", "sys", "vm"],
-  "tests": ["crates/lkjscript-database/tests/model.rs", "crates/lkjscript-database/tests/recovery.rs", "crates/lkjscript-database/tests/transactions.rs"],
-  "decisions": ["docs/decisions/platform/runtime-foundation/transactional-kernel.md"],
+  "tests": ["crates/lkjscript-database/tests/model.rs", "crates/lkjscript-database/tests/provider.rs", "crates/lkjscript-database/tests/recovery.rs", "crates/lkjscript-database/tests/transactions.rs"],
+  "decisions": ["docs/decisions/platform/runtime-foundation/database-service-and-tenants.md", "docs/decisions/platform/runtime-foundation/transactional-kernel.md"],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "uses", "names": ["durable-storage"] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
@@ -19,6 +19,6 @@
   "context_card": {
     "goal": "Keep the initial database durable, bounded, deterministic, and explicit about isolation.",
     "interfaces": ["crates/lkjscript-database/src/lib.rs"],
-    "invariants": ["safe Rust", "single writer", "snapshot readers", "sync before commit success", "no raw page exposure"]
+    "invariants": ["safe Rust", "single writer", "snapshot readers", "provider identity binds tenant and incarnation", "sync before commit success", "no raw page exposure"]
   }
 }

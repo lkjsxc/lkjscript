@@ -15,6 +15,7 @@ dependencies = [
  "lkjscript-compiler",
  "lkjscript-contracts",
  "lkjscript-core",
+ "lkjscript-database",
  "lkjscript-host",
  "lkjscript-ir",
  "lkjscript-jit",

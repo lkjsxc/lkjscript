@@ -4,7 +4,9 @@
 mod checkpoint;
 mod database;
 mod error;
+mod lifecycle;
 mod persistence;
+mod provider;
 mod read;
 mod types;
 mod wal;
@@ -12,6 +14,7 @@ mod write;
 
 pub use database::Database;
 pub use error::{DatabaseError, DatabaseResult};
+pub use provider::{DatabaseTenantService, TenantDatabaseProvider};
 pub use read::ReadTransaction;
 pub use types::{
     DatabaseId, DatabaseLimits, Key, RecoveryReport, TenantId, TransactionId, Value, MAX_KEY_BYTES,

@@ -20,6 +20,7 @@ mod linux {
     use std::error::Error;
     use std::num::NonZeroUsize;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     use lkjscript_host::PortableDurableStorage;
     use lkjscript_runtime::{
@@ -43,6 +44,8 @@ mod linux {
             NonZeroUsize::new(256).ok_or("cache bound")?,
             Some(worker),
         )?;
+        let database = database_service(&configuration.state_directory)?;
+        coordinator.attach_database(Arc::new(database))?;
         let socket = configuration.state_directory.join("control.sock");
         let mut control = UnixControlServer::bind(socket, configuration.principal)?;
         println!(
@@ -64,6 +67,30 @@ mod linux {
         drop(control);
         drop(lease);
         Ok(())
+    }
+
+    fn database_service(
+        state_directory: &std::path::Path,
+    ) -> Result<lkjscript_database::DatabaseTenantService, Box<dyn Error>> {
+        let storage: Arc<dyn lkjscript_host::DurableStorage> = Arc::new(
+            PortableDurableStorage::new(state_directory.join("database"))?,
+        );
+        let database = match lkjscript_database::Database::open(
+            Arc::clone(&storage),
+            "applications",
+            lkjscript_database::DatabaseLimits::default(),
+        ) {
+            Ok(database) => database,
+            Err(lkjscript_database::DatabaseError::NotFound) => {
+                lkjscript_database::Database::create(
+                    storage,
+                    "applications",
+                    lkjscript_database::DatabaseLimits::default(),
+                )?
+            }
+            Err(error) => return Err(error.into()),
+        };
+        Ok(lkjscript_database::DatabaseTenantService::new(database))
     }
 
     fn process_worker() -> Result<PathBuf, Box<dyn Error>> {

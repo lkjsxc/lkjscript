@@ -58,13 +58,14 @@ Linux, Windows, macOS, session, and container service definitions. Only the
 Linux foreground process and Unix transport executed; privileged installation
 and non-Linux adapters did not. Trusted in-process VMs now compose app-private
 host environments and execute exact arguments, direct stdio, and clock grants;
-portable relative paths and directory/database provider contracts exist. A
-fixed worker executes bounded Linux process cells with lossless outcomes,
+portable relative paths and directory providers exist. One daemon-owned ordered
+application database now supplies tenant- and incarnation-bound providers; its
+transactions abort on lifecycle release. A fixed worker executes bounded Linux process cells with lossless outcomes,
 restart, stale rejection, and per-app crash isolation. Durable registry identity,
 desired state, authenticated lifecycle/invoke, and daemon restart reconstruction
-are Current for process apps. File, terminal, network, SQLite, and stream-resource
-VM cutover, session brokers, database attachment, GUI, and SQLite replacement
-remain absent.
+are Current for process apps. File, terminal, network, SQLite, stream-resource,
+and database process/VM operation cutover, session brokers, GUI, and SQLite
+replacement remain absent.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -144,9 +145,9 @@ resources remain absent.
    then separate residual SQLite and host I/O mechanisms where evidence supports it.
 2. Add authenticated session brokers and native GUI/accessibility applications
    without presenting UI from system service contexts.
-3. Integrate database tenants, transactions, cancellation, buffer pages, and
-   checkpoints into application-incarnation lifecycle before SQLite migration
-   or benchmarks.
+3. Extend the Current database tenant lifecycle with request cancellation,
+   page-budget accounting, measured checkpoint scheduling, and process-cell
+   provider messages before SQLite migration or benchmarks.
 4. Continue aggregate/path migration and the six-family tracing ratchet without
    weakening existing memory, resource, forced-tier, or Linux x86-64 evidence.
 5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the current

@@ -67,6 +67,11 @@ pub trait DatabaseProvider: Send + Sync {
     fn abort_all(&self) -> HostResult<usize>;
 }
 
+pub trait DatabaseTenantFactory: Send + Sync {
+    fn attach(&self, tenant: &str, incarnation: u64) -> HostResult<Arc<dyn DatabaseProvider>>;
+    fn checkpoint(&self) -> HostResult<()>;
+}
+
 #[derive(Clone, Default)]
 pub struct HostEnvironment {
     pub stdio: Option<Arc<dyn StdioProvider>>,

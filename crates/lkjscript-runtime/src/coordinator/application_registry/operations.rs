@@ -89,9 +89,14 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             .runtime
             .start(runtime)
             .map_err(|error| rejected(&error.to_string()))?;
+        if let Err(error) = self.attach_application_database(id, incarnation) {
+            let _ = self.runtime.stop(incarnation);
+            return Err(rejected(&error.to_string()));
+        }
         let mut durable = self.durable(id)?;
         durable.desired_running = true;
         if let Err(error) = self.persist(&durable) {
+            let _ = self.abort_application_database(id);
             let _ = self.runtime.stop(incarnation);
             return Err(rejected(&error.to_string()));
         }
@@ -103,6 +108,8 @@ impl<S: DurableStorage> MachineCoordinator<S> {
 
     fn stop_application(&mut self, id: u64) -> Result<crate::ControlSuccess, crate::ControlFailure> {
         let incarnation = self.incarnation(id)?;
+        self.abort_application_database(id)
+            .map_err(|error| rejected(&error.to_string()))?;
         self.runtime
             .stop(incarnation)
             .map_err(|error| rejected(&error.to_string()))?;
@@ -111,8 +118,12 @@ impl<S: DurableStorage> MachineCoordinator<S> {
         if let Err(error) = self.persist(&durable) {
             let runtime = self.runtime_id(id)?;
             if let Ok(replacement) = self.runtime.start(runtime) {
-                if let Some(managed) = self.applications.get_mut(&id) {
-                    managed.incarnation = Some(replacement);
+                if self.attach_application_database(id, replacement).is_ok() {
+                    if let Some(managed) = self.applications.get_mut(&id) {
+                        managed.incarnation = Some(replacement);
+                    }
+                } else {
+                    let _ = self.runtime.stop(replacement);
                 }
             }
             return Err(rejected(&error.to_string()));
@@ -128,10 +139,16 @@ impl<S: DurableStorage> MachineCoordinator<S> {
         id: u64,
     ) -> Result<crate::ControlSuccess, crate::ControlFailure> {
         let incarnation = self.incarnation(id)?;
+        self.abort_application_database(id)
+            .map_err(|error| rejected(&error.to_string()))?;
         let replacement = self
             .runtime
             .restart(incarnation)
             .map_err(|error| rejected(&error.to_string()))?;
+        if let Err(error) = self.attach_application_database(id, replacement) {
+            let _ = self.runtime.stop(replacement);
+            return Err(rejected(&error.to_string()));
+        }
         self.applications
             .get_mut(&id)
             .ok_or(crate::ControlFailure::NotFound)?
@@ -143,6 +160,8 @@ impl<S: DurableStorage> MachineCoordinator<S> {
         let runtime = self.runtime_id(id)?;
         let durable = self.durable(id)?;
         if let Some(incarnation) = self.applications.get(&id).and_then(|app| app.incarnation) {
+            self.abort_application_database(id)
+                .map_err(|error| rejected(&error.to_string()))?;
             self.runtime
                 .stop(incarnation)
                 .map_err(|error| rejected(&error.to_string()))?;
@@ -155,7 +174,13 @@ impl<S: DurableStorage> MachineCoordinator<S> {
                 if durable.desired_running {
                     replacement.incarnation = self.runtime.start(replacement.runtime).ok();
                 }
+                let incarnation = replacement.incarnation;
                 self.applications.insert(id, replacement);
+                if let Some(incarnation) = incarnation {
+                    if self.attach_application_database(id, incarnation).is_err() {
+                        let _ = self.runtime.stop(incarnation);
+                    }
+                }
             }
             return Err(rejected(&error.to_string()));
         }

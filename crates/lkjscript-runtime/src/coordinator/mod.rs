@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use lkjscript_contracts::PLATFORM_REVISION;
 use lkjscript_host::{DurableStorage, HostError};
@@ -12,6 +13,7 @@ use crate::{
 };
 
 mod application_registry;
+mod database;
 mod lease;
 #[cfg(test)]
 mod tests;
@@ -31,6 +33,7 @@ pub enum CoordinatorError {
     InvalidBootstrap,
     InvalidApplicationRegistry,
     WorkerUnavailable,
+    DatabaseUnavailable,
 }
 
 impl fmt::Display for CoordinatorError {
@@ -45,6 +48,7 @@ impl fmt::Display for CoordinatorError {
                 output.write_str("invalid durable application registry")
             }
             Self::WorkerUnavailable => output.write_str("process-cell worker is unavailable"),
+            Self::DatabaseUnavailable => output.write_str("database tenant service is unavailable"),
         }
     }
 }
@@ -81,6 +85,7 @@ pub struct MachineCoordinator<S> {
     worker: Option<PathBuf>,
     applications: BTreeMap<u64, ManagedApplication>,
     next_application: u64,
+    database: Option<Arc<dyn lkjscript_host::DatabaseTenantFactory>>,
 }
 
 impl<S: DurableStorage> MachineCoordinator<S> {
@@ -116,6 +121,7 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             worker,
             applications: BTreeMap::new(),
             next_application: 1,
+            database: None,
         };
         coordinator.recover_applications()?;
         Ok(coordinator)
@@ -164,6 +170,7 @@ impl<S: DurableStorage> MachineCoordinator<S> {
     }
 
     pub fn shutdown(&mut self) -> Result<(), CoordinatorError> {
+        self.abort_all_databases()?;
         for application in self.applications.values_mut() {
             if let Some(incarnation) = application.incarnation.take() {
                 self.runtime.stop(incarnation)?;

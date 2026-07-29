@@ -30,6 +30,7 @@ pub(crate) struct Inner {
     pub state: Mutex<State>,
 }
 
+#[derive(Clone)]
 pub struct Database {
     pub(crate) inner: Arc<Inner>,
     recovery: RecoveryReport,
@@ -126,22 +127,6 @@ impl Database {
             state.index.as_ref().clone(),
             self.inner.limits,
         ))
-    }
-
-    /// Atomically checkpoints the logical index, clears the WAL, and closes.
-    pub fn close(self) -> DatabaseResult<()> {
-        let mut state = self.inner.lock();
-        ready(&state)?;
-        if state.writer_active {
-            return Err(DatabaseError::WriterActive);
-        }
-        let checkpoint = checkpoint::encode(&state.index, state.sequence);
-        self.inner
-            .storage
-            .replace(&self.inner.checkpoint_name, &checkpoint)?;
-        self.inner.storage.replace(&self.inner.wal_name, &[])?;
-        state.closed = true;
-        Ok(())
     }
 }
 

@@ -154,13 +154,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   scheduled optimizer/native integrations, and selected defaults are Current.
   See [exact evidence](current-state/semantic-resource-plane-evidence.md).
 - The exact Linux [OS-resident runtime foundation](current-state/os-resident-runtime-evidence.md)
-  has a persistent foreground `lkjscriptd`, exclusive lease, durable independent
-  control store, authenticated Unix control, CLI, and generated service definitions.
+  has foreground `lkjscriptd`, exclusive lease, durable control, authenticated Unix control, CLI, and service files.
   Trusted VMs and supervised Linux process cells admit arguments, stdio, and clock
   grants with private state and bounded quotas. Durable process-app install, list,
-  lifecycle, invoke, and restart recovery use authenticated control. Other VM host
-  families, database attachment, session brokers, GUI, and non-Linux transports
-  are not Current. The database remains experimental.
+  lifecycle, invoke, and restart recovery use authenticated control. The daemon-owned
+  ordered database gives each running incarnation an isolated tenant provider and
+  aborts it on lifecycle release. Database source/VM operations, other VM host families,
+  session brokers, GUI, and non-Linux transports are not Current.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic closed contract registry.
 - Capsule manifests, repository policy/provenance, graph/query outputs,

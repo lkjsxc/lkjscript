@@ -34,6 +34,7 @@ pub(super) struct ManagedApplication {
     pub runtime: ApplicationId,
     pub incarnation: Option<crate::ApplicationIncarnationId>,
     pub stdio: BufferedStdio,
+    pub database: Option<Arc<dyn lkjscript_host::DatabaseProvider>>,
 }
 
 impl<S: DurableStorage> MachineCoordinator<S> {
@@ -109,6 +110,7 @@ impl<S: DurableStorage> MachineCoordinator<S> {
             runtime,
             incarnation: None,
             stdio,
+            database: None,
         })
     }
 }
