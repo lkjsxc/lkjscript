@@ -9,6 +9,8 @@ and symbols use inline artifact IDs. Six traced representation families remain.
 
 ## Implemented Facts
 
+- Revisions `32374e9`, `e8de299`, `2d694a6`, `7e03b79`, and `5354ff9`
+  implement the substrate and first monotonic tracing-family decrements.
 - `StructuralRuntime` internally issues process-unique runtime identities and
   exact class/slot/nonzero-generation domain keys. Safe callers cannot forge an
   identity or mutate runtime state outside a typed store. Generation changes
@@ -38,6 +40,9 @@ and symbols use inline artifact IDs. Six traced representation families remain.
   drain, and completes teardown atomically. Empty worker queues are removed.
 - Resource-plane generation exhaustion now retires IDs before reuse. Owner proof
   epoch exhaustion fails before changing home or loan state.
+- Unused builtin heap storage is removed. Capture-free functions use checked
+  inline prototype IDs. Symbols use checked artifact IDs; returned snapshots
+  retain only reachable canonicalized symbol text.
 
 ## Focused Evidence
 
@@ -57,6 +62,23 @@ cargo run --locked -p lkjscript-xtask -- structure check
 cargo run --locked -p lkjscript-xtask -- structure audit
 cargo run --locked -p lkjscript-xtask -- quiet verify
 cargo run --locked -p lkjscript-app --bin lkjscript -- memory traced --json
+python3 meta/results/ai-authoring/validate.py meta/results/ai-authoring/results/*.json
+cargo build --workspace --release --locked
+./target/release/lkjscript run src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine vm src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine optimizing-jit src/examples/jit-optimizing/main.lkjscript
+./target/release/lkjscript run --engine auto --auto-jit-threshold 2 src/examples/jit-scalar/main.lkjscript
+./target/release/lkjscript run --engine vm src/examples/hello/main.lkjscript
+./target/release/lkjscript run --engine vm src/examples/mandel/main.lkjscript
+python3 meta/benchmarks/brainfuck/benchmark.py --mode smoke --no-build
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/lkjedit-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/http-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/bulk-bytes-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/durable-files-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sha256-smoke.sh
+LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sqlite-smoke.sh
+docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
 cargo miri --version  # unavailable for installed stable toolchain
 ```
 
@@ -74,7 +96,7 @@ cleanup, and epoch exhaustion with no partial mutation.
   cross-call runtime loan slots remain a backend integration target.
 - No sealed compact image is implemented.
 - No per-node precise reference count is implemented or selected.
-- The no-RC candidate comparison, HIR/SSA operations, execution-tier migration,
-  live-family ratchet decrements, sanitizers, and fuzzing remain untested in
-  this slice. Miri is unavailable in the installed stable toolchain.
+- The no-RC candidate comparison, real region/pool HIR and backend selection,
+  retained migration measurements for the six remaining families, sanitizers,
+  and fuzzing remain untested. Miri is unavailable on the installed toolchain.
 - No collector-free-runtime or no-tracing-runtime claim follows from this work.
