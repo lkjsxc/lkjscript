@@ -57,8 +57,7 @@ candidates are removed rather than retained as fallback paths.
 
 ## Metadata Claim Rejected as Evidence
 
-The directive's claimed "WASI 0.3, released June 11 2026" metadata is
-**unverified and future-dated** relative to this decision baseline. It cannot be
-Current evidence or an adoption premise. Any later use requires a published
-upstream release record, pinned interface contract, and fresh acceptance
-results.
+The directive's "WASI 0.3, released June 11 2026" metadata was not
+corroborated by the official WASI pages inspected for this cycle. It cannot be
+Current evidence or an adoption premise without a published upstream release
+record, pinned interface contract, and fresh acceptance results.
