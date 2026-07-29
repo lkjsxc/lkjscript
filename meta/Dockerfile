@@ -6,9 +6,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup component add rustfmt clippy
-COPY Cargo.toml Cargo.lock README.md AGENTS.md lkjscript.package.json lkjscript.lock.json ./
+COPY .gitignore Cargo.toml Cargo.lock README.md AGENTS.md lkjscript.package.json lkjscript.lock.json ./
 COPY crates ./crates
 COPY meta/config ./meta/config
+COPY meta/platform-revision ./meta/platform-revision
 COPY meta/agent-state ./meta/agent-state
 COPY meta/unsafe ./meta/unsafe
 COPY docs ./docs
@@ -30,7 +31,9 @@ RUN apt-get update \
 RUN --mount=type=cache,id=lkjscript-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=lkjscript-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=lkjscript-target-verify,target=/src/target,sharing=locked \
-    cargo run --locked -p lkjscript-xtask -- quiet verify \
+    --mount=type=bind,from=repository-git,source=.,target=/src/.git,readonly \
+    git config --global --add safe.directory /src \
+    && cargo run --locked -p lkjscript-xtask -- quiet verify \
     && /tmp/lkjscript run src/examples/hello/main.lkjscript | grep -q 3628800 \
     && /tmp/lkjscript run src/examples/mandel/main.lkjscript > /tmp/mandel.out \
     && test -s /tmp/mandel.out \
