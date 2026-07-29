@@ -47,16 +47,18 @@ support claim.
    artifact limit before its aggregate checked replacement is Current.
 6. `[machine: LKJ-REPO-*]` Authored files and directories obey the
    [bounded-topology contract](docs/decisions/platform/bounded-repository-topology.md).
-7. `[machine: Rust lint and crate graph]` Keep pure compiler/runtime state apart
-   from host effects; unsafe Rust is confined to `lkjscript-sys` behind a safe
-   caller contract.
+7. `[verified: Rust lint, crate graph, and unsafe-boundary review]` Keep pure
+   compiler/runtime state apart from host effects. Every unsafe-containing Rust
+   file must have one stable boundary identity and a reviewed safe caller
+   contract before unsafe code may move beyond its Current `lkjscript-sys`
+   locations.
 8. `[verified: evidence review]` Never claim an unrun command. Record commit,
    environment, exact command, result, and explicit untested gates.
 9. `[verified: focused tests]` Delete a test only when equal or stronger focused
    conformance or boundary coverage replaces it.
-10. `[external: dependency policy]` A third-party Rust dependency requires an
-    accepted record, license/advisory review, and measured runtime/build/package
-    justification.
+10. `[external: dependency policy]` Audited third-party Rust dependencies are
+    allowed only with an accepted record, license/advisory review, and measured
+    runtime/build/package justification.
 11. `[verified: proof checker]` Prove AI optimizer hints, retain a runtime check,
     or reject them; undefined behavior is not an optimization mechanism.
 12. `[verified: architecture review]` VM, JIT, AOT, and Wasm consume one resolved

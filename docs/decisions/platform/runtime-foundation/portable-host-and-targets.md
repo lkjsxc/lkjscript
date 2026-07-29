@@ -1,0 +1,67 @@
+# Portable Host and Targets
+
+## Status
+
+**Accepted Contract.** Linux x86-64 remains the only Current acceptance host.
+The optional cell probe described here is experimental; all other named
+backends are external, deferred, or rejected as stated.
+
+## Current Inherited State
+
+Current source resolves once through typed HIR and verified SSA before VM or
+native execution. Current Linux host effects remain explicit capabilities.
+Portability is a design constraint, not a support claim. There is no Current
+Wasm, WASI, Component Model, or Cranelift execution path.
+
+## Accepted Boundary
+
+A target describes code and ABI constraints. A host supplies measured execution
+policy, capabilities, clocks, interruption, and resource ceilings. Neither may
+reinterpret source syntax or bypass verified SSA. Target identity, runtime image
+identity, capability grants, and resource profile are content-addressed inputs.
+
+The [WebAssembly Component Model](https://component-model.bytecodealliance.org/)
+is adopted **only as an external component ABI reference**. It is rejected as
+lkjscript's internal type system, object model, package identity, or semantic
+IR. Core language values and effects remain authoritative.
+
+## Unsafe Boundary Contract
+
+Every authored Rust file containing a lexical `unsafe` code token must appear
+exactly once in a bounded machine-readable registry under one stable boundary
+identity. Every registered file must exist and contain such a token. The scan
+ignores comments and string/character literals. Registry locations may extend
+beyond `lkjscript-sys` after architecture and caller-contract review; this cycle
+moves no unsafe code and registers only inherited sys locations.
+
+## Optional Wasmtime Cell Reference
+
+Wasmtime is an experimental reference for an optional isolated cell because its
+official material documents:
+
+- [fast instance reuse](https://docs.wasmtime.dev/examples-fast-instantiation.html);
+- [store resource limiting](https://docs.wasmtime.dev/api/wasmtime/struct.Store.html);
+  and
+- [epoch interruption](https://docs.wasmtime.dev/examples-interrupting-wasm.html).
+
+Adoption means measuring equivalent bounded construction, memory/table limits,
+and deterministic cancellation. It does not adopt Wasmtime as a universal
+runtime, permit ambient WASI, or make a cell the internal ABI. The probe must
+pin dependency and interface identities, grant capabilities explicitly, and
+fail closed when limits or interruption are unavailable.
+
+## Deferred Backend Candidate
+
+[Cranelift](https://github.com/bytecodealliance/wasmtime/tree/main/cranelift) is
+a backend candidate, **Deferred** pending accepted dependency record,
+license/advisory review, build/package cost, measured compile/runtime behavior,
+and proof that it consumes the shared verified SSA contract without semantic
+divergence. No workspace dependency is authorized by this decision.
+
+## Rejected This Cycle
+
+- claiming portability acceptance from emission, disassembly, or scaffolding;
+- exposing WASI as ambient host authority;
+- making the Component Model an internal runtime representation;
+- replacing callable native-tier evidence with Wasm observation; and
+- treating unverified WASI 0.3 release metadata as Current evidence.
