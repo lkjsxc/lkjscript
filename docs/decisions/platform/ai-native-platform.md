@@ -75,8 +75,8 @@ This redesign retains the strongest Current foundations:
 - whole-artifact validation, opaque verified artifacts, bounded proof checking,
   exact roots, W^X, structured outcomes, deterministic budgets, and no silent
   forced-engine fallback remain binding; and
-- unsafe Rust remains confined to `lkjscript-sys`, whose safe interface must be
-  sound for every Rust caller.
+- unsafe Rust remains machine-registered at coherent mechanism boundaries; each
+  reviewed safe interface must be sound for every Rust caller.
 
 A replacement may strengthen or generalize these invariants, but may not bypass
 them during migration.

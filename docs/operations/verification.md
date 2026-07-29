@@ -53,8 +53,8 @@ ignoring comments and string/character literals. It enforces both directions:
 every matching file occurs once in `meta/unsafe/registry.json`, and every
 registered path exists and matches. The registry has at most 16 stable boundary
 entries, each with a reviewed safe caller contract and at most 16 sorted unique
-files. Locations beyond `lkjscript-sys` are permitted by the contract, but none
-exist in the Current registry. The command runs in `quiet verify`.
+files. The Current registry includes the host local-control peer-identity mechanism
+and inherited sys boundaries. The command runs in `quiet verify`.
 
 ## Current Structure Gate
 

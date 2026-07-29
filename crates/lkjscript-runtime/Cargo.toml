@@ -6,7 +6,9 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }
+lkjscript-host = { path = "../lkjscript-host" }
 lkjscript-vm = { path = "../lkjscript-vm" }
 
 [lints.clippy]

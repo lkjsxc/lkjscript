@@ -32,9 +32,10 @@ IR. Core language values and effects remain authoritative.
 registry. Every authored Rust file containing a lexical `unsafe` code token
 appears exactly once under one stable boundary identity; every registered file
 exists and contains such a token. The scanner ignores comments and
-string/character literals. Registry locations may extend beyond
-`lkjscript-sys` after architecture and caller-contract review. The Current
-registry contains only inherited sys locations; this slice moved no unsafe code.
+string/character literals. Registry locations extend beyond `lkjscript-sys` only after architecture and
+caller-contract review. The Current host entry reads Linux Unix-socket peer
+credentials behind a safe typed principal API; inherited sys mechanisms remain
+registered separately.
 
 ## Implemented Portable Slice
 

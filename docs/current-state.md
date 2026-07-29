@@ -18,6 +18,7 @@
 <!-- LKJ-STATUS id=never-control status=current -->
 <!-- LKJ-STATUS id=numeric-conversions status=current -->
 <!-- LKJ-STATUS id=opaque-paths status=current -->
+<!-- LKJ-STATUS id=os-resident-runtime-foundation status=current -->
 <!-- LKJ-STATUS id=repository-graph-context status=current -->
 <!-- LKJ-STATUS id=repository-topology status=current -->
 <!-- LKJ-STATUS id=resource-profile-compiler status=current -->
@@ -150,12 +151,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - The measured semantic resource runtime, Linux observation, owner homes,
   scheduled optimizer/native integrations, and selected defaults are Current.
   See [exact evidence](current-state/semantic-resource-plane-evidence.md).
-- Experimental safe-Rust host, runtime-system core, and database crates provide
-  composable providers, private capability-free VMs, incarnation-safe lifecycle,
-  fair bounded admission, immutable leases, tenant ordering, single-writer
-  serializability, snapshots, checksummed WAL, recovery, and checkpoints. They
-  are not source surfaces, `lkjscriptd`, durable control, process cells, a
-  session broker, a VM host cutover, database attachment, GUI, or SQLite replacement.
+- The exact Linux [OS-resident runtime foundation](current-state/os-resident-runtime-evidence.md)
+  has a persistent foreground `lkjscriptd`, exclusive lease, durable independent
+  control store, authenticated Unix control, CLI, and generated service definitions.
+  Application execution remains a private capability-free in-process experiment;
+  process cells, database attachment, session brokers, GUI, and non-Linux daemon
+  transports are not Current. The ordered database kernel remains experimental.
 ## Repository and agent platform
 - `lkjscript describe --json` and `semantic describe` expose the deterministic
   closed contract registry.
@@ -189,8 +190,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   concurrency;
 - portability beyond Linux x86-64; host/database build for `wasm32-wasip1`
   and a fake-storage recovery probe runs, but VM/runtime-system do not build there;
-Immutable `bytes` executes in all four tiers for the exact listed subset. The
-complete island remains Accepted until the other listed requirements are complete.
+The listed `bytes` subset is Current in all four tiers; the complete island remains Accepted.
 ## Verification authority
 The canonical local gate is:
 ```sh

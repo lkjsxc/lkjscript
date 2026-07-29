@@ -27,7 +27,10 @@ const FORBIDDEN_FIELDS: &[&str] = &[
     "abi-version",
     "format-version",
 ];
-const ENVELOPE_PRODUCERS: &[&str] = &["crates/lkjscript-app/src/describe.rs"];
+const ENVELOPE_PRODUCERS: &[&str] = &[
+    "crates/lkjscript-app/src/describe.rs",
+    "crates/lkjscript-runtime/src/control/mod.rs",
+];
 
 pub(super) fn check(root: &Path) -> usize {
     let mut failures = 0;

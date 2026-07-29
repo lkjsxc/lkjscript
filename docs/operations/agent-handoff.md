@@ -43,13 +43,15 @@ scheduled native kernels, shared sealed-image invocation, and retained policy
 evidence. Owner compute/kernel managed is the runtime default; proof discovery
 remains sequential by default.
 
-Experimental safe-Rust crates now provide typed portable host/storage contracts,
-a concurrent capability-free runtime-system core, and a durable multi-tenant
-ordered kernel with snapshot readers, one serialized writer, checksummed WAL,
-replay, and checkpoints. Public application identity now uses coordinator-scoped
-incarnations. These are not source APIs, `lkjscriptd`, durable local control,
-process cells, a session broker, a VM host cutover, relational storage, GUI, or
-a SQLite replacement.
+The Linux x86-64 runtime foundation now has real foreground `lkjscriptd`, an
+exclusive state-directory lease, durable database-independent journal/snapshot,
+kernel-authenticated Unix control, describe/status/stop CLI, and deterministic
+Linux, Windows, macOS, session, and container service definitions. Only the
+Linux foreground process and Unix transport executed; privileged installation
+and non-Linux adapters did not. Application execution remains the inherited
+capability-free in-process experiment with coordinator-scoped incarnations.
+Process cells, session brokers, VM provider cutover, database attachment,
+relational storage, GUI, and SQLite replacement remain absent.
 
 The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
 regions, sealed shared regions, typed generational pools, and structural owner
@@ -70,7 +72,8 @@ not Current.
   raw pointers, and memory-engine switches.
 - Preserve exact capabilities, effects, outcomes, budgets, W^X, content
   identities, and proof checking.
-- Keep unsafe Rust confined to `lkjscript-sys` behind safe caller contracts.
+- Keep unsafe Rust machine-registered at coherent mechanism boundaries behind
+  reviewed safe caller contracts.
 - Add no third-party Rust dependency without accepted external review.
 - Prefer complete vertical slices and focused conformance over mocks.
 

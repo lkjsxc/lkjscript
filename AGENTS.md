@@ -53,7 +53,8 @@ support claim.
 7. `[machine: LKJ-UNSAFE-BOUNDARY, Rust lint, and crate graph]` Keep pure
    compiler/runtime state apart from host effects. Every unsafe-containing Rust
    file has one stable registry boundary and reviewed safe caller contract.
-   Registry locations may extend beyond `lkjscript-sys`; Current entries do not.
+   Current entries include the reviewed host peer-identity boundary and inherited
+   `lkjscript-sys` mechanisms; no catch-all unsafe crate is privileged.
 8. `[verified: evidence review]` Never claim an unrun command. Record commit,
    environment, exact command, result, and explicit untested gates.
 9. `[verified: focused tests]` Delete a test only when equal or stronger focused

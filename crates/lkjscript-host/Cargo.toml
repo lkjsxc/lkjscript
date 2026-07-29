@@ -8,7 +8,7 @@ publish.workspace = true
 [dependencies]
 
 [lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [lints.clippy]
 expect_used = "deny"

@@ -8,6 +8,11 @@ mod args;
 mod json;
 mod json_support;
 mod plan;
+mod system;
+
+pub fn system_command(arguments: &[String]) -> Result<ExitCode, String> {
+    system::command(arguments)
+}
 
 pub fn command(arguments: &[String]) -> Result<ExitCode, String> {
     let command = args::parse(arguments)?;

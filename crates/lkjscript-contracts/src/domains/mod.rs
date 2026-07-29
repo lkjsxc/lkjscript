@@ -30,6 +30,7 @@ pub const PACKAGE_MANIFEST: &str = "lkjscript.package";
 pub const PACKAGE_LOCK: &str = "lkjscript.package-lock";
 pub const MODULE_INTERFACE: &str = "lkjscript.module-interface";
 pub const COMPONENT_INTERFACE: &str = "lkjscript.component-interface";
+pub const RUNTIME_CONTROL: &str = "lkjscript.runtime-control";
 
 pub const AGENT_PROTOCOL_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x9d, 0x63, 0x9e, 0x74, 0x41, 0x07, 0xb2, 0x4f, 0xc4, 0x90, 0xa1, 0x8d, 0x9a, 0x3e, 0xf9, 0xb3,
@@ -113,6 +114,7 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     add(&mut set, platform::capsule_manifest())?;
     add(&mut set, platform::agent_work_state(semantic))?;
     add(&mut set, platform::capability_status())?;
+    add(&mut set, platform::runtime_control())?;
     let memory = add(&mut set, execution::memory_obligations(language))?;
     add(&mut set, execution::structural_ownership_domains(memory))?;
     let hir = add(&mut set, execution::typed_hir(language))?;

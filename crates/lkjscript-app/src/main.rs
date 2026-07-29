@@ -30,7 +30,10 @@ fn real_main() -> Result<ExitCode, String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("--version" | "-V") if args.len() == 1 => {
-            println!("lkjscript {}", env!("CARGO_PKG_VERSION"));
+            println!(
+                "lkjscript platform-revision {}",
+                lkjscript_contracts::PLATFORM_REVISION
+            );
             Ok(ExitCode::SUCCESS)
         }
         None | Some("--help" | "-h") => {
@@ -43,6 +46,7 @@ fn real_main() -> Result<ExitCode, String> {
         Some("package") => package::command(&args),
         Some("memory") => memory::command(&args),
         Some("runtime") => runtime::command(&args),
+        Some("system") => runtime::system_command(&args),
         Some("semantic") => semantic::command(&args),
         Some(other) => Err(format!("unknown command: {other}")),
     }

@@ -28,6 +28,8 @@ pub enum RuntimeError {
     IdentifierSpaceExhausted,
     StateUnavailable,
     WorkerPanicked,
+    CoordinatorAlreadyActive,
+    CoordinatorLease(&'static str),
 }
 
 impl fmt::Display for RuntimeError {
@@ -56,6 +58,12 @@ impl fmt::Display for RuntimeError {
             Self::IdentifierSpaceExhausted => formatter.write_str("identifier space exhausted"),
             Self::StateUnavailable => formatter.write_str("runtime state lock is unavailable"),
             Self::WorkerPanicked => formatter.write_str("an invocation worker panicked"),
+            Self::CoordinatorAlreadyActive => {
+                formatter.write_str("another lkjscriptd coordinator is active")
+            }
+            Self::CoordinatorLease(message) => {
+                write!(formatter, "coordinator lease failed: {message}")
+            }
         }
     }
 }

@@ -36,6 +36,14 @@
       ]
     },
     {
+      "id": "local-control-peer-identity",
+      "responsibility": "Read kernel-authenticated Linux Unix-socket peer credentials.",
+      "safe_caller_contract": "Caller supplies a live connected Unix stream; no request field contributes identity.",
+      "files": [
+        "crates/lkjscript-host/src/local_control.rs"
+      ]
+    },
+    {
       "id": "native-runtime-bridge",
       "responsibility": "Serve verified native runtime calls and exact root, heap, and island state.",
       "safe_caller_contract": "Verified call IDs and checked handles preserve layout, lifetime, and alias rules.",

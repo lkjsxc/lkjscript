@@ -1,6 +1,5 @@
 {"schema":"lkjscript.capability-status",
- "contract":"69d72b81dcab539574b6890e69ac15e5a2ed6db85e03e611e25eb0e756802341",
- "capabilities":[
+ "contract":"69d72b81dcab539574b6890e69ac15e5a2ed6db85e03e611e25eb0e756802341", "capabilities":[
   {"id":"affine-resource-handles", "status":"superseded", "interface":"removed universal handle source contract",
     "authority":"docs/decisions/capabilities/resource-handles.md",
     "evidence":"docs/decisions/semantics/ownership-and-borrowing.md", "claimants":["docs/current-state.md"]},
@@ -125,6 +124,10 @@
   {"id":"ordinary-regions", "status":"current", "interface":"safe internal affine bulk-lifetime regions",
     "authority":"docs/decisions/memory/ordinary-regions.md", "evidence":"crates/lkjscript-core/tests/regions.rs",
     "claimants":["docs/decisions/memory/ordinary-regions.md"]},
+  {"id":"os-resident-runtime-foundation", "status":"current", "interface":"Linux daemon and Unix control",
+    "authority":"docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
+    "evidence":"docs/current-state/os-resident-runtime-evidence.md", "claimants":["docs/current-state.md",
+    "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md"]},
   {"id":"repository-graph-context", "status":"current", "interface":"lkjscript-xtask structure context",
     "authority":"docs/decisions/platform/repository-intelligence-graph.md",
     "evidence":"docs/decisions/platform/repository-intelligence-graph.md", "claimants":["docs/current-state.md",
@@ -194,5 +197,4 @@
   {"id":"typed-vm-scalars", "status":"current", "interface":"complete-range inline i64 and exact-bit f64 VM values",
     "authority":"docs/decisions/memory/typed-vm-scalars.md", "evidence":"docs/operations/verification.md",
     "claimants":["docs/current-state.md", "docs/decisions/memory/typed-vm-scalars.md",
-    "docs/operations/agent-handoff.md"]}
- ]}
+    "docs/operations/agent-handoff.md"]}]}

@@ -21,7 +21,7 @@ Rank the invariants used when architectural goals conflict.
 8. Measure isolated candidates and multiple combinations before adoption.
 9. Preserve rejected ideas with the conditions under which they may become useful.
 10. Grow capability in lkjscript libraries over a small, safe host boundary.
-11. Keep unsafe Rust isolated in `lkjscript-sys`; safe wrappers uphold safety.
+11. Keep unsafe Rust machine-registered by coherent mechanism; safe wrappers uphold safety.
 12. Add no third-party Rust dependency without a measured decision record that
     distinguishes runtime, build-time backend, and language-package impact.
 13. Keep Current the removed legacy source contract source limits until aggregate checked replacements

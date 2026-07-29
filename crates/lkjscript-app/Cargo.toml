@@ -20,6 +20,7 @@ lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-ir = { path = "../lkjscript-ir" }
 lkjscript-jit = { path = "../lkjscript-jit" }
 lkjscript-resource = { path = "../lkjscript-resource" }
+lkjscript-runtime = { path = "../lkjscript-runtime" }
 lkjscript-sys = { path = "../lkjscript-sys" }
 lkjscript-vm = { path = "../lkjscript-vm" }
 

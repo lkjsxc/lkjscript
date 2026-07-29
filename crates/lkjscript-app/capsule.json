@@ -27,6 +27,7 @@
     "jit",
     "native",
     "resource",
+    "runtime",
     "sys",
     "vm"
   ],
@@ -43,6 +44,7 @@
     "docs/decisions/memory/collector-free-deterministic-memory.md",
     "docs/decisions/platform/content-addressed-contracts.md",
     "docs/decisions/platform/modules-and-packages.md",
+    "docs/decisions/platform/runtime-foundation/machine-coordinator-daemon.md",
     "docs/decisions/platform/semantic-resource-plane.md",
     "docs/decisions/platform/semantic-source-and-agent-protocol/local-session.md"
   ],
@@ -75,7 +77,8 @@
       "lkjscript semantic serve --stdio",
       "lkjscript runtime topology",
       "lkjscript runtime host-scheduler",
-      "lkjscript runtime plan"
+      "lkjscript runtime plan",
+      "lkjscript system describe|status|stop"
     ],
     "invariants": [
       "run and disasm require an exact local package lock",

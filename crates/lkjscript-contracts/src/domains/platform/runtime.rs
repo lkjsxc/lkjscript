@@ -1,0 +1,44 @@
+use crate::{ContractDescriptor, ContractFact, ContractItem, ContractItemKind};
+
+use super::super::{name, RUNTIME_CONTROL};
+
+pub(crate) fn runtime_control() -> ContractDescriptor {
+    ContractDescriptor {
+        name: name(RUNTIME_CONTROL),
+        dependencies: Vec::new(),
+        items: vec![
+            ContractItem::new("control-store", ContractItemKind::Type)
+                .fact(fact("schema", "schema", "lkjscript.control-store"))
+                .fact(fact(
+                    "platform-revision",
+                    "platform revision",
+                    "canonical nonzero u64",
+                ))
+                .fact(fact("contract", "contract digest", "full ContractDigest"))
+                .fact(fact("sequence", "sequence", "monotonic u64"))
+                .fact(fact("checksum", "checksum", "full SHA-256"))
+                .fact(fact(
+                    "bounds",
+                    "bounds",
+                    "closed key value and record maxima",
+                )),
+            ContractItem::new("local-control", ContractItemKind::Type)
+                .fact(fact("schema", "schema", "lkjscript.local-control"))
+                .fact(fact(
+                    "platform-revision",
+                    "platform revision",
+                    "canonical nonzero u64",
+                ))
+                .fact(fact("contract", "contract digest", "full ContractDigest"))
+                .fact(fact("request", "request identity", "nonzero u64"))
+                .fact(fact("idempotency", "idempotency identity", "full SHA-256"))
+                .fact(fact("principal", "principal", "transport-derived identity"))
+                .fact(fact("operation", "operation", "closed typed operation"))
+                .fact(fact("frame", "frame", "bounded exact length prefix")),
+        ],
+    }
+}
+
+fn fact(id: &str, name_value: &str, value: &str) -> ContractFact {
+    ContractFact::required(id, name_value, value)
+}

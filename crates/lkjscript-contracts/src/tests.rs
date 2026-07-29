@@ -122,12 +122,13 @@ fn current_registry_is_closed_deterministic_and_dependency_checked() {
     );
     let second = second_result.unwrap_or_default();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 24);
+    assert_eq!(first.len(), 25);
     assert!(first.get(LANGUAGE).is_some());
     assert!(first.get(SEMANTIC_RESOURCE_PLANE).is_some());
     assert!(first.get(MEMORY_OBLIGATIONS).is_some());
     assert!(first.get(STRUCTURAL_OWNERSHIP_DOMAINS).is_some());
     assert!(first.get(CAPABILITY_STATUS).is_some());
+    assert!(first.get(RUNTIME_CONTROL).is_some());
 }
 
 #[test]

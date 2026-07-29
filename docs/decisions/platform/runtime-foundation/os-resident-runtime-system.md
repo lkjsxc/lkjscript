@@ -7,11 +7,12 @@ applications without requiring one process or one address space.
 
 ## Status
 
-**Accepted Contract with Experimental In-Process Implementation.** The inherited
-capability-free application runtime remains experimental. This contract makes
-its replacement binding; persistence, authenticated control, process cells,
-session brokers, GUI execution, and database attachment become Current only
-with their named execution evidence.
+**Accepted Contract with a Current Linux Coordinator Foundation.** The focused
+foreground daemon, exclusive lease, bootstrap store, authenticated Unix control,
+CLI, and service-definition slice are Current by their named evidence. The
+inherited capability-free application runtime remains experimental. Process
+cells, session brokers, GUI execution, database attachment, and other native
+transports become Current only with their own execution evidence.
 
 ## Product Authority
 
