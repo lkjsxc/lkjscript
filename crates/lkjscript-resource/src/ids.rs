@@ -62,45 +62,84 @@ impl TaskClassId {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SlotState {
+    Vacant,
+    Live,
+    Retired,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct GenerationSlot {
+    generation: u32,
+    state: SlotState,
+}
+
 #[derive(Clone, Debug)]
 pub struct GenerationTable<I> {
-    generations: Vec<u32>,
-    live: Vec<bool>,
+    slots: Vec<GenerationSlot>,
     limit: usize,
+    max_generation: u32,
     marker: PhantomData<I>,
 }
 
 impl<I: GenerationId> GenerationTable<I> {
     pub fn new(limit: usize) -> Self {
         Self {
-            generations: Vec::new(),
-            live: Vec::new(),
+            slots: Vec::new(),
             limit,
+            max_generation: u32::MAX,
             marker: PhantomData,
         }
     }
 
-    pub fn allocate(&mut self) -> ResourceResult<I> {
-        if let Some(slot) = self.live.iter().position(|live| !live) {
-            self.live[slot] = true;
-            return Ok(I::from_parts(slot as u32, self.generations[slot]));
+    pub fn with_max_generation(limit: usize, max_generation: u32) -> ResourceResult<Self> {
+        if max_generation == 0 {
+            return Err(ResourceError::new(
+                "generation-limit",
+                "maximum generation must be nonzero",
+            ));
         }
-        if self.live.len() >= self.limit || self.live.len() > u32::MAX as usize {
+        Ok(Self {
+            slots: Vec::new(),
+            limit,
+            max_generation,
+            marker: PhantomData,
+        })
+    }
+
+    pub fn allocate(&mut self) -> ResourceResult<I> {
+        if let Some((slot, entry)) = self
+            .slots
+            .iter_mut()
+            .enumerate()
+            .find(|(_, entry)| entry.state == SlotState::Vacant)
+        {
+            entry.state = SlotState::Live;
+            return Ok(I::from_parts(slot as u32, entry.generation));
+        }
+        if self.slots.len() >= self.limit || self.slots.len() > u32::MAX as usize {
             return Err(ResourceError::new(
                 "id-capacity",
                 "generation table is full",
             ));
         }
-        let slot = self.live.len();
-        self.live.push(true);
-        self.generations.push(1);
+        self.slots
+            .try_reserve(1)
+            .map_err(|_| ResourceError::new("id-allocation", "identifier storage failed"))?;
+        let slot = self.slots.len();
+        self.slots.push(GenerationSlot {
+            generation: 1,
+            state: SlotState::Live,
+        });
         Ok(I::from_parts(slot as u32, 1))
     }
 
     pub fn contains(&self, id: I) -> bool {
         let (slot, generation) = id.parts();
-        self.live.get(slot as usize) == Some(&true)
-            && self.generations.get(slot as usize) == Some(&generation)
+        self.slots
+            .get(slot as usize)
+            .is_some_and(|entry| entry.state == SlotState::Live && entry.generation == generation)
     }
 
     pub fn release(&mut self, id: I) -> ResourceResult<()> {
@@ -108,10 +147,15 @@ impl<I: GenerationId> GenerationTable<I> {
             return Err(ResourceError::new("stale-id", "identifier is not live"));
         }
         let slot = id.parts().0 as usize;
-        self.live[slot] = false;
-        self.generations[slot] = self.generations[slot].checked_add(1).ok_or_else(|| {
-            ResourceError::new("generation-overflow", "identifier generation exhausted")
-        })?;
+        let entry = &mut self.slots[slot];
+        if entry.generation >= self.max_generation {
+            entry.state = SlotState::Retired;
+        } else {
+            entry.generation = entry.generation.checked_add(1).ok_or_else(|| {
+                ResourceError::new("generation-overflow", "identifier generation exhausted")
+            })?;
+            entry.state = SlotState::Vacant;
+        }
         Ok(())
     }
 }

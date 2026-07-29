@@ -3,8 +3,8 @@
 ## Status
 
 Research record for the accepted contract. It does not promote production
-capabilities. Sources were checked on 2026-07-27; inaccessible details are not
-assumed.
+capabilities. Sources were checked through 2026-07-29; inaccessible details are
+not assumed.
 
 ## Automatic Borrowing And Precise Counting
 
@@ -26,8 +26,9 @@ garbage-free result under functional acyclic-heap assumptions. It does not
 reclaim arbitrary cycles; recursive decrements, synchronization, and physical
 reuse costs remain. Lkjscript adopts checked ownership operations, count
 coalescing, uniqueness specialization, and reuse, but not universal counting.
-Lean's Perceus-derived pass decomposition is useful production evidence; a
-specific Lean revision must be pinned before comparative claims.
+Lean's Perceus-derived pass decomposition is useful production evidence. The
+review pins `InferBorrow`, RC insertion/coalescing, reuse, and compacted-region
+code to Lean commit `a39eab69e1eee9ad38f4efe507907b1026a77808`.
 
 ## Modes, Isolation, And Concurrency
 
@@ -101,12 +102,38 @@ AI-friendly, but proves it in its eager value model instead of importing the
 library API.
 
 Destination-passing style, FHPC 2017,
-[DOI 10.1145/3122948.3122949](https://doi.org/10.1145/3122948.3122949), and the
-safe destination work at [arXiv 2601.08529](https://arxiv.org/abs/2601.08529)
-construct results directly in caller storage. Partial initialization, aliasing,
-failure cleanup, size, and alignment are the hazards. Lkjscript adopts DPS only
-inside verified SSA with unique destinations, initialization facts, capacity,
-and cleanup obligations.
+[DOI 10.1145/3122948.3122949](https://doi.org/10.1145/3122948.3122949), and
+*Destination Calculus*, PLDI 2025,
+[DOI 10.1145/3720423](https://doi.org/10.1145/3720423), construct results in
+caller storage under linearity and scope conditions. Partial initialization,
+aliasing, failure cleanup, size, and alignment remain hazards. Lkjscript adopts
+DPS only inside verified SSA with unique destinations, initialization facts,
+capacity, and cleanup obligations.
+
+## Typed Pools And Sparse Deletion
+
+Typed generational arena and ECS documentation was checked for
+[`generational-arena`](https://docs.rs/generational-arena/0.2.9/),
+[`slotmap`](https://docs.rs/slotmap/1.1.1/), and
+[Bevy ECS entity identity](https://docs.rs/bevy_ecs/0.19.0/bevy_ecs/entity/struct.Entity.html).
+The adopted mechanism combines runtime pool identity, typed class, slot, and
+nonwrapping generation. Lookup creates checked temporary borrows; stale IDs
+fail; exhausted slots retire; cyclic links are non-owning IDs. Raw indices,
+untyped keys, raw pointers, silent wrap, and cross-world identity assumptions
+are rejected.
+
+Berger, Zorn, and McKinley, *Reconsidering Custom Memory Allocation*, OOPSLA
+2002, [DOI 10.1145/582419.582421](https://doi.org/10.1145/582419.582421),
+introduces reaps to combine region allocation with individual deletion. It is
+retained as evidence that bulk-only regions may over-retain sparse long-lived
+workloads. General `free` and untyped reap semantics are rejected; split/reset
+regions or typed pools must be tested first.
+
+Lean's compacted regions retain contiguous immutable graphs without per-object
+retain/release and record cross-region dependencies explicitly. Lkjscript adopts
+that region-level shape but rejects caller-enforced unsafe `free`, erased read
+types, and unchecked dependency lifetimes. Safe typed domain/root identities
+and exact release ledgers remain mandatory.
 
 ## Place-Sensitive Borrowing
 

@@ -42,12 +42,12 @@ scheduled native kernels, shared sealed-image invocation, and retained policy
 evidence. Owner compute/kernel managed is the runtime default; proof discovery
 remains sequential by default.
 
-The authoritative pre-backend HIR memory plan is Current. The verified
-whole-place drop spine and generation-safe resource tables remain foundations
-for Accepted Contracts. Exact byte-vector, byte-slice, and immutable-bytes
-subsets execute through evaluator, VM, forced baseline, and forced proof tiers
-without collector interaction or fallback. The whole runtime still traces
-structural values; collector-free deterministic memory is not Current.
+The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
+regions, sealed shared regions, typed generational pools, and structural owner
+homes are Current substrate. They are not selected by HIR or an execution tier.
+Exact byte-vector, byte-slice, and immutable-bytes subsets execute through all
+four tiers without collector interaction or fallback. The whole runtime still
+traces structural values; collector-free deterministic memory is not Current.
 
 ## Product Intent
 
@@ -72,6 +72,11 @@ and exact-bit f64 values are inline and never collector allocated. `buf` remains
 a traced mutable object. Exact `bytes` uses static or deterministic unique
 storage in all four engines. Source `path` remains traced; core unique storage
 only establishes its fail-closed migration foundation.
+
+The structural substrate uses nonwrapping domain/root generations, bounded
+fallible capacity, typed layout and semantic identities, ledger-only iterative
+release, sealed region-level ownership and weak upgrade, typed cyclic pools,
+and exact resource-plane homes. See the [focused evidence](../current-state/structural-memory-evidence.md).
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
@@ -104,8 +109,8 @@ resources remain absent.
   rejected.
 - Forced native claims require synchronous generated entry with zero fallback.
 - Collection roots remain required for non-island native functions.
-- General regions, sealed regions, weak links, shared-node counting, pools, ECS,
-  and collector-free closures/lists/products/enums are later work.
+- Execution-tier region/pool selection, cross-call pool loans, sealed compact
+  images, no-RC falsification, and family migration remain later work.
 
 ## Accepted Next Sequence
 
@@ -113,8 +118,8 @@ resources remain absent.
    borrowed standard input.
 2. Verify aggregate-affine transfer/drop, migrate path and host byte boundaries,
    and remove transitional `buf` atomically without aliases.
-3. Implement ordinary/sealed regions, pools, weak links, and evidence-based
-   immutable sharing; ratchet traced families to zero before removing `GcHeap`.
+3. Integrate structural domains through HIR/SSA and all tiers, run the no-RC
+   experiment, and ratchet traced families to zero before removing `GcHeap`.
 4. Validate cross-LLC/NUMA resource policies on real multi-domain hardware
    before considering elastic locality or adaptive switching Current.
 

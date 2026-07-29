@@ -2,10 +2,10 @@
 
 ## Status
 
-<!-- LKJ-STATUS id=sealed-shared-regions status=accepted-contract -->
+<!-- LKJ-STATUS id=sealed-shared-regions status=current -->
 
-**Accepted contract; implementation is not yet Current.** Sealed regions are
-the preferred immutable sharing domain. They do not justify per-node reference
+**Current as a typed safe-core internal runtime domain.** Execution-tier use
+remains an Accepted Target. Sealed regions do not justify per-node reference
 counting or whole-runtime collector-free status.
 
 ## Build And Seal

@@ -12,7 +12,7 @@ mod prelude;
 mod profile;
 mod resource_table;
 mod sha256;
-mod unique;
+mod structural;
 mod validation;
 mod value;
 
@@ -57,10 +57,16 @@ pub use resource_table::{
     ResourceTableLimit, ResourceTableLimits, ResourceTableStats, ResourceTokenParts, ScopeId,
 };
 pub use sha256::sha256;
-pub use unique::{
-    ByteVectorKey, BytesKey, InvalidUniqueKeyWord, InvalidUniqueStoreLimits, PathKey, StaticBytes,
-    UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
-    UniqueStoreLimits, UniqueStoreStats,
+pub use structural::{
+    ByteVectorKey, BytesKey, DomainClass, DomainKey, InvalidUniqueKeyWord,
+    InvalidUniqueStoreLimits, LayoutIdentity, PathKey, PoolId, PoolMetrics, PoolPartition,
+    RegionMetrics, RegionOwner, RegionRef, RegionReleaseReport, RegionStore, RootClass, RootKey,
+    SealFailure, SealedBorrow, SealedBuilder, SealedOwner, SealedRef, SealedRegionMetrics,
+    SealedRegionStore, SealedReleaseReport, SealedUpgrade, SemanticTypeIdentity, StaticBytes,
+    StructuralError, StructuralLimit, StructuralLimits, StructuralRuntime, StructuralRuntimeId,
+    StructuralRuntimeMetrics, TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore,
+    UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats,
+    WeakSealedRef,
 };
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{CapabilityKind, HeapObj, ResourceKind, Value};

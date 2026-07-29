@@ -2,11 +2,11 @@
 
 ## Status
 
-<!-- LKJ-STATUS id=typed-generational-pools status=accepted-contract -->
+<!-- LKJ-STATUS id=typed-generational-pools status=current -->
 
-**Accepted contract; implementation is not yet Current.** Pools are the selected
-domain for mutable identity, individual deletion, and cyclic graphs. They are
-not a general source API in the first slice.
+**Current as a typed safe-core internal runtime domain.** Source and backend
+exposure remain Accepted Targets. Pools own mutable identity, individual
+deletion, and cyclic graphs; they are not yet a general source API.
 
 ## Owner And Identity
 

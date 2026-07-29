@@ -11,6 +11,7 @@ mod plan;
 mod runtime;
 mod runtime_support;
 mod scheduler;
+mod structural_home;
 mod topology;
 mod unique_home;
 mod verify;
@@ -38,6 +39,9 @@ pub use scheduler::{
     GlobalFifo, HierarchicalLocality, LocalWorkStealing, OwnerCompute, ReferenceReport,
     ReferenceScheduler, SchedulePolicy, SchedulingPolicy, SchedulingTrace, Sequential,
     StaticPartition, TaskState, TraceEvent,
+};
+pub use structural_home::{
+    StructuralNoLiveLoanProof, StructuralOwnerHomeTable, StructuralRemoteRelease,
 };
 pub use topology::{
     CacheDomain, FactCertainty, FactSource, HardwareTopology, HostSchedulerRecord, Locality,

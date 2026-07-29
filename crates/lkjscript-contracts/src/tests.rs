@@ -122,12 +122,12 @@ fn current_registry_is_closed_deterministic_and_dependency_checked() {
     );
     let second = second_result.unwrap_or_default();
     assert_eq!(first, second);
-    assert_eq!(first.len(), 23);
+    assert_eq!(first.len(), 24);
     assert!(first.get(LANGUAGE).is_some());
     assert!(first.get(SEMANTIC_RESOURCE_PLANE).is_some());
     assert!(first.get(MEMORY_OBLIGATIONS).is_some());
+    assert!(first.get(STRUCTURAL_OWNERSHIP_DOMAINS).is_some());
     assert!(first.get(CAPABILITY_STATUS).is_some());
-    assert!(first.get(COMPONENT_INTERFACE).is_some());
 }
 
 #[test]
@@ -170,6 +170,10 @@ fn compiled_source_digests_match_descriptors() {
     for (name, digest) in [
         (LANGUAGE, LANGUAGE_DIGEST),
         (MEMORY_OBLIGATIONS, MEMORY_OBLIGATIONS_DIGEST),
+        (
+            STRUCTURAL_OWNERSHIP_DOMAINS,
+            STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST,
+        ),
         (VERIFIED_SSA, VERIFIED_SSA_DIGEST),
         (RUNTIME_CALLS, RUNTIME_CALLS_DIGEST),
         (NATIVE_LAYOUT, NATIVE_LAYOUT_DIGEST),

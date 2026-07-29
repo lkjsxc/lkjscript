@@ -25,6 +25,7 @@ pub const RUNTIME_CALLS: &str = "lkjscript.runtime-calls";
 pub const NATIVE_LAYOUT: &str = "lkjscript.native-layout";
 pub const METRICS: &str = "lkjscript.metrics";
 pub const MEMORY_OBLIGATIONS: &str = "lkjscript.memory-obligations";
+pub const STRUCTURAL_OWNERSHIP_DOMAINS: &str = "lkjscript.structural-ownership-domains";
 pub const PACKAGE_MANIFEST: &str = "lkjscript.package";
 pub const PACKAGE_LOCK: &str = "lkjscript.package-lock";
 pub const MODULE_INTERFACE: &str = "lkjscript.module-interface";
@@ -49,6 +50,10 @@ pub const METRICS_DIGEST: ContractDigest = ContractDigest::from_bytes([
 pub const MEMORY_OBLIGATIONS_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x3a, 0xba, 0x85, 0x56, 0xdd, 0x99, 0xd6, 0xeb, 0x98, 0x6e, 0x51, 0x13, 0xe3, 0x64, 0x50, 0x4a,
     0x62, 0x32, 0x43, 0xfe, 0x27, 0xbc, 0x6b, 0xd7, 0x8a, 0xf3, 0xd6, 0xf2, 0xc4, 0xb8, 0xd1, 0x63,
+]);
+pub const STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST: ContractDigest = ContractDigest::from_bytes([
+    0x86, 0xe1, 0x5c, 0x02, 0x0b, 0x2f, 0x93, 0xea, 0xe0, 0xd2, 0x78, 0xa2, 0x72, 0x13, 0x9c, 0x37,
+    0xac, 0xd9, 0x66, 0x8d, 0x77, 0x48, 0x7d, 0xb3, 0x27, 0x77, 0x83, 0xb2, 0x46, 0xdb, 0x4b, 0x4a,
 ]);
 pub const NATIVE_LAYOUT_DIGEST: ContractDigest = ContractDigest::from_bytes([
     0x73, 0x9b, 0x2c, 0xca, 0x9f, 0x2f, 0xe5, 0x2c, 0x51, 0x73, 0x45, 0x32, 0xdb, 0x5a, 0xb7, 0x00,
@@ -108,7 +113,8 @@ pub fn current_contracts() -> Result<ContractSet, ContractError> {
     add(&mut set, platform::capsule_manifest())?;
     add(&mut set, platform::agent_work_state(semantic))?;
     add(&mut set, platform::capability_status())?;
-    add(&mut set, execution::memory_obligations(language))?;
+    let memory = add(&mut set, execution::memory_obligations(language))?;
+    add(&mut set, execution::structural_ownership_domains(memory))?;
     let hir = add(&mut set, execution::typed_hir(language))?;
     let ssa = add(&mut set, execution::verified_ssa(hir))?;
     add(&mut set, platform::semantic_resource_plane(profiles, ssa))?;

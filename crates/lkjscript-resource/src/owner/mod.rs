@@ -1,24 +1,12 @@
+mod epoch;
+mod model;
+mod release;
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::{DataOwnerId, ResourceError, ResourceResult, TaskId, WorkerId};
+pub use model::{NoLiveLoanProof, OwnerMetrics, RemoteRelease};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NoLiveLoanProof {
-    owner: DataOwnerId,
-    epoch: u64,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct OwnerMetrics {
-    pub transfers: u64,
-    pub remote_releases: u64,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RemoteRelease {
-    pub owner: DataOwnerId,
-    pub from_task: TaskId,
-}
+use crate::{DataOwnerId, ResourceError, ResourceResult, WorkerId};
 
 #[derive(Clone, Debug)]
 pub struct OwnerHomeTable {
@@ -29,6 +17,7 @@ pub struct OwnerHomeTable {
     pending_releases: BTreeSet<DataOwnerId>,
     owner_limit: usize,
     release_limit: usize,
+    max_epoch: u64,
     metrics: OwnerMetrics,
 }
 
@@ -42,8 +31,25 @@ impl OwnerHomeTable {
             pending_releases: BTreeSet::new(),
             owner_limit,
             release_limit,
+            max_epoch: u64::MAX,
             metrics: OwnerMetrics::default(),
         }
+    }
+
+    pub fn with_max_epoch(
+        owner_limit: usize,
+        release_limit: usize,
+        max_epoch: u64,
+    ) -> ResourceResult<Self> {
+        if max_epoch == 0 {
+            return Err(ResourceError::new(
+                "owner-epoch-limit",
+                "maximum owner epoch must be nonzero",
+            ));
+        }
+        let mut table = Self::new(owner_limit, release_limit);
+        table.max_epoch = max_epoch;
+        Ok(table)
     }
 
     pub fn insert(&mut self, owner: DataOwnerId, home: WorkerId) -> ResourceResult<()> {
@@ -66,27 +72,39 @@ impl OwnerHomeTable {
     }
 
     pub fn begin_loan(&mut self, owner: DataOwnerId) -> ResourceResult<()> {
-        if !self.homes.contains_key(&owner) || !self.live_loans.insert(owner) {
+        if !self.homes.contains_key(&owner)
+            || self.live_loans.contains(&owner)
+            || self.pending_releases.contains(&owner)
+        {
             return Err(ResourceError::new(
                 "owner-loan",
-                "owner unknown or already loaned",
+                "owner unknown, already loaned, or pending release",
             ));
         }
-        self.bump_epoch(owner)
+        let next = self.next_epoch(owner)?;
+        self.live_loans.insert(owner);
+        self.epochs.insert(owner, next);
+        Ok(())
     }
 
     pub fn end_loan(&mut self, owner: DataOwnerId) -> ResourceResult<()> {
-        if !self.live_loans.remove(&owner) {
+        if !self.live_loans.contains(&owner) {
             return Err(ResourceError::new("owner-loan", "no live loan"));
         }
-        self.bump_epoch(owner)
+        let next = self.next_epoch(owner)?;
+        self.live_loans.remove(&owner);
+        self.epochs.insert(owner, next);
+        Ok(())
     }
 
     pub fn prove_no_live_loan(&self, owner: DataOwnerId) -> ResourceResult<NoLiveLoanProof> {
-        if !self.homes.contains_key(&owner) || self.live_loans.contains(&owner) {
+        if !self.homes.contains_key(&owner)
+            || self.live_loans.contains(&owner)
+            || self.pending_releases.contains(&owner)
+        {
             return Err(ResourceError::new(
                 "owner-proof",
-                "owner has a live loan or is unknown",
+                "owner is loaned, pending release, or unknown",
             ));
         }
         Ok(NoLiveLoanProof {
@@ -102,41 +120,15 @@ impl OwnerHomeTable {
         proof: NoLiveLoanProof,
     ) -> ResourceResult<()> {
         self.check_proof(owner, proof)?;
+        let next = self.next_epoch(owner)?;
         let current = self
             .homes
             .get_mut(&owner)
             .ok_or_else(|| ResourceError::new("owner-stale", "owner unknown"))?;
         *current = home;
-        self.bump_epoch(owner)?;
+        self.epochs.insert(owner, next);
         self.metrics.transfers = self.metrics.transfers.saturating_add(1);
         Ok(())
-    }
-
-    pub fn remote_release(&mut self, home: WorkerId, release: RemoteRelease) -> ResourceResult<()> {
-        if self.home(release.owner)? != home {
-            return Err(ResourceError::new("release-home", "wrong owner home"));
-        }
-        let queue = self.releases.entry(home).or_default();
-        if queue.len() >= self.release_limit || !self.pending_releases.insert(release.owner) {
-            return Err(ResourceError::new(
-                "release-capacity",
-                "remote release queue full or owner already pending",
-            ));
-        }
-        queue.push_back(release);
-        self.metrics.remote_releases = self.metrics.remote_releases.saturating_add(1);
-        Ok(())
-    }
-
-    pub fn drain_releases(&mut self, home: WorkerId, limit: usize) -> Vec<RemoteRelease> {
-        let Some(queue) = self.releases.get_mut(&home) else {
-            return Vec::new();
-        };
-        let releases: Vec<_> = (0..limit).filter_map(|_| queue.pop_front()).collect();
-        for release in &releases {
-            self.pending_releases.remove(&release.owner);
-        }
-        releases
     }
 
     pub fn remove(&mut self, owner: DataOwnerId, proof: NoLiveLoanProof) -> ResourceResult<()> {
@@ -159,28 +151,13 @@ impl OwnerHomeTable {
         if proof.owner != owner
             || self.epoch(owner)? != proof.epoch
             || self.live_loans.contains(&owner)
+            || self.pending_releases.contains(&owner)
         {
             return Err(ResourceError::new(
                 "owner-proof",
-                "stale no-live-loan proof",
+                "stale or releasing no-live-loan proof",
             ));
         }
-        Ok(())
-    }
-
-    fn epoch(&self, owner: DataOwnerId) -> ResourceResult<u64> {
-        self.epochs
-            .get(&owner)
-            .copied()
-            .ok_or_else(|| ResourceError::new("owner-stale", "owner epoch is unknown"))
-    }
-
-    fn bump_epoch(&mut self, owner: DataOwnerId) -> ResourceResult<()> {
-        let epoch = self
-            .epochs
-            .get_mut(&owner)
-            .ok_or_else(|| ResourceError::new("owner-stale", "owner epoch is unknown"))?;
-        *epoch = epoch.saturating_add(1);
         Ok(())
     }
 }

@@ -4,18 +4,29 @@
   "id": "resource",
   "root": "crates/lkjscript-resource",
   "kind": "crate",
-  "purpose": "Provide pure verified task resource graphs, topology planning, scheduling, and scoped execution.",
+  "purpose": "Provide verified task resources, owner homes, topology, scheduling, and scoped execution.",
   "layer": "resource execution",
-  "concepts": ["resource topology", "verified task graphs", "resource scheduling", "scoped workers"],
+  "concepts": [
+    "resource topology",
+    "verified task graphs",
+    "resource scheduling",
+    "scoped workers",
+    "structural owner homes"
+  ],
   "facade": ["crates/lkjscript-resource/src/lib.rs"],
   "allowed_dependencies": ["contracts", "core"],
   "forbidden_dependencies": ["app", "compiler", "ir", "jit", "native", "sys", "vm"],
   "tests": [
     "crates/lkjscript-resource/tests/graph_scheduler.rs",
+    "crates/lkjscript-resource/tests/owner_home.rs",
     "crates/lkjscript-resource/tests/runtime_owner.rs",
+    "crates/lkjscript-resource/tests/structural_home.rs",
     "crates/lkjscript-resource/tests/topology_plan.rs"
   ],
-  "decisions": ["docs/decisions/platform/resource-budget-profiles.md"],
+  "decisions": [
+    "docs/decisions/memory/structural-ownership-domains.md",
+    "docs/decisions/platform/resource-budget-profiles.md"
+  ],
   "unsafe_boundary": { "status": "forbidden", "boundaries": [] },
   "capability": { "status": "none", "names": [] },
   "provenance": { "class": "authored", "source": "Rust crate source" },
@@ -23,6 +34,12 @@
   "context_card": {
     "goal": "Keep resource decisions bounded, deterministic, stale-safe, and independent of host effects.",
     "interfaces": ["crates/lkjscript-resource/src/lib.rs"],
-    "invariants": ["safe Rust", "bounded state", "verified graph before execution", "session-owned threads"]
+    "invariants": [
+      "safe Rust",
+      "bounded state",
+      "verified graph before execution",
+      "fresh no-live-loan owner transfer",
+      "session-owned threads"
+    ]
   }
 }

@@ -2,11 +2,11 @@
 
 ## Status
 
-<!-- LKJ-STATUS id=structural-ownership-domains status=accepted-contract -->
+<!-- LKJ-STATUS id=structural-ownership-domains status=current -->
 
-**Accepted contract; implementation is not yet Current.** This contract defines
-the shared deterministic runtime substrate. It does not migrate a language
-family, change an execution backend, or support a collector-free-runtime claim.
+**Current for the safe core substrate and resource-plane owner-home adapter.**
+It does not migrate a language family, change an execution backend, or support
+a collector-free-runtime claim.
 
 ## Decision
 

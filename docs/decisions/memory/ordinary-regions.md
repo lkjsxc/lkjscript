@@ -2,10 +2,11 @@
 
 ## Status
 
-<!-- LKJ-STATUS id=ordinary-regions status=accepted-contract -->
+<!-- LKJ-STATUS id=ordinary-regions status=current -->
 
-**Accepted contract; implementation is not yet Current.** Ordinary regions are
-the selected bulk-lifetime domain, not a compatibility arena or collector.
+**Current as a typed safe-core internal runtime domain.** Compiler planning and
+execution-tier selection remain Accepted Targets. Ordinary regions are not a
+compatibility arena or collector.
 
 ## Ownership And Allocation
 

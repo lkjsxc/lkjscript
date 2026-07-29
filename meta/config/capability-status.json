@@ -122,8 +122,8 @@
   {"id":"opaque-paths", "status":"current", "interface":"opaque absolute byte-preserving Linux Path values",
     "authority":"docs/decisions/capabilities/opaque-paths.md", "evidence":"docs/current-state.md", "claimants":[
     "docs/current-state.md"]},
-  {"id":"ordinary-regions", "status":"accepted-contract", "interface":"affine bulk-lifetime owned regions",
-    "authority":"docs/decisions/memory/ordinary-regions.md", "evidence":"docs/decisions/memory/ordinary-regions.md",
+  {"id":"ordinary-regions", "status":"current", "interface":"safe internal affine bulk-lifetime regions",
+    "authority":"docs/decisions/memory/ordinary-regions.md", "evidence":"crates/lkjscript-core/tests/regions.rs",
     "claimants":["docs/decisions/memory/ordinary-regions.md"]},
   {"id":"repository-graph-context", "status":"current", "interface":"lkjscript-xtask structure context",
     "authority":"docs/decisions/platform/repository-intelligence-graph.md",
@@ -147,10 +147,9 @@
     "authority":"docs/decisions/platform/resource-budget-profiles.md",
     "evidence":"docs/decisions/platform/resource-budget-profiles-candidate.md", "claimants":[
     "docs/current-state.md", "docs/operations/agent-handoff.md"]},
-  {"id":"sealed-shared-regions", "status":"accepted-contract", "interface":"immutable region-level sharing",
-    "authority":"docs/decisions/memory/sealed-shared-regions.md",
-    "evidence":"docs/decisions/memory/sealed-shared-regions.md", "claimants":[
-    "docs/decisions/memory/sealed-shared-regions.md"]},
+  {"id":"sealed-shared-regions", "status":"current", "interface":"safe internal immutable region-level sharing",
+    "authority":"docs/decisions/memory/sealed-shared-regions.md", "evidence":"crates/lkjscript-core/tests/sealed.rs",
+    "claimants":["docs/decisions/memory/sealed-shared-regions.md"]},
   {"id":"semantic-core-target", "status":"accepted-target", "interface":"canonical semantic core target",
     "authority":"docs/history/semantics/edition.md",
     "evidence":"docs/history/semantics/edition/execution-and-acceptance.md", "claimants":["docs/current-state.md",
@@ -172,19 +171,18 @@
     "authority":"docs/decisions/platform/semantic-source-and-agent-protocol.md",
     "evidence":"docs/decisions/platform/semantic-source-and-agent-protocol/typed-holes-and-legal-actions.md",
     "claimants":["docs/current-state.md", "docs/operations/agent-handoff.md"]},
-  {"id":"structural-ownership-domains", "status":"accepted-contract",
-    "interface":"typed deterministic structural ownership domains",
+  {"id":"structural-ownership-domains", "status":"current",
+    "interface":"safe internal typed deterministic ownership domains",
     "authority":"docs/decisions/memory/structural-ownership-domains.md",
-    "evidence":"docs/decisions/memory/structural-ownership-domains.md", "claimants":[
+    "evidence":"crates/lkjscript-resource/tests/structural_home.rs", "claimants":[
     "docs/decisions/memory/structural-ownership-domains.md"]},
   {"id":"typed-capabilities", "status":"current",
     "interface":"explicit closed Capability values and exact package grants",
     "authority":"docs/decisions/capabilities/typed-capabilities.md", "evidence":"docs/current-state.md",
     "claimants":["docs/current-state.md"]},
-  {"id":"typed-generational-pools", "status":"accepted-contract", "interface":"typed mutable identity pools",
-    "authority":"docs/decisions/memory/typed-generational-pools.md",
-    "evidence":"docs/decisions/memory/typed-generational-pools.md", "claimants":[
-    "docs/decisions/memory/typed-generational-pools.md"]},
+  {"id":"typed-generational-pools", "status":"current", "interface":"safe internal typed mutable identity pools",
+    "authority":"docs/decisions/memory/typed-generational-pools.md", "evidence":"crates/lkjscript-core/tests/pools.rs",
+    "claimants":["docs/decisions/memory/typed-generational-pools.md"]},
   {"id":"typed-holes", "status":"current", "interface":"hole_context",
     "authority":"docs/decisions/platform/semantic-source-and-agent-protocol.md",
     "evidence":"docs/decisions/platform/semantic-source-and-agent-protocol/acceptance-gates.md", "claimants":[

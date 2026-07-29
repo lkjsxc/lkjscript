@@ -156,12 +156,11 @@ impl PartitionedUniqueStore {
         self.require(&metadata, value)?;
         let home = metadata.homes.home(value.owner)?;
         if home != worker {
+            let proof = metadata.homes.prove_no_live_loan(value.owner)?;
             return metadata.homes.remote_release(
                 home,
-                RemoteRelease {
-                    owner: value.owner,
-                    from_task: task,
-                },
+                RemoteRelease::new(value.owner, task),
+                proof,
             );
         }
         self.release_locked(&mut metadata, value)
@@ -169,23 +168,18 @@ impl PartitionedUniqueStore {
 
     pub fn drain_remote(&self, home: WorkerId, limit: usize) -> ResourceResult<usize> {
         let mut metadata = self.metadata()?;
-        let releases = metadata.homes.drain_releases(home, limit);
-        for release in &releases {
-            let (partition, key) = metadata
-                .keys
+        let Metadata { homes, keys } = &mut *metadata;
+        homes.process_releases(home, limit, |release| {
+            let (partition, key) = keys
                 .get(&release.owner)
                 .copied()
                 .ok_or_else(|| ResourceError::new("owner-stale", "release owner missing"))?;
-            self.release_locked(
-                &mut metadata,
-                HomedByteVector {
-                    owner: release.owner,
-                    partition,
-                    key,
-                },
-            )?;
-        }
-        Ok(releases.len())
+            self.store(partition)?
+                .free_byte_vector(key)
+                .map_err(unique_error)?;
+            keys.remove(&release.owner);
+            Ok(())
+        })
     }
 }
 
