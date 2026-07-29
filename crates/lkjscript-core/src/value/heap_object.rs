@@ -13,7 +13,6 @@ pub enum HeapObj {
         proto: u32,
         captures: Vec<Value>,
     },
-    Builtin(u16),
     Buf(Vec<u8>),
     Path(Vec<u8>),
     Product {

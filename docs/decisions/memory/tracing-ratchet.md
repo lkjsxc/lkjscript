@@ -29,9 +29,12 @@ a changed ratchet contract. Analysis failure is never such a reversal.
 ## Current Migration
 
 Complete-range i64 and exact-bit f64 scalar families have left the allowed set.
-Transitional buffers, paths, and structural values remain exact registered
-legacy families. Collector infrastructure remains available only to those
-families, and the complete collector-free value island is not yet Current.
+The unused `HeapObj::Builtin` representation has also been removed: operation
+identity is validated bytecode/static registry data, and no runtime allocation
+site existed. Transitional buffers, paths, and the remaining structural values
+are the exact eight registered legacy families. Collector infrastructure
+remains available only to those families, and the complete collector-free value
+island is not yet Current.
 
 ## Final Gate
 

@@ -27,7 +27,6 @@ impl fmt::Debug for OwnedValue {
         match self.object() {
             Some(HeapObj::Pair { .. }) => formatter.write_str("#<owned-pair>"),
             Some(HeapObj::Closure { proto, .. }) => write!(formatter, "#<owned-fn:{proto}>"),
-            Some(HeapObj::Builtin(id)) => write!(formatter, "#<owned-builtin:{id}>"),
             Some(HeapObj::Buf(bytes)) => write!(formatter, "#<owned-buf:{}>", bytes.len()),
             Some(HeapObj::Path(bytes)) => write!(formatter, "#<owned-path:{}>", bytes.len()),
             Some(HeapObj::Product { product, .. }) => {

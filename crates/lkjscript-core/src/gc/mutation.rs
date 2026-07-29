@@ -88,7 +88,6 @@ fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
         | (HeapObj::Symbol(_), HeapObj::Symbol(_))
         | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
         | (HeapObj::Closure { .. }, HeapObj::Closure { .. })
-        | (HeapObj::Builtin(_), HeapObj::Builtin(_))
         | (HeapObj::Buf(_), HeapObj::Buf(_)) => true,
         (
             HeapObj::Product {
@@ -138,7 +137,6 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
             proto: *proto,
             captures: clone_values(captures, captures.capacity()),
         },
-        HeapObj::Builtin(value) => HeapObj::Builtin(*value),
         HeapObj::Buf(bytes) | HeapObj::Path(bytes) => {
             let mut clone = Vec::with_capacity(bytes.capacity());
             clone.extend_from_slice(bytes);

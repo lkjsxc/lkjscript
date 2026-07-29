@@ -2,17 +2,12 @@ use super::templates::{inline, traced};
 use super::MemoryObligation;
 
 pub(super) const STRUCTURAL: &[MemoryObligation] = &[
-    traced(
+    inline(
         "builtin",
-        "runtime builtin function",
-        "HeapObj::Builtin",
-        "immutable",
-        "none",
-        "impossible",
-        "not source-observable",
-        "leaf object",
-        "static operation table",
-        "no active allocator found; bytecode operation dispatch",
+        "bytecode validation and operation registry",
+        "validated operation identity",
+        "validated bytecode operation ID; no HeapObj",
+        "bytecode operation dispatch; no runtime allocator",
         "operation registry and bytecode validation suites",
     ),
     traced(

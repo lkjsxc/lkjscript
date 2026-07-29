@@ -4,7 +4,8 @@
 
 **Current only for the safe internal runtime substrate and resource-plane
 adapter.** No source, HIR, SSA, bytecode, VM, native, or JIT structural family
-selects these domains yet. The tracing registry still contains nine families.
+selects these domains yet. The unused builtin heap shape has been removed; the
+tracing registry still contains eight live representation families.
 
 ## Implemented Facts
 
@@ -55,6 +56,7 @@ cargo clippy --locked -p lkjscript-contracts --all-targets -- -D warnings
 cargo run --locked -p lkjscript-xtask -- structure check
 cargo run --locked -p lkjscript-xtask -- structure audit
 cargo run --locked -p lkjscript-xtask -- quiet verify
+cargo run --locked -p lkjscript-app --bin lkjscript -- memory traced --json
 cargo miri --version  # unavailable for installed stable toolchain
 ```
 
@@ -73,6 +75,6 @@ cleanup, and epoch exhaustion with no partial mutation.
 - No sealed compact image is implemented.
 - No per-node precise reference count is implemented or selected.
 - The no-RC candidate comparison, HIR/SSA operations, execution-tier migration,
-  family ratchet decrements, sanitizers, and fuzzing remain untested in this
-  slice. Miri is unavailable in the installed stable toolchain.
+  live-family ratchet decrements, sanitizers, and fuzzing remain untested in
+  this slice. Miri is unavailable in the installed stable toolchain.
 - No collector-free-runtime or no-tracing-runtime claim follows from this work.

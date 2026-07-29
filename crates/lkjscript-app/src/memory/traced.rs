@@ -42,8 +42,8 @@ mod tests {
 
     #[test]
     fn current_registry_is_exact_and_nonempty() {
-        assert_eq!(LEGACY_TRACED_FAMILIES.len(), 9);
+        assert_eq!(LEGACY_TRACED_FAMILIES.len(), 8);
         assert_eq!(LEGACY_TRACED_FAMILIES[0].identity, "buf");
-        assert_eq!(LEGACY_TRACED_FAMILIES[8].identity, "symbol");
+        assert_eq!(LEGACY_TRACED_FAMILIES[7].identity, "symbol");
     }
 }

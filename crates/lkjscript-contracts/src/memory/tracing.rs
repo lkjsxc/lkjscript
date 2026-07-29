@@ -15,10 +15,6 @@ pub const LEGACY_TRACED_FAMILIES: &[LegacyTracedFamily] = &[
         heap_variant: "Buf",
     },
     LegacyTracedFamily {
-        identity: "builtin",
-        heap_variant: "Builtin",
-    },
-    LegacyTracedFamily {
         identity: "closure",
         heap_variant: "Closure",
     },

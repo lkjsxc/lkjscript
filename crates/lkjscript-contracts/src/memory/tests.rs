@@ -73,6 +73,9 @@ fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
     );
     let bytes = records.iter().find(|record| record.identity == "bytes");
     assert!(matches!(bytes, Some(record) if record.status.contains("current exact evaluator/VM")));
+    let builtin = records.iter().find(|record| record.identity == "builtin");
+    assert!(matches!(builtin, Some(record) if record.current_trace_fields == "none"));
+    assert!(matches!(builtin, Some(record) if record.runtime_layout.contains("no HeapObj")));
     let heap = records.iter().find(|record| record.identity == "gc-heap");
     assert!(matches!(heap, Some(record) if record.current_trace_fields.contains("trace")));
     assert!(matches!(heap, Some(record) if record.status.contains("current collector")));
