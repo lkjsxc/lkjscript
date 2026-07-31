@@ -158,6 +158,11 @@ pub(super) fn runtime_slots() -> ContractItem {
             "(island-state,unique/bytes)->unique/byte-vector",
         ),
         (
+            "structural-dispatch",
+            "StructuralDispatch",
+            "(island-state,verified-structural-site,up-to-three-words)->typed-word noncollecting",
+        ),
+        (
             "collect-reference",
             "CollectReference",
             "(state,reference)->status",

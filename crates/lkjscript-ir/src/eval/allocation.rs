@@ -41,81 +41,40 @@ impl Evaluator<'_> {
         Ok(())
     }
 
-    pub(crate) fn allocate_buffer(
-        &mut self,
-        bytes: Vec<u8>,
-    ) -> std::result::Result<EvalValue, Flow> {
-        self.allocate_dynamic(bytes.capacity())?;
-        let id = self.next_buffer_id;
-        self.next_buffer_id = self.next_buffer_id.saturating_add(1);
-        Ok(EvalValue::Buf(EvalBuffer {
-            id,
-            bytes: Rc::new(RefCell::new(bytes)),
-        }))
-    }
-
     pub(crate) fn allocate_path(&mut self, bytes: &[u8]) -> std::result::Result<EvalValue, Flow> {
         let mut copy = Vec::new();
         copy.try_reserve_exact(bytes.len())
             .map_err(|_| Flow::Resource("heap bytes".into()))?;
         copy.extend_from_slice(bytes);
-        self.allocate_dynamic(copy.capacity())?;
-        Ok(EvalValue::Path(copy))
-    }
-
-    pub(crate) fn allocate_buffer_copy(
-        &mut self,
-        bytes: &[u8],
-    ) -> std::result::Result<EvalValue, Flow> {
-        let mut copy = Vec::new();
-        copy.try_reserve_exact(bytes.len())
-            .map_err(|_| Flow::Resource("heap bytes".into()))?;
-        copy.extend_from_slice(bytes);
-        self.allocate_buffer(copy)
+        if structural_eligible(self.program.program(), &crate::SsaType::Path) {
+            self.structural_path(copy)
+        } else {
+            self.allocate_dynamic(copy.capacity())?;
+            self.unique.allocate_path(copy)
+        }
     }
 
     pub(crate) fn allocate_string(&mut self, text: String) -> std::result::Result<EvalValue, Flow> {
-        self.allocate_dynamic(text.capacity())?;
-        Ok(EvalValue::Str(text))
+        if structural_eligible(self.program.program(), &crate::SsaType::Str) {
+            self.structural_string(text)
+        } else {
+            self.allocate_dynamic(text.capacity())?;
+            Ok(EvalValue::Str(text))
+        }
     }
 
     pub(crate) fn allocate_enum(
         &mut self,
-        enum_id: [u8; 32],
+        ty: &crate::SsaType,
         variant_id: [u8; 32],
         payload: Vec<EvalValue>,
     ) -> std::result::Result<EvalValue, Flow> {
-        let enum_id = crate::EnumId::new(enum_id);
-        let variant = crate::VariantId::new(variant_id);
-        let definition = self
-            .program
-            .program()
-            .enums
-            .iter()
-            .find(|item| item.id == enum_id)
-            .ok_or_else(|| Flow::Trap("prelude enum metadata missing".into()))?;
-        let selected = definition
-            .variants
-            .iter()
-            .find(|item| item.id == variant)
-            .ok_or_else(|| Flow::Trap("prelude enum variant metadata missing".into()))?;
-        if selected.fields.len() != payload.len() {
-            return Err(Flow::Trap("prelude enum payload shape mismatch".into()));
-        }
-        let layout = definition.layout.identity;
-        let physical_tag = selected.physical_tag;
-        self.allocate()?;
-        Ok(EvalValue::Enum {
-            enum_id,
-            variant,
-            layout,
-            physical_tag,
-            payload,
-        })
+        self.construct_enum(ty, crate::VariantId::new(variant_id), payload)
     }
 
     pub(crate) fn allocate_result(
         &mut self,
+        ty: &crate::SsaType,
         payload: EvalValue,
         is_ok: bool,
     ) -> std::result::Result<EvalValue, Flow> {
@@ -124,40 +83,52 @@ impl Evaluator<'_> {
         } else {
             crate::prelude_contract::RESULT_ERR_ID
         };
-        self.allocate_enum(crate::prelude_contract::RESULT_ID, variant, vec![payload])
+        self.allocate_enum(ty, variant, vec![payload])
     }
 
     pub(crate) fn allocate_option(
         &mut self,
+        ty: &crate::SsaType,
         payload: Option<EvalValue>,
     ) -> std::result::Result<EvalValue, Flow> {
         let (variant, payload) = match payload {
             Some(value) => (crate::prelude_contract::OPTION_SOME_ID, vec![value]),
             None => (crate::prelude_contract::OPTION_NONE_ID, Vec::new()),
         };
-        self.allocate_enum(crate::prelude_contract::OPTION_ID, variant, payload)
-    }
-
-    pub(crate) fn allocate_result_error(
-        &mut self,
-        message: &str,
-    ) -> std::result::Result<EvalValue, Flow> {
-        self.allocate_system_error(crate::prelude_contract::SYSTEM_UNSUPPORTED_ID, message)
+        self.allocate_enum(ty, variant, payload)
     }
 
     pub(crate) fn allocate_system_error(
         &mut self,
+        result_ty: &crate::SsaType,
         variant: [u8; 32],
         message: &str,
     ) -> std::result::Result<EvalValue, Flow> {
-        let code = self.allocate_option(None)?;
+        let (_, result_fields, _) = enum_variant(
+            self.program.program(),
+            result_ty,
+            crate::VariantId::new(crate::prelude_contract::RESULT_ERR_ID),
+        )
+        .map_err(Flow::Trap)?;
+        let error_ty = result_fields
+            .first()
+            .ok_or_else(|| Flow::Trap("result error payload metadata missing".into()))?;
+        let (_, error_fields, _) = enum_variant(
+            self.program.program(),
+            error_ty,
+            crate::VariantId::new(variant),
+        )
+        .map_err(Flow::Trap)?;
+        let code_ty = error_fields
+            .first()
+            .ok_or_else(|| Flow::Trap("system error code metadata missing".into()))?;
+        let detail_ty = error_fields
+            .get(1)
+            .ok_or_else(|| Flow::Trap("system error detail metadata missing".into()))?;
+        let code = self.allocate_option(code_ty, None)?;
         let detail = self.allocate_string(message.to_owned())?;
-        let detail = self.allocate_option(Some(detail))?;
-        let error = self.allocate_enum(
-            crate::prelude_contract::SYSTEM_ERROR_ID,
-            variant,
-            vec![code, detail],
-        )?;
-        self.allocate_result(error, false)
+        let detail = self.allocate_option(detail_ty, Some(detail))?;
+        let error = self.allocate_enum(error_ty, variant, vec![code, detail])?;
+        self.allocate_result(result_ty, error, false)
     }
 }

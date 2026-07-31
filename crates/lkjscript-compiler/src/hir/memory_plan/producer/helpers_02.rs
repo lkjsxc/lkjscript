@@ -1,176 +1,139 @@
+type DomainAxes = (
+    MemoryAliasing, MemoryDomain, MemoryDestruction, MemoryIdentity,
+    MemoryPortability, MemoryContention, Option<&'static str>,
+);
+
 fn memory_mode(
     ty: &Type,
+    fact: &MemoryTypeFact,
     effects: u16,
     escape: MemoryEscape,
-) -> (MemoryMode, Option<&'static str>, Option<MemoryDropGlueId>) {
-    let allocation_failure = allocation_failure(effects);
-    let (
-        multiplicity,
-        aliasing,
-        storage,
-        destruction,
-        identity,
-        portability,
-        contention,
-        family,
-        glue,
-    ) = match ty {
+) -> (MemoryMode, Option<&'static str>, MemoryExecution, Option<MemoryExecutionCutover>) {
+    let multiplicity = if matches!(ty, Type::ByteSlice | Type::ByteSliceMut) {
+        MemoryMultiplicity::Borrowed
+    } else { match fact.mode {
+        MemoryAggregateMode::Copy => MemoryMultiplicity::Copy,
+        MemoryAggregateMode::ImmutableValue => MemoryMultiplicity::ImmutableValue,
+        MemoryAggregateMode::Affine => MemoryMultiplicity::Affine,
+    }};
+    let (aliasing, domain, destruction, identity, portability, contention, family) = match ty {
         Type::Never | Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Capability(_) => (
-            MemoryMultiplicity::Copy,
-            MemoryAliasing::Unique,
-            MemoryStorage::Inline,
-            MemoryDestruction::Trivial,
-            MemoryIdentity::Value,
-            MemoryPortability::Portable,
-            MemoryContention::None,
-            None,
-            None,
+            MemoryAliasing::Unique, MemoryDomain::Inline, MemoryDestruction::Trivial,
+            MemoryIdentity::Value, MemoryPortability::Portable, MemoryContention::None, None,
         ),
-        Type::Str => legacy_value("string", MemoryMultiplicity::ImmutableValue),
-        Type::Buf => (
-            MemoryMultiplicity::Copy,
-            MemoryAliasing::LegacyTracedShared,
-            MemoryStorage::LegacyTraced,
-            MemoryDestruction::LegacyTraced,
-            MemoryIdentity::LegacyObject,
+        Type::Str => structural_domain(MemoryPortability::WorkerLocal),
+        Type::Path => structural_domain(MemoryPortability::LinuxHost),
+        Type::Bytes | Type::ByteVector => (
+            MemoryAliasing::Unique, MemoryDomain::UniqueStructural, MemoryDestruction::DropGlue,
+            MemoryIdentity::Value, MemoryPortability::WorkerLocal,
+            MemoryContention::SingleOwner, None,
+        ),
+        Type::ByteSlice => borrowed_domain(false),
+        Type::ByteSliceMut => borrowed_domain(true),
+        Type::Symbol => static_domain(),
+        Type::Resource(_) => (
+            MemoryAliasing::External, MemoryDomain::ExternalResource,
+            MemoryDestruction::ExternalClose, MemoryIdentity::ExternalResource,
+            MemoryPortability::ProcessLocal, MemoryContention::ProviderSerialized, None,
+        ),
+        Type::Product(_) => aggregate_domain(
+            fact,
+            "product",
             MemoryPortability::WorkerLocal,
-            MemoryContention::LegacyShared,
-            Some("buf"),
-            None,
         ),
-        Type::Path => (
-            MemoryMultiplicity::ImmutableValue,
-            MemoryAliasing::LegacyTracedShared,
-            MemoryStorage::LegacyTraced,
-            MemoryDestruction::LegacyTraced,
-            MemoryIdentity::Value,
-            MemoryPortability::LinuxHost,
-            MemoryContention::ImmutableShared,
-            Some("path"),
-            None,
-        ),
-        Type::Bytes => (
-            MemoryMultiplicity::Affine,
-            MemoryAliasing::Unique,
-            MemoryStorage::UniqueSlot,
-            MemoryDestruction::DropGlue,
-            MemoryIdentity::Value,
+        Type::Enum { .. } => aggregate_domain(
+            fact,
+            "enum",
             MemoryPortability::WorkerLocal,
-            MemoryContention::SingleOwner,
-            None,
-            Some(bytes_glue()),
         ),
-        Type::ByteVector => (
-            MemoryMultiplicity::Affine,
-            MemoryAliasing::Unique,
-            MemoryStorage::UniqueSlot,
-            MemoryDestruction::DropGlue,
-            MemoryIdentity::Value,
-            MemoryPortability::WorkerLocal,
-            MemoryContention::SingleOwner,
-            None,
-            Some(MemoryDropGlueId::new(0)),
-        ),
-        Type::ByteSlice => borrowed(false),
-        Type::ByteSliceMut => borrowed(true),
-        Type::Symbol => static_value(MemoryMultiplicity::Copy),
-        Type::Resource(kind) => (
-            MemoryMultiplicity::Affine,
-            MemoryAliasing::External,
-            MemoryStorage::ExternalSlot,
-            MemoryDestruction::ExternalClose,
-            MemoryIdentity::ExternalResource,
-            MemoryPortability::ProcessLocal,
-            MemoryContention::ProviderSerialized,
-            None,
-            Some(resource_glue(*kind)),
-        ),
-        Type::Product(_) => legacy_value("product", MemoryMultiplicity::ImmutableValue),
-        Type::Enum { .. } => legacy_value("enum", MemoryMultiplicity::ImmutableValue),
-        Type::List(_) => legacy_value("pair", MemoryMultiplicity::ImmutableValue),
-        Type::Fn { .. } | Type::Forall { .. } => static_value(MemoryMultiplicity::Copy),
+        Type::List(_) => legacy_domain("pair", MemoryPortability::WorkerLocal),
+        Type::Fn { .. } | Type::Forall { .. } => static_domain(),
         Type::Param(_) => (
-            MemoryMultiplicity::ImmutableValue,
-            MemoryAliasing::StaticShared,
-            MemoryStorage::CallerDestination,
-            MemoryDestruction::Trivial,
-            MemoryIdentity::Value,
-            MemoryPortability::WorkerLocal,
-            MemoryContention::ImmutableShared,
-            None,
-            None,
+            MemoryAliasing::StaticShared, MemoryDomain::CallerDestination,
+            MemoryDestruction::Trivial, MemoryIdentity::Value, MemoryPortability::WorkerLocal,
+            MemoryContention::ImmutableShared, None,
         ),
     };
-    (
-        MemoryMode {
-            multiplicity,
-            aliasing,
-            escape,
-            storage,
-            destruction,
-            identity,
-            portability,
-            contention,
-            allocation_failure,
-        },
-        family,
-        glue,
-    )
+    let execution_cutover = if fact.closure.class == MemoryClosureClass::Deterministic {
+        execution_cutover(ty)
+    } else { None };
+    let execution = if execution_cutover.is_some() { MemoryExecution::CutoverRequired }
+        else { MemoryExecution::Current };
+    (MemoryMode { multiplicity, aliasing, escape, domain, destruction, identity, portability,
+        contention, allocation_failure: allocation_failure(effects) }, family, execution,
+        execution_cutover)
 }
-#[allow(clippy::type_complexity)]
-fn legacy_value(
+
+fn aggregate_domain(
+    fact: &MemoryTypeFact,
     family: &'static str,
-    multiplicity: MemoryMultiplicity,
-) -> (
-    MemoryMultiplicity,
-    MemoryAliasing,
-    MemoryStorage,
-    MemoryDestruction,
-    MemoryIdentity,
-    MemoryPortability,
-    MemoryContention,
-    Option<&'static str>,
-    Option<MemoryDropGlueId>,
-) {
-    (
-        multiplicity,
-        MemoryAliasing::LegacyTracedShared,
-        MemoryStorage::LegacyTraced,
-        MemoryDestruction::LegacyTraced,
-        MemoryIdentity::Value,
-        MemoryPortability::WorkerLocal,
-        MemoryContention::ImmutableShared,
-        Some(family),
-        None,
-    )
+    portability: MemoryPortability,
+) -> DomainAxes {
+    if fact.closure.class == MemoryClosureClass::Deterministic {
+        structural_domain(portability)
+    } else {
+        legacy_domain(family, portability)
+    }
 }
-#[allow(clippy::type_complexity)]
-fn borrowed(
-    exclusive: bool,
-) -> (
-    MemoryMultiplicity,
-    MemoryAliasing,
-    MemoryStorage,
-    MemoryDestruction,
-    MemoryIdentity,
-    MemoryPortability,
-    MemoryContention,
-    Option<&'static str>,
-    Option<MemoryDropGlueId>,
-) {
+
+fn structural_domain(portability: MemoryPortability) -> DomainAxes {
     (
-        MemoryMultiplicity::Borrowed,
-        if exclusive {
-            MemoryAliasing::BorrowedExclusive
-        } else {
-            MemoryAliasing::BorrowedShared
-        },
-        MemoryStorage::BorrowedView,
-        MemoryDestruction::EndBorrow,
+        MemoryAliasing::Unique,
+        MemoryDomain::UniqueStructural,
+        MemoryDestruction::DropGlue,
         MemoryIdentity::Value,
-        MemoryPortability::WorkerLocal,
+        portability,
         MemoryContention::SingleOwner,
         None,
-        None,
     )
+}
+
+fn legacy_domain(family: &'static str, portability: MemoryPortability) -> DomainAxes {
+    (MemoryAliasing::LegacyTracedShared, MemoryDomain::RegisteredLegacyTraced,
+        MemoryDestruction::LegacyTraced, MemoryIdentity::Value, portability,
+        MemoryContention::ImmutableShared, Some(family))
+}
+
+fn borrowed_domain(exclusive: bool) -> DomainAxes {
+    (if exclusive { MemoryAliasing::BorrowedExclusive } else { MemoryAliasing::BorrowedShared },
+        MemoryDomain::BorrowedView, MemoryDestruction::EndBorrow, MemoryIdentity::Value,
+        MemoryPortability::WorkerLocal, MemoryContention::SingleOwner, None)
+}
+
+fn static_domain() -> DomainAxes {
+    (MemoryAliasing::StaticShared, MemoryDomain::Static, MemoryDestruction::Trivial,
+        MemoryIdentity::Value, MemoryPortability::WorkerLocal,
+        MemoryContention::ImmutableShared, None)
+}
+
+fn allocation_failure(effects: u16) -> MemoryAllocationFailure {
+    let allocates = effects & crate::hir::EffectSet::ALLOCATES.bits() != 0;
+    let trap = effects & crate::hir::EffectSet::MAY_TRAP.bits() != 0;
+    let outcome = effects & crate::hir::EffectSet::MAY_EXIT.bits() != 0 || allocates;
+    match (trap, outcome) {
+        (false, false) => MemoryAllocationFailure::Impossible,
+        (true, false) => MemoryAllocationFailure::Trap,
+        (false, true) => MemoryAllocationFailure::StructuredOutcome,
+        (true, true) => MemoryAllocationFailure::TrapOrOutcome,
+    }
+}
+
+pub(crate) const fn resource_glue(kind: ResourceKind) -> MemoryDropGlueId {
+    MemoryDropGlueId::new(1 + kind as u32)
+}
+
+const fn bytes_glue() -> MemoryDropGlueId {
+    MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32)
+}
+
+fn execution_cutover(ty: &Type) -> Option<MemoryExecutionCutover> {
+    match ty {
+        Type::Str => Some(MemoryExecutionCutover::StructuralString),
+        Type::Path => Some(MemoryExecutionCutover::StructuralPath),
+        Type::Product(name) => Some(MemoryExecutionCutover::Product(name.clone())),
+        Type::Enum { id, arguments, .. } => Some(MemoryExecutionCutover::Enum {
+            id: id.bytes(), arguments: arguments.iter().map(memory_type).collect(),
+        }),
+        _ => None,
+    }
 }

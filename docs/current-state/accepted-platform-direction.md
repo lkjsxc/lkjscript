@@ -32,7 +32,7 @@ Current. The
 AOT, content-addressed native caches, and optional explicit local PGO as later
 measured Targets; it does not add an engine or change Current runtime policy.
 
-The marker-trait foundation, initial `Owned Buf` ownership safe island, exact
+The marker-trait foundation, affine `byte-vector` ownership safe island, exact
 canonical native contract frames/roots, host-independent source allocation/recursive SCC slice, and
 forced first optimizing pipeline remain Current. General ownership, full static
 trait methods/associated items, Handle/host native calls, native/VM reference

@@ -37,12 +37,16 @@ fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles(
             panic!("scalar {worker_trait} fact unexpectedly failed: {error}")
         });
     }
-    let buffer = format!(
+    let byte_vector = format!(
         "{}{}",
         bounded_identity("send-value", "send"),
-        main_source("buf", "send-value/\nbuf-new/\n0\n/buf-new\n/send-value")
+        main_source(
+            "byte-vector",
+            "send-value/\nnew-byte-vector/\n0\n/new-byte-vector\n/send-value"
+        )
     );
-    assert!(analysis_error(&buffer).contains("does not satisfy trait send"));
+    assert!(analysis_error(&byte_vector)
+        .contains("ownership/reference generic instantiation is unavailable"));
     let handle = format!(
         "{}{}",
         bounded_identity("send-value", "send"),

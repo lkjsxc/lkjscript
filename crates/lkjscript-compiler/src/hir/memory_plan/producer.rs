@@ -6,20 +6,7 @@ use crate::hir::{
     self, BindingId, BindingStorage, BorrowKind, Expr, ExprKind, LocalDefinition, Operation, Type,
 };
 
-use super::{
-    compute_plan_id, FunctionMemoryPlan, FunctionMemorySignature, HirMemoryPlan, MemoryAliasing,
-    MemoryAllocationFailure, MemoryBindingStorage, MemoryBorrowKind, MemoryCallId, MemoryCallPlan,
-    MemoryCallTarget, MemoryConstantId, MemoryConstantPlan, MemoryConstantValue, MemoryContention,
-    MemoryDestruction, MemoryDropClass, MemoryDropGlueId, MemoryDropGlueKind, MemoryDropGluePlan,
-    MemoryEntryId, MemoryEscape, MemoryExpressionId, MemoryExpressionKind, MemoryFunctionId,
-    MemoryIdentity, MemoryLoanPlan, MemoryMode, MemoryMultiplicity, MemoryObligation,
-    MemoryObligationId, MemoryObligationKind, MemoryOrigin, MemoryParameterMode, MemoryPlanEntry,
-    MemoryPlanId, MemoryPlanWork, MemoryPortability, MemoryResultMode, MemoryStorage,
-    MemorySubject, MemoryType, MemoryUse, MemoryUseId, MemoryUseKind, HIR_MEMORY_PLAN_SCHEMA,
-    MAX_MEMORY_PLAN_CALLS, MAX_MEMORY_PLAN_CONSTANTS, MAX_MEMORY_PLAN_ENTRIES,
-    MAX_MEMORY_PLAN_EXPRESSIONS, MAX_MEMORY_PLAN_FUNCTIONS, MAX_MEMORY_PLAN_LOANS,
-    MAX_MEMORY_PLAN_OBLIGATIONS, MAX_MEMORY_PLAN_USES,
-};
+use super::*;
 
 pub(super) fn derive(program: &hir::Program) -> Result<HirMemoryPlan> {
     Producer::new(program)?.run()
@@ -27,6 +14,7 @@ pub(super) fn derive(program: &hir::Program) -> Result<HirMemoryPlan> {
 
 struct Producer<'a> {
     program: &'a hir::Program,
+    type_planner: TypePlanner<'a>,
     function_ids: HashMap<BindingId, MemoryFunctionId>,
     signatures: Vec<FunctionMemorySignature>,
     functions: Vec<FunctionMemoryPlan>,
@@ -36,6 +24,8 @@ struct Producer<'a> {
     constants: Vec<MemoryConstantPlan>,
     calls: Vec<MemoryCallPlan>,
     obligations: Vec<MemoryObligation>,
+    destinations: Vec<MemoryDestinationPlan>,
+    borrow_scopes: Vec<MemoryBorrowScopePlan>,
     current_function: MemoryFunctionId,
     next_expression: u32,
     next_place: u32,
@@ -43,6 +33,10 @@ struct Producer<'a> {
     work: MemoryPlanWork,
 }
 
+include!("producer/type_graph.rs");
+include!("producer/type_plan.rs");
+include!("producer/type_helpers.rs");
+include!("producer/recursive.rs");
 include!("producer/impl_00.rs");
 include!("producer/impl_01.rs");
 include!("producer/impl_02.rs");

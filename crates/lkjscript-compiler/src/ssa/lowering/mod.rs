@@ -1,8 +1,5 @@
-mod branches;
 mod calls;
 mod cleanup;
-mod control;
-mod enums;
 mod expressions;
 mod loads;
 mod locals;
@@ -11,4 +8,5 @@ mod numeric;
 mod ownership;
 mod products;
 mod sequence;
+mod structural;
 mod transfers;

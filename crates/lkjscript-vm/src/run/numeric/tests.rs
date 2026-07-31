@@ -5,14 +5,16 @@ use crate::run::NoTier as NullJit;
 use super::{bin_arithmetic, bin_ordering, Arithmetic, Ordering};
 use crate::run::{test_chunk, Vm};
 
-fn test_vm() -> Vm<'static, NullJit> {
-    let chunk = Box::leak(Box::new(test_chunk()));
-    Vm::new(
-        chunk,
-        NullJit,
-        crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
-    )
+macro_rules! test_vm {
+    ($name:ident) => {
+        let chunk = test_chunk();
+        let mut $name = Vm::new(
+            &chunk,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            ExecutionConfig::default(),
+        );
+    };
 }
 
 fn test_i64(_vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
@@ -35,7 +37,7 @@ fn pop_f64(vm: &mut Vm<'_, NullJit>) -> f64 {
 
 #[test]
 fn complete_i64_range_round_trips_inline_without_heap_allocation() {
-    let mut vm = test_vm();
+    test_vm!(vm);
     for number in [
         i64::MIN,
         -(1_i64 << 60) - 1,
@@ -53,7 +55,7 @@ fn complete_i64_range_round_trips_inline_without_heap_allocation() {
 
 #[test]
 fn i64_arithmetic_is_exact_checked_and_allocation_free() {
-    let mut vm = test_vm();
+    test_vm!(vm);
     let left = test_i64(&mut vm, 9_007_199_254_740_993);
     let right = test_i64(&mut vm, 2);
     vm.push(left);
@@ -87,7 +89,7 @@ fn i64_arithmetic_is_exact_checked_and_allocation_free() {
 
 #[test]
 fn mixed_and_f64_arithmetic_preserve_ieee_identity_without_allocation() {
-    let mut vm = test_vm();
+    test_vm!(vm);
     let integer = test_i64(&mut vm, 1);
     let float = test_float(&mut vm, 2.0);
     vm.push(integer);
@@ -112,7 +114,7 @@ fn mixed_and_f64_arithmetic_preserve_ieee_identity_without_allocation() {
 
 #[test]
 fn numeric_ordering_is_exact_and_uses_ieee_promotion() {
-    let mut vm = test_vm();
+    test_vm!(vm);
     let left = test_i64(&mut vm, 9_007_199_254_740_992);
     let right = test_i64(&mut vm, 9_007_199_254_740_993);
     vm.push(left);
@@ -131,7 +133,7 @@ fn numeric_ordering_is_exact_and_uses_ieee_promotion() {
 
 #[test]
 fn bitwise_dispatch_uses_all_i64_bits_without_allocation() {
-    let mut vm = test_vm();
+    test_vm!(vm);
     let left = test_i64(&mut vm, i64::MIN);
     let right = test_i64(&mut vm, -1);
     vm.push(left);

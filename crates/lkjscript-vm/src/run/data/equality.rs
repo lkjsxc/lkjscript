@@ -1,11 +1,6 @@
 use super::*;
 
-fn value_equal(
-    arena: &lkjscript_core::GcHeap,
-    chunk: &lkjscript_core::ValidatedChunk,
-    left: Value,
-    right: Value,
-) -> Result<bool> {
+fn value_equal<J: RuntimeTier>(vm: &Vm<'_, J>, left: Value, right: Value) -> Result<bool> {
     let mut pending = vec![(left, right)];
     let mut steps = 0_usize;
     while let Some((left, right)) = pending.pop() {
@@ -51,7 +46,7 @@ fn value_equal(
         if left_symbol.is_some() || right_symbol.is_some() {
             match (left_symbol, right_symbol) {
                 (Some(left), Some(right)) => {
-                    if symbol_text(chunk, left)? == symbol_text(chunk, right)? {
+                    if symbol_text(vm.chunk, left)? == symbol_text(vm.chunk, right)? {
                         continue;
                     }
                     return Ok(false);
@@ -59,11 +54,33 @@ fn value_equal(
                 _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
         }
-        match (arena.get(left)?, arena.get(right)?) {
-            (HeapObj::Str(left), HeapObj::Str(right)) if left == right => {}
-            (HeapObj::Str(_), HeapObj::Str(_)) => return Ok(false),
-            (HeapObj::Path(left), HeapObj::Path(right)) if left == right => {}
-            (HeapObj::Path(_), HeapObj::Path(_)) => return Ok(false),
+        let left_string = crate::run::structural_ops::copy_string(vm, left).ok();
+        let right_string = crate::run::structural_ops::copy_string(vm, right).ok();
+        if left_string.is_some() || right_string.is_some() {
+            match (left_string, right_string) {
+                (Some(left), Some(right)) if left == right => continue,
+                (Some(_), Some(_)) => return Ok(false),
+                _ => return Err(Error::msg("equal-value runtime type mismatch")),
+            }
+        }
+        let left_path = crate::run::structural_ops::copy_path(vm, left).ok();
+        let right_path = crate::run::structural_ops::copy_path(vm, right).ok();
+        if left_path.is_some() || right_path.is_some() {
+            match (left_path, right_path) {
+                (Some(left), Some(right)) if left == right => continue,
+                (Some(_), Some(_)) => return Ok(false),
+                _ => return Err(Error::msg("equal-value runtime type mismatch")),
+            }
+        }
+        let left_structural = crate::run::structural_ops::semantic_snapshot(vm, left).ok();
+        let right_structural = crate::run::structural_ops::semantic_snapshot(vm, right).ok();
+        if left_structural.is_some() || right_structural.is_some() {
+            return match (left_structural, right_structural) {
+                (Some(left), Some(right)) => Ok(left == right),
+                _ => Err(Error::msg("equal-value runtime type mismatch")),
+            };
+        }
+        match (vm.arena.get(left)?, vm.arena.get(right)?) {
             (
                 HeapObj::Enum {
                     layout: left_layout,
@@ -114,7 +131,7 @@ fn symbol_text(chunk: &lkjscript_core::ValidatedChunk, symbol: u32) -> Result<&s
 pub(crate) fn equal_value<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;
     let left = vm.pop()?;
-    let equal = value_equal(&vm.arena, vm.chunk, left, right)?;
+    let equal = value_equal(vm, left, right)?;
     vm.push(Value::from_bool(equal));
     Ok(())
 }
@@ -127,62 +144,13 @@ pub(crate) fn same_object<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         (Some(_), None) | (None, Some(_)) => {
             return Err(Error::msg("same-object runtime type mismatch"));
         }
-        (None, None) => match (vm.arena.get(left)?, vm.arena.get(right)?) {
-            (HeapObj::Buf(_), HeapObj::Buf(_)) => left == right,
-            _ => return Err(Error::msg("same-object expects Buf or Resource")),
-        },
+        (None, None) => return Err(Error::msg("same-object expects Resource")),
     };
     vm.push(Value::from_bool(equal));
     Ok(())
 }
 
-fn list_node(arena: &lkjscript_core::GcHeap, value: Value) -> Result<Option<(Value, Value)>> {
-    if value.is_empty_list() {
-        return Ok(None);
-    }
-    match arena.get(value)? {
-        HeapObj::Pair { car, cdr } => Ok(Some((*car, *cdr))),
-        _ => Err(Error::msg("list-equal expects proper List values")),
-    }
-}
-
-pub(crate) fn list_values_equal(
-    arena: &lkjscript_core::GcHeap,
-    chunk: &lkjscript_core::ValidatedChunk,
-    mut left: Value,
-    mut right: Value,
-    limit: usize,
-) -> Result<bool> {
-    let mut steps = 0_usize;
-    loop {
-        let left_node = list_node(arena, left)?;
-        let right_node = list_node(arena, right)?;
-        let (left_car, left_cdr, right_car, right_cdr) = match (left_node, right_node) {
-            (None, None) => return Ok(true),
-            (None, Some(_)) | (Some(_), None) => return Ok(false),
-            (Some((left_car, left_cdr)), Some((right_car, right_cdr))) => {
-                (left_car, left_cdr, right_car, right_cdr)
-            }
-        };
-        if steps == limit {
-            return Err(Error::msg("list-equal step limit exceeded"));
-        }
-        steps += 1;
-        if !value_equal(arena, chunk, left_car, right_car)? {
-            return Ok(false);
-        }
-        left = left_cdr;
-        right = right_cdr;
-    }
-}
-
-pub(crate) fn list_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let right = vm.pop()?;
-    let left = vm.pop()?;
-    let equal = list_values_equal(&vm.arena, vm.chunk, left, right, MAX_LIST_EQUAL_STEPS)?;
-    vm.push(Value::from_bool(equal));
-    Ok(())
-}
+include!("equality/list.rs");
 
 pub(crate) fn f64_bits_equal<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let right = vm.pop()?;

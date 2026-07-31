@@ -7,6 +7,14 @@ pub enum FrameHomeKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StructuralFrameCategory {
+    StaticString,
+    Owner,
+    View,
+    Destination,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FrameHome {
     pub(super) kind: FrameHomeKind,
     pub(super) value_type: ValueType,
@@ -28,6 +36,29 @@ impl FrameHome {
     pub const fn rbp_displacement(self) -> i32 {
         self.rbp_displacement
     }
+
+    #[must_use]
+    pub const fn structural_category(self) -> Option<StructuralFrameCategory> {
+        match self.value_type {
+            ValueType::StaticString(_) => Some(StructuralFrameCategory::StaticString),
+            ValueType::StructuralOwner(_) => Some(StructuralFrameCategory::Owner),
+            ValueType::StructuralView(_) => Some(StructuralFrameCategory::View),
+            ValueType::StructuralDestination(_) => Some(StructuralFrameCategory::Destination),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn has_structural_cleanup_obligation(self) -> bool {
+        matches!(
+            self.structural_category(),
+            Some(
+                StructuralFrameCategory::Owner
+                    | StructuralFrameCategory::View
+                    | StructuralFrameCategory::Destination
+            )
+        )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,6 +71,7 @@ pub struct FrameFacts {
     pub(super) uses_red_zone: bool,
     pub(super) call_site_aligned_16: bool,
     pub(super) homes: Vec<FrameHome>,
+    pub(super) returned_structural_owners: Vec<FrameHomeKind>,
 }
 
 impl FrameFacts {
@@ -81,6 +113,11 @@ impl FrameFacts {
     #[must_use]
     pub fn homes(&self) -> &[FrameHome] {
         &self.homes
+    }
+
+    #[must_use]
+    pub fn returned_structural_owners(&self) -> &[FrameHomeKind] {
+        &self.returned_structural_owners
     }
 }
 

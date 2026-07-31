@@ -2,6 +2,10 @@ use super::resource_token::{decode_parts, encode_key, provider_for_kind, reserva
 use super::*;
 
 impl ResourceTable {
+    pub(crate) fn is_borrowed_handle(&self, value: Value) -> bool {
+        encode_key(&self.stdin_key).is_ok_and(|borrowed| borrowed == value)
+    }
+
     pub(super) fn acquire_owned(
         &mut self,
         kind: ResourceKind,
@@ -102,6 +106,11 @@ impl ResourceTable {
         self.table
             .resolve_token_parts(parts, kind, provider, self.table.scope(), ownership)
             .map_err(|error| self.access_error(operation, error))
+    }
+
+    pub(crate) fn owned_kind(&self, handle: Value, operation: &str) -> Result<ResourceKind> {
+        self.resolve_owned_any(handle, operation)
+            .map(|(_, kind, _)| kind)
     }
 
     pub(super) fn resolve_owned_any(

@@ -35,6 +35,7 @@ pub(crate) fn frame_facts(
     local_slots: u32,
     outgoing_machine_arguments: u8,
     homes: Vec<FrameHome>,
+    returned_structural_owners: Vec<FrameHomeKind>,
 ) -> FrameFacts {
     FrameFacts {
         function,
@@ -45,6 +46,7 @@ pub(crate) fn frame_facts(
         uses_red_zone: false,
         call_site_aligned_16: true,
         homes,
+        returned_structural_owners,
     }
 }
 
@@ -114,6 +116,20 @@ pub(crate) fn heap_runtime_site(
         descriptor,
         arguments,
         result,
+        source,
+    }
+}
+
+pub(crate) fn structural_runtime_site(
+    id: u32,
+    function: FunctionId,
+    descriptor: StructuralCallDescriptor,
+    source: Option<SourceOrigin>,
+) -> StructuralRuntimeSite {
+    StructuralRuntimeSite {
+        id,
+        function,
+        descriptor,
         source,
     }
 }

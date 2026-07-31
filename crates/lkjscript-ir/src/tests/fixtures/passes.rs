@@ -4,6 +4,7 @@ use crate::*;
 pub(crate) fn pass_program() -> Program {
     let add_signature = Signature::monomorphic(vec![SsaType::I64, SsaType::I64], SsaType::I64);
     Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),

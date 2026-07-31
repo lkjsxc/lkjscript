@@ -15,33 +15,11 @@ impl JitHeapServices<'_> {
                 .copied()
                 .ok_or(NativeServiceError::HostFailure)
         };
-        let _as_i64 = |value: NativeValue| match value {
-            NativeValue::I64(value) => Ok(value),
-            _ => Err(NativeServiceError::HostFailure),
-        };
-        let _as_f64 = |value: NativeValue| match value {
-            NativeValue::F64Bits(bits) => Ok(f64::from_bits(bits)),
-            _ => Err(NativeServiceError::HostFailure),
-        };
         let as_reference = |value: NativeValue| match value {
             NativeValue::Reference(reference) => Ok(reference),
             _ => Err(NativeServiceError::HostFailure),
         };
         match descriptor.operation() {
-            HeapOperation::ConstantStr(text) => {
-                let ValueType::Reference(reference_type) = result_type else {
-                    return self.trap("string constant result layout mismatch");
-                };
-                let value = self.allocate(HeapObj::Str(text.clone()), reference_type)?;
-                self.native_from_value(value, result_type)
-            }
-            HeapOperation::EmptyStr => {
-                let ValueType::Reference(reference_type) = result_type else {
-                    return self.trap("empty-str result layout mismatch");
-                };
-                let value = self.allocate(HeapObj::Str(String::new()), reference_type)?;
-                self.native_from_value(value, result_type)
-            }
             HeapOperation::EmptyList => Ok(NativeValue::Reference(
                 lkjscript_native::NativeReference::new(
                     result_type

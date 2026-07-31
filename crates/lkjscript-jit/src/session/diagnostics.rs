@@ -14,17 +14,6 @@ impl JitSession {
                 .last_runtime_trap
                 .clone()
                 .or_else(|| {
-                    let word = u64::from(site?);
-                    let reference =
-                        lkjscript_native::NativeReference::new(ReferenceType::Str, word);
-                    let heap = self.heap.as_ref()?;
-                    let value = native_reference_value(heap, reference).ok()?;
-                    match heap.get(value).ok()? {
-                        HeapObj::Str(message) => Some(message.clone()),
-                        _ => None,
-                    }
-                })
-                .or_else(|| {
                     self.functions
                         .get(function.index().unwrap_or(usize::MAX))
                         .and_then(|record| record.code_object)

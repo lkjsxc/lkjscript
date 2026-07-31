@@ -1,8 +1,5 @@
 use super::*;
-use lkjscript_ir::{
-    verify, EffectSet, FailureBehavior, Instruction, InstructionKind, Safepoint, SsaType,
-    Terminator, ValueId,
-};
+use lkjscript_ir::InstructionKind;
 
 fn two_payload_variants() -> String {
     concat!(
@@ -24,7 +21,7 @@ fn two_payload_variants() -> String {
 }
 
 #[test]
-fn enum_heap_preflight_rejects_before_object_publication() {
+fn structural_enum_bypasses_legacy_heap_allocation_limits() {
     let float_source = source().replace("i64", "f64").replace("42", "1.5");
     let compiled = compile_source(
         &float_source,
@@ -42,67 +39,45 @@ fn enum_heap_preflight_rejects_before_object_publication() {
         execute_optimizing(compiled.ssa(), &execution, JitConfig::default())
             .expect("proof returns enum allocation resource outcome"),
     ] {
-        assert!(matches!(
-            result.outcome,
-            ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
-        ));
+        assert!(matches!(result.outcome, ExecutionOutcome::Returned(_)));
         assert_eq!(result.stats.allocations, 0);
+        assert_eq!(result.stats.runtime_heap_successes, 0);
+        assert_eq!(result.stats.collector_runtime_invocations, 0);
+        assert!(result.stats.structural_runtime_calls > 0);
         assert!(result.stats.native_entries > 0);
         assert_eq!(result.stats.vm_fallbacks, 0);
     }
 }
 
 #[test]
-fn inactive_projection_is_rejected_before_any_generated_access() {
+fn deterministic_enum_has_no_legacy_projection_or_construction_path() {
     let compiled = compile_source(
         &two_payload_variants(),
-        "enum-inactive.lkjscript",
+        "enum-structural-only.lkjscript",
         &Limits::default(),
     )
     .expect("compile two-variant enum");
-    let mut program = compiled.ssa().program().clone();
-    let function = &mut program.functions[program.main.index().expect("main indexes")];
-    let block = &mut function.blocks[0];
-    let constructor = block
-        .instructions
+    let instructions = compiled
+        .ssa()
+        .program()
+        .functions
         .iter()
-        .find(|instruction| matches!(instruction.kind, InstructionKind::EnumValue { .. }))
-        .cloned()
-        .expect("enum constructor exists");
-    let InstructionKind::EnumValue {
-        enum_id, layout, ..
-    } = constructor.kind
-    else {
-        unreachable!()
-    };
-    let inactive = &program
-        .enums
+        .flat_map(|function| &function.blocks)
+        .flat_map(|block| &block.instructions)
+        .map(|instruction| &instruction.kind)
+        .collect::<Vec<_>>();
+    assert!(instructions
         .iter()
-        .find(|definition| definition.id == enum_id)
-        .expect("enum exists")
-        .variants[1];
-    let projection = ValueId::new(constructor.id.raw() + 1);
-    block.instructions.push(Instruction {
-        id: projection,
-        ty: SsaType::I64,
-        kind: InstructionKind::EnumField {
-            enum_id,
-            variant: inactive.id,
-            field: inactive.fields[0].id,
-            layout,
-            value: constructor.id,
-        },
-        metadata: lkjscript_ir::InstructionMetadata {
-            origin: constructor.metadata.origin,
-            effects: EffectSet::READS_MEMORY,
-            safepoint: Safepoint::None,
-            failure: FailureBehavior::None,
-            failure_cleanup: None,
-            frame_state: None,
-        },
-    });
-    *function.signature.result = SsaType::I64;
-    block.terminator = Terminator::Return(projection);
-    let error = verify(program).expect_err("inactive projection must not gain verified authority");
-    assert!(error.to_string().contains("inactive enum projection"));
+        .any(|kind| { matches!(kind, InstructionKind::DestinationCreate { .. }) }));
+    assert!(instructions
+        .iter()
+        .any(|kind| { matches!(kind, InstructionKind::DestinationFinish { .. }) }));
+    assert!(instructions.iter().all(|kind| {
+        !matches!(
+            kind,
+            InstructionKind::EnumValue { .. }
+                | InstructionKind::EnumIsVariant { .. }
+                | InstructionKind::EnumField { .. }
+        )
+    }));
 }

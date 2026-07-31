@@ -1,4 +1,5 @@
 fn validate_unique_exit_state(
+    chunk: &Chunk,
     state: &State,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
@@ -15,13 +16,31 @@ fn validate_unique_exit_state(
             "function return has an active byte-vector place",
         ));
     }
+    if !state.structural_destinations.is_empty() {
+        return Err(instruction_error(
+            proto,
+            instruction.op(),
+            instruction.offset(),
+            "function return has an incomplete structural destination",
+        ));
+    }
     if state
         .locals
         .iter()
         .filter_map(|slot| *slot)
         .any(|kind| match kind {
+            Kind::Resource { owner, .. } | Kind::ResourceResult { owner, .. } => owner != 0,
             Kind::Bytes(_) | Kind::ByteVector(_) => true,
+            Kind::StructuralOwner { representation, .. } => chunk
+                .structural_representations
+                .get(representation.index())
+                .and_then(|representation| {
+                    chunk.structural_types.get(representation.type_id.index())
+                })
+                .is_none_or(|ty| ty.mode != crate::StructuralTypeMode::Copy),
             Kind::BytesBorrow { owner, .. } | Kind::ByteSlice { owner, .. } => owner & 0xf000_0000 != 0x9000_0000,
+            Kind::StructuralOwnerRef { .. } => false,
+            Kind::StructuralView { .. } | Kind::StructuralDestination { .. } => true,
             _ => false,
         })
     {
@@ -29,10 +48,52 @@ fn validate_unique_exit_state(
             proto,
             instruction.op(),
             instruction.offset(),
-            "function return has an untransferred owner or unended loan",
+            &format!(
+                "function return has an untransferred owner or unended loan: {:?}",
+                state
+                    .locals
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(slot, kind)| kind.map(|kind| (slot, kind)))
+                    .collect::<Vec<_>>(),
+            ),
         ));
     }
     Ok(())
+}
+
+fn validate_structural_return(
+    proto: &FunctionProto,
+    actual: Kind,
+    instruction: DecodedInstruction,
+) -> Result<()> {
+    let valid = match (proto.return_structural, actual) {
+        (
+            Some(expected),
+            Kind::StructuralOwner {
+                representation, ..
+            },
+        ) => expected == representation,
+        (
+            None,
+            Kind::StructuralOwner { .. }
+            | Kind::StructuralOwnerRef { .. }
+            | Kind::StructuralView { .. }
+            | Kind::StructuralDestination { .. },
+        ) => false,
+        (Some(_), _) => false,
+        (None, _) => true,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(instruction_error(
+            proto,
+            instruction.op(),
+            instruction.offset(),
+            "structural return does not match exact function metadata",
+        ))
+    }
 }
 
 fn validate_unique_return(
@@ -66,6 +127,24 @@ fn validate_unique_return(
 }
 
 fn call_return_kind(proto: &FunctionProto, instruction: DecodedInstruction) -> Result<Kind> {
+    if let Some(representation) = proto.return_structural {
+        let owner = u32::try_from(instruction.offset())
+            .ok()
+            .and_then(|offset| offset.checked_add(0x5000_0001))
+            .ok_or_else(|| {
+                instruction_error(
+                    proto,
+                    instruction.op(),
+                    instruction.offset(),
+                    "structural call-result identity overflow",
+                )
+            })?;
+        return Ok(Kind::StructuralOwner {
+            representation,
+            owner,
+            active_variant: None,
+        });
+    }
     if let Some(kind) = proto.return_unique {
         let owner = u32::try_from(instruction.offset())
             .ok()
@@ -91,46 +170,15 @@ fn call_return_kind(proto: &FunctionProto, instruction: DecodedInstruction) -> R
             }
         });
     }
-    Ok(resource_return_kind(proto.return_resource))
-}
-
-fn resource_return_kind(kind: Option<crate::ResourceReturnKind>) -> Kind {
-    match kind {
-        Some(crate::ResourceReturnKind::Resource(kind)) => Kind::Resource(kind),
-        Some(crate::ResourceReturnKind::Result(kind)) => Kind::ResourceResult(kind),
-        None => Kind::Any,
+    match proto.return_resource {
+        Some(crate::ResourceReturnKind::Resource(kind)) => {
+            resource_kind(kind, proto, instruction)
+        }
+        Some(crate::ResourceReturnKind::Result(kind)) => {
+            resource_result_kind(kind, proto, instruction)
+        }
+        None => Ok(Kind::Any),
     }
 }
 
-fn validate_resource_return(
-    proto: &FunctionProto,
-    actual: Kind,
-    instruction: DecodedInstruction,
-    is_main: bool,
-) -> Result<()> {
-    if is_main && matches!(actual, Kind::Resource(_) | Kind::ResourceResult(_)) {
-        return Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "typed resources cannot escape from main bytecode",
-        ));
-    }
-    let expected = resource_return_kind(proto.return_resource);
-    match (proto.return_resource, expected == actual, actual) {
-        (Some(_), true, _) => Ok(()),
-        (Some(_), false, _) => Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "typed resource return does not match declared kind",
-        )),
-        (None, _, Kind::Resource(_) | Kind::ResourceResult(_)) => Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "typed resource return lacks function metadata",
-        )),
-        (None, _, _) => Ok(()),
-    }
-}
+include!("returns/resource.rs");

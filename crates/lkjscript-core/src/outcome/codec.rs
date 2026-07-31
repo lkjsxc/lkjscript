@@ -7,14 +7,22 @@ use super::{
 
 const MAX_NESTING: usize = 8;
 
-pub fn encode_execution_outcome(outcome: &ExecutionOutcome, max_bytes: usize) -> Result<Vec<u8>> {
-    let mut encoder = Encoder::new(max_bytes);
+include!("codec/limits.rs");
+
+pub fn encode_execution_outcome(
+    outcome: &ExecutionOutcome,
+    limits: impl Into<ExecutionOutcomeCodecLimits>,
+) -> Result<Vec<u8>> {
+    let mut encoder = Encoder::new(limits.into().validate()?);
     encode_outcome(&mut encoder, outcome, 0)?;
     Ok(encoder.finish())
 }
 
-pub fn decode_execution_outcome(bytes: &[u8], max_bytes: usize) -> Result<ExecutionOutcome> {
-    let mut decoder = Decoder::new(bytes, max_bytes)?;
+pub fn decode_execution_outcome(
+    bytes: &[u8],
+    limits: impl Into<ExecutionOutcomeCodecLimits>,
+) -> Result<ExecutionOutcome> {
+    let mut decoder = Decoder::new(bytes, limits.into().validate()?)?;
     let outcome = decode_outcome(&mut decoder, 0)?;
     decoder.finish()?;
     Ok(outcome)
@@ -144,5 +152,11 @@ fn resource_kind(tag: u8) -> Result<ResourceLimitKind> {
 include!("codec/cleanup_tags.rs");
 include!("codec/io.rs");
 
+#[cfg(test)]
+mod structural_bounds_tests;
+#[cfg(test)]
+mod structural_decode_bounds_tests;
+#[cfg(test)]
+mod structural_tests;
 #[cfg(test)]
 mod tests;

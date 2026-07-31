@@ -47,6 +47,16 @@ impl RuntimeCallSlot {
                 ],
                 result: InternalMachineResult::Unit,
             }),
+            Self::StructuralDispatch => Some(InternalRuntimeSignature {
+                parameters: &[
+                    InternalMachineArgument::InvocationContext,
+                    InternalMachineArgument::StructuralSiteId,
+                    InternalMachineArgument::StructuralArgument0,
+                    InternalMachineArgument::StructuralArgument1,
+                    InternalMachineArgument::StructuralArgument2,
+                ],
+                result: InternalMachineResult::Integer,
+            }),
             Self::IdentityI64
             | Self::Poll
             | Self::EnterFunction

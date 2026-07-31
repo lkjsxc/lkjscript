@@ -33,19 +33,19 @@ that token metadata matters.
 
 ## Terminal Decision
 
-Remove script-controlled `sys-ioctl Handle I64 Buf`. Replace it with exactly:
+Script-controlled raw ioctl dispatch is removed. The source boundary is exactly:
 
 ```text
-sys-tty-get Handle Buf -> Result Unit SystemError
-sys-tty-set Handle Buf -> Result Unit SystemError
+get-terminal-state: fn inputs input-stream byte-slice-mut output result unit system-error
+set-terminal-state: fn inputs input-stream byte-slice output result unit system-error
 ```
 
 The Linux backend selects `TCGETS` and `TCSETS` internally. Both safe Rust
 wrappers require the exact Linux termios buffer size before entering FFI. A
 request number never crosses the language boundary. The language standard
-library continues to own raw-mode flag manipulation over the checked buffer.
+library continues to own raw-mode flag manipulation over the checked byte view.
 
-The process-exit terminal guard accepts only an exact-size saved buffer. It is
+The process-exit terminal guard accepts only an exact-size saved byte slice. It is
 still process-global and therefore cannot serve the future supervisor; moving
 it behind a per-process terminal lease is deferred to the process-safe VM
 cycle.

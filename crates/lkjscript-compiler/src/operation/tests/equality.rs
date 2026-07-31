@@ -17,7 +17,8 @@ fn explicit_equality_families_enforce_static_categories() {
             .is_ok());
     }
     for ty in [
-        Type::Buf,
+        Type::Bytes,
+        Type::ByteVector,
         Type::Resource(lkjscript_core::ResourceKind::FileReader),
         Type::List(Box::new(Type::I64)),
         Type::Param("t".into()),
@@ -34,13 +35,11 @@ fn explicit_equality_families_enforce_static_categories() {
         .resolve_types(&[Type::I64, Type::F64])
         .is_err());
 
+    let resource = Type::Resource(lkjscript_core::ResourceKind::FileReader);
     assert!(Operation::SameObject
-        .resolve_types(&[Type::Buf, Type::Buf])
+        .resolve_types(&[resource.clone(), resource])
         .is_ok());
-    for ty in [
-        Type::I64,
-        Type::Resource(lkjscript_core::ResourceKind::FileReader),
-    ] {
+    for ty in [Type::I64, Type::Bytes] {
         assert!(Operation::SameObject
             .resolve_types(&[ty.clone(), ty])
             .is_err());
@@ -54,9 +53,9 @@ fn explicit_equality_families_enforce_static_categories() {
     assert!(Operation::ListEqual
         .resolve_types(&[nested.clone(), nested])
         .is_err());
-    let buffers = Type::List(Box::new(Type::Buf));
+    let owners = Type::List(Box::new(Type::Bytes));
     assert!(Operation::ListEqual
-        .resolve_types(&[buffers.clone(), buffers])
+        .resolve_types(&[owners.clone(), owners])
         .is_err());
 
     assert!(Operation::F64BitsEqual

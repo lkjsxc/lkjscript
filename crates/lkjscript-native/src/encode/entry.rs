@@ -12,6 +12,7 @@ pub fn encode(
     let mut safepoints = Vec::new();
     let mut root_requirements = Vec::new();
     let mut heap_runtime_sites = Vec::new();
+    let mut structural_runtime_sites = Vec::new();
     let mut source_map = Vec::new();
     let mut trap_map = Vec::new();
     let mut outcome_map = Vec::new();
@@ -43,6 +44,7 @@ pub fn encode(
             safepoints: &mut safepoints,
             root_requirements: &mut root_requirements,
             heap_runtime_sites: &mut heap_runtime_sites,
+            structural_runtime_sites: &mut structural_runtime_sites,
             source_map: &mut source_map,
             trap_map: &mut trap_map,
             outcome_map: &mut outcome_map,
@@ -74,6 +76,7 @@ pub fn encode(
             to_u32(function.locals.len())?,
             outgoing_arguments,
             build_frame_homes(function)?,
+            returned_structural_owner_homes(function),
         ));
         source_map.push(source_map_entry(function.id, start_u32, end_u32, None));
     }
@@ -113,11 +116,12 @@ pub fn encode(
         RuntimeCallSlot::ThawBytes => 31_u8,
         RuntimeCallSlot::CollectReference => 32_u8,
         RuntimeCallSlot::HeapDispatch => 33_u8,
-        RuntimeCallSlot::ReserveFrame => 34_u8,
-        RuntimeCallSlot::RegisterFrame => 35_u8,
-        RuntimeCallSlot::PublishSafepoint => 36_u8,
-        RuntimeCallSlot::UnregisterFrame => 37_u8,
-        RuntimeCallSlot::TakeRejectedEntry => 38_u8,
+        RuntimeCallSlot::StructuralDispatch => 34_u8,
+        RuntimeCallSlot::ReserveFrame => 35_u8,
+        RuntimeCallSlot::RegisterFrame => 36_u8,
+        RuntimeCallSlot::PublishSafepoint => 37_u8,
+        RuntimeCallSlot::UnregisterFrame => 38_u8,
+        RuntimeCallSlot::TakeRejectedEntry => 39_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -131,6 +135,7 @@ pub fn encode(
         safepoints,
         root_requirements,
         heap_runtime_sites,
+        structural_runtime_sites,
         source_map,
         trap_map,
         outcome_map,

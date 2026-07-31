@@ -12,11 +12,14 @@ fn generated_collection_materializes_only_live_exact_roots(
     };
     let report = installed.invoke_with_services(
         entries.exact_local,
-        &[buf(11), buf(22)],
+        &[product_ref(11), product_ref(22)],
         &NativeInvocationConfig::default(),
         &mut services,
     )?;
-    assert_eq!(report.outcome(), InvocationOutcome::Returned(buf(33)));
+    assert_eq!(
+        report.outcome(),
+        InvocationOutcome::Returned(product_ref(33))
+    );
     assert_eq!(report.collection_calls(), 1);
     assert_eq!(report.exact_root_counts(), &[2]);
     assert_eq!(report.maximum_roots(), 2);
@@ -28,7 +31,7 @@ fn generated_collection_materializes_only_live_exact_roots(
     assert_eq!(services.observed[0].len(), 2);
     assert!(services.observed[0]
         .iter()
-        .all(|item| *item == (ReferenceType::Buf, 11)));
+        .all(|item| { *item == (ReferenceType::Product(LayoutIdentity::product(0)), 11,) }));
     assert!(!services.observed[0].iter().any(|item| item.1 == 22));
     Ok(())
 }
@@ -41,11 +44,14 @@ fn collecting_callee_exposes_caller_and_callee_chain() -> Result<(), Box<dyn std
     let mut services = RecordingServices::default();
     let report = installed.invoke_with_services(
         entries.caller,
-        &[buf(44)],
+        &[product_ref(44)],
         &NativeInvocationConfig::default(),
         &mut services,
     )?;
-    assert_eq!(report.outcome(), InvocationOutcome::Returned(buf(44)));
+    assert_eq!(
+        report.outcome(),
+        InvocationOutcome::Returned(product_ref(44))
+    );
     assert_eq!(report.peak_active_frame_depth(), 2);
     assert_eq!(report.active_frame_depth(), 0);
     assert!(report.peak_active_value_homes() > 0);
@@ -67,7 +73,7 @@ fn service_failure_and_all_structured_paths_unregister_frames(
     };
     let failed = installed.invoke_with_services(
         entries.caller,
-        &[buf(1)],
+        &[product_ref(1)],
         &NativeInvocationConfig::default(),
         &mut services,
     )?;
@@ -78,7 +84,7 @@ fn service_failure_and_all_structured_paths_unregister_frames(
     services.failure = Some(NativeServiceError::ResourceLimitExceeded);
     let service_limited = installed.invoke_with_services(
         entries.caller,
-        &[buf(1)],
+        &[product_ref(1)],
         &NativeInvocationConfig::default(),
         &mut services,
     )?;

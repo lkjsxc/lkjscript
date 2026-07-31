@@ -6,14 +6,18 @@ Define the safety boundary that must be Current before generated code may
 allocate or carry heap references across a collecting safepoint.
 ## Status
 
-The closed machine-plan boundary and host-independent source allocation slice
-are **Current** on Linux x86-64. Native canonical native contract carries typed stable reference
-words, derives exact typed maps, registers generated frames, and reaches
-`GcHeap` through safe copied-root/typed-operation callbacks. Reference-capable
-SSA/JIT lowering, initialization/scalar-store classification, and direct/mutual
-recursive source groups are Current for Str, legacy Buf, Product, List, Option,
-Result, and monomorphic host-independent enums. Handle/host-capability allocation, lexical ownership references,
-and native/VM reference transitions remain **Accepted Targets**.
+The closed machine-plan boundary and remaining host-independent traced
+allocation slice are **Current** on Linux x86-64. The native contract carries
+typed stable reference words, derives exact typed maps, registers generated
+frames, and reaches `GcHeap` through safe copied-root/typed-operation callbacks
+only for the registered legacy `enum`, `pair`, and `product` families. Dynamic
+strings, paths, and eligible nonrecursive products, enums, options, and results
+use compact structural roots instead and carry no GC stack-map obligation.
+Bytes and byte vectors use the separate noncollecting unique runtime.
+Reference-capable lowering remains Current for persistent lists and remaining
+legacy aggregate instantiations. Handle/host-capability allocation, lexical
+ownership references, and native/VM reference transitions remain **Accepted
+Targets**.
 
 ## Authority And Status Vocabulary
 

@@ -4,10 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::verify::{verify_plan, VerifiedMachinePlan};
 use crate::{BackendLimits, NativeError};
 
-mod append;
 mod builder;
-mod builder_core;
-mod calls_control;
 mod comparisons;
 mod enum_heap_validity;
 mod error;
@@ -19,6 +16,8 @@ mod ir;
 mod machine;
 mod numeric;
 mod runtime;
+mod structural;
+mod value_type;
 
 pub use builder::FunctionBuilder;
 pub use comparisons::*;
@@ -29,3 +28,5 @@ pub(crate) use ir::*;
 pub use ir::{FailureCleanupCall, FunctionPlan};
 pub use machine::{MachinePlanBuilder, StaticBytesIdentity};
 pub use runtime::*;
+pub use structural::*;
+pub use value_type::*;

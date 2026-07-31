@@ -14,12 +14,28 @@ pub(super) fn lower_constant(
         Constant::Bool(value) => builder.bool_const(block, *value),
         Constant::I64(value) => builder.i64_const(block, *value),
         Constant::F64(value) => builder.f64_const_bits(block, value.to_bits()),
-        Constant::Str(value) => lower_heap_constant(
-            block,
-            HeapOperation::ConstantStr(value.clone()),
-            value_type(value_types, instruction.id)?,
-            builder,
-        ),
+        Constant::Str(_) if static_trap_message(function, instruction.id).is_some() => {
+            builder.unit(block)
+        }
+        Constant::Str(value) => {
+            let ValueType::StaticString(value_type) = value_type(value_types, instruction.id)?
+            else {
+                return Err(invalid_structural(
+                    "static string local has the wrong native type",
+                ));
+            };
+            builder.static_string_const(
+                block,
+                *static_bytes.get(value.as_bytes()).ok_or_else(|| {
+                    LoweringError::new(
+                        LoweringFailureCode::InvalidFunction,
+                        Some(function.id),
+                        "native static string image identity is absent",
+                    )
+                })?,
+                value_type,
+            )
+        }
         Constant::EmptyList => lower_heap_constant(
             block,
             HeapOperation::EmptyList,

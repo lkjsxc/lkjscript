@@ -33,7 +33,7 @@ fn verifier_rejects_generic_ownership_substitution() {
     let caller = Function {
         id: FunctionId::new(2),
         name: "generic-owned-caller".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        signature: Signature::monomorphic(vec![byte_vector_type()], byte_vector_type()),
         places: vec![owned_place(0, 0)],
         failure_cleanups: vec![
             FailureCleanupPlan {
@@ -59,14 +59,14 @@ fn verifier_rejects_generic_ownership_substitution() {
             id: BlockId::new(0),
             parameters: vec![BlockParameter {
                 id: ValueId::new(0),
-                ty: owned_buf_type(),
+                ty: byte_vector_type(),
                 owner_place: Some(PlaceId::new(0)),
                 origin: Origin::SYNTHETIC,
             }],
             instructions: vec![
                 Instruction {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(0),
                         value: ValueId::new(0),
@@ -75,15 +75,19 @@ fn verifier_rejects_generic_ownership_substitution() {
                 },
                 Instruction {
                     id: ValueId::new(2),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Call {
                         target: CallTarget::Direct(FunctionId::new(1)),
                         arguments: vec![ValueId::new(1)],
-                        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+                        consuming: vec![true],
+                        signature: Signature::monomorphic(
+                            vec![byte_vector_type()],
+                            byte_vector_type(),
+                        ),
                         instantiation: Some(GenericInstantiation {
                             substitutions: vec![TypeSubstitution {
                                 parameter: "t".into(),
-                                ty: owned_buf_type(),
+                                ty: byte_vector_type(),
                             }],
                             witnesses: Vec::new(),
                         }),
@@ -141,6 +145,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                     kind: InstructionKind::Call {
                         target: CallTarget::Direct(FunctionId::new(1)),
                         arguments: vec![ValueId::new(0)],
+                        consuming: vec![false],
                         signature: Signature::monomorphic(
                             vec![reference.clone()],
                             reference.clone(),
@@ -170,7 +175,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                     id: ValueId::new(2),
                     ty: SsaType::I64,
                     kind: InstructionKind::Runtime {
-                        operation: RuntimeOp::OwnedBufLen,
+                        operation: RuntimeOp::ByteSliceLength,
                         arguments: vec![ValueId::new(1)],
                         signature: Signature::monomorphic(vec![reference], SsaType::I64),
                     },

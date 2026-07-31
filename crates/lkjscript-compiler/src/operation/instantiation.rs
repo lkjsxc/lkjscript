@@ -111,7 +111,6 @@ pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
         }
         Type::Never
         | Type::Capability(_)
-        | Type::Buf
         | Type::Bytes
         | Type::ByteVector
         | Type::ByteSlice

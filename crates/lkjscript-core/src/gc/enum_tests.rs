@@ -7,10 +7,16 @@ use crate::{HeapObj, RuntimeLayoutId};
 fn boxed_enum_traces_only_active_initialized_payload() {
     let mut heap = GcHeap::default();
     let active = heap
-        .alloc(HeapObj::Str("active".into()))
+        .alloc(HeapObj::Pair {
+            car: crate::Value::from_i64(1),
+            cdr: crate::Value::EMPTY_LIST,
+        })
         .expect("active child");
     let inactive = heap
-        .alloc(HeapObj::Str("inactive".into()))
+        .alloc(HeapObj::Pair {
+            car: crate::Value::from_i64(2),
+            cdr: crate::Value::EMPTY_LIST,
+        })
         .expect("inactive child");
     let value = heap
         .alloc(HeapObj::Enum {

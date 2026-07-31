@@ -5,7 +5,8 @@ use std::rc::Rc;
 
 use crate::plan::{
     FunctionId, HeapCallDescriptor, LoanType, ReferenceType, RuntimeCallSlot, Signature,
-    SourceFunctionId, SourceOrigin, TrapCode, UniqueType, ValueType,
+    SourceFunctionId, SourceOrigin, StructuralCallDescriptor, StructuralDestinationType,
+    StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType, ValueType,
 };
 
 mod access;
@@ -20,9 +21,9 @@ mod heap_sites;
 mod integrity;
 mod layouts;
 mod maps;
+mod structural_sites;
 #[cfg(test)]
 mod tests;
-mod tokens;
 mod values;
 
 use accounting::*;
@@ -33,7 +34,7 @@ pub use frames::*;
 pub use heap_sites::*;
 use layouts::*;
 pub use maps::*;
-pub use tokens::*;
+pub use structural_sites::*;
 pub use values::*;
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ pub struct InstallableImage {
     safepoints: Box<[Safepoint]>,
     root_requirements: Box<[RootMapRequirement]>,
     heap_runtime_sites: Box<[HeapRuntimeSite]>,
+    structural_runtime_sites: Box<[StructuralRuntimeSite]>,
     source_map: Box<[SourceMapEntry]>,
     trap_map: Box<[TrapMapEntry]>,
     outcome_map: Box<[OutcomeMapEntry]>,
@@ -66,6 +68,7 @@ pub(crate) struct ImageParts {
     pub(crate) safepoints: Vec<Safepoint>,
     pub(crate) root_requirements: Vec<RootMapRequirement>,
     pub(crate) heap_runtime_sites: Vec<HeapRuntimeSite>,
+    pub(crate) structural_runtime_sites: Vec<StructuralRuntimeSite>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) trap_map: Vec<TrapMapEntry>,
     pub(crate) outcome_map: Vec<OutcomeMapEntry>,

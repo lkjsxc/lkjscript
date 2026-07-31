@@ -75,7 +75,7 @@ pub(super) fn transfer_reference_liveness(
             }
             insert_reference_value(function, *value, live, work, maximum_work)?;
         }
-        Operation::ReadLocal(local) if output_live => {
+        Operation::ReadLocal(local) | Operation::ObserveLocal(local) if output_live => {
             if function.locals[local.index as usize]
                 .value_type
                 .reference_type()
@@ -87,6 +87,7 @@ pub(super) fn transfer_reference_liveness(
         }
         Operation::Call(_, arguments)
         | Operation::RuntimeCall(_, arguments)
+        | Operation::StructuralCall(_, arguments)
         | Operation::HeapCall(_, arguments) => {
             for operand in arguments {
                 insert_reference_value(function, *operand, live, work, maximum_work)?;

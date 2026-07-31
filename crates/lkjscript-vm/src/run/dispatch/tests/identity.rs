@@ -1,12 +1,8 @@
 use super::*;
 
 #[test]
-fn object_identity_is_limited_to_buffers_and_resources() {
-    let mut vm = test_vm();
-    let buffer = test_alloc(&mut vm, HeapObj::Buf(vec![1, 2, 3]));
-    let clone = test_alloc(&mut vm, HeapObj::Buf(vec![1, 2, 3]));
-    assert!(compare(&mut vm, Op::SameObject, buffer, buffer));
-    assert!(!compare(&mut vm, Op::SameObject, buffer, clone));
+fn object_identity_is_limited_to_resources() {
+    test_vm!(vm);
     assert!(compare(
         &mut vm,
         Op::SameObject,

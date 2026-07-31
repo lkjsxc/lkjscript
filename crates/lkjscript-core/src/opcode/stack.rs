@@ -22,13 +22,22 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::BytesMove
         | Op::BytesDropPlace
         | Op::BytesPlaceEnd
+        | Op::TakeStructuralLocal
+        | Op::LoadStructuralViewLocal
+        | Op::LoadStructuralOwnerLocal
+        | Op::EndStructuralBorrowLocal
+        | Op::StructuralPlaceInit
+        | Op::StructuralMove
+        | Op::StructuralDropPlace
+        | Op::StructuralPlaceEnd
+        | Op::StructuralDestinationCreate
         | Op::False
         | Op::True
         | Op::Unit
         | Op::EmptyList
         | Op::EmptyStr => fixed(0, 0, 1),
         Op::StoreLocal | Op::StoreGlobal => fixed(1, 0, 0),
-        Op::StoreUniqueLocal | Op::StoreViewLocal => fixed(1, 1, 0),
+        Op::StoreUniqueLocal | Op::StoreViewLocal | Op::StoreStructuralLocal => fixed(1, 1, 0),
         Op::ByteSliceLen => fixed(1, 1, 1),
         Op::ByteSliceRef | Op::ByteSliceReadU32Le | Op::BytesByteAt => fixed(2, 2, 1),
         Op::CopyBytesSlice => fixed(3, 3, 1),
@@ -71,9 +80,8 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::Arg
         | Op::SysWaitMs
         | Op::SysPathExists => fixed(2, 2, 1),
-        Op::SysReadInto | Op::SysWriteFrom => fixed(4, 4, 1),
-        Op::SysRandomFill => fixed(4, 4, 1),
-        Op::SysSha256 => fixed(3, 3, 1),
+        Op::SysReadInto | Op::SysWriteFrom | Op::SysRandomFill => fixed(2, 2, 1),
+        Op::SysSha256 => fixed(1, 1, 1),
         Op::SysSqliteClose
         | Op::SysSqliteFinalize
         | Op::SysSqliteReset
@@ -92,16 +100,13 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SysSqliteColumnF64
         | Op::SysSqliteColumnText
         | Op::SysSqliteColumnBytes => fixed(2, 2, 1),
-        Op::BufSlice
-        | Op::SysSqliteBindI64
+        Op::SysSqliteBindI64
         | Op::SysSqliteBindF64
         | Op::SysSqliteBindText
         | Op::SysSqliteBindBytes => fixed(3, 3, 1),
         Op::SysRename | Op::SysSqliteOpen => fixed(3, 3, 1),
         Op::SysSqliteBackup => fixed(4, 4, 1),
-        Op::BufRef | Op::BufGetU32 => fixed(2, 2, 1),
-        Op::StrSlice | Op::BufSet => fixed(3, 3, 1),
-        Op::BufSetU32 => fixed(3, 3, 1),
+        Op::StrSlice => fixed(3, 3, 1),
         Op::Not
         | Op::Car
         | Op::Cdr
@@ -113,15 +118,13 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::Argc
         | Op::SysNowMs
         | Op::SysSocket
-        | Op::BufNew
         | Op::ByteVectorNew
-        | Op::BufLen
-        | Op::BufClone
         | Op::SysIsatty
         | Op::StrLen
         | Op::StrFromByte
         | Op::SysFsync
         | Op::SysClose
+        | Op::ResourceDrop
         | Op::SysReadByte
         | Op::SysAccept
         | Op::SysRecv
@@ -130,11 +133,11 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::LoadProductField
         | Op::IsEnumVariant
         | Op::LoadEnumField
-        | Op::BufFromStr
-        | Op::BufToStr
+        | Op::ConvertStringToBytes
+        | Op::ConvertBytesToString
         | Op::PathFromStr
-        | Op::PathFromBuf
-        | Op::PathToBuf
+        | Op::PathFromBytes
+        | Op::PathToBytes
         | Op::PathToStr
         | Op::F64FromI64Exact
         | Op::F64FromI64Rounded
@@ -143,7 +146,17 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::BytesLength
         | Op::CloneBytes
         | Op::FreezeByteVector
-        | Op::ThawBytes => fixed(1, 1, 1),
+        | Op::ThawBytes
+        | Op::StructuralBorrow
+        | Op::StructuralBorrowMut
+        | Op::StructuralPublish
+        | Op::StructuralDestinationFinish
+        | Op::StructuralDestinationAbort
+        | Op::StructuralAggregateFieldBorrow
+        | Op::StructuralAggregateTag
+        | Op::StructuralAggregateConsumePayload
+        | Op::StructuralStringUtf8View
+        | Op::StructuralCopy => fixed(1, 1, 1),
         Op::Jump => fixed(0, 0, 0),
         Op::JumpIfFalse | Op::Exit | Op::Trap | Op::Pop | Op::Return => fixed(1, 1, 0),
         Op::MakeClosure => fixed(1, 1, 1),
@@ -151,7 +164,7 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         Op::MakeProduct => MakeProduct,
         Op::MakeEnum => MakeEnum,
         Op::Dup => fixed(1, 0, 1),
-        Op::WithProductField => fixed(2, 2, 1),
+        Op::WithProductField | Op::StructuralDestinationFieldInit => fixed(2, 2, 1),
     }
 }
 

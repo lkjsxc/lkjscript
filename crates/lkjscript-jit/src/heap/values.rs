@@ -2,8 +2,6 @@ use crate::*;
 
 pub(crate) fn reference_layout_key(reference_type: ReferenceType) -> u64 {
     match reference_type {
-        ReferenceType::Buf => 1_u64 << 56,
-        ReferenceType::Str => 2_u64 << 56,
         ReferenceType::List(layout, _) => (3_u64 << 56) | u64::from(layout.get()),
         ReferenceType::Product(layout) => (4_u64 << 56) | u64::from(layout.get()),
         ReferenceType::Enum(layout, _) => (5_u64 << 56) | u64::from(layout.get()),
@@ -28,9 +26,7 @@ pub(crate) fn native_reference_value(
         return Err("native heap handle layout mismatch".into());
     }
     let category_matches = match (reference_type, heap.get(value)) {
-        (ReferenceType::Buf, Ok(HeapObj::Buf(_)))
-        | (ReferenceType::Str, Ok(HeapObj::Str(_)))
-        | (ReferenceType::List(_, _), Ok(HeapObj::Pair { .. })) => true,
+        (ReferenceType::List(_, _), Ok(HeapObj::Pair { .. })) => true,
         (ReferenceType::Product(layout), Ok(HeapObj::Product { product, .. })) => {
             layout == lkjscript_native::LayoutIdentity::product(u32::from(product.raw()))
         }
@@ -61,10 +57,6 @@ pub(crate) fn reference_native_value(
     let reference = lkjscript_native::NativeReference::new(reference_type, u64::from(index) + 1);
     native_reference_value(heap, reference)?;
     Ok(NativeValue::Reference(reference))
-}
-
-pub(crate) fn index(value: i64, operation: &str) -> Result<usize, String> {
-    usize::try_from(value).map_err(|_| format!("{operation} index out of range"))
 }
 
 pub(crate) fn list_values_equal(
@@ -128,7 +120,6 @@ pub(crate) fn value_equal(heap: &GcHeap, left: Value, right: Value) -> Result<bo
         return Ok(true);
     }
     match (heap.get(left), heap.get(right)) {
-        (Ok(HeapObj::Str(left)), Ok(HeapObj::Str(right))) => Ok(left == right),
         (
             Ok(HeapObj::Enum {
                 layout: left_layout,

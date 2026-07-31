@@ -7,26 +7,29 @@ use crate::{
 #[test]
 fn integrity_rejects_malformed_heap_site_home_and_safepoint(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let buffer = ValueType::Reference(ReferenceType::Buf);
+    let product = ValueType::Reference(ReferenceType::Product(crate::LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
     let function = plan.declare_function(
         SourceFunctionId::new(9),
-        Signature::new(vec![buffer], ValueType::Unit)?,
+        Signature::new(vec![product, ValueType::I64], product)?,
     )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
     let input = builder.parameter(0)?;
-    let index = builder.i64_const(entry, 0)?;
-    let byte = builder.i64_const(entry, 1)?;
+    let replacement = builder.parameter(1)?;
     let descriptor = HeapCallDescriptor::new(
-        HeapOperation::BufSet,
-        vec![buffer, ValueType::I64, ValueType::I64],
-        ValueType::Unit,
-        AllocationClass::None,
-        StoreClass::Scalar,
+        HeapOperation::WithProductField {
+            product: 0,
+            field: 0,
+            field_type: ValueType::I64,
+        },
+        vec![product, ValueType::I64],
+        product,
+        AllocationClass::Bounded,
+        StoreClass::Initialization,
     )?;
-    let result = builder.heap_call(entry, descriptor, vec![input, index, byte])?;
+    let result = builder.heap_call(entry, descriptor, vec![input, replacement])?;
     builder.return_value(entry, result)?;
     plan.define_function(builder.finish())?;
     let mut image = encode(
@@ -51,10 +54,12 @@ fn integrity_rejects_malformed_heap_site_home_and_safepoint(
 #[test]
 fn integrity_rejects_out_of_frame_root_without_accounting_change(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let buf = ValueType::Reference(ReferenceType::Buf);
+    let product = ValueType::Reference(ReferenceType::Product(crate::LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
-    let function =
-        plan.declare_function(SourceFunctionId::new(1), Signature::new(vec![buf], buf)?)?;
+    let function = plan.declare_function(
+        SourceFunctionId::new(1),
+        Signature::new(vec![product], product)?,
+    )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;

@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 use crate::image::{
     entry_metadata, exact_safepoint, frame_facts, frame_home, heap_runtime_site, outcome_map_entry,
-    relocation, root_location, root_map_requirement, source_map_entry, trap_map_entry,
-    FrameHomeKind, ImageContracts, ImageParts, InstallableImage, NativeExecutionDomain,
-    OutcomeKind, RelocationKind, RelocationTarget, RootLocation,
+    relocation, root_location, root_map_requirement, source_map_entry, structural_runtime_site,
+    trap_map_entry, FrameHomeKind, ImageContracts, ImageParts, InstallableImage,
+    NativeExecutionDomain, OutcomeKind, RelocationKind, RelocationTarget, RootLocation,
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
@@ -82,6 +82,7 @@ struct FunctionEncoder<'a> {
     safepoints: &'a mut Vec<crate::Safepoint>,
     root_requirements: &'a mut Vec<crate::image::RootMapRequirement>,
     heap_runtime_sites: &'a mut Vec<crate::HeapRuntimeSite>,
+    structural_runtime_sites: &'a mut Vec<crate::StructuralRuntimeSite>,
     source_map: &'a mut Vec<crate::SourceMapEntry>,
     trap_map: &'a mut Vec<crate::TrapMapEntry>,
     outcome_map: &'a mut Vec<crate::OutcomeMapEntry>,

@@ -9,7 +9,17 @@ pub(super) fn valid_frame_homes(frame: &FrameFacts, entry: &EntryMetadata) -> bo
         Some(expected) => expected,
         None => return false,
     };
-    if frame.homes.len() != expected {
+    if frame.homes.len() != expected
+        || frame
+            .returned_structural_owners
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+        || frame.returned_structural_owners.iter().any(|kind| {
+            !frame.homes.iter().any(|home| {
+                home.kind == *kind && matches!(home.value_type, ValueType::StructuralOwner(_))
+            })
+        })
+    {
         return false;
     }
     let mut kinds = HashSet::new();
@@ -98,6 +108,7 @@ pub(super) struct MetadataSlices<'a> {
     pub(super) safepoints: &'a [Safepoint],
     pub(super) root_requirements: &'a [RootMapRequirement],
     pub(super) heap_runtime_sites: &'a [HeapRuntimeSite],
+    pub(super) structural_runtime_sites: &'a [StructuralRuntimeSite],
     pub(super) source_map: &'a [SourceMapEntry],
     pub(super) trap_map: &'a [TrapMapEntry],
     pub(super) outcome_map: &'a [OutcomeMapEntry],

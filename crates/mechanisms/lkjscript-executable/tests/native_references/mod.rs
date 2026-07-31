@@ -45,8 +45,11 @@ impl NativeRuntimeServices for RecordingServices {
     }
 }
 
-fn buf(word: u64) -> NativeValue {
-    NativeValue::Reference(NativeReference::buf(word))
+fn product_ref(word: u64) -> NativeValue {
+    NativeValue::Reference(NativeReference::new(
+        ReferenceType::Product(LayoutIdentity::product(0)),
+        word,
+    ))
 }
 
 mod active_frames;

@@ -19,6 +19,10 @@ impl EvalResource {
         self.kind
     }
 
+    pub(crate) fn same_identity(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+
     pub(super) const fn new(
         key: ResourceKey,
         kind: ResourceKind,

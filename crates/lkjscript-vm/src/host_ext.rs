@@ -6,10 +6,9 @@ use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lkjscript_core::{
-    CapabilityKind, CleanupFailureLimits, CleanupFailures, Error, GcHeap as Arena, HeapObj,
-    OwnedReservation, ProviderId, ResourceKey, ResourceKind, ResourceOwnership,
-    ResourceTable as CoreResourceTable, ResourceTableError, ResourceTableLimits,
-    ResourceTokenParts, Result, ScopeId, Value,
+    CapabilityKind, CleanupFailureLimits, CleanupFailures, Error, OwnedReservation, ProviderId,
+    ResourceKey, ResourceKind, ResourceOwnership, ResourceTable as CoreResourceTable,
+    ResourceTableError, ResourceTableLimits, ResourceTokenParts, Result, ScopeId, Value,
 };
 use lkjscript_sys::OwnedFd;
 
@@ -118,18 +117,14 @@ mod resource_keys;
 mod resource_session;
 mod resource_token;
 mod resources;
-mod results;
 mod sockets;
 mod sqlite_bindings;
 mod sqlite_columns;
 mod sqlite_lifecycle;
 mod streams;
-mod strings;
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests;
 
 pub use paths::*;
-pub use results::*;
 pub use sockets::SocketReceiveError;
-pub use strings::*;

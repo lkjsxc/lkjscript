@@ -1,5 +1,9 @@
 mod failure;
+mod runtime;
+mod structural;
 use failure::verify_failure_cleanup;
+use runtime::verify_runtime_slot;
+use structural::verify_structural_call;
 
 use super::*;
 
@@ -12,6 +16,18 @@ pub(super) fn verify_instruction(
 ) -> Result<(), VerificationError> {
     for operand in instruction.operation.operands() {
         require_available(function, operand, available_values)?;
+        if observed_local_alias(function, operand)
+            && !matches!(
+                &instruction.operation,
+                Operation::StructuralCall(descriptor, _)
+                    if descriptor.operation().is_observation()
+                        || matches!(descriptor.operation(), StructuralOperation::Borrow { .. })
+            )
+        {
+            return Err(VerificationError::TypeMismatch(
+                "observed structural local use",
+            ));
+        }
     }
     verify_failure_cleanup(function, instruction, initialized_locals)?;
     match &instruction.operation {
@@ -22,6 +38,11 @@ pub(super) fn verify_instruction(
         Operation::StaticBytesConst(_) => {
             require_output(instruction, ValueType::StaticBytes, "static bytes constant")
         }
+        Operation::StaticStringConst(_, value_type) => require_output(
+            instruction,
+            ValueType::StaticString(*value_type),
+            "static string constant",
+        ),
         Operation::I64Add(left, right)
         | Operation::I64Sub(left, right)
         | Operation::I64Mul(left, right)
@@ -64,12 +85,20 @@ pub(super) fn verify_instruction(
             require_types(function, [*value], ValueType::Bool, "Bool not")?;
             require_output(instruction, ValueType::Bool, "Bool not")
         }
-        Operation::ReadLocal(local) => {
+        Operation::ReadLocal(local) | Operation::ObserveLocal(local) => {
             let index = local_index(function, *local)?;
             if !initialized_locals.get(index).copied().unwrap_or(false) {
                 return Err(VerificationError::LocalNotInitialized(*local));
             }
-            require_output(instruction, function.locals[index].value_type, "local read")
+            let value_type = function.locals[index].value_type;
+            if matches!(instruction.operation, Operation::ObserveLocal(_))
+                && !matches!(value_type, ValueType::StructuralOwner(_))
+            {
+                return Err(VerificationError::TypeMismatch(
+                    "observed local is not structural owner",
+                ));
+            }
+            require_output(instruction, value_type, "local read")
         }
         Operation::WriteLocal(local, value) => {
             let local_type = function.locals[local_index(function, *local)?].value_type;
@@ -97,6 +126,9 @@ pub(super) fn verify_instruction(
             verify_arguments(function, arguments, &signature, "runtime call")?;
             require_output(instruction, signature.result(), "runtime call")
         }
+        Operation::StructuralCall(descriptor, arguments) => {
+            verify_structural_call(function, instruction, descriptor, arguments)
+        }
         Operation::HeapCall(descriptor, arguments) => {
             if !descriptor.canonical_facts_are_valid()
                 || descriptor.input_types().len() != arguments.len()
@@ -115,67 +147,11 @@ pub(super) fn verify_instruction(
     }
 }
 
-pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), VerificationError> {
-    if !slot.plan_callable() {
-        return Err(VerificationError::TypeMismatch(
-            "encoder-owned runtime call",
-        ));
-    }
-    let signature = slot
-        .plan_signature()
-        .ok_or(VerificationError::TypeMismatch(
-            "encoder-owned runtime call",
-        ))?;
-    match slot {
-        RuntimeCallSlot::CollectReference
-            if signature.parameters() == [ValueType::Reference(crate::ReferenceType::Buf)]
-                && signature.result() == ValueType::Reference(crate::ReferenceType::Buf) => {}
-        RuntimeCallSlot::CollectReference => {
-            return Err(VerificationError::TypeMismatch(
-                "collecting runtime-call signature",
-            ));
-        }
-        RuntimeCallSlot::IdentityI64
-        | RuntimeCallSlot::Poll
-        | RuntimeCallSlot::EnterFunction
-        | RuntimeCallSlot::StdinHandle
-        | RuntimeCallSlot::ByteVectorNew
-        | RuntimeCallSlot::ByteVectorMove
-        | RuntimeCallSlot::ByteVectorBorrowShared
-        | RuntimeCallSlot::ByteVectorBorrowExclusive
-        | RuntimeCallSlot::ByteSliceLength
-        | RuntimeCallSlot::ByteSliceByteAt
-        | RuntimeCallSlot::ByteSliceReadU32Le
-        | RuntimeCallSlot::ByteSliceMutSetByte
-        | RuntimeCallSlot::ByteSliceMutWriteU32Le
-        | RuntimeCallSlot::ByteSliceEnd
-        | RuntimeCallSlot::ByteSliceMutEnd
-        | RuntimeCallSlot::ByteVectorDrop
-        | RuntimeCallSlot::StaticBytesLength
-        | RuntimeCallSlot::StaticBytesByteAt
-        | RuntimeCallSlot::StaticBytesClone
-        | RuntimeCallSlot::StaticBytesCopySlice
-        | RuntimeCallSlot::StaticBytesThaw
-        | RuntimeCallSlot::BytesMove
-        | RuntimeCallSlot::BytesBorrowShared
-        | RuntimeCallSlot::BytesLength
-        | RuntimeCallSlot::BytesByteAt
-        | RuntimeCallSlot::BytesClone
-        | RuntimeCallSlot::BytesCopySlice
-        | RuntimeCallSlot::BytesEndBorrow
-        | RuntimeCallSlot::BytesDrop
-        | RuntimeCallSlot::FreezeByteVector
-        | RuntimeCallSlot::ThawBytes => {}
-        RuntimeCallSlot::HeapDispatch
-        | RuntimeCallSlot::TakeRejectedEntry
-        | RuntimeCallSlot::ReserveFrame
-        | RuntimeCallSlot::RegisterFrame
-        | RuntimeCallSlot::PublishSafepoint
-        | RuntimeCallSlot::UnregisterFrame => {
-            return Err(VerificationError::TypeMismatch(
-                "encoder-owned runtime call",
-            ));
-        }
-    }
-    Ok(())
+fn observed_local_alias(function: &FunctionPlan, value: ValueId) -> bool {
+    function.blocks.iter().any(|block| {
+        block.instructions.iter().any(|instruction| {
+            instruction.output == value
+                && matches!(instruction.operation, Operation::ObserveLocal(_))
+        })
+    })
 }

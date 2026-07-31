@@ -5,35 +5,7 @@ pub use failure::*;
 
 use crate::opcode::Op;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProductId(u16);
-
-impl ProductId {
-    pub const fn new(raw: u16) -> Self {
-        Self(raw)
-    }
-
-    pub const fn raw(self) -> u16 {
-        self.0
-    }
-
-    pub const fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProductMetadata {
-    pub id: ProductId,
-    pub name: String,
-    pub fields: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProductFieldRef {
-    pub product: ProductId,
-    pub field: u8,
-}
+include!("chunk/product.rs");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConstId(pub u16);
@@ -54,7 +26,12 @@ pub struct FunctionProto {
     pub name: String,
     pub arity: u8,
     pub locals: u8,
+    pub memory_plan: Option<crate::MemoryPlanId>,
+    pub parameter_structurals: Vec<Option<crate::StructuralRepresentationId>>,
+    pub parameter_structural_places: Vec<Option<u8>>,
+    pub return_structural: Option<crate::StructuralRepresentationId>,
     pub parameter_resources: Vec<Option<crate::ResourceKind>>,
+    pub parameter_resource_places: Vec<Option<u8>>,
     pub return_resource: Option<ResourceReturnKind>,
     pub parameter_uniques: Vec<Option<UniqueValueKind>>,
     pub parameter_unique_places: Vec<Option<u8>>,
@@ -70,6 +47,14 @@ pub struct Chunk {
     pub constants: Vec<Constant>,
     pub protos: Vec<FunctionProto>,
     pub main: FunctionProto,
+    pub memory_plan: Option<crate::MemoryPlanId>,
+    pub structural_types: Vec<crate::StructuralTypeMetadata>,
+    pub structural_layouts: Vec<crate::StructuralLayoutMetadata>,
+    pub structural_representations: Vec<crate::StructuralRepresentationMetadata>,
+    pub structural_destinations: Vec<crate::StructuralDestinationMetadata>,
+    pub structural_destination_fields: Vec<crate::StructuralDestinationFieldRef>,
+    pub structural_aggregate_fields: Vec<crate::StructuralAggregateFieldRef>,
+    pub structural_payloads: Vec<crate::StructuralPayloadRef>,
     pub required_capabilities: Vec<crate::CapabilityKind>,
     pub global_names: Vec<String>,
     pub global_prototypes: Vec<Option<u32>>,
@@ -96,7 +81,12 @@ impl Chunk {
                 name: "<main>".into(),
                 arity: 0,
                 locals: 0,
+                memory_plan: None,
+                parameter_structurals: Vec::new(),
+                parameter_structural_places: Vec::new(),
+                return_structural: None,
                 parameter_resources: Vec::new(),
+                parameter_resource_places: Vec::new(),
                 return_resource: None,
                 parameter_uniques: Vec::new(),
                 parameter_unique_places: Vec::new(),
@@ -106,6 +96,14 @@ impl Chunk {
                 failure_cleanup_ranges: Vec::new(),
                 code: Vec::new(),
             },
+            memory_plan: None,
+            structural_types: Vec::new(),
+            structural_layouts: Vec::new(),
+            structural_representations: Vec::new(),
+            structural_destinations: Vec::new(),
+            structural_destination_fields: Vec::new(),
+            structural_aggregate_fields: Vec::new(),
+            structural_payloads: Vec::new(),
             required_capabilities: Vec::new(),
             global_names: Vec::new(),
             global_prototypes: Vec::new(),

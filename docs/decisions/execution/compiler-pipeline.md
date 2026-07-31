@@ -8,7 +8,7 @@ reinterpret the language.
 ## Status
 
 **Current** for validated exact the canonical source contract Semantic Source tree -> resolved
-typed HIR -> mandatory initial `Owned Buf`
+typed HIR -> mandatory affine `byte-vector` and whole-owner slice
 ownership analysis with fixed-point function effects -> verified typed SSA ->
 verified baseline normalization -> reference bytecode. The independent bounded SSA evaluator and
 bytecode link metadata are

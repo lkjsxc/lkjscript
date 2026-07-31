@@ -4,6 +4,27 @@ use crate::optimize::passes::*;
 use crate::{InstructionKind, ValueId, VerifiedProgram};
 
 pub fn copy_propagate(verified: &VerifiedProgram) -> crate::Result<VerifiedProgram> {
+    if verified.program().functions.iter().any(|function| {
+        function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                matches!(
+                    instruction.kind,
+                    InstructionKind::StructuralPublish { .. }
+                        | InstructionKind::DestinationCreate { .. }
+                        | InstructionKind::DestinationFieldInit { .. }
+                        | InstructionKind::DestinationFinish { .. }
+                        | InstructionKind::DestinationAbort { .. }
+                        | InstructionKind::AggregateFieldBorrow { .. }
+                        | InstructionKind::AggregateTag { .. }
+                        | InstructionKind::AggregateConsumePayload { .. }
+                        | InstructionKind::StringUtf8View { .. }
+                        | InstructionKind::StructuralCopy { .. }
+                )
+            })
+        })
+    }) {
+        return Ok(verified.clone());
+    }
     let mut program = verified.program().clone();
     for function in &mut program.functions {
         let mut copies = HashMap::new();

@@ -4,12 +4,12 @@ use crate::*;
 #[test]
 fn ownership_verification_has_an_aggregate_state_work_bound() {
     let count = 22_000_u32;
-    let parameters: Vec<_> = (0..count).map(|_| owned_buf_type()).collect();
+    let parameters: Vec<_> = (0..count).map(|_| byte_vector_type()).collect();
     let places: Vec<_> = (0..count).map(|index| owned_place(index, index)).collect();
     let block_parameters: Vec<_> = (0..count)
         .map(|index| BlockParameter {
             id: ValueId::new(index),
-            ty: owned_buf_type(),
+            ty: byte_vector_type(),
             owner_place: Some(PlaceId::new(index)),
             origin: Origin::SYNTHETIC,
         })
@@ -73,7 +73,7 @@ fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() 
     let mut nested_function = one_block_program();
     *nested_function.functions[0].signature.result =
         SsaType::List(Box::new(SsaType::Function(Box::new(
-            Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+            Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         ))));
     let error = verify(nested_function)
         .expect_err("collection-nested function signatures cannot launder ownership types");
@@ -98,7 +98,7 @@ fn ownership_cfg_rejects_borrow_use_across_blocks() {
     let function = Function {
         id: FunctionId::new(1),
         name: "cross-block-loan".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::I64),
+        signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::I64),
         places: vec![owned_place(0, 0)],
         failure_cleanups: Vec::new(),
         effects: EffectSet::READS_MEMORY,
@@ -108,7 +108,7 @@ fn ownership_cfg_rejects_borrow_use_across_blocks() {
                 id: BlockId::new(0),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
@@ -136,7 +136,7 @@ fn ownership_cfg_rejects_borrow_use_across_blocks() {
                     id: ValueId::new(2),
                     ty: SsaType::I64,
                     kind: InstructionKind::Runtime {
-                        operation: RuntimeOp::OwnedBufLen,
+                        operation: RuntimeOp::ByteSliceLength,
                         arguments: vec![ValueId::new(1)],
                         signature: Signature::monomorphic(vec![SsaType::ByteSlice], SsaType::I64),
                     },

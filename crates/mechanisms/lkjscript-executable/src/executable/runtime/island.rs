@@ -60,6 +60,20 @@ pub(super) extern "C" fn runtime_island_stdin(
     }
 }
 
+pub(super) extern "C" fn runtime_island_structural_dispatch(
+    state: *mut IslandCallState<'_>,
+    site: u64,
+    first: u64,
+    second: u64,
+    third: u64,
+) -> u64 {
+    // SAFETY: collector-free relocation binds this call to its live island state.
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return 0;
+    };
+    dispatch_structural(state, site, first, second, third)
+}
+
 pub(super) extern "C" fn runtime_island_reserve(
     state: *mut IslandCallState<'_>,
     function: u64,

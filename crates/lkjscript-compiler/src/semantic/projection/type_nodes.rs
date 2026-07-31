@@ -40,7 +40,6 @@ pub(super) fn classify(name: &str, parent: Option<&SourceNode>, index: usize) ->
         "i64" => Kind::TypeI64,
         "f64" => Kind::TypeF64,
         "string" => Kind::TypeString,
-        "buf" => Kind::TypeBuffer,
         "bytes" => Kind::TypeBytes,
         "byte-vector" => Kind::TypeByteVector,
         "byte-slice" => Kind::TypeByteSlice,

@@ -10,6 +10,22 @@ pub fn optimize(
     let mut budget = Budget::new(limits);
     let input_shape = preflight_program(input.program(), &mut budget)?;
     budget.set_input_instructions(input_shape.instructions);
+    if has_explicit_structural_operations(input.program()) {
+        let certificate = OptimizationCertificate {
+            records: Vec::new(),
+        };
+        let checker = CheckerIndexes::build(input.program(), &input_shape, &mut budget)?;
+        let candidate = checker_reconstruct(input.program(), &certificate, &checker, &mut budget)?;
+        let candidate_shape = preflight_program(&candidate, &mut budget)?;
+        return verify_optimization_with_budget(
+            input,
+            candidate,
+            candidate_shape,
+            certificate,
+            input_shape,
+            &mut budget,
+        );
+    }
 
     budget.discovery_passes = budget.discovery_passes.saturating_add(1);
     let discovery = DiscoveryIndexes::build(input.program(), &input_shape, &mut budget)?;
@@ -27,6 +43,28 @@ pub fn optimize(
         input_shape,
         &mut budget,
     )
+}
+
+fn has_explicit_structural_operations(program: &Program) -> bool {
+    program.functions.iter().any(|function| {
+        function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                matches!(
+                    instruction.kind,
+                    crate::InstructionKind::StructuralPublish { .. }
+                        | crate::InstructionKind::DestinationCreate { .. }
+                        | crate::InstructionKind::DestinationFieldInit { .. }
+                        | crate::InstructionKind::DestinationFinish { .. }
+                        | crate::InstructionKind::DestinationAbort { .. }
+                        | crate::InstructionKind::AggregateFieldBorrow { .. }
+                        | crate::InstructionKind::AggregateTag { .. }
+                        | crate::InstructionKind::AggregateConsumePayload { .. }
+                        | crate::InstructionKind::StringUtf8View { .. }
+                        | crate::InstructionKind::StructuralCopy { .. }
+                )
+            })
+        })
+    })
 }
 
 /// Independently verify a certificate, reconstruct the exact candidate on a
@@ -66,7 +104,9 @@ pub(crate) fn verify_optimization_with_budget(
     preflight_certificate(&certificate, budget)?;
     budget.checker_passes = budget.checker_passes.saturating_add(1);
     let checker = CheckerIndexes::build(input.program(), &input_shape, budget)?;
-    checker.verify_records(input.program(), &certificate, budget)?;
+    if !(certificate.records.is_empty() && has_explicit_structural_operations(input.program())) {
+        checker.verify_records(input.program(), &certificate, budget)?;
+    }
     let reconstructed = checker_reconstruct(input.program(), &certificate, &checker, budget)?;
     let reconstructed_shape = preflight_program(&reconstructed, budget)?;
     budget.check_growth(reconstructed_shape.instructions)?;

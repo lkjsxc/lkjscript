@@ -17,9 +17,10 @@ available owner at `place-end`, and verifies discharge before every explicit
 SSA terminator. It elaborates exact byte-vector and owned typed-resource cleanup on normal
 lexical exit and source-level return, break, continue, trap, and exit. Explicit
 typed-resource close suppresses implicit close. The evaluator consumes exact
-resource glue through its fake core table, and bytecode lowering selects generic,
-SQLite-connection, or SQLite-statement close before place end in the reference
-VM. Borrowed standard input is rejected as a guest-owned obligation.
+resource glue through its fake core table, and bytecode lowering emits the
+dedicated typed `ResourceDrop` operation; the VM selects generic, SQLite
+connection, or SQLite statement destruction from the exact live resource kind
+without constructing an ignored language `result`. Borrowed standard input is rejected as a guest-owned obligation.
 
 Forced native byte-vector execution performs exact explicit drop and verified
 instruction cleanup for trap, poll-fuel/resource-limit, and propagated callee
@@ -125,9 +126,11 @@ not guest-owned and are never closed by guest drop.
 ## Supported Shape
 
 Static, dead, and conditional whole-place drops are required for byte-vector,
-owned dynamic bytes, owned dynamic path, and all typed resources. `open` drop,
-partial moves, user destructors, unwinding, and resource-bearing aggregates are
-not Current in this slice.
+owned dynamic bytes, dynamic strings and paths, deterministic structural
+aggregates, and all typed resources. Unrestricted partial moves, user
+destructors, and unwinding are not Current. Resource-bearing aggregate
+boundaries use the exact generation-safe adapter rather than structural or
+tracing-heap storage.
 
 ## Independent Verification
 

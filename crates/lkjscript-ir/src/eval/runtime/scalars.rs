@@ -4,7 +4,7 @@ impl Evaluator<'_> {
     pub(crate) fn runtime_scalars(
         &mut self,
         operation: RuntimeOp,
-        arguments: Vec<EvalValue>,
+        arguments: Vec<&EvalValue>,
     ) -> std::result::Result<EvalValue, Flow> {
         use RuntimeOp as Op;
         match operation {
@@ -12,11 +12,17 @@ impl Evaluator<'_> {
                 self.numeric(operation, &arguments)
             }
             Op::EqualValue => binary(&arguments, |left, right| {
-                Ok(EvalValue::Bool(value_equal(left, right)?))
+                let equal = match self.structural_value_equal(left, right) {
+                    Some(result) => result?,
+                    None => value_equal(left, right)?,
+                };
+                Ok(EvalValue::Bool(equal))
             }),
             Op::SameObject => binary(&arguments, |left, right| {
                 let same = match (left, right) {
-                    (EvalValue::Buf(left), EvalValue::Buf(right)) => left.id == right.id,
+                    (EvalValue::Resource(left), EvalValue::Resource(right)) => {
+                        left.same_identity(right)
+                    }
                     _ => return Err(Flow::Trap("same-object category mismatch".into())),
                 };
                 Ok(EvalValue::Bool(same))
@@ -56,7 +62,7 @@ impl Evaluator<'_> {
     pub(crate) fn numeric(
         &self,
         operation: RuntimeOp,
-        arguments: &[EvalValue],
+        arguments: &[&EvalValue],
     ) -> std::result::Result<EvalValue, Flow> {
         exact_arity(arguments, 2)?;
         let left = arguments
@@ -94,7 +100,7 @@ impl Evaluator<'_> {
     pub(crate) fn compare(
         &self,
         operation: RuntimeOp,
-        arguments: &[EvalValue],
+        arguments: &[&EvalValue],
     ) -> std::result::Result<EvalValue, Flow> {
         exact_arity(arguments, 2)?;
         let left = arguments

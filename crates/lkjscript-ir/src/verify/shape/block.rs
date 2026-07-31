@@ -12,16 +12,15 @@ pub(crate) fn verify_block(
     dominators: &Dominators,
     type_parameters: &[&str],
 ) -> crate::Result<()> {
+    let frame_context = FrameVerificationContext {
+        program,
+        function,
+        types,
+        definitions,
+        dominators,
+    };
     if let Some(frame) = &block.metadata.frame_state {
-        verify_frame_state(
-            function,
-            block.id,
-            None,
-            frame,
-            types,
-            definitions,
-            dominators,
-        )?;
+        verify_frame_state(&frame_context, block.id, None, frame)?;
     }
     for (index, instruction) in block.instructions.iter().enumerate() {
         for operand in instruction.kind.operands() {
@@ -35,15 +34,7 @@ pub(crate) fn verify_block(
             )?;
         }
         if let Some(frame) = &instruction.metadata.frame_state {
-            verify_frame_state(
-                function,
-                block.id,
-                Some(index),
-                frame,
-                types,
-                definitions,
-                dominators,
-            )?;
+            verify_frame_state(&frame_context, block.id, Some(index), frame)?;
         }
         super::active_enum::projection(function, block, instruction)?;
         verify_instruction(program, function, instruction, types, type_parameters)?;

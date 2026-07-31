@@ -31,7 +31,7 @@ pub(super) fn core_signature(
         RuntimeOp::SameObject => {
             parameters.len() == 2
                 && parameters[0] == parameters[1]
-                && matches!(parameters[0], SsaType::Buf)
+                && matches!(parameters[0], SsaType::Resource(_))
                 && result == &SsaType::Bool
         }
         RuntimeOp::ListEqual => {
@@ -71,11 +71,10 @@ pub(super) fn core_signature(
             &[SsaType::Capability(Arguments), SsaType::I64],
             &crate::prelude_contract::option(SsaType::Str),
         ),
-        RuntimeOp::BufNew => exact(&[SsaType::I64], &SsaType::Buf),
-        RuntimeOp::OwnedBufNew => exact(&[SsaType::I64], &SsaType::ByteVector),
-        RuntimeOp::OwnedBufLen => exact(&[SsaType::ByteSlice], &SsaType::I64),
-        RuntimeOp::OwnedBufRef => exact(&[SsaType::ByteSlice, SsaType::I64], &SsaType::I64),
-        RuntimeOp::OwnedBufSet => exact(
+        RuntimeOp::ByteVectorNew => exact(&[SsaType::I64], &SsaType::ByteVector),
+        RuntimeOp::ByteSliceLength => exact(&[SsaType::ByteSlice], &SsaType::I64),
+        RuntimeOp::ByteSliceByteAt => exact(&[SsaType::ByteSlice, SsaType::I64], &SsaType::I64),
+        RuntimeOp::ByteSliceMutSetByte => exact(
             &[SsaType::ByteSliceMut, SsaType::I64, SsaType::I64],
             &SsaType::Unit,
         ),
@@ -93,27 +92,12 @@ pub(super) fn core_signature(
         RuntimeOp::CloneBytes => exact(&[SsaType::Bytes], &SsaType::Bytes),
         RuntimeOp::FreezeByteVector => exact(&[SsaType::ByteVector], &SsaType::Bytes),
         RuntimeOp::ThawBytes => exact(&[SsaType::Bytes], &SsaType::ByteVector),
-        RuntimeOp::BufLen => exact(&[SsaType::Buf], &SsaType::I64),
-        RuntimeOp::BufRef | RuntimeOp::BufGetU32 => {
-            exact(&[SsaType::Buf, SsaType::I64], &SsaType::I64)
-        }
-        RuntimeOp::BufSet | RuntimeOp::BufSetU32 => {
-            exact(&[SsaType::Buf, SsaType::I64, SsaType::I64], &SsaType::Unit)
-        }
-        RuntimeOp::BufClone | RuntimeOp::BufFromStr => match operation {
-            RuntimeOp::BufClone => exact(&[SsaType::Buf], &SsaType::Buf),
-            RuntimeOp::BufFromStr => exact(&[SsaType::Str], &SsaType::Buf),
-            _ => false,
-        },
-        RuntimeOp::BufToStr => exact(&[SsaType::Buf], &utf8_result(SsaType::Str)),
+        RuntimeOp::ConvertStringToBytes => exact(&[SsaType::Str], &SsaType::Bytes),
+        RuntimeOp::ConvertBytesToString => exact(&[SsaType::Bytes], &utf8_result(SsaType::Str)),
         RuntimeOp::PathFromStr => exact(&[SsaType::Str], &system_result(SsaType::Path)),
-        RuntimeOp::PathFromBuf => exact(&[SsaType::Buf], &system_result(SsaType::Path)),
-        RuntimeOp::PathToBuf => exact(&[SsaType::Path], &SsaType::Buf),
+        RuntimeOp::PathFromBytes => exact(&[SsaType::Bytes], &system_result(SsaType::Path)),
+        RuntimeOp::PathToBytes => exact(&[SsaType::Path], &SsaType::Bytes),
         RuntimeOp::PathToStr => exact(&[SsaType::Path], &utf8_result(SsaType::Str)),
-        RuntimeOp::BufSlice => exact(
-            &[SsaType::Buf, SsaType::I64, SsaType::I64],
-            &system_result(SsaType::Buf),
-        ),
         RuntimeOp::StrLen => exact(&[SsaType::Str], &SsaType::I64),
         RuntimeOp::StrRef => exact(&[SsaType::Str, SsaType::I64], &SsaType::I64),
         RuntimeOp::StrAppend => exact(&[SsaType::Str, SsaType::Str], &SsaType::Str),

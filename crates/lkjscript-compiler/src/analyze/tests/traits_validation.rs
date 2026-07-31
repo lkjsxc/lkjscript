@@ -72,9 +72,13 @@ fn bounds_require_declared_parameters_known_traits_and_satisfied_facts() {
     let unsatisfied = format!(
         "{}{}",
         bounded_identity("copy-value", "copy"),
-        main_source("buf", "copy-value/\nbuf-new/\n1\n/buf-new\n/copy-value")
+        main_source(
+            "byte-vector",
+            "copy-value/\nnew-byte-vector/\n1\n/new-byte-vector\n/copy-value"
+        )
     );
-    assert!(analysis_error(&unsatisfied).contains("does not satisfy trait copy"));
+    assert!(analysis_error(&unsatisfied)
+        .contains("ownership/reference generic instantiation is unavailable"));
 
     let first_class = format!(
         "{}{}",

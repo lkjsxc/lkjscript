@@ -27,6 +27,19 @@ impl JitSession {
         })
     }
 
+    pub fn take_returned_structural(
+        &mut self,
+        function: FunctionId,
+    ) -> Result<SemanticValue, EngineError> {
+        self.returned_structural.take().ok_or_else(|| {
+            EngineError::new(
+                FailureCode::InvocationFailure,
+                Some(function),
+                "native structural return has no exported semantic tree",
+            )
+        })
+    }
+
     pub(super) fn invoke_collector_free(
         &mut self,
         function: FunctionId,
@@ -54,7 +67,7 @@ impl JitSession {
         let report = self.objects[object_index]
             .installed
             .invoke_island_with_services(native, arguments, config, &mut services);
-        let export = report
+        let unique_export = report
             .as_ref()
             .ok()
             .and_then(|report| match report.outcome() {
@@ -70,17 +83,57 @@ impl JitSession {
                 ),
                 _ => None,
             });
-        let (resources, unique, last_resource) = services.finish();
+        let structural_export = report
+            .as_ref()
+            .ok()
+            .and_then(|report| match report.outcome() {
+                InvocationOutcome::Returned(NativeValue::StructuralOwner(owner)) => {
+                    Some(services.export_structural(owner))
+                }
+                _ => None,
+            });
+        let (resources, unique, structural, last_resource, last_trap, empty) = services.finish();
         self.native_resources.add(resources);
         self.native_unique.add(unique);
+        self.native_structural.add(structural);
         self.last_runtime_resource = last_resource;
-        match export {
+        self.last_runtime_trap = last_trap;
+        if !empty {
+            return Err(EngineError::new(
+                FailureCode::InvocationFailure,
+                Some(function),
+                format!(
+                    concat!(
+                        "native structural runtime completed with live obligations: ",
+                        "roots={}, loans={}, views={}, destinations={}, published={}, dropped={}",
+                    ),
+                    structural.live_roots,
+                    structural.live_loans,
+                    structural.live_views,
+                    structural.live_destinations,
+                    structural.roots_published,
+                    structural.roots_dropped,
+                ),
+            ));
+        }
+        match unique_export {
             Some(Ok(bytes)) => self.returned_unique = Some(bytes),
             Some(Err(_)) => {
                 return Err(EngineError::new(
                     FailureCode::InvocationFailure,
                     Some(function),
                     "native byte-vector return transfer failed",
+                ));
+            }
+            None => {}
+        }
+        match structural_export {
+            Some(Ok(value)) => self.returned_structural = Some(value),
+            Some(Err(_)) => {
+                return Err(EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "native structural return export failed",
                 ));
             }
             None => {}

@@ -1,21 +1,9 @@
 fn encode_object(out: &mut Encoder, object: &HeapObj) -> Result<()> {
     match object {
-        HeapObj::Str(text) => {
-            out.u8(0)?;
-            out.text(text)
-        }
         HeapObj::Pair { car, cdr } => {
             out.u8(1)?;
             encode_value(out, *car)?;
             encode_value(out, *cdr)
-        }
-        HeapObj::Buf(bytes) => {
-            out.u8(2)?;
-            out.bytes(bytes)
-        }
-        HeapObj::Path(bytes) => {
-            out.u8(3)?;
-            out.bytes(bytes)
         }
         HeapObj::Product { product, fields } => {
             out.u8(4)?;
@@ -37,13 +25,10 @@ fn encode_object(out: &mut Encoder, object: &HeapObj) -> Result<()> {
 
 fn decode_object(input: &mut Decoder<'_>) -> Result<HeapObj> {
     Ok(match input.u8()? {
-        0 => HeapObj::Str(input.text()?),
         1 => HeapObj::Pair {
             car: decode_value(input)?,
             cdr: decode_value(input)?,
         },
-        2 => HeapObj::Buf(input.bytes()?.to_vec()),
-        3 => HeapObj::Path(input.bytes()?.to_vec()),
         4 => HeapObj::Product {
             product: ProductId::new(input.u16()?),
             fields: decode_values(input)?,
@@ -98,10 +83,15 @@ fn reserve<T>(length: usize) -> Result<Vec<T>> {
 
 fn validate_symbol(value: Value, symbols: &[Option<String>]) -> Result<()> {
     if let Some(index) = value.as_symbol() {
-        let index = usize::try_from(index).map_err(|_| Error::msg("symbol index overflow"))?;
-        if symbols.get(index).and_then(Option::as_ref).is_none() {
-            return Err(Error::msg("owned value references a missing symbol"));
-        }
+        validate_symbol_index(index, symbols)?;
+    }
+    Ok(())
+}
+
+fn validate_symbol_index(index: u32, symbols: &[Option<String>]) -> Result<()> {
+    let index = usize::try_from(index).map_err(|_| Error::msg("symbol index overflow"))?;
+    if symbols.get(index).and_then(Option::as_ref).is_none() {
+        return Err(Error::msg("owned value references a missing symbol"));
     }
     Ok(())
 }

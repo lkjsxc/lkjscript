@@ -1,14 +1,18 @@
 pub(crate) struct Encoder {
     bytes: Vec<u8>,
-    max: usize,
+    limits: ExecutionOutcomeCodecLimits,
 }
 
 impl Encoder {
-    fn new(max: usize) -> Self {
+    fn new(limits: ExecutionOutcomeCodecLimits) -> Self {
         Self {
             bytes: Vec::new(),
-            max,
+            limits,
         }
+    }
+
+    pub(crate) const fn structural_limits(&self) -> StructuralSnapshotLimits {
+        self.limits.structural
     }
 
     fn reserve(&mut self, additional: usize) -> Result<()> {
@@ -17,7 +21,7 @@ impl Encoder {
             .len()
             .checked_add(additional)
             .ok_or_else(|| Error::msg("wire length overflow"))?;
-        if total > self.max {
+        if total > self.limits.max_wire_bytes {
             return Err(Error::msg("wire value exceeds byte bound"));
         }
         self.bytes
@@ -74,14 +78,23 @@ impl Encoder {
 pub(crate) struct Decoder<'a> {
     bytes: &'a [u8],
     cursor: usize,
+    limits: ExecutionOutcomeCodecLimits,
 }
 
 impl<'a> Decoder<'a> {
-    fn new(bytes: &'a [u8], max: usize) -> Result<Self> {
-        if bytes.len() > max {
+    fn new(bytes: &'a [u8], limits: ExecutionOutcomeCodecLimits) -> Result<Self> {
+        if bytes.len() > limits.max_wire_bytes {
             return Err(Error::msg("wire value exceeds byte bound"));
         }
-        Ok(Self { bytes, cursor: 0 })
+        Ok(Self {
+            bytes,
+            cursor: 0,
+            limits,
+        })
+    }
+
+    pub(crate) const fn structural_limits(&self) -> StructuralSnapshotLimits {
+        self.limits.structural
     }
 
     fn take(&mut self, length: usize) -> Result<&'a [u8]> {

@@ -1,4 +1,4 @@
-use crate::canonical::{compile, evaluator, execution, forced, Scalar};
+use crate::canonical::{compile, evaluator, execution, Scalar};
 use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_jit::{execute_forced, execute_optimizing, FailureCode, JitConfig};
@@ -6,29 +6,22 @@ use lkjscript_vm::run_chunk;
 
 #[test]
 fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallback() {
-    let unsupported = [
-        (
-            "host.lkjscript",
-            concat!(
-                "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
-                "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
-                "flush/\nstdio\n/flush\n/main\n"
-            ),
-        ),
-    ];
-    for (name, source) in unsupported {
-        let program = compile(source, name);
-        let error = execute_forced(
-            program.ssa(),
-            &ExecutionConfig::default(),
-            JitConfig::default(),
-        )
-        .expect_err("forced native must reject unsupported semantics");
-        assert!(matches!(
-            error.code(),
-            FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
-        ));
-    }
+    let source = concat!(
+        "main/\nsig/\ninputs/\ncapability/\nstdio\n/capability\n/inputs\noutput/\nunit\n/output\n/sig\n",
+        "params/\nstdio\ncapability/\nstdio\n/capability\n/params\n",
+        "flush/\nstdio\n/flush\n/main\n"
+    );
+    let program = compile(source, "host.lkjscript");
+    let error = execute_forced(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect_err("forced native must reject unsupported semantics");
+    assert!(matches!(
+        error.code(),
+        FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
+    ));
 
     let recursion = "def/\nname/\nrecur\n/name\nfn/\nsig/\ninputs/\ni64\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nn\ni64\n/params\nif/\nless-than-or-equal/\nn\n0\n/less-than-or-equal\n0\nrecur/\nsubtract/\nn\n1\n/subtract\n/recur\n/if\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nrecur/\n3\n/recur\n/main\n";
     let program = compile(recursion, "recursion.lkjscript");
@@ -56,79 +49,58 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
         matches!(executed.outcome, ExecutionOutcome::Returned(value) if value.as_str() == Some(""))
     );
     assert_eq!(executed.stats.vm_fallbacks, 0);
-    assert_eq!(executed.stats.allocations, 1);
-    assert_eq!(executed.stats.collections, 1);
-    assert_eq!(executed.stats.runtime_heap_attempts, 1);
-    assert_eq!(executed.stats.runtime_heap_successes, 1);
+    assert_eq!(executed.stats.allocations, 0);
+    assert_eq!(executed.stats.collections, 0);
+    assert_eq!(executed.stats.runtime_heap_attempts, 0);
+    assert_eq!(executed.stats.runtime_heap_successes, 0);
+    assert_eq!(executed.stats.collector_runtime_invocations, 0);
+    assert!(executed.stats.structural_runtime_calls > 0);
+    assert_eq!(executed.stats.native_structural.live_roots, 0);
     assert!(executed.stats.native_entries > 0);
 }
 
 #[test]
-fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
-    let cases = [
-        (
-            "buf-slice-negative-offset.lkjscript",
-            concat!(
-                "match/\nunwrap-err/\ncopy-buf-slice/\nbuf-new/\n1\n/buf-new\n-1\n1\n",
-                "/copy-buf-slice\n/unwrap-err\narms/\narm/\nvariant-pattern/\ntype/\n",
-                "system-error/\n/system-error\n/type\nvariant/\nunsupported\n/variant\nfields/\n",
-                "variant-field-pattern/\nname/\ncode\n/name\nwildcard/\n/wildcard\n",
-                "/variant-field-pattern\nvariant-field-pattern/\nname/\ndetail\n/name\n",
-                "wildcard/\n/wildcard\n/variant-field-pattern\n/fields\n/variant-pattern\n",
-                "true\n/arm\narm/\nwildcard/\n/wildcard\nfalse\n/arm\n/arms\n/match",
-            ),
-        ),
-        (
-            "buf-slice-negative-length.lkjscript",
-            "not/\nis-ok/\ncopy-buf-slice/\nbuf-new/\n1\n/buf-new\n0\n-1\n/copy-buf-slice\n/is-ok\n/not",
-        ),
-        (
-            "buf-slice-out-of-range.lkjscript",
-            "not/\nis-ok/\ncopy-buf-slice/\nbuf-new/\n1\n/buf-new\n1\n1\n/copy-buf-slice\n/is-ok\n/not",
-        ),
-    ];
-    for (name, expression) in cases {
-        let source = format!(
-            "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\n{expression}\n/main\n"
-        );
-        let program = compile(&source, name);
-        let expected = Scalar::Bool(true);
-        assert_eq!(
-            evaluator(evaluate(program.ssa(), &EvalConfig::default())),
-            expected
-        );
-        assert_eq!(
-            execution(run_chunk(
-                program.bytecode(),
-                &lkjscript_vm::ExecutionInputs::default(),
-                &ExecutionConfig::default()
-            )),
-            expected
-        );
-        let baseline = forced(&source, name);
-        assert_eq!(execution(baseline.outcome), expected);
-        assert_eq!(baseline.stats.vm_fallbacks, 0);
-        let proof = execute_optimizing(
-            program.ssa(),
+fn bytes_conversion_results_match_evaluator_vm_and_forced_native_fails_closed() {
+    let success = concat!(
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\n",
+        "let/\nbind/\nb\nconvert-string-to-bytes/\nempty-string/\n/empty-string\n",
+        "/convert-string-to-bytes\n/bind\nstring-byte-length/\nunwrap-ok/\n",
+        "convert-bytes-to-string/\nb\n/convert-bytes-to-string\n/unwrap-ok\n/string-byte-length\n/let\n/main\n",
+    );
+    let success_program = compile(success, "bytes-to-string-success.lkjscript");
+    let expected = Scalar::I64(0);
+    assert_eq!(
+        evaluator(evaluate(success_program.ssa(), &EvalConfig::default())),
+        expected
+    );
+    assert_eq!(
+        execution(run_chunk(
+            success_program.bytecode(),
+            &lkjscript_vm::ExecutionInputs::default(),
+            &ExecutionConfig::default(),
+        )),
+        expected
+    );
+    assert_eq!(
+        execute_forced(
+            success_program.ssa(),
             &ExecutionConfig::default(),
             JitConfig::default(),
         )
-        .expect("forced proof SystemError execution");
-        assert_eq!(execution(proof.outcome), expected);
-        assert_eq!(proof.stats.vm_fallbacks, 0);
-    }
+        .expect_err("mixed traced string and unique bytes reject before native entry")
+        .code(),
+        FailureCode::UnsupportedType
+    );
 
     let invalid_utf8 = concat!(
-        "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\nvar/\nname/\nb\n/name\n",
-        "type/\nbuf\n/type\nbuf-new/\n1\n/buf-new\ndo/\nbuf-set-byte/\nb\n0\n255\n/buf-set-byte\n",
-        "match/\nunwrap-err/\nconvert-buf-to-string/\nb\n/convert-buf-to-string\n/unwrap-err\narms/\narm/\n",
-        "variant-pattern/\ntype/\nutf8-error/\n/utf8-error\n/type\nvariant/\n",
-        "invalid-leading-byte\n/variant\nfields/\nvariant-field-pattern/\nname/\noffset\n/name\n",
-        "i64-pattern/\n0\n/i64-pattern\n/variant-field-pattern\n/fields\n/variant-pattern\n",
-        "true\n/arm\narm/\nwildcard/\n/wildcard\nfalse\n/arm\n/arms\n/match\n",
-        "/do\n/var\n/main\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\nbool\n/output\n/sig\n",
+        "let/\nbind/\nv\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\ndo/\n",
+        "byte-slice-mut-set-byte/\nborrow-mut/\nv\n/borrow-mut\n0\n255\n/byte-slice-mut-set-byte\n",
+        "let/\nbind/\nb\nfreeze-byte-vector/\nmove/\nv\n/move\n/freeze-byte-vector\n/bind\n",
+        "not/\nis-ok/\nconvert-bytes-to-string/\nb\n/convert-bytes-to-string\n/is-ok\n/not\n",
+        "/let\n/do\n/let\n/main\n",
     );
-    let program = compile(invalid_utf8, "buf-to-str-error.lkjscript");
+    let program = compile(invalid_utf8, "bytes-to-string-error.lkjscript");
     let expected = Scalar::Bool(true);
     assert_eq!(
         evaluator(evaluate(program.ssa(), &EvalConfig::default())),
@@ -138,21 +110,27 @@ fn generated_buffer_result_boundaries_match_vm_and_evaluator_exactly() {
         execution(run_chunk(
             program.bytecode(),
             &lkjscript_vm::ExecutionInputs::default(),
-            &ExecutionConfig::default()
+            &ExecutionConfig::default(),
         )),
         expected
     );
-    let baseline = forced(invalid_utf8, "buf-to-str-error.lkjscript");
-    assert_eq!(execution(baseline.outcome), expected);
-    assert_eq!(baseline.stats.vm_fallbacks, 0);
-    assert!(baseline.stats.native_entries > 0);
-    let proof = execute_optimizing(
-        program.ssa(),
-        &ExecutionConfig::default(),
-        JitConfig::default(),
-    )
-    .expect("forced proof UTF-8 error execution");
-    assert_eq!(execution(proof.outcome), expected);
-    assert_eq!(proof.stats.vm_fallbacks, 0);
-    assert!(proof.stats.native_entries > 0);
+    for result in [
+        execute_forced(
+            program.ssa(),
+            &ExecutionConfig::default(),
+            JitConfig::default(),
+        ),
+        execute_optimizing(
+            program.ssa(),
+            &ExecutionConfig::default(),
+            JitConfig::default(),
+        ),
+    ] {
+        assert_eq!(
+            result
+                .expect_err("mixed traced string and unique bytes reject before native entry")
+                .code(),
+            FailureCode::UnsupportedType
+        );
+    }
 }

@@ -27,6 +27,7 @@ impl FunctionBuilder<'_> {
         let Some(value_id) = self.lower_expr(value)? else {
             return Err(Error::msg("HIR return value is already divergent"));
         };
+        self.drop_abandoned_structural_owners(value_id, value.origin)?;
         self.cleanup_all_places(value.origin)?;
         self.terminate(Terminator::Return(value_id))?;
         Ok(None)

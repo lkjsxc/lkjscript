@@ -25,7 +25,10 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
         .expect_err("one moved and one initialized branch must not join");
     assert!(
         mismatch.to_string().contains("implicitly transfer")
-            || mismatch.to_string().contains("join exactly"),
+            || mismatch.to_string().contains("join exactly")
+            || mismatch
+                .to_string()
+                .contains("lacks nonempty failure cleanup"),
         "wrong branch mismatch diagnostic: {mismatch}"
     );
 
@@ -33,7 +36,7 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
     returned_original.functions[1].blocks[1].terminator = Terminator::Return(ValueId::new(0));
     returned_original.functions[1].blocks[1]
         .metadata
-        .failure_cleanup = None;
+        .failure_cleanup = Some(FailureCleanupId::new(2));
     let error = verify(returned_original)
         .expect_err("Move followed by Return of the original owner must fail");
     assert!(error.to_string().contains("unavailable affine"), "{error}");
@@ -41,7 +44,7 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
     let direct_return = Function {
         id: FunctionId::new(1),
         name: "implicit-return".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        signature: Signature::monomorphic(vec![byte_vector_type()], byte_vector_type()),
         places: vec![owned_place(0, 0)],
         failure_cleanups: vec![FailureCleanupPlan {
             id: FailureCleanupId::new(0),
@@ -57,7 +60,7 @@ fn ownership_cfg_dataflow_accepts_equal_moves_and_rejects_mismatched_paths() {
             id: BlockId::new(0),
             parameters: vec![BlockParameter {
                 id: ValueId::new(0),
-                ty: owned_buf_type(),
+                ty: byte_vector_type(),
                 owner_place: Some(PlaceId::new(0)),
                 origin: Origin::SYNTHETIC,
             }],

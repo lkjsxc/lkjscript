@@ -1,6 +1,6 @@
 //! Linux filesystem open/read/write/access via owned libc externs.
 
-use std::ffi::CString;
+use std::ffi::{c_char, c_void, CString};
 use std::os::fd::RawFd;
 
 use crate::fd::{errno, FdError, OwnedFd};
@@ -19,13 +19,13 @@ const ENOTDIR: i32 = 20;
 const EINTR: i32 = 4;
 
 extern "C" {
-    fn open(pathname: *const i8, flags: i32, mode: u32) -> i32;
-    fn read(fd: i32, buf: *mut u8, count: usize) -> isize;
-    fn write(fd: i32, buf: *const u8, count: usize) -> isize;
-    fn access(pathname: *const i8, mode: i32) -> i32;
+    fn open(pathname: *const c_char, flags: i32, ...) -> i32;
+    fn read(fd: i32, buf: *mut c_void, count: usize) -> isize;
+    fn write(fd: i32, buf: *const c_void, count: usize) -> isize;
+    fn access(pathname: *const c_char, mode: i32) -> i32;
     fn fsync(fd: i32) -> i32;
     fn ftruncate(fd: i32, length: i64) -> i32;
-    fn rename(oldpath: *const i8, newpath: *const i8) -> i32;
+    fn rename(oldpath: *const c_char, newpath: *const c_char) -> i32;
 }
 
 fn c_path(path: &[u8]) -> Result<CString, FdError> {
@@ -97,7 +97,7 @@ pub fn rename_path(from: &[u8], to: &[u8]) -> Result<(), FdError> {
 
 pub fn read_fd(fd: RawFd, buf: &mut [u8]) -> Result<usize, FdError> {
     loop {
-        let n = unsafe { read(fd, buf.as_mut_ptr(), buf.len()) };
+        let n = unsafe { read(fd, buf.as_mut_ptr().cast(), buf.len()) };
         if n >= 0 {
             return Ok(n as usize);
         }
@@ -110,7 +110,7 @@ pub fn read_fd(fd: RawFd, buf: &mut [u8]) -> Result<usize, FdError> {
 
 pub fn write_fd(fd: RawFd, buf: &[u8]) -> Result<usize, FdError> {
     loop {
-        let n = unsafe { write(fd, buf.as_ptr(), buf.len()) };
+        let n = unsafe { write(fd, buf.as_ptr().cast(), buf.len()) };
         if n >= 0 {
             return Ok(n as usize);
         }

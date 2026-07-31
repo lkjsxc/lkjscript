@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::verify::*;
-use crate::{Block, Function, IrError, SsaType, ValueId};
+use crate::{Block, Function, IrError, Program, SsaType, ValueId};
 
 pub(crate) fn ownership_last_uses(block: &Block) -> BTreeMap<ValueId, usize> {
     let mut uses = BTreeMap::new();
@@ -27,28 +27,33 @@ pub(crate) fn ownership_last_uses(block: &Block) -> BTreeMap<ValueId, usize> {
 }
 
 pub(crate) fn expire_unplaced_affine(
-    state: &mut OwnershipState,
-    last_use: &BTreeMap<ValueId, usize>,
-    position: usize,
+    _state: &mut OwnershipState,
+    _last_use: &BTreeMap<ValueId, usize>,
+    _position: usize,
 ) {
-    let owners: BTreeSet<ValueId> = state.owners.values().copied().collect();
-    state.affine.retain(|value, _| {
-        owners.contains(value) || last_use.get(value).is_some_and(|last| *last >= position)
-    });
+    // Affine owners leave verifier state only through executable ownership events.
 }
 
 pub(crate) fn verify_frame_affine_available(
+    program: &Program,
     function: &Function,
     frame: Option<&crate::FrameState>,
     state: &OwnershipState,
     types: &[SsaType],
+    nonowned_affine: &std::collections::HashSet<ValueId>,
 ) -> crate::Result<()> {
     let Some(frame) = frame else {
         return Ok(());
     };
-    verify_terminator_affine_available(state, frame_values(frame), types)?;
+    verify_terminator_affine_available(
+        program,
+        state,
+        frame_values(frame),
+        types,
+        nonowned_affine,
+    )?;
     for local in &frame.locals {
-        if !is_owned_value(value_type(types, local.value)?) {
+        if !is_owned_value(program, value_type(types, local.value)?) {
             continue;
         }
         let Some(place) = function
@@ -69,13 +74,22 @@ pub(crate) fn verify_frame_affine_available(
 }
 
 pub(crate) fn verify_terminator_affine_available(
+    program: &Program,
     state: &OwnershipState,
     values: impl IntoIterator<Item = ValueId>,
     types: &[SsaType],
+    nonowned_affine: &std::collections::HashSet<ValueId>,
 ) -> crate::Result<()> {
     for value in values {
-        if is_affine(value_type(types, value)?) && !state.affine.contains_key(&value) {
-            return fail("SSA metadata or terminator reuses an unavailable affine value");
+        if is_affine(program, value_type(types, value)?)
+            && !nonowned_affine.contains(&value)
+            && !state.affine.contains_key(&value)
+        {
+            return fail(format!(
+                "SSA metadata or terminator reuses unavailable affine value {} of type {:?}",
+                value.raw(),
+                value_type(types, value)?,
+            ));
         }
     }
     Ok(())

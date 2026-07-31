@@ -136,7 +136,7 @@ fn end_borrow(
     Ok(())
 }
 
-fn pop_used_view(
+pub(in crate::validation::instruction) fn pop_used_view(
     state: &mut State,
     mutable: bool,
     proto: &FunctionProto,

@@ -18,7 +18,10 @@ fn only_explicit_legacy_traced_values_retain_heap_objects() {
     for root in non_roots {
         let mut heap = GcHeap::default();
         let object = heap
-            .alloc(HeapObj::Str("not-rooted".into()))
+            .alloc(HeapObj::Pair {
+                car: Value::UNIT,
+                cdr: Value::EMPTY_LIST,
+            })
             .expect("object allocation");
         assert_eq!(object.as_legacy_traced(), Some(0));
         heap.collect(&[root]);
@@ -27,7 +30,10 @@ fn only_explicit_legacy_traced_values_retain_heap_objects() {
 
     let mut heap = GcHeap::default();
     let object = heap
-        .alloc(HeapObj::Str("rooted".into()))
+        .alloc(HeapObj::Pair {
+            car: Value::UNIT,
+            cdr: Value::EMPTY_LIST,
+        })
         .expect("object allocation");
     heap.collect(&[object]);
     assert!(heap.get(object).is_ok());

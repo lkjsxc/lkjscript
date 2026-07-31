@@ -109,7 +109,10 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         {
             Constant::I64(number) => Ok(Value::from_i64(*number)),
             Constant::F64(number) => Ok(Value::from_f64_bits(number.to_bits())),
-            Constant::Str(text) => self.arena.alloc(HeapObj::Str(text.clone())),
+            Constant::Str(_) => Ok(Value::from_static_string(
+                u16::try_from(id)
+                    .map_err(|_| Error::msg("static string constant index exceeds u16"))?,
+            )),
             Constant::StaticBytes(_) => Ok(Value::from_static_bytes(
                 u16::try_from(id)
                     .map_err(|_| Error::msg("static bytes constant index exceeds u16"))?,

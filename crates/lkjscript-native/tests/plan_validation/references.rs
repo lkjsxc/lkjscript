@@ -2,12 +2,14 @@ use super::*;
 
 #[test]
 fn verifies_exact_reference_signatures_and_type_use() -> Result<(), Box<dyn std::error::Error>> {
-    let buf = ValueType::Reference(ReferenceType::Buf);
-    let string = ValueType::Reference(ReferenceType::Str);
+    let product_ref = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
+    let other_product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(1)));
 
     let mut plan = MachinePlanBuilder::new();
-    let function =
-        plan.declare_function(SourceFunctionId::new(10), Signature::new(vec![buf], buf)?)?;
+    let function = plan.declare_function(
+        SourceFunctionId::new(10),
+        Signature::new(vec![product_ref], product_ref)?,
+    )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
@@ -26,7 +28,7 @@ fn verifies_exact_reference_signatures_and_type_use() -> Result<(), Box<dyn std:
     let mut plan = MachinePlanBuilder::new();
     let function = plan.declare_function(
         SourceFunctionId::new(11),
-        Signature::new(vec![string], buf)?,
+        Signature::new(vec![other_product], product_ref)?,
     )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;
@@ -44,7 +46,7 @@ fn verifies_exact_reference_signatures_and_type_use() -> Result<(), Box<dyn std:
     let mut plan = MachinePlanBuilder::new();
     let function = plan.declare_function(
         SourceFunctionId::new(12),
-        Signature::new(vec![ValueType::I64], buf)?,
+        Signature::new(vec![ValueType::I64], product_ref)?,
     )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;

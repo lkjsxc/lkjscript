@@ -42,24 +42,16 @@ impl Operation {
             | Self::EmptyStr
             | Self::ArgCount
             | Self::Arg => value_signature(self),
-            Self::BufNew
-            | Self::BufLen
-            | Self::BufRef
-            | Self::BufSet
-            | Self::OwnedBufNew
-            | Self::OwnedBufLen
-            | Self::OwnedBufRef
-            | Self::OwnedBufSet
-            | Self::BufClone
-            | Self::BufFromStr
-            | Self::BufToStr
+            Self::ByteVectorNew
+            | Self::ByteSliceLength
+            | Self::ByteSliceByteAt
+            | Self::ByteSliceMutSetByte
+            | Self::ConvertStringToBytes
+            | Self::ConvertBytesToString
             | Self::PathFromStr
-            | Self::PathFromBuf
-            | Self::PathToBuf
+            | Self::PathFromBytes
+            | Self::PathToBytes
             | Self::PathToStr
-            | Self::BufSlice
-            | Self::BufGetU32
-            | Self::BufSetU32
             | Self::StrLen
             | Self::StrRef
             | Self::StrAppend

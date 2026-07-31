@@ -6,7 +6,9 @@ use lkjscript_executable::NativeServiceError;
 use lkjscript_native::{CapabilityKind, NativeResource, NativeUnique, ResourceKind};
 
 mod services;
+mod structural;
 mod unique;
+use structural::JitStructuralRuntime;
 use unique::JitUniqueRuntime;
 
 struct BorrowedStandardInput;
@@ -18,6 +20,7 @@ pub(crate) struct JitIslandServices {
     scope: ScopeId,
     stats: NativeResourceStats,
     unique: JitUniqueRuntime,
+    structural: JitStructuralRuntime,
 }
 
 impl JitIslandServices {
@@ -39,6 +42,7 @@ impl JitIslandServices {
             scope,
             stats: NativeResourceStats::default(),
             unique: JitUniqueRuntime::new(config)?,
+            structural: JitStructuralRuntime::new(config)?,
         })
     }
 
@@ -49,12 +53,22 @@ impl JitIslandServices {
         self.unique.export_owner(owner)
     }
 
+    pub(crate) fn export_structural(
+        &mut self,
+        owner: lkjscript_native::NativeStructuralOwner,
+    ) -> Result<lkjscript_core::SemanticValue, NativeServiceError> {
+        self.structural.export(owner)
+    }
+
     pub(crate) fn finish(
         mut self,
     ) -> (
         NativeResourceStats,
         NativeUniqueStats,
+        NativeStructuralStats,
         Option<ResourceLimitKind>,
+        Option<String>,
+        bool,
     ) {
         if let Some(key) = self.stdin.take() {
             if self
@@ -71,9 +85,19 @@ impl JitIslandServices {
         self.stats.ordinary_obligations = table_stats.ordinary_obligations() as u64;
         self.stats.borrowed_obligations = table_stats.borrowed_open() as u64;
         self.stats.emergency_obligations = self.table.emergency_obligations().count() as u64;
-        let last_resource = self.unique.last_resource();
+        let unique_resource = self.unique.last_resource();
         let unique = self.unique.finish();
-        (self.stats, unique, last_resource)
+        let last_trap = self.structural.take_last_trap();
+        let (structural, structural_resource) = self.structural.finish();
+        let empty = structural.teardown_failures == 0;
+        (
+            self.stats,
+            unique,
+            structural,
+            structural_resource.or(unique_resource),
+            last_trap,
+            empty,
+        )
     }
 
     fn native_stdin(&mut self) -> Result<NativeResource, NativeServiceError> {

@@ -1,12 +1,13 @@
 //! Stack VM with validated input, structured outcomes, and bounded execution.
 
 mod host;
-mod host_buf;
+mod host_bytes;
 mod host_ext;
 mod host_term;
 mod run;
 
 use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome, ValidatedChunk};
+#[cfg(feature = "jit")]
 use lkjscript_jit::{JitSession, JitStats};
 
 pub use run::{NoTier, Vm};
@@ -26,6 +27,7 @@ pub fn run_chunk(
     Vm::new(chunk, NoTier, inputs.clone(), config.clone()).run()
 }
 
+#[cfg(feature = "jit")]
 pub fn run_chunk_auto(
     chunk: &ValidatedChunk,
     inputs: &ExecutionInputs,

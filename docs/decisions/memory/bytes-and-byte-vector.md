@@ -8,9 +8,9 @@ and checked little-endian u32 read/write use deterministic unique storage throug
 evaluator, VM, forced baseline, and forced proof tiers. The immutable-bytes
 projection and six operations below execute through the same four engines.
 Native literals use verified image data; dynamic values use the noncollecting
-unique service. Ranged borrowed views, host byte operations, and remaining
-byte-vector operations are not Current. Transitional `buf` remains separately
-traced; it is neither an alias nor a conversion path.
+unique service. Whole-owner borrowed views and host byte operations are
+Current; ranged source view syntax remains non-Current. Removed buffer
+spellings are not aliases or conversion paths.
 
 ## Byte-Vector
 
@@ -124,19 +124,22 @@ whole-place move and return transfer the existing owner. Strict UTF-8 conversion
 remains separate. No accepted path owner is reference counted, traced, or
 aliased.
 
-The core store now provides bounded path construction, structural copy, exact
-value comparison, release, and returned-backing transfer with stale and wrong-
-layout rejection. Current evaluator/VM source paths still use `HeapObj::Path`.
-The constructor's `result path system-error` envelope is copyable/traced today;
-unique path bytes cannot enter it until whole-value aggregate transfer/drop is
-implemented or the affected contract and corpus are atomically rewritten.
+The core store provides bounded path construction, structural copy, exact value
+comparison, release, and returned-backing transfer with stale and wrong-layout
+rejection. Evaluator and VM path leaves use deterministic key-backed storage;
+`HeapObj::Path` is absent. Constructor `result path system-error` values must use
+exact whole-value structural transfer/drop. A traced enum containing a path key
+is an invalid mixed graph, not a compatibility route.
 
-## Transitional Removal
+## Completed Transitional Removal
 
-The cutover removes source `buf`, every `buf-*` operation, `HeapObj::Buf`,
-identity semantics for buffers, native buffer heap sites, package uses, and
-compatibility tests. Canonical operation names use `byte-vector`, `byte-slice`,
-`byte-slice-mut`, and `bytes`; removed names have no aliases.
+The cutover removed the transitional source type and operations, traced heap
+variant, identity semantics, native heap sites, package uses, tests, and
+metrics. Canonical operations use `byte-vector`, `byte-slice`,
+`byte-slice-mut`, and `bytes`; string and path conversions use immutable bytes.
+Bulk host calls accept checked shared or exclusive slices and do not retain the
+view. Removed names have exact diagnostics and no aliases.
 
-Package and contract identities are regenerated only after the corpus and all
-backends migrate atomically.
+Package and contract identities are regenerated with the corpus and backend
+cutover. The repository scan gate rejects any returning source, bytecode,
+runtime, native, metric, codec, or heap producer.

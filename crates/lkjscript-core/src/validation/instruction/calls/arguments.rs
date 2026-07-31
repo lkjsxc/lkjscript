@@ -1,30 +1,72 @@
-fn validate_resource_arguments(
+fn validate_structural_arguments(
     callee: &FunctionProto,
     arguments: &[Kind],
     caller: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {
+    let mut consuming_owners = Vec::new();
     for (index, actual) in arguments.iter().copied().enumerate() {
-        let expected = callee.parameter_resources.get(index).copied().flatten();
-        match (expected, actual) {
-            (Some(expected), Kind::Resource(actual)) if expected == actual => {}
-            (Some(_), _) => {
-                return Err(instruction_error(
-                    caller,
-                    instruction.op(),
-                    instruction.offset(),
-                    "typed resource call argument does not match declared kind",
-                ));
+        let expected = callee
+            .parameter_structurals
+            .get(index)
+            .copied()
+            .flatten();
+        let owning = callee
+            .parameter_structural_places
+            .get(index)
+            .is_some_and(Option::is_some);
+        let valid = match (expected, owning, actual) {
+            (
+                Some(expected),
+                true,
+                Kind::StructuralOwner {
+                    representation,
+                    owner,
+                    ..
+                },
+            ) => {
+                if consuming_owners.contains(&owner) {
+                    return Err(instruction_error(
+                        caller,
+                        instruction.op(),
+                        instruction.offset(),
+                        "one structural owner is duplicated across consuming call arguments",
+                    ));
+                }
+                consuming_owners.push(owner);
+                expected == representation
             }
-            (None, Kind::Resource(_) | Kind::ResourceResult(_)) => {
-                return Err(instruction_error(
-                    caller,
-                    instruction.op(),
-                    instruction.offset(),
-                    "typed resource call argument lacks parameter metadata",
-                ));
-            }
-            (None, _) => {}
+            (
+                Some(expected),
+                false,
+                Kind::StructuralOwnerRef { representation, .. },
+            ) => expected == representation,
+            (
+                None,
+                _,
+                Kind::StructuralOwner { .. }
+                | Kind::StructuralOwnerRef { .. }
+                | Kind::StructuralView { .. }
+                | Kind::StructuralDestination { .. },
+            ) => false,
+            (Some(_), _, _) => false,
+            (None, _, _) => true,
+        };
+        if !valid {
+            return Err(instruction_error(
+                caller,
+                instruction.op(),
+                instruction.offset(),
+                &format!(
+                    concat!(
+                        "structural call argument {index} kind {actual:?} does not match ",
+                        "exact parameter metadata {expected:?}",
+                    ),
+                    index = index,
+                    actual = actual,
+                    expected = expected,
+                ),
+            ));
         }
     }
     Ok(())

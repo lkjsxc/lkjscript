@@ -21,6 +21,7 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
                 .collect(),
         });
     }
+    install_structural_metadata(&mut chunk, program)?;
 
     let mut globals = HashMap::new();
     let mut prototypes = HashMap::new();
@@ -99,7 +100,12 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     let (main_proto, main_link) = compile_function(&mut chunk, &globals, main, code_base, None)?;
     chunk.main.locals = main_proto.locals;
     chunk.main.arity = main_proto.arity;
+    chunk.main.memory_plan = main_proto.memory_plan;
+    chunk.main.parameter_structurals = main_proto.parameter_structurals;
+    chunk.main.parameter_structural_places = main_proto.parameter_structural_places;
+    chunk.main.return_structural = main_proto.return_structural;
     chunk.main.parameter_resources = main_proto.parameter_resources;
+    chunk.main.parameter_resource_places = main_proto.parameter_resource_places;
     chunk.main.return_resource = main_proto.return_resource;
     chunk.main.parameter_uniques = main_proto.parameter_uniques;
     chunk.main.parameter_unique_places = main_proto.parameter_unique_places;

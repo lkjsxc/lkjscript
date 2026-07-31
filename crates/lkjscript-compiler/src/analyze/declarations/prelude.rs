@@ -168,7 +168,6 @@ fn field(id: [u8; 32], name: &str, ty: Type, indirect: bool) -> EnumVariantField
             ty,
             Type::Str
                 | Type::Symbol
-                | Type::Buf
                 | Type::Path
                 | Type::Product(_)
                 | Type::Enum { .. }

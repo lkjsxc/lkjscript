@@ -104,7 +104,7 @@ pub(super) fn verify_function(
                     *predecessor,
                     &in_values[*predecessor],
                     &in_locals[*predecessor],
-                );
+                )?;
                 intersect(&mut next_values, &out_values);
                 intersect(&mut next_locals, &out_locals);
             }
@@ -142,10 +142,13 @@ pub(super) fn verify_function(
             {
                 return Err(VerificationError::InvalidValue(instruction.output));
             }
+            consume_instruction(
+                function,
+                instruction,
+                &mut available_values,
+                &mut initialized_locals,
+            )?;
             available_values[output_index] = true;
-            if let Operation::WriteLocal(local, _) = instruction.operation {
-                initialized_locals[local_index(function, local)?] = true;
-            }
             work = work
                 .checked_add(1)
                 .ok_or(VerificationError::LimitExceeded("work units"))?;
@@ -158,6 +161,7 @@ pub(super) fn verify_function(
             require_available(function, operand, &available_values)?;
         }
         verify_terminator(function, terminator)?;
+        verify_affine_exit(function, terminator, &available_values, &initialized_locals)?;
         work = work
             .checked_add(1)
             .ok_or(VerificationError::LimitExceeded("work units"))?;
@@ -170,20 +174,16 @@ pub(super) fn transfer_sets(
     block_index_value: usize,
     in_values: &[bool],
     in_locals: &[bool],
-) -> (Vec<bool>, Vec<bool>) {
+) -> Result<(Vec<bool>, Vec<bool>), VerificationError> {
     let mut values = in_values.to_vec();
     let mut locals = in_locals.to_vec();
     for instruction in &function.blocks[block_index_value].instructions {
+        transfer_instruction(function, instruction, &mut values, &mut locals)?;
         if let Some(value) = values.get_mut(instruction.output.index as usize) {
             *value = true;
         }
-        if let Operation::WriteLocal(local, _) = instruction.operation {
-            if let Some(value) = locals.get_mut(local.index as usize) {
-                *value = true;
-            }
-        }
     }
-    (values, locals)
+    Ok((values, locals))
 }
 
 pub(super) fn intersect(target: &mut [bool], source: &[bool]) {

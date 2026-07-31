@@ -57,10 +57,11 @@ impl FunctionEncoder<'_> {
         register: u8,
         value: u64,
     ) -> Result<(), NativeError> {
-        if register > 7 {
+        if register > 15 {
             return Err(NativeError::Encode(EncodeError::UnsupportedSignature));
         }
-        self.emit(&[0x48, 0xb8 | register])?;
+        let rex = if register > 7 { 0x49 } else { 0x48 };
+        self.emit(&[rex, 0xb8 | (register & 7)])?;
         self.emit(&value.to_le_bytes())
     }
 
@@ -93,7 +94,11 @@ impl FunctionEncoder<'_> {
         register: u8,
         offset: i32,
     ) -> Result<(), NativeError> {
-        self.emit(&[0x48, 0x8b, 0x85 | (register << 3)])?;
+        if register > 15 {
+            return Err(NativeError::Encode(EncodeError::UnsupportedSignature));
+        }
+        let rex = if register > 7 { 0x4c } else { 0x48 };
+        self.emit(&[rex, 0x8b, 0x85 | ((register & 7) << 3)])?;
         self.emit_displacement(offset)
     }
 

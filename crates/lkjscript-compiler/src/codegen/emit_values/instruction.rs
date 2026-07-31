@@ -4,6 +4,14 @@ impl Emitter<'_> {
         instruction: &Instruction,
         store_result: bool,
     ) -> Result<()> {
+        if self.emit_structural_instruction(instruction)?
+            || self.emit_aggregate_instruction(instruction)?
+        {
+            if store_result {
+                self.store_result(instruction.id)?;
+            }
+            return Ok(());
+        }
         match &instruction.kind {
             InstructionKind::Constant(constant) => self.emit_constant(constant)?,
             InstructionKind::Copy(value) => self.load(*value)?,
@@ -88,7 +96,7 @@ impl Emitter<'_> {
                 ..
             } => {
                 for argument in arguments {
-                    self.load(*argument)?;
+                    self.load_observed_structural(*argument)?;
                 }
                 self.proto.emit(runtime_opcode(*operation));
             }
@@ -97,10 +105,17 @@ impl Emitter<'_> {
             | InstructionKind::I64FromF64Exact { value }
             | InstructionKind::I64FromF64Trunc { value } => self.emit_numeric(instruction, *value)?,
             InstructionKind::Call {
-                target, arguments, ..
+                target,
+                arguments,
+                consuming,
+                ..
             } => {
-                for argument in arguments {
-                    self.load(*argument)?;
+                for (argument, consuming) in arguments.iter().zip(consuming) {
+                    if *consuming {
+                        self.load(*argument)?;
+                    } else {
+                        self.load_observed_structural(*argument)?;
+                    }
                 }
                 match target {
                     CallTarget::Direct(function) => {
@@ -113,77 +128,7 @@ impl Emitter<'_> {
                     .map_err(|_| Error::msg("SSA call arity exceeds bytecode u8"))?;
                 self.proto.emit_op_u8(Op::Call, arity);
             }
-            InstructionKind::ProductValue { product, fields } => {
-                for field in fields {
-                    self.load(*field)?;
-                }
-                self.proto.emit_op_u16(Op::MakeProduct, product.raw());
-            }
-            InstructionKind::ProductField {
-                product,
-                field,
-                value,
-            } => {
-                self.load(*value)?;
-                let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
-                self.proto.emit_op_u16(Op::LoadProductField, descriptor);
-            }
-            InstructionKind::WithProductField {
-                product,
-                field,
-                value,
-                replacement,
-            } => {
-                self.load(*value)?;
-                self.load(*replacement)?;
-                let descriptor = intern_product_field(self.chunk, product.raw(), *field)?;
-                self.proto.emit_op_u16(Op::WithProductField, descriptor);
-            }
-            InstructionKind::EnumValue {
-                enum_id,
-                variant,
-                layout,
-                fields,
-            } => {
-                for field in fields {
-                    self.load(*field)?;
-                }
-                let SsaType::Enum { arguments, .. } = &instruction.ty else {
-                    return Err(Error::msg(
-                        "verified enum construction lost enum result type",
-                    ));
-                };
-                let descriptor = intern_enum_construction(
-                    self.chunk,
-                    *enum_id,
-                    *variant,
-                    *layout,
-                    arguments.len(),
-                )?;
-                self.proto.emit_op_u16(Op::MakeEnum, descriptor);
-            }
-            InstructionKind::EnumIsVariant {
-                enum_id,
-                variant,
-                layout,
-                value,
-            } => {
-                self.load(*value)?;
-                let descriptor = intern_enum_variant(self.chunk, *enum_id, *variant, *layout)?;
-                self.proto.emit_op_u16(Op::IsEnumVariant, descriptor);
-            }
-            InstructionKind::EnumField {
-                enum_id,
-                variant,
-                field,
-                layout,
-                value,
-            } => {
-                self.load(*value)?;
-                let descriptor =
-                    intern_enum_field(self.chunk, (*enum_id, *variant, *field), *layout)?;
-                self.proto.emit_op_u16(Op::LoadEnumField, descriptor);
-            }
+            _ => return Err(Error::msg("structural instruction dispatch mismatch")),
         }
         if store_result {
             self.store_result(instruction.id)?;

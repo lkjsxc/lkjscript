@@ -1,28 +1,30 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use lkjscript_core::{Error, ResourceKind, Result};
 
 use crate::hir::{self, BindingId, Type};
 
-use super::{
-    compute_plan_id, HirMemoryPlan, MemoryAliasing, MemoryContention, MemoryDestruction,
-    MemoryDropClass, MemoryDropGlueId, MemoryDropGlueKind, MemoryEscape, MemoryFunctionId,
-    MemoryIdentity, MemoryMultiplicity, MemoryObligationKind, MemoryParameterMode, MemoryPlanEntry,
-    MemoryPortability, MemoryStorage, MemorySubject, MemoryType, HIR_MEMORY_PLAN_SCHEMA,
-    MAX_MEMORY_PLAN_VERIFIER_STEPS,
-};
+use super::*;
 
+mod authority;
 mod check;
 mod drop_class;
+mod expression_kind;
 mod modes;
+mod records;
 mod support;
+mod types;
 mod walk;
 mod walk_support;
 
+use authority::*;
 use check::*;
 use drop_class::*;
+use expression_kind::*;
 use modes::*;
+use records::*;
 use support::*;
+use types::*;
 use walk::*;
 use walk_support::*;
 
@@ -37,16 +39,18 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
     verify_work(plan, &facts)?;
     verify_functions(program, plan)?;
     verify_expressions(plan, &facts)?;
+    verify_uses_and_constants(plan, &facts)?;
     verify_entries(plan)?;
     verify_legacy_registration(plan)?;
     verify_drop_glues(plan)?;
     verify_drop_classes(program, plan)?;
-    verify_calls(program, plan, &facts)?;
+    let authority_steps = verify_authority(program, plan, &facts)?;
     let steps = facts
         .steps
         .checked_add(plan.work.entries)
         .and_then(|value| value.checked_add(plan.work.uses))
         .and_then(|value| value.checked_add(plan.work.obligations))
+        .and_then(|value| value.checked_add(authority_steps))
         .ok_or_else(|| Error::msg("independent HIR memory-plan verifier work overflow"))?;
     if steps > MAX_MEMORY_PLAN_VERIFIER_STEPS {
         return Err(Error::msg(format!(
@@ -78,20 +82,6 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
                 "HIR memory function identity/signature mismatch",
             ));
         }
-        for (position, parameter) in function.params.iter().enumerate() {
-            let ty = &program
-                .binding(*parameter)
-                .ok_or_else(|| Error::msg("HIR memory verifier found unknown parameter"))?
-                .ty;
-            let expected = parameter_mode(ty, resource_consumed(&function.body, *parameter));
-            if actual.signature.parameters.get(position) != Some(&expected) {
-                return Err(Error::msg("HIR memory parameter mode mismatch"));
-            }
-        }
-        let result = callable_result(&binding.ty)?;
-        if actual.signature.result != result_mode(result) {
-            return Err(Error::msg("HIR memory result mode mismatch"));
-        }
     }
     let main_id = MemoryFunctionId::new(index_u32(program.functions.len())?);
     let main = plan
@@ -101,7 +91,6 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
         || main.binding.is_some()
         || main.source != program.main.origin.raw()
         || main.signature.parameters.len() != program.main.param_types.len()
-        || main.signature.result != result_mode(&program.main.return_type)
     {
         return Err(Error::msg("HIR main memory signature mismatch"));
     }
@@ -114,17 +103,21 @@ fn verify_legacy_registration(plan: &HirMemoryPlan) -> Result<()> {
         .map(|family| family.identity)
         .collect();
     for entry in &plan.entries {
-        let expected = legacy_family(&entry.ty);
+        let expected = (entry.mode.domain == MemoryDomain::RegisteredLegacyTraced)
+            .then(|| legacy_family(&entry.ty))
+            .flatten();
         if entry.legacy_family.as_deref() != expected {
             return Err(Error::msg("HIR memory plan has a wrong legacy family"));
         }
         if let Some(family) = expected {
-            if !registered.contains(family) || entry.mode.storage != MemoryStorage::LegacyTraced {
+            if !registered.contains(family)
+                || entry.mode.domain != MemoryDomain::RegisteredLegacyTraced
+            {
                 return Err(Error::msg(
                     "HIR memory plan selected unregistered legacy tracing",
                 ));
             }
-        } else if entry.mode.storage == MemoryStorage::LegacyTraced {
+        } else if entry.mode.domain == MemoryDomain::RegisteredLegacyTraced {
             return Err(Error::msg(
                 "HIR memory plan selected legacy tracing without an exact family",
             ));
@@ -134,23 +127,25 @@ fn verify_legacy_registration(plan: &HirMemoryPlan) -> Result<()> {
 }
 
 fn verify_drop_glues(plan: &HirMemoryPlan) -> Result<()> {
-    if plan.drop_glues.len() != ResourceKind::ALL.len().saturating_add(2)
-        || plan.drop_glues.first().map(|glue| glue.kind) != Some(MemoryDropGlueKind::ByteVector)
+    if plan.drop_glues.len() < ResourceKind::ALL.len().saturating_add(2)
+        || plan.drop_glues.first().map(|glue| glue.kind.clone())
+            != Some(MemoryDropGlueKind::ByteVector)
     {
         return Err(Error::msg("HIR memory-plan drop-glue table is incomplete"));
     }
     for (index, kind) in ResourceKind::ALL.into_iter().enumerate() {
         let expected = MemoryDropGlueId::new(1 + u32::from(kind as u8));
         let glue = plan.drop_glues.get(index.saturating_add(1));
-        if glue.map(|glue| (glue.id, glue.kind))
+        if glue.map(|glue| (glue.id, glue.kind.clone()))
             != Some((expected, MemoryDropGlueKind::Resource(kind)))
         {
             return Err(Error::msg("HIR memory-plan resource drop glue mismatch"));
         }
     }
-    let bytes = plan.drop_glues.last();
     let bytes_id = MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32);
-    if bytes.map(|glue| (glue.id, glue.kind)) != Some((bytes_id, MemoryDropGlueKind::Bytes)) {
+    let bytes = plan.drop_glues.get(bytes_id.index().unwrap_or(usize::MAX));
+    if bytes.map(|glue| (glue.id, glue.kind.clone())) != Some((bytes_id, MemoryDropGlueKind::Bytes))
+    {
         return Err(Error::msg("HIR memory-plan bytes drop glue mismatch"));
     }
     Ok(())

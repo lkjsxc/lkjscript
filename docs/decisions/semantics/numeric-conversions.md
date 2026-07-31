@@ -44,4 +44,6 @@ Focused tables cover signed zero, subnormals, both fractional signs,
 infinities, multiple NaN payloads, values around `2^53`, exact `-2^63`, and the
 positive boundary. Four-engine tests require native baseline/proof entries and
 zero VM fallback. Rounded conversion uses the native scalar conversion plan;
-fallible conversions retain checked heap-runtime sites for result construction.
+fallible conversions construct deterministic structural `result` and
+`numeric-error` owners through generated structural calls with zero tracing-heap
+dispatch.

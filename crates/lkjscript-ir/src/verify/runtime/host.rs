@@ -59,16 +59,16 @@ pub(super) fn host_signature(
         ),
         RuntimeOp::SysReadInto => resource_input(
             &[InputStream, FileReader, TcpStream],
-            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &[SsaType::ByteSliceMut],
             &system_result(SsaType::I64),
         ),
         RuntimeOp::SysWriteFrom => resource_input(
             &[OutputStream, FileWriter, FileAppender, TcpStream],
-            &[SsaType::Buf, SsaType::I64, SsaType::I64],
+            &[SsaType::ByteSlice],
             &system_result(SsaType::I64),
         ),
         RuntimeOp::SysTtyGuardSave => exact(
-            &[SsaType::Capability(Terminal), SsaType::Buf],
+            &[SsaType::Capability(Terminal), SsaType::ByteSlice],
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysTtyGuardClear => exact(
@@ -100,18 +100,10 @@ pub(super) fn host_signature(
             &system_result(SsaType::Unit),
         ),
         RuntimeOp::SysRandomFill => exact(
-            &[
-                SsaType::Capability(Entropy),
-                SsaType::Buf,
-                SsaType::I64,
-                SsaType::I64,
-            ],
+            &[SsaType::Capability(Entropy), SsaType::ByteSliceMut],
             &system_result(SsaType::Unit),
         ),
-        RuntimeOp::SysSha256 => exact(
-            &[SsaType::Buf, SsaType::I64, SsaType::I64],
-            &system_result(SsaType::Buf),
-        ),
+        RuntimeOp::SysSha256 => exact(&[SsaType::ByteSlice], &SsaType::Bytes),
         RuntimeOp::SysPathExists => exact(
             &[SsaType::Capability(FileSystem), SsaType::Path],
             &system_result(SsaType::Bool),
@@ -143,8 +135,12 @@ pub(super) fn host_signature(
             &[SsaType::I64],
             &system_result(SsaType::I64),
         ),
-        RuntimeOp::SysTtyGet | RuntimeOp::SysTtySet => exact(
-            &[resource(InputStream), SsaType::Buf],
+        RuntimeOp::SysTtyGet => exact(
+            &[resource(InputStream), SsaType::ByteSliceMut],
+            &system_result(SsaType::Unit),
+        ),
+        RuntimeOp::SysTtySet => exact(
+            &[resource(InputStream), SsaType::ByteSlice],
             &system_result(SsaType::Unit),
         ),
         _ => return None,

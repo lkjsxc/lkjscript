@@ -39,6 +39,9 @@ pub(crate) fn discovery_reconstruct(
         )?;
     }
     budget.check_growth(instruction_count(&candidate))?;
+    if certificate.records.is_empty() && has_explicit_structural_operations(&candidate) {
+        return Ok(candidate);
+    }
     run_cleanup(candidate, budget)
 }
 
@@ -94,7 +97,32 @@ pub(crate) fn checker_reconstruct(
         )?;
     }
     budget.check_growth(instruction_count(&private))?;
+    if certificate.records.is_empty() && has_explicit_structural_operations(&private) {
+        return Ok(private);
+    }
     run_cleanup(private, budget)
+}
+
+fn has_explicit_structural_operations(program: &Program) -> bool {
+    program.functions.iter().any(|function| {
+        function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                matches!(
+                    instruction.kind,
+                    InstructionKind::StructuralPublish { .. }
+                        | InstructionKind::StructuralCopy { .. }
+                        | InstructionKind::DestinationCreate { .. }
+                        | InstructionKind::DestinationFieldInit { .. }
+                        | InstructionKind::DestinationFinish { .. }
+                        | InstructionKind::DestinationAbort { .. }
+                        | InstructionKind::AggregateFieldBorrow { .. }
+                        | InstructionKind::AggregateTag { .. }
+                        | InstructionKind::AggregateConsumePayload { .. }
+                        | InstructionKind::StringUtf8View { .. }
+                )
+            })
+        })
+    })
 }
 
 pub(crate) fn illegal_edit(detail: &str) -> OptimizationError {

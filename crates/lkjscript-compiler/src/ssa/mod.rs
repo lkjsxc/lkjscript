@@ -11,8 +11,12 @@ use lkjscript_ir::{
     FailureCleanupAction, FailureCleanupId, FailureCleanupPlan, FrameLocal, FrameState, Function,
     FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
     InstructionMetadata, LoanId as SsaLoanId, Origin, PlaceId as SsaPlaceId, PlaceMetadata,
-    ProductField, ProductId, ProductMetadata, Program, RuntimeOp, Safepoint, Signature,
-    SourceMetadata, SsaType, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
+    ProductField, ProductId, ProductMetadata, Program, RuntimeLayoutId, RuntimeOp, Safepoint,
+    Signature, SourceMetadata, SsaType, StructuralDropGlueIdentity, StructuralLayoutId,
+    StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
+    StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
+    StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
+    StructuralVariantLayout, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
     TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VerifiedProgram,
 };
 
@@ -84,12 +88,14 @@ mod lowering;
 mod model;
 mod operations;
 mod program;
+mod structural;
 
 use enums::*;
 use facts::*;
 use model::*;
 use operations::*;
 use program::construct_program;
+use structural::*;
 
 pub(in crate::ssa) struct PendingBlock {
     pub(in crate::ssa) id: BlockId,
@@ -112,6 +118,8 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) product_ids: &'a HashMap<String, ProductId>,
     pub(in crate::ssa) function_ids: &'a HashMap<BindingId, FunctionId>,
     pub(in crate::ssa) function_effects: &'a HashMap<FunctionId, EffectSet>,
+    pub(in crate::ssa) function_parameter_consumption: &'a HashMap<FunctionId, Vec<bool>>,
+    pub(in crate::ssa) structural: &'a StructuralMemoryMetadata,
     pub(in crate::ssa) id: FunctionId,
     pub(in crate::ssa) name: String,
     pub(in crate::ssa) signature: Signature,
@@ -122,6 +130,7 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) current: Option<BlockId>,
     pub(in crate::ssa) next_value: u32,
     pub(in crate::ssa) next_position: u32,
+    pub(in crate::ssa) next_synthetic_binding: u32,
     pub(in crate::ssa) value_types: Vec<SsaType>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) failure_cleanups: Vec<FailureCleanupPlan>,

@@ -5,12 +5,23 @@ pub(super) fn lower_failure_cleanup(
     instruction: &Instruction,
     locals: &[LocalId],
     value_types: &[ValueType],
+    layouts: &LayoutInterner,
 ) -> Result<Vec<lkjscript_native::FailureCleanupCall>, LoweringError> {
+    let mut excluded = vec![instruction.id];
+    excluded.extend(
+        instruction
+            .kind
+            .operands()
+            .into_iter()
+            .filter(|value| consuming_operand(&instruction.kind, *value)),
+    );
     lower_failure_cleanup_id(
         function,
         instruction.metadata.failure_cleanup,
         locals,
         value_types,
+        layouts,
+        &excluded,
     )
 }
 
@@ -19,6 +30,8 @@ pub(in crate::lower) fn lower_failure_cleanup_id(
     cleanup: Option<lkjscript_ir::FailureCleanupId>,
     locals: &[LocalId],
     value_types: &[ValueType],
+    layouts: &LayoutInterner,
+    excluded: &[ValueId],
 ) -> Result<Vec<lkjscript_native::FailureCleanupCall>, LoweringError> {
     let Some(cleanup) = cleanup else {
         return Ok(Vec::new());
@@ -36,13 +49,31 @@ pub(in crate::lower) fn lower_failure_cleanup_id(
         })?;
     plan.actions
         .iter()
+        .filter(|action| {
+            let value = match action {
+                lkjscript_ir::FailureCleanupAction::EndBorrow { value, .. }
+                | lkjscript_ir::FailureCleanupAction::DropOwner { value, .. } => *value,
+            };
+            !excluded.contains(&value)
+        })
         .map(|action| {
-            let (value, slot) = match action {
+            let (value, runtime, structural) = match action {
                 lkjscript_ir::FailureCleanupAction::EndBorrow { value, .. } => {
-                    let slot = match value_type(value_types, *value)? {
-                        ValueType::Loan(LoanType::Bytes) => RuntimeCallSlot::BytesEndBorrow,
-                        ValueType::Loan(LoanType::ByteSlice) => RuntimeCallSlot::ByteSliceEnd,
-                        ValueType::Loan(LoanType::ByteSliceMut) => RuntimeCallSlot::ByteSliceMutEnd,
+                    match value_type(value_types, *value)? {
+                        ValueType::Loan(LoanType::Bytes) => {
+                            (*value, Some(RuntimeCallSlot::BytesEndBorrow), None)
+                        }
+                        ValueType::Loan(LoanType::ByteSlice) => {
+                            (*value, Some(RuntimeCallSlot::ByteSliceEnd), None)
+                        }
+                        ValueType::Loan(LoanType::ByteSliceMut) => {
+                            (*value, Some(RuntimeCallSlot::ByteSliceMutEnd), None)
+                        }
+                        ValueType::StructuralView(view) => (
+                            *value,
+                            None,
+                            Some(lkjscript_native::StructuralOperation::EndView(view)),
+                        ),
                         _ => {
                             return Err(LoweringError::new(
                                 LoweringFailureCode::InvalidFunction,
@@ -50,27 +81,68 @@ pub(in crate::lower) fn lower_failure_cleanup_id(
                                 "SSA native failure loan has an invalid type",
                             ))
                         }
-                    };
-                    (*value, slot)
+                    }
                 }
                 lkjscript_ir::FailureCleanupAction::DropOwner {
                     value,
                     glue: lkjscript_ir::DropGlueIdentity::ByteVector,
                     ..
-                } => (*value, RuntimeCallSlot::ByteVectorDrop),
+                } => (*value, Some(RuntimeCallSlot::ByteVectorDrop), None),
                 lkjscript_ir::FailureCleanupAction::DropOwner {
                     value,
                     glue: lkjscript_ir::DropGlueIdentity::Bytes,
                     ..
-                } => (*value, RuntimeCallSlot::BytesDrop),
+                } => (*value, Some(RuntimeCallSlot::BytesDrop), None),
                 lkjscript_ir::FailureCleanupAction::DropOwner {
                     glue: lkjscript_ir::DropGlueIdentity::Resource(_),
                     ..
                 } => return unsupported_operation(function.id, "owned resource failure cleanup"),
+                lkjscript_ir::FailureCleanupAction::DropOwner {
+                    value,
+                    glue: lkjscript_ir::DropGlueIdentity::Structural(_),
+                    ..
+                } => {
+                    let operation = match value_type(value_types, *value)? {
+                        ValueType::StructuralOwner(value_type) => {
+                            lkjscript_native::StructuralOperation::Drop(value_type)
+                        }
+                        ValueType::StructuralDestination(_) => {
+                            let (aggregate, initialized) =
+                                layouts.structural().destination(function, *value)?;
+                            lkjscript_native::StructuralOperation::DestinationAbort {
+                                aggregate,
+                                initialized,
+                            }
+                        }
+                        actual => {
+                            return Err(LoweringError::new(
+                                LoweringFailureCode::InvalidFunction,
+                                Some(function.id),
+                                format!(
+                                    "SSA structural failure owner {} has invalid type {actual:?}",
+                                    value.raw(),
+                                ),
+                            ));
+                        }
+                    };
+                    (*value, None, Some(operation))
+                }
             };
-            Ok(lkjscript_native::FailureCleanupCall::new(
-                slot,
-                value_local(locals, value, function.id)?,
+            let local = value_local(locals, value, function.id)?;
+            if let Some(slot) = runtime {
+                return Ok(lkjscript_native::FailureCleanupCall::new(slot, local));
+            }
+            let operation = structural.ok_or_else(|| {
+                LoweringError::new(
+                    LoweringFailureCode::InvalidFunction,
+                    Some(function.id),
+                    "SSA failure cleanup operation is absent",
+                )
+            })?;
+            let descriptor = lkjscript_native::StructuralCallDescriptor::new(operation)
+                .map_err(LoweringError::backend)?;
+            Ok(lkjscript_native::FailureCleanupCall::structural(
+                descriptor, local,
             ))
         })
         .collect()

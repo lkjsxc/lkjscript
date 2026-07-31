@@ -95,7 +95,7 @@ fn variant_test(
     let actual = pop(state, proto, instruction)?;
     if actual != Kind::Any
         && !matches!(actual, Kind::Enum(id, _) if id == definition.id)
-        && !matches!(actual, Kind::ResourceResult(_) if definition.id.bytes() == crate::RESULT_ID)
+        && !matches!(actual, Kind::ResourceResult { .. } if definition.id.bytes() == crate::RESULT_ID)
     {
         return Err(instruction_error(
             proto,
@@ -154,7 +154,7 @@ fn projection(
         Kind::Any => true,
         Kind::Enum(id, None) => id == definition.id,
         Kind::Enum(id, Some(active)) => id == definition.id && active == variant.id,
-        Kind::ResourceResult(_) => definition.id.bytes() == crate::RESULT_ID,
+        Kind::ResourceResult { .. } => definition.id.bytes() == crate::RESULT_ID,
         _ => false,
     };
     if !active {
@@ -165,18 +165,12 @@ fn projection(
             "inactive enum projection rejected before access",
         ));
     }
-    let projected = match actual {
-        Kind::ResourceResult(kind)
-            if variant.id.bytes() == crate::RESULT_OK_ID
-                && descriptor.field.bytes() == crate::RESULT_OK_VALUE_ID =>
-        {
-            Kind::Resource(kind)
-        }
-        _ => Kind::Any,
-    };
+    let projected = project_resource_result(state, actual, variant.id, descriptor.field);
     state.stack.push(projected);
     Ok(())
 }
+
+include!("types/enum_resources.rs");
 
 fn definition<'a>(
     chunk: &'a Chunk,

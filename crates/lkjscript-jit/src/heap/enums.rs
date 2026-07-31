@@ -94,12 +94,22 @@ impl JitHeapServices<'_> {
     fn preflight_enum_heap(&mut self, arguments: &[NativeValue]) -> Result<(), NativeServiceError> {
         self.heap
             .preflight_enum_allocation(arguments.len())
-            .map_err(|limit| {
-                self.last_resource = Some(match limit {
-                    GcLimit::Allocations => ResourceLimitKind::Allocations,
-                    GcLimit::HeapBytes => ResourceLimitKind::HeapBytes,
-                });
-                NativeServiceError::ResourceLimitExceeded
+            .map_err(|limit| match limit {
+                GcLimit::Allocations => {
+                    self.last_resource = Some(ResourceLimitKind::Allocations);
+                    NativeServiceError::ResourceLimitExceeded
+                }
+                GcLimit::HeapBytes => {
+                    self.last_resource = Some(ResourceLimitKind::HeapBytes);
+                    NativeServiceError::ResourceLimitExceeded
+                }
+                GcLimit::MixedOwnershipGraph => {
+                    self.last_trap = Some(
+                        "legacy traced object cannot contain deterministic owners or capabilities"
+                            .into(),
+                    );
+                    NativeServiceError::Trap
+                }
             })
     }
 

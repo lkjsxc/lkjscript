@@ -73,11 +73,11 @@ pub(crate) fn auto_trait_holds(
             | SsaType::Path
             | SsaType::Symbol => Ok(true),
             SsaType::ByteSlice => Ok(true),
-            SsaType::Buf
-            | SsaType::Bytes
+            SsaType::Bytes
             | SsaType::ByteVector
             | SsaType::ByteSliceMut
             | SsaType::Resource(_)
+            | SsaType::StructuralDestination(_)
             | SsaType::Function(_)
             | SsaType::TypeParameter(_) => Ok(false),
             SsaType::List(inner) => auto_trait_holds(program, role, inner, depth + 1, work, active),

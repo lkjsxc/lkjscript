@@ -57,11 +57,13 @@ pub(super) fn plan_signature(slot: RuntimeCallSlot) -> Option<Signature> {
         RuntimeCallSlot::BytesDrop => signature(vec![bytes], ValueType::Unit),
         RuntimeCallSlot::FreezeByteVector => signature(vec![unique], bytes),
         RuntimeCallSlot::ThawBytes => signature(vec![bytes], unique),
-        RuntimeCallSlot::CollectReference => signature(
-            vec![ValueType::Reference(ReferenceType::Buf)],
-            ValueType::Reference(ReferenceType::Buf),
-        ),
+        RuntimeCallSlot::CollectReference => {
+            let reference =
+                ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
+            signature(vec![reference], reference)
+        }
         RuntimeCallSlot::HeapDispatch
+        | RuntimeCallSlot::StructuralDispatch
         | RuntimeCallSlot::TakeRejectedEntry
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame

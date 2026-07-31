@@ -30,13 +30,13 @@ pub(super) fn apply(
             let right = pop(state, proto, instruction)?;
             let left = pop(state, proto, instruction)?;
             if left != Kind::Any && right != Kind::Any {
-                let valid = left == right && matches!(left, Kind::Buf);
+                let valid = left == right && matches!(left, Kind::Resource { .. });
                 if !valid {
                     return Err(instruction_error(
                         proto,
                         op,
                         instruction.offset(),
-                        "is-same-object expects matching buf categories",
+                        "is-same-object expects matching resource categories",
                     ));
                 }
             }

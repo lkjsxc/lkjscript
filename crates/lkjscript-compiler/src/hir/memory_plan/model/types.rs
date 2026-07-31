@@ -6,7 +6,6 @@ pub enum MemoryType {
     I64,
     F64,
     String,
-    Buffer,
     Bytes,
     Path,
     Capability(CapabilityKind),
@@ -45,7 +44,7 @@ pub enum MemoryParameterMode {
 pub enum MemoryResultMode {
     Trivial,
     Owned,
-    Borrowed,
+    SealedShared,
     External,
 }
 

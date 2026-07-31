@@ -13,31 +13,32 @@ canonical local gate, and Docker verification are implemented and verified.
 
 ## Decision
 
-`buf` is the lossless file/wire representation; `string` remains valid UTF-8.
-Add these `result`-valued primitives:
+Checked byte slices are the lossless file/wire boundary; `string` remains valid
+UTF-8. The primitives are:
 
 ```text
 read-into:
   forall resource; resource one-of input-stream,file-reader,tcp-stream;
-  fn inputs resource buf i64 i64 output result i64 system-error
+  fn inputs resource byte-slice-mut output result i64 system-error
 write-from:
   forall resource;
   resource one-of output-stream,file-writer,file-appender,tcp-stream;
-  fn inputs resource buf i64 i64 output result i64 system-error
-convert-string-to-buf: fn inputs string output buf
-convert-buf-to-string: fn inputs buf output result string utf8-error
-copy-buf-slice: fn inputs buf i64 i64 output result buf system-error
+  fn inputs resource byte-slice output result i64 system-error
+convert-string-to-bytes: fn inputs string output bytes
+convert-bytes-to-string: fn inputs bytes output result string utf8-error
+copy-bytes-slice: fn inputs bytes i64 i64 output bytes
 ```
 
-For read/write, offset and requested length are non-negative, fit the buffer,
-and do not exceed a fixed bulk-I/O limit. An `ok 0` branch means EOF or no progress;
+For read/write, the validated view length does not exceed the fixed bulk-I/O
+limit. An `ok 0` branch means EOF or no progress;
 writes report actual progress and never hide a partial write. Invalid ranges,
 wrong/stale typed resources, ordinary OS errors, and invalid UTF-8 are
 `result` errors.
-UTF-8 conversion never uses replacement characters. `convert-string-to-buf` encodes
-exact UTF-8 and is bounded by the existing buffer limit. `copy-buf-slice` copies an
-exact validated range into a bounded `buf`; it supplies protocol consumers with
-an exact received prefix without exposing host slices.
+UTF-8 conversion never uses replacement characters.
+`convert-string-to-bytes` encodes exact UTF-8 and is bounded by the byte-value
+limit. `copy-bytes-slice` copies an exact validated range into immutable
+`bytes`; it supplies protocol consumers with an exact received prefix without
+exposing host slices.
 
 The current string-oriented socket operations remain distinct while canonical
 consumers migrate to byte storage. Blocking bulk calls remain rejected by
@@ -48,9 +49,8 @@ hard-deadline execution before effects.
 Unsafe syscall FFI stays in `lkjscript-sys`. Safe wrappers validate all ranges
 before slicing, preserve exact resource-kind and closed-state checks, and use
 retry only for interrupted syscalls. They do not allocate from untrusted
-requested lengths. The VM owns buffers and typed resources; no raw pointer,
-descriptor, or borrowed byte
-slice crosses the language boundary.
+requested lengths. The VM owns unique byte storage and typed resources; no raw pointer,
+descriptor, or unchecked borrowed byte slice crosses the language boundary.
 
 ## Verification
 

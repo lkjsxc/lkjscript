@@ -37,10 +37,29 @@ ID; captured closure graphs remain unsupported. Symbol constants carry bounded
 artifact indexes and returned snapshots copy only reachable symbol text. The
 Current validated constant-byte ceiling bounds that text; artifact identity and
 result transfer do not consume tracing-heap allocation or live-byte limits.
-Transitional buffers, paths, and the remaining structural values are the exact
-six registered legacy families. Collector infrastructure remains available only
-to those families, and the complete collector-free value island is not yet
-Current.
+The exact three registered legacy families are `enum`, `pair`, and `product`.
+Collector infrastructure remains available only to those families, and the
+complete collector-free value island is not yet Current.
+
+## Completed Leaf Decrements
+
+The buffer decrement removed source `buf`, `HeapObj::Buf`, buffer opcodes,
+native layouts and helpers, host owner access, codec identities, metrics,
+packages, and collector-root producers. Immutable `bytes`, affine
+`byte-vector`, and checked whole-owner slices execute without tracing.
+
+The path and string decrement removed `HeapObj::Path`, `HeapObj::Str`, their
+wire tags, native heap layouts, collector traversal, root production, and
+registry entries. Dynamic path and string leaves use bounded structural owners;
+static string artifacts remain inline identities. Neither removed family may
+regain a traced representation. The ratchet gate fixes the remaining registry
+at exactly `enum`, `pair`, and `product`.
+
+Eligible nonrecursive product/enum instantiations may execute structurally while
+the broad family remains registered. Their independently verified closure must
+produce zero collector interactions; this does not remove the broad family from
+the registry. A completed leaf cannot regain a legacy memory plan, heap variant,
+collector allocation, root, barrier, or safepoint.
 
 ## Final Gate
 

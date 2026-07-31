@@ -1,14 +1,16 @@
 use std::collections::BTreeMap;
 
 use crate::verify::*;
-use crate::{Function, Instruction, InstructionKind, IrError, PlaceId, SsaType};
+use crate::{Function, Instruction, InstructionKind, IrError, PlaceId, Program, SsaType};
 
 pub(crate) fn process_ownership_instruction(
+    program: &Program,
     function: &Function,
     instruction: &Instruction,
     state: &mut OwnershipState,
     live_loans: &mut BTreeMap<PlaceId, Vec<LiveLoan>>,
     types: &[SsaType],
+    nonowned_affine: &std::collections::HashSet<crate::ValueId>,
 ) -> crate::Result<()> {
     match &instruction.kind {
         InstructionKind::PlaceInit { place, value } => {
@@ -96,7 +98,11 @@ pub(crate) fn process_ownership_instruction(
                 );
             }
         }
-        InstructionKind::Call { arguments, .. } => {
+        InstructionKind::Call {
+            arguments,
+            consuming,
+            ..
+        } => {
             for argument in arguments {
                 if matches!(value_type(types, *argument)?, SsaType::ByteSliceMut) {
                     return fail(
@@ -104,44 +110,72 @@ pub(crate) fn process_ownership_instruction(
                     );
                 }
             }
-            consume_affine_arguments(arguments, state, types, true, false)?;
+            let consumed = arguments
+                .iter()
+                .zip(consuming)
+                .filter_map(|(argument, consuming)| consuming.then_some(*argument))
+                .collect::<Vec<_>>();
+            consume_affine_arguments(
+                program,
+                &consumed,
+                state,
+                types,
+                nonowned_affine,
+                true,
+                true,
+            )?;
         }
         InstructionKind::Runtime {
             operation,
             arguments,
             ..
-        } => {
-            let closes = matches!(
-                operation,
-                crate::RuntimeOp::SysClose
-                    | crate::RuntimeOp::SysSqliteClose
-                    | crate::RuntimeOp::SysSqliteFinalize
-            );
-            let pending = if closes {
-                let [value] = arguments.as_slice() else {
-                    return fail("SSA resource close must consume one exact owner");
-                };
-                current_owner_place(state, *value).map(|place| (place, *value))
-            } else {
-                None
-            };
-            let observes_bytes = matches!(
-                operation,
-                crate::RuntimeOp::BytesLength
-                    | crate::RuntimeOp::BytesByteAt
-                    | crate::RuntimeOp::CopyBytesSlice
-                    | crate::RuntimeOp::CloneBytes
-            );
-            if !observes_bytes {
-                consume_affine_arguments(arguments, state, types, false, closes)?;
-            }
-            if let Some((place, value)) = pending {
-                if state.pending_drops.insert(place, value).is_some() {
-                    return fail("SSA resource close duplicated a pending Drop event");
-                }
-            }
+        } => process_runtime_instruction(
+            program,
+            operation,
+            arguments,
+            state,
+            types,
+            nonowned_affine,
+        )?,
+        InstructionKind::StructuralPublish { value, .. } => {
+            process_structural_publish(value, state)?
         }
-        InstructionKind::Constant(_)
+        InstructionKind::DestinationFieldInit {
+            destination, value, ..
+        } => process_destination_field_init(program, destination, value, state, types)?,
+        InstructionKind::DestinationFinish { destination }
+        | InstructionKind::DestinationAbort { destination } => {
+            process_destination_terminal(destination, state)?
+        }
+        InstructionKind::AggregateFieldBorrow {
+            place, loan, value, ..
+        } => {
+            if state.owners.get(place) != Some(value) {
+                return fail(
+                    "SSA aggregate field borrow does not reference its current placed owner",
+                );
+            }
+            let loans = live_loans.entry(*place).or_default();
+            if loans
+                .iter()
+                .any(|loan| loan.kind == crate::BorrowKind::Mutable)
+            {
+                return fail("SSA aggregate field borrow conflicts with a mutable loan");
+            }
+            loans.push(LiveLoan {
+                loan: *loan,
+                kind: crate::BorrowKind::Shared,
+                value: instruction.id,
+            });
+        }
+        InstructionKind::AggregateConsumePayload { place, value, .. } => {
+            process_aggregate_payload(program, function, place, value, state, live_loans, types)?
+        }
+        InstructionKind::DestinationCreate { .. }
+        | InstructionKind::AggregateTag { .. }
+        | InstructionKind::StringUtf8View { .. }
+        | InstructionKind::StructuralCopy { .. }
+        | InstructionKind::Constant(_)
         | InstructionKind::Copy(_)
         | InstructionKind::FunctionRef(_)
         | InstructionKind::F64FromI64Exact { .. }
@@ -155,33 +189,11 @@ pub(crate) fn process_ownership_instruction(
         | InstructionKind::EnumIsVariant { .. }
         | InstructionKind::EnumField { .. } => {}
     }
-
-    let static_bytes = matches!(
-        instruction.kind,
-        InstructionKind::Constant(crate::Constant::StaticBytes(_))
-    );
-    let borrowed_bytes = matches!(instruction.kind, InstructionKind::Borrow { .. })
-        && instruction.ty == SsaType::Bytes;
-    let borrowed_resource = matches!(
-        instruction.kind,
-        InstructionKind::Runtime {
-            operation: crate::RuntimeOp::StdinHandle,
-            ..
-        }
-    );
-    if is_owned_value(&instruction.ty)
-        && !matches!(instruction.kind, InstructionKind::Move { .. })
-        && !static_bytes
-        && !borrowed_bytes
-        && !borrowed_resource
-    {
-        state.affine.insert(
-            instruction.id,
-            AffineFact {
-                provenance: AffineProvenance::Fresh(instruction.id),
-                transferred: false,
-            },
-        );
-    }
+    register_instruction_result(program, instruction, state);
     Ok(())
 }
+
+include!("instruction/runtime.rs");
+include!("instruction/destination.rs");
+include!("instruction/aggregate.rs");
+include!("instruction_result.rs");

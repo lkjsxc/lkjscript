@@ -62,7 +62,22 @@ const fn operand_width(op: Op) -> usize {
         | Op::ByteVectorDropPlace
         | Op::BytesPlaceInit
         | Op::BytesMove
-        | Op::BytesDropPlace => 2,
+        | Op::BytesDropPlace
+        | Op::StructuralPlaceInit
+        | Op::StructuralMove
+        | Op::StructuralDropPlace
+        | Op::StructuralBorrow
+        | Op::StructuralBorrowMut
+        | Op::StructuralPublish
+        | Op::StructuralDestinationCreate
+        | Op::StructuralDestinationFieldInit
+        | Op::StructuralDestinationFinish
+        | Op::StructuralDestinationAbort
+        | Op::StructuralAggregateFieldBorrow
+        | Op::StructuralAggregateTag
+        | Op::StructuralAggregateConsumePayload
+        | Op::StructuralStringUtf8View
+        | Op::StructuralCopy => 2,
         Op::LoadLocal
         | Op::StoreLocal
         | Op::Call
@@ -74,6 +89,12 @@ const fn operand_width(op: Op) -> usize {
         | Op::TakeUniqueLocal
         | Op::LoadViewLocal
         | Op::EndBorrowLocal
+        | Op::StoreStructuralLocal
+        | Op::TakeStructuralLocal
+        | Op::LoadStructuralViewLocal
+        | Op::EndStructuralBorrowLocal
+        | Op::LoadStructuralOwnerLocal
+        | Op::StructuralPlaceEnd
         | Op::ByteVectorPlaceEnd
         | Op::BytesPlaceEnd => 1,
         _ => 0,

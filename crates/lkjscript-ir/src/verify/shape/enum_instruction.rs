@@ -63,6 +63,9 @@ fn construction(
     layout: crate::RuntimeLayoutId,
     fields: &[ValueId],
 ) -> crate::Result<EffectSet> {
+    if program.memory.is_owned(&instruction.ty) {
+        return fail("SSA EnumValue cannot construct a type with structural metadata");
+    }
     let definition = enum_by_id(program, enum_id)?;
     check_layout(definition, layout)?;
     let selected = variant_by_id(definition, variant)?;

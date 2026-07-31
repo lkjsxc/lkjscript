@@ -43,6 +43,12 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         }
         x if x == Op::Return as u8 => {
             let ret = vm.pop()?;
+            let prototype = vm
+                .frames
+                .last()
+                .map(|frame| frame.proto)
+                .ok_or_else(|| Error::msg("return without frame"))?;
+            structural_ops::prepare_return(vm, ret, prototype)?;
             let frame = vm.frames.pop().ok_or_else(|| Error::msg("return"))?;
             vm.stack.truncate(frame.stack_base);
             vm.push(ret);
@@ -52,15 +58,14 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             let value = vm.pop()?;
             let code = vm.as_i64(value)?;
             let code = i32::try_from(code).map_err(|_| Error::msg("exit code out of range"))?;
+            structural_ops::prepare_exit(vm)?;
             vm.exit_code = Some(code);
             Ok(())
         }
         x if x == Op::Trap as u8 => {
             let value = vm.pop()?;
-            let message = match vm.arena.get(value) {
-                Ok(lkjscript_core::HeapObj::Str(message)) => message.clone(),
-                _ => return Err(Error::msg("Trap value is not Str")),
-            };
+            let message = structural_ops::copy_string(vm, value)
+                .map_err(|_| Error::msg("Trap value is not String"))?;
             Err(Error::msg(message))
         }
         _ => unreachable!("opcode family checked"),
@@ -83,4 +88,5 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     }
 }
 
+#[cfg(feature = "jit")]
 impl<'a> Vm<'a, JitSession> {}

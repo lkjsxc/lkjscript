@@ -46,13 +46,12 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   typed block arguments; direct predecessor-value carry is deliberately
   rejected.
 
-The initial owned-buffer operations consume typed references directly; general
+The initial byte-slice operations consume typed references directly; general
 `ref-read`/`ref-write` syntax is rejected until place projection is implemented.
-This slice does not silently make transitional `buf`, products, or collections
-affine. Exact typed resources are a separate accepted-contract foundation and
-cannot enter unsupported aggregates. Full byte-vector corpus migration,
-deterministic compiler-inserted resource cleanup, named regions, arbitrary
-owned types, and borrow-aware host operations remain **Accepted Targets**.
+This slice does not silently make products or collections affine. Exact typed
+resources are a separate accepted-contract foundation and cannot enter
+unsupported aggregates. Named regions, arbitrary owned types, ranged source
+views, and broader borrow-aware host operations remain **Accepted Targets**.
 Runtime session cleanup remains a safety backstop, not source-level `drop`.
 
 Native GC references are added as a separate ownership category rather than

@@ -13,7 +13,6 @@ pub(crate) fn canonical(ty: &Type) -> String {
         Type::I64 => "i64".into(),
         Type::F64 => "f64".into(),
         Type::Str => "string".into(),
-        Type::Buf => "buf".into(),
         Type::Bytes => "bytes".into(),
         Type::ByteVector => "byte-vector".into(),
         Type::ByteSlice => "byte-slice".into(),
@@ -177,7 +176,7 @@ pub(super) fn ownership(ty: &Type) -> crate::semantic::schema::OwnershipAccess {
         Type::ByteVector => OwnershipAccess::Move,
         Type::ByteSlice => OwnershipAccess::SharedBorrow,
         Type::ByteSliceMut => OwnershipAccess::MutableBorrow,
-        Type::Buf | Type::Resource(_) => OwnershipAccess::Unavailable,
+        Type::Resource(_) => OwnershipAccess::Unavailable,
         _ => OwnershipAccess::Copy,
     }
 }

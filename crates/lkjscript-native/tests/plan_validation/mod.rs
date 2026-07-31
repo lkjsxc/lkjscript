@@ -5,7 +5,10 @@ use lkjscript_native::{
     FrameHomeKind, HeapCallDescriptor, HeapOperation, InternalMachineArgument,
     InternalMachineResult, LayoutIdentity, MachinePlanBuilder, NativeError, PlanError,
     ReferenceType, ResourceKind, RuntimeCallSlot, Signature, SourceFunctionId, StoreClass,
-    UniqueType, ValueType, VerificationError,
+    StructuralAggregateDescriptor, StructuralAggregateKind, StructuralCallDescriptor,
+    StructuralKind, StructuralOperation, StructuralPayloadKind, StructuralProjectionDescriptor,
+    StructuralProjectionKind, StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType,
+    ValueType, VerificationError,
 };
 
 mod control;
@@ -18,3 +21,5 @@ mod references;
 mod root_limits;
 mod roots;
 mod runtime_abi;
+mod runtime_structural;
+mod structural;

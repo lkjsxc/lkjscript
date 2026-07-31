@@ -6,6 +6,8 @@ impl<'a> FunctionBuilder<'a> {
         product_ids: &'a HashMap<String, ProductId>,
         function_ids: &'a HashMap<BindingId, FunctionId>,
         function_effects: &'a HashMap<FunctionId, EffectSet>,
+        function_parameter_consumption: &'a HashMap<FunctionId, Vec<bool>>,
+        structural: &'a StructuralMemoryMetadata,
         id: FunctionId,
         name: String,
         signature: Signature,
@@ -13,10 +15,19 @@ impl<'a> FunctionBuilder<'a> {
         function_origin: Origin,
         cleanup: CleanupPlan,
     ) -> Self {
+        let next_synthetic_binding = cleanup
+            .places
+            .iter()
+            .map(|place| place.binding.raw())
+            .max()
+            .map_or(0, |binding| binding.saturating_add(1));
+        let places = cleanup.places.clone();
         Self {
             product_ids,
             function_ids,
             function_effects,
+            function_parameter_consumption,
+            structural,
             id,
             name,
             signature,
@@ -27,8 +38,9 @@ impl<'a> FunctionBuilder<'a> {
             current: None,
             next_value: 0,
             next_position: 0,
+            next_synthetic_binding,
             value_types: Vec::new(),
-            places: Vec::new(),
+            places,
             failure_cleanups: Vec::new(),
             cleanup,
             active_place_bindings: Vec::new(),
@@ -46,18 +58,17 @@ impl<'a> FunctionBuilder<'a> {
         binding: BindingId,
         ty: SsaType,
     ) -> Result<()> {
-        let expected = u32::try_from(self.places.len())
-            .map_err(|_| Error::msg("SSA place count exceeds u32"))?;
-        if place.raw() != expected {
-            return Err(Error::msg("HIR PlaceIds are not dense in function order"));
-        }
         let id = SsaPlaceId::new(place.raw());
-        self.places.push(PlaceMetadata {
-            id,
-            binding: SsaBindingId::new(binding.raw()),
-            ty,
-            drop_glue: self.cleanup.place_glues.get(&id).copied(),
-        });
+        let declared = self
+            .places
+            .get(id.index().unwrap_or(usize::MAX))
+            .filter(|declared| declared.id == id)
+            .ok_or_else(|| Error::msg("HIR place is absent from verified memory metadata"))?;
+        if declared.binding != SsaBindingId::new(binding.raw()) || declared.ty != ty {
+            return Err(Error::msg(
+                "HIR place disagrees with verified SSA place metadata",
+            ));
+        }
         Ok(())
     }
 

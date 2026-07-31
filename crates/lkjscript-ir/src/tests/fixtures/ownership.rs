@@ -5,7 +5,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
     let second_instruction = if equal_moves {
         Instruction {
             id: ValueId::new(5),
-            ty: owned_buf_type(),
+            ty: byte_vector_type(),
             kind: InstructionKind::Move {
                 place: PlaceId::new(0),
                 value: ValueId::new(3),
@@ -23,7 +23,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
     Function {
         id: FunctionId::new(1),
         name: "owned-branch".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        signature: Signature::monomorphic(vec![byte_vector_type()], byte_vector_type()),
         places: vec![owned_place(0, 0)],
         failure_cleanups: if equal_moves {
             vec![
@@ -50,7 +50,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                 id: BlockId::new(0),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
@@ -73,13 +73,13 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                 id: BlockId::new(1),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(2),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
                 instructions: vec![Instruction {
                     id: ValueId::new(4),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(0),
                         value: ValueId::new(2),
@@ -96,7 +96,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                 id: BlockId::new(2),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(3),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
@@ -115,7 +115,7 @@ pub(crate) fn owned_branch_function(equal_moves: bool) -> Function {
                 id: BlockId::new(3),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(6),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: None,
                     origin: Origin::SYNTHETIC,
                 }],

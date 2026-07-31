@@ -1,45 +1,12 @@
 use super::*;
 
-pub(super) fn heap_operation(
-    operation: RuntimeOp,
-    error_types: &[ReferenceType],
-) -> Option<HeapOperation> {
+pub(super) fn heap_operation(operation: RuntimeOp) -> Option<HeapOperation> {
     Some(match operation {
-        RuntimeOp::SameObject => HeapOperation::SameObject,
         RuntimeOp::ListEqual => HeapOperation::ListEqual,
         RuntimeOp::Cons => HeapOperation::Cons,
         RuntimeOp::Car => HeapOperation::Car,
         RuntimeOp::Cdr => HeapOperation::Cdr,
         RuntimeOp::IsEmptyList => HeapOperation::IsEmptyList,
-        RuntimeOp::EmptyStr => HeapOperation::EmptyStr,
-        RuntimeOp::BufNew => HeapOperation::BufNew,
-        RuntimeOp::BufLen => HeapOperation::BufLen,
-        RuntimeOp::BufRef => HeapOperation::BufRef,
-        RuntimeOp::BufSet => HeapOperation::BufSet,
-        RuntimeOp::BufClone => HeapOperation::BufClone,
-        RuntimeOp::BufFromStr => HeapOperation::BufFromStr,
-        RuntimeOp::BufToStr => HeapOperation::BufToStr {
-            error_type: *error_types.first()?,
-        },
-        RuntimeOp::BufSlice => {
-            let [error_type, code_option_type, detail_option_type] = error_types else {
-                return None;
-            };
-            HeapOperation::BufSlice {
-                error_type: *error_type,
-                code_option_type: *code_option_type,
-                detail_option_type: *detail_option_type,
-            }
-        }
-        RuntimeOp::BufGetU32 => HeapOperation::BufGetU32,
-        RuntimeOp::BufSetU32 => HeapOperation::BufSetU32,
-        RuntimeOp::StrLen => HeapOperation::StrLen,
-        RuntimeOp::StrRef => HeapOperation::StrRef,
-        RuntimeOp::StrAppend => HeapOperation::StrAppend,
-        RuntimeOp::StrSlice => HeapOperation::StrSlice,
-        RuntimeOp::StrFromByte => HeapOperation::StrFromByte,
-        RuntimeOp::StrFromI64 => HeapOperation::StrFromI64,
-        RuntimeOp::StrFromF64 => HeapOperation::StrFromF64,
         _ => return None,
     })
 }
@@ -51,22 +18,10 @@ pub(super) fn heap_descriptor(
 ) -> Result<HeapCallDescriptor, lkjscript_native::PlanError> {
     let allocation = if matches!(
         operation,
-        HeapOperation::ConstantStr(_)
-            | HeapOperation::EmptyStr
-            | HeapOperation::ProductValue { .. }
+        HeapOperation::ProductValue { .. }
             | HeapOperation::WithProductField { .. }
             | HeapOperation::EnumValue { .. }
             | HeapOperation::Cons
-            | HeapOperation::BufNew
-            | HeapOperation::BufClone
-            | HeapOperation::BufFromStr
-            | HeapOperation::BufToStr { .. }
-            | HeapOperation::BufSlice { .. }
-            | HeapOperation::StrAppend
-            | HeapOperation::StrSlice
-            | HeapOperation::StrFromByte
-            | HeapOperation::StrFromI64
-            | HeapOperation::StrFromF64
             | HeapOperation::F64FromI64Exact { .. }
             | HeapOperation::I64FromF64Exact { .. }
             | HeapOperation::I64FromF64Trunc { .. }
@@ -76,7 +31,6 @@ pub(super) fn heap_descriptor(
         AllocationClass::None
     };
     let store = match operation {
-        HeapOperation::BufSet | HeapOperation::BufSetU32 => StoreClass::Scalar,
         _ if allocation == AllocationClass::Bounded => StoreClass::Initialization,
         _ => StoreClass::None,
     };
@@ -95,10 +49,14 @@ pub(super) fn convert_to_f64(
         ValueType::Bool
         | ValueType::Unit
         | ValueType::StaticBytes
+        | ValueType::StaticString(_)
         | ValueType::Capability(_)
         | ValueType::Resource(_)
         | ValueType::Unique(_)
         | ValueType::Loan(_)
+        | ValueType::StructuralOwner(_)
+        | ValueType::StructuralView(_)
+        | ValueType::StructuralDestination(_)
         | ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
     }
 }

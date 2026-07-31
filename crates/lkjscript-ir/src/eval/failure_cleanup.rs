@@ -42,34 +42,12 @@ impl Evaluator<'_> {
 
     pub(crate) fn execute_unentered_argument_cleanup(&mut self, arguments: Vec<EvalValue>) {
         for value in arguments.into_iter().rev() {
-            match value {
-                value @ (EvalValue::ByteVector(_) | EvalValue::Bytes(_)) => {
-                    if let Err(flow) = self.unique.drop_owner(value) {
-                        self.cleanup_failures.push(
-                            CleanupPhase::Ordinary,
-                            CleanupSubject::UniqueStorage,
-                            flow.detail(),
-                        );
-                    }
-                }
-                EvalValue::Resource(resource) => {
-                    let kind = resource.kind();
-                    if matches!(
-                        kind,
-                        lkjscript_core::ResourceKind::InputStream
-                            | lkjscript_core::ResourceKind::OutputStream
-                    ) {
-                        continue;
-                    }
-                    if let Err(message) = self.resources.drop_owned(resource, kind) {
-                        self.cleanup_failures.push(
-                            CleanupPhase::Ordinary,
-                            CleanupSubject::Resource(kind),
-                            message,
-                        );
-                    }
-                }
-                _ => {}
+            if let Err(flow) = self.cleanup_eval_value(value) {
+                self.cleanup_failures.push(
+                    CleanupPhase::Ordinary,
+                    CleanupSubject::UniqueStorage,
+                    flow.detail(),
+                );
             }
         }
     }
@@ -100,7 +78,7 @@ impl Evaluator<'_> {
             match action {
                 FailureCleanupAction::EndBorrow { value, .. } => {
                     let result = take_cleanup_value(values, value)
-                        .and_then(|value| self.unique.end_borrow(value).map_err(Flow::detail));
+                        .and_then(|value| self.end_eval_borrow(value).map_err(Flow::detail));
                     if let Err(message) = result {
                         self.cleanup_failures.push(
                             CleanupPhase::Ordinary,
@@ -113,6 +91,17 @@ impl Evaluator<'_> {
                     DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes => {
                         let result = take_cleanup_value(values, value)
                             .and_then(|value| self.unique.drop_owner(value).map_err(Flow::detail));
+                        if let Err(message) = result {
+                            self.cleanup_failures.push(
+                                CleanupPhase::Ordinary,
+                                CleanupSubject::UniqueStorage,
+                                message,
+                            );
+                        }
+                    }
+                    DropGlueIdentity::Structural(_) => {
+                        let result = take_cleanup_value(values, value)
+                            .and_then(|value| self.cleanup_eval_value(value).map_err(Flow::detail));
                         if let Err(message) = result {
                             self.cleanup_failures.push(
                                 CleanupPhase::Ordinary,

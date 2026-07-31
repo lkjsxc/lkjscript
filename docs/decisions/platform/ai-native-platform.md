@@ -98,7 +98,7 @@ The following are no longer permanent product decisions:
 | Stable handles are the only native reference representation worth considering | Exact direct generated-code references may be measured behind stack maps; handles remain valid boundaries | No representation changes without exact-root and stale-reference evidence | <!-- LKJ-EXACT-DATA -->
 | Runtime JIT is the only final deployment strategy; offline PGO/cache are permanently rejected | The measured execution portfolio in [Execution Portfolio](../execution/execution-portfolio.md) | Current JIT modes and evidence remain unchanged | <!-- LKJ-EXACT-DATA -->
 | Zero dependencies is an end in itself | Measured trusted-computing-base classification | Every added dependency still requires an accepted measured decision | <!-- LKJ-EXACT-DATA -->
-| `Owned Buf` is the final ownership surface | Inferred modes and type-specific ownership with place-based borrowing | The Current safe island remains honestly partial | <!-- LKJ-EXACT-DATA -->
+| The direct byte-vector island is the final ownership surface | Inferred modes and type-specific ownership with place-based borrowing | The Current safe island remains honestly partial | <!-- LKJ-EXACT-DATA -->
 
 The historical records remain evidence. Their incompatible permanent policy is
 superseded; their descriptions of Current behavior and measured results are not.

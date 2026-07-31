@@ -1,13 +1,13 @@
 use super::*;
 
 #[test]
-fn initial_owned_buf_slice_accepts_nll_mutation_move_and_return() {
+fn byte_vector_slice_accepts_nll_mutation_move_and_return() {
     let source = ownership_source(
         "let/\nbind/\nb\nnew-byte-vector/\n2\n/new-byte-vector\n/bind\ndo/\nlet/\nbind/\nr\nborrow/\nb\n/borrow\n/bind\nbyte-slice-length/\nr\n/byte-slice-length\n/let\nlet/\nbind/\nm\nborrow-mut/\nb\n/borrow-mut\n/bind\ndo/\nbyte-slice-mut-set-byte/\nm\n0\n65\n/byte-slice-mut-set-byte\nmove/\nb\n/move\n/do\n/let\n/do\n/let",
         "byte-vector",
     );
     let program = compile_source(&source, "owned-valid.lkjscript", &Limits::default())
-        .expect("valid Owned Buf safe island");
+        .expect("valid byte-vector ownership island");
     let instructions: Vec<_> = program
         .ssa()
         .program()
@@ -164,7 +164,7 @@ fn static_byte_cleanup_covers_normal_and_explicit_trap_paths() {
 }
 
 #[test]
-fn initial_owned_buf_slice_rejects_affine_and_alias_failures() {
+fn byte_vector_slice_rejects_affine_and_alias_failures() {
     let cases = [
         ("let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nb\n/let", "byte-vector", "loaded or copied"),
         ("let/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\ndo/\nmove/\nb\n/move\nmove/\nb\n/move\n/do\n/let", "byte-vector", "double move"),

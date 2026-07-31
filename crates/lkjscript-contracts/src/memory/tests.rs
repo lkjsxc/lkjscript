@@ -1,14 +1,13 @@
 use super::*;
 
 #[test]
-fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
+fn inventory_is_sorted_unique_and_complete() {
     let records = memory_obligations();
     assert!(records
         .windows(2)
         .all(|pair| pair[0].identity < pair[1].identity));
     for required in [
         "bool",
-        "buf",
         "builtin",
         "byte-slice",
         "byte-slice-mut",
@@ -38,7 +37,6 @@ fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
         "ordinary-region",
         "package-metadata",
         "pair",
-        "path",
         "pool",
         "pool-id",
         "precise-shared-node",
@@ -51,7 +49,6 @@ fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
         "source-tree",
         "ssa",
         "static-function",
-        "string",
         "symbol",
         "typed-hole-candidates",
         "unit",
@@ -82,6 +79,12 @@ fn inventory_is_sorted_unique_complete_and_explicit_about_transition() {
     let symbol = records.iter().find(|record| record.identity == "symbol");
     assert!(matches!(symbol, Some(record) if record.current_trace_fields == "none"));
     assert!(matches!(symbol, Some(record) if record.runtime_layout.contains("Value::Symbol")));
+    for removed in ["path", "string"] {
+        assert!(
+            records.iter().all(|record| record.identity != removed),
+            "removed traced catalog family {removed} reappeared"
+        );
+    }
     let heap = records.iter().find(|record| record.identity == "gc-heap");
     assert!(matches!(heap, Some(record) if record.current_trace_fields.contains("trace")));
     assert!(matches!(heap, Some(record) if record.status.contains("current collector")));

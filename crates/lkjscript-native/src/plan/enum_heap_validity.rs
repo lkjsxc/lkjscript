@@ -19,6 +19,10 @@ pub(super) fn enum_operation_types_are_valid(
                 && stable(*layout)
                 && substitutions.len() <= 16
                 && usize::from(*fields) == inputs.len()
+                && inputs
+                    .iter()
+                    .copied()
+                    .all(super::heap_validity::is_legacy_heap_value)
                 && matches!(result, ValueType::Reference(ReferenceType::Enum(_, _)))
         }
         HeapOperation::EnumIsVariant {
@@ -47,6 +51,7 @@ pub(super) fn enum_operation_types_are_valid(
                 && stable(*field)
                 && stable(*layout)
                 && *field_index < 16
+                && super::heap_validity::is_legacy_heap_value(*field_type)
                 && matches!(inputs, [ValueType::Reference(ReferenceType::Enum(_, _))])
                 && result == *field_type
         }

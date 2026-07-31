@@ -1,25 +1,41 @@
 use crate::codegen::*;
 
-impl Emitter<'_> {
-    pub(in crate::codegen) fn offset(&self) -> Result<u16> {
-        let local = u16::try_from(self.proto.len())
-            .map_err(|_| Error::msg("bytecode function offset exceeds u16"))?;
-        self.code_base
-            .checked_add(local)
-            .ok_or_else(|| Error::msg("bytecode function offset exceeds u16"))
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::codegen) enum StructuralLocalKind {
+    Owner,
+    OwnerRef,
+    View,
+    Destination,
+}
 
-    pub(in crate::codegen) fn slot(&self, value: ValueId) -> Result<u8> {
-        self.slots.get(&value).copied().ok_or_else(|| {
-            Error::msg(format!(
-                "SSA value {} has no bytecode local slot",
-                value.raw()
-            ))
-        })
+impl Emitter<'_> {
+    pub(in crate::codegen) fn load_observed_structural(&mut self, value: ValueId) -> Result<()> {
+        if matches!(
+            self.structural_local_kind(value)?,
+            Some(StructuralLocalKind::Owner | StructuralLocalKind::OwnerRef)
+        ) {
+            let slot = self.slot(value)?;
+            self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, slot);
+            return Ok(());
+        }
+        self.load(value)
     }
 
     pub(in crate::codegen) fn load(&mut self, value: ValueId) -> Result<()> {
         let slot = self.slot(value)?;
+        if let Some(kind) = self.structural_local_kind(value)? {
+            self.proto.emit_op_u8(
+                match kind {
+                    StructuralLocalKind::Owner | StructuralLocalKind::Destination => {
+                        Op::TakeStructuralLocal
+                    }
+                    StructuralLocalKind::OwnerRef => Op::LoadStructuralOwnerLocal,
+                    StructuralLocalKind::View => Op::LoadStructuralViewLocal,
+                },
+                slot,
+            );
+            return Ok(());
+        }
         self.proto.emit_op_u8(
             match self.value_type(value)? {
                 SsaType::Bytes if self.borrowed_bytes_value(value)? => Op::LoadViewLocal,
@@ -35,6 +51,10 @@ impl Emitter<'_> {
 
     pub(in crate::codegen) fn store_result(&mut self, value: ValueId) -> Result<()> {
         let slot = self.slot(value)?;
+        if self.structural_local_kind(value)?.is_some() {
+            self.proto.emit_op_u8(Op::StoreStructuralLocal, slot);
+            return Ok(());
+        }
         match self.value_type(value)? {
             SsaType::Bytes if self.borrowed_bytes_value(value)? => {
                 self.proto.emit_op_u8(Op::StoreViewLocal, slot);
@@ -54,7 +74,7 @@ impl Emitter<'_> {
         Ok(())
     }
 
-    fn value_type(&self, value: ValueId) -> Result<&SsaType> {
+    pub(in crate::codegen) fn value_type(&self, value: ValueId) -> Result<&SsaType> {
         self.function
             .blocks
             .iter()
@@ -127,6 +147,15 @@ impl Emitter<'_> {
             .ok_or_else(|| Error::msg("SSA bytecode lowering lost a PlaceId"))
     }
 
+    fn structural_place(&self, place: lkjscript_ir::PlaceId) -> Result<bool> {
+        self.function
+            .places
+            .iter()
+            .find(|metadata| metadata.id == place)
+            .map(|metadata| structural_owner_representation(self.chunk, &metadata.ty).is_some())
+            .ok_or_else(|| Error::msg("SSA bytecode lowering lost a structural PlaceId"))
+    }
+
     fn byte_vector_place(&self, place: lkjscript_ir::PlaceId) -> Result<bool> {
         self.function
             .places
@@ -136,26 +165,22 @@ impl Emitter<'_> {
             .ok_or_else(|| Error::msg("SSA bytecode lowering lost a PlaceId"))
     }
 
-    fn place_slot(&self, place: lkjscript_ir::PlaceId, value: ValueId) -> Result<u16> {
+    pub(in crate::codegen) fn place_slot(
+        &self,
+        place: lkjscript_ir::PlaceId,
+        value: ValueId,
+    ) -> Result<u16> {
         let place = u8::try_from(place.raw())
             .map_err(|_| Error::msg("byte-vector PlaceId exceeds bytecode u8"))?;
         Ok((u16::from(place) << 8) | u16::from(self.slot(value)?))
     }
 }
 
-impl Emitter<'_> {
-    fn emit_numeric(&mut self, instruction: &Instruction, value: ValueId) -> Result<()> {
-        self.load(value)?;
-        self.proto.emit(match &instruction.kind {
-            InstructionKind::F64FromI64Exact { .. } => Op::F64FromI64Exact,
-            InstructionKind::F64FromI64Rounded { .. } => Op::F64FromI64Rounded,
-            InstructionKind::I64FromF64Exact { .. } => Op::I64FromF64Exact,
-            InstructionKind::I64FromF64Trunc { .. } => Op::I64FromF64Trunc,
-            _ => return Err(Error::msg("numeric opcode lowering mismatch")),
-        });
-        Ok(())
-    }
-}
-
+include!("emit_values/slots.rs");
+include!("emit_values/destination.rs");
 include!("emit_values/instruction.rs");
+include!("emit_values/aggregate_instruction.rs");
+include!("emit_values/numeric.rs");
+include!("emit_values/structural_local.rs");
 include!("emit_values/resource_drop.rs");
+include!("emit_values/structural_instruction.rs");

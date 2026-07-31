@@ -7,7 +7,7 @@ Define expression, type, and import behavior above the physical line format.
 
 **Current.** Executable roots use exactly one explicit `main`, imported files
 are declaration-only, mutation is limited to typed function-local `var`/`set`,
-and the exact initial `Owned Buf` safe island below is implemented. The exact
+and the affine `byte-vector` plus whole-owner slice island below is implemented. The exact
 numeric contract is
 [numeric-semantics.md](../decisions/semantics/numeric-semantics.md).
 

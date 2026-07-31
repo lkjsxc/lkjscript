@@ -3,6 +3,46 @@ use crate::eval::{EvalValue, Flow};
 use lkjscript_core::{UniqueKeyWord, UniqueLayout};
 
 impl EvalUniqueRuntime {
+    pub(crate) fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
+        let key = self.store.allocate_bytes(bytes).map_err(map_store_error)?;
+        self.publish_bytes(key.packed_word())
+    }
+
+    pub(crate) fn allocate_byte_vector_bytes(&mut self, bytes: Vec<u8>) -> Result<EvalValue, Flow> {
+        let key = self
+            .store
+            .allocate_byte_vector(bytes)
+            .map_err(map_store_error)?;
+        let word = key.packed_word();
+        if self
+            .owners
+            .insert(word.get(), UniqueLayout::ByteVector)
+            .is_some()
+        {
+            return Err(Flow::Trap("duplicate evaluator byte-vector owner".into()));
+        }
+        Ok(EvalValue::ByteVector(word))
+    }
+
+    pub(crate) fn restore_owner(
+        &mut self,
+        bytes: Vec<u8>,
+        layout: UniqueLayout,
+    ) -> Result<EvalValue, Flow> {
+        match layout {
+            UniqueLayout::Bytes => self.allocate_bytes(bytes),
+            UniqueLayout::ByteVector => self.allocate_byte_vector_bytes(bytes),
+            UniqueLayout::Path => self.allocate_path(bytes),
+        }
+    }
+
+    pub(crate) fn copy_bytes(&mut self, value: &EvalValue) -> Result<Vec<u8>, Flow> {
+        let word = self.bytes_word(value)?;
+        self.require_owner(word, UniqueLayout::Bytes)?;
+        let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+        Ok(self.store.bytes(key).map_err(map_store_error)?.to_vec())
+    }
+
     pub(crate) fn bytes_length(&mut self, value: &EvalValue) -> Result<usize, Flow> {
         let word = self.bytes_word(value)?;
         self.require_owner(word, UniqueLayout::Bytes)?;
@@ -141,7 +181,11 @@ impl EvalUniqueRuntime {
         Ok(EvalValue::Bytes(word))
     }
 
-    fn require_owner(&self, word: UniqueKeyWord, layout: UniqueLayout) -> Result<(), Flow> {
+    pub(super) fn require_owner(
+        &self,
+        word: UniqueKeyWord,
+        layout: UniqueLayout,
+    ) -> Result<(), Flow> {
         if self.owners.get(&word.get()) == Some(&layout) {
             Ok(())
         } else {

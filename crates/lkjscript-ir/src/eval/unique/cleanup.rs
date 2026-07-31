@@ -52,7 +52,11 @@ impl EvalUniqueRuntime {
                 self.store.take_bytes(key).map_err(map_store_error)?
             }
             UniqueLayout::Path => {
-                return Err(Flow::Trap("path is not an evaluator owned return".into()))
+                let key = self.store.import_path_key(word).map_err(map_store_error)?;
+                self.store
+                    .take_path(key)
+                    .map_err(map_store_error)?
+                    .into_vec()
             }
         };
         if self.owners.remove(&word.get()) != Some(layout) {
@@ -100,9 +104,10 @@ impl EvalUniqueRuntime {
                 let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
                 self.store.free_bytes(key).map_err(map_store_error)
             }
-            UniqueLayout::Path => Err(Flow::Trap(
-                "path is not registered as an evaluator owner".into(),
-            )),
+            UniqueLayout::Path => {
+                let key = self.store.import_path_key(word).map_err(map_store_error)?;
+                self.store.free_path(key).map_err(map_store_error)
+            }
         }
     }
 }
@@ -111,6 +116,7 @@ fn owner(value: &EvalValue) -> Result<(UniqueKeyWord, UniqueLayout), Flow> {
     match value {
         EvalValue::ByteVector(word) => Ok((*word, UniqueLayout::ByteVector)),
         EvalValue::Bytes(word) => Ok((*word, UniqueLayout::Bytes)),
+        EvalValue::Path(word) => Ok((*word, UniqueLayout::Path)),
         _ => Err(Flow::Trap("expected exact unique owner".into())),
     }
 }

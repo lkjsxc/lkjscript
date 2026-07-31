@@ -147,7 +147,6 @@ fn is_traced_type(ty: &Type) -> bool {
         ty,
         Type::Str
             | Type::Symbol
-            | Type::Buf
             | Type::Path
             | Type::Product(_)
             | Type::Enum { .. }

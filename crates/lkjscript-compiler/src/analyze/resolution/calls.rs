@@ -77,6 +77,8 @@ impl Resolver<'_> {
                     | Operation::BytesByteAt
                     | Operation::CopyBytesSlice
                     | Operation::CloneBytes
+                    | Operation::ConvertBytesToString
+                    | Operation::PathFromBytes
             ) {
                 self.infer_bytes_borrow(&mut resolved_args)?;
             }

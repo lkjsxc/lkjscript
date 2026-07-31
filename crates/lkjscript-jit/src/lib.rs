@@ -12,10 +12,10 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    CleanupFailures, CleanupPhase, CleanupSubject, Error as CoreError, ErrorClass, ExecutionConfig,
-    ExecutionOutcome, GcConfig, GcHeap, GcLimit, HeapObj, HostError, OwnedValue, ProductId,
-    ResourceLimitKind, Trap, UniqueKeyWord, UniqueStore, UniqueStoreError, UniqueStoreId,
-    UniqueStoreLimits, Value, MAX_BUFFER_BYTES, MAX_LIST_EQUAL_STEPS,
+    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionConfig, ExecutionOutcome, GcConfig,
+    GcHeap, GcLimit, HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, SemanticValue,
+    Trap, UniqueKeyWord, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value,
+    MAX_BYTE_STORAGE_BYTES, MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
@@ -68,7 +68,8 @@ pub use scalar::{
     ScalarSignature,
 };
 pub use stats::{
-    CompileStats, FunctionTierRecord, JitStats, NativeResourceStats, NativeUniqueStats,
+    CompileStats, FunctionTierRecord, JitStats, NativeResourceStats, NativeStructuralStats,
+    NativeUniqueStats,
 };
 
 enum ProgramAuthority {
@@ -121,9 +122,12 @@ pub struct JitSession {
     collector_runtime_invocations: u64,
     resource_runtime_calls: u64,
     unique_runtime_calls: u64,
+    structural_runtime_calls: u64,
     native_resources: NativeResourceStats,
     native_unique: NativeUniqueStats,
+    native_structural: NativeStructuralStats,
     returned_unique: Option<Vec<u8>>,
+    returned_structural: Option<SemanticValue>,
     next_resource_scope: u64,
     peak_native_frame_depth: usize,
     vm_to_native_transitions: u64,

@@ -153,9 +153,9 @@ The bounded marker solver derives `Copy`, `Send`, and `Sync`. Unit, Bool, I64,
 and F64 have all three facts. Str and Symbol are `Copy` within one worker but,
 like List, Option, Result, and nominal products, are worker-local GC references
 and therefore do not derive `Send` or `Sync`; structurally eligible contained
-values still determine their `Copy` fact. Legacy Buf, Handle, and function types have no automatic facts in this slice.
-In the Current initial ownership island, `Owned Buf` and `RefMut Buf` derive no
-Copy/Send/Sync fact; `Ref Buf` derives Copy but not Send or Sync. All remain
+values still determine their `Copy` fact. Bytes, byte-vector,
+byte-slice-mut, typed resources, and function types have no automatic facts in
+this slice. A shared byte-slice derives Copy but not Send or Sync. All remain
 worker-local. Exact repeated product recursion and solver
 depth/work exhaustion are deterministic compile errors rather than optimistic
 inference. Other user marker bounds require one exact explicit product

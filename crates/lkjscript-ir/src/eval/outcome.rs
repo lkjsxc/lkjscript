@@ -1,6 +1,6 @@
 use super::{EvalValue, RuntimeOp};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum EvalOutcome {
     Returned(EvalValue),
     Exited(i64),

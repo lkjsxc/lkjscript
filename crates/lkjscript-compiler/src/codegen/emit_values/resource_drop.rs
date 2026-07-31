@@ -24,16 +24,10 @@ impl Emitter<'_> {
     pub(in crate::codegen) fn emit_implicit_resource_drop(
         &mut self,
         value: ValueId,
-        kind: lkjscript_core::ResourceKind,
+        _kind: lkjscript_core::ResourceKind,
     ) -> Result<()> {
         self.load(value)?;
-        self.proto.emit(match kind {
-            lkjscript_core::ResourceKind::SqliteConnection => Op::SysSqliteClose,
-            lkjscript_core::ResourceKind::SqliteStatement => Op::SysSqliteFinalize,
-            _ => Op::SysClose,
-        });
-        self.proto.emit(Op::Pop);
-        self.proto.emit(Op::Unit);
+        self.proto.emit(Op::ResourceDrop);
         Ok(())
     }
 }

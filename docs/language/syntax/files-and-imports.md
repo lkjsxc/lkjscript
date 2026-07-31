@@ -37,15 +37,14 @@ Declarations are private unless they contain `public`.
 
 ## Text, Byte Data, And Runtime Paths
 
-`string`, transitional `buf`, and `path` are disjoint. `string` owns valid
-UTF-8. `path` stores immutable exact absolute Linux pathname bytes and is not
-text. Current `buf` remains the bounded mutable byte representation while the
-accepted `bytes` and affine `byte-vector` migration is incomplete; it is not an
-alias for either destination type.
+`string`, `bytes`, `byte-vector`, and `path` are disjoint. `string` owns valid
+UTF-8. `bytes` is immutable arbitrary byte data, `byte-vector` is affine
+mutable byte storage, and `path` stores immutable exact absolute Linux pathname
+bytes and is not text. Removed buffer spellings alias none of them.
 
-`convert-string-to-path` and `convert-buf-to-path` are the Current constructors.
+`convert-string-to-path` and `convert-bytes-to-path` are the Current constructors.
 They reject empty, relative, NUL-containing, and longer-than-4095-byte values.
-`convert-path-to-buf` returns an independent exact copy;
+`convert-path-to-bytes` returns an independent exact copy;
 `convert-path-to-string` performs strict UTF-8 validation. Filesystem and SQLite
 pathname operations accept only `path`. No conversion normalizes, searches,
 consults ambient state, or decodes with replacement.
@@ -53,5 +52,6 @@ consults ambient state, or decodes with replacement.
 The ownership foundation exposes direct `byte-vector`, `byte-slice`, and
 `byte-slice-mut` spellings for the existing bounded whole-place affine slice.
 Immutable `bytes` uses the exact `bytes-literal/` lowercase hexadecimal
-projection and executes in the evaluator and VM. Ranged borrowed views and
+projection and executes in the evaluator, VM, forced baseline, and forced proof
+tiers. Ranged borrowed views and
 borrowed text `str` remain non-Current and are rejected.

@@ -2,24 +2,27 @@ mod constant;
 mod error;
 mod ids;
 mod instruction;
+mod instruction_metadata;
 mod instruction_operands;
 mod memory;
 mod metadata;
 mod program;
 mod runtime;
+mod structural;
 mod terminator;
 mod types;
 
 pub use constant::Constant;
 pub use error::{IrError, Result};
 pub use ids::{
-    BindingId, BlockId, EnumId, FailureCleanupId, FunctionId, ImplId, LoanId, PlaceId, ProductId,
-    RuntimeLayoutId, TraitId, ValueId, VariantFieldId, VariantId,
+    BindingId, BlockId, EnumId, FailureCleanupId, FunctionId, ImplId, LoanId, MemoryPlanId,
+    PlaceId, ProductId, RuntimeLayoutId, StructuralLayoutId, StructuralRepresentationId,
+    StructuralTypeId, TraitId, ValueId, VariantFieldId, VariantId,
 };
-pub use instruction::{
-    BlockParameter, BorrowKind, CallTarget, FailureBehavior, FailureCleanupAction,
-    FailureCleanupPlan, FrameLocal, FrameState, Instruction, InstructionKind, InstructionMetadata,
-    Safepoint,
+pub use instruction::{BlockParameter, BorrowKind, CallTarget, Instruction, InstructionKind};
+pub use instruction_metadata::{
+    FailureBehavior, FailureCleanupAction, FailureCleanupPlan, FrameLocal, FrameState,
+    InstructionMetadata, Safepoint,
 };
 pub use memory::{
     DropEventKind, DropGlueIdentity, MemoryAliasing, MemoryContention, MemoryDestruction,
@@ -35,6 +38,13 @@ pub use program::{
     FunctionBytecodeLink, PlaceMetadata, Program,
 };
 pub use runtime::RuntimeOp;
+pub use structural::{
+    StructuralDropGlueIdentity, StructuralLayoutKind, StructuralLayoutMetadata,
+    StructuralMemoryMetadata, StructuralRepresentationMetadata, StructuralStorage,
+    StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout,
+    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
+    MAX_STRUCTURAL_TYPES,
+};
 pub use terminator::{BlockMetadata, StructuredOutcome, Terminator};
 pub use types::{
     GenericInstantiation, ImplMetadata, Origin, Signature, SsaType, TraitBound, TraitMetadata,

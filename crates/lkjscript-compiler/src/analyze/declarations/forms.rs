@@ -105,7 +105,6 @@ pub(in crate::analyze) fn is_builtin_type_name(name: &str) -> bool {
             | "utf8-error"
             | "system-error"
             | "string"
-            | "buf"
             | "path"
             | "capability"
             | "symbol"

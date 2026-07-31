@@ -47,11 +47,34 @@ impl FunctionBuilder<'_> {
                 (CallTarget::Indirect(target), EffectSet::CONSERVATIVE_CALL)
             }
         };
+        let consuming = match target {
+            CallTarget::Direct(function) => self
+                .function_parameter_consumption
+                .get(&function)
+                .cloned()
+                .ok_or_else(|| Error::msg("SSA call target has no parameter ownership modes"))?,
+            CallTarget::Indirect(_) => arguments
+                .iter()
+                .map(|argument| {
+                    self.value_type(*argument).map(|ty| {
+                        is_owned_value(self.structural, &ty)
+                            && !self.structural.is_immutable(&ty)
+                            && !matches!(ty, SsaType::Resource(_))
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+        };
+        if consuming.len() != arguments.len() {
+            return Err(Error::msg(
+                "SSA call parameter ownership modes do not match arity",
+            ));
+        }
         let value = self.append(
             ty,
             InstructionKind::Call {
                 target,
                 arguments,
+                consuming,
                 signature,
                 instantiation: instantiation
                     .map(|instantiation| self.lower_instantiation(instantiation))
@@ -90,6 +113,7 @@ impl FunctionBuilder<'_> {
         let runtime = runtime_operation(operation)?;
         let signature = signature_from_type(resolved_signature, self.product_ids)?;
         let consumed_resource = arguments.first().copied();
+        let result_ty = ty.clone();
         let result = self.append(
             ty,
             InstructionKind::Runtime {
@@ -118,6 +142,7 @@ impl FunctionBuilder<'_> {
                 .ok_or_else(|| Error::msg("resource close lost its SSA operand"))?;
             self.record_explicit_close(reference.binding, value, expression.origin)?;
         }
-        Ok(Some(result))
+        self.publish_structural_source(result_ty, result, expression.origin)
+            .map(Some)
     }
 }

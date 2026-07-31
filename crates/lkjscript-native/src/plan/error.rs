@@ -13,6 +13,7 @@ pub enum PlanError {
     BlockAlreadyTerminated,
     EncoderOwnedRuntimeCall,
     InvalidHeapCall,
+    InvalidStructuralCall,
 }
 
 impl fmt::Display for PlanError {
@@ -42,6 +43,9 @@ impl fmt::Display for PlanError {
                 formatter.write_str("runtime call is owned by the native encoder")
             }
             Self::InvalidHeapCall => formatter.write_str("heap runtime call metadata is invalid"),
+            Self::InvalidStructuralCall => {
+                formatter.write_str("structural runtime call metadata is invalid")
+            }
         }
     }
 }

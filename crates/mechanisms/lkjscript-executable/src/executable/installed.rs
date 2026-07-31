@@ -152,6 +152,7 @@ impl InstalledImage {
             active_value_homes: state.active_value_homes,
             resource_calls: 0,
             unique_calls: 0,
+            structural_calls: 0,
             cleanup_failures: Vec::new(),
             omitted_cleanup_failures: 0,
             collector_runtime: true,

@@ -4,7 +4,7 @@ impl Evaluator<'_> {
     pub(super) fn runtime_bytes(
         &mut self,
         operation: RuntimeOp,
-        arguments: Vec<EvalValue>,
+        arguments: Vec<&EvalValue>,
     ) -> Result<EvalValue, Flow> {
         use RuntimeOp as Op;
         match (operation, arguments.as_slice()) {

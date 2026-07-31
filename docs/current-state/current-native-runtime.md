@@ -7,13 +7,12 @@
 **Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
 explicit labels in this capsule and its authority; this capsule cannot promote a capability.
 
-- Lossless bulk bytes: bounded transitional `buf` UTF-8 conversion and
-  offset/length-checked file partial-progress reads/writes remain Current. The
-  immutable `bytes` and full affine byte-vector migration remains accepted.
+- Lossless bulk bytes: immutable `bytes`, affine `byte-vector`, strict UTF-8
+  conversion, and checked-slice file partial-progress reads/writes are Current.
 - Durable files and entropy: typed `file-writer`, `file-appender`, and
   `directory` runtime slots enforce exact sync/truncate/write access. Linux
   `getrandom` fill remains Current.
-- SHA-256: fixed bounded-buffer digest is Current for verifier/integrity
+- SHA-256: fixed checked-slice digest returning immutable bytes is Current for verifier/integrity
   consumers; HMAC, password KDF, encryption, and WebAuthn remain absent.
 - SQLite: `sqlite-connection` and `sqlite-statement` are statically and
   dynamically disjoint; prepared operations, bounded text/blob copies, and
@@ -26,12 +25,12 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 - SSA evaluator: independent of bytecode, VM, native, and host helpers; it
   covers exact scalar/control semantics, calls and recursion, SSA-converted
   local mutation, products, Option/Result, lists, strings, deterministic args,
-  host-independent buffers, traps, exits, and explicit fuel/frame/allocation/
-  buffer/list bounds; console, filesystem, sockets, terminal, time, and typed
+  host-independent bytes and byte vectors, traps, exits, and explicit
+  fuel/frame/allocation/byte/list bounds; console, filesystem, sockets, terminal, time, and typed
   resource operations return explicit unsupported-evaluator outcomes
 - Callable baseline JIT: `lkjscript-jit` consumes only `VerifiedProgram`,
   lowers scalar `unit`/`bool`/`i64`/`f64` plus host-independent `string`,
-  transitional `buf`, product, list, option, result, and monomorphic host-independent enum
+  bytes, byte vectors, product, list, option, result, and monomorphic host-independent enum
   semantics and direct recursive SCC groups to `lkjscript-native`, installs
   bounded owned non-Send code objects through
   `lkjscript-executable`, and actually invokes generated System V AMD64 entries;
@@ -87,7 +86,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   performance. Automatic optimizing promotion remains disabled and unmeasured;
   no OSR, deoptimization, or speculation claim is made
 - Native references and heap sites: typed opaque stable-handle words use exact
-  Buf/Str/List/Option/Result/product/concrete-enum layout identities and verified
+  Str/List/Option/Result/product/concrete-enum layout identities and verified
   frame homes, not raw object pointers; zero is accepted only for EmptyList/None;
   the Copy runtime-adapter token
   is non-Send/non-Sync.
@@ -95,7 +94,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   before allocation and certificates sorted/deduplicated typed requirements for
   every direct/runtime call. The encoder consumes the certificate, and private
   structural image requirements prevent omitted/stale public maps from
-  validating. `CollectReferenceV1` exercises exact non-empty Buf roots while
+  validating. `CollectReferenceV1` exercises exact non-empty traced roots while
   Poll/Enter stay non-collecting. `lkjscript-executable` alone retains raw active-frame
   addresses, validates the installed image/chain/maps, grows root capacity
   dynamically under an aggregate cap, copies typed roots to safe runtime

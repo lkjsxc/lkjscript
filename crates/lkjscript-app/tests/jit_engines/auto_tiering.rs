@@ -4,7 +4,7 @@ use lkjscript_jit::{JitConfig, JitSession, TierState};
 use lkjscript_vm::{run_chunk, run_chunk_auto};
 
 #[test]
-fn auto_group_reference_helper_remains_vm_entry_ineligible() {
+fn auto_group_structural_string_helper_remains_vm_entry_ineligible() {
     let source = "def/\nname/\ntext\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nparams/\n/params\nempty-string/\n/empty-string\n/fn\n/def\ndef/\nname/\nsize\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\n/params\nstring-byte-length/\ntext/\n/text\n/string-byte-length\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\ndo/\nsize/\n/size\ntext/\n/text\nsize/\n/size\n/do\n/main\n";
     let program = compile(source, "auto-reference-helper.lkjscript");
     let mut config = JitConfig::default();
@@ -24,10 +24,7 @@ fn auto_group_reference_helper_remains_vm_entry_ineligible() {
         .expect("reference helper tier record");
     assert!(!helper.auto_entry_eligible());
     assert_ne!(helper.state(), TierState::BaselineNative);
-    assert!(
-        helper.native_entries() > 0,
-        "native direct calls remain supported"
-    );
+    assert_eq!(helper.native_entries(), 0);
     assert_eq!(stats.compile_failures, 0);
 }
 

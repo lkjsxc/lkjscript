@@ -20,7 +20,8 @@ fn encode_response(output: &mut Writer, value: &ProcessResponse) -> io::Result<(
             if *flushes > MAX_FLUSHES {
                 return Err(invalid("application flush count exceeds process bound"));
             }
-            let outcome = lkjscript_core::encode_execution_outcome(outcome, MAX_FRAME_BYTES)
+            let outcome =
+                lkjscript_core::encode_execution_outcome(outcome, PROCESS_OUTCOME_CODEC_LIMITS)
                 .map_err(|error| invalid(error.to_string()))?;
             output.u8(5)?;
             output.u64(nonzero(*cell, "execution cell")?)?;
@@ -48,7 +49,8 @@ fn decode_response(input: &mut Reader<'_>) -> io::Result<ProcessResponse> {
         5 => {
             let cell = nonzero(input.u64()?, "execution cell")?;
             let encoded = input.bytes(MAX_FRAME_BYTES)?;
-            let outcome = lkjscript_core::decode_execution_outcome(encoded, MAX_FRAME_BYTES)
+            let outcome =
+                lkjscript_core::decode_execution_outcome(encoded, PROCESS_OUTCOME_CODEC_LIMITS)
                 .map_err(|error| invalid(error.to_string()))?;
             let output = input.bytes(MAX_APPLICATION_OUTPUT_BYTES)?.to_vec();
             let flushes = input.u64()?;

@@ -4,6 +4,7 @@ impl OwnedValue {
         mut self,
         mut resolve: impl FnMut(u32) -> Result<&'a str>,
     ) -> Result<Self> {
+        let structural_symbols = self.structural_symbol_order()?;
         let mut pending = vec![self.root];
         let mut visited = vec![false; self.heap.len()];
         while let Some(value) = pending.pop() {
@@ -23,8 +24,42 @@ impl OwnedValue {
             visited[index] = true;
             object.trace(&mut |child| pending.push(child));
         }
+        for symbol in structural_symbols {
+            self.retain_symbol(symbol, resolve(symbol)?)?;
+        }
         self.canonicalize_symbols()?;
         Ok(self)
+    }
+
+    fn structural_symbol_order(&self) -> Result<Vec<u32>> {
+        let Some(structural) = self.structural.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let capacity = usize::try_from(structural.metrics.nodes)
+            .map_err(|_| Error::msg("owned structural symbol count exceeds platform"))?;
+        let mut pending = Vec::new();
+        pending
+            .try_reserve_exact(capacity)
+            .map_err(|_| Error::msg("owned structural symbol traversal allocation failed"))?;
+        pending.push(&structural.value);
+        let mut symbols = Vec::new();
+        symbols
+            .try_reserve_exact(capacity)
+            .map_err(|_| Error::msg("owned structural symbol traversal allocation failed"))?;
+        while let Some(value) = pending.pop() {
+            match &value.payload {
+                SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(symbol)) => {
+                    symbols.push(*symbol);
+                }
+                SemanticPayload::Product(fields)
+                | SemanticPayload::Enum {
+                    active_payload: fields,
+                    ..
+                } => pending.extend(fields.iter().rev()),
+                _ => {}
+            }
+        }
+        Ok(symbols)
     }
 
     fn canonicalize_symbols(&mut self) -> Result<()> {
@@ -64,6 +99,9 @@ impl OwnedValue {
         rewrite_symbol(&mut self.root, &mapping)?;
         for object in self.heap.iter_mut().flatten() {
             rewrite_object_symbols(object, &mapping)?;
+        }
+        if let Some(structural) = self.structural.as_mut() {
+            rewrite_structural_symbols(&mut structural.value, &mapping)?;
         }
         let mut canonical = Vec::new();
         canonical
@@ -115,7 +153,25 @@ fn rewrite_object_symbols(object: &mut HeapObj, mapping: &[Option<u32>]) -> Resu
                 rewrite_symbol(field, mapping)?;
             }
         }
-        HeapObj::Str(_) | HeapObj::Buf(_) | HeapObj::Path(_) => {}
+    }
+    Ok(())
+}
+
+fn rewrite_structural_symbols(value: &mut SemanticValue, mapping: &[Option<u32>]) -> Result<()> {
+    match &mut value.payload {
+        SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(symbol)) => {
+            *symbol = canonical_symbol(*symbol, mapping)?;
+        }
+        SemanticPayload::Product(fields)
+        | SemanticPayload::Enum {
+            active_payload: fields,
+            ..
+        } => {
+            for field in fields {
+                rewrite_structural_symbols(field, mapping)?;
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -124,11 +180,14 @@ fn rewrite_symbol(value: &mut Value, mapping: &[Option<u32>]) -> Result<()> {
     let Some(old) = value.as_symbol() else {
         return Ok(());
     };
-    let canonical = mapping
+    *value = Value::from_symbol(canonical_symbol(old, mapping)?);
+    Ok(())
+}
+
+fn canonical_symbol(old: u32, mapping: &[Option<u32>]) -> Result<u32> {
+    mapping
         .get(old as usize)
         .copied()
         .flatten()
-        .ok_or_else(|| Error::msg("owned symbol mapping is incomplete"))?;
-    *value = Value::from_symbol(canonical);
-    Ok(())
+        .ok_or_else(|| Error::msg("owned symbol mapping is incomplete"))
 }

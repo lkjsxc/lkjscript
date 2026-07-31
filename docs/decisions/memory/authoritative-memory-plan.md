@@ -57,8 +57,8 @@ values have value identity and cannot use object equality.
 ## Function Signatures
 
 Each parameter is exactly one of `copy`, `borrow-shared`, `borrow-exclusive`,
-or `consume`. Each result is `trivial`, `owned`, `borrowed`, or `external`.
-Borrowed results remain rejected in this slice.
+or `consume`. Each result is `trivial`, `owned`, `sealed-shared`, or `external`.
+Borrowed structural results remain rejected in this slice.
 
 Direct calls consume the verified signature. Affine or borrowed indirect calls
 remain rejected unless a complete callable signature exists. A backend cannot
@@ -81,11 +81,43 @@ Immutable transient call uses borrow where the signature permits it. Mutation
 requires an exclusive loan. Loans end after their last reachable use, not at
 function end.
 
+## Deterministic Aggregate Cutover Contract
+
+The integrated aggregate cutover extends each plan with separate domain and
+root-projection facts. Domain/storage is exactly inline, static, stack, caller
+destination, unique owner, ordinary region, sealed region, borrowed view,
+external resource, or registered legacy tracing. A compact structural root is
+a runtime projection of a typed domain root, never a storage class.
+
+Each planned value additionally records aggregate mode, transitive deterministic
+closure, destination kind, copy/share strategy, root-projection need, borrow
+scope, exact drop path, source/HIR origin, and allocation-failure cleanup.
+Destinations are private write-once state. Stack, caller, unique, ordinary-region,
+and sealed-builder destinations are permitted only where construction and abort
+execute; complete initialization precedes publication.
+
+Aggregate mode is reconstructed recursively from monomorphized field types:
+`copy` requires every field to be physically and semantically trivial;
+`immutable-value` permits borrow, static identity, explicit structural copy, or
+sealed sharing; `affine` follows any unique owner, external owner, or exact drop
+obligation. All declaration variants participate in enum mode derivation, while
+only the active payload initializes or drops. Unknown type arguments and
+recursive declaration SCCs cannot select the first deterministic island.
+
+The first island is transitively closed. Inline, static, deterministic leaf, and
+eligible nested aggregate fields are legal. A list/pair, captured closure,
+unknown type argument, or other registered legacy-traced field keeps the whole
+aggregate traced. A traced object cannot own a deterministic dynamic root, and
+a deterministic domain cannot own or borrow a collector-dependent value.
+Producer flags do not establish this closure: the verifier reconstructs it from
+the resolved type graph.
+
 ## Legacy Tracing
 
-`legacy-traced` is valid only for a family named by the tracing ratchet. An
-island value cannot use `legacy-unknown`, `legacy-traced-shared`, or
-`legacy-traced`. Unknown families and stale plan contracts fail before effects.
+`legacy-traced` is valid only for a family named by the tracing ratchet and an
+exact independently reconstructed closure blocker. An island value cannot use
+`legacy-unknown`, `legacy-traced-shared`, or `legacy-traced`. Unknown families,
+analysis failure, and stale plan contracts fail before effects.
 
 ## Budgets
 

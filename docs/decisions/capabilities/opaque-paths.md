@@ -5,12 +5,13 @@
 ## Status
 
 **Current on Linux x86-64.** Runtime filesystem and SQLite pathname APIs accept
-only the opaque immutable `path` value. `string` and `buf` are not pathname values
-and have no compatibility overload.
+only the opaque immutable `path` value. `string`, `bytes`, and `byte-vector`
+are not pathname values and have no compatibility overload.
 
 ## Disjoint Foundations
 
-- `buf` is bounded mutable arbitrary bytes.
+- `bytes` is bounded immutable arbitrary bytes.
+- `byte-vector` is bounded affine mutable arbitrary bytes.
 - `string` is bounded immutable valid UTF-8.
 - `path` is bounded immutable native pathname bytes.
 
@@ -19,12 +20,12 @@ canonical package-root-relative UTF-8 strings.
 
 ## Construction And Observation
 
-The closed operations are:
+The integrated public byte cutover provides:
 
 ```text
 convert-string-to-path: fn inputs string output result path system-error
-convert-buf-to-path: fn inputs buf output result path system-error
-convert-path-to-buf: fn inputs path output buf
+convert-bytes-to-path: fn inputs bytes output result path system-error
+convert-path-to-bytes: fn inputs path output bytes
 convert-path-to-string: fn inputs path output result string utf8-error
 ```
 
@@ -34,10 +35,10 @@ rejected before FFI or an unchecked allocation. Constructors copy exact bytes;
 they do not normalize, canonicalize, decode with replacement, consult the
 current directory, inspect environment or home state, or search roots.
 
-`convert-path-to-buf` returns an independent exact byte copy. `convert-path-to-string` performs
-strict UTF-8 validation and returns the existing precise `utf8-error` kind and
-offset. `path` has byte-value equality and immutable copy semantics; it has no
-object-identity or mutation operation.
+`convert-path-to-bytes` returns an independent exact immutable byte value.
+`convert-path-to-string` performs strict UTF-8 validation and returns the
+existing precise `utf8-error` kind and offset. `path` has byte-value equality
+and immutable value semantics; it has no object-identity or mutation operation.
 
 The accepted collector-free representation gives every dynamic path exactly one
 `UniqueStore::PathKey` owner. A source-level copy must become an explicit
@@ -49,17 +50,16 @@ tracing, and aliasing owner keys are forbidden.
 
 The safe core store implements exact path allocation, access, value comparison,
 structural copy, release, stale/wrong-layout rejection, and returned-backing
-transfer. This is a fail-closed executable foundation, not a claim that Current
-source path values use it.
+transfer. Evaluator paths use generation-safe unique path keys and VM path
+leaves use the bounded structural value runtime. `HeapObj::Path`, its wire tag,
+and the `path` tracing entry are removed; no dual traced path representation is
+permitted.
 
-The blocking aggregate is constructor output `result path system-error`.
-Current enum projection copies a payload value while the traced result envelope
-can have multiple aliases; replacing that payload with a unique owner would
-therefore duplicate or erase ownership. The cutover requires either verified
-whole-value aggregate transfer/drop without partial moves or an atomic source
-and operation-contract rewrite that removes the aggregate. Until then the
-collector-free path representation, path drop glue, and path bytecode ownership
-ABI remain non-Current and `HeapObj::Path` remains the Current representation.
+Generic constructor output `result path system-error` is governed by the
+aggregate-affine contract. Its payload must transfer through an exact structural
+or resource adapter with whole-value drop; a traced envelope containing a path
+owner is rejected. Complete compiler-selected option/result execution through
+all tiers remains separate acceptance evidence.
 
 Absolute bytes remove current-directory authority but do not claim symlink
 containment. Directory capabilities and `openat`-style sandboxing remain a
@@ -87,17 +87,14 @@ resource bounds, and language `result` values remain authoritative.
 
 ## Representation And Verification
 
-`path` is a distinct HIR, verified-SSA, bytecode, evaluator, and VM type. The VM
-currently stores exact bytes in a traced immutable heap object. `path`
-allocations and copies charge existing allocation and heap-byte limits.
-Bytecode validation rejects old `string` pathname stacks and malformed
-conversion stacks.
-
-The collector-free cutover must add exact path storage mode, drop glue,
-structural-copy and borrow events, bytecode owner metadata, evaluator/VM owner
-cleanup, borrowed host access, and returned-owner transfer in one safe vertical
-slice. It must then remove `HeapObj::Path` and decrement the tracing ratchet once.
-The core `PathKey` foundation alone does neither.
+`path` is a distinct HIR, verified-SSA, bytecode, evaluator, and VM type.
+Dynamic path owners use deterministic generation-safe storage, charge bounded
+structural owner and byte limits, and export key-free snapshots. Bytecode
+validation rejects old `string` pathname stacks, malformed conversion stacks,
+and legacy aggregate routes that would contain a path owner. Exact path storage
+mode, structural-copy metadata, evaluator/VM cleanup, borrowed host access, and
+returned-owner transfer are independently checked; generic aggregate envelopes
+still require their own explicit execution acceptance.
 
 Native tiers reject a `path` operation before source effects unless that tier
 implements its exact layout and operation contract. Forced tiers never fall

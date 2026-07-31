@@ -69,6 +69,7 @@ pub(crate) fn runtime(
 
 pub(crate) fn one_block_program() -> Program {
     Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -114,7 +115,7 @@ pub(crate) fn core_traits() -> Vec<TraitMetadata> {
     .collect()
 }
 
-pub(crate) fn owned_buf_type() -> SsaType {
+pub(crate) fn byte_vector_type() -> SsaType {
     SsaType::ByteVector
 }
 
@@ -122,7 +123,7 @@ pub(crate) fn owned_place(id: u32, binding: u32) -> crate::PlaceMetadata {
     crate::PlaceMetadata {
         id: PlaceId::new(id),
         binding: crate::BindingId::new(binding),
-        ty: owned_buf_type(),
+        ty: byte_vector_type(),
         drop_glue: Some(DropGlueIdentity::ByteVector),
     }
 }

@@ -70,7 +70,6 @@ impl<'a> Producer<'a> {
         });
         Ok(())
     }
-    #[allow(clippy::too_many_lines)]
     fn walk_expr(
         &mut self,
         expression: &Expr,

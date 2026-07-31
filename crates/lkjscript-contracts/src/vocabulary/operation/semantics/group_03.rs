@@ -79,7 +79,7 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
     OperationSemanticsRecord {
         identity: OperationIdentity::new(35),
         arity: 1,
-        type_scheme: "fn inputs i64 output buf",
+        type_scheme: "fn inputs i64 output byte-vector",
         generic_variables: &[],
         generic_constraints: &[],
         effects: OperationEffects(33),
@@ -94,7 +94,7 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
     OperationSemanticsRecord {
         identity: OperationIdentity::new(36),
         arity: 1,
-        type_scheme: "fn inputs buf output i64",
+        type_scheme: "fn inputs byte-slice output i64",
         generic_variables: &[],
         generic_constraints: &[],
         effects: OperationEffects(2),
@@ -109,7 +109,7 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
     OperationSemanticsRecord {
         identity: OperationIdentity::new(37),
         arity: 2,
-        type_scheme: "fn inputs buf i64 output i64",
+        type_scheme: "fn inputs byte-slice i64 output i64",
         generic_variables: &[],
         generic_constraints: &[],
         effects: OperationEffects(34),
@@ -124,7 +124,7 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
     OperationSemanticsRecord {
         identity: OperationIdentity::new(38),
         arity: 3,
-        type_scheme: "fn inputs buf i64 i64 output unit",
+        type_scheme: "fn inputs byte-slice-mut i64 i64 output unit",
         generic_variables: &[],
         generic_constraints: &[],
         effects: OperationEffects(36),
@@ -139,10 +139,10 @@ pub(super) const RECORDS: &[OperationSemanticsRecord] = &[
     OperationSemanticsRecord {
         identity: OperationIdentity::new(39),
         arity: 1,
-        type_scheme: "fn inputs i64 output byte-vector",
+        type_scheme: "fn inputs string output bytes",
         generic_variables: &[],
         generic_constraints: &[],
-        effects: OperationEffects(33),
+        effects: OperationEffects(35),
         capability_requirements: &[],
         ownership: OperationOwnership::Allocates,
         may_trap: true,

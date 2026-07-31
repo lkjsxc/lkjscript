@@ -85,8 +85,8 @@ The following are **Current**:
 - dense synchronous reference-VM execution and precise non-moving VM GC;
 - a closed scalar target-lowering plan, x86-64 encoder, opaque image, owned
   bounded W^X system lease, and typed invocation;
-- a verified-SSA adapter for Unit/Bool/I64/F64 plus host-independent Str, legacy
-  Buf, Product, List, Option, Result allocation/operations, direct recursive
+- a verified-SSA adapter for Unit/Bool/I64/F64 plus host-independent unique
+  bytes/byte-vectors and Str, Product, List, Option, Result operations, direct recursive
   SCCs, checked numerics, branches/loops, and outcomes;
 - bounded baseline/optimizing code objects and explicit per-function tier states;
 - bounded complete stable-ID certificates, opaque optimized-program authority,

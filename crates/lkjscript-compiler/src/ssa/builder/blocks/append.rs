@@ -11,43 +11,19 @@ impl FunctionBuilder<'_> {
         let current = self
             .current
             .ok_or_else(|| Error::msg("cannot append to an ended SSA path"))?;
-        let place_init = match &kind {
-            InstructionKind::PlaceInit { value, .. } => Some(*value),
-            _ => None,
-        };
+        let ownership = success_ownership(self.structural, &self.value_types, &ty, &kind);
         let call_handoff = match &kind {
-            InstructionKind::Call { arguments, .. } => arguments.clone(),
-            _ => Vec::new(),
-        };
-        let consumed_unplaced = match &kind {
-            InstructionKind::Drop { value, .. } => vec![*value],
-            InstructionKind::Call { arguments, .. } => arguments.clone(),
-            InstructionKind::Runtime {
-                operation,
+            InstructionKind::Call {
                 arguments,
+                consuming,
                 ..
-            } if !matches!(
-                operation,
-                RuntimeOp::BytesLength
-                    | RuntimeOp::BytesByteAt
-                    | RuntimeOp::CopyBytesSlice
-                    | RuntimeOp::CloneBytes
-            ) =>
-            {
-                arguments.clone()
-            }
+            } => arguments
+                .iter()
+                .zip(consuming)
+                .filter_map(|(argument, consuming)| consuming.then_some(*argument))
+                .collect(),
             _ => Vec::new(),
         };
-        let publishes_unplaced_owner = is_owned_value(&ty)
-            && !matches!(
-                &kind,
-                InstructionKind::Constant(Constant::StaticBytes(_))
-                    | InstructionKind::Borrow { .. }
-                    | InstructionKind::Runtime {
-                        operation: RuntimeOp::StdinHandle,
-                        ..
-                    }
-            );
         let id = self.next_value(&ty)?;
         let safepoint = if matches!(kind, InstructionKind::Call { .. })
             || effects.contains(EffectSet::ALLOCATES)
@@ -79,11 +55,8 @@ impl FunctionBuilder<'_> {
             metadata,
         });
         self.unplaced_owners
-            .retain(|owner| !consumed_unplaced.contains(owner));
-        if let Some(value) = place_init {
-            self.unplaced_owners.retain(|owner| *owner != value);
-        }
-        if publishes_unplaced_owner {
+            .retain(|owner| !ownership.consumed.contains(owner));
+        if ownership.publishes_owner {
             self.unplaced_owners.push(id);
         }
         Ok(id)
@@ -119,11 +92,91 @@ impl FunctionBuilder<'_> {
         constant: Constant,
         expression_origin: hir::SourceId,
     ) -> Result<ValueId> {
-        self.append(
-            ty,
+        let source = self.append(
+            ty.clone(),
             InstructionKind::Constant(constant),
             EffectSet::PURE,
             expression_origin,
-        )
+        )?;
+        self.publish_structural_source(ty, source, expression_origin)
+    }
+}
+
+struct SuccessOwnership {
+    consumed: Vec<ValueId>,
+    publishes_owner: bool,
+}
+
+fn success_ownership(
+    structural: &StructuralMemoryMetadata,
+    value_types: &[SsaType],
+    ty: &SsaType,
+    kind: &InstructionKind,
+) -> SuccessOwnership {
+    let consumed = match kind {
+        InstructionKind::PlaceInit { value, .. }
+        | InstructionKind::Drop { value, .. }
+        | InstructionKind::Move { value, .. }
+        | InstructionKind::StructuralPublish { value, .. }
+        | InstructionKind::DestinationFinish { destination: value }
+        | InstructionKind::DestinationAbort { destination: value }
+        | InstructionKind::AggregateConsumePayload { value, .. } => vec![*value],
+        InstructionKind::DestinationFieldInit {
+            destination, value, ..
+        }
+        | InstructionKind::WithProductField {
+            value: destination,
+            replacement: value,
+            ..
+        } => vec![*destination, *value],
+        InstructionKind::Call {
+            arguments,
+            consuming,
+            ..
+        } => arguments
+            .iter()
+            .zip(consuming)
+            .filter_map(|(argument, consuming)| consuming.then_some(*argument))
+            .collect(),
+        InstructionKind::Runtime {
+            operation,
+            arguments,
+            ..
+        } => arguments
+            .iter()
+            .copied()
+            .filter(|argument| {
+                let ty = value_types.get(argument.index().unwrap_or(usize::MAX));
+                ty.is_some_and(|ty| {
+                    !structural.is_immutable(ty)
+                        && (is_owned_value(structural, ty)
+                            && (!matches!(ty, SsaType::Resource(_))
+                                || operation.consumes_affine_arguments()))
+                })
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let raw_structural_source = structural.is_owned(ty)
+        && matches!(
+            kind,
+            InstructionKind::Constant(_) | InstructionKind::Runtime { .. }
+        );
+    let publishes_owner = is_owned_value(structural, ty)
+        && !raw_structural_source
+        && !matches!(
+            kind,
+            InstructionKind::Constant(Constant::StaticBytes(_))
+                | InstructionKind::Borrow { .. }
+                | InstructionKind::AggregateFieldBorrow { .. }
+                | InstructionKind::StringUtf8View { .. }
+                | InstructionKind::Runtime {
+                    operation: RuntimeOp::StdinHandle,
+                    ..
+                }
+        );
+    SuccessOwnership {
+        consumed,
+        publishes_owner,
     }
 }

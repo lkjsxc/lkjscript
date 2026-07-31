@@ -1,6 +1,9 @@
 use std::io::{self, Read, Write};
 
-use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
+use lkjscript_core::{
+    CapabilityKind, ExecutionConfig, ExecutionOutcome, ExecutionOutcomeCodecLimits,
+    StructuralSnapshotLimits,
+};
 
 pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_ENTRY_BYTES: usize = 4 * 1024;
@@ -10,6 +13,8 @@ pub const MAX_AGGREGATE_ARGUMENT_BYTES: usize = 256 * 1024;
 pub const MAX_APPLICATION_OUTPUT_BYTES: usize = 1024 * 1024;
 pub const MAX_DIAGNOSTIC_BYTES: usize = 4 * 1024;
 pub const MAX_FLUSHES: u64 = 1_000_000;
+pub const PROCESS_OUTCOME_CODEC_LIMITS: ExecutionOutcomeCodecLimits =
+    ExecutionOutcomeCodecLimits::new(MAX_FRAME_BYTES, StructuralSnapshotLimits::DEFAULT);
 
 pub fn runtime_control_digest() -> io::Result<[u8; 32]> {
     let contracts = lkjscript_contracts::current_contracts()
@@ -132,5 +137,7 @@ include!("io.rs");
 include!("messages.rs");
 include!("config.rs");
 
+#[cfg(test)]
+mod structural_tests;
 #[cfg(test)]
 mod tests;

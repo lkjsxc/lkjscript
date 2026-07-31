@@ -5,9 +5,12 @@
 <!-- LKJ-STATUS id=structural-ownership-domains status=current -->
 <!-- LKJ-STATUS id=structural-root-values status=current -->
 
-**Current for the safe core substrate and resource-plane owner-home adapter.**
-It does not migrate a language family, change an execution backend, or support
-a collector-free-runtime claim.
+**Current for the safe core substrate, resource-plane owner-home adapter, and
+nonrecursive deterministic language island.** Dynamic strings, paths, eligible
+products/enums/results, destinations, and key-free snapshots use this service in
+the evaluator, VM, forced baseline, and forced proof tiers. Recursive legacy
+families remain outside the island, so this does not support a whole-runtime
+collector-free claim.
 
 ## Decision
 
@@ -59,6 +62,28 @@ Optional debug facts may record live roots, state transitions, poisoning,
 ownership events, and leaks. Debug tracking is observation only. Runtime storage
 uses no reachability traversal, finalizer, collector fallback, or source raw
 pointer.
+
+## Execution Service Cutover
+
+Each evaluator, VM, or native invocation owns one structural execution service:
+a structural runtime, compact root table, deterministic domain stores, exact
+limits, and metrics. Publishing a dynamic value creates or selects its domain,
+creates one typed root, publishes one table entry, and returns only a
+`StructuralValueKey` in runtime `Value` storage.
+
+A move takes and invalidates the old table entry before transfer or
+republication. A borrow couples a stale-safe table loan to the exact domain
+loan. A drop removes the entry first and then dispatches the returned typed root
+to its domain authority for deterministic release. Static artifacts unregister
+without dynamic allocation; sealed roots release one region-level owner and do
+not count internal nodes. Session completion requires zero live dynamic roots,
+loans, private destinations, and release backlog.
+
+The adapter dispatches by typed domain/layout metadata, never source type-name
+strings. It rejects wrong runtime, stale generation, wrong layout or semantic
+type, conflicting borrow, drop while borrowed, and a domain/root mismatch
+before mutation. Structural keys and loan tokens are invocation-private and
+never returned through a process codec.
 
 ## Thread And Scheduler Boundary
 

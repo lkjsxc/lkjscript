@@ -4,6 +4,7 @@ impl<'a> Producer<'a> {
         entry: MemoryEntryId,
         kind: MemoryObligationKind,
         drop_glue: Option<MemoryDropGlueId>,
+        drop_path: Option<MemoryDropPathId>,
     ) -> Result<()> {
         self.charge_obligations(1)?;
         let id = MemoryObligationId::new(
@@ -16,6 +17,7 @@ impl<'a> Producer<'a> {
             entry,
             kind,
             drop_glue,
+            drop_path,
             drop_class: (!matches!(kind, MemoryObligationKind::EndBorrow))
                 .then_some(MemoryDropClass::Static),
         });
@@ -34,16 +36,28 @@ impl<'a> Producer<'a> {
             u32::try_from(self.entries.len())
                 .map_err(|_| Error::msg("HIR memory-plan entry identity exceeds u32"))?,
         );
-        let (mode, legacy_family, drop_glue) = memory_mode(ty, effects, escape);
+        let type_fact = self.type_planner.intern(ty)?;
+        let fact = self.type_planner.fact(type_fact)?.clone();
+        let (mode, legacy_family, execution, execution_cutover) =
+            memory_mode(ty, &fact, effects, escape);
+        let owns_glue = fact.mode != MemoryAggregateMode::Copy;
         self.entries.push(MemoryPlanEntry {
             id,
             subject,
             ty: memory_type(ty),
             effects,
             mode,
+            type_fact,
+            root_projection: fact.root_projection,
+            destination: None,
+            copy_share: fact.copy_share,
+            borrow_scope: None,
+            drop_path: owns_glue.then_some(fact.drop_path).flatten(),
+            execution,
+            execution_cutover,
             origin,
             legacy_family: legacy_family.map(str::to_owned),
-            drop_glue,
+            drop_glue: owns_glue.then_some(fact.drop_glue).flatten(),
         });
         Ok(id)
     }

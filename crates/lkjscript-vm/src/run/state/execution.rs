@@ -2,6 +2,9 @@ use super::*;
 
 impl<'a, J: RuntimeTier> Vm<'a, J> {
     pub(super) fn run_loop(&mut self) -> Result<Stop> {
+        if let Some(error) = self.structural_initialization_error.take() {
+            return Err(error);
+        }
         if self.inputs.capabilities != self.chunk.required_capabilities() {
             return Err(Error::msg(format!(
                 "execution capability mismatch: required {:?}, received {:?}",
@@ -18,6 +21,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 unique::RuntimePlace::Inactive;
                 usize::from(self.chunk.main().unique_places)
             ],
+            borrowed_resources: Vec::new(),
         });
         for kind in &self.inputs.capabilities {
             self.stack.push(Value::from_capability(*kind));
@@ -36,6 +40,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             let site = self.current_failure_offset();
             if self.is_failure_boundary(site) {
                 if let Err(error) = self.check_deadline() {
+                    self.restore_structural_handoffs();
                     self.execute_failure_unwind(site, true);
                     return Err(error);
                 }
@@ -44,6 +49,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                         ResourceLimitKind::InstructionFuel,
                         "instruction fuel exhausted",
                     );
+                    self.restore_structural_handoffs();
                     self.execute_failure_unwind(site, true);
                     return Err(error);
                 }
@@ -53,11 +59,13 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 self.collect();
             }
             if let Err(error) = self.step() {
+                self.restore_structural_handoffs();
                 self.execute_failure_unwind(site, false);
                 return Err(error);
             }
             if let Some(error) = self.allocation_error.take() {
                 let failure_site = self.current_failure_offset().saturating_sub(1);
+                self.restore_structural_handoffs();
                 self.execute_failure_unwind(failure_site, false);
                 return Err(error);
             }
@@ -65,6 +73,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             if self.is_failure_boundary(next_site) {
                 if let Err(error) = self.check_runtime_limits() {
                     let failure_site = next_site.saturating_sub(1);
+                    self.restore_structural_handoffs();
                     self.execute_failure_unwind(failure_site, false);
                     return Err(error);
                 }
@@ -73,6 +82,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
     }
 }
 
+#[cfg(feature = "jit")]
 impl<'a> Vm<'a, JitSession> {
     pub fn run_auto(mut self) -> (ExecutionOutcome, JitStats) {
         let outcome = self.run_inner();

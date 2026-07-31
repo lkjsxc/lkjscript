@@ -20,5 +20,6 @@ mod control;
 mod enums;
 mod failure_cleanup;
 mod metadata;
+mod structural;
 mod types;
 mod unique;

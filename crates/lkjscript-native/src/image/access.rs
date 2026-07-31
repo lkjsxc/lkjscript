@@ -53,6 +53,11 @@ impl InstallableImage {
     }
 
     #[must_use]
+    pub fn structural_runtime_sites(&self) -> &[StructuralRuntimeSite] {
+        &self.structural_runtime_sites
+    }
+
+    #[must_use]
     pub fn source_map(&self) -> &[SourceMapEntry] {
         &self.source_map
     }

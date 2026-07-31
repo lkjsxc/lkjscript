@@ -29,6 +29,20 @@ pub enum FailureCleanupAction {
         place: Option<u8>,
         kind: crate::ResourceKind,
     },
+    EndStructuralBorrow {
+        local: u8,
+        place: u8,
+        representation: crate::StructuralRepresentationId,
+    },
+    DropStructural {
+        local: u8,
+        place: Option<u8>,
+        representation: crate::StructuralRepresentationId,
+    },
+    AbortStructuralDestination {
+        local: u8,
+        destination: crate::StructuralDestinationId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

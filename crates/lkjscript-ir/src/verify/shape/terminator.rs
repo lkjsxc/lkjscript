@@ -81,15 +81,27 @@ pub(crate) fn verify_edge(
     Ok(())
 }
 
+pub(crate) struct FrameVerificationContext<'a> {
+    pub(crate) program: &'a Program,
+    pub(crate) function: &'a Function,
+    pub(crate) types: &'a [SsaType],
+    pub(crate) definitions: &'a HashMap<ValueId, Definition>,
+    pub(crate) dominators: &'a Dominators,
+}
+
 pub(crate) fn verify_frame_state(
-    function: &Function,
+    context: &FrameVerificationContext<'_>,
     block: BlockId,
     instruction: Option<usize>,
     frame: &crate::FrameState,
-    types: &[SsaType],
-    definitions: &HashMap<ValueId, Definition>,
-    dominators: &Dominators,
 ) -> crate::Result<()> {
+    let FrameVerificationContext {
+        program,
+        function,
+        types,
+        definitions,
+        dominators,
+    } = context;
     let mut bindings = HashSet::new();
     let mut slots = HashSet::new();
     let mut affine_values = HashSet::new();
@@ -103,7 +115,7 @@ pub(crate) fn verify_frame_state(
             return fail("SSA frame state has duplicate bindings or local slots");
         }
         let ty = value_type(types, local.value)?;
-        if is_affine(ty) && !affine_values.insert(local.value) {
+        if is_affine(program, ty) && !affine_values.insert(local.value) {
             return fail("SSA frame state duplicates an affine local value");
         }
         verify_available(
@@ -117,7 +129,7 @@ pub(crate) fn verify_frame_state(
     }
     for value in &frame.operand_stack {
         let ty = value_type(types, *value)?;
-        if is_affine(ty) && !affine_values.insert(*value) {
+        if is_affine(program, ty) && !affine_values.insert(*value) {
             return fail("SSA frame state duplicates an affine value");
         }
         verify_available(

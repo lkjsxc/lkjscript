@@ -144,7 +144,7 @@ families:
 
 - `equal-value`: identical-type value equality for current scalar types and
   recursively comparable Option/Result values;
-- `is-same-object`: identity comparison for current Buf and Handle values;
+- `is-same-object`: identity comparison for current typed-resource values;
 - `equal-list`: structural `List T` equality when `T` supports value equality,
   bounded to 1,000,000 pair-node comparisons;
 - `equal-f64-bits`: exact `to_bits` equality, distinct from IEEE equality.

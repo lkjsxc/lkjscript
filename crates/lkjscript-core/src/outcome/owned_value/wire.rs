@@ -5,6 +5,13 @@ const MAX_WIRE_ITEMS: usize = 262_144;
 
 impl OwnedValue {
     pub(crate) fn encode_wire(&self, out: &mut Encoder) -> Result<()> {
+        self.validate_wire_symbols()?;
+        if let Some(structural) = &self.structural {
+            out.u8(3)?;
+            let limits = out.structural_limits();
+            encode_structural_snapshot(out, structural, limits)?;
+            return encode_symbol_table(out, &self.symbols);
+        }
         if let Some(bytes) = &self.unique_byte_vector {
             out.u8(1)?;
             return out.bytes(bytes);
@@ -25,17 +32,7 @@ impl OwnedValue {
                 None => out.u8(0)?,
             }
         }
-        out.usize(self.symbols.len())?;
-        for symbol in &self.symbols {
-            match symbol {
-                Some(text) => {
-                    out.u8(1)?;
-                    out.text(text)?;
-                }
-                None => out.u8(0)?,
-            }
-        }
-        Ok(())
+        encode_symbol_table(out, &self.symbols)
     }
 
     pub(crate) fn decode_wire(input: &mut Decoder<'_>) -> Result<Self> {
@@ -51,22 +48,21 @@ impl OwnedValue {
                         _ => return Err(Error::msg("unknown owned heap slot tag")),
                     });
                 }
-                let symbol_count = count(input.usize()?)?;
-                let mut symbols = reserve(symbol_count)?;
-                for _ in 0..symbol_count {
-                    symbols.push(match input.u8()? {
-                        0 => None,
-                        1 => Some(input.text()?),
-                        _ => return Err(Error::msg("unknown owned symbol slot tag")),
-                    });
-                }
                 let mut value = Self::from_vm_snapshot(root, heap)?;
-                value.symbols = symbols;
+                value.symbols = decode_symbol_table(input)?;
                 value.validate_wire_symbols()?;
                 Ok(value)
             }
             1 => Self::from_unique_byte_vector(input.bytes()?.to_vec()),
             2 => Self::from_unique_bytes(input.bytes()?.to_vec()),
+            3 => {
+                let limits = input.structural_limits();
+                let structural = decode_structural_snapshot(input, limits)?;
+                let mut value = Self::from_owned_structural(structural);
+                value.symbols = decode_symbol_table(input)?;
+                value.validate_wire_symbols()?;
+                Ok(value)
+            }
             _ => Err(Error::msg("unknown owned value tag")),
         }
     }
@@ -82,8 +78,38 @@ impl OwnedValue {
                 return Err(Error::msg("owned value references a missing symbol"));
             }
         }
+        for symbol in self.structural_symbol_order()? {
+            validate_symbol_index(symbol, &self.symbols)?;
+        }
         Ok(())
     }
+}
+
+fn encode_symbol_table(out: &mut Encoder, symbols: &[Option<String>]) -> Result<()> {
+    out.usize(symbols.len())?;
+    for symbol in symbols {
+        match symbol {
+            Some(text) => {
+                out.u8(1)?;
+                out.text(text)?;
+            }
+            None => out.u8(0)?,
+        }
+    }
+    Ok(())
+}
+
+fn decode_symbol_table(input: &mut Decoder<'_>) -> Result<Vec<Option<String>>> {
+    let symbol_count = count(input.usize()?)?;
+    let mut symbols = reserve(symbol_count)?;
+    for _ in 0..symbol_count {
+        symbols.push(match input.u8()? {
+            0 => None,
+            1 => Some(input.text()?),
+            _ => return Err(Error::msg("unknown owned symbol slot tag")),
+        });
+    }
+    Ok(symbols)
 }
 
 fn encode_value(out: &mut Encoder, value: Value) -> Result<()> {
@@ -115,7 +141,9 @@ fn encode_value(out: &mut Encoder, value: Value) -> Result<()> {
         out.u8(10)?;
         out.u32(value)
     } else {
-        Err(Error::msg("owned value category is not process transportable"))
+        Err(Error::msg(
+            "owned value category is not process transportable",
+        ))
     }
 }
 
@@ -140,3 +168,7 @@ fn decode_value(input: &mut Decoder<'_>) -> Result<Value> {
 }
 
 include!("wire_objects.rs");
+include!("structural_wire.rs");
+include!("structural_encode.rs");
+include!("structural_decode_budget.rs");
+include!("structural_decode.rs");

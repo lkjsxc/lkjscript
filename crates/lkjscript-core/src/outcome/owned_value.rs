@@ -13,6 +13,7 @@ pub struct OwnedValue {
     unique_byte_vector: Option<Vec<u8>>,
     unique_bytes: Option<Vec<u8>>,
     symbols: Vec<Option<String>>,
+    structural: Option<Box<OwnedStructuralValue>>,
 }
 
 impl OwnedValue {
@@ -53,6 +54,7 @@ impl OwnedValue {
             unique_byte_vector: None,
             unique_bytes: None,
             symbols: Vec::new(),
+            structural: None,
         })
     }
 
@@ -66,6 +68,7 @@ impl OwnedValue {
             unique_byte_vector: Some(bytes),
             unique_bytes: None,
             symbols: Vec::new(),
+            structural: None,
         })
     }
 
@@ -77,64 +80,8 @@ impl OwnedValue {
             unique_byte_vector: None,
             unique_bytes: Some(bytes),
             symbols: Vec::new(),
+            structural: None,
         })
-    }
-
-    pub fn is_unit(&self) -> bool {
-        self.unique_byte_vector.is_none() && self.unique_bytes.is_none() && self.root.is_unit()
-    }
-
-    pub fn is_empty_list(&self) -> bool {
-        self.root.is_empty_list()
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
-        self.root.as_bool()
-    }
-
-    pub fn as_i64(&self) -> Option<i64> {
-        self.root.as_i64()
-    }
-
-    pub fn as_f64(&self) -> Option<f64> {
-        self.root.as_f64()
-    }
-
-    pub fn as_f64_bits(&self) -> Option<u64> {
-        self.root.as_f64_bits()
-    }
-
-    pub fn as_str(&self) -> Option<&str> {
-        if let Some(index) = self.root.as_symbol() {
-            return self.symbols.get(index as usize)?.as_deref();
-        }
-        match self.object()? {
-            HeapObj::Str(text) => Some(text),
-            _ => None,
-        }
-    }
-
-    pub fn as_path_bytes(&self) -> Option<&[u8]> {
-        match self.object()? {
-            HeapObj::Path(bytes) => Some(bytes),
-            _ => None,
-        }
-    }
-
-    pub fn as_byte_vector(&self) -> Option<&[u8]> {
-        self.unique_byte_vector.as_deref()
-    }
-
-    pub fn as_bytes(&self) -> Option<&[u8]> {
-        self.unique_bytes.as_deref()
-    }
-
-    pub fn as_resource(&self) -> Option<u32> {
-        self.root.as_resource()
-    }
-
-    pub fn as_function(&self) -> Option<u32> {
-        self.root.as_function()
     }
 
     pub fn enum_identity(&self) -> Option<(RuntimeLayoutId, u16)> {
@@ -156,6 +103,12 @@ impl OwnedValue {
     }
 
     pub fn enum_physical_tag(&self) -> Option<u16> {
+        if let Some(value) = self.as_structural() {
+            return match &value.payload {
+                SemanticPayload::Enum { tag, .. } => Some(*tag),
+                _ => None,
+            };
+        }
         match self.object()? {
             HeapObj::Enum { physical_tag, .. } => Some(*physical_tag),
             _ => None,
@@ -163,6 +116,15 @@ impl OwnedValue {
     }
 
     pub fn enum_field_i64(&self, field: usize) -> Option<i64> {
+        if let Some(value) = self.as_structural() {
+            let SemanticPayload::Enum { active_payload, .. } = &value.payload else {
+                return None;
+            };
+            return match &active_payload.get(field)?.payload {
+                SemanticPayload::Inline(InlineStructuralValue::I64(value)) => Some(*value),
+                _ => None,
+            };
+        }
         let HeapObj::Enum { active_payload, .. } = self.object()? else {
             return None;
         };
@@ -172,7 +134,23 @@ impl OwnedValue {
     /// Test/diagnostic inspection of retained reachable snapshot storage.
     #[doc(hidden)]
     pub fn snapshot_object_count(&self) -> usize {
-        self.heap.iter().flatten().count()
+        let Some(root) = self.as_structural() else {
+            return self.heap.iter().flatten().count();
+        };
+        let mut work = vec![root];
+        let mut count = 0usize;
+        while let Some(value) = work.pop() {
+            count = count.saturating_add(1);
+            match &value.payload {
+                SemanticPayload::Product(fields)
+                | SemanticPayload::Enum {
+                    active_payload: fields,
+                    ..
+                } => work.extend(fields),
+                _ => {}
+            }
+        }
+        count
     }
 
     fn object(&self) -> Option<&HeapObj> {
@@ -185,6 +163,9 @@ impl OwnedValue {
     }
 }
 
+include!("owned_value/structural.rs");
+include!("owned_value/structural_validation.rs");
+include!("owned_value/views.rs");
 include!("owned_value/symbols.rs");
 include!("owned_value/wire.rs");
 include!("owned_value/debug.rs");

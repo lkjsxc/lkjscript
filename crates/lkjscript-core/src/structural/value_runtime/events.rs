@@ -1,0 +1,142 @@
+use std::collections::VecDeque;
+
+use super::StructuralValueError;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StructuralEventKind {
+    Allocate,
+    Initialize,
+    Borrow,
+    EndView,
+    Move,
+    Publish,
+    Clone,
+    Drop,
+    Release,
+    Stale,
+    SlotReuse,
+    DestinationCreate,
+    DestinationComplete,
+    DestinationAbort,
+    DestinationCleanup,
+    StringView,
+    StaticRegister,
+    StaticUnregister,
+    Export,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StructuralEvent {
+    pub sequence: u64,
+    pub kind: StructuralEventKind,
+    pub subject: u32,
+    pub amount: u64,
+}
+
+#[derive(Debug)]
+pub struct StructuralEventLog {
+    limit: usize,
+    next_sequence: u64,
+    records: VecDeque<StructuralEvent>,
+}
+
+impl StructuralEventLog {
+    pub(super) fn new(limit: u32) -> Result<Self, StructuralValueError> {
+        let limit = usize::try_from(limit).map_err(|_| StructuralValueError::InvalidLimits)?;
+        let mut records = VecDeque::new();
+        records
+            .try_reserve_exact(limit)
+            .map_err(|_| StructuralValueError::AllocationFailed)?;
+        Ok(Self {
+            limit,
+            next_sequence: 1,
+            records,
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &StructuralEvent> {
+        self.records.iter()
+    }
+
+    pub(super) fn record(&mut self, kind: StructuralEventKind, subject: u32, amount: u64) -> bool {
+        let overwritten = self.records.len() == self.limit;
+        if overwritten {
+            self.records.pop_front();
+        }
+        self.records.push_back(StructuralEvent {
+            sequence: self.next_sequence,
+            kind,
+            subject,
+            amount,
+        });
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        overwritten
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StructuralValueRuntimeMetrics {
+    pub allocations: u64,
+    pub initializations: u64,
+    pub borrows: u64,
+    pub moves: u64,
+    pub publications: u64,
+    pub clones: u64,
+    pub drops: u64,
+    pub releases: u64,
+    pub stale_rejections: u64,
+    pub object_slots_reused: u64,
+    pub live_objects: u32,
+    pub peak_live_objects: u32,
+    pub destinations_created: u64,
+    pub destinations_completed: u64,
+    pub destinations_aborted: u64,
+    pub destination_fields_initialized: u64,
+    pub destination_cleanup_work: u64,
+    pub live_destinations: u32,
+    pub views_created: u64,
+    pub views_ended: u64,
+    pub live_views: u32,
+    pub peak_live_views: u32,
+    pub string_bytes_allocated: u64,
+    pub string_bytes_live: u64,
+    pub string_bytes_cloned: u64,
+    pub string_bytes_released: u64,
+    pub path_bytes_allocated: u64,
+    pub path_bytes_live: u64,
+    pub path_bytes_cloned: u64,
+    pub path_bytes_released: u64,
+    pub payload_bytes_live: u64,
+    pub payload_bytes_peak: u64,
+    pub clone_nodes: u64,
+    pub release_work: u64,
+    pub release_backlog: u32,
+    pub events_overwritten: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct TreeFacts {
+    pub nodes: u32,
+    pub bytes: u64,
+    pub string_bytes: u64,
+    pub path_bytes: u64,
+}
+
+impl TreeFacts {
+    pub(super) fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            nodes: self.nodes.checked_add(other.nodes)?,
+            bytes: self.bytes.checked_add(other.bytes)?,
+            string_bytes: self.string_bytes.checked_add(other.string_bytes)?,
+            path_bytes: self.path_bytes.checked_add(other.path_bytes)?,
+        })
+    }
+}

@@ -3,6 +3,9 @@ impl fmt::Debug for OwnedValue {
         if let Some(bytes) = self.as_byte_vector() {
             return write!(formatter, "#<owned-byte-vector:{}>", bytes.len());
         }
+        if let Some(bytes) = self.as_bytes() {
+            return write!(formatter, "#<owned-bytes:{}>", bytes.len());
+        }
         if self.is_unit() {
             return formatter.write_str("unit");
         }
@@ -21,23 +24,40 @@ impl fmt::Debug for OwnedValue {
         if let Some(value) = self.as_str() {
             return value.fmt(formatter);
         }
+        if let Some(value) = self.as_path_bytes() {
+            return write!(formatter, "#<owned-path:{}>", value.len());
+        }
         if let Some(value) = self.as_resource() {
             return write!(formatter, "resource#{value}");
         }
         if let Some(prototype) = self.as_function() {
             return write!(formatter, "#<owned-fn:{prototype}>");
         }
+        if let Some(value) = self.as_structural() {
+            return match &value.payload {
+                SemanticPayload::Product(fields) => {
+                    write!(formatter, "#<owned-structural-product:{}>", fields.len())
+                }
+                SemanticPayload::Enum {
+                    tag,
+                    active_payload,
+                } => write!(
+                    formatter,
+                    "#<owned-structural-enum:{tag}:{}>",
+                    active_payload.len()
+                ),
+                SemanticPayload::Static(_) => formatter.write_str("#<owned-static>"),
+                _ => formatter.write_str("#<owned-structural-value>"),
+            };
+        }
         match self.object() {
             Some(HeapObj::Pair { .. }) => formatter.write_str("#<owned-pair>"),
-            Some(HeapObj::Buf(bytes)) => write!(formatter, "#<owned-buf:{}>", bytes.len()),
-            Some(HeapObj::Path(bytes)) => write!(formatter, "#<owned-path:{}>", bytes.len()),
             Some(HeapObj::Product { product, .. }) => {
                 write!(formatter, "#<owned-product:{}>", product.raw())
             }
             Some(HeapObj::Enum { physical_tag, .. }) => {
                 write!(formatter, "#<owned-enum:{physical_tag}>")
             }
-            Some(HeapObj::Str(_)) => formatter.write_str("#<owned-value>"),
             None => self.root.fmt(formatter),
         }
     }

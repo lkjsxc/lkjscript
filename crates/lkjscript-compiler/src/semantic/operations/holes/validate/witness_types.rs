@@ -10,7 +10,6 @@ pub(in crate::semantic::operations::holes) fn type_expression(ty: &Type) -> Opti
         Type::I64 => T::I64 {},
         Type::F64 => T::F64 {},
         Type::Str => T::String {},
-        Type::Buf => T::Buffer {},
         Type::Bytes => T::Bytes {},
         Type::ByteVector => T::ByteVector {},
         Type::ByteSlice => T::ByteSlice {},

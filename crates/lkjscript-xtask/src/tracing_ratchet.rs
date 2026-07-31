@@ -81,7 +81,9 @@ fn registry_is_canonical() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{heap_variants, registry_is_canonical};
+    use std::path::Path;
+
+    use super::{check, heap_variants, registry_is_canonical};
 
     #[test]
     fn parser_retains_only_enum_variants() {
@@ -100,5 +102,11 @@ mod tests {
     #[test]
     fn registry_is_sorted_and_unique() {
         assert!(registry_is_canonical());
+    }
+
+    #[test]
+    fn repository_heap_source_matches_the_three_family_ratchet() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        assert_eq!(check(&root), 0);
     }
 }

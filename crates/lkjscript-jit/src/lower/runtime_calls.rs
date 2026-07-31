@@ -1,38 +1,5 @@
 use super::*;
 
-fn error_reference_types(
-    function: FunctionId,
-    operation: RuntimeOp,
-    result: &SsaType,
-    layouts: &LayoutInterner,
-) -> Result<Vec<ReferenceType>, lkjscript_native::PlanError> {
-    if operation != RuntimeOp::BufToStr && operation != RuntimeOp::BufSlice {
-        return Ok(Vec::new());
-    }
-    let SsaType::Enum { arguments, .. } = result else {
-        return Err(lkjscript_native::PlanError::InvalidHeapCall);
-    };
-    let error = arguments
-        .get(1)
-        .ok_or(lkjscript_native::PlanError::InvalidHeapCall)?;
-    let error = lower_type(function, error, layouts)
-        .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?
-        .reference_type()
-        .ok_or(lkjscript_native::PlanError::InvalidHeapCall)?;
-    let mut references = vec![error];
-    if operation == RuntimeOp::BufSlice {
-        for ty in [SsaType::I64, SsaType::Str] {
-            let option = lkjscript_ir::prelude_contract::option(ty);
-            let reference = lower_type(function, &option, layouts)
-                .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?
-                .reference_type()
-                .ok_or(lkjscript_native::PlanError::InvalidHeapCall)?;
-            references.push(reference);
-        }
-    }
-    Ok(references)
-}
-
 pub(super) fn lower_runtime(
     function: &Function,
     operation: RuntimeOp,
@@ -52,13 +19,7 @@ pub(super) fn lower_runtime(
         && input_types
             .first()
             .is_some_and(|ty| matches!(ty, ValueType::Reference(_)));
-    let error_types = error_reference_types(
-        function.id,
-        operation,
-        context.result_ssa_type,
-        context.layouts,
-    )?;
-    let heap = heap_operation(operation, &error_types);
+    let heap = heap_operation(operation);
     if reference_equality || heap.is_some() {
         let operation = if reference_equality {
             HeapOperation::EqualValue
@@ -76,19 +37,19 @@ pub(super) fn lower_runtime(
     }
     match operation {
         RuntimeOp::StdinHandle => builder.runtime_call(block, RuntimeCallSlot::StdinHandle, values),
-        RuntimeOp::OwnedBufNew => {
+        RuntimeOp::ByteVectorNew => {
             builder.runtime_call(block, RuntimeCallSlot::ByteVectorNew, values)
         }
-        RuntimeOp::OwnedBufLen => {
+        RuntimeOp::ByteSliceLength => {
             builder.runtime_call(block, RuntimeCallSlot::ByteSliceLength, values)
         }
-        RuntimeOp::OwnedBufRef => {
+        RuntimeOp::ByteSliceByteAt => {
             builder.runtime_call(block, RuntimeCallSlot::ByteSliceByteAt, values)
         }
         RuntimeOp::ByteSliceReadU32Le => {
             builder.runtime_call(block, RuntimeCallSlot::ByteSliceReadU32Le, values)
         }
-        RuntimeOp::OwnedBufSet => {
+        RuntimeOp::ByteSliceMutSetByte => {
             builder.runtime_call(block, RuntimeCallSlot::ByteSliceMutSetByte, values)
         }
         RuntimeOp::ByteSliceMutWriteU32Le => {
@@ -171,10 +132,14 @@ pub(super) fn lower_runtime(
                     builder.f64_compare(block, F64Comparison::OrderedEqual, left, right)
                 }
                 ValueType::StaticBytes
+                | ValueType::StaticString(_)
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)
+                | ValueType::StructuralOwner(_)
+                | ValueType::StructuralView(_)
+                | ValueType::StructuralDestination(_)
                 | ValueType::Reference(_) => Err(lkjscript_native::PlanError::UnknownValue),
             }
         }

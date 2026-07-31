@@ -40,8 +40,6 @@ pub enum SsaType {
     F64,
     Str,
     Symbol,
-    /// Transitional traced mutable buffer.
-    Buf,
     /// Exact immutable bytes value; constants are static and runtime values are affine.
     Bytes,
     /// Exact affine deterministic byte-vector owner.
@@ -53,6 +51,8 @@ pub enum SsaType {
     Path,
     Capability(lkjscript_contracts::CapabilityKind),
     Resource(lkjscript_contracts::ResourceKind),
+    /// Verifier-only private aggregate construction state; never crosses a signature.
+    StructuralDestination(StructuralTypeId),
     Product(ProductId),
     Enum {
         id: EnumId,

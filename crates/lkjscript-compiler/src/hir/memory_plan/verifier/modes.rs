@@ -24,7 +24,7 @@ pub(super) fn verify_entries(plan: &HirMemoryPlan) -> Result<()> {
             ));
         }
         if matches!(entry.ty, MemoryType::Bytes) {
-            let expected = if entry.mode.storage == MemoryStorage::Static {
+            let expected = if entry.mode.domain == MemoryDomain::Static {
                 None
             } else {
                 Some(MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32))
@@ -45,7 +45,7 @@ pub(super) fn verify_entries(plan: &HirMemoryPlan) -> Result<()> {
 fn is_unique_byte_vector(entry: &MemoryPlanEntry) -> bool {
     entry.mode.multiplicity == MemoryMultiplicity::Affine
         && entry.mode.aliasing == MemoryAliasing::Unique
-        && entry.mode.storage == MemoryStorage::UniqueSlot
+        && entry.mode.domain == MemoryDomain::UniqueStructural
         && entry.mode.destruction == MemoryDestruction::DropGlue
         && entry.mode.identity == MemoryIdentity::Value
         && entry.mode.portability == MemoryPortability::WorkerLocal
@@ -56,7 +56,7 @@ fn is_unique_byte_vector(entry: &MemoryPlanEntry) -> bool {
 fn is_static_artifact_value(entry: &MemoryPlanEntry) -> bool {
     entry.mode.multiplicity == MemoryMultiplicity::Copy
         && entry.mode.aliasing == MemoryAliasing::StaticShared
-        && entry.mode.storage == MemoryStorage::Static
+        && entry.mode.domain == MemoryDomain::Static
         && entry.mode.destruction == MemoryDestruction::Trivial
         && entry.mode.identity == MemoryIdentity::Value
         && entry.mode.portability == MemoryPortability::WorkerLocal

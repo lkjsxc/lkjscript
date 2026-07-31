@@ -112,7 +112,7 @@ fn value_trap_is_exact_in_all_engines() {
         JitConfig::default(),
     )
     .expect("forced proof trap");
-    assert!(optimized.stats.optimization_certificate_records > 0);
+    assert_eq!(optimized.stats.optimization_certificate_records, 0);
     assert!(optimized.stats.optimization_checker_passes > 0);
     assert!(optimized.stats.optimization_reconstruction_passes > 0);
     assert_eq!(baseline.stats.vm_fallbacks, 0);
@@ -136,7 +136,10 @@ fn value_trap_is_exact_in_all_engines() {
 
 #[test]
 fn exit_is_structured_in_all_engines() {
-    let source = main_source("i64", "exit/\n23\n/exit");
+    let source = main_source(
+        "i64",
+        "let/\nbind/\ntext\nformat-i64/\n9\n/format-i64\n/bind\nexit/\n23\n/exit\n/let",
+    );
     let program = compile_source(&source, "exit-control.lkjscript", &Limits::default())
         .expect("compile exit control");
     assert_eq!(

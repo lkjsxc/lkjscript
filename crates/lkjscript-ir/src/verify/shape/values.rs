@@ -15,7 +15,7 @@ pub(crate) fn collect_values(
             verify_type(program, &parameter.ty, type_parameters)?;
             if let Some(place) = parameter.owner_place {
                 let declared = place_by_id(function, place)?;
-                if !is_owned_value(&parameter.ty)
+                if !is_owned_value(program, &parameter.ty)
                     || declared.ty != parameter.ty
                     || declared.drop_glue.is_none()
                     || !owner_places.insert(place)

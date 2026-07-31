@@ -19,6 +19,7 @@ impl<'a> Producer<'a> {
         }
         match &expression.kind {
             ExprKind::Load(reference) => {
+                self.reject_affine_load(expression, reference.binding)?;
                 self.add_use(expression_id, reference.binding, MemoryUseKind::Load)?;
             }
             ExprKind::Move { binding, .. } => {
@@ -57,7 +58,7 @@ impl<'a> Producer<'a> {
                     end_after: expression_id,
                     entry,
                 });
-                self.add_obligation(entry, MemoryObligationKind::EndBorrow, None)?;
+                self.add_obligation(entry, MemoryObligationKind::EndBorrow, None, None)?;
             }
             ExprKind::Borrow {
                 place,
@@ -93,7 +94,7 @@ impl<'a> Producer<'a> {
                     end_after: expression_id,
                     entry,
                 });
-                self.add_obligation(entry, MemoryObligationKind::EndBorrow, None)?;
+                self.add_obligation(entry, MemoryObligationKind::EndBorrow, None, None)?;
             }
             _ => return Err(Error::msg("HIR memory leaf category mismatch")),
         }
@@ -116,7 +117,7 @@ impl<'a> Producer<'a> {
                         BindingStorage::Local(_) => MemoryUseKind::IndirectCallTarget,
                     },
                 )?;
-                self.add_call(
+                let call = self.add_call(
                     expression_id,
                     expression_entry,
                     callee,
@@ -124,7 +125,7 @@ impl<'a> Producer<'a> {
                     expression,
                     escape,
                 )?;
-                self.walk_call_arguments(args, expression_id)?;
+                self.walk_call_arguments(args, expression_id, Some(call))?;
             }
             ExprKind::Operation {
                 operation,
@@ -140,7 +141,7 @@ impl<'a> Producer<'a> {
                     expression,
                     escape,
                 )?;
-                self.walk_call_arguments(args, expression_id)?;
+                self.walk_call_arguments(args, expression_id, None)?;
             }
             ExprKind::F64FromI64Exact(value)
             | ExprKind::F64FromI64Rounded(value)

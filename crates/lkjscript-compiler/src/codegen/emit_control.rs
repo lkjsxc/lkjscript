@@ -73,8 +73,12 @@ impl Emitter<'_> {
         for argument in arguments {
             self.load(*argument)?;
         }
-        for parameter in target_block.parameters.iter().rev() {
+        for (parameter, argument) in target_block.parameters.iter().zip(arguments).rev() {
             let slot = self.slot(parameter.id)?;
+            if self.structural_local_kind(*argument)?.is_some() {
+                self.proto.emit_op_u8(Op::StoreStructuralLocal, slot);
+                continue;
+            }
             match parameter.ty {
                 SsaType::Bytes | SsaType::ByteVector => {
                     self.proto.emit_op_u8(Op::StoreUniqueLocal, slot);

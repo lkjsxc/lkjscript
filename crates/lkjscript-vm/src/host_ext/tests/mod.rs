@@ -4,14 +4,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use lkjscript_core::{Error, HeapObj, Value};
+use lkjscript_core::Value;
 
-use lkjscript_core::GcHeap as Arena;
-
-use super::{
-    as_str, language_result, option_none, option_some, str_from_f64, str_from_i64,
-    system_utf8_error, ResourceTable,
-};
+use super::ResourceTable;
 
 static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
 
@@ -36,4 +31,3 @@ impl Drop for TempFile {
 mod files;
 mod sockets;
 mod sqlite;
-mod values;

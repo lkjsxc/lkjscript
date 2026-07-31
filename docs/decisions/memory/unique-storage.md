@@ -3,13 +3,14 @@
 ## Status
 
 **The safe core service and exact byte-vector and immutable-bytes evaluator/VM
-families are Current; collector-free path evaluator/VM/native integration and
-the remaining source families are not Current.** The core path layout supports
-bounded allocation, exact access and equality, structural copy, release, stale
-and wrong-layout rejection, and returned-backing transfer. Current source path
-values remain traced because their constructor result is an aliasable aggregate.
-Transitional `buf` remains independently traced. This service is not a
-collector and does not decide liveness by tracing.
+families are Current. Dynamic paths are also Current in evaluator, VM, forced
+baseline, and forced proof through the separate compact structural-root
+runtime.** The core unique path layout remains tested for bounded allocation,
+exact access and equality, structural copy, release, stale and wrong-layout
+rejection, and returned-backing transfer, but production path values are not
+traced and do not use that legacy layout. Bytes and byte vectors use
+`UniqueStore` and have no traced representation. Neither service decides
+liveness by tracing.
 
 ## Representation
 
@@ -87,7 +88,8 @@ Normal lexical completion releases owners directly. Trap and early outcomes
 run deterministic execution cleanup before the store leak assertion; teardown
 only verifies the result. Explicit byte-vector and bytes returned-owner transfer remains a bounded
 execution-boundary case and does not promote the wider collector-free island.
-Core path returned-backing transfer is executable foundation evidence only; no
-Current evaluator or VM path owner reaches that boundary. Path-bearing general
-aggregates and every native path group remain outside the collector-free subset,
-so neither the complete island nor whole-runtime collector removal is Current.
+Dynamic paths now use the separate compact structural-root runtime rather than
+`UniqueStore`; evaluator, VM, forced baseline, and forced proof return key-free
+path snapshots. Eligible deterministic path-bearing aggregates use that same
+structural authority. Neither the complete island nor whole-runtime collector
+removal is Current.

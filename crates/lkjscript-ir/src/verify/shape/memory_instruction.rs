@@ -1,7 +1,8 @@
 use crate::verify::*;
-use crate::{EffectSet, Function, Instruction, InstructionKind, SsaType};
+use crate::{EffectSet, Function, Instruction, InstructionKind, Program, SsaType};
 
 pub(super) fn verify(
+    program: &Program,
     function: &Function,
     instruction: &Instruction,
     types: &[SsaType],
@@ -10,7 +11,7 @@ pub(super) fn verify(
         InstructionKind::PlaceInit { place, value } => {
             let declared = place_by_id(function, *place)?;
             if declared.drop_glue.is_none()
-                || !is_owned_value(&declared.ty)
+                || !is_owned_value(program, &declared.ty)
                 || declared.ty != *value_type(types, *value)?
                 || instruction.ty != SsaType::Unit
             {
@@ -23,17 +24,35 @@ pub(super) fn verify(
                 return fail("SSA PlaceEnd requires an exact obligated place and Unit result");
             }
         }
-        InstructionKind::EndBorrow { place, value, .. } => {
+        InstructionKind::EndBorrow { place, loan, value } => {
             let declared = place_by_id(function, *place)?;
-            let vector_loan = is_owned_buf(&declared.ty)
+            let vector_loan = is_byte_vector(&declared.ty)
                 && matches!(
                     value_type(types, *value)?,
                     SsaType::ByteSlice | SsaType::ByteSliceMut
                 );
             let bytes_loan =
                 declared.ty == SsaType::Bytes && value_type(types, *value)? == &SsaType::Bytes;
-            if (!vector_loan && !bytes_loan) || instruction.ty != SsaType::Unit {
-                return fail("SSA EndBorrow requires a matching byte loan and Unit result");
+            let structural_loan =
+                program.memory.is_owned(&declared.ty) && value_type(types, *value)? == &declared.ty;
+            let structural_projection = program.memory.is_owned(&declared.ty)
+                && function.blocks.iter().any(|block| {
+                    block.instructions.iter().any(|candidate| {
+                        candidate.id == *value
+                            && matches!(
+                                candidate.kind,
+                                InstructionKind::AggregateFieldBorrow {
+                                    place: source,
+                                    loan: source_loan,
+                                    ..
+                                } if source == *place && source_loan == *loan
+                            )
+                    })
+                });
+            if (!vector_loan && !bytes_loan && !structural_loan && !structural_projection)
+                || instruction.ty != SsaType::Unit
+            {
+                return fail("SSA EndBorrow requires a matching exact loan and Unit result");
             }
         }
         InstructionKind::Drop {
@@ -47,7 +66,9 @@ pub(super) fn verify(
                 (kind, glue),
                 (
                     crate::DropEventKind::ExplicitClose,
-                    crate::DropGlueIdentity::ByteVector | crate::DropGlueIdentity::Bytes
+                    crate::DropGlueIdentity::ByteVector
+                        | crate::DropGlueIdentity::Bytes
+                        | crate::DropGlueIdentity::Structural(_)
                 )
             ) || matches!(
                 (kind, glue),
@@ -59,7 +80,7 @@ pub(super) fn verify(
                 )
             );
             if declared.drop_glue != Some(*glue)
-                || expected_drop_glue(value_type(types, *value)?) != Some(*glue)
+                || expected_drop_glue(program, value_type(types, *value)?) != Some(*glue)
                 || declared.ty != *value_type(types, *value)?
                 || instruction.ty != SsaType::Unit
                 || bad_kind
@@ -68,12 +89,27 @@ pub(super) fn verify(
             }
         }
         InstructionKind::Move { value, .. } => {
-            if value_type(types, *value)? != &instruction.ty || !is_owned_value(&instruction.ty) {
+            if value_type(types, *value)? != &instruction.ty
+                || !is_owned_value(program, &instruction.ty)
+            {
                 return fail("SSA Move requires matching exact affine input and result");
             }
         }
-        InstructionKind::Borrow { kind, value, .. } => {
-            if value_type(types, *value)? == &SsaType::Bytes {
+        InstructionKind::Borrow {
+            place, kind, value, ..
+        } => {
+            let source = value_type(types, *value)?;
+            if program.memory.is_owned(source) {
+                let declared = place_by_id(function, *place)?;
+                if &declared.ty != source
+                    || instruction.ty != *source
+                    || *kind == crate::BorrowKind::Mutable
+                {
+                    return fail("SSA structural borrow requires an exact shared whole owner");
+                }
+                return Ok(EffectSet::PURE);
+            }
+            if source == &SsaType::Bytes {
                 if *kind != crate::BorrowKind::Shared || instruction.ty != SsaType::Bytes {
                     return fail("SSA immutable bytes borrow must be shared exact bytes");
                 }
@@ -83,7 +119,7 @@ pub(super) fn verify(
                 crate::BorrowKind::Shared => SsaType::ByteSlice,
                 crate::BorrowKind::Mutable => SsaType::ByteSliceMut,
             };
-            if !is_owned_buf(value_type(types, *value)?) || instruction.ty != expected {
+            if !is_byte_vector(value_type(types, *value)?) || instruction.ty != expected {
                 return fail("SSA Borrow ownership or reference type mismatch");
             }
         }

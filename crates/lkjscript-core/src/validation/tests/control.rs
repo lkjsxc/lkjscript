@@ -73,9 +73,9 @@ fn main_arity_global_initialization_and_static_operation_categories_are_checked(
 
     for (operation, category) in [
         (Op::Car, "list"),
-        (Op::BufLen, "buf"),
+        (Op::ByteSliceLen, "byte view"),
         (Op::SysClose, "typed resource"),
-        (Op::BufToStr, "buf"),
+        (Op::ConvertBytesToString, "immutable bytes"),
     ] {
         let mut chunk = unit_chunk();
         chunk.main.code = vec![Op::Unit as u8, operation as u8, Op::Return as u8];

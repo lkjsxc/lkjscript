@@ -24,7 +24,12 @@ pub(super) fn validate_instruction_operands(
             | Op::StoreViewLocal
             | Op::TakeUniqueLocal
             | Op::LoadViewLocal
-            | Op::EndBorrowLocal => {
+            | Op::EndBorrowLocal
+            | Op::StoreStructuralLocal
+            | Op::TakeStructuralLocal
+            | Op::LoadStructuralViewLocal
+            | Op::EndStructuralBorrowLocal
+            | Op::LoadStructuralOwnerLocal => {
                 let index = operand_index(operand, proto, op, at)?;
                 if index >= usize::from(proto.locals) {
                     return operand_error(proto, op, at, "local index out of range");
@@ -35,7 +40,10 @@ pub(super) fn validate_instruction_operands(
             | Op::ByteVectorDropPlace
             | Op::BytesPlaceInit
             | Op::BytesMove
-            | Op::BytesDropPlace => {
+            | Op::BytesDropPlace
+            | Op::StructuralPlaceInit
+            | Op::StructuralMove
+            | Op::StructuralDropPlace => {
                 let packed = operand_index(operand, proto, op, at)?;
                 let slot = packed & usize::from(u8::MAX);
                 let place = packed >> u8::BITS;
@@ -46,7 +54,7 @@ pub(super) fn validate_instruction_operands(
                     return operand_error(proto, op, at, "unique place index out of range");
                 }
             }
-            Op::ByteVectorPlaceEnd | Op::BytesPlaceEnd => {
+            Op::ByteVectorPlaceEnd | Op::BytesPlaceEnd | Op::StructuralPlaceEnd => {
                 let place = operand_index(operand, proto, op, at)?;
                 if place >= usize::from(proto.unique_places) {
                     return operand_error(proto, op, at, "unique place index out of range");
@@ -113,6 +121,58 @@ pub(super) fn validate_instruction_operands(
                 let descriptor = operand_index(operand, proto, op, at)?;
                 if chunk.enum_fields.get(descriptor).is_none() {
                     return operand_error(proto, op, at, "enum field descriptor out of range");
+                }
+            }
+            Op::StructuralBorrow
+            | Op::StructuralBorrowMut
+            | Op::StructuralPublish
+            | Op::StructuralAggregateTag
+            | Op::StructuralStringUtf8View
+            | Op::StructuralCopy => {
+                let index = operand_index(operand, proto, op, at)?;
+                if index >= chunk.structural_representations.len() {
+                    return operand_error(
+                        proto,
+                        op,
+                        at,
+                        "structural representation index out of range",
+                    );
+                }
+            }
+            Op::StructuralDestinationCreate
+            | Op::StructuralDestinationFinish
+            | Op::StructuralDestinationAbort => {
+                let index = operand_index(operand, proto, op, at)?;
+                if index >= chunk.structural_destinations.len() {
+                    return operand_error(proto, op, at, "structural destination index out of range");
+                }
+            }
+            Op::StructuralDestinationFieldInit => {
+                let index = operand_index(operand, proto, op, at)?;
+                if index >= chunk.structural_destination_fields.len() {
+                    return operand_error(
+                        proto,
+                        op,
+                        at,
+                        "structural destination-field index out of range",
+                    );
+                }
+            }
+            Op::StructuralAggregateFieldBorrow => {
+                let index = operand_index(operand, proto, op, at)?;
+                if index >= chunk.structural_aggregate_fields.len() {
+                    return operand_error(
+                        proto,
+                        op,
+                        at,
+                        "structural aggregate-field index out of range",
+                    );
+                }
+            }
+            Op::StructuralAggregateConsumePayload => {
+                let index = operand_index(operand, proto, op, at)?;
+                if index >= chunk.structural_payloads.len() {
+                    return operand_error(proto, op, at, "structural payload index out of range");
                 }
             }
             Op::Call => {

@@ -60,7 +60,8 @@ fn failure_cleanup_metadata_is_bounded_exact_and_independently_checked() {
         place: Some(0),
         kind: crate::UniqueValueKind::Bytes,
     };
-    assert!(error(wrong_kind).contains("wrong local kind"));
+    let actual = error(wrong_kind);
+    assert!(actual.contains("has wrong kind"), "{actual}");
     let mut invalid_unentered = chunk.clone();
     invalid_unentered.main.failure_cleanup_ranges[0].unentered_plan = Some(9);
     assert!(error(invalid_unentered).contains("malformed or overlapping"));

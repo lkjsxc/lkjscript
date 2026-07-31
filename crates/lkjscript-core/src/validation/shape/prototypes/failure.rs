@@ -61,6 +61,15 @@ pub(super) fn validate_failure_cleanup_shape(
                     }
                     (*local, *place)
                 }
+                crate::FailureCleanupAction::EndStructuralBorrow { local, place, .. } => {
+                    (*local, Some(*place))
+                }
+                crate::FailureCleanupAction::DropStructural { local, place, .. } => {
+                    (*local, *place)
+                }
+                crate::FailureCleanupAction::AbortStructuralDestination { local, .. } => {
+                    (*local, None)
+                }
             };
             if local >= proto.locals || place.is_some_and(|place| place >= proto.unique_places) {
                 return Err(Error::msg(

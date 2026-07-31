@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn compile_failure_cleanups(
     function: &Function,
     slots: &HashMap<ValueId, u8>,
+    chunk: &Chunk,
 ) -> Result<(Vec<BytecodeFailureCleanupPlan>, Vec<u16>)> {
     let mut plans = Vec::new();
     let mut mapping = Vec::with_capacity(function.failure_cleanups.len());
@@ -10,7 +11,7 @@ pub(super) fn compile_failure_cleanups(
         let actions = plan
             .actions
             .iter()
-            .map(|action| compile_failure_action(function, slots, action))
+            .map(|action| compile_failure_action(function, slots, chunk, action))
             .collect::<Result<Vec<_>>>()?;
         let compiled = BytecodeFailureCleanupPlan { actions };
         let index = if let Some(index) = plans.iter().position(|plan| plan == &compiled) {
@@ -31,6 +32,7 @@ pub(super) fn compile_unentered_cleanup(
     function: &Function,
     instruction: &Instruction,
     slots: &HashMap<ValueId, u8>,
+    chunk: &Chunk,
 ) -> Result<Vec<BytecodeFailureCleanupAction>> {
     let InstructionKind::Call { arguments, .. } = &instruction.kind else {
         return Ok(Vec::new());
@@ -66,7 +68,33 @@ pub(super) fn compile_unentered_cleanup(
                     place: None,
                     kind: *kind,
                 }),
-                _ => Err(Error::msg(
+                ty
+                @ (SsaType::Str | SsaType::Path | SsaType::Product(_) | SsaType::Enum { .. }) => {
+                    Ok(BytecodeFailureCleanupAction::DropStructural {
+                        local,
+                        place: None,
+                        representation: structural_owner_representation(chunk, ty).ok_or_else(
+                            || Error::msg("unentered structural owner has no representation"),
+                        )?,
+                    })
+                }
+                SsaType::StructuralDestination(_) => {
+                    Ok(BytecodeFailureCleanupAction::AbortStructuralDestination {
+                        local,
+                        destination: structural_destination_for_value(function, chunk, *value)?,
+                    })
+                }
+                SsaType::Unit
+                | SsaType::Bool
+                | SsaType::I64
+                | SsaType::F64
+                | SsaType::Symbol
+                | SsaType::ByteSlice
+                | SsaType::ByteSliceMut
+                | SsaType::Capability(_)
+                | SsaType::List(_)
+                | SsaType::Function(_)
+                | SsaType::TypeParameter(_) => Err(Error::msg(
                     "unentered cleanup argument is not an owned value",
                 )),
             }
@@ -74,70 +102,4 @@ pub(super) fn compile_unentered_cleanup(
         .collect()
 }
 
-fn compile_failure_action(
-    function: &Function,
-    slots: &HashMap<ValueId, u8>,
-    action: &SsaFailureCleanupAction,
-) -> Result<BytecodeFailureCleanupAction> {
-    let local = |value: ValueId| {
-        slots
-            .get(&value)
-            .copied()
-            .ok_or_else(|| Error::msg("failure cleanup lost SSA local slot"))
-    };
-    let place = |place: lkjscript_ir::PlaceId| {
-        u8::try_from(place.raw()).map_err(|_| Error::msg("failure cleanup PlaceId exceeds u8"))
-    };
-    match action {
-        SsaFailureCleanupAction::EndBorrow {
-            place: owner,
-            value,
-            ..
-        } => Ok(BytecodeFailureCleanupAction::EndBorrow {
-            local: local(*value)?,
-            place: place(*owner)?,
-            kind: unique_value_kind(ssa_value_type(function, *value)?)
-                .ok_or_else(|| Error::msg("failure cleanup loan has non-unique type"))?,
-        }),
-        SsaFailureCleanupAction::DropOwner {
-            place: owner,
-            value,
-            glue: DropGlueIdentity::ByteVector | DropGlueIdentity::Bytes,
-        } => Ok(BytecodeFailureCleanupAction::DropUnique {
-            local: local(*value)?,
-            place: owner.map(place).transpose()?,
-            kind: unique_value_kind(ssa_value_type(function, *value)?)
-                .ok_or_else(|| Error::msg("failure cleanup owner has non-unique type"))?,
-        }),
-        SsaFailureCleanupAction::DropOwner {
-            place: owner,
-            value,
-            glue: DropGlueIdentity::Resource(kind),
-        } => Ok(BytecodeFailureCleanupAction::DropResource {
-            local: local(*value)?,
-            place: owner.map(place).transpose()?,
-            kind: *kind,
-        }),
-    }
-}
-
-fn ssa_value_type(function: &Function, value: ValueId) -> Result<&SsaType> {
-    function
-        .blocks
-        .iter()
-        .find_map(|block| {
-            block
-                .parameters
-                .iter()
-                .find(|parameter| parameter.id == value)
-                .map(|parameter| &parameter.ty)
-                .or_else(|| {
-                    block
-                        .instructions
-                        .iter()
-                        .find(|instruction| instruction.id == value)
-                        .map(|instruction| &instruction.ty)
-                })
-        })
-        .ok_or_else(|| Error::msg("failure cleanup references missing SSA value type"))
-}
+include!("failure/action.rs");

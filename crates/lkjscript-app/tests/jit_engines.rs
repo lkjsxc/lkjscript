@@ -6,8 +6,6 @@ mod canonical;
 mod allocation;
 #[path = "jit_engines/auto_tiering.rs"]
 mod auto_tiering;
-#[path = "jit_engines/buffer_boundaries.rs"]
-mod buffer_boundaries;
 #[path = "jit_engines/collector_free_scalar.rs"]
 mod collector_free_scalar;
 #[path = "jit_engines/reference_graphs.rs"]

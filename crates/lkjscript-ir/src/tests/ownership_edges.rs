@@ -6,7 +6,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
     let successor_reuse = Function {
         id: FunctionId::new(1),
         name: "successor-reuse".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], owned_buf_type()),
+        signature: Signature::monomorphic(vec![byte_vector_type()], byte_vector_type()),
         places: vec![owned_place(0, 0)],
         failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
@@ -16,13 +16,13 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 id: BlockId::new(0),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
                 instructions: vec![Instruction {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(0),
                         value: ValueId::new(0),
@@ -50,7 +50,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
     let duplicate_edge = Function {
         id: FunctionId::new(1),
         name: "duplicate-edge".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         places: vec![owned_place(0, 0)],
         failure_cleanups: vec![
             FailureCleanupPlan {
@@ -77,13 +77,13 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 id: BlockId::new(0),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
                 instructions: vec![Instruction {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(0),
                         value: ValueId::new(0),
@@ -101,13 +101,13 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 parameters: vec![
                     BlockParameter {
                         id: ValueId::new(2),
-                        ty: owned_buf_type(),
+                        ty: byte_vector_type(),
                         owner_place: None,
                         origin: Origin::SYNTHETIC,
                     },
                     BlockParameter {
                         id: ValueId::new(3),
-                        ty: owned_buf_type(),
+                        ty: byte_vector_type(),
                         owner_place: None,
                         origin: Origin::SYNTHETIC,
                     },
@@ -124,14 +124,14 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
     let error = verify(ownership_program(duplicate_edge))
         .expect_err("duplicate affine edge arguments must fail");
     assert!(
-        error.to_string().contains("duplicates one affine"),
+        error.to_string().contains("duplicates affine argument"),
         "{error}"
     );
 
     let loop_mismatch = Function {
         id: FunctionId::new(1),
         name: "loop-mismatch".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         places: vec![owned_place(0, 0)],
         failure_cleanups: Vec::new(),
         effects: EffectSet::PURE,
@@ -141,7 +141,7 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 id: BlockId::new(0),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
@@ -156,13 +156,13 @@ fn ownership_cfg_rejects_successor_reuse_duplicate_edges_and_loop_mismatch() {
                 id: BlockId::new(1),
                 parameters: vec![BlockParameter {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 }],
                 instructions: vec![Instruction {
                     id: ValueId::new(2),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(0),
                         value: ValueId::new(1),

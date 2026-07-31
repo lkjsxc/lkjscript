@@ -135,6 +135,23 @@ fn immutable_product_state_threads_through_a_local_var() {
 }
 
 #[test]
+fn structural_string_loop_locals_teardown_every_owner() {
+    let source = "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nvar/\nname/\nn\n/name\ntype/\ni64\n/type\n0\ndo/\nwhile/\nless-than/\nn\n3\n/less-than\nlet/\nbind/\ntext\nformat-i64/\nn\n/format-i64\n/bind\ndo/\nstring-byte-length/\ntext\n/string-byte-length\nset/\nn\nadd/\nn\n1\n/add\n/set\n/do\n/let\n/while\nn\n/do\n/var\n/main\n";
+    let program = compile(source).expect("compile structural string loop");
+    assert!(program
+        .bytecode()
+        .main()
+        .code
+        .contains(&(Op::StoreStructuralLocal as u8)));
+    assert_eq!(
+        evaluate(source)
+            .expect("run structural string loop")
+            .as_i64(),
+        Some(3)
+    );
+}
+
+#[test]
 fn option_arguments_equality_and_products_still_cross_compiler_vm_boundary() {
     let argument = concat!(
         "main/\nsig/\ninputs/\ncapability/\narguments\n/capability\n/inputs\noutput/\ni64\n/output\n/sig\n",

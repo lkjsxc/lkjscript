@@ -24,11 +24,12 @@ direct-call SCC closure. Compatible generated callers use direct relocated
 native calls and exact I64/F64/Bool/Unit values. Forced reference results are
 marshaled as owned `GcHeap` snapshots; auto does not transfer references.
 
-Current generated coverage is Unit, Bool, I64, F64, Str, legacy Buf, nominal
-Product, List, Option, Result, block parameters, local mutation represented as
-machine-plan locals, multi-block branches, loops, checked numerics, exact
-supported equality families, constructors/accessors/immutable replacement,
-string and legacy-buffer operations, direct and mutual recursion, return, trap,
+Current generated coverage is Unit, Bool, I64, F64, bytes, byte-vector and
+whole-owner byte views, Str, nominal Product, List, Option, Result, block
+parameters, local mutation represented as machine-plan locals, multi-block
+branches, loops, checked numerics, exact supported equality families,
+constructors/accessors/immutable replacement, string and byte operations,
+direct and mutual recursion, return, trap,
 exit, and structured outcome propagation. Indirect calls remain unsupported.
 
 Native entry, call, and loop transitions use enum-identified versioned runtime

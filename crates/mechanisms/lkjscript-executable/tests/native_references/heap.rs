@@ -64,19 +64,23 @@ impl NativeRuntimeServices for MovingHeapService {
 #[test]
 fn heap_dispatch_rematerializes_moved_argument_after_root_writeback(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let buffer = ValueType::Reference(ReferenceType::Buf);
+    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
     let function = plan.declare_function(
         SourceFunctionId::new(41),
-        Signature::new(vec![buffer], ValueType::I64)?,
+        Signature::new(vec![product], ValueType::I64)?,
     )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
     let input = builder.parameter(0)?;
     let descriptor = HeapCallDescriptor::new(
-        HeapOperation::BufLen,
-        vec![buffer],
+        HeapOperation::ProductField {
+            product: 0,
+            field: 0,
+            field_type: ValueType::I64,
+        },
+        vec![product],
         ValueType::I64,
         AllocationClass::None,
         StoreClass::None,
@@ -95,7 +99,7 @@ fn heap_dispatch_rematerializes_moved_argument_after_root_writeback(
     };
     let report = installed.invoke_with_services(
         function,
-        &[buf(11)],
+        &[product_ref(11)],
         &NativeInvocationConfig::default(),
         &mut service,
     )?;

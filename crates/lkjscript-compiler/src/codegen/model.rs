@@ -12,7 +12,7 @@ pub(in crate::codegen) fn compile_function(
     code_base: u16,
     prototype: Option<u32>,
 ) -> Result<(FunctionProto, FunctionBytecodeLink)> {
-    let slots = allocate_locals(function)?;
+    let slots = allocate_locals(function, chunk)?;
     let entry = function
         .blocks
         .iter()
@@ -27,11 +27,38 @@ pub(in crate::codegen) fn compile_function(
     })?;
     let arity = u8::try_from(function.signature.parameters.len())
         .map_err(|_| Error::msg("SSA function arity exceeds bytecode u8"))?;
-    let (failure_cleanups, failure_cleanup_map) = compile_failure_cleanups(function, &slots)?;
+    let (failure_cleanups, failure_cleanup_map) =
+        compile_failure_cleanups(function, &slots, chunk)?;
     let proto = FunctionProto {
         name: function.name.clone(),
         arity,
         locals,
+        memory_plan: chunk.memory_plan,
+        parameter_structurals: entry
+            .parameters
+            .iter()
+            .zip(&function.signature.parameters)
+            .map(|(_, ty)| structural_owner_representation(chunk, ty))
+            .collect(),
+        parameter_structural_places: entry
+            .parameters
+            .iter()
+            .zip(&function.signature.parameters)
+            .map(|(parameter, ty)| {
+                if structural_owner_representation(chunk, ty).is_none() {
+                    return Ok(None);
+                }
+                parameter
+                    .owner_place
+                    .map(|place| {
+                        u8::try_from(place.raw()).map_err(|_| {
+                            Error::msg("SSA structural parameter PlaceId exceeds bytecode u8")
+                        })
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>>>()?,
+        return_structural: structural_owner_representation(chunk, &function.signature.result),
         parameter_resources: function
             .signature
             .parameters
@@ -41,6 +68,24 @@ pub(in crate::codegen) fn compile_function(
                 _ => None,
             })
             .collect(),
+        parameter_resource_places: entry
+            .parameters
+            .iter()
+            .zip(&function.signature.parameters)
+            .map(|(parameter, ty)| {
+                if !matches!(ty, SsaType::Resource(_)) {
+                    return Ok(None);
+                }
+                parameter
+                    .owner_place
+                    .map(|place| {
+                        u8::try_from(place.raw()).map_err(|_| {
+                            Error::msg("SSA resource parameter PlaceId exceeds bytecode u8")
+                        })
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>>>()?,
         return_resource: resource_return_kind(&function.signature.result),
         parameter_uniques: function
             .signature
@@ -146,28 +191,4 @@ pub(in crate::codegen) fn compile_function(
     ))
 }
 
-fn unique_value_kind(ty: &SsaType) -> Option<UniqueValueKind> {
-    match ty {
-        SsaType::Bytes => Some(UniqueValueKind::Bytes),
-        SsaType::ByteVector => Some(UniqueValueKind::ByteVector),
-        SsaType::ByteSlice => Some(UniqueValueKind::ByteSlice),
-        SsaType::ByteSliceMut => Some(UniqueValueKind::ByteSliceMut),
-        _ => None,
-    }
-}
-
-fn resource_return_kind(ty: &SsaType) -> Option<ResourceReturnKind> {
-    match ty {
-        SsaType::Resource(kind) => Some(ResourceReturnKind::Resource(*kind)),
-        SsaType::Enum { id, arguments }
-            if id.bytes() == lkjscript_core::RESULT_ID
-                && matches!(arguments.as_slice(), [SsaType::Resource(_), _]) =>
-        {
-            let [SsaType::Resource(kind), _] = arguments.as_slice() else {
-                return None;
-            };
-            Some(ResourceReturnKind::Result(*kind))
-        }
-        _ => None,
-    }
-}
+include!("model/helpers.rs");

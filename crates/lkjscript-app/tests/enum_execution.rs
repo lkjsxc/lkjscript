@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
 use lkjscript_compiler::compile_source;
-use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, ResourceLimitKind};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome, Limits, OwnedValue, ResourceLimitKind};
 use lkjscript_ir::{evaluate, EvalConfig, EvalOutcome, EvalValue};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -12,6 +12,13 @@ mod adversarial;
 mod enum_source_variants;
 #[path = "enum_execution/native_ssa.rs"]
 mod native_ssa;
+
+fn evaluator_owned(program: &lkjscript_compiler::ExecutableProgram) -> OwnedValue {
+    match evaluate(program.ssa(), &EvalConfig::default()) {
+        EvalOutcome::Returned(EvalValue::ReturnedOwned(value)) => value,
+        outcome => panic!("evaluator must return a key-free structural value: {outcome:?}"),
+    }
+}
 
 fn source() -> String {
     concat!(
@@ -34,15 +41,11 @@ fn source() -> String {
 fn source_construction_is_differential_on_evaluator_and_vm() {
     let program = compile_source(&source(), "enum.lkjscript", &Limits::default())
         .expect("compile enum construction");
-    let EvalOutcome::Returned(EvalValue::Enum {
-        physical_tag,
-        payload,
-        ..
-    }) = evaluate(program.ssa(), &EvalConfig::default())
-    else {
-        panic!("evaluator must return enum")
-    };
-    assert_eq!(payload, [EvalValue::I64(42)]);
+    let evaluated = evaluator_owned(&program);
+    let physical_tag = evaluated
+        .enum_physical_tag()
+        .expect("evaluator returns structural enum tag");
+    assert_eq!(evaluated.enum_field_i64(0), Some(42));
     let ExecutionOutcome::Returned(value) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
@@ -82,12 +85,9 @@ fn fields_evaluate_once_in_declaration_order() {
         &Limits::default(),
     )
     .expect("compile ordered enum fields");
-    let EvalOutcome::Returned(EvalValue::Enum { payload, .. }) =
-        evaluate(program.ssa(), &EvalConfig::default())
-    else {
-        panic!("evaluator must return enum")
-    };
-    assert_eq!(payload, [EvalValue::I64(1), EvalValue::I64(2)]);
+    let evaluated = evaluator_owned(&program);
+    assert_eq!(evaluated.enum_field_i64(0), Some(1));
+    assert_eq!(evaluated.enum_field_i64(1), Some(2));
     let ExecutionOutcome::Returned(value) = run_chunk(
         program.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
@@ -129,10 +129,9 @@ fn logical_construction_exhausts_before_allocation_on_both_engines() {
 fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
     let program = compile_source(&source(), "enum-jit.lkjscript", &Limits::default())
         .expect("compile enum construction");
-    let evaluator = evaluate(program.ssa(), &EvalConfig::default());
-    let EvalOutcome::Returned(EvalValue::Enum { physical_tag, .. }) = evaluator else {
-        panic!("evaluator must return enum")
-    };
+    let physical_tag = evaluator_owned(&program)
+        .enum_physical_tag()
+        .expect("evaluator returns structural enum tag");
     for execution in [
         execute_forced(
             program.ssa(),
@@ -153,7 +152,11 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
         assert_eq!(value.enum_physical_tag(), Some(physical_tag));
         assert_eq!(value.enum_field_i64(0), Some(42));
         assert!(execution.stats.native_entries > 0);
-        assert!(execution.stats.runtime_heap_successes > 0);
+        assert_eq!(execution.stats.runtime_heap_successes, 0);
+        assert_eq!(execution.stats.collector_runtime_invocations, 0);
+        assert!(execution.stats.structural_runtime_calls > 0);
+        assert_eq!(execution.stats.native_structural.live_roots, 0);
+        assert_eq!(execution.stats.native_structural.live_destinations, 0);
         assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }

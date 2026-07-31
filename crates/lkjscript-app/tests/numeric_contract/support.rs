@@ -48,13 +48,12 @@ pub(super) fn assert_scalar(source: &str, expected: Expected) {
                         .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
             }));
         } else {
-            assert!(execution.stats.runtime_heap_attempts > 0);
-            assert!(execution.stats.code_objects.iter().any(|object| {
-                let sites = object.numeric_conversion_sites;
-                let exact_sites =
-                    sites.f64_from_i64_exact + sites.i64_from_f64_exact + sites.i64_from_f64_trunc;
-                exact_sites == 1
-                    && object
+            assert_eq!(execution.stats.runtime_heap_attempts, 0);
+            assert_eq!(execution.stats.collector_runtime_invocations, 0);
+            assert!(execution.stats.structural_runtime_calls > 0);
+            assert!(execution.stats.code_objects.iter().all(|object| {
+                object.numeric_conversion_sites == Default::default()
+                    && !object
                         .runtime_calls
                         .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
             }));

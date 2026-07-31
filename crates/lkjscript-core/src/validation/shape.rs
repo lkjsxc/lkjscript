@@ -58,9 +58,15 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
             .parameter_unique_places
             .iter()
             .any(Option::is_some)
+        || chunk.main.parameter_structurals.iter().any(Option::is_some)
+        || chunk
+            .main
+            .parameter_structural_places
+            .iter()
+            .any(Option::is_some)
     {
         return Err(Error::msg(
-            "bytecode main cannot declare unique owner/view parameters",
+            "bytecode main cannot declare unique or structural owner/view parameters",
         ));
     }
     if matches!(
@@ -86,57 +92,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
         }
     }
 
-    let mut metadata_bytes = super::entry_capabilities::metadata_bytes(chunk)?;
-    let global_prototype_bytes = chunk
-        .global_prototypes
-        .len()
-        .checked_mul(5)
-        .ok_or_else(|| Error::msg("bytecode metadata byte size overflow"))?;
-    metadata_bytes = checked_add(metadata_bytes, global_prototype_bytes, "metadata byte size")?;
-    metadata_bytes = checked_add(
-        metadata_bytes,
-        chunk.main.parameter_resources.len(),
-        "metadata byte size",
-    )?;
-    metadata_bytes = checked_add(
-        metadata_bytes,
-        chunk
-            .main
-            .parameter_uniques
-            .len()
-            .saturating_add(chunk.main.parameter_unique_places.len()),
-        "metadata byte size",
-    )?;
-    metadata_bytes = checked_add(metadata_bytes, 3, "metadata byte size")?;
-    metadata_bytes = checked_add(
-        metadata_bytes,
-        failure_metadata_bytes(&chunk.main)?,
-        "metadata byte size",
-    )?;
-    let mut encoded_bytes = chunk.main.code.len();
-    for proto in &chunk.protos {
-        metadata_bytes = checked_add(metadata_bytes, proto.name.len(), "metadata byte size")?;
-        metadata_bytes = checked_add(
-            metadata_bytes,
-            proto.parameter_resources.len(),
-            "metadata byte size",
-        )?;
-        metadata_bytes = checked_add(
-            metadata_bytes,
-            proto
-                .parameter_uniques
-                .len()
-                .saturating_add(proto.parameter_unique_places.len()),
-            "metadata byte size",
-        )?;
-        metadata_bytes = checked_add(metadata_bytes, 3, "metadata byte size")?;
-        metadata_bytes = checked_add(
-            metadata_bytes,
-            failure_metadata_bytes(proto)?,
-            "metadata byte size",
-        )?;
-        encoded_bytes = checked_add(encoded_bytes, proto.code.len(), "encoded byte size")?;
-    }
+    let (mut metadata_bytes, mut encoded_bytes) = function_metadata_bytes(chunk)?;
 
     let mut global_names = HashSet::with_capacity(chunk.global_names.len());
     for name in &chunk.global_names {
@@ -150,6 +106,12 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
     }
 
     metadata_bytes = super::shape_products::validate(chunk, metadata_bytes)?;
+
+    metadata_bytes = checked_add(
+        metadata_bytes,
+        super::shape_structural::validate(chunk, limits)?,
+        "metadata byte size",
+    )?;
 
     metadata_bytes = checked_add(
         metadata_bytes,
@@ -176,6 +138,7 @@ pub(super) fn validate_tables(chunk: &Chunk, limits: &ValidationLimits) -> Resul
 }
 
 include!("shape/constants.rs");
+include!("shape/metadata.rs");
 include!("shape/prototypes.rs");
 
 fn checked_add(left: usize, right: usize, category: &str) -> Result<usize> {

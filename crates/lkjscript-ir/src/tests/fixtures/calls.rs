@@ -13,6 +13,7 @@ pub(crate) fn bounded_call_program() -> Program {
     };
     let resolved = Signature::monomorphic(vec![SsaType::I64], SsaType::I64);
     Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: vec![SourceMetadata {
             id: 0,
             path: "traits.lkjscript".into(),
@@ -63,6 +64,7 @@ pub(crate) fn bounded_call_program() -> Program {
                             kind: InstructionKind::Call {
                                 target: CallTarget::Direct(FunctionId::new(0)),
                                 arguments: vec![ValueId::new(0)],
+                                consuming: vec![false],
                                 signature: resolved,
                                 instantiation: Some(GenericInstantiation {
                                     substitutions: vec![TypeSubstitution {

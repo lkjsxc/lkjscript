@@ -51,16 +51,22 @@ pub(super) fn apply(
                     ));
                 }
                 validate_resource_arguments(callee_proto, &arguments, proto, instruction)?;
+                consume_resource_arguments(state, callee_proto, &arguments);
                 validate_unique_arguments(callee_proto, &arguments, proto, instruction)?;
+                validate_structural_arguments(callee_proto, &arguments, proto, instruction)?;
                 call_return_kind(callee_proto, instruction)?
             } else {
                 if arguments.iter().any(|kind| {
                     matches!(
                         kind,
-                        Kind::Resource(_)
-                            | Kind::ResourceResult(_)
+                        Kind::Resource { .. }
+                            | Kind::ResourceResult { .. }
                             | Kind::ByteVector(_)
                             | Kind::ByteSlice { .. }
+                            | Kind::StructuralOwner { .. }
+                            | Kind::StructuralOwnerRef { .. }
+                            | Kind::StructuralView { .. }
+                            | Kind::StructuralDestination { .. }
                     )
                 }) {
                     return Err(instruction_error(
@@ -84,9 +90,11 @@ pub(super) fn apply(
                 ));
             }
             let returned = pop(state, proto, instruction)?;
-            validate_unique_exit_state(state, proto, instruction)?;
             validate_resource_return(proto, returned, instruction, is_main)?;
+            consume_resource_return(state, returned);
+            validate_unique_exit_state(chunk, state, proto, instruction)?;
             validate_unique_return(proto, returned, instruction)?;
+            validate_structural_return(proto, returned, instruction)?;
         }
         Op::MakeClosure => {
             let value = pop(state, proto, instruction)?;
@@ -117,4 +125,5 @@ pub(super) fn apply(
 }
 
 include!("arguments.rs");
+include!("resource_arguments.rs");
 include!("returns.rs");

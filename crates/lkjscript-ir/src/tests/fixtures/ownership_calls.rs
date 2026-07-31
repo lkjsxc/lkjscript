@@ -16,7 +16,10 @@ pub(crate) fn ownership_callee() -> Function {
     Function {
         id: FunctionId::new(1),
         name: "take-two".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type(), owned_buf_type()], SsaType::Unit),
+        signature: Signature::monomorphic(
+            vec![byte_vector_type(), byte_vector_type()],
+            SsaType::Unit,
+        ),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
         failure_cleanups: vec![
             FailureCleanupPlan {
@@ -35,13 +38,13 @@ pub(crate) fn ownership_callee() -> Function {
             parameters: vec![
                 BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 },
                 BlockParameter {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(1)),
                     origin: Origin::SYNTHETIC,
                 },
@@ -69,7 +72,7 @@ pub(crate) fn duplicate_call_caller() -> Function {
     Function {
         id: FunctionId::new(2),
         name: "duplicate-call".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         places: vec![owned_place(0, 0)],
         failure_cleanups: vec![FailureCleanupPlan {
             id: FailureCleanupId::new(0),
@@ -81,14 +84,14 @@ pub(crate) fn duplicate_call_caller() -> Function {
             id: BlockId::new(0),
             parameters: vec![BlockParameter {
                 id: ValueId::new(0),
-                ty: owned_buf_type(),
+                ty: byte_vector_type(),
                 owner_place: Some(PlaceId::new(0)),
                 origin: Origin::SYNTHETIC,
             }],
             instructions: vec![
                 Instruction {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(0),
                         value: ValueId::new(0),
@@ -101,8 +104,9 @@ pub(crate) fn duplicate_call_caller() -> Function {
                     kind: InstructionKind::Call {
                         target: CallTarget::Direct(FunctionId::new(1)),
                         arguments: vec![ValueId::new(1), ValueId::new(1)],
+                        consuming: vec![true, true],
                         signature: Signature::monomorphic(
-                            vec![owned_buf_type(), owned_buf_type()],
+                            vec![byte_vector_type(), byte_vector_type()],
                             SsaType::Unit,
                         ),
                         instantiation: None,

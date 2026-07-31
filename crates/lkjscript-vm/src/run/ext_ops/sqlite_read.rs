@@ -20,34 +20,42 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let index = vm.pop()?;
             let index = vm.as_i64(index)?;
             let handle = vm.pop()?;
-            let result =
-                vm.resources
-                    .sqlite_column_i64(handle, index)
-                    .and_then(|value| match value {
-                        Some(value) => {
-                            let value = Value::from_i64(value);
-                            crate::host_ext::option_some(&mut vm.arena, value)
-                        }
-                        None => crate::host_ext::option_none(&mut vm.arena),
-                    });
-            push_language_result(vm, lkjscript_core::SystemErrorKind::Sqlite, result);
+            let result = vm.resources.sqlite_column_i64(handle, index).map(|value| {
+                crate::run::structural_ops::HostValue::option(
+                    crate::run::structural_ops::HostValueType::I64,
+                    value.map(crate::run::structural_ops::HostValue::I64),
+                )
+            });
+            push_language_result(
+                vm,
+                lkjscript_core::SystemErrorKind::Sqlite,
+                crate::run::structural_ops::HostValueType::Option(Box::new(
+                    crate::run::structural_ops::HostValueType::I64,
+                )),
+                result,
+            );
             Ok(true)
         }
         x if x == Op::SysSqliteColumnF64 as u8 => {
             let index = vm.pop()?;
             let index = vm.as_i64(index)?;
             let handle = vm.pop()?;
-            let result =
-                vm.resources
-                    .sqlite_column_f64(handle, index)
-                    .and_then(|value| match value {
-                        Some(value) => {
-                            let value = Value::from_f64_bits(value.to_bits());
-                            crate::host_ext::option_some(&mut vm.arena, value)
-                        }
-                        None => crate::host_ext::option_none(&mut vm.arena),
-                    });
-            push_language_result(vm, lkjscript_core::SystemErrorKind::Sqlite, result);
+            let result = vm.resources.sqlite_column_f64(handle, index).map(|value| {
+                crate::run::structural_ops::HostValue::option(
+                    crate::run::structural_ops::HostValueType::F64,
+                    value.map(|value| {
+                        crate::run::structural_ops::HostValue::F64Bits(value.to_bits())
+                    }),
+                )
+            });
+            push_language_result(
+                vm,
+                lkjscript_core::SystemErrorKind::Sqlite,
+                crate::run::structural_ops::HostValueType::Option(Box::new(
+                    crate::run::structural_ops::HostValueType::F64,
+                )),
+                result,
+            );
             Ok(true)
         }
         x if x == Op::SysSqliteColumnText as u8 => {
@@ -56,15 +64,21 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let handle = vm.pop()?;
             let result = vm
                 .resources
-                .sqlite_column_text(handle, index, lkjscript_core::MAX_BUFFER_BYTES)
-                .and_then(|value| match value {
-                    Some(value) => {
-                        let value = vm.arena.alloc(HeapObj::Str(value))?;
-                        crate::host_ext::option_some(&mut vm.arena, value)
-                    }
-                    None => crate::host_ext::option_none(&mut vm.arena),
+                .sqlite_column_text(handle, index, lkjscript_core::MAX_BYTE_STORAGE_BYTES)
+                .map(|value| {
+                    crate::run::structural_ops::HostValue::option(
+                        crate::run::structural_ops::HostValueType::String,
+                        value.map(crate::run::structural_ops::HostValue::String),
+                    )
                 });
-            push_language_result(vm, lkjscript_core::SystemErrorKind::Sqlite, result);
+            push_language_result(
+                vm,
+                lkjscript_core::SystemErrorKind::Sqlite,
+                crate::run::structural_ops::HostValueType::Option(Box::new(
+                    crate::run::structural_ops::HostValueType::String,
+                )),
+                result,
+            );
             Ok(true)
         }
         x if x == Op::SysSqliteColumnBytes as u8 => {
@@ -73,15 +87,21 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             let handle = vm.pop()?;
             let result = vm
                 .resources
-                .sqlite_column_bytes(handle, index, lkjscript_core::MAX_BUFFER_BYTES)
-                .and_then(|value| match value {
-                    Some(value) => {
-                        let value = vm.arena.alloc(HeapObj::Buf(value))?;
-                        crate::host_ext::option_some(&mut vm.arena, value)
-                    }
-                    None => crate::host_ext::option_none(&mut vm.arena),
+                .sqlite_column_bytes(handle, index, lkjscript_core::MAX_BYTE_STORAGE_BYTES)
+                .map(|value| {
+                    crate::run::structural_ops::HostValue::option(
+                        crate::run::structural_ops::HostValueType::Bytes,
+                        value.map(crate::run::structural_ops::HostValue::Bytes),
+                    )
                 });
-            push_language_result(vm, lkjscript_core::SystemErrorKind::Sqlite, result);
+            push_language_result(
+                vm,
+                lkjscript_core::SystemErrorKind::Sqlite,
+                crate::run::structural_ops::HostValueType::Option(Box::new(
+                    crate::run::structural_ops::HostValueType::Bytes,
+                )),
+                result,
+            );
             Ok(true)
         }
         x if x == Op::SysSqliteChanges as u8 => {

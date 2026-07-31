@@ -81,7 +81,7 @@ fn pop_bytes(
     }
 }
 
-fn new_owner(instruction: DecodedInstruction) -> Result<u32> {
+pub(super) fn new_owner(instruction: DecodedInstruction) -> Result<u32> {
     u32::try_from(instruction.offset())
         .ok()
         .and_then(|offset| offset.checked_add(0x6000_0001))

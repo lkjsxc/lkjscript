@@ -37,11 +37,6 @@ impl JitHeapServices<'_> {
                 })?;
                 Ok(NativeValue::Bool(equal))
             }
-            HeapOperation::SameObject => {
-                let left = as_reference(argument(0)?)?;
-                let right = as_reference(argument(1)?)?;
-                Ok(NativeValue::Bool(left.opaque_word() == right.opaque_word()))
-            }
             HeapOperation::ListEqual => {
                 let left = native_reference_value(self.heap, as_reference(argument(0)?)?).map_err(
                     |message| {

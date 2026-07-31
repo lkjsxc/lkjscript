@@ -78,18 +78,21 @@ pub(crate) fn exact_instruction_kind_equal(
             InstructionKind::Call {
                 target: left_target,
                 arguments: left_arguments,
+                consuming: left_consuming,
                 signature: left_signature,
                 instantiation: left_instantiation,
             },
             InstructionKind::Call {
                 target: right_target,
                 arguments: right_arguments,
+                consuming: right_consuming,
                 signature: right_signature,
                 instantiation: right_instantiation,
             },
         ) => {
             left_target == right_target
                 && left_arguments == right_arguments
+                && left_consuming == right_consuming
                 && left_signature == right_signature
                 && left_instantiation == right_instantiation
         }

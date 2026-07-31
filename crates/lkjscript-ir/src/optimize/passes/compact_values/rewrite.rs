@@ -20,6 +20,7 @@ pub(crate) fn rewrite_function_values(
             match &mut instruction.kind {
                 InstructionKind::Constant(_)
                 | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::DestinationCreate { .. }
                 | InstructionKind::FunctionRef(_) => {}
                 InstructionKind::Copy(value)
                 | InstructionKind::PlaceInit { value, .. }
@@ -27,10 +28,24 @@ pub(crate) fn rewrite_function_values(
                 | InstructionKind::Drop { value, .. }
                 | InstructionKind::Move { value, .. }
                 | InstructionKind::Borrow { value, .. }
+                | InstructionKind::StructuralPublish { value, .. }
+                | InstructionKind::DestinationFinish { destination: value }
+                | InstructionKind::DestinationAbort { destination: value }
+                | InstructionKind::AggregateFieldBorrow { value, .. }
+                | InstructionKind::AggregateTag { value, .. }
+                | InstructionKind::AggregateConsumePayload { value, .. }
+                | InstructionKind::StringUtf8View { value, .. }
+                | InstructionKind::StructuralCopy { value, .. }
                 | InstructionKind::F64FromI64Exact { value }
                 | InstructionKind::F64FromI64Rounded { value }
                 | InstructionKind::I64FromF64Exact { value }
                 | InstructionKind::I64FromF64Trunc { value } => {
+                    *value = rewrite(*value);
+                }
+                InstructionKind::DestinationFieldInit {
+                    destination, value, ..
+                } => {
+                    *destination = rewrite(*destination);
                     *value = rewrite(*value);
                 }
                 InstructionKind::Runtime { arguments, .. }

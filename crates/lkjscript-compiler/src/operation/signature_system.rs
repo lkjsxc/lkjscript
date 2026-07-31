@@ -31,12 +31,16 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
         Operation::SysWriteByte => {
             resource_function(vec![any_resource(), Type::I64], system_result(Type::Unit))
         }
-        Operation::SysReadInto | Operation::SysWriteFrom => resource_function(
-            vec![any_resource(), Type::Buf, Type::I64, Type::I64],
+        Operation::SysReadInto => resource_function(
+            vec![any_resource(), Type::ByteSliceMut],
+            system_result(Type::I64),
+        ),
+        Operation::SysWriteFrom => resource_function(
+            vec![any_resource(), Type::ByteSlice],
             system_result(Type::I64),
         ),
         Operation::SysTtyGuardSave => function(
-            vec![Type::Capability(Terminal), Type::Buf],
+            vec![Type::Capability(Terminal), Type::ByteSlice],
             system_result(Type::Unit),
         ),
         Operation::SysTtyGuardClear => {
@@ -67,13 +71,10 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
             system_result(Type::Unit),
         ),
         Operation::SysRandomFill => function(
-            vec![Type::Capability(Entropy), Type::Buf, Type::I64, Type::I64],
+            vec![Type::Capability(Entropy), Type::ByteSliceMut],
             system_result(Type::Unit),
         ),
-        Operation::SysSha256 => function(
-            vec![Type::Buf, Type::I64, Type::I64],
-            system_result(Type::Buf),
-        ),
+        Operation::SysSha256 => function(vec![Type::ByteSlice], Type::Bytes),
         Operation::SysPathExists => function(
             vec![Type::Capability(FileSystem), Type::Path],
             system_result(Type::Bool),
@@ -106,8 +107,12 @@ pub(in crate::operation) fn system_signature(operation: Operation) -> Type {
         Operation::SysPoll => {
             resource_function(vec![any_resource(), Type::I64], system_result(Type::I64))
         }
-        Operation::SysTtyGet | Operation::SysTtySet => function(
-            vec![resource(ResourceKind::InputStream), Type::Buf],
+        Operation::SysTtyGet => function(
+            vec![resource(ResourceKind::InputStream), Type::ByteSliceMut],
+            system_result(Type::Unit),
+        ),
+        Operation::SysTtySet => function(
+            vec![resource(ResourceKind::InputStream), Type::ByteSlice],
             system_result(Type::Unit),
         ),
         _ => unreachable!("operation signature family mismatch"),

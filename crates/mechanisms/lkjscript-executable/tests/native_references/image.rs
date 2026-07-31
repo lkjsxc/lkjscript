@@ -13,16 +13,20 @@ pub(super) struct ReferenceEntries {
 
 pub(super) fn reference_image(
 ) -> Result<(InstallableImage, ReferenceEntries), Box<dyn std::error::Error>> {
-    let buf = ValueType::Reference(ReferenceType::Buf);
+    let product_ref = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
     let exact_local = plan.declare_function(
         SourceFunctionId::new(1),
-        Signature::new(vec![buf, buf], buf)?,
+        Signature::new(vec![product_ref, product_ref], product_ref)?,
     )?;
-    let callee =
-        plan.declare_function(SourceFunctionId::new(2), Signature::new(vec![buf], buf)?)?;
-    let caller =
-        plan.declare_function(SourceFunctionId::new(3), Signature::new(vec![buf], buf)?)?;
+    let callee = plan.declare_function(
+        SourceFunctionId::new(2),
+        Signature::new(vec![product_ref], product_ref)?,
+    )?;
+    let caller = plan.declare_function(
+        SourceFunctionId::new(3),
+        Signature::new(vec![product_ref], product_ref)?,
+    )?;
     let trap = plan.declare_function(
         SourceFunctionId::new(4),
         Signature::new(Vec::new(), ValueType::Unit)?,
@@ -70,7 +74,7 @@ pub(super) fn reference_image(
         builder.set_entry(entry)?;
         let live = builder.parameter(0)?;
         let _dead = builder.parameter(1)?;
-        let local = builder.create_local(buf)?;
+        let local = builder.create_local(product_ref)?;
         let _write = builder.write_local(entry, local, live)?;
         let _collected =
             builder.runtime_call(entry, RuntimeCallSlot::CollectReference, vec![live])?;

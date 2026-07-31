@@ -54,8 +54,8 @@ pub enum InvocationError {
     },
     ArgumentType {
         index: usize,
-        expected: ValueType,
-        actual: ValueType,
+        expected: Box<ValueType>,
+        actual: Box<ValueType>,
     },
     UnsupportedSignature,
     InvalidNativeStatus(u32),

@@ -46,7 +46,8 @@ impl Emitter<'_> {
         &mut self,
         instruction: &Instruction,
     ) -> Result<Option<u16>> {
-        let actions = compile_unentered_cleanup(self.function, instruction, &self.slots)?;
+        let actions =
+            compile_unentered_cleanup(self.function, instruction, &self.slots, self.chunk)?;
         if actions.is_empty() {
             return Ok(None);
         }

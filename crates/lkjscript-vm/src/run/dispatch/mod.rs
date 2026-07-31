@@ -5,6 +5,9 @@ use lkjscript_core::{Error, Result};
 use super::{RuntimeTier, Vm};
 
 pub fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()> {
+    if super::structural_ops::handles(op) {
+        return super::structural_ops::dispatch(vm, op);
+    }
     if super::unique_ops::handles(op) {
         return super::unique_ops::dispatch(vm, op);
     }

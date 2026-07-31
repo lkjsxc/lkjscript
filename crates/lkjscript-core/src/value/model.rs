@@ -19,7 +19,11 @@ enum ValueKind {
     Function,
     Symbol,
     LegacyTraced,
+    AggregateAdapter,
     StructuralRoot,
+    StructuralView,
+    StructuralDestination,
+    StaticString,
     StaticBytes,
     BytesKey,
     ByteVectorKey,
@@ -51,6 +55,23 @@ impl Value {
         Self { payload, kind }
     }
 
+    pub(crate) const fn is_forbidden_legacy_payload(self) -> bool {
+        matches!(
+            self.kind,
+            ValueKind::Capability
+                | ValueKind::Resource
+                | ValueKind::AggregateAdapter
+                | ValueKind::StructuralRoot
+                | ValueKind::StructuralView
+                | ValueKind::StructuralDestination
+                | ValueKind::BytesKey
+                | ValueKind::ByteVectorKey
+                | ValueKind::BytesBorrow
+                | ValueKind::ByteSlice
+                | ValueKind::ByteSliceMut
+        )
+    }
+
     pub const fn from_bool(value: bool) -> Self {
         if value {
             Self::TRUE
@@ -65,6 +86,17 @@ impl Value {
 
     pub const fn from_f64_bits(bits: u64) -> Self {
         Self::new(ValueKind::F64, bits)
+    }
+
+    pub const fn from_static_string(index: u16) -> Self {
+        Self::new(ValueKind::StaticString, index as u64)
+    }
+
+    pub const fn as_static_string(self) -> Option<u16> {
+        match self.kind {
+            ValueKind::StaticString => Some(self.payload as u16),
+            _ => None,
+        }
     }
 
     pub const fn from_legacy_traced(index: u32) -> Self {

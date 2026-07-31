@@ -1,6 +1,7 @@
 //! Call and pair opcodes.
 
 use lkjscript_core::{Error, HeapObj, Op, Result, Value};
+#[cfg(feature = "jit")]
 use lkjscript_jit::{EntryDecision, NativeValue, ScalarInvocationOutcome, ValueType};
 
 use crate::run::{Frame, RuntimeTier, Vm};

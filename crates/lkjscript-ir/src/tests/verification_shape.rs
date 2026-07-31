@@ -31,6 +31,7 @@ fn verifier_rejects_direct_malformed_id_use_dominance_edge_loop_and_metadata() {
             kind: InstructionKind::Call {
                 target: CallTarget::Indirect(ValueId::new(1)),
                 arguments: Vec::new(),
+                consuming: Vec::new(),
                 signature: indirect_signature.clone(),
                 instantiation: None,
             },

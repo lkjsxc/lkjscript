@@ -1,6 +1,36 @@
 use super::{map_store_error, Error, Result, UniqueRuntime, Value};
 
 impl UniqueRuntime {
+    pub(crate) fn shared_bytes(&mut self, value: Value) -> Result<&[u8]> {
+        let token = self.validate_view(value, false)?;
+        let loan = *self
+            .loans
+            .get(&token)
+            .ok_or_else(|| Error::msg("VM byte view disappeared"))?;
+        let key = self
+            .store
+            .import_byte_vector_key(loan.owner)
+            .map_err(map_store_error)?;
+        self.store
+            .byte_vector_range(key, loan.start, loan.len)
+            .map_err(map_store_error)
+    }
+
+    pub(crate) fn exclusive_bytes(&mut self, value: Value) -> Result<&mut [u8]> {
+        let token = self.validate_view(value, true)?;
+        let loan = *self
+            .loans
+            .get(&token)
+            .ok_or_else(|| Error::msg("VM byte view disappeared"))?;
+        let key = self
+            .store
+            .import_byte_vector_key(loan.owner)
+            .map_err(map_store_error)?;
+        self.store
+            .byte_vector_range_mut(key, loan.start, loan.len)
+            .map_err(map_store_error)
+    }
+
     pub(crate) fn len(&self, value: Value) -> Result<i64> {
         let token = self.validate_view(value, false)?;
         let loan = self

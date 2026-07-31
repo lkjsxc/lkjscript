@@ -20,8 +20,6 @@ pub enum StoreClass {
 /// never source pointers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum HeapOperation {
-    ConstantStr(String),
-    EmptyStr,
     EmptyList,
     ProductValue {
         product: u32,
@@ -64,29 +62,6 @@ pub enum HeapOperation {
     Car,
     Cdr,
     IsEmptyList,
-    BufNew,
-    BufLen,
-    BufRef,
-    BufSet,
-    BufClone,
-    BufFromStr,
-    BufToStr {
-        error_type: ReferenceType,
-    },
-    BufSlice {
-        error_type: ReferenceType,
-        code_option_type: ReferenceType,
-        detail_option_type: ReferenceType,
-    },
-    BufGetU32,
-    BufSetU32,
-    StrLen,
-    StrRef,
-    StrAppend,
-    StrSlice,
-    StrFromByte,
-    StrFromI64,
-    StrFromF64,
     F64FromI64Exact {
         error_type: ValueType,
     },
@@ -97,45 +72,26 @@ pub enum HeapOperation {
         error_type: ValueType,
     },
     EqualValue,
-    SameObject,
     ListEqual,
 }
 
 impl HeapOperation {
     pub(crate) fn expected_arity(&self) -> usize {
         match self {
-            Self::EmptyStr | Self::EmptyList | Self::ConstantStr(_) => 0,
+            Self::EmptyList => 0,
             Self::ProductValue { fields, .. } | Self::EnumValue { fields, .. } => {
                 usize::from(*fields)
             }
-            Self::BufSet | Self::BufSlice { .. } | Self::BufSetU32 | Self::StrSlice => 3,
             Self::ProductField { .. }
             | Self::EnumIsVariant { .. }
             | Self::EnumField { .. }
             | Self::Car
             | Self::Cdr
             | Self::IsEmptyList
-            | Self::BufNew
-            | Self::BufLen
-            | Self::BufClone
-            | Self::BufFromStr
-            | Self::BufToStr { .. }
-            | Self::StrLen
-            | Self::StrFromByte
-            | Self::StrFromI64
-            | Self::StrFromF64
             | Self::F64FromI64Exact { .. }
             | Self::I64FromF64Exact { .. }
             | Self::I64FromF64Trunc { .. } => 1,
-            Self::WithProductField { .. }
-            | Self::Cons
-            | Self::BufRef
-            | Self::BufGetU32
-            | Self::StrRef
-            | Self::StrAppend
-            | Self::EqualValue
-            | Self::SameObject
-            | Self::ListEqual => 2,
+            Self::WithProductField { .. } | Self::Cons | Self::EqualValue | Self::ListEqual => 2,
         }
     }
 }

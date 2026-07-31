@@ -17,6 +17,7 @@ impl InstallableImage {
             safepoints: &self.safepoints,
             root_requirements: &self.root_requirements,
             heap_runtime_sites: &self.heap_runtime_sites,
+            structural_runtime_sites: &self.structural_runtime_sites,
             source_map: &self.source_map,
             trap_map: &self.trap_map,
             outcome_map: &self.outcome_map,
@@ -153,6 +154,19 @@ impl InstallableImage {
             == runtime_calls.contains(&RuntimeCallSlot::HeapDispatch)
         {
             return Err(ImageIntegrityError::HeapRuntimeSite);
+        }
+        for (expected_id, site) in self.structural_runtime_sites.iter().enumerate() {
+            if site.id as usize != expected_id
+                || !functions.contains(&site.function)
+                || !site.descriptor.canonical()
+            {
+                return Err(ImageIntegrityError::StructuralRuntimeSite);
+            }
+        }
+        if self.structural_runtime_sites.is_empty()
+            == runtime_calls.contains(&RuntimeCallSlot::StructuralDispatch)
+        {
+            return Err(ImageIntegrityError::StructuralRuntimeSite);
         }
         for source in &self.source_map {
             if source.code_start >= source.code_end

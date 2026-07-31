@@ -19,8 +19,9 @@ explicit local PGO is now a **Deferred Optional Target** under the superseding
 execution portfolio. Canonical source/verified-SSA linkage, bounded code objects,
 VM/native transfer, `vm`/`auto`/`baseline-jit`/`optimizing-jit`, PollV1, and actual generated
 calls are implemented. Closed machine plans also have canonical native contract exact typed
-reference frames/maps and a collecting Buf-reference slot. Source-level host-independent native
-references/allocation and recursive SCCs
+reference frames/maps for the remaining traced layouts. Collector-free bytes
+and byte vectors use the checked unique runtime. Source-level host-independent
+native references/allocation and recursive SCCs
 are implemented. Handle/host calls, lexical ownership adapters, native/VM
 reference transitions, automatic optimizing promotion, broader proof passes,
 OSR, speculative tiers, background work, and deoptimization are absent.

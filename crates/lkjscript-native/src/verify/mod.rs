@@ -2,11 +2,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 
 use crate::plan::{
-    BlockId, FunctionDeclaration, FunctionId, FunctionPlan, LocalId, Operation, ReferenceType,
-    RuntimeCallSlot, Signature, Terminator, TrapCode, ValueDefinition, ValueId, ValueType,
+    BlockId, FunctionDeclaration, FunctionId, FunctionPlan, LoanType, LocalId, Operation,
+    ReferenceType, RuntimeCallSlot, Signature, StructuralCallDescriptor, StructuralOperation,
+    Terminator, ValueDefinition, ValueId, ValueType,
 };
 use crate::BackendLimits;
 
+mod affine;
 mod functions;
 mod instructions;
 mod layouts;
@@ -15,6 +17,7 @@ mod plan;
 mod roots;
 mod terminators;
 
+use affine::*;
 use functions::*;
 use instructions::*;
 use layouts::*;
@@ -42,6 +45,11 @@ pub enum VerificationError {
     TypeMismatch(&'static str),
     InvalidCall(FunctionId),
     InvalidReturn(FunctionId),
+    LiveAffineValue(ValueId),
+    LiveAffineLocal(LocalId),
+    LiveLoan(ValueId),
+    BorrowConflict(ValueId),
+    IncompleteStructuralDestination(ValueId),
 }
 
 impl fmt::Display for VerificationError {
@@ -85,6 +93,19 @@ impl fmt::Display for VerificationError {
             Self::TypeMismatch(context) => write!(formatter, "type mismatch in {context}"),
             Self::InvalidCall(function) => write!(formatter, "invalid call to {function:?}"),
             Self::InvalidReturn(function) => write!(formatter, "invalid return in {function:?}"),
+            Self::LiveAffineValue(value) => {
+                write!(formatter, "affine value {value:?} is not consumed")
+            }
+            Self::LiveAffineLocal(local) => {
+                write!(formatter, "affine local {local:?} is not consumed")
+            }
+            Self::LiveLoan(owner) => write!(formatter, "owner {owner:?} has a live loan"),
+            Self::BorrowConflict(owner) => {
+                write!(formatter, "owner {owner:?} has conflicting loans")
+            }
+            Self::IncompleteStructuralDestination(value) => {
+                write!(formatter, "structural destination {value:?} is incomplete")
+            }
         }
     }
 }

@@ -24,7 +24,9 @@ explicit in SSA and whole-function verification. lkjscript adopts explicit
 availability, moves, borrows, borrow ends, destroys, and ownership-preserving
 optimization. It does not adopt Swift ARC or object semantics.
 
-Source: <https://forums.swift.org/t/sil-ownership-model-proposal-refreshed/16872>.
+Sources: <https://github.com/swiftlang/swift/blob/040158599072ecfbfdf7fcc6fc2aafd3e1ab219e/docs/SIL/Ownership.md>
+and the ownership/linear-lifetime verifier implementation at the same Swift
+revision. The revision was checked on 2026-07-30.
 
 ## Perceus And Lean
 
@@ -46,8 +48,10 @@ Inaccessible paper details are not invented. Polonius informs place-sensitive
 issuance, subset/liveness constraints, invalidation, kills, and CFG fixed
 points; it is not a dependency or source-language memory system.
 
-Sources: DOI `10.1145/3798221` and
-<https://github.com/rust-lang/polonius>.
+Sources: DOI <https://doi.org/10.1145/3798221>, its ACM supplement, and
+<https://github.com/rust-lang/polonius>. The paper's reference-count insertion
+fallback is explicitly rejected; inaccessible or pure-language-only details do
+not establish mutable aggregate conformance.
 
 ## Destination Passing
 
@@ -56,9 +60,22 @@ initialization, failure cleanup, aliasing, and caller-destination escape are
 verified. It is an optional optimization, not required to establish the first
 island.
 
-Sources: DOI `10.1145/3122948.3122949`; the 2026 arXiv source named by the
-contract was unavailable during this cycle, so no additional mechanism is
-claimed from it.
+Sources: DOI <https://doi.org/10.1145/3720423> and author preprint
+<https://arxiv.org/abs/2503.07489>. The linear hole/destination and complete-
+initialization reasoning is adopted internally; first-class destination or age
+syntax is rejected.
+
+## Implicit Sized Regions And Lean Compaction
+
+Spegion provides implicit non-lexical region and sized-allocation evidence, not
+a replacement for affine drop or a production performance result. Lean's
+compacted region implementation provides evidence for contiguous immutable
+sealed graphs with explicit external dependencies, not proof that Lean's
+runtime representation fits lkjscript.
+
+Sources: <https://doi.org/10.4230/LIPIcs.ECOOP.2025.15> and Lean revision
+`f696c4686b327b271b3488d757dc4fcd80f298ce`, especially
+`src/Lean/CompactedRegion.lean` and `src/runtime/compact.cpp`.
 
 ## Tool Boundary
 

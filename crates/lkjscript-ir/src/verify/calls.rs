@@ -53,9 +53,11 @@ pub(crate) fn verify_call_compatibility(
         }
         return Ok(());
     }
-    if signature_contains_ownership(declared)
-        || signature_contains_ownership(resolved)
-        || substitutions.values().any(contains_ownership_type)
+    if signature_contains_ownership(program, declared)
+        || signature_contains_ownership(program, resolved)
+        || substitutions
+            .values()
+            .any(|ty| contains_ownership_type(program, ty))
     {
         return fail("SSA ownership/reference generic instantiation is unavailable in this slice");
     }
@@ -73,7 +75,7 @@ pub(crate) fn verify_call_compatibility(
             return fail("SSA generic call substitution identity does not match inference");
         }
         verify_type(program, &fact.ty, caller_type_parameters)?;
-        if contains_ownership_type(&fact.ty) {
+        if contains_ownership_type(program, &fact.ty) {
             return fail(
                 "SSA ownership/reference generic instantiation is unavailable in this slice",
             );

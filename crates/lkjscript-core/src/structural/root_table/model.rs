@@ -138,6 +138,7 @@ pub(super) enum LoanSlot {
     Retired,
 }
 
+#[derive(Debug)]
 pub struct StructuralRootTable {
     pub(super) runtime: StructuralRuntimeId,
     pub(super) limits: StructuralRootTableLimits,

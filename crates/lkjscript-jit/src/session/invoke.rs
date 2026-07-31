@@ -127,6 +127,9 @@ impl JitSession {
         self.unique_runtime_calls = self
             .unique_runtime_calls
             .saturating_add(report.unique_calls());
+        self.structural_runtime_calls = self
+            .structural_runtime_calls
+            .saturating_add(report.structural_calls());
         self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
         self.runtime_heap_attempts = self
             .runtime_heap_attempts

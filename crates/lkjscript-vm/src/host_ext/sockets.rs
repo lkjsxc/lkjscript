@@ -55,11 +55,7 @@ impl ResourceTable {
         )
     }
 
-    pub fn sys_recv(
-        &self,
-        arena: &mut Arena,
-        handle: Value,
-    ) -> std::result::Result<Value, SocketReceiveError> {
+    pub fn sys_recv(&self, handle: Value) -> std::result::Result<String, SocketReceiveError> {
         let raw = self
             .socket_raw(handle, ResourceKind::TcpStream, "receive-string")
             .map_err(SocketReceiveError::Network)?;
@@ -69,14 +65,12 @@ impl ResourceTable {
         })?;
         buffer.truncate(received);
         let text = lkjscript_core::validate_utf8(&buffer).map_err(SocketReceiveError::Utf8)?;
-        arena
-            .alloc(HeapObj::Str(text.to_owned()))
-            .map_err(SocketReceiveError::Network)
+        Ok(text.to_owned())
     }
 
-    pub fn sys_send(&self, arena: &Arena, handle: Value, data: Value) -> Result<i64> {
+    pub fn sys_send(&self, handle: Value, data: &str) -> Result<i64> {
         let raw = self.socket_raw(handle, ResourceKind::TcpStream, "send-string")?;
-        let bytes = as_str(arena, data)?.as_bytes();
+        let bytes = data.as_bytes();
         let mut sent = 0_usize;
         while sent < bytes.len() {
             let count = lkjscript_sys::send_sock(raw, &bytes[sent..])

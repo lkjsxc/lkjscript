@@ -61,8 +61,9 @@ eligible scalar-adapter function entry and uses the baseline object only on late
 reference-signature helpers may be generated direct callees but remain
 ineligible VM/native entries. Unsupported code stays VM-correct with same-epoch
 retry suppression. The old observation-only hook is
-removed. Closed plans retain exact Buf-reference collection. Forced SSA/source execution
-also supports Str, legacy Buf, Product, List, Option, and Result allocation and
+removed. Closed plans retain exact registered-reference collection. Forced
+SSA/source execution also supports collector-free bytes and byte-vector
+operations plus Str, Product, List, Option, and Result allocation and
 direct/mutual recursion. Auto intentionally keeps reference-typed functions in
 VM because reference transitions remain absent. Loop OSR, automatic optimizing promotion, broader
 proof passes, background

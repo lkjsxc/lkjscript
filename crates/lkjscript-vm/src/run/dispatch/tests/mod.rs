@@ -6,14 +6,16 @@ use super::dispatch;
 use crate::run::data::list_values_equal;
 use crate::run::{test_chunk, Vm};
 
-fn test_vm() -> Vm<'static, NullJit> {
-    let chunk = Box::leak(Box::new(test_chunk()));
-    Vm::new(
-        chunk,
-        NullJit,
-        crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
-    )
+macro_rules! test_vm {
+    ($name:ident) => {
+        let chunk = test_chunk();
+        let mut $name = Vm::new(
+            &chunk,
+            NullJit,
+            crate::ExecutionInputs::default(),
+            ExecutionConfig::default(),
+        );
+    };
 }
 
 fn compare(vm: &mut Vm<'_, NullJit>, op: Op, left: Value, right: Value) -> bool {

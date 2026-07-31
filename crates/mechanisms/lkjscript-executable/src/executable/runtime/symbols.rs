@@ -99,6 +99,9 @@ pub(in crate::executable) fn runtime_symbol(
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ThawBytes) => {
             runtime_island_thaw_bytes as *const () as usize
         }
+        (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::StructuralDispatch) => {
+            runtime_island_structural_dispatch as *const () as usize
+        }
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::ReserveFrame) => {
             runtime_island_reserve as *const () as usize
         }

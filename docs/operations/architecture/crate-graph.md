@@ -45,7 +45,7 @@ a third-party Rust dependency.
 | Public compiler API | `crates/lkjscript-compiler/src/lib.rs` | `compile_path`, `compile_path_with_sources`, `compile_source`, `validate_source` | <!-- LKJ-EXACT-DATA -->
 | Validated Semantic Source foundation | `crates/lkjscript-compiler/src/source/` | opaque `ValidatedSourceTree`, iterative contained loading, parser/limits, spans/origins, revision/keys/nodes, structural formatter, source diagnostics | <!-- LKJ-EXACT-DATA -->
 | Resolution and typed HIR | `crates/lkjscript-compiler/src/analyze/`, `effects/`, `hir/`, `operation/` | `analyze_program`, fixed-point effect inference, explicit Main/Function, BindingId, local slots, typed operations/effects | <!-- LKJ-EXACT-DATA -->
-| Ownership analysis | `crates/lkjscript-compiler/src/ownership/` | mandatory aggregate-bounded `Owned Buf` lexical place/move/same-block-loan analysis and exact joins | <!-- LKJ-EXACT-DATA -->
+| Ownership analysis | `crates/lkjscript-compiler/src/ownership/` | mandatory aggregate-bounded affine byte-vector lexical place/move/same-block-loan analysis and exact joins | <!-- LKJ-EXACT-DATA -->
 | HIR-to-SSA conversion | `crates/lkjscript-compiler/src/ssa/` | environment renaming, BindingId-ordered branch/loop parameters, exact operation/type/effect/ownership transfer | <!-- LKJ-EXACT-DATA -->
 | Typed SSA authority | `crates/lkjscript-ir/src/` | IR model, `verify`, `evaluate`, isolated baseline passes, bounded proof optimization/certificate verification, bytecode link metadata | <!-- LKJ-EXACT-DATA -->
 | Type representation | `crates/lkjscript-compiler/src/types/` | canonical source/HIR Type parsing and substitution |
@@ -55,7 +55,7 @@ a third-party Rust dependency.
 | Shared bytecode/value ABI | `crates/lkjscript-core/src/` | `Chunk`, `Op`, `Value`, `HeapObj` |
 | VM loop | `crates/lkjscript-vm/src/run/` | `Vm::run`, dispatch and calls |
 | Heap/GC | `crates/lkjscript-core/src/gc/` | pure session-owned non-reusing stable-index `GcHeap`, transactional estimated-byte-accounted mutation, transitive snapshots, bounded counters/collection policy, VM and forced-JIT use | <!-- LKJ-EXACT-DATA -->
-| Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, buffers, descriptor table |
+| Host resources | `crates/lkjscript-vm/src/host*.rs` | IO, checked byte views, descriptor table |
 | Executable/native runtime mechanisms | `crates/mechanisms/lkjscript-executable/src/` | safe bounded W^X installation/invocation, private active-frame chain, typed-root and island callbacks | <!-- LKJ-EXACT-DATA -->
 | Linux topology/affinity mechanisms | `crates/mechanisms/lkjscript-linux-host/src/` | bounded topology and scheduler observation, checked affinity and worker binding | <!-- LKJ-EXACT-DATA -->
 | Residual host and SQLite mechanisms | `crates/lkjscript-sys/src/` | owned file/path/socket/time/poll/random/terminal wrappers and SQLite FFI | <!-- LKJ-EXACT-DATA -->
@@ -126,7 +126,7 @@ machine plan, encoder, metadata, safe W^X boundary, verified SSA adapter,
 bounded code objects, callable function-entry baseline tier, host-independent
 reference/allocation SCC groups in forced mode, and the forced first proof-based
 optimizing pipeline are **Current**. Forced and auto baseline engines plus forced
-optimizing execution enter real generated code. The initial `Owned Buf`
+optimizing execution enter real generated code. The affine byte-vector and whole-owner slice
 ownership safe island, marker traits, and closed-plan canonical native contract typed-reference
 frames/maps are Current;
 general ownership, Handle/host native allocation, native/VM reference

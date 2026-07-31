@@ -121,7 +121,6 @@ fn symbol_kind(kind: Kind) -> bool {
             | Kind::TypeI64
             | Kind::TypeF64
             | Kind::TypeString
-            | Kind::TypeBuffer
             | Kind::TypeBytes
             | Kind::TypeByteVector
             | Kind::TypeByteSlice

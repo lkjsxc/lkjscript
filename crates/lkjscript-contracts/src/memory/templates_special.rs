@@ -37,7 +37,7 @@ pub const fn resource(
     }
 }
 
-pub const fn affine_buffer(
+pub const fn affine_byte_vector(
     identity: &'static str,
     producers: &'static str,
     tests: &'static str,

@@ -47,8 +47,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Generic enums, exhaustive `match`, `never`, structured control, and explicit
   numeric conversions run through evaluator, VM, baseline JIT, and proof JIT
   where each engine supports the relevant operation set.
-- Source, declaration, node, revision, and Semantic Source identities frame the
-  Current source/semantic contract digest.
+- Source, declaration, node, revision, and Semantic Source identities frame the Current source/semantic contract digest.
 - Semantic Source requests, sessions, diagnostics, typed holes, transactions,
   and publications require stable schema names plus exact full contract
   digests. No generation-numbered envelope is accepted.
@@ -59,8 +58,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   main requirements before effects; capability values are unforgeable, copyable, process-local, and never serialized.
 - Linux runtime pathnames use immutable byte-preserving `path` values. Explicit
   constructors reject empty, relative, NUL-containing, and oversized paths;
-  observation is either exact bytes or strict UTF-8. Filesystem and SQLite
-  operations reject `string` pathname operands.
+  observation is either exact bytes or strict UTF-8. Filesystem and SQLite operations reject `string` pathname operands.
 ## Modules and local packages
 - Every source file is a module identified only by its package-root-relative UTF-8 path.
 - Declarations are private by default. The `public` field is explicit; each
@@ -80,8 +78,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   the existing bounded ownership foundation without `owned buf`, `ref buf`, or `ref-mut buf` source aliases.
 - The universal source type `handle` is removed. Eleven exact resource kinds
   flow through source typing, HIR, verified SSA, bytecode validation, and VM
-  resource-kind checks. Resources cannot use value/object equality, escape from
-  `main`, or enter unsupported aggregates.
+  resource-kind checks. Resources cannot use value/object equality, escape from `main`, or enter unsupported aggregates.
 - Exact drop glue for deterministic `byte-vector` and all eleven resource kinds
   reaches affine SSA place metadata. Verified SSA has explicit loan-end and
   whole-place-drop events, rejects owner-erasing `place-end`, proves
@@ -93,25 +90,24 @@ Git history. They do not provide aliases or acceptance fallbacks.
   by the ownership verifier. The evaluator and reference VM execute those plans
   for instruction failure, fuel/deadline exhaustion, and propagated callee
   outcomes; failed pre-entry calls clean transferred arguments separately.
-  Forced baseline and proof JITs execute the same verified plans for
-  collector-free byte owners without fallback. Statically decidable conditional
-  byte owners execute through all four engines, and conditional typed resources
-  execute explicit/implicit close in the VM. Bounded ordered cleanup failures
-  retain the unchanged primary outcome. Native owned-resource execution remains
-  fail-closed, so deterministic drop and typed resources are not complete Current capabilities.
+  Forced baseline and proof JITs execute the same verified plans for byte and
+  structural owners without fallback. Statically decidable conditional owners
+  execute through all four engines, and typed resources execute dedicated
+  explicit/implicit close in the VM. Bounded ordered cleanup failures retain the
+  unchanged primary outcome. Native owned-resource execution remains fail-closed.
 - The VM uses checked generation-bearing core resource-table tokens. Evaluator
   fake providers perform no ambient I/O and dispatch borrowed standard input,
   terminal detection, file/directory acquisition and close, and SQLite
   connection/statement acquisition and close/finalize. One exact kind can fail
   acquisition or close deterministically. Native tiers still support only
   borrowed `standard-input`; complete evaluator host and owned-native operations remain incomplete.
-- Core provides deterministic unique storage for byte-vector, dynamic bytes, and
-  path layouts. Exact byte-vector owners, loans, byte/u32 access, and mutation
-  execute through evaluator, VM, forced baseline, and forced proof tiers with
-  bounded runtime tables and exactly-once release on every supported outcome.
+- Core provides deterministic unique byte/byte-vector storage and a bounded
+  structural runtime for strings, paths, deterministic nonrecursive aggregates,
+  results, destinations, and views. These groups execute through evaluator, VM,
+  forced baseline, and forced proof with bounded tables and exact cleanup.
 - Immutable bytes literal/read/copy/clone/freeze/thaw operations execute through
   all four engines. Native static identities select verified image data; dynamic
-  values remain affine. Path, owned resources, and mixed groups remain outside.
+  byte values remain affine. Owned resources and mixed legacy graphs remain outside.
 ## Compiler and execution
 - One validated source tree feeds module resolution, typed HIR, ownership and
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
@@ -134,7 +130,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests; public metrics use stable unnumbered names.
 - Metrics use `lkjscript.metrics` and its full contract digest. `lkjscript
-  memory inventory` exposes 62 sorted memory-obligation records under
+  memory inventory` exposes 61 sorted memory-obligation records under
   `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
   exact roots, executable evaluator/VM bytes island, and accepted deterministic
   candidates; it is derived evidence, not semantic authority.
@@ -143,10 +139,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   production and verification require byte-vector unique storage and static
   artifact values before checked HIR enters SSA. The direct-affine SSA inventory
   remains independently recomputed derived evidence.
-- `LKJ-MEMORY-TRACING-RATCHET` protects the exact six registered `HeapObj`
-  families exposed by `lkjscript memory traced [--json]`. The internal
-  [substrate](current-state/structural-memory-evidence.md) includes a compact
-  stale-safe root table; it is not tier-selected and does not remove tracing.
+- `LKJ-MEMORY-TRACING-RATCHET` protects the exact three registered `HeapObj`
+  families, `enum`, `pair`, and `product`, exposed by `lkjscript memory traced
+  [--json]`. `buf`, dynamic string, and path heap families are absent. The
+  [substrate](current-state/structural-memory-evidence.md) includes compact
+  stale-safe roots, destinations, views, and direct evaluator, VM, baseline,
+  and proof runtime services. Independently verified HIR/SSA authority selects
+  every eligible deterministic nonrecursive source aggregate.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
   compiler/runtime ledger remains an accepted target.
@@ -172,14 +171,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   code, tests, fixtures, examples, config, and documentation. Immutable
   historical evidence is explicitly excluded rather than rewritten.
 ## Accepted targets not claimed Current
-- lowercase-vocabulary promotion is blocked only by removing transitional `buf`;
 - evaluator dispatch beyond the fake-provider slice and native owned resources beyond borrowed `standard-input`;
-- full affine `byte-vector` corpus migration, ranged lexical byte slices,
-  borrowed `str`, and removal of transitional `buf`;
+- ranged lexical byte-slice source syntax and borrowed `str`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
 - structural domains, ordinary/sealed regions, and typed pools have a Current
-  internal substrate; inferred selection, tier migration, no-RC falsification,
-  six-family tracing removal, and final collector deletion remain targets;
+  internal substrate; recursive and remaining legacy aggregate migration,
+  no-RC falsification, three-family tracing removal, and final collector
+  deletion remain targets;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;

@@ -22,6 +22,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
     };
     let callee_signature = Signature::monomorphic(vec![SsaType::Bool], SsaType::I64);
     let program = verify(Program {
+        memory: lkjscript_ir::StructuralMemoryMetadata::default(),
         sources: vec![SourceMetadata {
             id: 0,
             path: "selected-trap.lkjscript".into(),
@@ -127,6 +128,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                             kind: InstructionKind::Call {
                                 target: CallTarget::Direct(FunctionId::new(0)),
                                 arguments: vec![ValueId::new(0)],
+                                consuming: vec![false],
                                 signature: callee_signature,
                                 instantiation: None,
                             },

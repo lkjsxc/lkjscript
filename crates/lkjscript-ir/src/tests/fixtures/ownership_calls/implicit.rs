@@ -4,7 +4,10 @@ pub(crate) fn implicit_call_caller() -> Function {
     Function {
         id: FunctionId::new(2),
         name: "implicit-call".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type(), owned_buf_type()], SsaType::Unit),
+        signature: Signature::monomorphic(
+            vec![byte_vector_type(), byte_vector_type()],
+            SsaType::Unit,
+        ),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
         failure_cleanups: vec![
             FailureCleanupPlan {
@@ -23,13 +26,13 @@ pub(crate) fn implicit_call_caller() -> Function {
             parameters: vec![
                 BlockParameter {
                     id: ValueId::new(0),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(0)),
                     origin: Origin::SYNTHETIC,
                 },
                 BlockParameter {
                     id: ValueId::new(1),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     owner_place: Some(PlaceId::new(1)),
                     origin: Origin::SYNTHETIC,
                 },
@@ -37,7 +40,7 @@ pub(crate) fn implicit_call_caller() -> Function {
             instructions: vec![
                 Instruction {
                     id: ValueId::new(2),
-                    ty: owned_buf_type(),
+                    ty: byte_vector_type(),
                     kind: InstructionKind::Move {
                         place: PlaceId::new(1),
                         value: ValueId::new(1),
@@ -50,8 +53,9 @@ pub(crate) fn implicit_call_caller() -> Function {
                     kind: InstructionKind::Call {
                         target: CallTarget::Direct(FunctionId::new(1)),
                         arguments: vec![ValueId::new(0), ValueId::new(2)],
+                        consuming: vec![true, true],
                         signature: Signature::monomorphic(
-                            vec![owned_buf_type(), owned_buf_type()],
+                            vec![byte_vector_type(), byte_vector_type()],
                             SsaType::Unit,
                         ),
                         instantiation: None,

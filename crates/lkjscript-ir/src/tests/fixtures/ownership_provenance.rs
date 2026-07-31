@@ -5,7 +5,7 @@ pub(crate) fn aliased_places() -> Function {
     Function {
         id: FunctionId::new(1),
         name: "aliased-places".into(),
-        signature: Signature::monomorphic(vec![owned_buf_type()], SsaType::Unit),
+        signature: Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         places: vec![owned_place(0, 0), owned_place(1, 1)],
         failure_cleanups: vec![FailureCleanupPlan {
             id: FailureCleanupId::new(0),
@@ -21,7 +21,7 @@ pub(crate) fn aliased_places() -> Function {
             id: BlockId::new(0),
             parameters: vec![BlockParameter {
                 id: ValueId::new(0),
-                ty: owned_buf_type(),
+                ty: byte_vector_type(),
                 owner_place: Some(PlaceId::new(0)),
                 origin: Origin::SYNTHETIC,
             }],

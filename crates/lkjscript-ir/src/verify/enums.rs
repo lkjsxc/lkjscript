@@ -77,9 +77,8 @@ fn verify_variant(
             return fail("SSA enum field has invalid or duplicate identity/name");
         }
         verify_type(program, &field.ty, scope)?;
-        if contains_ownership_type(&field.ty)
-            || field.indirect != contains_any_enum(&field.ty)
-            || field.traced != is_traced(&field.ty)
+        if field.indirect != contains_any_enum(&field.ty)
+            || field.traced != is_traced(program, &field.ty)
         {
             return fail("SSA enum field has invalid storage/layout facts");
         }
@@ -159,17 +158,14 @@ fn contains_any_enum(ty: &SsaType) -> bool {
     }
 }
 
-fn is_traced(ty: &SsaType) -> bool {
+fn is_traced(program: &Program, ty: &SsaType) -> bool {
+    program.memory.type_for(ty).is_none() && is_legacy_traced_type(ty)
+}
+
+fn is_legacy_traced_type(ty: &SsaType) -> bool {
     matches!(
         ty,
-        SsaType::Str
-            | SsaType::Symbol
-            | SsaType::Buf
-            | SsaType::Path
-            | SsaType::Product(_)
-            | SsaType::Enum { .. }
-            | SsaType::List(_)
-            | SsaType::Function(_)
+        SsaType::Product(_) | SsaType::Enum { .. } | SsaType::List(_)
     )
 }
 
@@ -178,7 +174,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn path_enum_fields_require_traced_metadata() {
-        assert!(is_traced(&SsaType::Path));
+    fn path_enum_fields_are_never_traced_metadata() {
+        assert!(!is_legacy_traced_type(&SsaType::Path));
     }
 }

@@ -1,5 +1,3 @@
-mod results;
-
 use super::*;
 use crate::*;
 
@@ -52,46 +50,23 @@ impl<'a> JitHeapServices<'a> {
     ) -> Result<Value, NativeServiceError> {
         self.heap
             .try_alloc_with_layout(object, reference_layout_key(reference_type))
-            .map_err(|limit| {
-                self.last_resource = Some(match limit {
-                    GcLimit::Allocations => ResourceLimitKind::Allocations,
-                    GcLimit::HeapBytes => ResourceLimitKind::HeapBytes,
-                });
-                NativeServiceError::ResourceLimitExceeded
+            .map_err(|limit| match limit {
+                GcLimit::Allocations => {
+                    self.last_resource = Some(ResourceLimitKind::Allocations);
+                    NativeServiceError::ResourceLimitExceeded
+                }
+                GcLimit::HeapBytes => {
+                    self.last_resource = Some(ResourceLimitKind::HeapBytes);
+                    NativeServiceError::ResourceLimitExceeded
+                }
+                GcLimit::MixedOwnershipGraph => {
+                    self.last_trap = Some(
+                        "legacy traced object cannot contain deterministic owners or capabilities"
+                            .into(),
+                    );
+                    NativeServiceError::Trap
+                }
             })
-    }
-
-    pub(crate) fn mutate<T>(
-        &mut self,
-        value: Value,
-        mutation: impl FnOnce(&mut HeapObj) -> lkjscript_core::Result<T>,
-    ) -> Result<T, NativeServiceError> {
-        self.heap.mutate(value, mutation).map_err(|error| {
-            if error.class() == ErrorClass::Resource(ResourceLimitKind::HeapBytes) {
-                self.last_resource = Some(ResourceLimitKind::HeapBytes);
-                NativeServiceError::ResourceLimitExceeded
-            } else {
-                self.last_trap = Some(error.to_string());
-                NativeServiceError::Trap
-            }
-        })
-    }
-
-    pub(crate) fn enum_value(
-        &mut self,
-        layout: [u8; 32],
-        physical_tag: u16,
-        payload: Vec<Value>,
-        reference_type: ReferenceType,
-    ) -> Result<Value, NativeServiceError> {
-        self.allocate(
-            HeapObj::Enum {
-                layout: lkjscript_core::RuntimeLayoutId::new(layout),
-                physical_tag,
-                active_payload: payload,
-            },
-            reference_type,
-        )
     }
 
     pub(crate) fn value_from_native(
@@ -104,10 +79,16 @@ impl<'a> JitHeapServices<'a> {
             NativeValue::I64(value) => Ok(Value::from_i64(value)),
             NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
             NativeValue::StaticBytes(_)
+            | NativeValue::StaticString(_)
             | NativeValue::Capability(_)
             | NativeValue::Resource(_)
             | NativeValue::Unique(_)
-            | NativeValue::Loan(_) => self.trap("island value entered legacy heap service"),
+            | NativeValue::Loan(_)
+            | NativeValue::StructuralOwner(_)
+            | NativeValue::StructuralView(_)
+            | NativeValue::StructuralDestination(_) => {
+                self.trap("island value entered legacy heap service")
+            }
             NativeValue::Reference(reference) => native_reference_value(self.heap, reference)
                 .map_err(|message| {
                     self.last_trap = Some(message);

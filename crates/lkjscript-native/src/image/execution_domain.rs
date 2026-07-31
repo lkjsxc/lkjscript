@@ -24,6 +24,7 @@ impl InstallableImage {
         let mut has_reference = false;
         let mut has_resource = false;
         let mut has_unique = false;
+        let mut has_structural = false;
         for value_type in value_types {
             has_reference |= matches!(value_type, ValueType::Reference(_));
             has_resource |= matches!(
@@ -34,12 +35,19 @@ impl InstallableImage {
                 value_type,
                 ValueType::StaticBytes | ValueType::Unique(_) | ValueType::Loan(_)
             );
+            has_structural |= matches!(
+                value_type,
+                ValueType::StaticString(_)
+                    | ValueType::StructuralOwner(_)
+                    | ValueType::StructuralView(_)
+                    | ValueType::StructuralDestination(_)
+            );
         }
-        let has_island_value = has_resource || has_unique;
+        let has_island_value = has_resource || has_unique || has_structural;
         match self.execution_domain {
             NativeExecutionDomain::CollectorFree
                 if has_reference
-                    || (has_resource && has_unique)
+                    || (has_resource && (has_unique || has_structural))
                     || !self.safepoints.is_empty()
                     || !self.root_requirements.is_empty()
                     || !self.heap_runtime_sites.is_empty()

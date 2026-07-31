@@ -3,58 +3,7 @@ use std::collections::HashSet;
 use crate::verify::*;
 use crate::{IrError, Program, Signature, SsaType, TraitRole};
 
-pub(crate) fn supports_value_equality(ty: &SsaType) -> bool {
-    match ty {
-        SsaType::Unit
-        | SsaType::Bool
-        | SsaType::I64
-        | SsaType::F64
-        | SsaType::Str
-        | SsaType::Path
-        | SsaType::Symbol => true,
-        SsaType::Enum { arguments, .. } => arguments.iter().all(supports_value_equality),
-        _ => false,
-    }
-}
-
-pub(crate) fn signature_contains_ownership(signature: &Signature) -> bool {
-    signature.parameters.iter().any(contains_ownership_type)
-        || contains_ownership_type(&signature.result)
-}
-
-pub(crate) fn contains_ownership_type(ty: &SsaType) -> bool {
-    match ty {
-        SsaType::Bytes | SsaType::ByteVector | SsaType::ByteSlice | SsaType::ByteSliceMut => true,
-        SsaType::List(inner) => contains_ownership_type(inner),
-        SsaType::Enum { arguments, .. } => arguments.iter().any(contains_ownership_type),
-        SsaType::Function(signature) => {
-            signature.parameters.iter().any(contains_ownership_type)
-                || contains_ownership_type(&signature.result)
-        }
-        _ => false,
-    }
-}
-
-pub(crate) fn is_owned_buf(ty: &SsaType) -> bool {
-    matches!(ty, SsaType::ByteVector)
-}
-
-pub(crate) fn is_owned_value(ty: &SsaType) -> bool {
-    is_owned_buf(ty) || matches!(ty, SsaType::Bytes | SsaType::Resource(_))
-}
-
-pub(crate) fn expected_drop_glue(ty: &SsaType) -> Option<crate::DropGlueIdentity> {
-    match ty {
-        SsaType::Bytes => Some(crate::DropGlueIdentity::Bytes),
-        SsaType::ByteVector => Some(crate::DropGlueIdentity::ByteVector),
-        SsaType::Resource(kind) => Some(crate::DropGlueIdentity::Resource(*kind)),
-        _ => None,
-    }
-}
-
-pub(crate) fn is_affine(ty: &SsaType) -> bool {
-    is_owned_value(ty) || matches!(ty, SsaType::ByteSliceMut)
-}
+include!("types/ownership.rs");
 
 pub(crate) fn is_numeric(ty: &SsaType) -> bool {
     matches!(ty, SsaType::I64 | SsaType::F64)
@@ -98,8 +47,16 @@ pub(crate) fn verify_type_at(
             if arguments.len() != definition.type_parameters.len() {
                 return fail("SSA enum substitution arity mismatch");
             }
+            let structural = program.memory.type_for(ty).is_some();
             for argument in arguments {
-                verify_type_at(program, argument, type_parameters, depth + 1, work, false)?;
+                verify_type_at(
+                    program,
+                    argument,
+                    type_parameters,
+                    depth + 1,
+                    work,
+                    structural,
+                )?;
             }
             Ok(())
         }
@@ -108,6 +65,19 @@ pub(crate) fn verify_type_at(
                 return fail("SSA ownership/reference type has an unsupported storage position");
             }
             Ok(())
+        }
+        SsaType::StructuralDestination(type_id) => {
+            if ownership_allowed
+                && program
+                    .memory
+                    .types
+                    .get(type_id.index().unwrap_or(usize::MAX))
+                    .is_some_and(|item| item.id == *type_id)
+            {
+                Ok(())
+            } else {
+                fail("SSA structural destination has invalid private type metadata")
+            }
         }
         SsaType::List(item) => {
             verify_type_at(program, item, type_parameters, depth + 1, work, false)

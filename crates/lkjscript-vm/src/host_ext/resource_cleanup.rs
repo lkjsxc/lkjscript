@@ -4,14 +4,14 @@ impl ResourceTeardown {
     pub const fn cleanup_failures(&self) -> &CleanupFailures {
         &self.cleanup_failures
     }
+
+    pub const fn ordinary_obligations(&self) -> usize {
+        self.ordinary_obligations
+    }
 }
 
 #[cfg(test)]
 impl ResourceTeardown {
-    pub const fn ordinary_obligations(&self) -> usize {
-        self.ordinary_obligations
-    }
-
     pub const fn emergency_obligations(&self) -> usize {
         self.emergency_obligations
     }

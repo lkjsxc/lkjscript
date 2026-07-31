@@ -16,6 +16,11 @@ impl FunctionBuilder<'_> {
         let preheader = self
             .current
             .ok_or_else(|| Error::msg("loop has no live SSA preheader"))?;
+        if !self.unplaced_owners.is_empty() {
+            return Err(Error::msg(
+                "structural temporary ownership cannot cross a loop boundary",
+            ));
+        }
         let incoming = self.env.clone();
         let bindings: Vec<_> = incoming.keys().copied().collect();
         let block_origin = origin(expression.origin.raw(), self.next_position);
@@ -58,6 +63,11 @@ impl FunctionBuilder<'_> {
         self.active_place_bindings = target.active_place_bindings.clone();
         self.env = exit_env;
         self.slots = incoming_slots;
+        self.unplaced_owners = if is_owned_value(self.structural, &self.value_type(result)?) {
+            vec![result]
+        } else {
+            Vec::new()
+        };
         Ok(Some(result))
     }
 

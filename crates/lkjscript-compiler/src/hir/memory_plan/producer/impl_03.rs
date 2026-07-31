@@ -46,21 +46,29 @@ impl<'a> Producer<'a> {
                 self.walk_expr(initial, Some(expression_id), 0, MemoryEscape::Local, None)?;
                 self.walk_expr(body, Some(expression_id), 1, escape, None)?;
             }
-            ExprKind::SetLocal { value, .. } | ExprKind::ProductField { value, .. } => {
+            ExprKind::SetLocal { value, .. } => {
+                self.walk_expr(value, Some(expression_id), 0, MemoryEscape::Local, None)?;
+            }
+            ExprKind::ProductField { value, .. } => {
+                self.reject_partial_projection(expression)?;
                 self.walk_expr(value, Some(expression_id), 0, MemoryEscape::Local, None)?;
             }
             ExprKind::ProductValue { fields, .. } | ExprKind::EnumValue { fields, .. } => {
                 self.walk_sequence(fields, expression_id, MemoryEscape::Local)?;
+                self.add_destination(expression, expression_id)?;
             }
             ExprKind::WithProductField {
                 value, replacement, ..
             } => {
+                self.reject_partial_projection(expression)?;
                 self.walk_expr(value, Some(expression_id), 0, MemoryEscape::Local, None)?;
                 self.walk_expr(replacement, Some(expression_id), 1, MemoryEscape::Local, None)?;
             }
-            ExprKind::EnumIsVariant { value, .. }
-            | ExprKind::EnumField { value, .. }
-            | ExprKind::EnumUnwrap { value, .. } => {
+            ExprKind::EnumIsVariant { value, .. } => {
+                self.walk_expr(value, Some(expression_id), 0, MemoryEscape::Local, None)?;
+            }
+            ExprKind::EnumField { value, .. } | ExprKind::EnumUnwrap { value, .. } => {
+                self.reject_partial_projection(expression)?;
                 self.walk_expr(value, Some(expression_id), 0, MemoryEscape::Local, None)?;
             }
             _ => return Err(Error::msg("HIR memory scope category mismatch")),
@@ -71,15 +79,19 @@ impl<'a> Producer<'a> {
         &mut self,
         arguments: &[Expr],
         parent: MemoryExpressionId,
+        call: Option<MemoryCallId>,
     ) -> Result<()> {
         for (index, argument) in arguments.iter().enumerate() {
-            self.walk_expr(
+            let expression = self.walk_expr(
                 argument,
                 Some(parent),
                 index_u32(index)?,
                 MemoryEscape::Caller,
                 None,
             )?;
+            if let Some(call) = call {
+                self.add_inferred_borrow_scope(call, index, argument, expression, parent)?;
+            }
         }
         Ok(())
     }
@@ -144,8 +156,17 @@ impl<'a> Producer<'a> {
             },
         )?;
         if owns_obligation {
-            if let Some((kind, glue)) = obligation_for_type(ty) {
-                self.add_obligation(entry, kind, Some(glue))?;
+            let type_fact = self.entries.get(entry.index().unwrap_or(usize::MAX))
+                .ok_or_else(|| Error::msg("whole-place entry is missing"))?.type_fact;
+            let fact = self.type_planner.fact(type_fact)?.clone();
+            if fact.mode != MemoryAggregateMode::Copy {
+                if let Some(glue) = fact.drop_glue {
+                    let kind = match ty {
+                        Type::Resource(kind) => MemoryObligationKind::DropResource(*kind),
+                        _ => MemoryObligationKind::DropWholeValue,
+                    };
+                    self.add_obligation(entry, kind, Some(glue), fact.drop_path)?;
+                }
             }
         }
         Ok(entry)

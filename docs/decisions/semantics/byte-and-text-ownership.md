@@ -5,12 +5,12 @@
 **Accepted contract with an initial ownership foundation.** Owned text is
 spelled `string`; `string-literal/` replaces the old `str/` marker. Direct
 `byte-vector`, `byte-slice`, and `byte-slice-mut` spellings expose the existing
-whole-place affine slice. Immutable `bytes` has one accepted
-`bytes-literal/` lowercase hexadecimal projection and the exact
-four-engine operation subset defined by
-[bytes and byte-vector ownership](../memory/bytes-and-byte-vector.md). Ranged
-borrowed views and borrowed `str` are non-Current, and transitional `buf`
-remains outside the destination. No old spelling aliases a destination type.
+whole-place affine slice. Immutable `bytes` has one Current
+`bytes-literal/` lowercase hexadecimal projection and the exact four-engine
+operation subset defined by [bytes and byte-vector
+ownership](../memory/bytes-and-byte-vector.md). Ranged borrowed views and
+borrowed `str` are non-Current. Transitional buffer spellings are removed; no
+old spelling aliases a destination type.
 
 ## Immutable bytes
 
@@ -36,10 +36,17 @@ crosses an unsupported worker, suspension, or host boundary.
 
 ## Text
 
-`string` owns valid UTF-8 text. `str` is reserved for a borrowed valid-UTF-8
-view. Current owned `Str` values migrate to `string`; they do not silently
-acquire borrowed semantics. APIs distinguish byte length, scalar iteration,
-validation, formatting, parsing, encoding, decoding, and slicing.
+`string` owns valid UTF-8 text. Static literals are artifact values; dynamic
+strings use deterministic unique, caller-destination, ordinary-region, or
+sealed-region ownership selected by the verified plan. Equality compares UTF-8
+bytes and ordinary observation borrows instead of cloning.
+
+`str` is reserved for a borrowed valid-UTF-8 view. The first cutover keeps this
+view internal rather than publishing an incomplete source type. It carries an
+owner/root, byte range, UTF-8 boundary proof, and exact shared-loan lifetime; it
+cannot return, enter an aggregate, be captured, or cross a process/task/host
+ownership boundary. APIs distinguish byte length, scalar iteration, validation,
+formatting, parsing, encoding, decoding, and slicing.
 
 ## Paths
 
@@ -50,15 +57,20 @@ UTF-8 and returns a typed result.
 
 ## Operations and migration
 
-Canonical names state ownership and units. The immutable family is exactly
+Canonical names state ownership and units. The immutable family is
 `bytes-length`, `bytes-byte-at`, `copy-bytes-slice`, `clone-bytes`,
-`freeze-byte-vector`, and `thaw-bytes`. Future vector operations include
-`byte-vector-length` and `byte-vector-set-byte`; text conversion includes
-`string-byte-length` and `convert-bytes-to-string`. Bulk file, socket, hashing,
-SQLite blob, editor, Brainfuck, and HTTP operations replace quadratic per-byte
-default paths only after complete equivalents are Current.
+`freeze-byte-vector`, and `thaw-bytes`. The mutable family uses
+`byte-vector-length`, exact byte/u32 access, and checked shared or exclusive
+views. Text conversion is `convert-string-to-bytes` and
+`convert-bytes-to-string`; invalid UTF-8 remains data until explicit validation.
 
-The migration preserves limits and raw bytes, proves view lifetimes, updates
-exact roots, and removes `buf` aliases after all live uses have complete
-replacements. Invalid UTF-8 remains data until an explicit validating text
-conversion.
+Bulk file, socket, random, hashing, terminal, SQLite blob, editor, Brainfuck,
+and HTTP operations borrow `byte-slice` or `byte-slice-mut`. They receive a
+validated range, never owner identity. The integrated cutover removes source
+`buf`, every `buf-*` operation, buffer bytecode/native helpers and metrics, and
+all `HeapObj::Buf` allocation. The removed spelling has one exact diagnostic and
+no alias or forwarding path.
+
+The migration preserves existing aggregate limits, byte bounds, logical
+charges, exact path bytes, and failure-before-mutation behavior. Package and
+contract identities change atomically with the corpus and backend cutover.

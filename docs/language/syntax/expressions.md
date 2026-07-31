@@ -97,9 +97,9 @@ The existing whole-place ownership slice now has direct source types:
 `borrow-mut` require whole local places. Views cannot be returned, stored in
 aggregates, captured, or carried across unsupported control flow.
 
-Transitional `buf` remains Current for the unmigrated corpus. Immutable
-`bytes`, arbitrary ranged byte views, and borrowed `str` remain accepted but
-non-Current. No alias equates `buf` with those destination semantics.
+Immutable `bytes` and the whole-owner byte views are Current. Arbitrary ranged
+byte-view source syntax and borrowed `str` remain accepted but non-Current.
+Removed buffer spellings have one deterministic diagnostic and no alias.
 
 ## Numeric Contract
 

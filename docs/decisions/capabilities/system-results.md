@@ -46,13 +46,13 @@ write-resource-byte:
   fn inputs resource i64 output result unit system-error
 read-into:
   forall resource; resource one-of input-stream,file-reader,tcp-stream;
-  fn inputs resource buf i64 i64 output result i64 system-error
+  fn inputs resource byte-slice-mut output result i64 system-error
 write-from:
   forall resource;
   resource one-of output-stream,file-writer,file-appender,tcp-stream;
-  fn inputs resource buf i64 i64 output result i64 system-error
-convert-string-to-buf: fn inputs string output buf
-convert-buf-to-string: fn inputs buf output result string utf8-error
+  fn inputs resource byte-slice output result i64 system-error
+convert-string-to-bytes: fn inputs string output bytes
+convert-bytes-to-string: fn inputs bytes output result string utf8-error
 open-file-appender: fn inputs capability file-system path output result file-appender system-error
 create-file: fn inputs capability file-system path output result file-writer system-error
 open-directory: fn inputs capability file-system path output result directory system-error
@@ -63,8 +63,8 @@ truncate-file:
   forall resource; resource one-of file-writer,file-appender;
   fn inputs resource i64 output result unit system-error
 rename-path: fn inputs capability file-system path path output result unit system-error
-fill-random: fn inputs capability entropy buf i64 i64 output result unit system-error
-save-terminal-guard: fn inputs capability terminal buf output result unit system-error
+fill-random: fn inputs capability entropy byte-slice-mut output result unit system-error
+save-terminal-guard: fn inputs capability terminal byte-slice output result unit system-error
 clear-terminal-guard: fn inputs capability terminal output result unit system-error
 ```
 

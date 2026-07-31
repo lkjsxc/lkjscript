@@ -42,8 +42,13 @@ mod tests {
 
     #[test]
     fn current_registry_is_exact_and_nonempty() {
-        assert_eq!(LEGACY_TRACED_FAMILIES.len(), 6);
-        assert_eq!(LEGACY_TRACED_FAMILIES[0].identity, "buf");
-        assert_eq!(LEGACY_TRACED_FAMILIES[5].identity, "string");
+        let observed: Vec<_> = LEGACY_TRACED_FAMILIES
+            .iter()
+            .map(|family| (family.identity, family.heap_variant))
+            .collect();
+        assert_eq!(
+            observed,
+            [("enum", "Enum"), ("pair", "Pair"), ("product", "Product")]
+        );
     }
 }

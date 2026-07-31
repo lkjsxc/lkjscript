@@ -20,6 +20,7 @@ pub struct InvocationReport {
     pub(super) active_value_homes: usize,
     pub(super) resource_calls: u64,
     pub(super) unique_calls: u64,
+    pub(super) structural_calls: u64,
     pub(super) cleanup_failures: Vec<NativeCleanupFailure>,
     pub(super) omitted_cleanup_failures: usize,
     pub(super) collector_runtime: bool,
@@ -114,6 +115,11 @@ impl InvocationReport {
     #[must_use]
     pub const fn unique_calls(&self) -> u64 {
         self.unique_calls
+    }
+
+    #[must_use]
+    pub const fn structural_calls(&self) -> u64 {
+        self.structural_calls
     }
 
     #[must_use]

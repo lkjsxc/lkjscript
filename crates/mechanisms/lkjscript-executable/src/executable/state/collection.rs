@@ -65,7 +65,8 @@ impl NativeCallState<'_> {
             .find(|(address, _)| {
                 address.frame_index + 1 == self.active_depth
                     && address.original_word == argument
-                    && address.reference_type == ReferenceType::Buf
+                    && address.reference_type
+                        == ReferenceType::Product(lkjscript_native::LayoutIdentity::product(0))
             })
             .map_or(argument, |(_, root)| root.opaque_word)
     }

@@ -2,14 +2,14 @@ use super::*;
 mod calls;
 mod constants;
 mod failure_cleanup;
+mod output;
+mod products;
 mod runtime_bytes;
+mod structural;
+mod structural_dispatch;
 mod unique;
-use calls::{indirect_call, lower_direct_call};
-use constants::*;
-use failure_cleanup::lower_failure_cleanup;
-pub(in crate::lower) use failure_cleanup::lower_failure_cleanup_id;
-pub(in crate::lower) use runtime_bytes::lower_bytes_runtime;
-use unique::*;
+include!("imports.rs");
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
     program: &lkjscript_ir::Program,
@@ -23,6 +23,18 @@ pub(super) fn lower_instruction(
     static_bytes: &HashMap<Vec<u8>, lkjscript_native::StaticBytesIdentity>,
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
+    if structural_dispatch::lower_instruction(
+        function,
+        instruction,
+        block,
+        locals,
+        value_types,
+        layouts,
+        static_bytes,
+        builder,
+    )? {
+        return Ok(());
+    }
     let output = match &instruction.kind {
         InstructionKind::Constant(constant) => lower_constant(
             function,
@@ -60,8 +72,6 @@ pub(super) fn lower_instruction(
                 locals,
                 value_types,
                 result_type: value_type(value_types, instruction.id)?,
-                result_ssa_type: &instruction.ty,
-                layouts,
             },
             builder,
         ),
@@ -89,6 +99,7 @@ pub(super) fn lower_instruction(
             block,
             locals,
             value_types,
+            layouts,
             native_functions,
             builder,
         )?,
@@ -96,70 +107,18 @@ pub(super) fn lower_instruction(
             target: CallTarget::Indirect(_),
             ..
         } => return indirect_call(function.id),
-        InstructionKind::ProductValue { product, fields } => {
-            let arguments = read_values(builder, block, locals, fields, function.id)?;
-            let inputs = fields
-                .iter()
-                .map(|value| value_type(value_types, *value))
-                .collect::<Result<Vec<_>, _>>()?;
-            builder.heap_call(
+        InstructionKind::ProductValue { .. }
+        | InstructionKind::ProductField { .. }
+        | InstructionKind::WithProductField { .. } => {
+            return products::lower_product_instruction(
+                function,
+                instruction,
                 block,
-                heap_descriptor(
-                    HeapOperation::ProductValue {
-                        product: u32::from(product.raw()),
-                        fields: u8::try_from(fields.len())
-                            .map_err(|_| lkjscript_native::PlanError::InvalidHeapCall)?,
-                    },
-                    inputs,
-                    value_type(value_types, instruction.id)?,
-                )?,
-                arguments,
-            )
-        }
-        InstructionKind::ProductField {
-            product,
-            field,
-            value,
-        } => {
-            let argument = read_value(builder, block, locals, *value, function.id)?;
-            builder.heap_call(
-                block,
-                heap_descriptor(
-                    HeapOperation::ProductField {
-                        product: u32::from(product.raw()),
-                        field: *field,
-                        field_type: value_type(value_types, instruction.id)?,
-                    },
-                    vec![value_type(value_types, *value)?],
-                    value_type(value_types, instruction.id)?,
-                )?,
-                vec![argument],
-            )
-        }
-        InstructionKind::WithProductField {
-            product,
-            field,
-            value,
-            replacement,
-        } => {
-            let arguments =
-                read_values(builder, block, locals, &[*value, *replacement], function.id)?;
-            builder.heap_call(
-                block,
-                heap_descriptor(
-                    HeapOperation::WithProductField {
-                        product: u32::from(product.raw()),
-                        field: *field,
-                        field_type: value_type(value_types, *replacement)?,
-                    },
-                    vec![
-                        value_type(value_types, *value)?,
-                        value_type(value_types, *replacement)?,
-                    ],
-                    value_type(value_types, instruction.id)?,
-                )?,
-                arguments,
-            )
+                locals,
+                value_types,
+                layouts,
+                builder,
+            );
         }
         InstructionKind::EnumValue { .. }
         | InstructionKind::EnumIsVariant { .. }
@@ -176,23 +135,44 @@ pub(super) fn lower_instruction(
         InstructionKind::Borrow { kind, value, .. } => {
             lower_borrow(function, *kind, *value, block, locals, value_types, builder)
         }
+        InstructionKind::StructuralPublish { .. }
+        | InstructionKind::DestinationCreate { .. }
+        | InstructionKind::DestinationFieldInit { .. }
+        | InstructionKind::DestinationFinish { .. }
+        | InstructionKind::DestinationAbort { .. }
+        | InstructionKind::AggregateFieldBorrow { .. }
+        | InstructionKind::AggregateTag { .. }
+        | InstructionKind::AggregateConsumePayload { .. }
+        | InstructionKind::StringUtf8View { .. }
+        | InstructionKind::StructuralCopy { .. } => {
+            let lowered = structural_dispatch::lower_instruction(
+                function,
+                instruction,
+                block,
+                locals,
+                value_types,
+                layouts,
+                static_bytes,
+                builder,
+            )?;
+            if lowered {
+                return Ok(());
+            }
+            return unsupported_operation(function.id, "structural instruction");
+        }
         InstructionKind::FunctionRef(_) => {
             return unsupported_operation(function.id, "first-class function reference")
         }
     }
     .map_err(LoweringError::backend)?;
-    builder
-        .set_instruction_source(output, SourceOrigin::new(instruction.metadata.origin.node))
-        .map_err(LoweringError::backend)?;
-    builder
-        .set_instruction_failure_cleanup(
-            output,
-            lower_failure_cleanup(function, instruction, locals, value_types)?,
-        )
-        .map_err(LoweringError::backend)?;
-    let local = value_local(locals, instruction.id, function.id)?;
-    builder
-        .write_local(block, local, output)
-        .map_err(LoweringError::backend)?;
-    Ok(())
+    write_instruction_output(
+        function,
+        instruction,
+        block,
+        locals,
+        value_types,
+        layouts,
+        output,
+        builder,
+    )
 }

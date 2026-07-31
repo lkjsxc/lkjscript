@@ -1,6 +1,6 @@
 use super::*;
 
-mod buffers;
+mod byte_data;
 mod bytes;
 mod paths;
 mod resources;
@@ -13,7 +13,8 @@ impl Evaluator<'_> {
     pub(crate) fn runtime(
         &mut self,
         operation: RuntimeOp,
-        arguments: Vec<EvalValue>,
+        arguments: Vec<&EvalValue>,
+        result_type: &crate::SsaType,
     ) -> std::result::Result<EvalValue, Flow> {
         use RuntimeOp as Op;
         match operation {
@@ -39,31 +40,23 @@ impl Evaluator<'_> {
             | Op::IsEmptyList
             | Op::EmptyStr
             | Op::ArgCount
-            | Op::Arg => self.runtime_sequences(operation, arguments),
-            Op::BufNew
-            | Op::OwnedBufNew
-            | Op::BufLen
-            | Op::OwnedBufLen
-            | Op::BufRef
-            | Op::OwnedBufRef
-            | Op::BufSet
-            | Op::OwnedBufSet
+            | Op::Arg => self.runtime_sequences(operation, arguments, result_type),
+            Op::ByteVectorNew
+            | Op::ByteSliceLength
+            | Op::ByteSliceByteAt
+            | Op::ByteSliceMutSetByte
             | Op::ByteSliceReadU32Le
             | Op::ByteSliceMutWriteU32Le
-            | Op::BufClone
-            | Op::BufFromStr
-            | Op::BufToStr
-            | Op::BufSlice
-            | Op::BufGetU32
-            | Op::BufSetU32 => self.runtime_buffers(operation, arguments),
+            | Op::ConvertStringToBytes
+            | Op::ConvertBytesToString => self.runtime_byte_data(operation, arguments, result_type),
             Op::BytesLength
             | Op::BytesByteAt
             | Op::CopyBytesSlice
             | Op::CloneBytes
             | Op::FreezeByteVector
             | Op::ThawBytes => self.runtime_bytes(operation, arguments),
-            Op::PathFromStr | Op::PathFromBuf | Op::PathToBuf | Op::PathToStr => {
-                self.runtime_paths(operation, arguments)
+            Op::PathFromStr | Op::PathFromBytes | Op::PathToBytes | Op::PathToStr => {
+                self.runtime_paths(operation, arguments, result_type)
             }
             Op::StdinHandle
             | Op::SysIsatty
@@ -76,7 +69,7 @@ impl Evaluator<'_> {
             | Op::SysSqliteOpen
             | Op::SysSqliteClose
             | Op::SysSqlitePrepare
-            | Op::SysSqliteFinalize => self.runtime_resources(operation, arguments),
+            | Op::SysSqliteFinalize => self.runtime_resources(operation, arguments, result_type),
             Op::StrLen
             | Op::StrRef
             | Op::StrAppend

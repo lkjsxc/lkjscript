@@ -6,8 +6,8 @@ pub(super) fn builtin_category(operation: crate::hir::Operation) -> CandidateCat
         crate::hir::Operation::StrFromByte
             | crate::hir::Operation::StrFromI64
             | crate::hir::Operation::StrFromF64
-            | crate::hir::Operation::BufFromStr
-            | crate::hir::Operation::BufToStr
+            | crate::hir::Operation::ConvertStringToBytes
+            | crate::hir::Operation::ConvertBytesToString
             | crate::hir::Operation::F64FromI64Exact
             | crate::hir::Operation::F64FromI64Rounded
             | crate::hir::Operation::I64FromF64Exact

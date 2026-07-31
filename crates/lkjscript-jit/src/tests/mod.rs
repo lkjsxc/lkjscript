@@ -2,6 +2,7 @@ mod enum_metadata;
 mod heap_identity;
 mod list_limits;
 mod outcomes;
+mod structural_cutover;
 mod trap_sites;
 
 use crate::*;
@@ -55,6 +56,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
         Vec::new()
     };
     verify(Program {
+        memory: lkjscript_ir::StructuralMemoryMetadata::default(),
         sources: vec![SourceMetadata {
             id: 0,
             path: "terminal.lkjscript".into(),

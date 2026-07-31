@@ -3,6 +3,8 @@ use super::*;
 #[derive(Default)]
 pub(in crate::executable) struct NoopNativeIslandRuntimeServices;
 
+impl NativeStructuralRuntimeServices for NoopNativeIslandRuntimeServices {}
+
 impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {
         Err(NativeServiceError::HostFailure)

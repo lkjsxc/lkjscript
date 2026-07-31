@@ -3,16 +3,18 @@ use crate::ssa::*;
 pub(in crate::ssa) fn lower_enums(
     definitions: &[hir::EnumDefinition],
     products: &HashMap<String, ProductId>,
+    structural: &StructuralMemoryMetadata,
 ) -> Result<Vec<EnumMetadata>> {
     definitions
         .iter()
-        .map(|definition| lower_enum(definition, products))
+        .map(|definition| lower_enum(definition, products, structural))
         .collect()
 }
 
 fn lower_enum(
     definition: &hir::EnumDefinition,
     products: &HashMap<String, ProductId>,
+    structural: &StructuralMemoryMetadata,
 ) -> Result<EnumMetadata> {
     let mut tag_order: Vec<_> = definition
         .variants
@@ -37,12 +39,18 @@ fn lower_enum(
                     .fields
                     .iter()
                     .map(|field| {
+                        let ty = lower_type(&field.ty, products)?;
+                        let traced = structural.type_for(&ty).is_none()
+                            && matches!(
+                                ty,
+                                SsaType::Product(_) | SsaType::Enum { .. } | SsaType::List(_)
+                            );
                         Ok(EnumFieldMetadata {
                             id: lkjscript_ir::VariantFieldId::new(field.id.bytes()),
                             name: field.name.clone(),
-                            ty: lower_type(&field.ty, products)?,
+                            ty,
                             indirect: field.indirect,
-                            traced: field.traced,
+                            traced,
                         })
                     })
                     .collect::<Result<Vec<_>>>()?,

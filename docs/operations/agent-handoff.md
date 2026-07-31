@@ -35,8 +35,9 @@ packages, canonical Semantic Source and local sessions, explicit capabilities,
 generic ADTs and structured control, validated VM, callable baseline JIT, and
 forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
 and explain commands are Current descriptive evidence. The machine tracing
-ratchet and `memory traced` expose the exact six allowed `HeapObj` families;
-builtin storage is removed, and capture-free functions and symbols use artifact IDs.
+ratchet and `memory traced` expose exactly `enum`, `pair`, and `product` as the
+remaining allowed `HeapObj` families; buffer, dynamic string, and path storage
+are removed, and capture-free functions and symbols use artifact IDs.
 The measured semantic resource runtime is Current: Linux observation, verified
 task graphs, six real policies, owner homes, forced scheduled proof discovery,
 scheduled native kernels, shared sealed-image invocation, and retained policy
@@ -95,10 +96,11 @@ not Current.
 
 The stable-index non-moving `GcHeap` still traces explicit legacy-traced
 reference values, exact roots, and generated native stack maps. Complete i64
-and exact-bit f64 values are inline and never collector allocated. `buf` remains
-a traced mutable object. Exact `bytes` uses static or deterministic unique
-storage in all four engines. Source `path` remains traced; core unique storage
-only establishes its fail-closed migration foundation.
+and exact-bit f64 values are inline and never collector allocated. Exact
+`bytes` and affine `byte-vector` use static or deterministic unique storage in
+all four engines. Dynamic string and path leaves use deterministic structural
+owners; their traced heap variants and registry entries are absent. Generic
+product/enum selection remains bounded by explicit structural SSA evidence.
 
 The structural substrate uses nonwrapping domain/root generations, bounded
 fallible capacity, typed layout and semantic identities, ledger-only iterative
@@ -133,10 +135,10 @@ resources remain absent.
 - Compiler authority is resolved typed HIR, verified SSA, and validated
   reference bytecode; no backend reinterprets source syntax.
 - Imports and packages are exact and content-addressed. The canonical lowercase
-  vocabulary remains Accepted Contract while transitional `buf` exists.
-- Borrowing is a bounded direct whole-place slice; borrowed returns,
-  projections, aggregate partial moves, and resource-bearing aggregates remain
-  rejected.
+  vocabulary and removed-spelling diagnostics are Current.
+- Borrowing remains bounded and explicit. Structural field and UTF-8 views,
+  aggregate payload transfer, and exact generation-safe resource adapters are
+  Current; borrowed returns and unrestricted partial moves remain rejected.
 - Forced native claims require synchronous generated entry with zero fallback.
 - Collection roots remain required for non-island native functions.
 - Execution-tier region/pool selection, cross-call pool loans, sealed compact
@@ -144,14 +146,13 @@ resources remain absent.
 
 ## Accepted Next Sequence
 
-1. Promote the compact structural root table and authoritative HIR plan through
-   ownership, borrow, region, destination, and independently verified SSA facts.
-2. Complete aggregate whole-value transfer, then migrate `buf`, path, string,
-   product, enum, and pair monotonically through evaluator, VM, and both forced
-   native tiers. Remove each `HeapObj` variant with its registry entry.
-3. Use headless long-lived state and existing daemon/database/process workloads
-   for boundary evidence. The reported GUI cycle is absent and must not be
-   recreated before the no-tracing cutover.
+1. Retain adversarial ownership, borrowing, destination, failure-cleanup,
+   resource-adapter, recursive-call, and limit evidence for every Current
+   structural group.
+2. Migrate the remaining recursive and legacy `enum`, `pair`, and `product`
+   groups only through the shared HIR/SSA authority and without mixed graphs.
+3. Infer collector-free ownership, borrowing, regions, sealed sharing, and
+   pools without exposing lifetime syntax or retaining a tracing fallback.
 4. At zero families, delete collector code and enable the automatically guarded
    no-tracing closure; only then resume provider, interactive, and database
    product expansion.

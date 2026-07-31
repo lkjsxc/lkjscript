@@ -99,6 +99,7 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
     let count = match kind {
         InstructionKind::Constant(_)
         | InstructionKind::PlaceEnd { .. }
+        | InstructionKind::DestinationCreate { .. }
         | InstructionKind::FunctionRef(_) => 0,
         InstructionKind::Copy(_)
         | InstructionKind::PlaceInit { .. }
@@ -106,6 +107,14 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
         | InstructionKind::Drop { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
+        | InstructionKind::StructuralPublish { .. }
+        | InstructionKind::DestinationFinish { .. }
+        | InstructionKind::DestinationAbort { .. }
+        | InstructionKind::AggregateFieldBorrow { .. }
+        | InstructionKind::AggregateTag { .. }
+        | InstructionKind::AggregateConsumePayload { .. }
+        | InstructionKind::StringUtf8View { .. }
+        | InstructionKind::StructuralCopy { .. }
         | InstructionKind::F64FromI64Exact { .. }
         | InstructionKind::F64FromI64Rounded { .. }
         | InstructionKind::I64FromF64Exact { .. }
@@ -113,6 +122,7 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
         | InstructionKind::ProductField { .. }
         | InstructionKind::EnumIsVariant { .. }
         | InstructionKind::EnumField { .. } => 1,
+        InstructionKind::DestinationFieldInit { .. } => 2,
         InstructionKind::Runtime { arguments, .. }
         | InstructionKind::Call {
             target: crate::CallTarget::Direct(_),

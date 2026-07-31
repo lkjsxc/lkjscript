@@ -1,17 +1,23 @@
 use super::*;
 
 impl RuntimeOp {
+    pub const fn consumes_affine_arguments(self) -> bool {
+        matches!(
+            self,
+            Self::SysClose | Self::SysSqliteClose | Self::SysSqliteFinalize
+        )
+    }
+
     pub const fn effects(self) -> EffectSet {
         match self {
             Self::Add | Self::Subtract | Self::Multiply | Self::Divide => EffectSet::MAY_TRAP,
             Self::CloneBytes
             | Self::CopyBytesSlice
-            | Self::BufFromStr
-            | Self::BufToStr
-            | Self::BufSlice
+            | Self::ConvertStringToBytes
+            | Self::ConvertBytesToString
             | Self::PathFromStr
-            | Self::PathFromBuf
-            | Self::PathToBuf
+            | Self::PathFromBytes
+            | Self::PathToBytes
             | Self::PathToStr
             | Self::SysSha256 => EffectSet::ALLOCATES
                 .union(EffectSet::READS_MEMORY)
@@ -22,16 +28,12 @@ impl RuntimeOp {
             | Self::StrFromI64
             | Self::StrFromF64
             | Self::EmptyStr
-            | Self::BufNew
-            | Self::OwnedBufNew
-            | Self::BufClone => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
+            | Self::ByteVectorNew => EffectSet::ALLOCATES.union(EffectSet::MAY_TRAP),
             Self::BytesByteAt
             | Self::Car
             | Self::Cdr
-            | Self::BufRef
-            | Self::OwnedBufRef
+            | Self::ByteSliceByteAt
             | Self::ByteSliceReadU32Le
-            | Self::BufGetU32
             | Self::StrRef
             | Self::StrSlice => EffectSet::READS_MEMORY.union(EffectSet::MAY_TRAP),
             Self::FreezeByteVector => EffectSet::READS_MEMORY
@@ -41,12 +43,10 @@ impl RuntimeOp {
                 .union(EffectSet::READS_MEMORY)
                 .union(EffectSet::WRITES_MEMORY)
                 .union(EffectSet::MAY_TRAP),
-            Self::BufSet | Self::BufSetU32 | Self::OwnedBufSet | Self::ByteSliceMutWriteU32Le => {
+            Self::ByteSliceMutSetByte | Self::ByteSliceMutWriteU32Le => {
                 EffectSet::WRITES_MEMORY.union(EffectSet::MAY_TRAP)
             }
-            Self::BytesLength | Self::BufLen | Self::OwnedBufLen | Self::StrLen => {
-                EffectSet::READS_MEMORY
-            }
+            Self::BytesLength | Self::ByteSliceLength | Self::StrLen => EffectSet::READS_MEMORY,
             Self::SysReadInto => EffectSet::HOST_IO
                 .union(EffectSet::ALLOCATES)
                 .union(EffectSet::WRITES_MEMORY)

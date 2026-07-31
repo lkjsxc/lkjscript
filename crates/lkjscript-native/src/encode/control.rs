@@ -27,10 +27,14 @@ impl FunctionEncoder<'_> {
                     ValueType::I64
                     | ValueType::Bool
                     | ValueType::StaticBytes
+                    | ValueType::StaticString(_)
                     | ValueType::Capability(_)
                     | ValueType::Resource(_)
                     | ValueType::Unique(_)
                     | ValueType::Loan(_)
+                    | ValueType::StructuralOwner(_)
+                    | ValueType::StructuralView(_)
+                    | ValueType::StructuralDestination(_)
                     | ValueType::Reference(_) => {
                         self.load_rax(self.value_offset(*value)?)?;
                     }
@@ -41,7 +45,7 @@ impl FunctionEncoder<'_> {
                 }
                 self.emit_epilogue()
             }
-            Terminator::Trap { trap, site, value } => {
+            Terminator::Trap { trap, site } => {
                 let offset = self.bytes.len();
                 self.trap_map.push(trap_map_entry(
                     self.function.id,
@@ -54,11 +58,7 @@ impl FunctionEncoder<'_> {
                     to_u32(offset)?,
                     OutcomeKind::Trap(*trap),
                 ));
-                if let Some(value) = value {
-                    self.load_rax(self.value_offset(*value)?)?;
-                    self.load_integer_register(1, self.context_offset())?;
-                    self.emit(&[0x48, 0x89, 0x41, 0x08])?;
-                } else if let Some(site) = site {
+                if let Some(site) = site {
                     self.load_rax_immediate(u64::from(*site))?;
                     self.load_integer_register(1, self.context_offset())?;
                     self.emit(&[0x48, 0x89, 0x41, 0x08])?;

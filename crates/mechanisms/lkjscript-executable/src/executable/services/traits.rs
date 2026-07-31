@@ -2,7 +2,7 @@ use super::*;
 
 /// Safe runtime boundary. Implementations receive only copied typed values and
 /// roots; frame addresses and stack traversal remain private to this crate.
-pub trait NativeIslandRuntimeServices {
+pub trait NativeIslandRuntimeServices: NativeStructuralRuntimeServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError>;
     fn new_byte_vector(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError>;
     fn move_byte_vector(&mut self, owner: NativeUnique)

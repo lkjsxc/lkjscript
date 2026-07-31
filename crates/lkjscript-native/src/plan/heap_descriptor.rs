@@ -52,22 +52,10 @@ impl HeapCallDescriptor {
     pub(crate) fn canonical_facts_are_valid(&self) -> bool {
         let allocates = matches!(
             self.operation,
-            HeapOperation::ConstantStr(_)
-                | HeapOperation::EmptyStr
-                | HeapOperation::ProductValue { .. }
+            HeapOperation::ProductValue { .. }
                 | HeapOperation::WithProductField { .. }
                 | HeapOperation::EnumValue { .. }
                 | HeapOperation::Cons
-                | HeapOperation::BufNew
-                | HeapOperation::BufClone
-                | HeapOperation::BufFromStr
-                | HeapOperation::BufToStr { .. }
-                | HeapOperation::BufSlice { .. }
-                | HeapOperation::StrAppend
-                | HeapOperation::StrSlice
-                | HeapOperation::StrFromByte
-                | HeapOperation::StrFromI64
-                | HeapOperation::StrFromF64
                 | HeapOperation::F64FromI64Exact { .. }
                 | HeapOperation::I64FromF64Exact { .. }
                 | HeapOperation::I64FromF64Trunc { .. }
@@ -78,7 +66,6 @@ impl HeapCallDescriptor {
             AllocationClass::None
         };
         let expected_store = match self.operation {
-            HeapOperation::BufSet | HeapOperation::BufSetU32 => StoreClass::Scalar,
             _ if allocates => StoreClass::Initialization,
             _ => StoreClass::None,
         };

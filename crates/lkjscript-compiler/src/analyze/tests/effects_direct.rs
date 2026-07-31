@@ -40,16 +40,16 @@ fn direct_effect_categories_are_inferred_without_unrelated_bits() {
     let read = function_source(
         "memory-read",
         &[],
-        "inputs/\nbuf\n/inputs\noutput/\ni64\n/output",
-        "value\nbuf",
-        "buf-length/\nvalue\n/buf-length",
+        "inputs/\nbyte-slice\n/inputs\noutput/\ni64\n/output",
+        "value\nbyte-slice",
+        "byte-slice-length/\nvalue\n/byte-slice-length",
     );
     let write = function_source(
         "memory-write",
         &[],
-        "inputs/\nbuf\n/inputs\noutput/\nunit\n/output",
-        "value\nbuf",
-        "buf-set-byte/\nvalue\n0\n1\n/buf-set-byte",
+        "inputs/\nbyte-slice-mut\n/inputs\noutput/\nunit\n/output",
+        "value\nbyte-slice-mut",
+        "byte-slice-mut-set-byte/\nvalue\n0\n1\n/byte-slice-mut-set-byte",
     );
     let source = format!(
         "{allocation}{trapper}{host}{outcome}{mutation}{read}{write}{}",

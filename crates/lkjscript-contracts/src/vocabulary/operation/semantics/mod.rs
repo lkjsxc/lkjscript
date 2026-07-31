@@ -56,7 +56,6 @@ mod group_09;
 mod group_10;
 mod group_11;
 mod group_12;
-mod group_13;
 
 pub(super) const fn required_operation_semantics(
     identity: OperationIdentity,
@@ -85,7 +84,6 @@ pub const fn operation_semantics_by_id(
         100..=109 => Some(&group_10::RECORDS[index - 100]),
         110..=119 => Some(&group_11::RECORDS[index - 110]),
         120..=122 => Some(&group_12::RECORDS[index - 120]),
-        123..=130 => Some(&group_13::RECORDS[index - 123]),
         _ => None,
     }
 }

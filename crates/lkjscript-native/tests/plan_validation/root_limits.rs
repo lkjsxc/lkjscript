@@ -3,13 +3,16 @@ use super::*;
 #[test]
 fn rejects_adversarial_wide_root_certificates_before_metadata_allocation(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let buf = ValueType::Reference(ReferenceType::Buf);
+    let product_ref = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
     let sink = plan.declare_function(
         SourceFunctionId::new(30),
-        Signature::new(vec![buf, buf], ValueType::Unit)?,
+        Signature::new(vec![product_ref, product_ref], ValueType::Unit)?,
     )?;
-    let wide = plan.declare_function(SourceFunctionId::new(31), Signature::new(vec![buf], buf)?)?;
+    let wide = plan.declare_function(
+        SourceFunctionId::new(31),
+        Signature::new(vec![product_ref], product_ref)?,
+    )?;
 
     let mut sink_builder = plan.function_builder(sink)?;
     let sink_entry = sink_builder.create_block()?;
@@ -24,7 +27,7 @@ fn rejects_adversarial_wide_root_certificates_before_metadata_allocation(
     let input = builder.parameter(0)?;
     let mut locals = Vec::new();
     for _ in 0..128 {
-        let local = builder.create_local(buf)?;
+        let local = builder.create_local(product_ref)?;
         let _write = builder.write_local(entry, local, input)?;
         locals.push(local);
     }

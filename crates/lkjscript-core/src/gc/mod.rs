@@ -1,6 +1,8 @@
 //! Pure session-owned stable-index mark/sweep heap shared by VM and JIT.
 
 mod allocation;
+#[cfg(test)]
+mod bridge_tests;
 mod collection;
 #[cfg(test)]
 mod enum_tests;

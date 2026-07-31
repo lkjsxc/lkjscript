@@ -20,10 +20,9 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
         .resources
         .sys_open_read(b"/dev/null")
         .expect("open trapped VM resource");
-    assert!(matches!(
-        trapped_vm.run_inner(),
-        ExecutionOutcome::Trapped(_)
-    ));
+    let trapped = trapped_vm.run_inner();
+    assert!(matches!(trapped.primary(), ExecutionOutcome::Trapped(_)));
+    assert_resource_cleanup_failure(&trapped);
     assert_emergency_cleanup(trapped_vm.resources.metrics());
 
     let mut exit = Chunk::new();
@@ -41,7 +40,9 @@ fn trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup() {
         .resources
         .sys_open_read(b"/dev/null")
         .expect("open exited VM resource");
-    assert_eq!(exited_vm.run_inner(), ExecutionOutcome::Exited(0));
+    let exited = exited_vm.run_inner();
+    assert_eq!(exited.primary(), &ExecutionOutcome::Exited(0));
+    assert_resource_cleanup_failure(&exited);
     assert_emergency_cleanup(exited_vm.resources.metrics());
 }
 
@@ -75,6 +76,14 @@ fn runtime_teardown_failure_attaches_without_replacing_trap() {
         failures.retained()[0].phase(),
         lkjscript_core::CleanupPhase::RuntimeTeardown
     );
+}
+
+fn assert_resource_cleanup_failure(outcome: &ExecutionOutcome) {
+    let failures = outcome.cleanup_failures().expect("cleanup attachment");
+    assert!(failures.retained().iter().any(|failure| {
+        failure.subject() == lkjscript_core::CleanupSubject::ResourceTable
+            && failure.phase() == lkjscript_core::CleanupPhase::RuntimeTeardown
+    }));
 }
 
 fn assert_emergency_cleanup(metrics: crate::host_ext::ResourceMetrics) {

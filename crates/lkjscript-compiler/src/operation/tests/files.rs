@@ -56,17 +56,13 @@ fn durable_file_operations_have_exact_signatures_and_effects() {
     assert_eq!(
         Operation::SysRandomFill.resolve_types(&[
             Type::Capability(lkjscript_core::CapabilityKind::Entropy),
-            Type::Buf,
-            Type::I64,
-            Type::I64,
+            Type::ByteSliceMut,
         ]),
         Ok((
             function(
                 vec![
                     Type::Capability(lkjscript_core::CapabilityKind::Entropy),
-                    Type::Buf,
-                    Type::I64,
-                    Type::I64,
+                    Type::ByteSliceMut,
                 ],
                 result_unit,
             ),
@@ -117,12 +113,12 @@ fn generic_resource_operations_enforce_exact_kind_sets() {
         (
             Operation::SysReadInto,
             &[InputStream, FileReader, TcpStream],
-            &[Type::Buf, Type::I64, Type::I64],
+            &[Type::ByteSliceMut],
         ),
         (
             Operation::SysWriteFrom,
             &[OutputStream, FileWriter, FileAppender, TcpStream],
-            &[Type::Buf, Type::I64, Type::I64],
+            &[Type::ByteSlice],
         ),
         (
             Operation::SysFsync,

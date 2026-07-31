@@ -97,7 +97,7 @@ Generated snapshots stay under `target/lkjscript/agent-state/`.
 
 ## Current Semantic Operation And Resource-Profile Gates
 
-The Semantic Source contract gate covers all 133 tracked files with the current
+The Semantic Source contract gate covers all 93 tracked files with the current
 canonical base representation, closed node/value/type/built-in/declaration/trivia/
 expression/correlation records, enum/match/pattern nodes and expressions,
 typed holes including match expected/scope facts, schema/source roundtrip,
@@ -156,8 +156,8 @@ exhaustion, exact generated entries/runtime calls/roots, malformed native
 metadata/tag/projection rejection, and zero forced fallback. Numeric conversion tests add stable `NumericError`
 identity/cases, exact bit/exponent boundaries, F64-bit outcomes, malformed SSA,
 four-engine differentials, direct rounded I64-to-F64 native conversion with
-exact result bits and no heap call, exact generated heap-runtime calls for the
-three fallible conversions, and zero fallback. Match tests add
+exact result bits and no heap call, exact generated structural-runtime calls
+with zero heap dispatch for the three fallible conversions, and zero fallback. Match tests add
 nested usefulness/witness, stale plan, active projection, resource, source-order,
 single-evaluation, and four-engine zero-fallback coverage. Automatic and
 host-native enum transitions remain outside Current acceptance.
@@ -177,8 +177,8 @@ whole-platform cross-authority ledger remain Accepted.
 
 ## Current Canonical Source Contract Gate
 
-The canonical source contract gate is Current for all 133 tracked sources
-(129 under `src/`). Retained
+The canonical source contract gate is Current for all 93 tracked sources
+(89 under `src/`). Retained
 [execution acceptance evidence](../history/semantics/edition/execution-and-acceptance.md)
 records exact source and semantic identity and byte reports, check/diff/publish idempotence, stale/mixed/conflict
 rejection, atomic all-file rollback and crash recovery, compiler-resolved

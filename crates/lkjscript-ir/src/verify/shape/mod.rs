@@ -7,6 +7,8 @@ mod instruction_effects;
 mod memory_instruction;
 mod numeric_conversion;
 mod program;
+mod structural_instruction;
+mod structural_metadata;
 mod terminator;
 mod values;
 

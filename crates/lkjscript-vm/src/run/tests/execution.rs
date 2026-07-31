@@ -1,45 +1,5 @@
 use super::*;
 
-fn add_result_ok_test(chunk: &mut Chunk) {
-    let enum_id = lkjscript_core::EnumId::new(lkjscript_core::RESULT_ID);
-    let layout = lkjscript_core::RuntimeLayoutId::new(lkjscript_core::RESULT_LAYOUT);
-    let ok = lkjscript_core::VariantId::new(lkjscript_core::RESULT_OK_ID);
-    let err = lkjscript_core::VariantId::new(lkjscript_core::RESULT_ERR_ID);
-    chunk.enums.push(lkjscript_core::EnumMetadata {
-        id: enum_id,
-        name: "result".into(),
-        type_parameter_count: 2,
-        layout,
-        variants: vec![
-            lkjscript_core::EnumVariantMetadata {
-                id: ok,
-                name: "ok".into(),
-                physical_tag: 0,
-                fields: vec![lkjscript_core::EnumFieldMetadata {
-                    id: lkjscript_core::VariantFieldId::new(lkjscript_core::RESULT_OK_VALUE_ID),
-                    name: "value".into(),
-                    traced: true,
-                }],
-            },
-            lkjscript_core::EnumVariantMetadata {
-                id: err,
-                name: "err".into(),
-                physical_tag: 1,
-                fields: vec![lkjscript_core::EnumFieldMetadata {
-                    id: lkjscript_core::VariantFieldId::new(lkjscript_core::RESULT_ERR_ERROR_ID),
-                    name: "error".into(),
-                    traced: true,
-                }],
-            },
-        ],
-    });
-    chunk.enum_variants.push(lkjscript_core::EnumVariantRef {
-        enum_id,
-        variant: ok,
-        layout,
-    });
-}
-
 #[test]
 fn fuel_and_returned_values_use_structured_outcomes() {
     let chunk = validated(&[Op::Unit, Op::Return]);
@@ -143,37 +103,14 @@ fn returned_heap_values_own_their_storage() {
     ));
 }
 #[test]
-fn sha256_opcode_returns_language_results_for_valid_and_invalid_ranges() {
-    let mut valid = Chunk::new();
-    let zero = valid.add_const(Constant::I64(0));
-    valid.main.emit_op_u16(Op::LoadConst, zero.0);
-    valid.main.emit(Op::BufNew);
-    valid.main.emit_op_u16(Op::LoadConst, zero.0);
-    valid.main.emit_op_u16(Op::LoadConst, zero.0);
-    valid.main.emit(Op::SysSha256);
-    add_result_ok_test(&mut valid);
-    valid.main.emit_op_u16(Op::IsEnumVariant, 0);
-    valid.main.emit(Op::Return);
-    let valid = validate(valid);
-    assert!(matches!(
-        Vm::new(&valid, NullJit, crate::ExecutionInputs::default(), ExecutionConfig::default()).run(),
-        ExecutionOutcome::Returned(value) if value.as_bool() == Some(true)
-    ));
-
-    let mut invalid = Chunk::new();
-    let zero = invalid.add_const(Constant::I64(0));
-    let one = invalid.add_const(Constant::I64(1));
-    invalid.main.emit_op_u16(Op::LoadConst, zero.0);
-    invalid.main.emit(Op::BufNew);
-    invalid.main.emit_op_u16(Op::LoadConst, zero.0);
-    invalid.main.emit_op_u16(Op::LoadConst, one.0);
-    invalid.main.emit(Op::SysSha256);
-    add_result_ok_test(&mut invalid);
-    invalid.main.emit_op_u16(Op::IsEnumVariant, 0);
-    invalid.main.emit(Op::Return);
-    let invalid = validate(invalid);
-    assert!(matches!(
-        Vm::new(&invalid, NullJit, crate::ExecutionInputs::default(), ExecutionConfig::default()).run(),
-        ExecutionOutcome::Returned(value) if value.as_bool() == Some(false)
-    ));
+fn removed_buffer_opcode_bytes_are_rejected_before_execution() {
+    for removed in [66_u8, 67, 68, 69, 72, 73, 85, 191] {
+        let mut chunk = Chunk::new();
+        chunk.main.code = vec![removed, Op::Return as u8];
+        assert!(lkjscript_core::validate_chunk(
+            chunk,
+            &lkjscript_core::ValidationLimits::default()
+        )
+        .is_err());
+    }
 }

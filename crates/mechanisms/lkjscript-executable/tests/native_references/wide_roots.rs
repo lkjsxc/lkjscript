@@ -1,13 +1,16 @@
 use super::*;
 
 fn shallow_wide_root_image() -> Result<(InstallableImage, FunctionId), Box<dyn std::error::Error>> {
-    let buf = ValueType::Reference(ReferenceType::Buf);
+    let product_ref = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
     let mut plan = MachinePlanBuilder::new();
     let sink = plan.declare_function(
         SourceFunctionId::new(41),
-        Signature::new(vec![buf, buf], ValueType::Unit)?,
+        Signature::new(vec![product_ref, product_ref], ValueType::Unit)?,
     )?;
-    let wide = plan.declare_function(SourceFunctionId::new(42), Signature::new(vec![buf], buf)?)?;
+    let wide = plan.declare_function(
+        SourceFunctionId::new(42),
+        Signature::new(vec![product_ref], product_ref)?,
+    )?;
 
     let mut sink_builder = plan.function_builder(sink)?;
     let sink_entry = sink_builder.create_block()?;
@@ -22,7 +25,7 @@ fn shallow_wide_root_image() -> Result<(InstallableImage, FunctionId), Box<dyn s
     let input = builder.parameter(0)?;
     let mut locals = Vec::new();
     for _ in 0..1024 {
-        let local = builder.create_local(buf)?;
+        let local = builder.create_local(product_ref)?;
         let _write = builder.write_local(entry, local, input)?;
         locals.push(local);
     }
@@ -75,11 +78,14 @@ fn shallow_1025_root_map_reserves_dynamically_under_aggregate_cap(
     let mut services = RecordingServices::default();
     let report = installed.invoke_with_services(
         entry,
-        &[buf(55)],
+        &[product_ref(55)],
         &NativeInvocationConfig::default(),
         &mut services,
     )?;
-    assert_eq!(report.outcome(), InvocationOutcome::Returned(buf(55)));
+    assert_eq!(
+        report.outcome(),
+        InvocationOutcome::Returned(product_ref(55))
+    );
     assert_eq!(report.exact_root_counts(), &[1025]);
     assert_eq!(report.maximum_roots(), 1025);
     assert_eq!(report.reserved_native_stack_bytes(), 0);

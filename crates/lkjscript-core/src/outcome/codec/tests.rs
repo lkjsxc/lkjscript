@@ -1,7 +1,12 @@
 #![allow(clippy::expect_used)]
 
+use std::num::NonZeroU64;
+
 use super::*;
-use crate::{HeapObj, OwnedValue, ResourceKind, Value};
+use crate::{
+    HeapObj, LayoutIdentity, OwnedValue, ResourceKind, SemanticPayload, SemanticTypeIdentity,
+    SemanticValue, StructuralKind, StructuralSnapshotLimits, StructuralType, Value,
+};
 
 fn round_trip(outcome: ExecutionOutcome) {
     let bytes = encode_execution_outcome(&outcome, 64 * 1024).expect("encode outcome");
@@ -9,17 +14,34 @@ fn round_trip(outcome: ExecutionOutcome) {
     assert_eq!(decoded, outcome);
 }
 
+fn structural_value(kind: StructuralKind, payload: SemanticPayload) -> SemanticValue {
+    SemanticValue::new(
+        StructuralType::new(
+            LayoutIdentity::new(NonZeroU64::new(1).expect("layout")),
+            SemanticTypeIdentity::new(NonZeroU64::new(2).expect("semantic type")),
+            kind,
+        ),
+        payload,
+    )
+}
+
 #[test]
 fn process_outcome_codec_preserves_closed_outcomes() {
     round_trip(ExecutionOutcome::Returned(
-        OwnedValue::from_vm_snapshot(
-            Value::from_legacy_traced(0),
-            vec![Some(HeapObj::Str("cell-result".into()))],
+        OwnedValue::from_structural(
+            structural_value(
+                StructuralKind::String,
+                SemanticPayload::String(b"cell-result".to_vec()),
+            ),
+            StructuralSnapshotLimits::DEFAULT,
         )
-        .expect("owned string"),
+        .expect("owned structural string"),
     ));
     round_trip(ExecutionOutcome::Returned(
-        OwnedValue::from_unique_byte_vector(vec![0, 1, 255]).expect("owned bytes"),
+        OwnedValue::from_unique_byte_vector(vec![0, 1, 255]).expect("owned byte-vector"),
+    ));
+    round_trip(ExecutionOutcome::Returned(
+        OwnedValue::from_unique_bytes(vec![255, 0, 1]).expect("owned immutable bytes"),
     ));
     round_trip(ExecutionOutcome::Exited(-7));
     round_trip(ExecutionOutcome::Trapped(Trap::new("cell trap")));
@@ -30,6 +52,44 @@ fn process_outcome_codec_preserves_closed_outcomes() {
     round_trip(ExecutionOutcome::HostFailure(HostError::new(
         "provider failed",
     )));
+}
+
+#[test]
+fn process_outcome_codec_preserves_registered_legacy_object_families() {
+    round_trip(ExecutionOutcome::Returned(
+        OwnedValue::from_vm_snapshot(
+            Value::from_legacy_traced(0),
+            vec![
+                Some(HeapObj::Enum {
+                    layout: crate::RuntimeLayoutId::new([7; 32]),
+                    physical_tag: 1,
+                    active_payload: vec![Value::from_legacy_traced(1)],
+                }),
+                Some(HeapObj::Product {
+                    product: crate::ProductId::new(3),
+                    fields: vec![Value::from_legacy_traced(2)],
+                }),
+                Some(HeapObj::Pair {
+                    car: Value::from_i64(9),
+                    cdr: Value::EMPTY_LIST,
+                }),
+            ],
+        )
+        .expect("owned legacy aggregate"),
+    ));
+}
+
+#[test]
+fn process_outcome_codec_rejects_removed_traced_string_and_path_tags() {
+    for removed_tag in [0, 3] {
+        let mut bytes = vec![0, 0, 10];
+        bytes.extend_from_slice(&0_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u64.to_le_bytes());
+        bytes.push(1);
+        bytes.push(removed_tag);
+        let error = decode_execution_outcome(&bytes, 64).expect_err("removed object tag");
+        assert_eq!(error.as_str(), "unknown owned heap object tag");
+    }
 }
 
 #[test]

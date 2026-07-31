@@ -13,7 +13,11 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             let index = vm.pop()?;
             let view = vm.pop()?;
             let index = vm.as_i64(index)?;
-            let word = vm.unique.read_u32_little_endian(view, index)?;
+            let word = if super::super::structural_ops::is_byte_view(vm, view) {
+                super::super::structural_ops::read_u32_little_endian(vm, view, index)?
+            } else {
+                vm.unique.read_u32_little_endian(view, index)?
+            };
             vm.push(Value::from_i64(word));
         }
         Op::ByteSliceMutWriteU32Le => {

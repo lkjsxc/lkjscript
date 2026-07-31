@@ -1,6 +1,6 @@
-use super::templates::{borrowed, inline, traced};
+use super::templates::{borrowed, inline};
 use super::templates_scalar::inline_scalar;
-use super::templates_special::{affine_buffer, immutable_bytes};
+use super::templates_special::{affine_byte_vector, immutable_bytes};
 use super::MemoryObligation;
 
 pub(super) const VALUES: &[MemoryObligation] = &[
@@ -27,23 +27,10 @@ pub(super) const VALUES: &[MemoryObligation] = &[
         "borrow-mut expression and exact operation signatures",
         "ownership alias and mutation suites",
     ),
-    affine_buffer(
+    affine_byte_vector(
         "byte-vector",
         "new-byte-vector and ownership lowering",
         "ownership and bulk-byte suites",
-    ),
-    traced(
-        "buf",
-        "transitional mutable byte buffer",
-        "HeapObj::Buf(Vec<u8>)",
-        "mutable",
-        "none",
-        "impossible",
-        "observable buffer identity",
-        "bounded variable bytes",
-        "remove after byte-vector/bytes migration",
-        "buffer operations, VM and native heap dispatch",
-        "buffer boundary, host buffer, native allocation suites",
     ),
     inline(
         "capability",
@@ -64,32 +51,6 @@ pub(super) const VALUES: &[MemoryObligation] = &[
         "complete signed bits in typed evaluator, VM, and native values",
         "constants and numeric operations",
         "complete range and native scalar suites",
-    ),
-    traced(
-        "path",
-        "opaque immutable path bytes",
-        "HeapObj::Path(Vec<u8>)",
-        "immutable",
-        "none",
-        "impossible",
-        "not source-observable",
-        "bounded variable bytes",
-        "static, unique, owned region, sealed-shared-region",
-        "path constructors and host results",
-        "opaque path and host capability suites",
-    ),
-    traced(
-        "string",
-        "immutable text value",
-        "HeapObj::Str(String)",
-        "immutable",
-        "none",
-        "impossible",
-        "not source-observable",
-        "bounded variable UTF-8 bytes",
-        "static, stack, unique, region, sealed-shared-region, eligible shared-node",
-        "literals, conversions, host results",
-        "string, UTF-8, evaluator/VM/native suites",
     ),
     inline(
         "symbol",

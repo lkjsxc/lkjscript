@@ -30,10 +30,25 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     string.main.emit(Op::Return);
     let string = validate(string);
 
+    let mut no_heap = ExecutionConfig::default();
+    no_heap.max_heap_bytes = 0;
+    no_heap.max_allocations = 0;
+    assert!(matches!(
+        Vm::new(&string, NullJit, crate::ExecutionInputs::default(), no_heap).run(),
+        ExecutionOutcome::Returned(value) if value.as_str() == Some("x")
+    ));
+
+    let mut aggregate = Chunk::new();
+    aggregate.main.emit(Op::Unit);
+    aggregate.main.emit(Op::EmptyList);
+    aggregate.main.emit(Op::Cons);
+    aggregate.main.emit(Op::Return);
+    let aggregate = validate(aggregate);
+
     let mut heap = ExecutionConfig::default();
     heap.max_heap_bytes = 0;
     assert_eq!(
-        Vm::new(&string, NullJit, crate::ExecutionInputs::default(), heap).run(),
+        Vm::new(&aggregate, NullJit, crate::ExecutionInputs::default(), heap).run(),
         ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
     );
 
@@ -41,7 +56,7 @@ fn configured_stack_frame_heap_allocation_and_output_limits_stop_execution() {
     allocations.max_allocations = 0;
     assert_eq!(
         Vm::new(
-            &string,
+            &aggregate,
             NullJit,
             crate::ExecutionInputs::default(),
             allocations
@@ -95,9 +110,11 @@ fn configured_handle_and_wall_limits_are_structured() {
     socket.main.locals = 1;
     socket.main.emit_op_u16(Op::LoadLocal, 0);
     socket.main.emit(Op::SysSocket);
-    socket.main.emit(Op::Pop);
-    socket.main.emit(Op::Unit);
-    socket.main.emit(Op::Return);
+    let wait_after_success = socket.main.code.len();
+    socket.main.emit_op_u16(
+        Op::Jump,
+        u16::try_from(wait_after_success).expect("small test offset"),
+    );
     let socket = validate(socket);
     let mut handles = ExecutionConfig::default();
     handles.max_handles = 0;

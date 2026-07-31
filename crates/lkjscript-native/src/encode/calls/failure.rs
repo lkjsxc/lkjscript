@@ -53,10 +53,31 @@ impl FunctionEncoder<'_> {
         cleanups: &[crate::plan::FailureCleanupCall],
     ) -> Result<(), NativeError> {
         for cleanup in cleanups {
-            self.runtime_calls.insert(cleanup.slot);
-            self.load_integer_register(7, self.context_offset())?;
-            self.load_integer_register(6, self.local_offset(cleanup.local)?)?;
-            self.emit_runtime_call_target(cleanup.slot)?;
+            match &cleanup.operation {
+                crate::plan::FailureCleanupOperation::Runtime(slot) => {
+                    self.runtime_calls.insert(*slot);
+                    self.load_integer_register(7, self.context_offset())?;
+                    self.load_integer_register(6, self.local_offset(cleanup.local)?)?;
+                    self.emit_runtime_call_target(*slot)?;
+                }
+                crate::plan::FailureCleanupOperation::Structural(descriptor) => {
+                    let site_id = to_u32(self.structural_runtime_sites.len())?;
+                    self.structural_runtime_sites.push(structural_runtime_site(
+                        site_id,
+                        self.function.id,
+                        descriptor.as_ref().clone(),
+                        None,
+                    ));
+                    self.runtime_calls
+                        .insert(RuntimeCallSlot::StructuralDispatch);
+                    self.load_integer_register(7, self.context_offset())?;
+                    self.load_integer_register_immediate(6, u64::from(site_id))?;
+                    self.load_integer_register(2, self.local_offset(cleanup.local)?)?;
+                    self.load_integer_register_immediate(1, 0)?;
+                    self.load_integer_register_immediate(8, 0)?;
+                    self.emit_runtime_call_target(RuntimeCallSlot::StructuralDispatch)?;
+                }
+            }
         }
         Ok(())
     }

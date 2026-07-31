@@ -55,8 +55,11 @@ mod match_resources;
 mod matches;
 mod numeric;
 mod operations;
+#[path = "structural_cases/ownership_boundaries.rs"]
 mod ownership_boundaries;
 mod ownership_control;
 mod ownership_flow;
 mod paths;
 mod resources;
+#[path = "structural_cases/bytecode.rs"]
+mod structural_bytecode;

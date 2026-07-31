@@ -13,8 +13,10 @@ impl<'a> Producer<'a> {
                 ));
             }
         }
+        let type_planner = TypePlanner::new(program)?;
         let mut producer = Self {
             program,
+            type_planner,
             function_ids,
             signatures: Vec::new(),
             functions: Vec::new(),
@@ -24,6 +26,8 @@ impl<'a> Producer<'a> {
             constants: Vec::new(),
             calls: Vec::new(),
             obligations: Vec::new(),
+            destinations: Vec::new(),
+            borrow_scopes: Vec::new(),
             current_function: MemoryFunctionId::new(0),
             next_expression: 0,
             next_place: 0,
@@ -49,6 +53,10 @@ impl<'a> Producer<'a> {
         self.build_main(main_id)?;
         self.finish_loans()?;
         self.finish_drop_classes()?;
+        self.finish_type_work()?;
+        let type_facts = std::mem::take(&mut self.type_planner.facts);
+        let drop_paths = std::mem::take(&mut self.type_planner.drop_paths);
+        let drop_glues = std::mem::take(&mut self.type_planner.glues);
         let mut plan = HirMemoryPlan {
             schema: HIR_MEMORY_PLAN_SCHEMA,
             id: MemoryPlanId::from_bytes([0; 32]),
@@ -59,7 +67,11 @@ impl<'a> Producer<'a> {
             constants: self.constants,
             calls: self.calls,
             obligations: self.obligations,
-            drop_glues: drop_glues(),
+            type_facts,
+            destinations: self.destinations,
+            borrow_scopes: self.borrow_scopes,
+            drop_paths,
+            drop_glues,
             work: self.work,
         };
         plan.id = compute_plan_id(&plan)?;
@@ -74,7 +86,7 @@ impl<'a> Producer<'a> {
             let binding = self.program.binding(function.binding).ok_or_else(|| {
                 Error::msg("HIR memory signature references unknown function binding")
             })?;
-            let result_ty = function_result_type(&binding.ty)?;
+            let result_ty = function_result_type(&binding.ty)?.clone();
             let mut parameters = Vec::with_capacity(function.params.len());
             for parameter in &function.params {
                 let parameter_ty = &self
@@ -84,31 +96,31 @@ impl<'a> Producer<'a> {
                         Error::msg("HIR memory signature references unknown parameter binding")
                     })?
                     .ty;
-                parameters.push(parameter_mode(
-                    parameter_ty,
+                let parameter_ty = parameter_ty.clone();
+                parameters.push(self.planned_parameter_mode(
+                    &parameter_ty,
                     resource_parameter_consumed(&function.body, *parameter),
-                ));
+                )?);
             }
+            let result = self.planned_result_mode(&result_ty)?;
             self.signatures.push(FunctionMemorySignature {
                 function: function_id,
                 parameters,
-                result: result_mode(result_ty),
+                result,
             });
         }
         let main_id = MemoryFunctionId::new(
             u32::try_from(self.program.functions.len())
                 .map_err(|_| Error::msg("HIR main memory signature identity exceeds u32"))?,
         );
+        let main_parameters = self.program.main.param_types.clone().into_iter()
+            .map(|ty| self.planned_parameter_mode(&ty, false)).collect::<Result<Vec<_>>>()?;
+        let main_result = self.program.main.return_type.clone();
+        let main_result = self.planned_result_mode(&main_result)?;
         self.signatures.push(FunctionMemorySignature {
             function: main_id,
-            parameters: self
-                .program
-                .main
-                .param_types
-                .iter()
-                .map(|ty| parameter_mode(ty, false))
-                .collect(),
-            result: result_mode(&self.program.main.return_type),
+            parameters: main_parameters,
+            result: main_result,
         });
         Ok(())
     }

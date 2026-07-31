@@ -17,15 +17,7 @@ pub(in crate::executable) unsafe fn invoke_typed(
         }
 
     match (arguments, result) {
-        (
-            [],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
+        ([], result) if integer_result(result) => Ok(RawReturn::Integer(call!(
             extern "C" fn(*mut NativeCallState) -> u64
         ))),
         ([], ValueType::F64) => Ok(RawReturn::Float(call!(
@@ -35,18 +27,12 @@ pub(in crate::executable) unsafe fn invoke_typed(
             call!(extern "C" fn(*mut NativeCallState));
             Ok(RawReturn::Unit)
         }
-        (
-            [MachineArgument::Integer(first)],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
-            extern "C" fn(*mut NativeCallState, u64) -> u64,
-            *first
-        ))),
+        ([MachineArgument::Integer(first)], result) if integer_result(result) => {
+            Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, u64) -> u64,
+                *first
+            )))
+        }
         ([MachineArgument::Integer(first)], ValueType::F64) => Ok(RawReturn::Float(call!(
             extern "C" fn(*mut NativeCallState, u64) -> f64,
             *first
@@ -55,18 +41,12 @@ pub(in crate::executable) unsafe fn invoke_typed(
             call!(extern "C" fn(*mut NativeCallState, u64), *first);
             Ok(RawReturn::Unit)
         }
-        (
-            [MachineArgument::Float(first)],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
-            extern "C" fn(*mut NativeCallState, f64) -> u64,
-            *first
-        ))),
+        ([MachineArgument::Float(first)], result) if integer_result(result) => {
+            Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, f64) -> u64,
+                *first
+            )))
+        }
         ([MachineArgument::Float(first)], ValueType::F64) => Ok(RawReturn::Float(call!(
             extern "C" fn(*mut NativeCallState, f64) -> f64,
             *first
@@ -75,19 +55,15 @@ pub(in crate::executable) unsafe fn invoke_typed(
             call!(extern "C" fn(*mut NativeCallState, f64), *first);
             Ok(RawReturn::Unit)
         }
-        (
-            [MachineArgument::Integer(first), MachineArgument::Integer(second)],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
-            extern "C" fn(*mut NativeCallState, u64, u64) -> u64,
-            *first,
-            *second
-        ))),
+        ([MachineArgument::Integer(first), MachineArgument::Integer(second)], result)
+            if integer_result(result) =>
+        {
+            Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, u64, u64) -> u64,
+                *first,
+                *second
+            )))
+        }
         ([MachineArgument::Integer(first), MachineArgument::Integer(second)], ValueType::F64) => {
             Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState, u64, u64) -> f64,
@@ -103,19 +79,15 @@ pub(in crate::executable) unsafe fn invoke_typed(
             );
             Ok(RawReturn::Unit)
         }
-        (
-            [MachineArgument::Integer(first), MachineArgument::Float(second)],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
-            extern "C" fn(*mut NativeCallState, u64, f64) -> u64,
-            *first,
-            *second
-        ))),
+        ([MachineArgument::Integer(first), MachineArgument::Float(second)], result)
+            if integer_result(result) =>
+        {
+            Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, u64, f64) -> u64,
+                *first,
+                *second
+            )))
+        }
         ([MachineArgument::Integer(first), MachineArgument::Float(second)], ValueType::F64) => {
             Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState, u64, f64) -> f64,
@@ -131,19 +103,15 @@ pub(in crate::executable) unsafe fn invoke_typed(
             );
             Ok(RawReturn::Unit)
         }
-        (
-            [MachineArgument::Float(first), MachineArgument::Integer(second)],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
-            extern "C" fn(*mut NativeCallState, f64, u64) -> u64,
-            *first,
-            *second
-        ))),
+        ([MachineArgument::Float(first), MachineArgument::Integer(second)], result)
+            if integer_result(result) =>
+        {
+            Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, f64, u64) -> u64,
+                *first,
+                *second
+            )))
+        }
         ([MachineArgument::Float(first), MachineArgument::Integer(second)], ValueType::F64) => {
             Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState, f64, u64) -> f64,
@@ -159,19 +127,15 @@ pub(in crate::executable) unsafe fn invoke_typed(
             );
             Ok(RawReturn::Unit)
         }
-        (
-            [MachineArgument::Float(first), MachineArgument::Float(second)],
-            ValueType::I64
-            | ValueType::Bool
-            | ValueType::StaticBytes
-            | ValueType::Unique(_)
-            | ValueType::Loan(_)
-            | ValueType::Reference(_),
-        ) => Ok(RawReturn::Integer(call!(
-            extern "C" fn(*mut NativeCallState, f64, f64) -> u64,
-            *first,
-            *second
-        ))),
+        ([MachineArgument::Float(first), MachineArgument::Float(second)], result)
+            if integer_result(result) =>
+        {
+            Ok(RawReturn::Integer(call!(
+                extern "C" fn(*mut NativeCallState, f64, f64) -> u64,
+                *first,
+                *second
+            )))
+        }
         ([MachineArgument::Float(first), MachineArgument::Float(second)], ValueType::F64) => {
             Ok(RawReturn::Float(call!(
                 extern "C" fn(*mut NativeCallState, f64, f64) -> f64,
@@ -189,4 +153,20 @@ pub(in crate::executable) unsafe fn invoke_typed(
         }
         _ => Err(InvocationError::UnsupportedSignature),
     }
+}
+
+const fn integer_result(result: ValueType) -> bool {
+    matches!(
+        result,
+        ValueType::I64
+            | ValueType::Bool
+            | ValueType::StaticBytes
+            | ValueType::StaticString(_)
+            | ValueType::Unique(_)
+            | ValueType::Loan(_)
+            | ValueType::StructuralOwner(_)
+            | ValueType::StructuralView(_)
+            | ValueType::StructuralDestination(_)
+            | ValueType::Reference(_)
+    )
 }

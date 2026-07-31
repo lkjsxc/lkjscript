@@ -58,7 +58,6 @@ pub(crate) enum SemanticNodeKind {
     TypeI64,
     TypeF64,
     TypeString,
-    TypeBuffer,
     TypeBytes,
     TypeByteVector,
     TypeByteSlice,

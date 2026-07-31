@@ -7,16 +7,19 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
             vm.require_capability(lkjscript_core::CapabilityKind::Arguments)?;
             let index = vm.as_i64(value)?;
             let index = usize::try_from(index).ok();
-            if index.is_none_or(|index| index >= vm.inputs.arguments.len()) {
-                let value = crate::host_ext::option_none(&mut vm.arena)?;
-                vm.push(value);
-            } else if let Some(index) = index {
-                let string = vm
-                    .arena
-                    .alloc(HeapObj::Str(vm.inputs.arguments[index].clone()))?;
-                let value = crate::host_ext::option_some(&mut vm.arena, string)?;
-                vm.push(value);
-            }
+            let argument = index
+                .filter(|index| *index < vm.inputs.arguments.len())
+                .map(|index| {
+                    crate::run::structural_ops::HostValue::String(
+                        vm.inputs.arguments[index].clone(),
+                    )
+                });
+            let value = crate::run::structural_ops::publish_option(
+                vm,
+                crate::run::structural_ops::HostValueType::String,
+                argument,
+            )?;
+            vm.push(value);
             Ok(true)
         }
         x if x == Op::Argc as u8 => {
@@ -70,7 +73,12 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<boo
                 }
                 Err(error) => Err(error),
             };
-            push_language_result(vm, lkjscript_core::SystemErrorKind::Time, result);
+            push_runtime_result(
+                vm,
+                lkjscript_core::SystemErrorKind::Time,
+                crate::run::structural_ops::HostValueType::Unit,
+                result,
+            );
             Ok(true)
         }
         _ => Ok(false),

@@ -27,22 +27,41 @@ fn verify_cleanup_calls(
         if !initialized_locals.get(index).copied().unwrap_or(false) || !seen.insert(cleanup.local) {
             return Err(VerificationError::LocalNotInitialized(cleanup.local));
         }
-        let signature = cleanup
-            .slot
-            .plan_signature()
-            .ok_or(VerificationError::TypeMismatch(
-                "failure cleanup runtime slot",
-            ))?;
+        let signature = match &cleanup.operation {
+            crate::plan::FailureCleanupOperation::Runtime(slot) => {
+                if !matches!(
+                    slot,
+                    RuntimeCallSlot::ByteSliceEnd
+                        | RuntimeCallSlot::ByteSliceMutEnd
+                        | RuntimeCallSlot::ByteVectorDrop
+                        | RuntimeCallSlot::BytesEndBorrow
+                        | RuntimeCallSlot::BytesDrop
+                ) {
+                    return Err(VerificationError::TypeMismatch(
+                        "failure cleanup runtime call",
+                    ));
+                }
+                slot.plan_signature()
+                    .ok_or(VerificationError::TypeMismatch(
+                        "failure cleanup runtime slot",
+                    ))?
+            }
+            crate::plan::FailureCleanupOperation::Structural(descriptor) => {
+                if !matches!(
+                    descriptor.operation(),
+                    StructuralOperation::EndView(_)
+                        | StructuralOperation::Drop(_)
+                        | StructuralOperation::DestinationAbort { .. }
+                ) {
+                    return Err(VerificationError::TypeMismatch(
+                        "failure cleanup structural call",
+                    ));
+                }
+                descriptor.signature().clone()
+            }
+        };
         if signature.parameters() != [function.locals[index].value_type]
             || signature.result() != ValueType::Unit
-            || !matches!(
-                cleanup.slot,
-                RuntimeCallSlot::ByteSliceEnd
-                    | RuntimeCallSlot::ByteSliceMutEnd
-                    | RuntimeCallSlot::ByteVectorDrop
-                    | RuntimeCallSlot::BytesEndBorrow
-                    | RuntimeCallSlot::BytesDrop
-            )
         {
             return Err(VerificationError::TypeMismatch(
                 "failure cleanup runtime call",

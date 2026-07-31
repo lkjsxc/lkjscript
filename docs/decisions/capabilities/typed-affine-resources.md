@@ -91,12 +91,19 @@ error, safepoint, and frame state. Verification proves initialization,
 kind-correct access, no use after consumption, no double cleanup, and one
 cleanup on every structured outcome.
 
-The implemented bytecode foundation publishes exact resource parameter and
-resource-result metadata plus explicit global-to-prototype links. Validation
-rejects untyped `any` values at host-resource instructions, checks exact kinds
-at statically known calls and returns, and rejects resource flow through calls
-without metadata. Atomic instruction ranges now carry exact cleanup plans; this
-does not supply owned native cleanup or complete provider/state proofs.
+The implemented bytecode foundation publishes exact resource parameter,
+owner-place, and resource-result metadata plus explicit global-to-prototype
+links. Owner-place presence distinguishes a consuming parameter transfer from a
+borrowed parameter. Validation assigns stable abstract owner identities, rejects
+duplicate consuming arguments and ordinary duplication, invalidates exact
+owners at consuming calls, returns, closes, and result projection, rejects every
+attempt to consume or return a borrowed resource, and rejects live owned locals
+at return. The VM mirrors those transfers with generation-safe
+handle comparison and leaves borrowed standard I/O aliases reusable. Validation
+also rejects untyped `any` values at host-resource instructions and resource
+flow through calls without metadata. Atomic instruction ranges carry exact
+cleanup plans; this does not supply owned native cleanup or complete
+provider/state proofs.
 
 VM and forced native execution preflight complete reachable support, preserve
 ownership and exact roots, execute cleanup, produce real native entries, and

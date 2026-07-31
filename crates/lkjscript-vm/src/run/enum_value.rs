@@ -75,6 +75,15 @@ fn make_enum<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         active_payload.push(vm.pop()?);
     }
     active_payload.reverse();
+    if active_payload
+        .iter()
+        .copied()
+        .any(is_structural_runtime_value)
+    {
+        return Err(Error::msg(
+            "legacy traced enum cannot contain a structural runtime value",
+        ));
+    }
     let definition = vm
         .chunk
         .enums()
@@ -100,14 +109,24 @@ fn is_variant<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         return Err(Error::msg("enum variant test layout mismatch"));
     }
     let value = vm.pop()?;
-    let matches = match vm.arena.get(value)? {
-        HeapObj::Enum {
-            layout,
-            physical_tag,
-            ..
-        } if *layout == descriptor.layout => *physical_tag == expected_tag,
-        HeapObj::Enum { .. } => return Err(Error::msg("enum variant test layout mismatch")),
-        _ => return Err(Error::msg("enum variant test expects enum")),
+    let matches = if let Some(matches) = structural_ops::adapter_is_variant(
+        vm,
+        value,
+        descriptor.enum_id,
+        descriptor.layout,
+        descriptor.variant,
+    )? {
+        matches
+    } else {
+        match vm.arena.get(value)? {
+            HeapObj::Enum {
+                layout,
+                physical_tag,
+                ..
+            } if *layout == descriptor.layout => *physical_tag == expected_tag,
+            HeapObj::Enum { .. } => return Err(Error::msg("enum variant test layout mismatch")),
+            _ => return Err(Error::msg("enum variant test expects enum")),
+        }
     };
     vm.push(Value::from_bool(matches));
     Ok(())
@@ -128,21 +147,35 @@ fn load_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         .ok_or_else(|| Error::msg("enum projection field identity mismatch"))?;
     let expected_tag = selected.physical_tag;
     let value = vm.pop()?;
-    let projected = match vm.arena.get(value)? {
-        HeapObj::Enum {
-            layout,
-            physical_tag,
-            active_payload,
-        } if *layout == descriptor.layout && *physical_tag == expected_tag => active_payload
-            .get(index)
-            .copied()
-            .ok_or_else(|| Error::msg("enum active payload is malformed"))?,
-        HeapObj::Enum { .. } => {
-            return Err(Error::msg(
-                "inactive enum projection rejected before payload access",
-            ));
+    let projected = if let Some(projected) = structural_ops::adapter_take_field(
+        vm,
+        value,
+        descriptor.enum_id,
+        descriptor.layout,
+        descriptor.variant,
+    )? {
+        if index != 0 {
+            return Err(Error::msg("aggregate adapter field identity mismatch"));
         }
-        _ => return Err(Error::msg("enum projection expects enum")),
+        super::ext_ops::clear_resource_aliases(vm, value);
+        projected
+    } else {
+        match vm.arena.get(value)? {
+            HeapObj::Enum {
+                layout,
+                physical_tag,
+                active_payload,
+            } if *layout == descriptor.layout && *physical_tag == expected_tag => active_payload
+                .get(index)
+                .copied()
+                .ok_or_else(|| Error::msg("enum active payload is malformed"))?,
+            HeapObj::Enum { .. } => {
+                return Err(Error::msg(
+                    "inactive enum projection rejected before payload access",
+                ));
+            }
+            _ => return Err(Error::msg("enum projection expects enum")),
+        }
     };
     vm.push(projected);
     Ok(())

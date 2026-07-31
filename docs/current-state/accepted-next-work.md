@@ -17,26 +17,35 @@ native execution. Deterministic byte-vector and bytes owners cross all four
 engines. The authoritative HIR memory plan independently rejects false traced
 classification for those owners and for static function/symbol artifacts.
 
-The internal structural substrate now includes ordinary and sealed regions,
-typed pools, owner homes, and a compact stale-safe structural root table. The
-six registered traced families remain `buf`, `enum`, `pair`, `path`, `product`,
-and `string`; no collector-free-runtime claim follows.
+The structural runtime now executes compact stale-safe roots, destinations,
+views, dynamic paths and strings, deterministic nonrecursive products and
+enums, structural results, nested returns, and key-free process snapshots
+through evaluator, VM, forced baseline, and forced proof tiers. Ordinary and
+sealed regions, typed pools, and owner homes remain internal substrate rather
+than selected language storage. The three registered traced families remain
+`enum`, `pair`, and `product`; no collector-free-runtime claim follows.
 
 The Linux runtime has an authenticated foreground coordinator, durable process
 applications, isolated VM process cells, app-private stdio/clock providers, a
 daemon-owned tenant database, and authenticated session presence. Database VM
 operations, broker-launched interactive cells, and GUI remain absent.
 
-The accepted immediate sequence is deterministic structural memory only:
+The accepted immediate sequence remains deterministic structural memory only:
 
-1. complete aggregate ownership, automatic borrowing, destination, and region
-   facts in independently verified HIR and SSA;
-2. migrate the six families monotonically through evaluator, VM, baseline, and
-   proof execution, including returns and process codecs;
-3. use headless state, daemon, database, editor, HTTP, and existing terminal
-   workloads as acceptance evidence; and
+1. retain adversarial exact cleanup, stale-key, destination, borrowing,
+   resource-adapter, recursive-call, and execution-limit evidence for the
+   Current structural groups;
+2. migrate recursive and remaining legacy `enum`, `pair`, and `product` groups
+   only when mixed graphs remain impossible and every execution tier uses the
+   same verified structural authority;
+3. infer collector-free ownership, borrowing, regions, sealed sharing, and
+   pools without exposing lifetime syntax or a tracing fallback; and
 4. at zero families, delete collector mechanics and activate the implemented
    `LKJ-RUNTIME-NO-TRACING-COLLECTOR` closure.
+
+The next ratchet target is three-to-zero through complete measured production
+groups. It does not claim general product/enum migration or a collector-free
+whole runtime.
 
 The previously selected synchronous automatic baseline-to-proof promotion
 remains an **Accepted Implementation Selection** for a later cycle. OSR,

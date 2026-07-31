@@ -2,7 +2,7 @@ use super::{GcHeap, GcLimit};
 use crate::{Error, HeapObj, ResourceLimitKind, Result, Value};
 
 impl GcHeap {
-    /// Compatibility allocation for VM and host helpers. Publication checks
+    /// Publish one completely initialized traced object. Publication checks
     /// configured limits and stable-handle exhaustion before assigning an ID.
     pub fn alloc(&mut self, object: HeapObj) -> Result<Value> {
         self.try_alloc(object).map_err(gc_limit_error)
@@ -12,6 +12,9 @@ impl GcHeap {
     /// allocation and live-byte bounds. Callers collect first when
     /// `collect_before_allocation` is true.
     pub fn try_alloc(&mut self, object: HeapObj) -> std::result::Result<Value, GcLimit> {
+        if !legacy_payload_is_valid(&object) {
+            return Err(GcLimit::MixedOwnershipGraph);
+        }
         if self.stats.allocations >= self.config.max_allocations
             || !stable_index_available(self.objs.len())
         {
@@ -99,6 +102,9 @@ impl GcHeap {
         object: HeapObj,
         layout: u64,
     ) -> std::result::Result<Value, GcLimit> {
+        if !legacy_payload_is_valid(&object) {
+            return Err(GcLimit::MixedOwnershipGraph);
+        }
         if self.stats.allocations >= self.config.max_allocations
             || !stable_index_available(self.objs.len())
         {
@@ -147,6 +153,20 @@ pub(super) fn stable_index_available(slot_count: usize) -> bool {
     u32::try_from(slot_count).is_ok()
 }
 
+pub(super) fn legacy_payload_is_valid(object: &HeapObj) -> bool {
+    match object {
+        HeapObj::Pair { car, cdr } => {
+            !car.is_forbidden_legacy_payload() && !cdr.is_forbidden_legacy_payload()
+        }
+        HeapObj::Product { fields, .. } => fields
+            .iter()
+            .all(|value| !value.is_forbidden_legacy_payload()),
+        HeapObj::Enum { active_payload, .. } => active_payload
+            .iter()
+            .all(|value| !value.is_forbidden_legacy_payload()),
+    }
+}
+
 fn gc_limit_error(limit: GcLimit) -> Error {
     match limit {
         GcLimit::Allocations => Error::resource(
@@ -157,15 +177,16 @@ fn gc_limit_error(limit: GcLimit) -> Error {
             ResourceLimitKind::HeapBytes,
             "heap live byte limit exceeded",
         ),
+        GcLimit::MixedOwnershipGraph => {
+            Error::msg("legacy traced object cannot contain deterministic owners or capabilities")
+        }
     }
 }
 
 pub(super) fn estimated_object_bytes(object: &HeapObj) -> usize {
     let base = std::mem::size_of::<HeapObj>();
     let dynamic = match object {
-        HeapObj::Str(text) => text.capacity(),
         HeapObj::Pair { .. } => 0,
-        HeapObj::Buf(bytes) | HeapObj::Path(bytes) => bytes.capacity(),
         HeapObj::Product { fields, .. } => fields
             .capacity()
             .saturating_mul(std::mem::size_of::<Value>()),

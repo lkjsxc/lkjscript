@@ -10,8 +10,12 @@ impl FunctionBuilder<'_> {
         let Some(fields) = self.lower_arguments(fields)? else {
             return Ok(None);
         };
+        let ty = SsaType::Product(product);
+        if self.structural.is_owned(&ty) {
+            return self.construct_structural_aggregate(ty, None, fields, origin);
+        }
         let value = self.append(
-            SsaType::Product(product),
+            ty,
             InstructionKind::ProductValue { product, fields },
             EffectSet::ALLOCATES,
             origin,
@@ -30,6 +34,12 @@ impl FunctionBuilder<'_> {
         let Some(value) = self.lower_expr(value)? else {
             return Ok(None);
         };
+        let owner_ty = SsaType::Product(product);
+        if self.structural.is_owned(&owner_ty) {
+            return Err(Error::msg(
+                "structural product field projection requires explicit owner lowering",
+            ));
+        }
         let value = self.append(
             ty,
             InstructionKind::ProductField {
@@ -57,8 +67,14 @@ impl FunctionBuilder<'_> {
         let Some(replacement) = self.lower_expr(replacement)? else {
             return Ok(None);
         };
+        let ty = SsaType::Product(product);
+        if self.structural.is_owned(&ty) {
+            return Err(Error::msg(
+                "structural product update is unavailable without whole-owner reconstruction",
+            ));
+        }
         let value = self.append(
-            SsaType::Product(product),
+            ty,
             InstructionKind::WithProductField {
                 product,
                 field,

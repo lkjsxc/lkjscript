@@ -1,12 +1,15 @@
 use crate::ssa::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn construct(
     program: &hir::Program,
     product_ids: &HashMap<String, ProductId>,
     function_ids: &HashMap<BindingId, FunctionId>,
     function_effects: &HashMap<FunctionId, EffectSet>,
+    function_parameter_consumption: &HashMap<FunctionId, Vec<bool>>,
     main_id: FunctionId,
     memory_plan: &HirMemoryPlan,
+    structural: &StructuralMemoryMetadata,
 ) -> Result<Function> {
     let signature = Signature::monomorphic(
         program
@@ -21,12 +24,19 @@ pub(super) fn construct(
         product_ids,
         function_ids,
         function_effects,
+        function_parameter_consumption,
+        structural,
         main_id,
         "main".into(),
         signature,
         effects(program.main.body.effects),
         origin(program.main.origin.raw(), 0),
-        CleanupPlan::new(memory_plan, MemoryFunctionId::new(main_id.raw()))?,
+        CleanupPlan::new(
+            memory_plan,
+            MemoryFunctionId::new(main_id.raw()),
+            product_ids,
+            structural,
+        )?,
     );
     let entry = builder.new_block(origin(program.main.origin.raw(), 0), false)?;
     builder.entry = entry;
@@ -62,6 +72,7 @@ pub(super) fn construct(
         builder.slots.insert(binding, slot);
     }
     if let Some(result) = builder.lower_expr(&program.main.body)? {
+        builder.drop_abandoned_structural_owners(result, program.main.origin)?;
         builder.cleanup_all_places(program.main.origin)?;
         builder.terminate(Terminator::Return(result))?;
     }

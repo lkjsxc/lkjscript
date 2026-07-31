@@ -21,6 +21,26 @@ pub(super) fn build_frame_homes(
     Ok(homes)
 }
 
+pub(super) fn returned_structural_owner_homes(function: &FunctionPlan) -> Vec<FrameHomeKind> {
+    let mut returned = function
+        .blocks
+        .iter()
+        .filter_map(|block| match block.terminator {
+            Some(Terminator::Return(value))
+                if function.values[value.index as usize]
+                    .value_type
+                    .is_structural_owner() =>
+            {
+                Some(FrameHomeKind::Value(value.index))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    returned.sort_unstable();
+    returned.dedup();
+    returned
+}
+
 pub(super) fn value_frame_home(
     function: &FunctionPlan,
     value: ValueId,
@@ -76,7 +96,9 @@ pub(super) fn maximum_outgoing_arguments(function: &FunctionPlan) -> Result<u8, 
         .iter()
         .flat_map(|block| &block.instructions)
         .filter_map(|instruction| match &instruction.operation {
-            Operation::Call(_, arguments) | Operation::RuntimeCall(_, arguments) => Some(
+            Operation::Call(_, arguments)
+            | Operation::RuntimeCall(_, arguments)
+            | Operation::StructuralCall(_, arguments) => Some(
                 arguments
                     .iter()
                     .filter(|argument| {

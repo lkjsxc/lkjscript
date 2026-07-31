@@ -137,7 +137,7 @@ benchmark.
    maps at collecting safepoints.
 4. Add versioned allocation and write-barrier runtime calls, then force
    collection while generated frames retain live references.
-5. Add products, Option/Result, Str, Buf, List, Handle runtime paths and bounded
+5. Add products, Option/Result, Str, bytes, byte-vector, List, and typed-resource runtime paths and bounded
    recursion without weakening forced-mode behavior.
 6. Retain scalar native performance as a regression gate and measure general
    allocation/reference workloads against same-commit VM.

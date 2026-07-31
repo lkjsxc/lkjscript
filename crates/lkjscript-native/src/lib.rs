@@ -16,9 +16,11 @@ pub use encode::{encode, EncodingConfig};
 pub use image::{
     CodeAccounting, EntryMetadata, ExactStackMap, FrameFacts, FrameHome, FrameHomeKind,
     HeapRuntimeSite, ImageContracts, ImageIntegrityError, InstallableImage, NativeExecutionDomain,
-    NativeLoan, NativeReference, NativeResource, NativeStaticBytes, NativeUnique, NativeValue,
-    OutcomeKind, OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget, RootLocation,
-    Safepoint, SourceMapEntry, TrapMapEntry,
+    NativeLoan, NativeReference, NativeResource, NativeStaticBytes, NativeStaticString,
+    NativeStructuralDestination, NativeStructuralOwner, NativeStructuralView, NativeUnique,
+    NativeValue, OutcomeKind, OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget,
+    RootLocation, Safepoint, SourceMapEntry, StructuralFrameCategory, StructuralRuntimeSite,
+    TrapMapEntry,
 };
 pub use lkjscript_contracts::{CapabilityKind, ResourceKind};
 pub use plan::{
@@ -27,7 +29,10 @@ pub use plan::{
     InternalMachineArgument, InternalMachineResult, InternalRuntimeSignature, LayoutIdentity,
     LoanType, LocalId, MachinePlanBuilder, PlanError, ReferenceType, RuntimeCallSlot,
     RuntimeOutcome, Signature, SourceFunctionId, SourceOrigin, StaticBytesIdentity, StoreClass,
-    TrapCode, UniqueType, ValueId, ValueType,
+    StructuralAggregateDescriptor, StructuralAggregateKind, StructuralCallDescriptor,
+    StructuralDestinationType, StructuralKind, StructuralNumericConversion, StructuralOperation,
+    StructuralPayloadKind, StructuralProjectionDescriptor, StructuralProjectionKind,
+    StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType, ValueId, ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 

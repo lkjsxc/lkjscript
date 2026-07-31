@@ -1,11 +1,11 @@
-use super::{list_values_equal, EvalBuffer, EvalValue, Flow};
-use std::cell::RefCell;
-use std::rc::Rc;
+use super::{list_values_equal, EvalValue, Flow};
 
 #[test]
 fn evaluator_list_equality_accepts_limit_and_rejects_limit_plus_one() {
     let limit = 1_000_000;
-    let values = vec![EvalValue::Unit; limit + 1];
+    let values = std::iter::repeat_with(|| EvalValue::Unit)
+        .take(limit + 1)
+        .collect::<Vec<_>>();
     assert_eq!(
         list_values_equal(&values[..limit], &values[..limit], limit).ok(),
         Some(true)
@@ -29,13 +29,13 @@ fn evaluator_list_equality_is_incremental_at_difference_and_length_boundaries() 
 }
 
 #[test]
-fn evaluator_list_equality_propagates_element_comparison_errors() {
-    let buffer = EvalValue::Buf(EvalBuffer {
-        id: 1,
-        bytes: Rc::new(RefCell::new(Vec::new())),
-    });
+fn evaluator_list_equality_propagates_element_comparison_errors(
+) -> Result<(), lkjscript_core::InvalidUniqueKeyWord> {
+    let owner = lkjscript_core::UniqueKeyWord::new((1_u64 << 32) | 1)?;
+    let vector = EvalValue::ByteVector(owner);
     assert!(matches!(
-        list_values_equal(&[buffer], &[EvalValue::Unit], 1),
+        list_values_equal(&[vector], &[EvalValue::Unit], 1),
         Err(Flow::Trap(message)) if message == "equal-value category mismatch"
     ));
+    Ok(())
 }

@@ -13,11 +13,44 @@ fn validate_proto_shape(
             proto.name, proto.arity, proto.locals
         )));
     }
+    if !proto.parameter_structurals.is_empty()
+        && proto.parameter_structurals.len() != usize::from(proto.arity)
+    {
+        return Err(Error::msg(format!(
+            "bytecode {category} {} structural parameter metadata does not match arity",
+            proto.name
+        )));
+    }
+    if !proto.parameter_structural_places.is_empty()
+        && proto.parameter_structural_places.len() != usize::from(proto.arity)
+    {
+        return Err(Error::msg(format!(
+            "bytecode {category} {} structural owner-place metadata does not match arity",
+            proto.name
+        )));
+    }
+    if proto.memory_plan.is_none()
+        && (proto.parameter_structurals.iter().any(Option::is_some)
+            || proto.return_structural.is_some())
+    {
+        return Err(Error::msg(format!(
+            "bytecode {category} {} structural signature lacks a MemoryPlanId",
+            proto.name
+        )));
+    }
     if !proto.parameter_resources.is_empty()
         && proto.parameter_resources.len() != usize::from(proto.arity)
     {
         return Err(Error::msg(format!(
             "bytecode {category} {} resource parameter metadata does not match arity",
+            proto.name
+        )));
+    }
+    if !proto.parameter_resource_places.is_empty()
+        && proto.parameter_resource_places.len() != usize::from(proto.arity)
+    {
+        return Err(Error::msg(format!(
+            "bytecode {category} {} resource owner-place metadata does not match arity",
             proto.name
         )));
     }
@@ -38,18 +71,54 @@ fn validate_proto_shape(
         )));
     }
     for index in 0..usize::from(proto.arity) {
-        let unique = proto.parameter_uniques.get(index).copied().flatten();
-        let place = proto.parameter_unique_places.get(index).copied().flatten();
-        if proto
-            .parameter_resources
+        let structural = proto.parameter_structurals.get(index).copied().flatten();
+        let structural_place = proto
+            .parameter_structural_places
             .get(index)
             .copied()
-            .flatten()
-            .is_some()
-            && unique.is_some()
+            .flatten();
+        let resource = proto.parameter_resources.get(index).copied().flatten();
+        let resource_place = proto
+            .parameter_resource_places
+            .get(index)
+            .copied()
+            .flatten();
+        let unique = proto.parameter_uniques.get(index).copied().flatten();
+        let place = proto.parameter_unique_places.get(index).copied().flatten();
+        if resource.is_some() && (unique.is_some() || structural.is_some())
         {
             return Err(Error::msg(format!(
                 "bytecode {category} {} parameter has overlapping resource and unique metadata",
+                proto.name
+            )));
+        }
+        if resource_place.is_some() && resource.is_none() {
+            return Err(Error::msg(format!(
+                "bytecode {category} {} resource owner-place metadata lacks its parameter",
+                proto.name
+            )));
+        }
+        if resource_place.is_some_and(|place| place >= proto.unique_places) {
+            return Err(Error::msg(format!(
+                "bytecode {category} {} resource owner-place metadata is out of range",
+                proto.name
+            )));
+        }
+        if unique.is_some() && structural.is_some() {
+            return Err(Error::msg(format!(
+                "bytecode {category} {} parameter overlaps unique and structural metadata",
+                proto.name
+            )));
+        }
+        if structural_place.is_some() && structural.is_none() {
+            return Err(Error::msg(format!(
+                "bytecode {category} {} structural owner-place metadata does not match its parameter",
+                proto.name
+            )));
+        }
+        if structural_place.is_some_and(|place| place >= proto.unique_places) {
+            return Err(Error::msg(format!(
+                "bytecode {category} {} structural owner-place metadata is out of range",
                 proto.name
             )));
         }
@@ -71,9 +140,24 @@ fn validate_proto_shape(
             )));
         }
     }
-    if proto.return_resource.is_some() && proto.return_unique.is_some() {
+    if usize::from(proto.arity) > proto.parameter_structural_places.len()
+        && !proto.parameter_structural_places.is_empty()
+    {
+        return Err(Error::msg("bytecode structural parameter place metadata is truncated"));
+    }
+    if usize::from(proto.arity) > proto.parameter_structurals.len()
+        && !proto.parameter_structurals.is_empty()
+    {
+        return Err(Error::msg("bytecode structural parameter metadata is truncated"));
+    }
+    if [proto.return_resource.is_some(), proto.return_unique.is_some(), proto.return_structural.is_some()]
+        .into_iter()
+        .filter(|present| *present)
+        .count()
+        > 1
+    {
         return Err(Error::msg(format!(
-            "bytecode {category} {} has overlapping resource and unique return metadata",
+            "bytecode {category} {} has overlapping resource, unique, or structural return metadata",
             proto.name
         )));
     }

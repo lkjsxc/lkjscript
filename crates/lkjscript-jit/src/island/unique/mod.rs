@@ -52,7 +52,7 @@ impl JitUniqueRuntime {
     pub(super) fn allocate(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError> {
         let size = usize::try_from(size)
             .ok()
-            .filter(|size| *size <= MAX_BUFFER_BYTES)
+            .filter(|size| *size <= MAX_BYTE_STORAGE_BYTES)
             .ok_or_else(|| self.reject())?;
         self.owners.try_reserve(1).map_err(|_| self.heap_limit())?;
         let mut bytes = Vec::new();

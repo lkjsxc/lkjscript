@@ -4,6 +4,21 @@ pub(super) fn exact_ownership_instruction_kind_equal(
     left: &InstructionKind,
     right: &InstructionKind,
 ) -> bool {
+    if matches!(
+        left,
+        InstructionKind::StructuralPublish { .. }
+            | InstructionKind::DestinationCreate { .. }
+            | InstructionKind::DestinationFieldInit { .. }
+            | InstructionKind::DestinationFinish { .. }
+            | InstructionKind::DestinationAbort { .. }
+            | InstructionKind::AggregateFieldBorrow { .. }
+            | InstructionKind::AggregateTag { .. }
+            | InstructionKind::AggregateConsumePayload { .. }
+            | InstructionKind::StringUtf8View { .. }
+            | InstructionKind::StructuralCopy { .. }
+    ) {
+        return left == right;
+    }
     match (left, right) {
         (
             InstructionKind::PlaceInit {

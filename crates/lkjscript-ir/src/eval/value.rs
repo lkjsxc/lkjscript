@@ -1,36 +1,26 @@
-#[derive(Clone)]
-pub struct EvalBuffer {
-    id: u64,
-    bytes: Rc<RefCell<Vec<u8>>>,
-}
-
-impl fmt::Debug for EvalBuffer {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let length = self.bytes.try_borrow().map_or(0, |bytes| bytes.len());
-        formatter
-            .debug_struct("EvalBuffer")
-            .field("id", &self.id)
-            .field("length", &length)
-            .finish()
-    }
-}
-
-impl PartialEq for EvalBuffer {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum EvalValue {
     Unit,
     Bool(bool),
     I64(i64),
     F64(f64),
+    /// Legacy string category retained only for rejected mixed-graph diagnostics.
     Str(String),
+    /// Evaluator-session static string artifact identity.
+    StaticString(u32),
+    /// Evaluator-session static symbol artifact identity.
+    StaticSymbol(u32),
     Symbol(String),
-    /// Transitional traced evaluator buffer.
-    Buf(EvalBuffer),
+    /// Compact owned structural root.
+    StructuralOwner(EvalStructuralOwner),
+    /// Exact root-table projected loan.
+    StructuralView(EvalStructuralView),
+    /// Internal UTF-8 loan; it can only be consumed by byte-slice operations or end-borrow.
+    StructuralUtf8View(EvalStructuralView),
+    /// Private write-once construction destination; never a semantic result.
+    StructuralDestination(EvalStructuralDestination),
+    /// Key-free owned snapshot transferred across the evaluator boundary.
+    ReturnedOwned(lkjscript_core::OwnedValue),
     /// Evaluator-local immutable static constant index.
     StaticBytes(u32),
     /// Execution-owned deterministic immutable-bytes key.
@@ -47,7 +37,8 @@ pub enum EvalValue {
     ReturnedByteVector(Vec<u8>),
     /// Immutable bytes snapshot transferred across the evaluator boundary.
     ReturnedBytes(Vec<u8>),
-    Path(Vec<u8>),
+    /// Execution-owned deterministic opaque-path key.
+    Path(lkjscript_core::UniqueKeyWord),
     Capability(lkjscript_contracts::CapabilityKind),
     Resource(EvalResource),
     Product(ProductId, Vec<Self>),
@@ -69,10 +60,15 @@ impl PartialEq for EvalValue {
             (Self::Bool(left), Self::Bool(right)) => left == right,
             (Self::I64(left), Self::I64(right)) => left == right,
             (Self::F64(left), Self::F64(right)) => left.to_bits() == right.to_bits(),
-            (Self::Str(left), Self::Str(right)) | (Self::Symbol(left), Self::Symbol(right)) => {
-                left == right
-            }
-            (Self::Buf(left), Self::Buf(right)) => left == right,
+            (Self::Str(left), Self::Str(right)) => left == right,
+            (Self::StaticString(left), Self::StaticString(right)) => left == right,
+            (Self::StaticSymbol(left), Self::StaticSymbol(right)) => left == right,
+            (Self::Symbol(left), Self::Symbol(right)) => left == right,
+            (Self::StructuralOwner(left), Self::StructuralOwner(right)) => left == right,
+            (Self::StructuralView(left), Self::StructuralView(right)) => left == right,
+            (Self::StructuralUtf8View(left), Self::StructuralUtf8View(right)) => left == right,
+            (Self::StructuralDestination(left), Self::StructuralDestination(right)) => left == right,
+            (Self::ReturnedOwned(left), Self::ReturnedOwned(right)) => left == right,
             (Self::StaticBytes(left), Self::StaticBytes(right)) => left == right,
             (Self::Bytes(left), Self::Bytes(right)) => left == right,
             (Self::BytesBorrow(left), Self::BytesBorrow(right)) => left == right,

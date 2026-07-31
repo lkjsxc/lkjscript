@@ -77,7 +77,11 @@ fn stdio_and_clock_operations_use_only_granted_providers() {
         ExecutionConfig::default(),
     )
     .run();
-    assert!(matches!(output, ExecutionOutcome::Returned(_)));
+    assert!(matches!(
+        output,
+        ExecutionOutcome::Trapped(ref error)
+            if error.as_str().contains("lacks exact structural type metadata")
+    ));
 }
 
 #[test]

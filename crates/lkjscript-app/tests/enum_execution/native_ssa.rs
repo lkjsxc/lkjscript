@@ -1,77 +1,19 @@
 use super::enum_source_variants::{nested_source, nullary_source};
 use super::*;
-use lkjscript_ir::{
-    verify, EffectSet, FailureBehavior, Instruction, InstructionKind, Safepoint, SsaType,
-    Terminator, ValueId,
-};
-
 fn projected_program() -> lkjscript_ir::VerifiedProgram {
-    let compiled = compile_source(&source(), "enum-project.lkjscript", &Limits::default())
-        .expect("compile enum construction");
-    let mut program = compiled.ssa().program().clone();
-    let function = &mut program.functions[program.main.index().expect("main indexes")];
-    let block = &mut function.blocks[function.entry.index().expect("entry indexes")];
-    let constructor = block
-        .instructions
-        .iter()
-        .find(|instruction| matches!(instruction.kind, InstructionKind::EnumValue { .. }))
-        .cloned()
-        .expect("enum constructor exists");
-    let InstructionKind::EnumValue {
-        enum_id,
-        variant,
-        layout,
-        ..
-    } = constructor.kind
-    else {
-        unreachable!()
-    };
-    let definition = program
-        .enums
-        .iter()
-        .find(|definition| definition.id == enum_id)
-        .expect("enum metadata exists");
-    let selected = definition
-        .variants
-        .iter()
-        .find(|candidate| candidate.id == variant)
-        .expect("variant metadata exists");
-    let metadata = lkjscript_ir::InstructionMetadata {
-        origin: constructor.metadata.origin,
-        effects: EffectSet::READS_MEMORY,
-        safepoint: Safepoint::None,
-        failure: FailureBehavior::None,
-        failure_cleanup: None,
-        frame_state: None,
-    };
-    let test_id = ValueId::new(constructor.id.raw() + 1);
-    block.instructions.push(Instruction {
-        id: test_id,
-        ty: SsaType::Bool,
-        kind: InstructionKind::EnumIsVariant {
-            enum_id,
-            variant,
-            layout,
-            value: constructor.id,
-        },
-        metadata: metadata.clone(),
-    });
-    let projection_id = ValueId::new(test_id.raw() + 1);
-    block.instructions.push(Instruction {
-        id: projection_id,
-        ty: SsaType::I64,
-        kind: InstructionKind::EnumField {
-            enum_id,
-            variant,
-            field: selected.fields[0].id,
-            layout,
-            value: constructor.id,
-        },
-        metadata,
-    });
-    *function.signature.result = SsaType::I64;
-    block.terminator = Terminator::Return(projection_id);
-    verify(program).expect("hand-built projection SSA verifies")
+    let source = concat!(
+        "enum/\nname/\nmaybe\n/name\nforall/\nt\n/forall\nvariants/\n",
+        "variant/\nname/\nnone\n/name\nfields/\n/fields\n/variant\n",
+        "variant/\nname/\nsome\n/name\nfields/\nvariant-field/\nname/\nvalue\n/name\ntype/\nt\n/type\n/variant-field\n/fields\n/variant\n/variants\n/enum\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nmatch/\n",
+        "variant-value/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field/\nname/\nvalue\n/name\n42\n/variant-field\n/fields\n/variant-value\n",
+        "arms/\narm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nsome\n/variant\nfields/\nvariant-field-pattern/\nname/\nvalue\n/name\nbinding/\nname/\nx\n/name\n/binding\n/variant-field-pattern\n/fields\n/variant-pattern\nx\n/arm\n",
+        "arm/\nvariant-pattern/\ntype/\nmaybe/\ni64\n/maybe\n/type\nvariant/\nnone\n/variant\nfields/\n/fields\n/variant-pattern\n0\n/arm\n/arms\n/match\n/main\n",
+    );
+    compile_source(source, "enum-project.lkjscript", &Limits::default())
+        .expect("compile structural enum projection")
+        .ssa()
+        .clone()
 }
 
 #[test]
@@ -92,7 +34,12 @@ fn variant_test_and_active_projection_execute_in_both_generated_tiers() {
         };
         assert_eq!(value.as_i64(), Some(42));
         assert!(execution.stats.native_entries > 0);
-        assert!(execution.stats.runtime_heap_successes >= 3);
+        assert_eq!(execution.stats.runtime_heap_successes, 0);
+        assert_eq!(execution.stats.collector_runtime_invocations, 0);
+        assert!(execution.stats.structural_runtime_calls > 0);
+        assert_eq!(execution.stats.native_structural.live_roots, 0);
+        assert_eq!(execution.stats.native_structural.live_loans, 0);
+        assert_eq!(execution.stats.native_structural.live_destinations, 0);
         assert_eq!(execution.stats.vm_fallbacks, 0);
     }
 }
@@ -105,11 +52,9 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
         &Limits::default(),
     )
     .expect("compile nullary enum");
-    let EvalOutcome::Returned(EvalValue::Enum { physical_tag, .. }) =
-        evaluate(compiled.ssa(), &EvalConfig::default())
-    else {
-        panic!("evaluator returns nullary enum")
-    };
+    let physical_tag = evaluator_owned(&compiled)
+        .enum_physical_tag()
+        .expect("evaluator returns structural nullary enum");
     let ExecutionOutcome::Returned(vm) = run_chunk(
         compiled.bytecode(),
         &lkjscript_vm::ExecutionInputs::default(),
@@ -149,11 +94,9 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
         &Limits::default(),
     )
     .expect("compile nested generic enum");
-    let EvalOutcome::Returned(EvalValue::Enum { physical_tag, .. }) =
-        evaluate(compiled.ssa(), &EvalConfig::default())
-    else {
-        panic!("evaluator returns nested enum")
-    };
+    let physical_tag = evaluator_owned(&compiled)
+        .enum_physical_tag()
+        .expect("evaluator returns nested structural enum");
     let config = JitConfig {
         force_gc_before_allocation: true,
         ..JitConfig::default()
@@ -169,13 +112,20 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
         };
         assert_eq!(value.enum_physical_tag(), Some(physical_tag));
         assert!(value.snapshot_object_count() >= 2);
-        assert!(execution.stats.collections >= 2);
-        assert!(execution.stats.maximum_roots > 0);
-        assert!(execution.stats.code_objects.iter().any(|object| {
-            !object.exact_scalar_stack_maps
-                && object
-                    .runtime_calls
-                    .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
+        assert_eq!(execution.stats.collections, 0);
+        assert_eq!(execution.stats.maximum_roots, 0);
+        assert_eq!(execution.stats.runtime_heap_successes, 0);
+        assert_eq!(execution.stats.collector_runtime_invocations, 0);
+        assert!(execution.stats.structural_runtime_calls > 0);
+        assert!(execution.stats.native_structural.calls > 0);
+        assert_eq!(execution.stats.native_structural.live_roots, 0);
+        assert_eq!(execution.stats.native_structural.live_loans, 0);
+        assert_eq!(execution.stats.native_structural.live_destinations, 0);
+        assert_eq!(execution.stats.native_structural.teardown_failures, 0);
+        assert!(execution.stats.code_objects.iter().all(|object| {
+            !object
+                .runtime_calls
+                .contains(&lkjscript_native::RuntimeCallSlot::HeapDispatch)
         }));
         assert_eq!(execution.stats.vm_fallbacks, 0);
     }

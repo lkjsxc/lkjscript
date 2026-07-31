@@ -1,9 +1,13 @@
 use std::collections::{BTreeSet, VecDeque};
 
 use crate::verify::*;
-use crate::{Function, InstructionKind, IrError, SsaType};
+use crate::{Function, InstructionKind, IrError, Program, SsaType};
 
-pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> crate::Result<()> {
+pub(crate) fn verify_ownership_facts(
+    program: &Program,
+    function: &Function,
+    types: &[SsaType],
+) -> crate::Result<()> {
     let (mut work, entry) = collect_ownership_provenance(function)?;
     let reachable = reachable(function)?;
     for block in &function.blocks {
@@ -22,9 +26,9 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
             continue;
         }
         let has_ownership = block.parameters.iter().any(|parameter| {
-            parameter.owner_place.is_some() || contains_ownership_type(&parameter.ty)
+            parameter.owner_place.is_some() || contains_ownership_type(program, &parameter.ty)
         }) || block.instructions.iter().any(|instruction| {
-            contains_ownership_type(&instruction.ty)
+            contains_ownership_type(program, &instruction.ty)
                 || matches!(
                     instruction.kind,
                     InstructionKind::PlaceInit { .. }
@@ -52,7 +56,7 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
                     transferred: false,
                 },
             );
-        } else if is_affine(&parameter.ty) {
+        } else if is_affine(program, &parameter.ty) {
             initial.affine.insert(
                 parameter.id,
                 AffineFact {
@@ -81,7 +85,7 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
             .ok_or_else(|| IrError::new("SSA entry ownership state is missing"))?,
     )?;
 
-    let nonowned_affine = nonowned_affine_values(function);
+    let nonowned_affine = nonowned_affine_values(program, function);
     while let Some(block_id) = queue.pop_front() {
         queued.remove(&block_id);
         charge_ownership_work(&mut work, 1)?;
@@ -95,8 +99,15 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
         charge_ownership_work(&mut work, ownership_state_cells(state_ref)?)?;
         let state = state_ref.clone();
         let current = block_by_id(function, block_id)?;
-        let successors =
-            process_ownership_block(function, current, state, types, &nonowned_affine, &mut work)?;
+        let successors = process_ownership_block(
+            program,
+            function,
+            current,
+            state,
+            types,
+            &nonowned_affine,
+            &mut work,
+        )?;
         for (successor, successor_state) in successors {
             charge_ownership_work(&mut work, 1)?;
             let successor_index = successor
@@ -113,8 +124,13 @@ pub(crate) fn verify_ownership_facts(function: &Function, types: &[SsaType]) -> 
                             .saturating_add(ownership_state_cells(&successor_state)?),
                     )?;
                     return fail(format!(
-                        "SSA ownership predecessor states do not join exactly at block {}",
-                        successor.raw()
+                        concat!(
+                            "SSA ownership predecessor states do not join exactly at block {}: ",
+                            "previous {previous:?}, incoming {successor_state:?}",
+                        ),
+                        successor.raw(),
+                        previous = previous,
+                        successor_state = successor_state,
                     ));
                 }
                 Some(previous) => {

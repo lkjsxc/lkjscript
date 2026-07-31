@@ -22,7 +22,7 @@ impl FunctionEncoder<'_> {
                 self.zero_rax()?;
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
-            Operation::StaticBytesConst(identity) => {
+            Operation::StaticBytesConst(identity) | Operation::StaticStringConst(identity, _) => {
                 self.load_rax_immediate(identity.opaque_word())?;
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
@@ -94,7 +94,7 @@ impl FunctionEncoder<'_> {
                 self.emit(&[0x48, 0x83, 0xf0, 0x01])?;
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
-            Operation::ReadLocal(local) => {
+            Operation::ReadLocal(local) | Operation::ObserveLocal(local) => {
                 self.load_rax(self.local_offset(*local)?)?;
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }
@@ -127,6 +127,9 @@ impl FunctionEncoder<'_> {
                     arguments,
                     RelocationTarget::Runtime(*slot),
                 )?;
+            }
+            Operation::StructuralCall(descriptor, arguments) => {
+                self.emit_structural_call(instruction, descriptor, arguments)?;
             }
             Operation::HeapCall(descriptor, arguments) => {
                 self.emit_heap_call(instruction, descriptor, arguments)?;

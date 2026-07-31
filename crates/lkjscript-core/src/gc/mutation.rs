@@ -1,4 +1,7 @@
-use super::{allocation::estimated_object_bytes, GcHeap};
+use super::{
+    allocation::{estimated_object_bytes, legacy_payload_is_valid},
+    GcHeap,
+};
 use crate::{Error, HeapObj, ResourceLimitKind, Result, Value};
 
 impl GcHeap {
@@ -20,9 +23,6 @@ impl GcHeap {
             .get(index)
             .and_then(Option::as_ref)
             .ok_or_else(|| Error::msg("bad heap index"))?;
-        if matches!(source, HeapObj::Path(_)) {
-            return Err(Error::msg("Path is immutable"));
-        }
         let old = clone_object_for_transaction(source);
         let old_bytes = estimated_object_bytes(&old);
         let result = {
@@ -48,6 +48,12 @@ impl GcHeap {
         if !same_object_layout(&old, new_object) {
             self.objs[index] = Some(old);
             return Err(Error::msg("heap mutation changed object layout"));
+        }
+        if !legacy_payload_is_valid(new_object) {
+            self.objs[index] = Some(old);
+            return Err(Error::msg(
+                "legacy traced object cannot contain deterministic owners or capabilities",
+            ));
         }
         let new_bytes = estimated_object_bytes(new_object);
         if new_bytes > old_bytes {
@@ -84,9 +90,7 @@ impl GcHeap {
 
 fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
     match (old, new) {
-        (HeapObj::Str(_), HeapObj::Str(_))
-        | (HeapObj::Pair { .. }, HeapObj::Pair { .. })
-        | (HeapObj::Buf(_), HeapObj::Buf(_)) => true,
+        (HeapObj::Pair { .. }, HeapObj::Pair { .. }) => true,
         (
             HeapObj::Product {
                 product: old_product,
@@ -114,31 +118,16 @@ fn same_object_layout(old: &HeapObj, new: &HeapObj) -> bool {
 }
 
 fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
-    fn clone_string(text: &str, capacity: usize) -> String {
-        let mut clone = String::with_capacity(capacity);
-        clone.push_str(text);
-        clone
-    }
     fn clone_values(values: &[Value], capacity: usize) -> Vec<Value> {
         let mut clone = Vec::with_capacity(capacity);
         clone.extend_from_slice(values);
         clone
     }
     match object {
-        HeapObj::Str(text) => HeapObj::Str(clone_string(text, text.capacity())),
         HeapObj::Pair { car, cdr } => HeapObj::Pair {
             car: *car,
             cdr: *cdr,
         },
-        HeapObj::Buf(bytes) | HeapObj::Path(bytes) => {
-            let mut clone = Vec::with_capacity(bytes.capacity());
-            clone.extend_from_slice(bytes);
-            if matches!(object, HeapObj::Buf(_)) {
-                HeapObj::Buf(clone)
-            } else {
-                HeapObj::Path(clone)
-            }
-        }
         HeapObj::Product { product, fields } => HeapObj::Product {
             product: *product,
             fields: clone_values(fields, fields.capacity()),
@@ -152,26 +141,5 @@ fn clone_object_for_transaction(object: &HeapObj) -> HeapObj {
             physical_tag: *physical_tag,
             active_payload: clone_values(active_payload, active_payload.capacity()),
         },
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn path_objects_reject_mutation_before_invoking_the_closure() {
-        let mut heap = GcHeap::default();
-        let path = heap
-            .alloc(HeapObj::Path(b"/tmp/immutable".to_vec()))
-            .expect("path");
-        let mut invoked = false;
-        let result = heap.mutate(path, |_| {
-            invoked = true;
-            Ok(())
-        });
-        assert!(result.is_err());
-        assert!(!invoked);
     }
 }

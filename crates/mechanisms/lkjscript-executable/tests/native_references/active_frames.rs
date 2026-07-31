@@ -8,7 +8,7 @@ fn active_frame_bound_uses_unregistered_epilogue_and_reference_images_repeat(
     let installer = ExecutableInstaller::default();
     let installed = installer.install(image)?;
     let config = NativeInvocationConfig::default().with_max_active_frames(1);
-    let report = installed.invoke_with_config(entries.caller, &[buf(9)], &config)?;
+    let report = installed.invoke_with_config(entries.caller, &[product_ref(9)], &config)?;
     assert_eq!(
         report.outcome(),
         InvocationOutcome::ResourceLimitExceeded(NativeResourceLimitKind::ActiveFrames)
@@ -23,10 +23,13 @@ fn active_frame_bound_uses_unregistered_epilogue_and_reference_images_repeat(
         let installed = installer.install(image)?;
         let report = installed.invoke_with_config(
             entries.exact_local,
-            &[buf(7), buf(8)],
+            &[product_ref(7), product_ref(8)],
             &NativeInvocationConfig::default(),
         )?;
-        assert_eq!(report.outcome(), InvocationOutcome::Returned(buf(7)));
+        assert_eq!(
+            report.outcome(),
+            InvocationOutcome::Returned(product_ref(7))
+        );
         assert_eq!(report.active_frame_depth(), 0);
         drop(installed);
         assert_eq!(installer.usage().objects(), 0);

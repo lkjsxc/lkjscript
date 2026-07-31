@@ -17,7 +17,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             let value = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
             let provider = stdio(vm)?;
-            let text = display_value(&vm.arena, vm.chunk, value)?;
+            let text = data::display::value(vm, value)?;
             vm.record_output(text.len())?;
             write_output(provider.as_ref(), text.as_bytes(), "print")?;
             vm.push(Value::UNIT);
@@ -51,9 +51,9 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.ensure_host_deadline_support("write-string", false)?;
             let value = vm.pop()?;
             vm.require_capability(lkjscript_core::CapabilityKind::Stdio)?;
-            let length = crate::host_ext::as_str(&vm.arena, value)?.len();
-            vm.record_output(length)?;
-            vm.push(write_str(stdio(vm)?.as_ref(), &vm.arena, value)?);
+            let text = structural_ops::copy_string(vm, value)?;
+            vm.record_output(text.len())?;
+            vm.push(write_str(stdio(vm)?.as_ref(), &text)?);
             Ok(())
         }
         _ => unreachable!("opcode family checked"),

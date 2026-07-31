@@ -14,6 +14,7 @@ pub enum ImageIntegrityError {
     Safepoint,
     RootRequirement,
     HeapRuntimeSite,
+    StructuralRuntimeSite,
     SourceMap,
     TrapMap,
     OutcomeMap,
@@ -40,6 +41,7 @@ impl fmt::Display for ImageIntegrityError {
                 "installable image stack map disagrees with its verifier requirement"
             }
             Self::HeapRuntimeSite => "installable image heap runtime site is invalid",
+            Self::StructuralRuntimeSite => "installable image structural runtime site is invalid",
             Self::SourceMap => "installable image source map is invalid",
             Self::TrapMap => "installable image trap map is invalid",
             Self::OutcomeMap => "installable image outcome map is invalid",

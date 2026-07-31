@@ -112,6 +112,7 @@ fn parameter_mode(ty: &Type, resource_consumed: bool) -> MemoryParameterMode {
         Type::Bytes | Type::ByteVector => MemoryParameterMode::Consume,
         Type::ByteSlice => MemoryParameterMode::BorrowShared,
         Type::ByteSliceMut => MemoryParameterMode::BorrowExclusive,
+        Type::Str | Type::Path => MemoryParameterMode::BorrowShared,
         Type::Resource(_) if resource_consumed => MemoryParameterMode::Consume,
         Type::Resource(_) => MemoryParameterMode::BorrowExclusive,
         _ => MemoryParameterMode::Copy,
@@ -127,9 +128,8 @@ fn operation_parameter_mode(operation: Operation, ty: &Type) -> MemoryParameterM
 fn result_mode(ty: &Type) -> MemoryResultMode {
     match ty {
         Type::Bytes | Type::ByteVector => MemoryResultMode::Owned,
-        Type::ByteSlice | Type::ByteSliceMut => {
-            MemoryResultMode::Borrowed
-        }
+        Type::ByteSlice | Type::ByteSliceMut => MemoryResultMode::Trivial,
+        Type::Str | Type::Path | Type::Product(_) | Type::Enum { .. } => MemoryResultMode::Owned,
         Type::Resource(_) => MemoryResultMode::External,
         _ => MemoryResultMode::Trivial,
     }

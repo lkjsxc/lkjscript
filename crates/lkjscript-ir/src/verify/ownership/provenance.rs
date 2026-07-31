@@ -36,7 +36,8 @@ pub(crate) fn collect_ownership_provenance(
                 InstructionKind::PlaceInit { place, .. } => {
                     proven_places.insert(place);
                 }
-                InstructionKind::Borrow { place, loan, .. } => {
+                InstructionKind::Borrow { place, loan, .. }
+                | InstructionKind::AggregateFieldBorrow { place, loan, .. } => {
                     if !loan_ids.insert(loan) {
                         return fail("SSA has duplicate LoanId ownership facts");
                     }

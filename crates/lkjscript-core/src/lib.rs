@@ -25,14 +25,22 @@ pub use budget::{
 pub use bytecode::{
     Chunk, ConstId, Constant, EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId,
     EnumMetadata, EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupPlan,
-    FailureCleanupRange, FunctionProto, ProductFieldRef, ProductId, ProductMetadata,
-    ResourceReturnKind, RuntimeLayoutId, UniqueValueKind, VariantFieldId, VariantId,
+    FailureCleanupRange, FunctionProto, MemoryPlanId, ProductFieldRef, ProductId, ProductMetadata,
+    ResourceReturnKind, RuntimeLayoutId, StructuralAggregateFieldRef,
+    StructuralDestinationFieldRef, StructuralDestinationId, StructuralDestinationMetadata,
+    StructuralFieldMetadata, StructuralFieldRoute, StructuralLayoutId, StructuralLayoutKind,
+    StructuralLayoutMetadata, StructuralPayloadRef, StructuralRepresentationId,
+    StructuralRepresentationMetadata, StructuralStorage, StructuralTypeId, StructuralTypeKind,
+    StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout,
+    UniqueValueKind, VariantFieldId, VariantId, MAX_STRUCTURAL_DESTINATIONS,
+    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_OPERATION_REFS,
+    MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use gc::{GcConfig, GcHeap, GcLimit, GcStats};
 pub use limits::{
-    ExecutionConfig, Limits, ValidationLimits, MAX_BUFFER_BYTES, MAX_BULK_IO_BYTES,
-    MAX_BYTECODE_METADATA_BYTES, MAX_BYTECODE_TABLE_ENTRIES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES,
+    ExecutionConfig, Limits, ValidationLimits, MAX_BULK_IO_BYTES, MAX_BYTECODE_METADATA_BYTES,
+    MAX_BYTECODE_TABLE_ENTRIES, MAX_BYTE_STORAGE_BYTES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES,
     MAX_CONSTANT_DATA_BYTES, MAX_DIR_CHILDREN, MAX_FUNCTION_CODE_BYTES, MAX_LIST_EQUAL_STEPS,
     MAX_NEST_DEPTH, MAX_PRODUCT_FIELDS, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
 };
@@ -42,9 +50,12 @@ pub use numeric_conversion::{
 pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{
     decode_execution_outcome, encode_execution_outcome, CleanupFailure, CleanupFailureLimits,
-    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, HostError, OwnedValue,
-    ResourceLimitKind, Trap, DEFAULT_MAX_CLEANUP_FAILURES, DEFAULT_MAX_CLEANUP_FAILURE_BYTES,
-    MAX_CLEANUP_FAILURES, MAX_CLEANUP_FAILURE_BYTES,
+    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, ExecutionOutcomeCodecLimits,
+    HostError, OwnedValue, ResourceLimitKind, StructuralSnapshotLimits, StructuralSnapshotMetrics,
+    Trap, DEFAULT_MAX_CLEANUP_FAILURES, DEFAULT_MAX_CLEANUP_FAILURE_BYTES, MAX_CLEANUP_FAILURES,
+    MAX_CLEANUP_FAILURE_BYTES, MAX_STRUCTURAL_SNAPSHOT_BYTES, MAX_STRUCTURAL_SNAPSHOT_DEPTH,
+    MAX_STRUCTURAL_SNAPSHOT_FIELDS, MAX_STRUCTURAL_SNAPSHOT_NODES,
+    MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES, MAX_STRUCTURAL_SNAPSHOT_WORK,
 };
 pub use prelude::*;
 pub use profile::{
@@ -59,17 +70,23 @@ pub use resource_table::{
 };
 pub use sha256::sha256;
 pub use structural::{
-    ByteVectorKey, BytesKey, DomainClass, DomainKey, InvalidUniqueKeyWord,
-    InvalidUniqueStoreLimits, LayoutIdentity, PathKey, PoolId, PoolMetrics, PoolPartition,
-    RegionMetrics, RegionOwner, RegionRef, RegionReleaseReport, RegionStore, RootClass, RootKey,
-    SealFailure, SealedBorrow, SealedBuilder, SealedOwner, SealedRef, SealedRegionMetrics,
-    SealedRegionStore, SealedReleaseReport, SealedUpgrade, SemanticTypeIdentity, StaticBytes,
-    StructuralBorrow, StructuralBorrowKey, StructuralError, StructuralLimit, StructuralLimits,
+    ByteVectorKey, BytesKey, DestinationCleanupReport, DomainClass, DomainKey,
+    InlineStructuralValue, InvalidUniqueKeyWord, InvalidUniqueStoreLimits, LayoutIdentity, PathKey,
+    PoolId, PoolMetrics, PoolPartition, RegionMetrics, RegionOwner, RegionRef, RegionReleaseReport,
+    RegionStore, RootClass, RootKey, SealFailure, SealedBorrow, SealedBuilder, SealedOwner,
+    SealedRef, SealedRegionMetrics, SealedRegionStore, SealedReleaseReport, SealedUpgrade,
+    SemanticPayload, SemanticTypeIdentity, SemanticValue, StaticArtifactPayload, StaticBytes,
+    StaticStructuralArtifact, StaticStructuralLeaf, StructuralBorrow, StructuralBorrowKey,
+    StructuralDestinationKey, StructuralError, StructuralEvent, StructuralEventKind,
+    StructuralEventLog, StructuralFieldPath, StructuralInitializationFailure, StructuralKind,
+    StructuralLimit, StructuralLimits, StructuralProjection, StructuralPublishFailure,
     StructuralRootOwnership, StructuralRootState, StructuralRootTable, StructuralRootTableError,
     StructuralRootTableLimit, StructuralRootTableLimits, StructuralRootTableStats,
-    StructuralRuntime, StructuralRuntimeId, StructuralRuntimeMetrics, StructuralValueKey,
-    TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId,
-    UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
+    StructuralRuntime, StructuralRuntimeId, StructuralRuntimeMetrics, StructuralType,
+    StructuralValueError, StructuralValueKey, StructuralValueLimit, StructuralValueRuntime,
+    StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics, StructuralViewKey, TypedPool,
+    UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
+    UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
 };
 pub use validation::{validate_chunk, ValidatedChunk};
 pub use value::{CapabilityKind, HeapObj, ResourceKind, Value};

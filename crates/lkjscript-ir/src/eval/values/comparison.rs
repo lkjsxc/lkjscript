@@ -26,11 +26,18 @@ pub(crate) fn value_equal(left: &EvalValue, right: &EvalValue) -> std::result::R
         (EvalValue::Bool(left), EvalValue::Bool(right)) => Ok(left == right),
         (EvalValue::I64(left), EvalValue::I64(right)) => Ok(left == right),
         (EvalValue::F64(left), EvalValue::F64(right)) => Ok(left == right),
-        (EvalValue::Str(left), EvalValue::Str(right))
-        | (EvalValue::Symbol(left), EvalValue::Symbol(right)) => Ok(left == right),
-        (EvalValue::Path(left), EvalValue::Path(right)) => Ok(left == right),
+        (EvalValue::StaticSymbol(left), EvalValue::StaticSymbol(right)) => Ok(left == right),
+        (EvalValue::Symbol(left), EvalValue::Symbol(right)) => Ok(left == right),
         (EvalValue::Resource(_), _) | (_, EvalValue::Resource(_)) => Err(Flow::Trap(
             "typed resources cannot be compared as values".into(),
+        )),
+        (EvalValue::StaticString(_), _)
+        | (_, EvalValue::StaticString(_))
+        | (EvalValue::StructuralOwner(_), _)
+        | (_, EvalValue::StructuralOwner(_))
+        | (EvalValue::StructuralView(_), _)
+        | (_, EvalValue::StructuralView(_)) => Err(Flow::Trap(
+            "legacy list cannot contain structural values".into(),
         )),
         (
             EvalValue::Enum {
@@ -73,7 +80,7 @@ pub(crate) fn value_equal(left: &EvalValue, right: &EvalValue) -> std::result::R
 }
 
 pub(crate) fn unary<F>(
-    arguments: &[EvalValue],
+    arguments: &[&EvalValue],
     operation: F,
 ) -> std::result::Result<EvalValue, Flow>
 where
@@ -87,7 +94,7 @@ where
 }
 
 pub(crate) fn binary<F>(
-    arguments: &[EvalValue],
+    arguments: &[&EvalValue],
     operation: F,
 ) -> std::result::Result<EvalValue, Flow>
 where
@@ -104,7 +111,7 @@ where
 }
 
 pub(crate) fn ternary<F>(
-    arguments: &[EvalValue],
+    arguments: &[&EvalValue],
     operation: F,
 ) -> std::result::Result<EvalValue, Flow>
 where
@@ -124,7 +131,7 @@ where
 }
 
 pub(crate) fn exact_arity(
-    arguments: &[EvalValue],
+    arguments: &[&EvalValue],
     expected: usize,
 ) -> std::result::Result<(), Flow> {
     if arguments.len() == expected {

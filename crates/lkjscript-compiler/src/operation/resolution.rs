@@ -56,7 +56,7 @@ impl Operation {
                         "is-same-object: operands must have the same type, got {left} and {right}"
                     ));
                 }
-                if !matches!(left, Type::Buf) {
+                if !matches!(left, Type::Resource(_)) {
                     return Err(format!(
                         "is-same-object: type {left} does not have object identity"
                     ));

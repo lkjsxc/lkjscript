@@ -3,24 +3,29 @@ use super::*;
 #[test]
 fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let buffer = ValueType::Reference(ReferenceType::Buf);
+    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
+    let operation = || HeapOperation::WithProductField {
+        product: 0,
+        field: 0,
+        field_type: ValueType::I64,
+    };
     assert_eq!(
         HeapCallDescriptor::new(
-            HeapOperation::BufSet,
-            vec![buffer, ValueType::I64],
-            ValueType::Unit,
-            AllocationClass::None,
-            StoreClass::Scalar,
+            operation(),
+            vec![product],
+            product,
+            AllocationClass::Bounded,
+            StoreClass::Initialization,
         ),
         Err(PlanError::InvalidHeapCall)
     );
     assert_eq!(
         HeapCallDescriptor::new(
-            HeapOperation::BufSet,
-            vec![buffer, ValueType::I64, ValueType::I64],
-            ValueType::Unit,
-            AllocationClass::Bounded,
-            StoreClass::Scalar,
+            operation(),
+            vec![product, ValueType::I64],
+            product,
+            AllocationClass::None,
+            StoreClass::Initialization,
         ),
         Err(PlanError::InvalidHeapCall)
     );
@@ -28,22 +33,21 @@ fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
     let mut plan = MachinePlanBuilder::new();
     let function = plan.declare_function(
         SourceFunctionId::new(77),
-        Signature::new(vec![buffer], ValueType::Unit)?,
+        Signature::new(vec![product, ValueType::I64], product)?,
     )?;
     let mut builder = plan.function_builder(function)?;
     let entry = builder.create_block()?;
     builder.set_entry(entry)?;
-    let input = builder.parameter(0)?;
-    let index = builder.i64_const(entry, 0)?;
-    let byte = builder.i64_const(entry, 255)?;
+    let owner = builder.parameter(0)?;
+    let replacement = builder.parameter(1)?;
     let descriptor = HeapCallDescriptor::new(
-        HeapOperation::BufSet,
-        vec![buffer, ValueType::I64, ValueType::I64],
-        ValueType::Unit,
-        AllocationClass::None,
-        StoreClass::Scalar,
+        operation(),
+        vec![product, ValueType::I64],
+        product,
+        AllocationClass::Bounded,
+        StoreClass::Initialization,
     )?;
-    let result = builder.heap_call(entry, descriptor, vec![input, index, byte])?;
+    let result = builder.heap_call(entry, descriptor, vec![owner, replacement])?;
     builder.return_value(entry, result)?;
     plan.define_function(builder.finish())?;
     let image = encode(
@@ -51,11 +55,8 @@ fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
         EncodingConfig::default(),
     )?;
     assert_eq!(image.heap_runtime_sites().len(), 1);
-    assert_eq!(image.heap_runtime_sites()[0].arguments().len(), 3);
-    assert_eq!(
-        image.heap_runtime_sites()[0].result().value_type(),
-        ValueType::Unit
-    );
+    assert_eq!(image.heap_runtime_sites()[0].arguments().len(), 2);
+    assert_eq!(image.heap_runtime_sites()[0].result().value_type(), product);
     assert!(image
         .runtime_calls()
         .contains(&RuntimeCallSlot::HeapDispatch));

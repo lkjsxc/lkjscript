@@ -51,6 +51,9 @@ impl<J: RuntimeTier> Vm<'_, J> {
                 self.execute_failure_action(frame, action);
             }
         }
+        if let Err(error) = structural_ops::cleanup_failure_roots(self) {
+            self.record_failure(CleanupSubject::UniqueStorage, error.to_string());
+        }
     }
 
     fn execute_failure_action(&mut self, frame: usize, action: FailureCleanupAction) {
@@ -62,7 +65,18 @@ impl<J: RuntimeTier> Vm<'_, J> {
             FailureCleanupAction::DropResource { local, kind, .. } => {
                 (local, CleanupSubject::Resource(kind))
             }
+            FailureCleanupAction::EndStructuralBorrow { local, .. }
+            | FailureCleanupAction::DropStructural { local, .. }
+            | FailureCleanupAction::AbortStructuralDestination { local, .. } => {
+                (local, CleanupSubject::UniqueStorage)
+            }
         };
+        if let Some(result) = structural_ops::cleanup_failure_action(self, frame, action) {
+            if let Err(error) = result {
+                self.record_failure(subject, error.to_string());
+            }
+            return;
+        }
         let Some(index) = self
             .frames
             .get(frame)
@@ -80,7 +94,18 @@ impl<J: RuntimeTier> Vm<'_, J> {
             return;
         }
         *slot = Value::INVALID;
+        if let FailureCleanupAction::DropResource { kind, .. } = action {
+            if let Some(result) = structural_ops::drop_resource_adapter(self, value, kind) {
+                if let Err(error) = result {
+                    self.record_failure(subject, error.to_string());
+                }
+                return;
+            }
+        }
         let result = match action {
+            FailureCleanupAction::EndBorrow { .. } if structural_ops::is_byte_view(self, value) => {
+                structural_ops::end_byte_view(self, value)
+            }
             FailureCleanupAction::EndBorrow { .. } => self.unique.end_borrow(value),
             FailureCleanupAction::DropUnique { place, .. } => {
                 let result = self.unique.drop_owner(value);
@@ -104,6 +129,11 @@ impl<J: RuntimeTier> Vm<'_, J> {
                 }
                 _ => self.resources.close(value).map(|_| ()),
             },
+            FailureCleanupAction::EndStructuralBorrow { .. }
+            | FailureCleanupAction::DropStructural { .. }
+            | FailureCleanupAction::AbortStructuralDestination { .. } => {
+                Err(Error::msg("structural failure cleanup dispatch mismatch"))
+            }
         };
         if let Err(error) = result {
             self.record_failure(subject, error.to_string());
@@ -113,6 +143,12 @@ impl<J: RuntimeTier> Vm<'_, J> {
     fn record_failure(&mut self, subject: CleanupSubject, message: String) {
         self.cleanup_failures
             .push(CleanupPhase::Ordinary, subject, message);
+    }
+
+    pub(super) fn restore_structural_handoffs(&mut self) {
+        if let Err(error) = structural_ops::restore_handoffs(self) {
+            self.record_failure(CleanupSubject::UniqueStorage, error.to_string());
+        }
     }
 
     pub(super) fn current_failure_offset(&self) -> usize {

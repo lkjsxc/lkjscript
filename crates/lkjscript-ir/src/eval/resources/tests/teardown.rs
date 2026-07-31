@@ -21,8 +21,11 @@ fn trap_and_exit_preserve_primary_outcomes_during_reverse_emergency_cleanup() {
             .prepare_statement(&connection, true)
             .expect("prepare statement");
 
-        let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary.clone());
-        assert_eq!(outcome, primary);
+        let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary);
+        match index {
+            0 => assert_eq!(outcome, EvalOutcome::Trapped("primary trap".into())),
+            _ => assert_eq!(outcome, EvalOutcome::Exited(7)),
+        }
         assert_eq!(teardown.ordinary_obligations, 3);
         assert_eq!(teardown.emergency_obligations.len(), 3);
         assert_eq!(teardown.cleanup_attempts.len(), 3);
@@ -88,8 +91,8 @@ fn cleanup_failures_are_ordered_bounded_and_attached_to_primary() {
     }
 
     let primary = EvalOutcome::Trapped("primary".into());
-    let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary.clone());
-    assert_eq!(outcome.primary(), &primary);
+    let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary);
+    assert_eq!(outcome.primary(), &EvalOutcome::Trapped("primary".into()));
     let failures = outcome.cleanup_failures().expect("attached failures");
     assert_eq!(failures.retained().len(), 1);
     assert_eq!(
@@ -110,8 +113,8 @@ fn successful_teardown_reports_unmet_ordinary_invariant_separately() {
         .acquire_owned(ResourceKind::TerminalSession, true)
         .expect("acquire terminal session");
     let primary = EvalOutcome::Returned(EvalValue::Unit);
-    let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary.clone());
-    assert_eq!(outcome, primary);
+    let (outcome, teardown) = finish_evaluation_with_report(&mut resources, primary);
+    assert_eq!(outcome, EvalOutcome::Returned(EvalValue::Unit));
     assert_eq!(teardown.ordinary_obligations, 1);
     assert_eq!(teardown.emergency_obligations.len(), 1);
     assert_eq!(teardown.cleanup_attempts.len(), 1);

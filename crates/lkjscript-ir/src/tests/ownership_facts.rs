@@ -77,7 +77,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
         },
         Instruction {
             id: ValueId::new(3),
-            ty: owned_buf_type(),
+            ty: byte_vector_type(),
             kind: InstructionKind::Move {
                 place: PlaceId::new(0),
                 value: ValueId::new(0),
@@ -105,7 +105,7 @@ fn verifier_rejects_malformed_move_borrow_and_loan_facts() {
     copied.functions[1].blocks[0].instructions[0].kind = InstructionKind::Copy(ValueId::new(0));
     assert!(verify(copied).is_err());
     let mut wrong_move = valid.clone();
-    wrong_move.functions[1].blocks[0].instructions[0].ty = SsaType::Buf;
+    wrong_move.functions[1].blocks[0].instructions[0].ty = SsaType::I64;
     assert!(verify(wrong_move).is_err());
 
     let mut unknown_place = valid.clone();

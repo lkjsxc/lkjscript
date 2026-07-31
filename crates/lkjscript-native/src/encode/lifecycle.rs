@@ -115,10 +115,14 @@ impl FunctionEncoder<'_> {
                 ValueType::I64
                 | ValueType::Bool
                 | ValueType::StaticBytes
+                | ValueType::StaticString(_)
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)
+                | ValueType::StructuralOwner(_)
+                | ValueType::StructuralView(_)
+                | ValueType::StructuralDestination(_)
                 | ValueType::Reference(_) => {
                     let scratch = [SCRATCH_INTEGER_ARGUMENT_0, SCRATCH_INTEGER_ARGUMENT_1]
                         .get(integer_index)

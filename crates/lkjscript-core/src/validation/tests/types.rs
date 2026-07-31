@@ -6,37 +6,31 @@ fn bulk_byte_opcodes_reject_malformed_type_stacks() {
     read.main.code = vec![
         Op::Unit as u8,
         Op::Unit as u8,
-        Op::Unit as u8,
-        Op::Unit as u8,
         Op::SysReadInto as u8,
         Op::Return as u8,
     ];
-    assert!(error(read).contains("i64"));
+    assert!(error(read).contains("byte view"));
 
     let mut from = unit_chunk();
-    from.main.code = vec![Op::Unit as u8, Op::BufFromStr as u8, Op::Return as u8];
+    from.main.code = vec![
+        Op::Unit as u8,
+        Op::ConvertStringToBytes as u8,
+        Op::Return as u8,
+    ];
     assert!(error(from).contains("string"));
 
     let mut random = unit_chunk();
     random.main.code = vec![
         Op::Unit as u8,
         Op::Unit as u8,
-        Op::Unit as u8,
-        Op::Unit as u8,
         Op::SysRandomFill as u8,
         Op::Return as u8,
     ];
-    assert!(error(random).contains("i64"));
+    assert!(error(random).contains("byte view"));
 
     let mut sha256 = unit_chunk();
-    sha256.main.code = vec![
-        Op::Unit as u8,
-        Op::Unit as u8,
-        Op::Unit as u8,
-        Op::SysSha256 as u8,
-        Op::Return as u8,
-    ];
-    assert!(error(sha256).contains("i64"));
+    sha256.main.code = vec![Op::Unit as u8, Op::SysSha256 as u8, Op::Return as u8];
+    assert!(error(sha256).contains("byte view"));
 
     let mut fsync = unit_chunk();
     fsync.main.code = vec![Op::Unit as u8, Op::SysFsync as u8, Op::Return as u8];
@@ -91,6 +85,25 @@ fn typed_resource_kinds_reject_cross_domain_bytecode() {
     ];
     let message = error(escape);
     assert!(message.contains("cannot escape from main"), "{message}");
+
+    let live_local = resource_parameter_chunk(vec![Op::Unit as u8, Op::Return as u8]);
+    let message = error(live_local);
+    assert!(message.contains("untransferred owner"), "{message}");
+
+    let duplicate = resource_parameter_chunk(vec![
+        Op::LoadLocal as u8,
+        0,
+        Op::Dup as u8,
+        Op::Return as u8,
+    ]);
+    let message = error(duplicate);
+    assert!(message.contains("cannot forge a unique owner"), "{message}");
+
+    let mut borrowed =
+        resource_parameter_chunk(vec![Op::LoadLocal as u8, 0, Op::ResourceDrop as u8]);
+    borrowed.protos[0].parameter_resource_places[0] = None;
+    borrowed.protos[0].unique_places = 0;
+    assert!(error(borrowed).contains("borrowed resource cannot be consumed"));
 }
 
 #[test]
@@ -101,12 +114,17 @@ fn resource_call_and_return_metadata_is_enforced() {
         name: "resource-parameter".into(),
         arity: 1,
         locals: 1,
+        memory_plan: None,
+        parameter_structurals: Vec::new(),
+        parameter_structural_places: Vec::new(),
+        return_structural: None,
         parameter_resources: vec![Some(crate::ResourceKind::FileReader)],
+        parameter_resource_places: vec![Some(0)],
         return_resource: None,
         parameter_uniques: Vec::new(),
         parameter_unique_places: Vec::new(),
         return_unique: None,
-        unique_places: 0,
+        unique_places: 1,
         failure_cleanups: Vec::new(),
         failure_cleanup_ranges: Vec::new(),
         code: vec![Op::LoadLocal as u8, 0, 0, Op::Return as u8],
@@ -126,12 +144,17 @@ fn resource_call_and_return_metadata_is_enforced() {
 
     let mut returned = unit_chunk();
     returned.protos.push(FunctionProto {
-        name: "resource-return".into(),
-        arity: 0,
-        locals: 0,
-        parameter_resources: Vec::new(),
+        name: "borrowed-resource-return".into(),
+        arity: 1,
+        locals: 1,
+        memory_plan: None,
+        parameter_structurals: Vec::new(),
+        parameter_structural_places: Vec::new(),
+        return_structural: None,
+        parameter_resources: vec![Some(crate::ResourceKind::InputStream)],
+        parameter_resource_places: vec![None],
         return_resource: Some(crate::ResourceReturnKind::Resource(
-            crate::ResourceKind::FileReader,
+            crate::ResourceKind::InputStream,
         )),
         parameter_uniques: Vec::new(),
         parameter_unique_places: Vec::new(),
@@ -139,10 +162,24 @@ fn resource_call_and_return_metadata_is_enforced() {
         unique_places: 0,
         failure_cleanups: Vec::new(),
         failure_cleanup_ranges: Vec::new(),
-        code: vec![Op::Unit as u8, Op::Return as u8],
+        code: vec![Op::LoadLocal as u8, 0, 0, Op::Return as u8],
     });
     let message = error(returned);
     assert!(message.contains("return does not match"), "{message}");
+}
+
+fn resource_parameter_chunk(code: Vec<u8>) -> Chunk {
+    let mut chunk = unit_chunk();
+    let mut proto = Chunk::new().main;
+    proto.name = "owned-resource-parameter".into();
+    proto.arity = 1;
+    proto.locals = 1;
+    proto.parameter_resources = vec![Some(crate::ResourceKind::FileReader)];
+    proto.parameter_resource_places = vec![Some(0)];
+    proto.unique_places = 1;
+    proto.code = code;
+    chunk.protos.push(proto);
+    chunk
 }
 
 #[test]

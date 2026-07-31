@@ -1,4 +1,16 @@
-use super::{lower_type, LayoutInterner, LoweringError, LoweringFailureCode, SsaType};
+use super::{lower_type, FunctionId, LayoutInterner, LoweringError, LoweringFailureCode, SsaType};
+
+#[test]
+fn source_string_and_path_types_have_no_legacy_native_reference_lowering() {
+    for ty in [SsaType::Str, SsaType::Path] {
+        let error = lower_type(FunctionId::new(0), &ty, &LayoutInterner::default())
+            .expect_err("source structural type must fail closed before native entry");
+        assert_eq!(error.code(), LoweringFailureCode::UnsupportedType);
+        assert!(error
+            .detail()
+            .contains("no compiler-produced native structural owner"));
+    }
+}
 
 #[test]
 fn nested_layout_interner_is_injective_for_previous_result_tag_collision() {
@@ -20,6 +32,7 @@ fn nested_layout_interner_is_injective_for_previous_result_tag_collision() {
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),
         enum_layouts: std::collections::HashMap::new(),
+        structural: Default::default(),
         next: LayoutInterner::FIRST_NESTED_IDENTITY,
     };
     layouts.intern(&first).expect("first exact layout");
@@ -33,6 +46,7 @@ fn layout_identity_exhaustion_is_structured() {
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),
         enum_layouts: std::collections::HashMap::new(),
+        structural: Default::default(),
         next: u32::MAX,
     };
     assert!(matches!(layouts.intern(&ty), Err(LoweringError { .. })));
@@ -52,6 +66,7 @@ fn concrete_enum_layouts_are_injective_and_host_substitutions_reject() {
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),
         enum_layouts: std::collections::HashMap::new(),
+        structural: Default::default(),
         next: LayoutInterner::FIRST_NESTED_IDENTITY,
     };
     layouts.intern(&scalar).expect("scalar enum layout");

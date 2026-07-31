@@ -15,6 +15,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
         metadata: metadata(checked),
     };
     let dominating = Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -60,6 +61,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
     );
 
     let siblings = Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),

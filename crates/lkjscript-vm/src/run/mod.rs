@@ -8,11 +8,11 @@ mod enum_value;
 mod ext_ops;
 mod failure_cleanup;
 mod host_ops;
-mod limits;
 mod numeric;
 mod product;
 mod state;
-mod unique;
+mod structural_ops;
+pub(crate) mod unique;
 mod unique_ops;
 
 use std::time::{Duration, Instant};
@@ -24,12 +24,13 @@ use lkjscript_core::{
     ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
     MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
 };
+#[cfg(feature = "jit")]
 use lkjscript_jit::{
     EngineError, EntryDecision, FunctionId, JitSession, JitStats, NativeValue, ScalarInvocation,
     ScalarSignature, TrapCode,
 };
 
-use crate::host::{display_value, flush_out, read_byte, write_byte, write_output, write_str};
+use crate::host::{flush_out, read_byte, write_byte, write_output, write_str};
 use crate::host_ext::ResourceTable;
 use crate::ExecutionInputs;
 use calls::{call, car, cdr, make_closure};
@@ -40,6 +41,7 @@ pub(crate) struct Frame {
     pub stack_base: usize,
     pub locals_base: usize,
     pub unique_places: Vec<unique::RuntimePlace>,
+    pub borrowed_resources: Vec<Value>,
 }
 
 enum Stop {
@@ -48,30 +50,36 @@ enum Stop {
 }
 
 pub trait RuntimeTier {
+    #[cfg(feature = "jit")]
     fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision;
+    #[cfg(feature = "jit")]
     fn scalar_signature(&self, function: FunctionId) -> Option<ScalarSignature>;
+    #[cfg(feature = "jit")]
     fn invoke_scalar(
         &mut self,
         function: FunctionId,
         arguments: &[NativeValue],
         execution: &ExecutionConfig,
     ) -> std::result::Result<ScalarInvocation, EngineError>;
+    #[cfg(feature = "jit")]
     fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String;
-    fn record_invocation_failure(&mut self, function: FunctionId);
 }
 
 #[derive(Debug, Default)]
 pub struct NoTier;
 
 impl RuntimeTier for NoTier {
+    #[cfg(feature = "jit")]
     fn observe_function_entry(&mut self, _prototype: u32) -> EntryDecision {
         EntryDecision::Interpret
     }
 
+    #[cfg(feature = "jit")]
     fn scalar_signature(&self, _function: FunctionId) -> Option<ScalarSignature> {
         None
     }
 
+    #[cfg(feature = "jit")]
     fn invoke_scalar(
         &mut self,
         function: FunctionId,
@@ -81,13 +89,13 @@ impl RuntimeTier for NoTier {
         Err(EngineError::new_unavailable(function))
     }
 
+    #[cfg(feature = "jit")]
     fn trap_message(&self, _function: FunctionId, _trap: TrapCode, _site: Option<u32>) -> String {
         "native tier is unavailable".to_string()
     }
-
-    fn record_invocation_failure(&mut self, _function: FunctionId) {}
 }
 
+#[cfg(feature = "jit")]
 impl RuntimeTier for JitSession {
     fn observe_function_entry(&mut self, prototype: u32) -> EntryDecision {
         JitSession::observe_function_entry(self, prototype)
@@ -109,10 +117,6 @@ impl RuntimeTier for JitSession {
     fn trap_message(&self, function: FunctionId, trap: TrapCode, site: Option<u32>) -> String {
         self.trap_message_for(function, trap, site)
     }
-
-    fn record_invocation_failure(&mut self, function: FunctionId) {
-        JitSession::record_invocation_failure(self, function);
-    }
 }
 
 pub struct Vm<'a, J: RuntimeTier> {
@@ -126,6 +130,8 @@ pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) inputs: ExecutionInputs,
     pub(crate) resources: ResourceTable,
     pub(crate) unique: unique::UniqueRuntime,
+    pub(crate) structural: Option<structural_ops::StructuralInvocation>,
+    structural_initialization_error: Option<Error>,
     config: ExecutionConfig,
     fuel_remaining: u64,
     output_bytes: usize,
@@ -145,7 +151,12 @@ pub(crate) fn test_chunk() -> ValidatedChunk {
         name: "test-function".into(),
         arity: 0,
         locals: 0,
+        memory_plan: None,
+        parameter_structurals: Vec::new(),
+        parameter_structural_places: Vec::new(),
+        return_structural: None,
         parameter_resources: Vec::new(),
+        parameter_resource_places: Vec::new(),
         return_resource: None,
         parameter_uniques: Vec::new(),
         parameter_unique_places: Vec::new(),
@@ -160,6 +171,12 @@ pub(crate) fn test_chunk() -> ValidatedChunk {
     });
     lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
         .expect("VM unit-test chunk validates")
+}
+
+fn is_structural_runtime_value(value: Value) -> bool {
+    value.as_structural_root().is_some()
+        || value.as_structural_view().is_some()
+        || value.as_structural_destination().is_some()
 }
 
 fn outcome_from_error(error: Error) -> ExecutionOutcome {

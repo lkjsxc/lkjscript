@@ -36,28 +36,16 @@ pub(crate) fn values_for(
     values: &[Option<EvalValue>],
     ids: &[ValueId],
 ) -> std::result::Result<Vec<EvalValue>, Flow> {
-    ids.iter().map(|id| value(values, *id).cloned()).collect()
-}
-
-pub(crate) fn values_for_call(
-    values: &mut [Option<EvalValue>],
-    ids: &[ValueId],
-) -> std::result::Result<Vec<EvalValue>, Flow> {
     ids.iter()
-        .map(|id| match value(values, *id)? {
-            EvalValue::Bytes(_) | EvalValue::ByteVector(_) | EvalValue::Resource(_) => {
-                take_value(values, *id)
-            }
-            other => Ok(other.clone()),
-        })
+        .map(|id| clone_plain_eval_value(value(values, *id)?))
         .collect()
 }
 
-pub(crate) fn values_for_edge(
-    values: &mut [Option<EvalValue>],
+pub(crate) fn values_for_refs<'a>(
+    values: &'a [Option<EvalValue>],
     ids: &[ValueId],
-) -> std::result::Result<Vec<EvalValue>, Flow> {
-    values_for_call(values, ids)
+) -> std::result::Result<Vec<&'a EvalValue>, Flow> {
+    ids.iter().map(|id| value(values, *id)).collect()
 }
 
 pub(crate) fn assign_parameters(

@@ -144,6 +144,9 @@ impl StructuralRootTable {
         self.loans
             .try_reserve(1)
             .map_err(|_| StructuralRootTableError::AllocationFailed)?;
+        self.free_loans
+            .try_reserve(1)
+            .map_err(|_| StructuralRootTableError::AllocationFailed)?;
         let Some(generation) = NonZeroU32::new(1) else {
             return Err(StructuralRootTableError::InvariantViolation);
         };

@@ -84,7 +84,6 @@ fn memory_type(ty: &Type) -> MemoryType {
         Type::I64 => MemoryType::I64,
         Type::F64 => MemoryType::F64,
         Type::Str => MemoryType::String,
-        Type::Buf => MemoryType::Buffer,
         Type::Bytes => MemoryType::Bytes,
         Type::Path => MemoryType::Path,
         Type::Capability(kind) => MemoryType::Capability(*kind),
@@ -113,5 +112,33 @@ fn memory_type(ty: &Type) -> MemoryType {
             variables: vars.clone(),
             body: Box::new(memory_type(body)),
         },
+    }
+}
+
+fn destination_shape(
+    program: &hir::Program,
+    expression: &Expr,
+) -> Result<(u32, Option<MemoryActivePayload>)> {
+    match &expression.kind {
+        ExprKind::ProductValue { product, fields } => {
+            let declared = program.products.iter().find(|item| item.id == *product)
+                .ok_or_else(|| Error::msg("aggregate destination lost product declaration"))?;
+            if declared.fields.len() != fields.len() {
+                return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION product fields"));
+            }
+            Ok((index_u32(fields.len())?, None))
+        }
+        ExprKind::EnumValue { enum_id, variant, fields, .. } => {
+            let declared = program.enums.iter().find(|item| item.id == *enum_id)
+                .and_then(|item| item.variants.iter().find(|item| item.id == *variant))
+                .ok_or_else(|| Error::msg("aggregate destination lost active enum payload"))?;
+            if declared.fields.len() != fields.len() {
+                return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION enum fields"));
+            }
+            Ok((index_u32(fields.len())?, Some(MemoryActivePayload {
+                variant: variant.bytes(), source_order: declared.source_order,
+            })))
+        }
+        _ => Err(Error::msg("destination requested for non-construction expression")),
     }
 }

@@ -101,7 +101,6 @@ impl Resolver<'_> {
                 | Type::Symbol => true,
                 Type::ByteSlice => true,
                 Type::Never
-                | Type::Buf
                 | Type::Bytes
                 | Type::ByteVector
                 | Type::ByteSliceMut

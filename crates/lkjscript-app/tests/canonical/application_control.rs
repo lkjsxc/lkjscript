@@ -23,7 +23,7 @@ fn daemon_persists_restarts_and_controls_runnable_application(
         "--name".into(),
         "persistent-hello".into(),
         "--package".into(),
-        "c1f030631e6c746ae957d40deb188187f7a96db56f3d9864ad177b040595e936".into(),
+        "316925afee5cad89c87ec8f601733d323401769195aa873b1c628f6fdf72967c".into(),
         "--root".into(),
         root.to_string_lossy().into_owned(),
         "--entry".into(),
@@ -45,8 +45,8 @@ fn daemon_persists_restarts_and_controls_runnable_application(
     assert!(lifecycle(&endpoint, "restart")?.status.success());
     let invoked = invoke(&endpoint)?;
     assert!(invoked.status.success());
-    assert_eq!(invoked.stdout, b"3628800");
     let invoked_stderr = String::from_utf8(invoked.stderr)?;
+    assert_eq!(invoked.stdout, b"3628800", "{invoked_stderr}");
     assert!(
         invoked_stderr.contains("Returned(unit)"),
         "{invoked_stderr}"

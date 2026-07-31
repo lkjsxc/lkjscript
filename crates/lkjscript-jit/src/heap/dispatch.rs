@@ -7,9 +7,7 @@ impl JitHeapServices<'_> {
         arguments: &[NativeValue],
     ) -> Result<NativeValue, NativeServiceError> {
         match site.descriptor().operation() {
-            HeapOperation::ConstantStr(_)
-            | HeapOperation::EmptyStr
-            | HeapOperation::EmptyList
+            HeapOperation::EmptyList
             | HeapOperation::ProductValue { .. }
             | HeapOperation::ProductField { .. }
             | HeapOperation::WithProductField { .. } => self.execute_products(site, arguments),
@@ -20,29 +18,12 @@ impl JitHeapServices<'_> {
             | HeapOperation::Car
             | HeapOperation::Cdr
             | HeapOperation::IsEmptyList => self.execute_lists(site, arguments),
-            HeapOperation::BufNew
-            | HeapOperation::BufLen
-            | HeapOperation::BufRef
-            | HeapOperation::BufGetU32
-            | HeapOperation::BufSet
-            | HeapOperation::BufSetU32 => self.execute_buffer_access(site, arguments),
-            HeapOperation::BufClone
-            | HeapOperation::BufFromStr
-            | HeapOperation::BufToStr { .. }
-            | HeapOperation::BufSlice { .. } => self.execute_buffer_transfer(site, arguments),
-            HeapOperation::StrLen
-            | HeapOperation::StrRef
-            | HeapOperation::StrAppend
-            | HeapOperation::StrSlice
-            | HeapOperation::StrFromByte
-            | HeapOperation::StrFromI64
-            | HeapOperation::StrFromF64 => self.execute_strings(site, arguments),
             HeapOperation::F64FromI64Exact { .. }
             | HeapOperation::I64FromF64Exact { .. }
             | HeapOperation::I64FromF64Trunc { .. } => {
                 self.execute_numeric_conversion(site, arguments)
             }
-            HeapOperation::EqualValue | HeapOperation::SameObject | HeapOperation::ListEqual => {
+            HeapOperation::EqualValue | HeapOperation::ListEqual => {
                 self.execute_equality(site, arguments)
             }
         }

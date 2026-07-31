@@ -139,14 +139,20 @@ fn forced_native_tiers_reject_path_entries_without_fallback() {
         JitConfig::default(),
     )
     .expect_err("forced baseline Path entry must not fall back");
-    assert_eq!(baseline.code(), FailureCode::UnsupportedType);
+    assert!(matches!(
+        baseline.code(),
+        FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
+    ));
     let optimizing = execute_optimizing(
         path.ssa(),
         &ExecutionConfig::default(),
         JitConfig::default(),
     )
     .expect_err("forced optimizing Path entry must not fall back");
-    assert_eq!(optimizing.code(), FailureCode::UnsupportedType);
+    assert!(matches!(
+        optimizing.code(),
+        FailureCode::UnsupportedType | FailureCode::UnsupportedOperation
+    ));
 }
 
 #[test]

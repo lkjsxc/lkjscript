@@ -1,0 +1,193 @@
+use std::num::NonZeroU64;
+
+use lkjscript_core::{
+    Constant, LayoutIdentity, OwnedValue, SemanticPayload, SemanticTypeIdentity, SemanticValue,
+    StructuralKind, StructuralSnapshotLimits, StructuralType,
+};
+
+use super::*;
+
+fn host_type(kind: StructuralKind) -> StructuralType {
+    let identity = match kind {
+        StructuralKind::String => NonZeroU64::MIN,
+        StructuralKind::Path => NonZeroU64::MAX,
+        _ => unreachable!("host structural leaf kind"),
+    };
+    StructuralType::new(
+        LayoutIdentity::new(identity),
+        SemanticTypeIdentity::new(identity),
+        kind,
+    )
+}
+
+pub(in crate::run) fn publish_string<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    text: String,
+) -> Result<Value> {
+    publish_host_leaf(
+        vm,
+        SemanticValue::new(
+            host_type(StructuralKind::String),
+            SemanticPayload::String(text.into_bytes()),
+        ),
+    )
+}
+
+fn publish_host_leaf<J: RuntimeTier>(vm: &mut Vm<'_, J>, semantic: SemanticValue) -> Result<Value> {
+    let value_type = semantic.value_type;
+    let key = invocation_mut(vm)?
+        .runtime
+        .publish_owned(semantic)
+        .map_err(|failure| map_value_error(failure.error))?;
+    invocation_mut(vm)?.register_host_owner(key, value_type)
+}
+
+pub(in crate::run) fn semantic_snapshot<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+    value: Value,
+) -> Result<SemanticValue> {
+    let key = value
+        .as_structural_root()
+        .ok_or_else(|| Error::msg("value is not a structural owner"))?;
+    let structural = invocation(vm)?;
+    let value_type = structural
+        .owners
+        .get(&key.get())
+        .map(|record| record.value_type)
+        .or_else(|| structural.host_owners.get(&key.get()).copied())
+        .ok_or_else(|| Error::msg("structural owner is stale or unregistered"))?;
+    structural
+        .runtime
+        .value(key, value_type)
+        .cloned()
+        .map_err(map_value_error)
+}
+
+pub(in crate::run) fn copy_string<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<String> {
+    if let Some(index) = value.as_static_string() {
+        return match vm.chunk.constants().get(usize::from(index)) {
+            Some(Constant::Str(text)) => Ok(text.clone()),
+            _ => Err(Error::msg("stale static string constant")),
+        };
+    }
+    let (key, value_type) = leaf_owner(vm, value, StructuralKind::String)?;
+    let semantic = invocation(vm)?
+        .runtime
+        .value(key, value_type)
+        .map_err(map_value_error)?;
+    let SemanticPayload::String(bytes) = &semantic.payload else {
+        return Err(Error::msg("structural string owner has the wrong payload"));
+    };
+    std::str::from_utf8(bytes)
+        .map(str::to_owned)
+        .map_err(|_| Error::msg("structural string payload is not UTF-8"))
+}
+
+pub(in crate::run) fn copy_path<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Vec<u8>> {
+    let (key, value_type) = leaf_owner(vm, value, StructuralKind::Path)?;
+    let semantic = invocation(vm)?
+        .runtime
+        .value(key, value_type)
+        .map_err(map_value_error)?;
+    let SemanticPayload::Path(bytes) = &semantic.payload else {
+        return Err(Error::msg("structural path owner has the wrong payload"));
+    };
+    Ok(bytes.clone())
+}
+
+fn leaf_owner<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+    value: Value,
+    expected: StructuralKind,
+) -> Result<(StructuralValueKey, StructuralType)> {
+    let key = value
+        .as_structural_root()
+        .ok_or_else(|| Error::msg("expected exact structural leaf owner"))?;
+    let structural = invocation(vm)?;
+    let value_type = structural
+        .owners
+        .get(&key.get())
+        .map(|record| record.value_type)
+        .or_else(|| structural.host_owners.get(&key.get()).copied())
+        .ok_or_else(|| Error::msg("stale, forged, or unregistered structural leaf owner"))?;
+    if value_type.kind != expected {
+        return Err(Error::msg(
+            "structural leaf owner has the wrong runtime kind",
+        ));
+    }
+    Ok((key, value_type))
+}
+
+pub(in crate::run) fn static_string_semantic<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+    value: Value,
+) -> Result<SemanticValue> {
+    let index = value
+        .as_static_string()
+        .ok_or_else(|| Error::msg("expected static string artifact"))?;
+    let text = match vm.chunk.constants().get(usize::from(index)) {
+        Some(Constant::Str(text)) => text,
+        _ => return Err(Error::msg("stale static string artifact")),
+    };
+    Ok(SemanticValue::new(
+        host_type(StructuralKind::String),
+        SemanticPayload::String(text.as_bytes().to_vec()),
+    ))
+}
+
+pub(in crate::run) fn export_plain_return<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    value: Value,
+) -> Result<Option<OwnedValue>> {
+    if value.as_static_string().is_some() {
+        return static_string_semantic(vm, value)
+            .and_then(|semantic| {
+                OwnedValue::from_structural(semantic, StructuralSnapshotLimits::DEFAULT)
+            })
+            .map(Some);
+    }
+    let Some(key) = value.as_structural_root() else {
+        return Ok(None);
+    };
+    let (value_type, host_owner) =
+        if let Some(value_type) = invocation(vm)?.host_owners.get(&key.get()).copied() {
+            (value_type, true)
+        } else if let Some(record) = invocation(vm)?.owners.get(&key.get()).copied() {
+            (record.value_type, false)
+        } else {
+            return Ok(None);
+        };
+    let semantic = invocation_mut(vm)?
+        .runtime
+        .export_semantic(key, value_type)
+        .map_err(map_value_error)?;
+    if host_owner {
+        invocation_mut(vm)?.host_owners.remove(&key.get());
+    } else {
+        invocation_mut(vm)?.owners.remove(&key.get());
+    }
+    OwnedValue::from_structural(semantic, StructuralSnapshotLimits::DEFAULT).map(Some)
+}
+
+pub(super) fn is_host_owner(invocation: &StructuralInvocation, value: Value) -> bool {
+    value
+        .as_structural_root()
+        .is_some_and(|key| invocation.host_owners.contains_key(&key.get()))
+}
+
+pub(super) fn drop_host_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>, value: Value) -> Result<()> {
+    let key = value
+        .as_structural_root()
+        .ok_or_else(|| Error::msg("host structural owner changed category"))?;
+    let value_type = invocation(vm)?
+        .host_owners
+        .get(&key.get())
+        .copied()
+        .ok_or_else(|| Error::msg("host structural owner disappeared"))?;
+    invocation_mut(vm)?
+        .runtime
+        .drop_owned(key, value_type)
+        .map_err(map_value_error)?;
+    invocation_mut(vm)?.host_owners.remove(&key.get());
+    Ok(())
+}

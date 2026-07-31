@@ -18,8 +18,7 @@ macro_rules! dense_id {
                 self.0
             }
 
-            #[allow(dead_code)]
-            pub(crate) fn index(self) -> Option<usize> {
+            pub fn index(self) -> Option<usize> {
                 usize::try_from(self.0).ok()
             }
         }
@@ -34,6 +33,10 @@ dense_id!(MemoryConstantId);
 dense_id!(MemoryCallId);
 dense_id!(MemoryObligationId);
 dense_id!(MemoryDropGlueId);
+dense_id!(MemoryTypeFactId);
+dense_id!(MemoryDestinationId);
+dense_id!(MemoryBorrowScopeId);
+dense_id!(MemoryDropPathId);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MemoryPlanId([u8; 32]);
@@ -87,18 +90,6 @@ pub enum MemoryEscape {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MemoryStorage {
-    Inline,
-    Static,
-    Stack,
-    CallerDestination,
-    UniqueSlot,
-    BorrowedView,
-    ExternalSlot,
-    LegacyTraced,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryDestruction {
     Trivial,
     EndBorrow,
@@ -144,7 +135,7 @@ pub struct MemoryMode {
     pub multiplicity: MemoryMultiplicity,
     pub aliasing: MemoryAliasing,
     pub escape: MemoryEscape,
-    pub storage: MemoryStorage,
+    pub domain: MemoryDomain,
     pub destruction: MemoryDestruction,
     pub identity: MemoryIdentity,
     pub portability: MemoryPortability,
@@ -153,5 +144,6 @@ pub struct MemoryMode {
 }
 
 include!("model/types.rs");
+include!("model/authority.rs");
 include!("model/records.rs");
 include!("model/obligations.rs");

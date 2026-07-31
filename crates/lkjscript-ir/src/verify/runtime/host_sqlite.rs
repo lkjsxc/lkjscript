@@ -58,7 +58,7 @@ pub(super) fn sqlite_signature(
         RuntimeOp::SysSqliteBindI64 => sqlite_bind(SsaType::I64, parameters, result),
         RuntimeOp::SysSqliteBindF64 => sqlite_bind(SsaType::F64, parameters, result),
         RuntimeOp::SysSqliteBindText => sqlite_bind(SsaType::Str, parameters, result),
-        RuntimeOp::SysSqliteBindBytes => sqlite_bind(SsaType::Buf, parameters, result),
+        RuntimeOp::SysSqliteBindBytes => sqlite_bind(SsaType::ByteSlice, parameters, result),
         RuntimeOp::SysSqliteStep | RuntimeOp::SysSqliteColumnCount => {
             sqlite_one(ResourceKind::SqliteStatement, result, SsaType::I64)
         }
@@ -77,7 +77,7 @@ pub(super) fn sqlite_signature(
         RuntimeOp::SysSqliteColumnI64 => sqlite_column(SsaType::I64, parameters, result),
         RuntimeOp::SysSqliteColumnF64 => sqlite_column(SsaType::F64, parameters, result),
         RuntimeOp::SysSqliteColumnText => sqlite_column(SsaType::Str, parameters, result),
-        RuntimeOp::SysSqliteColumnBytes => sqlite_column(SsaType::Buf, parameters, result),
+        RuntimeOp::SysSqliteColumnBytes => sqlite_column(SsaType::Bytes, parameters, result),
         RuntimeOp::SysSqliteBackup => exact(
             &[
                 SsaType::Capability(CapabilityKind::Sqlite),

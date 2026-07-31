@@ -95,6 +95,8 @@ pub enum RootClass {
     RegionPublic,
     SealedPublic,
     PoolElement,
+    UniquePublic,
+    StaticPublic,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

@@ -154,6 +154,14 @@ impl FunctionBuilder {
         self.append(block, value_type, Operation::ReadLocal(local), None)
     }
 
+    pub fn observe_local(&mut self, block: BlockId, local: LocalId) -> Result<ValueId, PlanError> {
+        let value_type = self.local_type(local)?;
+        if !matches!(value_type, ValueType::StructuralOwner(_)) {
+            return Err(PlanError::InvalidStructuralCall);
+        }
+        self.append(block, value_type, Operation::ObserveLocal(local), None)
+    }
+
     pub fn write_local(
         &mut self,
         block: BlockId,

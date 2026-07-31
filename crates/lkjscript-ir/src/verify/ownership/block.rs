@@ -1,17 +1,18 @@
 mod failure;
 mod nonowned;
 use failure::{expected_failure_cleanup, verify_failure_cleanup, verify_failure_cleanup_plan};
-pub(crate) use nonowned::nonowned_affine_values;
+pub(crate) use nonowned::{edge_arguments_to, nonowned_affine_values};
 
 use std::collections::{BTreeMap, HashSet};
 
 use crate::verify::*;
 use crate::{
     Block, BlockId, FailureCleanupAction, FailureCleanupId, Function, Instruction, InstructionKind,
-    IrError, SsaType, Terminator, ValueId,
+    IrError, Program, SsaType, Terminator, ValueId,
 };
 
 pub(crate) fn process_ownership_block(
+    program: &Program,
     function: &Function,
     block: &Block,
     mut state: OwnershipState,
@@ -26,11 +27,19 @@ pub(crate) fn process_ownership_block(
         charge_ownership_work(work, 1)?;
         expire_unplaced_affine(&mut state, &last_use, index);
         verify_frame_affine_available(
+            program,
             function,
             instruction.metadata.frame_state.as_ref(),
             &state,
             types,
-        )?;
+            nonowned_affine,
+        )
+        .map_err(|error| {
+            IrError::new(format!(
+                "SSA instruction {} frame state: {error}",
+                instruction.id.raw()
+            ))
+        })?;
         for operand in instruction.kind.operands() {
             let pending_drop_operand =
                 matches!(
@@ -42,7 +51,7 @@ pub(crate) fn process_ownership_block(
                 ) && state.pending_drops.values().any(|value| *value == operand);
             let ended_borrow_operand =
                 matches!(instruction.kind, InstructionKind::EndBorrow { .. });
-            if is_affine(value_type(types, operand)?)
+            if is_affine(program, value_type(types, operand)?)
                 && !nonowned_affine.contains(&operand)
                 && !state.affine.contains_key(&operand)
                 && !pending_drop_operand
@@ -58,6 +67,7 @@ pub(crate) fn process_ownership_block(
         }
 
         verify_failure_cleanup(
+            program,
             function,
             instruction,
             &state,
@@ -65,100 +75,54 @@ pub(crate) fn process_ownership_block(
             types,
             nonowned_affine,
         )?;
-        process_ownership_instruction(function, instruction, &mut state, &mut live_loans, types)?;
+        process_ownership_instruction(
+            program,
+            function,
+            instruction,
+            &mut state,
+            &mut live_loans,
+            types,
+            nonowned_affine,
+        )?;
     }
 
     let terminator_index = block.instructions.len();
     expire_unplaced_affine(&mut state, &last_use, terminator_index);
-    verify_frame_affine_available(function, block.metadata.frame_state.as_ref(), &state, types)?;
+    verify_frame_affine_available(
+        program,
+        function,
+        block.metadata.frame_state.as_ref(),
+        &state,
+        types,
+        nonowned_affine,
+    )
+    .map_err(|error| IrError::new(format!("SSA block terminator frame state: {error}")))?;
     if live_loans.values().any(|loans| !loans.is_empty()) {
         return fail("SSA live loan reaches a block terminator without EndBorrow");
     }
     verify_failure_cleanup_plan(
         function,
         block.metadata.failure_cleanup,
-        &expected_failure_cleanup(function, &state, &live_loans, types, nonowned_affine, &[])?,
+        &expected_failure_cleanup(
+            program,
+            function,
+            &state,
+            &live_loans,
+            types,
+            nonowned_affine,
+            &[],
+        )?,
         "block terminator",
     )?;
-    let terminal = !matches!(
-        block.terminator,
-        Terminator::Branch { .. } | Terminator::ConditionalBranch { .. }
-    );
-    let incomplete = !state.pending_drops.is_empty()
-        || state
-            .owners
-            .values()
-            .any(|value| value_type(types, *value).is_ok_and(is_owned_value));
-    if terminal && !matches!(block.terminator, Terminator::Return(_)) && incomplete {
-        return fail(format!(
-            "SSA structured terminator {:?} in block {} has incomplete cleanup owners {:?} pending {:?}",
-            block.terminator, block.id.raw(), state.owners, state.pending_drops
-        ));
-    }
-
-    match &block.terminator {
-        Terminator::Branch { target, arguments } => Ok(vec![(
-            *target,
-            transfer_edge(function, &state, *target, arguments, types, work)?,
-        )]),
-        Terminator::ConditionalBranch {
-            true_target,
-            true_arguments,
-            false_target,
-            false_arguments,
-            ..
-        } => Ok(vec![
-            (
-                *true_target,
-                transfer_edge(function, &state, *true_target, true_arguments, types, work)?,
-            ),
-            (
-                *false_target,
-                transfer_edge(
-                    function,
-                    &state,
-                    *false_target,
-                    false_arguments,
-                    types,
-                    work,
-                )?,
-            ),
-        ]),
-        Terminator::Return(value) => {
-            if is_affine(value_type(types, *value)?) {
-                let fact = state
-                    .affine
-                    .get(value)
-                    .ok_or_else(|| IrError::new("SSA Return reuses an unavailable affine value"))?;
-                if is_owned_value(value_type(types, *value)?) {
-                    if state.owners.values().any(|owner| owner == value) {
-                        return fail(
-                            "SSA cannot return an Owned place value without explicit Move",
-                        );
-                    }
-                    if !fact.transferred && !matches!(fact.provenance, AffineProvenance::Fresh(_)) {
-                        return fail("SSA affine return lacks explicit Move transfer provenance");
-                    }
-                }
-            }
-            if !state.pending_drops.is_empty()
-                || state
-                    .owners
-                    .values()
-                    .any(|owner| value_type(types, *owner).is_ok_and(is_owned_value))
-            {
-                return fail("SSA Return has incomplete whole-place cleanup");
-            }
-            Ok(Vec::new())
-        }
-        Terminator::Exit { code } => {
-            verify_terminator_affine_available(&state, [*code], types)?;
-            Ok(Vec::new())
-        }
-        Terminator::Outcome { detail, .. } => {
-            verify_terminator_affine_available(&state, detail.iter().copied(), types)?;
-            Ok(Vec::new())
-        }
-        Terminator::Trap { .. } => Ok(Vec::new()),
-    }
+    process_ownership_terminator(
+        program,
+        function,
+        block,
+        &state,
+        types,
+        nonowned_affine,
+        work,
+    )
 }
+
+include!("block/terminator.rs");

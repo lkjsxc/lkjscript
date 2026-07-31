@@ -2,6 +2,27 @@ use crate::optimize::passes::*;
 use crate::{verify, Program, VerifiedProgram};
 
 pub fn normalize_baseline(program: &VerifiedProgram) -> crate::Result<VerifiedProgram> {
+    if program.program().functions.iter().any(|function| {
+        function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                matches!(
+                    instruction.kind,
+                    crate::InstructionKind::StructuralPublish { .. }
+                        | crate::InstructionKind::DestinationCreate { .. }
+                        | crate::InstructionKind::DestinationFieldInit { .. }
+                        | crate::InstructionKind::DestinationFinish { .. }
+                        | crate::InstructionKind::DestinationAbort { .. }
+                        | crate::InstructionKind::AggregateFieldBorrow { .. }
+                        | crate::InstructionKind::AggregateTag { .. }
+                        | crate::InstructionKind::AggregateConsumePayload { .. }
+                        | crate::InstructionKind::StringUtf8View { .. }
+                        | crate::InstructionKind::StructuralCopy { .. }
+                )
+            })
+        })
+    }) {
+        return Ok(program.clone());
+    }
     let folded = constant_fold_and_propagate(program)
         .map_err(|error| crate::IrError::new(format!("constant fold: {error}")))?;
     let copied = copy_propagate(&folded)

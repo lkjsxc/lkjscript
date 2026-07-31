@@ -9,7 +9,7 @@ use lkjscript_native::{
     AllocationClass, BackendLimits, BoolComparison, F64Comparison, FunctionBuilder,
     HeapCallDescriptor, HeapOperation, I64Comparison, InstallableImage, LayoutIdentity, LoanType,
     LocalId, MachinePlanBuilder, NativeError, ReferenceType, RuntimeCallSlot, RuntimeOutcome,
-    Signature, SourceFunctionId, SourceOrigin, StoreClass, UniqueType, ValueType,
+    Signature, SourceFunctionId, SourceOrigin, StoreClass, TrapCode, UniqueType, ValueType,
 };
 
 mod enum_lower;
@@ -111,6 +111,7 @@ impl std::error::Error for LoweringError {}
 enum LoweringDomain {
     ResourceIsland,
     UniqueIsland,
+    StructuralIsland,
     Legacy,
 }
 
@@ -124,6 +125,7 @@ pub(crate) struct LoweredGroup {
 struct LayoutInterner {
     identities: HashMap<SsaType, LayoutIdentity>,
     enum_layouts: HashMap<SsaType, [u8; 32]>,
+    structural: StructuralCatalog,
     next: u32,
 }
 
@@ -140,8 +142,6 @@ struct RuntimeLoweringContext<'a> {
     locals: &'a [LocalId],
     value_types: &'a [ValueType],
     result_type: ValueType,
-    result_ssa_type: &'a SsaType,
-    layouts: &'a LayoutInterner,
 }
 
 #[derive(Clone, Copy)]
@@ -151,4 +151,5 @@ struct TerminatorContext<'a> {
     blocks: &'a [lkjscript_native::BlockId],
     locals: &'a [LocalId],
     value_types: &'a [ValueType],
+    layouts: &'a LayoutInterner,
 }

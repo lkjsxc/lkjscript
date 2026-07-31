@@ -54,11 +54,16 @@ fn push_f64_result<J: RuntimeTier>(
     result: std::result::Result<f64, NumericError>,
 ) -> Result<()> {
     let result = match result {
-        Ok(value) => {
-            let value = Value::from_f64_bits(value.to_bits());
-            result_value(vm, 0, value)?
-        }
-        Err(error) => error_result(vm, error)?,
+        Ok(value) => structural_ops::publish_numeric_result(
+            vm,
+            structural_ops::HostValueType::F64,
+            Ok(structural_ops::HostValue::F64Bits(value.to_bits())),
+        )?,
+        Err(error) => structural_ops::publish_numeric_result(
+            vm,
+            structural_ops::HostValueType::F64,
+            Err(error),
+        )?,
     };
     vm.push(result);
     Ok(())
@@ -69,29 +74,17 @@ fn push_i64_result<J: RuntimeTier>(
     result: std::result::Result<i64, NumericError>,
 ) -> Result<()> {
     let result = match result {
-        Ok(value) => {
-            let value = Value::from_i64(value);
-            result_value(vm, 0, value)?
-        }
-        Err(error) => error_result(vm, error)?,
+        Ok(value) => structural_ops::publish_numeric_result(
+            vm,
+            structural_ops::HostValueType::I64,
+            Ok(structural_ops::HostValue::I64(value)),
+        )?,
+        Err(error) => structural_ops::publish_numeric_result(
+            vm,
+            structural_ops::HostValueType::I64,
+            Err(error),
+        )?,
     };
     vm.push(result);
     Ok(())
-}
-
-fn error_result<J: RuntimeTier>(vm: &mut Vm<'_, J>, error: NumericError) -> Result<Value> {
-    let error = vm.arena.alloc(HeapObj::Enum {
-        layout: lkjscript_core::RuntimeLayoutId::new(lkjscript_core::NUMERIC_ERROR_LAYOUT),
-        physical_tag: error.physical_tag(),
-        active_payload: Vec::new(),
-    })?;
-    result_value(vm, 1, error)
-}
-
-fn result_value<J: RuntimeTier>(vm: &mut Vm<'_, J>, tag: u16, payload: Value) -> Result<Value> {
-    vm.arena.alloc(HeapObj::Enum {
-        layout: lkjscript_core::RuntimeLayoutId::new(lkjscript_core::RESULT_LAYOUT),
-        physical_tag: tag,
-        active_payload: vec![payload],
-    })
 }

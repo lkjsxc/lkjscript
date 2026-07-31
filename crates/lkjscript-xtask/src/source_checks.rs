@@ -26,6 +26,7 @@ pub fn check_sources(root: &Path) -> i32 {
     files.sort();
     let mut failures = crate::tracing_ratchet::check(root);
     failures += crate::no_tracing::check(root);
+    failures += check_removed_buf_family(root);
     if root.join("examples").exists() {
         eprintln!("obsolete examples/ directory; use src/examples/");
         failures += 1;
@@ -102,6 +103,77 @@ pub fn check_sources(root: &Path) -> i32 {
         failures += 1;
     }
     i32::from(failures > 0)
+}
+
+fn check_removed_buf_family(root: &Path) -> usize {
+    const RUNTIME_NAMES: &[&str] = &[
+        "HeapObj::Buf",
+        "ReferenceType::Buf",
+        "Type::Buf",
+        "SsaType::Buf",
+        "EvalValue::Buf",
+        "OwnedBuf",
+        "BufNew",
+        "BufLen",
+        "BufRef",
+        "BufSet",
+        "BufClone",
+        "BufSlice",
+        "BufGetU32",
+        "BufSetU32",
+    ];
+    const SOURCE_NAMES: &[&str] = &[
+        "buf",
+        "buf-new",
+        "buf-length",
+        "buf-ref",
+        "buf-set",
+        "buf-clone",
+        "buf-slice",
+        "buf-get-u32",
+        "buf-set-u32",
+        "convert-string-to-buf",
+        "convert-buf-to-string",
+        "convert-buf-to-path",
+        "convert-path-to-buf",
+    ];
+    let mut files = Vec::new();
+    if let Err(error) = walk(&root.join("crates"), &mut files) {
+        eprintln!("{error}");
+        return 1;
+    }
+    if let Err(error) = walk(&root.join("src"), &mut files) {
+        eprintln!("{error}");
+        return 1;
+    }
+    let mut failures = 0;
+    for path in files {
+        if path.ends_with("lkjscript-xtask/src/source_checks.rs") {
+            continue;
+        }
+        let extension = path.extension().and_then(|value| value.to_str());
+        if !matches!(extension, Some("rs" | "lkjscript")) {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        for name in RUNTIME_NAMES {
+            if text.contains(name) {
+                eprintln!("removed buf runtime name `{name}`: {}", path.display());
+                failures += 1;
+            }
+        }
+        if extension == Some("lkjscript") {
+            for token in text.split(|byte: char| !byte.is_ascii_lowercase() && byte != '-') {
+                if SOURCE_NAMES.contains(&token) {
+                    eprintln!("removed buf source name `{token}`: {}", path.display());
+                    failures += 1;
+                }
+            }
+        }
+    }
+    failures
 }
 
 fn validate(path: &Path, root: &Path, limits: &Limits) -> usize {

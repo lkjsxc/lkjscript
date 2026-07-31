@@ -1,0 +1,193 @@
+use std::num::NonZeroU32;
+
+use super::super::{DomainKey, RootClass, RootKey};
+use super::{
+    SemanticValue, StaticStructuralArtifact, StructuralValueError, StructuralValueRuntimeLimits,
+    TreeFacts,
+};
+
+#[derive(Debug)]
+pub(super) enum StructuralObject {
+    Owned {
+        value: SemanticValue,
+        facts: TreeFacts,
+    },
+    Static(StaticStructuralArtifact),
+}
+
+impl StructuralObject {
+    pub(super) const fn value_type(&self) -> super::StructuralType {
+        match self {
+            Self::Owned { value, .. } => value.value_type,
+            Self::Static(artifact) => artifact.value_type,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ObjectSlot {
+    Vacant(NonZeroU32),
+    Live {
+        generation: NonZeroU32,
+        domain: DomainKey,
+        object: StructuralObject,
+    },
+    Retired,
+}
+
+#[derive(Debug)]
+pub(super) struct ObjectSlab {
+    slots: Vec<ObjectSlot>,
+    free: Vec<u32>,
+    max_objects: u32,
+    max_generation: u32,
+    pub live: u32,
+}
+
+impl ObjectSlab {
+    pub(super) const fn new(limits: StructuralValueRuntimeLimits) -> Self {
+        Self {
+            slots: Vec::new(),
+            free: Vec::new(),
+            max_objects: limits.max_objects,
+            max_generation: limits.max_generation,
+            live: 0,
+        }
+    }
+
+    pub(super) fn insert(
+        &mut self,
+        domain: DomainKey,
+        class: RootClass,
+        object: StructuralObject,
+    ) -> Result<(RootKey, bool), Box<(StructuralValueError, StructuralObject)>> {
+        if let Err(error) = self.free.try_reserve(1) {
+            return Err(Box::new((error.into(), object)));
+        }
+        let (slot, generation, reused) = if let Some(slot) = self.free.pop() {
+            let ObjectSlot::Vacant(generation) = self.slots[slot as usize] else {
+                return Err(Box::new((StructuralValueError::InvariantViolation, object)));
+            };
+            (slot, generation, true)
+        } else {
+            let slot = match u32::try_from(self.slots.len()) {
+                Ok(slot) if slot < self.max_objects => slot,
+                _ => {
+                    return Err(Box::new((
+                        StructuralValueError::LimitExceeded(super::StructuralValueLimit::Objects),
+                        object,
+                    )));
+                }
+            };
+            if let Err(error) = self.slots.try_reserve(1) {
+                return Err(Box::new((error.into(), object)));
+            }
+            self.slots.push(ObjectSlot::Vacant(NonZeroU32::MIN));
+            (slot, NonZeroU32::MIN, false)
+        };
+        let value_type = object.value_type();
+        self.slots[slot as usize] = ObjectSlot::Live {
+            generation,
+            domain,
+            object,
+        };
+        self.live += 1;
+        Ok((
+            RootKey::from_parts(
+                domain,
+                class,
+                slot,
+                generation,
+                value_type.layout,
+                value_type.semantic_type,
+            ),
+            reused,
+        ))
+    }
+
+    pub(super) fn get(&self, root: RootKey) -> Result<&StructuralObject, StructuralValueError> {
+        let ObjectSlot::Live {
+            generation,
+            domain,
+            object,
+        } = self
+            .slots
+            .get(root.slot() as usize)
+            .ok_or(StructuralValueError::StaleObject)?
+        else {
+            return Err(StructuralValueError::StaleObject);
+        };
+        if *generation != root.generation() || *domain != root.domain() {
+            return Err(StructuralValueError::StaleObject);
+        }
+        Ok(object)
+    }
+
+    pub(super) fn get_mut(
+        &mut self,
+        root: RootKey,
+    ) -> Result<&mut StructuralObject, StructuralValueError> {
+        let ObjectSlot::Live {
+            generation,
+            domain,
+            object,
+        } = self
+            .slots
+            .get_mut(root.slot() as usize)
+            .ok_or(StructuralValueError::StaleObject)?
+        else {
+            return Err(StructuralValueError::StaleObject);
+        };
+        if *generation != root.generation() || *domain != root.domain() {
+            return Err(StructuralValueError::StaleObject);
+        }
+        Ok(object)
+    }
+
+    pub(super) fn rollback_insert(&mut self, root: RootKey, reused: bool) -> StructuralObject {
+        assert!(self.get(root).is_ok());
+        let index = root.slot() as usize;
+        assert!(self.live > 0);
+        if !reused {
+            assert_eq!(index.checked_add(1), Some(self.slots.len()));
+        }
+        let slot = std::mem::replace(&mut self.slots[index], ObjectSlot::Retired);
+        let ObjectSlot::Live { object, .. } = slot else {
+            unreachable!("just-inserted structural object");
+        };
+        if reused {
+            self.slots[index] = ObjectSlot::Vacant(root.generation());
+            self.free.push(root.slot());
+        } else {
+            self.slots.pop();
+        }
+        self.live -= 1;
+        object
+    }
+
+    pub(super) fn take(&mut self, root: RootKey) -> Result<StructuralObject, StructuralValueError> {
+        self.get(root)?;
+        let index = root.slot() as usize;
+        let replacement = if root.generation().get() >= self.max_generation {
+            ObjectSlot::Retired
+        } else {
+            let generation = NonZeroU32::new(root.generation().get() + 1)
+                .ok_or(StructuralValueError::InvariantViolation)?;
+            self.free.push(root.slot());
+            ObjectSlot::Vacant(generation)
+        };
+        let ObjectSlot::Live { object, .. } =
+            std::mem::replace(&mut self.slots[index], replacement)
+        else {
+            return Err(StructuralValueError::InvariantViolation);
+        };
+        self.live -= 1;
+        Ok(object)
+    }
+}
+
+impl From<std::collections::TryReserveError> for StructuralValueError {
+    fn from(_: std::collections::TryReserveError) -> Self {
+        Self::AllocationFailed
+    }
+}

@@ -3,6 +3,38 @@ use super::{
 };
 
 impl UniqueRuntime {
+    pub(crate) fn allocate_bytes(&mut self, bytes: Vec<u8>) -> Result<Value> {
+        let key = self.store.allocate_bytes(bytes).map_err(map_store_error)?;
+        self.publish_bytes(key.packed_word().get())
+    }
+
+    pub(crate) fn copy_bytes(&mut self, value: Value) -> Result<Vec<u8>> {
+        let word = self.bytes_word(value)?;
+        let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+        Ok(self.store.bytes(key).map_err(map_store_error)?.to_vec())
+    }
+
+    pub(crate) fn copy_owner_bytes(&mut self, value: Value) -> Result<Vec<u8>> {
+        let owner = self.validate_any_owner(value)?;
+        let word = UniqueKeyWord::new(owner).map_err(|error| Error::msg(error.to_string()))?;
+        if value.as_bytes_key().is_some() {
+            let key = self.store.import_bytes_key(word).map_err(map_store_error)?;
+            Ok(self.store.bytes(key).map_err(map_store_error)?.to_vec())
+        } else if value.as_byte_vector_key().is_some() {
+            let key = self
+                .store
+                .import_byte_vector_key(word)
+                .map_err(map_store_error)?;
+            Ok(self
+                .store
+                .byte_vector(key)
+                .map_err(map_store_error)?
+                .to_vec())
+        } else {
+            Err(Error::msg("expected exact unique byte owner"))
+        }
+    }
+
     pub(crate) fn bytes_length(&mut self, value: Value) -> Result<usize> {
         let word = self.bytes_word(value)?;
         let key = self.store.import_bytes_key(word).map_err(map_store_error)?;

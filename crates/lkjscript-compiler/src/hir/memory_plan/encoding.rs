@@ -15,6 +15,10 @@ pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
     records(&mut bytes, &plan.constants)?;
     records(&mut bytes, &plan.calls)?;
     records(&mut bytes, &plan.obligations)?;
+    records(&mut bytes, &plan.type_facts)?;
+    records(&mut bytes, &plan.destinations)?;
+    records(&mut bytes, &plan.borrow_scopes)?;
+    records(&mut bytes, &plan.drop_paths)?;
     records(&mut bytes, &plan.drop_glues)?;
     frame(&mut bytes, &plan.work.functions.to_be_bytes())?;
     frame(&mut bytes, &plan.work.entries.to_be_bytes())?;
@@ -24,6 +28,14 @@ pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
     frame(&mut bytes, &plan.work.constants.to_be_bytes())?;
     frame(&mut bytes, &plan.work.calls.to_be_bytes())?;
     frame(&mut bytes, &plan.work.obligations.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.type_nodes.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.type_edges.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.scc_work.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.aggregate_fields.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.aggregate_variants.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.destinations.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.borrow_scopes.to_be_bytes())?;
+    frame(&mut bytes, &plan.work.drop_paths.to_be_bytes())?;
     Ok(MemoryPlanId::from_bytes(lkjscript_core::sha256(&bytes)))
 }
 

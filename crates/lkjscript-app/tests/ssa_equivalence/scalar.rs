@@ -34,10 +34,10 @@ fn focused_ssa_evaluator_and_reference_vm_equivalence() {
             main_source("i64", "unwrap-some/\nsome/\n42\n/some\n/unwrap-some"),
         ),
         (
-            "buffer.lkjscript",
+            "byte-vector.lkjscript",
             main_source(
                 "i64",
-                "var/\nname/\nb\n/name\ntype/\nbuf\n/type\nbuf-new/\n4\n/buf-new\ndo/\nbuf-set-byte/\nb\n0\n255\n/buf-set-byte\nbuf-byte-at/\nb\n0\n/buf-byte-at\n/do\n/var",
+                "let/\nbind/\nb\nnew-byte-vector/\n4\n/new-byte-vector\n/bind\ndo/\nbyte-slice-mut-set-byte/\nborrow-mut/\nb\n/borrow-mut\n0\n255\n/byte-slice-mut-set-byte\nbyte-slice-byte-at/\nborrow/\nb\n/borrow\n0\n/byte-slice-byte-at\n/do\n/let",
             ),
         ),
         (

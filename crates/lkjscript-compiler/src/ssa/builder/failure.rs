@@ -14,21 +14,53 @@ impl FunctionBuilder<'_> {
                 value: active.value,
             });
         }
-        for value in self
+        let mut unplaced = self
             .unplaced_owners
             .iter()
-            .rev()
+            .copied()
             .filter(|value| !exclusions.contains(value))
-        {
-            let glue = match self.value_type(*value)? {
+            .collect::<Vec<_>>();
+        unplaced.sort();
+        for value in unplaced.into_iter().rev() {
+            let glue = match self.value_type(value)? {
                 SsaType::ByteVector => DropGlueIdentity::ByteVector,
                 SsaType::Bytes => DropGlueIdentity::Bytes,
                 SsaType::Resource(kind) => DropGlueIdentity::Resource(kind),
-                _ => return Err(Error::msg("SSA unplaced owner has no exact drop glue")),
+                ty
+                @ (SsaType::Str | SsaType::Path | SsaType::Product(_) | SsaType::Enum { .. }) => {
+                    structural_glue(self.structural, &ty)?
+                }
+                SsaType::StructuralDestination(type_id) => {
+                    let item = self
+                        .structural
+                        .types
+                        .get(type_id.index().unwrap_or(usize::MAX))
+                        .filter(|item| item.id == type_id)
+                        .ok_or_else(|| {
+                            Error::msg("SSA destination owner has no exact drop metadata")
+                        })?;
+                    DropGlueIdentity::Structural(StructuralDropGlueIdentity::Destination {
+                        type_id,
+                        layout: item.layout,
+                    })
+                }
+                SsaType::Unit
+                | SsaType::Bool
+                | SsaType::I64
+                | SsaType::F64
+                | SsaType::Symbol
+                | SsaType::ByteSlice
+                | SsaType::ByteSliceMut
+                | SsaType::Capability(_)
+                | SsaType::List(_)
+                | SsaType::Function(_)
+                | SsaType::TypeParameter(_) => {
+                    return Err(Error::msg("SSA unplaced owner has no exact drop glue"))
+                }
             };
             actions.push(FailureCleanupAction::DropOwner {
                 place: None,
-                value: *value,
+                value,
                 glue,
             });
         }

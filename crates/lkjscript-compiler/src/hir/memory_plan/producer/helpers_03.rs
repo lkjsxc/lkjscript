@@ -1,76 +1,121 @@
-#[allow(clippy::type_complexity)]
-fn static_value(
-    multiplicity: MemoryMultiplicity,
-) -> (
-    MemoryMultiplicity,
-    MemoryAliasing,
-    MemoryStorage,
-    MemoryDestruction,
-    MemoryIdentity,
-    MemoryPortability,
-    MemoryContention,
-    Option<&'static str>,
-    Option<MemoryDropGlueId>,
-) {
-    (
-        multiplicity,
-        MemoryAliasing::StaticShared,
-        MemoryStorage::Static,
-        MemoryDestruction::Trivial,
-        MemoryIdentity::Value,
-        MemoryPortability::WorkerLocal,
-        MemoryContention::ImmutableShared,
-        None,
-        None,
-    )
-}
-fn allocation_failure(effects: u16) -> MemoryAllocationFailure {
-    let allocates = effects & crate::hir::EffectSet::ALLOCATES.bits() != 0;
-    let trap = effects & crate::hir::EffectSet::MAY_TRAP.bits() != 0;
-    let outcome = effects & crate::hir::EffectSet::MAY_EXIT.bits() != 0 || allocates;
-    match (trap, outcome) {
-        (false, false) => MemoryAllocationFailure::Impossible,
-        (true, false) => MemoryAllocationFailure::Trap,
-        (false, true) => MemoryAllocationFailure::StructuredOutcome,
-        (true, true) => MemoryAllocationFailure::TrapOrOutcome,
-    }
-}
-fn obligation_for_type(ty: &Type) -> Option<(MemoryObligationKind, MemoryDropGlueId)> {
-    match ty {
-        Type::ByteVector => {
-            Some((MemoryObligationKind::DropValue, MemoryDropGlueId::new(0)))
+impl Producer<'_> {
+    fn planned_parameter_mode(
+        &mut self,
+        ty: &Type,
+        consumed: bool,
+    ) -> Result<MemoryParameterMode> {
+        if matches!(ty, Type::ByteSlice) { return Ok(MemoryParameterMode::BorrowShared); }
+        if matches!(ty, Type::ByteSliceMut) { return Ok(MemoryParameterMode::BorrowExclusive); }
+        if matches!(ty, Type::Resource(_)) {
+            return Ok(if consumed { MemoryParameterMode::Consume }
+                else { MemoryParameterMode::BorrowExclusive });
         }
-        Type::Bytes => Some((MemoryObligationKind::DropValue, bytes_glue())),
-        Type::Resource(kind) => Some((
-            MemoryObligationKind::DropResource(*kind),
-            resource_glue(*kind),
-        )),
-        _ => None,
+        let id = self.type_planner.intern(ty)?;
+        let fact = self.type_planner.fact(id)?;
+        Ok(if fact.closure.class == MemoryClosureClass::LegacyClosed {
+            MemoryParameterMode::Copy
+        } else {
+            match fact.mode {
+                MemoryAggregateMode::Copy => MemoryParameterMode::Copy,
+                MemoryAggregateMode::ImmutableValue => MemoryParameterMode::BorrowShared,
+                MemoryAggregateMode::Affine => MemoryParameterMode::Consume,
+            }
+        })
     }
-}
-pub(crate) const fn resource_glue(kind: ResourceKind) -> MemoryDropGlueId {
-    MemoryDropGlueId::new(1 + kind as u32)
-}
-const fn bytes_glue() -> MemoryDropGlueId {
-    MemoryDropGlueId::new(1 + ResourceKind::ALL.len() as u32)
-}
-fn drop_glues() -> Vec<MemoryDropGluePlan> {
-    let mut glues = Vec::with_capacity(ResourceKind::ALL.len().saturating_add(2));
-    glues.push(MemoryDropGluePlan {
-        id: MemoryDropGlueId::new(0),
-        kind: MemoryDropGlueKind::ByteVector,
-    });
-    glues.extend(
-        ResourceKind::ALL
-            .into_iter()
-            .map(|kind| MemoryDropGluePlan {
-                id: resource_glue(kind),
-                kind: MemoryDropGlueKind::Resource(kind),
-            }),
-    );
-    glues.push(MemoryDropGluePlan {
-        id: bytes_glue(),
-        kind: MemoryDropGlueKind::Bytes,
-    });
-    glues
+
+    fn planned_result_mode(&mut self, ty: &Type) -> Result<MemoryResultMode> {
+        let id = self.type_planner.intern(ty)?;
+        let fact = self.type_planner.fact(id)?;
+        if fact.contains_borrow {
+            return Err(Error::msg(format!(
+                "LKJ-MEM-BORROWED-RESULT type={:?} reason=borrowed result/escape",
+                memory_type(ty),
+            )));
+        }
+        if matches!(ty, Type::Resource(_)) { return Ok(MemoryResultMode::External); }
+        Ok(if fact.closure.class == MemoryClosureClass::LegacyClosed
+            || fact.mode == MemoryAggregateMode::Copy {
+            MemoryResultMode::Trivial
+        } else { MemoryResultMode::Owned })
+    }
+
+    fn finish_type_work(&mut self) -> Result<()> {
+        self.work.type_nodes = u64::try_from(self.type_planner.facts.len())
+            .map_err(|_| Error::msg("HIR memory-plan type facts exceed u64"))?;
+        if self.work.type_nodes > MAX_MEMORY_PLAN_TYPE_NODES {
+            return Err(Error::msg("HIR memory-plan type facts exceed bounded maximum"));
+        }
+        self.work.type_edges = self.type_planner.graph.edges;
+        self.work.scc_work = self.type_planner.graph.scc_work;
+        self.work.aggregate_fields = self.type_planner.fields;
+        self.work.aggregate_variants = self.type_planner.variants;
+        self.work.destinations = u64::try_from(self.destinations.len())
+            .map_err(|_| Error::msg("HIR memory-plan destinations exceed u64"))?;
+        self.work.borrow_scopes = u64::try_from(self.borrow_scopes.len())
+            .map_err(|_| Error::msg("HIR memory-plan borrow scopes exceed u64"))?;
+        self.work.drop_paths = u64::try_from(self.type_planner.drop_paths.len())
+            .map_err(|_| Error::msg("HIR memory-plan drop paths exceed u64"))?;
+        Ok(())
+    }
+
+    fn reject_partial_projection(&mut self, expression: &Expr) -> Result<()> {
+        let source = match &expression.kind {
+            ExprKind::ProductField { value, .. }
+            | ExprKind::WithProductField { value, .. }
+            | ExprKind::EnumField { value, .. }
+            | ExprKind::EnumUnwrap { value, .. } => value,
+            _ => return Ok(()),
+        };
+        if !matches!(source.kind, ExprKind::Load(_)) { return Ok(()); }
+        let id = self.type_planner.intern(&expression.ty)?;
+        if self.type_planner.fact(id)?.mode == MemoryAggregateMode::Affine {
+            return Err(Error::msg(format!(
+                "LKJ-MEM-PARTIAL-MOVE type={:?} path={:?} reason=affine aggregate field projection",
+                memory_type(&expression.ty), expression_kind(&expression.kind),
+            )));
+        }
+        Ok(())
+    }
+
+    fn add_destination(&mut self, expression: &Expr, expression_id: MemoryExpressionId) -> Result<()> {
+        if u64::try_from(self.destinations.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_DESTINATIONS {
+            return Err(Error::msg("HIR memory-plan destinations exceed bounded maximum"));
+        }
+        let entry_id = self.entries.iter().find_map(|entry| match entry.subject {
+            MemorySubject::Expression { expression, .. } if expression == expression_id => Some(entry.id),
+            _ => None,
+        }).ok_or_else(|| Error::msg("aggregate destination lost expression entry"))?;
+        let entry_index = entry_id.index().ok_or_else(|| Error::msg("aggregate entry exceeds usize"))?;
+        let type_fact = self.entries[entry_index].type_fact;
+        let fact = self.type_planner.fact(type_fact)?.clone();
+        let mut children: Vec<_> = self.entries.iter().filter_map(|entry| match entry.subject {
+            MemorySubject::Expression { expression, parent: Some(parent), child_index, .. }
+                if parent == expression_id => Some((child_index, expression, entry.drop_path)),
+            _ => None,
+        }).collect();
+        children.sort_by_key(|item| item.0);
+        let (field_count, active_payload) = destination_shape(self.program, expression)?;
+        if children.len() != usize::try_from(field_count).unwrap_or(usize::MAX) {
+            return Err(Error::msg("LKJ-MEM-INCOMPLETE-DESTINATION field count mismatch"));
+        }
+        let id = MemoryDestinationId::new(u32::try_from(self.destinations.len())
+            .map_err(|_| Error::msg("HIR memory-plan destination identity exceeds u32"))?);
+        let initialized_order: Vec<u32> = (0..field_count).collect();
+        let fields = children.into_iter().map(|(index, expression, drop_path)| {
+            MemoryDestinationField { index, expression, drop_path }
+        }).collect();
+        let (kind, execution, execution_cutover) =
+            if fact.closure.class == MemoryClosureClass::Deterministic {
+                (MemoryDestinationKind::CutoverRequired, MemoryExecution::CutoverRequired,
+                    execution_cutover(&expression.ty))
+            } else { (MemoryDestinationKind::RegisteredLegacyTraced,
+                MemoryExecution::Current, None) };
+        self.destinations.push(MemoryDestinationPlan { id, function: self.current_function,
+            expression: expression_id, kind, execution, execution_cutover, type_fact,
+            field_count, fields,
+            active_payload, initialized_order: initialized_order.clone(),
+            reverse_abort_cleanup: initialized_order.into_iter().rev().collect() });
+        self.entries[entry_index].destination = Some(id);
+        Ok(())
+    }
 }

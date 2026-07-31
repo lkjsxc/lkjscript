@@ -23,7 +23,7 @@ pub fn evaluator_outcome(outcome: EvalOutcome) -> ScalarOutcome {
         EvalOutcome::Returned(EvalValue::I64(value)) => ScalarOutcome::I64(value),
         EvalOutcome::Returned(EvalValue::F64(value)) => ScalarOutcome::F64(value.to_bits()),
         EvalOutcome::Returned(EvalValue::Str(value)) => ScalarOutcome::Str(value),
-        EvalOutcome::Returned(EvalValue::Path(value)) => ScalarOutcome::Path(value),
+        EvalOutcome::Returned(EvalValue::ReturnedOwned(value)) => vm_value(&value),
         EvalOutcome::Exited(code) => ScalarOutcome::Exited(code),
         EvalOutcome::Trapped(_) => ScalarOutcome::Trapped,
         other => ScalarOutcome::Other(format!("{other:?}")),

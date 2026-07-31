@@ -4,6 +4,7 @@ use crate::verify::*;
 use crate::{InstructionKind, Program, TraitRole};
 
 pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
+    super::structural_metadata::verify(program)?;
     if program.sources.iter().enumerate().any(|(index, source)| {
         source.id != u32::try_from(index).unwrap_or(u32::MAX) || source.path.is_empty()
     }) {
@@ -31,8 +32,13 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
                 ));
             }
             verify_type(program, &field.ty, &[])?;
-            if contains_ownership_type(&field.ty) {
-                return fail("SSA ownership/reference type cannot be stored in a product field");
+            if contains_ownership_type(program, &field.ty)
+                && program
+                    .memory
+                    .type_for(&crate::SsaType::Product(product.id))
+                    .is_none()
+            {
+                return fail("SSA ownership/reference field requires deterministic structural product metadata");
             }
         }
     }

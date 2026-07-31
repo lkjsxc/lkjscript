@@ -66,7 +66,6 @@ pub(in crate::ssa) fn lower_type(
         Type::I64 => SsaType::I64,
         Type::F64 => SsaType::F64,
         Type::Str => SsaType::Str,
-        Type::Buf => SsaType::Buf,
         Type::Bytes => SsaType::Bytes,
         Type::ByteVector => SsaType::ByteVector,
         Type::ByteSlice => SsaType::ByteSlice,
@@ -95,17 +94,20 @@ pub(in crate::ssa) fn lower_type(
     })
 }
 
-pub(in crate::ssa) fn is_owned_value(ty: &SsaType) -> bool {
+pub(in crate::ssa) fn is_owned_value(structural: &StructuralMemoryMetadata, ty: &SsaType) -> bool {
     matches!(
         ty,
-        SsaType::Bytes | SsaType::ByteVector | SsaType::Resource(_)
-    )
+        SsaType::Bytes
+            | SsaType::ByteVector
+            | SsaType::Resource(_)
+            | SsaType::StructuralDestination(_)
+    ) || structural.is_owned(ty)
 }
 
 pub(in crate::ssa) struct CleanupPlan {
     pub(in crate::ssa) next_expression: u32,
     pub(in crate::ssa) loan_ends: BTreeMap<u32, Vec<SsaLoanId>>,
-    pub(in crate::ssa) place_glues: BTreeMap<SsaPlaceId, DropGlueIdentity>,
+    pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) place_drop_classes: BTreeMap<SsaPlaceId, MemoryDropClass>,
 }
 
@@ -116,72 +118,4 @@ pub(in crate::ssa) struct ActiveLoan {
     pub(in crate::ssa) value: ValueId,
 }
 
-impl CleanupPlan {
-    pub(in crate::ssa) fn new(plan: &HirMemoryPlan, function: MemoryFunctionId) -> Result<Self> {
-        let function_plan = plan
-            .function(function)
-            .ok_or_else(|| Error::msg("HIR memory plan lost an SSA function"))?;
-        let mut loan_ends: BTreeMap<u32, Vec<SsaLoanId>> = BTreeMap::new();
-        for loan in plan.loans.iter().filter(|loan| loan.function == function) {
-            loan_ends
-                .entry(loan.end_after.raw())
-                .or_default()
-                .push(SsaLoanId::new(loan.loan));
-        }
-        let mut place_glues = BTreeMap::new();
-        let mut place_drop_classes = BTreeMap::new();
-        for obligation in plan
-            .obligations
-            .iter()
-            .filter(|obligation| obligation.function == function)
-        {
-            if matches!(obligation.kind, MemoryObligationKind::EndBorrow) {
-                continue;
-            }
-            let entry = plan
-                .entry(obligation.entry)
-                .ok_or_else(|| Error::msg("HIR memory obligation lost its entry"))?;
-            let MemorySubject::Place { place, .. } = entry.subject else {
-                return Err(Error::msg("HIR drop obligation does not name a place"));
-            };
-            let glue = obligation
-                .drop_glue
-                .and_then(|id| plan.drop_glues.iter().find(|glue| glue.id == id))
-                .ok_or_else(|| Error::msg("HIR drop obligation lost closed glue identity"))?;
-            let glue = match glue.kind {
-                MemoryDropGlueKind::ByteVector => DropGlueIdentity::ByteVector,
-                MemoryDropGlueKind::Bytes => DropGlueIdentity::Bytes,
-                MemoryDropGlueKind::Resource(kind) => DropGlueIdentity::Resource(kind),
-            };
-            let place = SsaPlaceId::new(place);
-            let drop_class = obligation
-                .drop_class
-                .ok_or_else(|| Error::msg("HIR place obligation lost its drop class"))?;
-            if drop_class == MemoryDropClass::Open {
-                return Err(Error::msg("open HIR drop class reached SSA lowering"));
-            }
-            if place_glues.insert(place, glue).is_some()
-                || place_drop_classes.insert(place, drop_class).is_some()
-            {
-                return Err(Error::msg(
-                    "HIR memory plan duplicates a place drop obligation",
-                ));
-            }
-        }
-        Ok(Self {
-            next_expression: function_plan.body.raw(),
-            loan_ends,
-            place_glues,
-            place_drop_classes,
-        })
-    }
-
-    pub(in crate::ssa) fn begin_expression(&mut self) -> Result<MemoryExpressionId> {
-        let id = MemoryExpressionId::new(self.next_expression);
-        self.next_expression = self
-            .next_expression
-            .checked_add(1)
-            .ok_or_else(|| Error::msg("SSA HIR memory expression identity overflow"))?;
-        Ok(id)
-    }
-}
+include!("model/cleanup.rs");

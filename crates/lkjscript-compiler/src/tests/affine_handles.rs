@@ -54,14 +54,7 @@ fn affine_handle_receives_exact_implicit_cleanup() {
         .iter()
         .map(|instruction| instruction.op())
         .collect();
-    assert!(ops.windows(3).any(|window| {
-        window
-            == [
-                lkjscript_core::Op::SysClose,
-                lkjscript_core::Op::Pop,
-                lkjscript_core::Op::Unit,
-            ]
-    }));
+    assert!(ops.contains(&lkjscript_core::Op::ResourceDrop));
 }
 
 #[test]

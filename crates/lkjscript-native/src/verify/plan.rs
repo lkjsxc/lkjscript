@@ -63,10 +63,15 @@ pub(super) fn verify_plan_inner(
             .iter()
             .flat_map(|block| block.instructions.iter())
         {
-            if let Operation::StaticBytesConst(identity) = instruction.operation {
-                if static_bytes.get(identity.index() as usize).is_none() {
-                    return Err(VerificationError::TypeMismatch("static bytes constant"));
-                }
+            let static_identity = match instruction.operation {
+                Operation::StaticBytesConst(identity)
+                | Operation::StaticStringConst(identity, _) => Some(identity),
+                _ => None,
+            };
+            if static_identity
+                .is_some_and(|identity| static_bytes.get(identity.index() as usize).is_none())
+            {
+                return Err(VerificationError::TypeMismatch("static bytes constant"));
             }
         }
         total_blocks = total_blocks

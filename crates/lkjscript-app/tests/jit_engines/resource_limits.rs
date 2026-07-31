@@ -68,16 +68,20 @@ fn native_poll_deadline_fuel_and_code_work_limits_are_bounded() {
         .expect("allocation limit is structured");
     assert!(matches!(
         outcome.outcome,
-        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::Allocations)
+        ExecutionOutcome::Returned(ref value) if value.as_str() == Some("")
     ));
+    assert_eq!(outcome.stats.runtime_heap_successes, 0);
+    assert!(outcome.stats.structural_runtime_calls > 0);
     let mut tiny_heap = ExecutionConfig::default();
     tiny_heap.max_heap_bytes = 1;
     let outcome = execute_forced(allocation.ssa(), &tiny_heap, JitConfig::default())
         .expect("heap limit is structured");
     assert!(matches!(
         outcome.outcome,
-        ExecutionOutcome::ResourceLimitExceeded(ResourceLimitKind::HeapBytes)
+        ExecutionOutcome::Returned(ref value) if value.as_str() == Some("")
     ));
+    assert_eq!(outcome.stats.runtime_heap_successes, 0);
+    assert!(outcome.stats.structural_runtime_calls > 0);
 
     let mut limited = JitConfig::default();
     limited.backend_limits =

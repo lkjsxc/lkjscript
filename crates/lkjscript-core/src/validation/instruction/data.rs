@@ -1,4 +1,5 @@
 use super::{instruction_error, types::*, Kind, State};
+use crate::validation::UniquePlaceState;
 use crate::{Chunk, Constant, DecodedInstruction, FunctionProto, Op, Result};
 
 pub(super) fn apply(
@@ -10,7 +11,14 @@ pub(super) fn apply(
     let op = instruction.op();
     match op {
         Op::Nop | Op::Jump => {}
-        Op::Trap => expect_pop(state, Kind::Str, proto, instruction)?,
+        Op::Trap => pop_structural_leaf(
+            chunk,
+            state,
+            crate::StructuralKind::String,
+            Kind::Str,
+            proto,
+            instruction,
+        )?,
         Op::LoadConst => {
             let constant = instruction
                 .operand()
@@ -28,47 +36,8 @@ pub(super) fn apply(
                 Constant::Proto(proto) => Kind::Proto(*proto),
             });
         }
-        Op::LoadLocal => {
-            let slot = instruction_operand(proto, instruction)?;
-            let kind = state.locals.get(slot).copied().flatten().ok_or_else(|| {
-                instruction_error(
-                    proto,
-                    op,
-                    instruction.offset(),
-                    "local is not definitely initialized",
-                )
-            })?;
-            if is_unique(kind) {
-                return Err(instruction_error(
-                    proto,
-                    op,
-                    instruction.offset(),
-                    "unique owners/views require typed local opcodes",
-                ));
-            }
-            state.stack.push(kind);
-        }
-        Op::StoreLocal => {
-            let slot = instruction_operand(proto, instruction)?;
-            let value = top(state, proto, instruction)?;
-            if is_unique(value) {
-                return Err(instruction_error(
-                    proto,
-                    op,
-                    instruction.offset(),
-                    "unique owners/views require typed local opcodes",
-                ));
-            }
-            let target = state.locals.get_mut(slot).ok_or_else(|| {
-                instruction_error(
-                    proto,
-                    op,
-                    instruction.offset(),
-                    "local index is out of range",
-                )
-            })?;
-            *target = Some(value);
-        }
+        Op::LoadLocal => load_local(proto, instruction, state)?,
+        Op::StoreLocal => store_local(proto, instruction, state)?,
         Op::LoadGlobal => {
             let slot = instruction_operand(proto, instruction)?;
             let kind = state.globals.get(slot).copied().flatten().ok_or_else(|| {
@@ -93,7 +62,7 @@ pub(super) fn apply(
                         "global closure does not match declared prototype metadata",
                     ));
                 }
-            } else if matches!(value, Kind::Resource(_) | Kind::ResourceResult(_))
+            } else if matches!(value, Kind::Resource { .. } | Kind::ResourceResult { .. })
                 || is_unique(value)
             {
                 return Err(instruction_error(
@@ -115,18 +84,36 @@ pub(super) fn apply(
         }
         Op::Pop => {
             let value = pop(state, proto, instruction)?;
-            if is_unique(value) {
+            let unplaced_structural = matches!(value, Kind::StructuralOwner { owner, .. }
+            if !state.unique_places.iter().any(|place| {
+                matches!(place, UniquePlaceState::Active { owner: Some(actual), .. } if *actual == owner)
+            }));
+            let resource_alias = match value {
+                Kind::Resource { owner, .. } | Kind::ResourceResult { owner, .. } => {
+                    state.locals.iter().flatten().any(|local| match local {
+                        Kind::Resource { owner: actual, .. }
+                        | Kind::ResourceResult { owner: actual, .. } => *actual == owner,
+                        _ => false,
+                    })
+                }
+                _ => false,
+            };
+            if is_unique(value)
+                && !matches!(value, Kind::StructuralOwnerRef { .. })
+                && !unplaced_structural
+                && !resource_alias
+            {
                 return Err(instruction_error(
                     proto,
                     op,
                     instruction.offset(),
-                    "Pop cannot erase a unique owner or live view",
+                    &format!("Pop cannot erase unique owner or live view {value:?}"),
                 ));
             }
         }
         Op::Dup => {
             let value = top(state, proto, instruction)?;
-            if is_unique(value) {
+            if is_unique(value) && !matches!(value, Kind::StructuralOwnerRef { .. }) {
                 return Err(instruction_error(
                     proto,
                     op,
@@ -143,9 +130,11 @@ pub(super) fn apply(
                 proto,
                 instruction,
             )?;
-            state
-                .stack
-                .push(Kind::Resource(crate::ResourceKind::InputStream));
+            state.stack.push(resource_kind(
+                crate::ResourceKind::InputStream,
+                proto,
+                instruction,
+            )?);
         }
         Op::False | Op::True => state.stack.push(Kind::Bool),
         Op::Unit => state.stack.push(Kind::Unit),
@@ -159,12 +148,28 @@ pub(super) fn apply(
             )?;
             state.stack.push(Kind::I64);
         }
-        Op::EmptyStr => state.stack.push(Kind::Str),
+        Op::EmptyStr => state.stack.push(structural_leaf_owner(
+            chunk,
+            crate::StructuralKind::String,
+            proto,
+            instruction,
+        )?),
         _ => unreachable!("opcode dispatched to wrong validation family"),
     }
     Ok(())
 }
 
+include!("types/data_locals.rs");
+
 fn is_unique(kind: Kind) -> bool {
-    matches!(kind, Kind::ByteVector(_) | Kind::ByteSlice { .. })
+    is_affine_resource(kind)
+        || matches!(
+            kind,
+            Kind::ByteVector(_)
+                | Kind::ByteSlice { .. }
+                | Kind::StructuralOwner { .. }
+                | Kind::StructuralOwnerRef { .. }
+                | Kind::StructuralView { .. }
+                | Kind::StructuralDestination { .. }
+        )
 }

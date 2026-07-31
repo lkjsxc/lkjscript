@@ -19,8 +19,9 @@ The implementation proceeds through separately honest boundaries:
 
 1. **Current:** native canonical native contract typed references, exact non-empty stack maps,
    bounded active generated frames, and a safe collection-dispatch boundary;
-2. **Current:** source-to-generated host-independent allocation for Str, legacy
-   Buf, products, List, Option, Result, and monomorphic the canonical source contract enums,
+2. **Current:** source-to-generated host-independent allocation for Str,
+   products, List, Option, Result, and monomorphic the canonical source contract
+   enums, plus noncollecting unique bytes and byte vectors,
    including construction, field/tag/read/write operations, direct and mutual
    recursion, forced collection, and VM/evaluator/native equality;
 3. **Accepted Target:** versioned Handle and host-capability calls, native/VM
@@ -59,8 +60,8 @@ forced JIT sessions use that implementation with exact allocation counts,
 deterministic estimated object-byte accounting, collection counts, estimated
 peak-live bytes, and stress-collection APIs. The independent evaluator mirrors
 these allocation and estimated-live-byte limits for its heap-producing
-operations; buffer conversion and slicing charge both payload and Result
-wrapper on success, and error string payload plus Result wrapper on failure.
+operations. Bytes conversion and slicing use separately bounded unique storage;
+traced error and Result envelopes retain their ordinary charges.
 Because a language `Value` has no generation field, swept object indices are
 never reused within a session, and all publication paths reject before the
 stable `u32` handle space is exhausted. Mutation is transactional and
@@ -77,8 +78,8 @@ re-materializes arguments after any moving root writeback, and propagates
 structured status. Empty List and None use only the exact zero niche; other references
 reject zero and every nonzero handle is category/layout checked.
 
-Forced lowering covers Str, legacy Buf, Product, List, Option, Result, and
-monomorphic host-independent enums, their listed constructors/accessors/
+Forced lowering covers unique bytes and byte vectors plus Str, Product, List,
+Option, Result, and monomorphic host-independent enums, their listed constructors/accessors/
 mutations/conversions/equality families, and recursive SCCs. Runtime ABI calls are generated execution, not fallback.
 Automatic mode deliberately keeps reference-signature entries in the VM
 because native/VM reference transfer is not Current. Such a helper may still
@@ -92,8 +93,8 @@ calls, and lexical ownership references reject deterministically.
 The tier supports directly or through exact versioned runtime calls:
 
 - Unit, Bool, I64, and F64;
-- products, Option, Result, Str, Buf, List, and Handle;
-- construction, field/tag access, immutable replacement, current buffer
+- products, Option, Result, Str, bytes, byte-vector, List, and typed resources;
+- construction, field/tag access, immutable replacement, current byte
   operations, and exact equality families;
 - allocation, initialized object publication, and classified heap stores;
 - direct calls, direct and mutual recursion, and native-to-native calls;
@@ -101,8 +102,8 @@ The tier supports directly or through exact versioned runtime calls:
 - structured return, trap, exit, deadline, resource limit, and host failure;
 - bulk bytes, durable files, SHA-256, and SQLite through runtime calls.
 
-`buf-slice` remains copying. SQLite remains a runtime capability; SQLite code is
-not generated machine code.
+`copy-bytes-slice` is a checked owned copy. SQLite remains a runtime
+capability; SQLite code is not generated machine code.
 
 ## Recursion
 

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use lkjscript_core::{
     Error, ExecutionConfig, Result, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreId,
-    UniqueStoreLimits, Value, MAX_BUFFER_BYTES,
+    UniqueStoreLimits, Value, MAX_BYTE_STORAGE_BYTES,
 };
 
 mod access;
@@ -58,7 +58,7 @@ impl UniqueRuntime {
     pub(crate) fn allocate(&mut self, size: i64) -> Result<Value> {
         let size = usize::try_from(size)
             .ok()
-            .filter(|size| *size <= MAX_BUFFER_BYTES)
+            .filter(|size| *size <= MAX_BYTE_STORAGE_BYTES)
             .ok_or_else(|| Error::msg("new-byte-vector size out of range"))?;
         let mut bytes = Vec::new();
         bytes

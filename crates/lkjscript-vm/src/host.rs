@@ -1,129 +1,6 @@
-//! Host effect helpers for print and byte IO.
+//! Host effect helpers for print and byte I/O.
 
-use lkjscript_core::{Constant, Error, GcHeap as Arena, HeapObj, Result, ValidatedChunk, Value};
-
-pub fn display_value(arena: &Arena, chunk: &ValidatedChunk, v: Value) -> Result<String> {
-    if v.is_invalid() {
-        return Err(Error::msg("invalid VM value escaped initialized storage"));
-    }
-    if v.is_unit() {
-        return Ok("unit".into());
-    }
-    if v.is_empty_list() {
-        return Ok("empty-list".into());
-    }
-    if let Some(b) = v.as_bool() {
-        return Ok(b.to_string());
-    }
-    if let Some(number) = v.as_i64() {
-        return Ok(number.to_string());
-    }
-    if let Some(number) = v.as_f64() {
-        return Ok(number.to_string());
-    }
-    if let Some(resource) = v.as_resource() {
-        return Ok(format!("resource#{resource}"));
-    }
-    if let Some(prototype) = v.as_function() {
-        return Ok(format!("#<fn:{prototype}>"));
-    }
-    if let Some(symbol) = v.as_symbol() {
-        return Ok(symbol_text(chunk, symbol)?.to_owned());
-    }
-    match arena.get(v)? {
-        HeapObj::Str(s) => Ok(s.clone()),
-        HeapObj::Pair { car, cdr } => {
-            let a = display_value(arena, chunk, *car)?;
-            let d = display_value(arena, chunk, *cdr)?;
-            Ok(format!("({a} . {d})"))
-        }
-        HeapObj::Buf(b) => Ok(format!("#<buf:{}>", b.len())),
-        HeapObj::Path(path) => Ok(format!("#<path:{}>", path.len())),
-        HeapObj::Product { product, .. } => Ok(format!("#<product:{}>", product.raw())),
-        HeapObj::Enum {
-            layout,
-            physical_tag,
-            active_payload,
-        } => display_enum(arena, chunk, layout.bytes(), *physical_tag, active_payload),
-    }
-}
-
-fn symbol_text(chunk: &ValidatedChunk, symbol: u32) -> Result<&str> {
-    match chunk.constants().get(symbol as usize) {
-        Some(Constant::Symbol(text)) => Ok(text),
-        _ => Err(Error::msg("invalid symbol constant index")),
-    }
-}
-
-fn display_enum(
-    arena: &Arena,
-    chunk: &ValidatedChunk,
-    layout: [u8; 32],
-    tag: u16,
-    payload: &[Value],
-) -> Result<String> {
-    if layout == lkjscript_core::OPTION_LAYOUT {
-        return match (tag, payload) {
-            (0, [value]) => Ok(format!("some({})", display_value(arena, chunk, *value)?)),
-            (1, []) => Ok("none".into()),
-            _ => Err(Error::msg("malformed option value")),
-        };
-    }
-    if layout == lkjscript_core::RESULT_LAYOUT {
-        return match (tag, payload) {
-            (0, [value]) => Ok(format!("ok({})", display_value(arena, chunk, *value)?)),
-            (1, [value]) => Ok(format!("err({})", display_value(arena, chunk, *value)?)),
-            _ => Err(Error::msg("malformed result value")),
-        };
-    }
-    if layout == lkjscript_core::NUMERIC_ERROR_LAYOUT && payload.is_empty() {
-        let name = match tag {
-            0 => "fractional",
-            1 => "non-finite",
-            2 => "inexact",
-            3 => "out-of-range",
-            _ => return Err(Error::msg("malformed numeric-error value")),
-        };
-        return Ok(format!("numeric-error {name}"));
-    }
-    if layout == lkjscript_core::UTF8_ERROR_LAYOUT {
-        let name = match tag {
-            0 => "invalid-leading-byte",
-            1 => "unexpected-continuation",
-            2 => "surrogate",
-            3 => "out-of-range",
-            4 => "missing-continuation",
-            5 => "overlong-encoding",
-            _ => return Err(Error::msg("malformed utf8-error value")),
-        };
-        return match payload {
-            [offset] => Ok(format!(
-                "utf8-error {name}({})",
-                display_value(arena, chunk, *offset)?
-            )),
-            _ => Err(Error::msg("malformed utf8-error payload")),
-        };
-    }
-    if layout == lkjscript_core::SYSTEM_ERROR_LAYOUT {
-        let name = match tag {
-            0 => "io",
-            1 => "terminal",
-            2 => "sqlite",
-            3 => "time",
-            4 => "network",
-            5 => "utf8",
-            6 => "unsupported",
-            7 => "random",
-            _ => return Err(Error::msg("malformed system-error value")),
-        };
-        let mut fields = Vec::with_capacity(payload.len());
-        for value in payload {
-            fields.push(display_value(arena, chunk, *value)?);
-        }
-        return Ok(format!("system-error {name}({})", fields.join(", ")));
-    }
-    Ok(format!("#<enum:{tag}>"))
-}
+use lkjscript_core::{Error, Result, Value};
 
 pub fn write_output(
     provider: &dyn lkjscript_host::StdioProvider,
@@ -156,14 +33,9 @@ pub fn write_byte(provider: &dyn lkjscript_host::StdioProvider, number: i64) -> 
     Ok(Value::UNIT)
 }
 
-pub fn write_str(
-    provider: &dyn lkjscript_host::StdioProvider,
-    arena: &Arena,
-    v: Value,
-) -> Result<Value> {
-    let s = crate::host_ext::as_str(arena, v)?;
+pub fn write_str(provider: &dyn lkjscript_host::StdioProvider, text: &str) -> Result<Value> {
     provider
-        .write(s.as_bytes())
-        .map_err(|error| Error::host(format!("write-str: {error}")))?;
+        .write(text.as_bytes())
+        .map_err(|error| Error::host(format!("write-string: {error}")))?;
     Ok(Value::UNIT)
 }

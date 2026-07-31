@@ -43,13 +43,13 @@ python3 meta/results/ai-authoring/validate.py \
 9. workspace unit tests with the locked Cargo graph.
 
 Workspace tests independently require exact structural parse/format/parse and
-byte roundtrip for all 133 tracked `.lkjscript` sources, revision/key/node/path
+byte roundtrip for all 93 tracked `.lkjscript` sources, revision/key/node/path
 invariants, iterative deep import/tree behavior, source safety maxima, and
 malformed source/descriptor containment boundaries. The Python command validates
 retained benchmark schemas and verdict consistency; it does not invoke a model
 or fabricate missing semantic/hole variants.
 
-Workspace tests also cover the initial `Owned Buf` safe island: exact type and
+Workspace tests also cover the affine `byte-vector` and whole-owner slice island: exact type and
 operation signatures; generic-laundering and direct/nested aggregate-storage
 rejection; direct temporary/let Borrow placement and full-expression loan
 extent; affine move/reinitialization failures; lexical and branch-local place
@@ -62,7 +62,7 @@ Borrow rejection, terminator reuse, duplicate LoanIds, duplicate active
 `PlaceEnd`, loop mismatch, pass preservation, collection-nested function-type
 laundering, explicit affine arm transport, the 4,096-block function cap, bitset
 dominance, and bounded ownership/CFG/state work. Evaluator/VM equivalence uses the same
-zero-allocation boundary for the focused owned-buffer resource check, and the
+zero-tracing boundary for the focused byte-vector resource check, and the
 scalar-returning forced-baseline fixture reaches allocation/borrow/read before
 an ownership/reference support rejection.
 
@@ -73,7 +73,7 @@ exact-bit F64 values with zero scalar heap allocation. Typed-SSA tests directly
 cover malformed IDs, use-before-definition,
 dominance/edge/loop/effect failures; deterministic isolated and combined
 passes; exact bounded evaluation of scalar/control/calls/recursion/local
-mutation/products/Option/Result/lists/strings/buffers/traps/exits; explicit
+mutation/products/Option/Result/lists/strings/bytes/byte-vectors/traps/exits; explicit
 unsupported host operations; focused VM equivalence; and 64 deterministic
 bounded randomized type-correct scalar programs. Bytecode tests also cover
 whole-chunk reachable/unreachable decode, random small-byte robustness without
@@ -119,8 +119,8 @@ Focused cases cover I64 multi-block loops/calls/overflow/division, F64 bits,
 IEEE comparisons and mixed conversion, exact selected conditional/callee trap
 messages, exit, deadline/fuel/code/heap/allocation and zero/tiny active-value
 limits, unsupported ownership/host semantics, direct and mutual recursion with
-live references, exact/MAX+1 bounded list equality, native buffer Result error
-boundaries, nested Product/Option/Result/List/Str/Buf graphs, and auto scalar
+live references, exact/MAX+1 bounded list equality, native byte-view Result
+error boundaries, nested Product/Option/Result/List/Str graphs, and auto scalar
 later-call transfer while compiled reference helpers remain entry-ineligible.
 Test modules may locally allow panic-oriented assertion ergonomics. Product
 code remains under workspace `expect`, `unwrap`, `panic`, `todo`, and

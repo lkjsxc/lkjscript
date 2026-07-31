@@ -46,6 +46,16 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                     "bounded invocation-owned UniqueStore and generation-bearing loan table",
                 ))
                 .fact(fact(
+                    "structural-values",
+                    "structural-values",
+                    "exact static-string owner view destination type layout projection words",
+                ))
+                .fact(fact(
+                    "structural-service",
+                    "structural-service",
+                    "verified direct sites and bounded invocation-owned StructuralValueRuntime",
+                ))
+                .fact(fact(
                     "static-data",
                     "static-data",
                     "immutable accounted image bytes addressed only by verified tokens",
@@ -98,6 +108,11 @@ pub(crate) fn metrics() -> ContractDescriptor {
                 "unique",
                 "unique",
                 "operations cleanup live owners live loans release backlog and forged failures",
+            ))
+            .fact(fact(
+                "structural",
+                "structural",
+                "calls roots views destinations events release work empty completion and teardown failures",
             )),
     )
 }

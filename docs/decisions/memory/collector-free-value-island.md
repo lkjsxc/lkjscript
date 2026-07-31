@@ -29,8 +29,11 @@ The minimum island is:
 - all eleven typed external resources;
 - byte-vector, byte-slice, byte-slice-mut, bytes, and path.
 
-Dynamic strings, symbols, products, enums, option, result, list nodes, closures,
-and other registered structural families remain outside the island.
+The integrated cutover extends the island with owned `string`, internal
+borrowed UTF-8 views, `path`, and every eligible monomorphized nonrecursive
+product or enum whose transitive fields already belong to this set. General
+products, enums, list/pair nodes, captured closures, unknown generic arguments,
+and recursive aggregate SCCs remain outside.
 
 ## Eligibility
 
@@ -88,8 +91,19 @@ entries, zero VM transitions/fallback, zero collector-capable calls/counters,
 and zero final owners, loans, or release backlog. Proof fixtures permit
 optimizing entries only.
 
-Path construction, file I/O, owned resource close, mixed resource/unique
-execution, legacy-family removal, and the full island remain required evidence.
+Current evidence covers path construction/borrow/equality, dynamic string
+construction/view/equality/return, generic nonrecursive product/enum
+construction, field/tag borrow, whole-value move/drop, destination abort,
+`option string`, `result path system-error`, `result bytes system-error`, nested
+deterministic aggregates, owned resource close, mixed resource/unique
+execution, and semantic process snapshots. Eligible forced tiers retain
+nonzero selected-tier entries, zero fallback, zero collector metadata/counters,
+and exact final root/loan/destination/release accounting.
+
+Recursive products and enums, persistent pairs/lists, captured closures, and
+unknown generic graphs remain outside the Current island. Completed leaf,
+aggregate, resource, and borrowed-host evidence does not promote those families
+or the whole runtime.
 
 ## Remaining Collector
 

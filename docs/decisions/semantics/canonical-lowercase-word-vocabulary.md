@@ -2,12 +2,11 @@
 
 ## Status
 
-**Accepted contract with the vocabulary cutover implemented.** Compiler,
-tracked source corpus, packages, Semantic Source discriminants, diagnostics,
-structured signatures/imports, string literal markers, and removed-spelling
-rejection use the typed lowercase registry. Promotion of this entire capsule to
-Current remains blocked by the atomic removal of transitional `buf`; no edition
-or compatibility mode exists.
+**Current.** Compiler, tracked source corpus, packages, Semantic Source
+discriminants, diagnostics, structured signatures/imports, string literal
+markers, and removed-spelling rejection use the typed lowercase registry. The
+transitional buffer spelling is removed; no edition or compatibility mode
+exists.
 
 ## Identifier identity
 
@@ -70,7 +69,7 @@ Public resource calls use typed domain words such as `open-file-reader`,
 | `I64` | `i64` |
 | `F64` | `f64` |
 | `Str` | `string` |
-| `Buf` | `buf` during atomic data migration only |
+| `Buf` | `bytes`, `byte-vector`, `byte-slice`, or `byte-slice-mut` by semantics |
 | `Path` | `path` |
 | `Symbol` | `symbol` |
 | `Handle` / `handle` | exact typed resource kind |
@@ -83,9 +82,9 @@ Public resource calls use typed domain words such as `open-file-reader`,
 | `Option` | `option` |
 | `Result` | `result` |
 
-The implementation must not publish this capsule as Current while transitional
-`buf` remains. Universal `handle` is already removed. Current owned text becomes `string`; `str` is reserved for a
-borrowed valid-UTF-8 view. Type parameters are lowercase names whose binder
+Universal `handle` and transitional buffer spellings are removed. Current
+owned text is `string`; `str` is reserved for a borrowed valid-UTF-8 view. Type
+parameters are lowercase names whose binder
 identity, not capitalization, distinguishes them from nominal types.
 
 Built-in errors are `numeric-error`, `utf8-error`, and `system-error`.

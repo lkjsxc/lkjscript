@@ -47,7 +47,9 @@ pub(crate) fn verify_borrow_uses(
                     }
                     if !matches!(
                         instruction.kind,
-                        InstructionKind::Runtime { .. } | InstructionKind::Call { .. }
+                        InstructionKind::Copy(_)
+                            | InstructionKind::Runtime { .. }
+                            | InstructionKind::Call { .. }
                     ) {
                         return fail("SSA Borrow result has an unsupported non-argument use");
                     }

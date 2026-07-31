@@ -3,13 +3,10 @@ use crate::ProductId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeapObj {
-    Str(String),
     Pair {
         car: Value,
         cdr: Value,
     },
-    Buf(Vec<u8>),
-    Path(Vec<u8>),
     Product {
         product: ProductId,
         fields: Vec<Value>,
@@ -38,7 +35,6 @@ impl HeapObj {
                     mark(*field);
                 }
             }
-            _ => {}
         }
     }
 }

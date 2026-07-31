@@ -1,4 +1,5 @@
 mod failure;
+mod structural;
 use super::*;
 
 impl FunctionEncoder<'_> {
@@ -39,12 +40,16 @@ impl FunctionEncoder<'_> {
                 ValueType::I64
                 | ValueType::Bool
                 | ValueType::StaticBytes
+                | ValueType::StaticString(_)
                 | ValueType::Capability(_)
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)
+                | ValueType::StructuralOwner(_)
+                | ValueType::StructuralView(_)
+                | ValueType::StructuralDestination(_)
                 | ValueType::Reference(_) => {
-                    let register = [6_u8, 2_u8, 1_u8]
+                    let register = [6_u8, 2_u8, 1_u8, 8_u8, 9_u8]
                         .get(integer_index)
                         .copied()
                         .ok_or(NativeError::Encode(EncodeError::UnsupportedSignature))?;
@@ -81,10 +86,14 @@ impl FunctionEncoder<'_> {
             ValueType::I64
             | ValueType::Bool
             | ValueType::StaticBytes
+            | ValueType::StaticString(_)
             | ValueType::Capability(_)
             | ValueType::Resource(_)
             | ValueType::Unique(_)
             | ValueType::Loan(_)
+            | ValueType::StructuralOwner(_)
+            | ValueType::StructuralView(_)
+            | ValueType::StructuralDestination(_)
             | ValueType::Reference(_) => {
                 self.store_rax(self.value_offset(instruction.output)?)?;
             }

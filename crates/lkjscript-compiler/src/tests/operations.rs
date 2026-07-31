@@ -3,12 +3,13 @@ use super::*;
 #[test]
 fn bounded_terminal_operations_replace_arbitrary_ioctl() {
     let canonical = stdio_unit_main(
-        "get-terminal-state/\nstandard-input/\nstdio\n/standard-input\nbuf-new/\n60\n/buf-new\n/get-terminal-state",
+        "let/\nbind/\nstate\nnew-byte-vector/\n60\n/new-byte-vector\n/bind\nget-terminal-state/\nstandard-input/\nstdio\n/standard-input\nborrow-mut/\nstate\n/borrow-mut\n/get-terminal-state\n/let",
     );
     let arbitrary = stdio_unit_main(
-        "sys-ioctl/\nstandard-input/\nstdio\n/standard-input\n21505\nbuf-new/\n1\n/buf-new\n/sys-ioctl",
+        "sys-ioctl/\nstandard-input/\nstdio\n/standard-input\n21505\nnew-byte-vector/\n1\n/new-byte-vector\n/sys-ioctl",
     );
-    assert!(compile_source(&canonical, "terminal.lkjscript", &Limits::default()).is_ok());
+    compile_source(&canonical, "terminal.lkjscript", &Limits::default())
+        .expect("bounded terminal operations compile");
     assert!(compile_source(&arbitrary, "terminal.lkjscript", &Limits::default()).is_err());
 }
 

@@ -4,7 +4,7 @@ use crate::types::Type;
 use super::Operation;
 use crate::operation::instantiation::function;
 
-mod buffers;
+mod byte_data;
 mod equality;
 mod files;
 mod hash;
@@ -73,7 +73,6 @@ fn canonical_type(ty: &Type) -> String {
         Type::I64 => "i64".into(),
         Type::F64 => "f64".into(),
         Type::Str => "string".into(),
-        Type::Buf => "buf".into(),
         Type::Bytes => "bytes".into(),
         Type::ByteVector => "byte-vector".into(),
         Type::ByteSlice => "byte-slice".into(),

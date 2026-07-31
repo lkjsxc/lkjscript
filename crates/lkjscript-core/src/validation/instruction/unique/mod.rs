@@ -5,6 +5,7 @@ mod owners;
 mod release;
 pub(super) mod support;
 mod views;
+pub(super) use views::pop_used_view;
 
 pub(super) fn apply(
     chunk: &Chunk,

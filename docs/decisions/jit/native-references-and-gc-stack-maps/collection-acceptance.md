@@ -10,7 +10,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 ## Collection Acceptance
 
 The Current closed-plan acceptance forces `CollectReferenceV1` with an exact
-Buf-reference argument/local map, proves a dead Buf home is absent, observes a
+traced-reference argument/local map, proves a dead traced home is absent, observes a
 caller/callee active chain, writes back copied handles, covers callback failure
 and every structured epilogue, enforces frame bounds, and repeats W^X
 install/invoke/drop. It does not allocate a language object.
@@ -18,8 +18,9 @@ install/invoke/drop. It does not allocate a language object.
 Source-level host-independent native allocation is Current after tests force collection with roots
 in arguments and spill slots, across native/native and native/runtime calls,
 through recursion, immediately before return, and around a native/VM
-transition. Tests include live/dead product, Option, Result, string, buffer, and
-list graphs, tiny heap limits, barriers, traps, exits, deadlines, and repeated
+transition. Tests include live/dead product, Option, Result, string, and list
+graphs plus independently noncollecting bytes and byte vectors, tiny heap limits,
+barriers, traps, exits, deadlines, and repeated
 install/invoke/drop. Missing or stale roots must fail validation or tests rather
 than become undefined behavior.
 ## Long-Term GC Sequence

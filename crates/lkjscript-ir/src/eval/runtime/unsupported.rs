@@ -4,7 +4,7 @@ impl Evaluator<'_> {
     pub(crate) fn runtime_unsupported(
         &mut self,
         operation: RuntimeOp,
-        _arguments: Vec<EvalValue>,
+        _arguments: Vec<&EvalValue>,
     ) -> std::result::Result<EvalValue, Flow> {
         reject_unsupported_host(operation)
     }

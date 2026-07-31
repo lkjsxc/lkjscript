@@ -14,6 +14,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
         metadata: metadata(effects),
     };
     Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -94,6 +95,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
                             kind: InstructionKind::Call {
                                 target: CallTarget::Direct(FunctionId::new(0)),
                                 arguments: vec![ValueId::new(0)],
+                                consuming: vec![false],
                                 signature: Signature::monomorphic(vec![SsaType::I64], SsaType::I64),
                                 instantiation: None,
                             },

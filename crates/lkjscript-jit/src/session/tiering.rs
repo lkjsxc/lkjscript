@@ -97,18 +97,6 @@ impl JitSession {
         Some(ScalarSignature { parameters, result })
     }
 
-    pub fn record_invocation_failure(&mut self, function: FunctionId) {
-        self.vm_fallbacks = self.vm_fallbacks.saturating_add(1);
-        let Some(index) = function.index() else {
-            return;
-        };
-        if let Some(record) = self.functions.get_mut(index) {
-            record.last_failure = Some(FailureCode::InvocationFailure);
-            record.state = TierState::Disabled;
-            record.code_object = None;
-        }
-    }
-
     pub fn trap_message_for(
         &self,
         function: FunctionId,

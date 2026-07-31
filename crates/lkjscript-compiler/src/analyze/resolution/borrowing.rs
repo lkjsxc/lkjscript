@@ -45,9 +45,8 @@ impl Resolver<'_> {
         })?;
         let owner_ty = self.analyzer.binding(binding)?.ty.clone();
         if owner_ty != Type::ByteVector {
-            return Err(self.error(
-                "borrow target must have exact type byte-vector; reborrow and legacy Buf are unsupported",
-            ));
+            return Err(self
+                .error("borrow target must have exact type byte-vector; reborrow is unsupported"));
         }
         let place = self.place(binding)?;
         let loan = self.allocate_loan()?;

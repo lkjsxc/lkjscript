@@ -141,3 +141,53 @@ fn directly_consumes(expression: &Expr, binding: BindingId) -> bool {
 fn open_drop_error() -> Error {
     Error::msg("HIR memory plan rejects an open or multiply consumed whole place")
 }
+
+impl Producer<'_> {
+    fn add_inferred_borrow_scope(
+        &mut self,
+        call: MemoryCallId,
+        argument_index: usize,
+        argument: &Expr,
+        expression: MemoryExpressionId,
+        end_after: MemoryExpressionId,
+    ) -> Result<()> {
+        let call_index = call.index().ok_or_else(|| Error::msg("call identity exceeds usize"))?;
+        let mode = *self.calls.get(call_index).and_then(|item| item.parameters.get(argument_index))
+            .ok_or_else(|| Error::msg("call borrow parameter is missing"))?;
+        let kind = match mode {
+            MemoryParameterMode::BorrowShared => MemoryBorrowKind::Shared,
+            MemoryParameterMode::BorrowExclusive => MemoryBorrowKind::Exclusive,
+            _ => return Ok(()),
+        };
+        let ExprKind::Load(reference) = argument.kind else { return Ok(()); };
+        let type_id = self.type_planner.intern(&argument.ty)?;
+        let fact = self.type_planner.fact(type_id)?;
+        if kind == MemoryBorrowKind::Shared
+            && (fact.closure.class != MemoryClosureClass::Deterministic
+                || fact.mode != MemoryAggregateMode::ImmutableValue) {
+            return Ok(());
+        }
+        if u64::try_from(self.borrow_scopes.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_BORROW_SCOPES {
+            return Err(Error::msg("HIR memory-plan borrow scopes exceed bounded maximum"));
+        }
+        let place = self.entries.iter().find_map(|entry| match entry.subject {
+            MemorySubject::Place { function, place, binding }
+                if function == self.current_function && binding == reference.binding.raw() => Some(place),
+            _ => None,
+        }).ok_or_else(|| Error::msg("inferred direct-call borrow lost source place"))?;
+        let id = MemoryBorrowScopeId::new(u32::try_from(self.borrow_scopes.len())
+            .map_err(|_| Error::msg("HIR memory-plan borrow scope identity exceeds u32"))?);
+        let entry = self.entries.iter_mut().find(|entry| matches!(entry.subject,
+            MemorySubject::Expression { expression: item, .. } if item == expression))
+            .ok_or_else(|| Error::msg("inferred direct-call borrow lost argument entry"))?;
+        entry.borrow_scope = Some(id);
+        entry.copy_share = if kind == MemoryBorrowKind::Shared {
+            MemoryCopySharePlan::BorrowShared
+        } else { MemoryCopySharePlan::BorrowExclusive };
+        self.calls[call_index].borrow_scopes[argument_index] = Some(id);
+        self.borrow_scopes.push(MemoryBorrowScopePlan { id, function: self.current_function,
+            call, argument_index: index_u32(argument_index)?, source_expression: expression,
+            binding: reference.binding.raw(), place, kind, semantic_uses: 1, end_after });
+        Ok(())
+    }
+}

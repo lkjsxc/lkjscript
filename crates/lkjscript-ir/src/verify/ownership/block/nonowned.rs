@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) fn nonowned_affine_values(function: &Function) -> HashSet<ValueId> {
+pub(crate) fn nonowned_affine_values(program: &Program, function: &Function) -> HashSet<ValueId> {
     let mut values = HashSet::new();
     for block in &function.blocks {
         for parameter in &block.parameters {
@@ -9,20 +9,32 @@ pub(crate) fn nonowned_affine_values(function: &Function) -> HashSet<ValueId> {
             }
         }
         for instruction in &block.instructions {
+            let borrowed_bytes = matches!(instruction.kind, InstructionKind::Borrow { .. })
+                && instruction.ty == SsaType::Bytes;
+            let structural_view = matches!(
+                instruction.kind,
+                InstructionKind::Borrow { .. } | InstructionKind::AggregateFieldBorrow { .. }
+            ) && program.memory.is_owned(&instruction.ty);
+            let borrowed_resource = matches!(
+                instruction.kind,
+                InstructionKind::Runtime {
+                    operation: crate::RuntimeOp::StdinHandle,
+                    ..
+                }
+            );
             if matches!(
                 instruction.kind,
-                InstructionKind::Constant(crate::Constant::StaticBytes(_))
-                    | InstructionKind::Borrow { .. }
-            ) && instruction.ty == SsaType::Bytes
-                || matches!(
-                    instruction.kind,
-                    InstructionKind::Runtime {
-                        operation: crate::RuntimeOp::StdinHandle,
-                        ..
-                    }
+                InstructionKind::Constant(
+                    crate::Constant::StaticBytes(_) | crate::Constant::Str(_)
                 )
+            ) || borrowed_bytes
+                || structural_view
+                || borrowed_resource
             {
                 values.insert(instruction.id);
+            }
+            if let InstructionKind::StructuralPublish { value, .. } = instruction.kind {
+                values.insert(value);
             }
         }
     }
@@ -54,7 +66,11 @@ pub(crate) fn nonowned_affine_values(function: &Function) -> HashSet<ValueId> {
     values
 }
 
-fn edge_arguments_to(terminator: &Terminator, target: BlockId, index: usize) -> Vec<ValueId> {
+pub(crate) fn edge_arguments_to(
+    terminator: &Terminator,
+    target: BlockId,
+    index: usize,
+) -> Vec<ValueId> {
     match terminator {
         Terminator::Branch {
             target: actual,

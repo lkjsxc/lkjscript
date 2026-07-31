@@ -40,10 +40,13 @@ impl<'a> Producer<'a> {
                     .ok_or_else(|| Error::msg("static bytes memory entry is missing"))?;
                 entry.mode.multiplicity = MemoryMultiplicity::Copy;
                 entry.mode.aliasing = MemoryAliasing::StaticShared;
-                entry.mode.storage = MemoryStorage::Static;
+                entry.mode.domain = MemoryDomain::Static;
                 entry.mode.destruction = MemoryDestruction::Trivial;
                 entry.mode.contention = MemoryContention::ImmutableShared;
+                entry.root_projection = MemoryRootProjection::None;
+                entry.copy_share = MemoryCopySharePlan::StaticIdentity;
                 entry.drop_glue = None;
+                entry.drop_path = None;
             }
         }
         Ok(())
@@ -56,8 +59,8 @@ impl<'a> Producer<'a> {
         args: &[Expr],
         hir_expression: &Expr,
         escape: MemoryEscape,
-    ) -> Result<()> {
-        let (target, parameters, result) = match callee.storage {
+    ) -> Result<MemoryCallId> {
+        let (target, mut parameters, mut result) = match callee.storage {
             BindingStorage::Function => {
                 let target = self
                     .function_ids
@@ -92,6 +95,14 @@ impl<'a> Producer<'a> {
                 )
             }
         };
+        if matches!(hir_expression.kind, ExprKind::Call { instantiation: Some(_), .. })
+            && matches!(target, MemoryCallTarget::Direct(_))
+        {
+            parameters = args.iter().map(|argument| {
+                self.planned_parameter_mode(&argument.ty, false)
+            }).collect::<Result<Vec<_>>>()?;
+            result = self.planned_result_mode(&hir_expression.ty)?;
+        }
         if args.len() != parameters.len() {
             return Err(Error::msg(
                 "HIR direct call argument count does not match memory signature",
@@ -127,7 +138,7 @@ impl<'a> Producer<'a> {
             parameters,
             result_mode(result_ty),
             escape,
-        )
+        ).map(|_| ())
     }
     fn add_call_record(
         &mut self,
@@ -137,7 +148,7 @@ impl<'a> Producer<'a> {
         parameters: Vec<MemoryParameterMode>,
         result: MemoryResultMode,
         escape: MemoryEscape,
-    ) -> Result<()> {
+    ) -> Result<MemoryCallId> {
         self.charge_calls(1)?;
         let id = MemoryCallId::new(
             u32::try_from(self.calls.len())
@@ -148,6 +159,7 @@ impl<'a> Producer<'a> {
             function: self.current_function,
             expression,
             target,
+            borrow_scopes: vec![None; parameters.len()],
             parameters,
             result,
         });
@@ -164,26 +176,6 @@ impl<'a> Producer<'a> {
                 expression: Some(expression),
             },
         )?;
-        Ok(())
-    }
-    fn add_use(
-        &mut self,
-        expression: MemoryExpressionId,
-        binding: BindingId,
-        kind: MemoryUseKind,
-    ) -> Result<()> {
-        self.charge_uses(1)?;
-        let id = MemoryUseId::new(
-            u32::try_from(self.uses.len())
-                .map_err(|_| Error::msg("HIR memory-plan use identity exceeds u32"))?,
-        );
-        self.uses.push(MemoryUse {
-            id,
-            function: self.current_function,
-            expression,
-            binding: binding.raw(),
-            kind,
-        });
-        Ok(())
+        Ok(id)
     }
 }

@@ -9,8 +9,6 @@ pub enum Type {
     I64,
     F64,
     Str,
-    /// Transitional traced mutable buffer. It is not a byte-vector.
-    Buf,
     /// Exact immutable bytes, static or affine dynamic unique storage.
     Bytes,
     /// Exact affine owner in deterministic unique byte storage.

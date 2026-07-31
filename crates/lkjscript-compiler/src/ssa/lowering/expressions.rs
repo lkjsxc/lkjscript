@@ -3,13 +3,6 @@ mod enum_dispatch;
 use crate::ssa::*;
 
 impl FunctionBuilder<'_> {
-    pub(in crate::ssa) fn lower_expr(&mut self, expression: &Expr) -> Result<Option<ValueId>> {
-        let memory_expression = self.begin_memory_expression()?;
-        let result = self.lower_expr_inner(expression)?;
-        self.finish_memory_expression(memory_expression, expression.origin)?;
-        Ok(result)
-    }
-
     fn lower_expr_inner(&mut self, expression: &Expr) -> Result<Option<ValueId>> {
         // Never controls paths; this local branch never emits an SSA value.
         let ty = if expression.ty == Type::Never {
@@ -189,3 +182,15 @@ impl FunctionBuilder<'_> {
         Ok(Some(value))
     }
 }
+
+include!("expressions/entry.rs");
+include!("expressions/branches.rs");
+include!("expressions/branch_merge.rs");
+include!("expressions/control.rs");
+include!("expressions/short_circuit.rs");
+include!("expressions/enums.rs");
+include!("expressions/enum_unwrap.rs");
+include!("expressions/structural_owner.rs");
+include!("expressions/structural_owner_unwrap.rs");
+include!("expressions/structural_copy_unwrap.rs");
+include!("expressions/structural_owner_cleanup.rs");

@@ -29,20 +29,6 @@ pub(crate) fn as_numeric_f64(value: &EvalValue) -> std::result::Result<f64, Flow
     }
 }
 
-pub(crate) fn as_str(value: &EvalValue) -> std::result::Result<&str, Flow> {
-    match value {
-        EvalValue::Str(value) => Ok(value),
-        _ => Err(Flow::Trap("expected Str".into())),
-    }
-}
-
-pub(crate) fn as_buffer(value: &EvalValue) -> std::result::Result<&EvalBuffer, Flow> {
-    match value {
-        EvalValue::Buf(value) => Ok(value),
-        _ => Err(Flow::Trap("expected Buf".into())),
-    }
-}
-
 pub(crate) fn list_values_equal(
     left: &[EvalValue],
     right: &[EvalValue],

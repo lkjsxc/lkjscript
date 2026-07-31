@@ -1,5 +1,6 @@
 use super::*;
 
+pub(super) mod display;
 mod equality;
 mod stack;
 #[cfg(test)]
@@ -62,11 +63,30 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
                 .ok_or_else(|| Error::msg("StoreLocal without frame"))?
                 .locals_base;
             let value = vm.peek()?;
+            let borrowed_resource = vm.resources.is_borrowed_handle(value)
+                || vm
+                    .frames
+                    .last()
+                    .is_some_and(|frame| frame.borrowed_resources.contains(&value));
+            let resource = value.as_aggregate_adapter().is_some()
+                || (value.as_resource().is_some() && !borrowed_resource);
             let target = vm
                 .stack
                 .get_mut(base + slot)
                 .ok_or_else(|| Error::msg("StoreLocal slot out of range"))?;
+            if resource && !target.is_invalid() && *target != value {
+                return Err(Error::msg(
+                    "StoreLocal would overwrite a distinct live affine resource",
+                ));
+            }
             *target = value;
+            if resource {
+                let top = vm
+                    .stack
+                    .last_mut()
+                    .ok_or_else(|| Error::msg("StoreLocal lost its resource operand"))?;
+                *top = Value::UNIT;
+            }
             Ok(())
         }
         x if x == Op::LoadGlobal as u8 => {
@@ -112,7 +132,10 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         x if x == Op::SameObject as u8 => same_object(vm),
         x if x == Op::ListEqual as u8 => list_equal(vm),
         x if x == Op::Pop as u8 => {
-            let _ = vm.pop()?;
+            let value = vm.pop()?;
+            if value.as_structural_root().is_some() {
+                return crate::run::structural_ops::drop_registered_owner(vm, value);
+            }
             Ok(())
         }
         x if x == Op::Dup as u8 => {

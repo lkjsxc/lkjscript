@@ -2,10 +2,14 @@
 
 ## Status
 
-**Current only for the safe internal runtime substrate and resource-plane
-adapter.** No source, HIR, SSA, bytecode, VM, native, or JIT structural family
-selects these domains yet. Builtin storage is removed; capture-free functions
-and symbols use inline artifact IDs. Six traced representation families remain.
+**Current for the safe runtime substrate and deterministic structural-value
+cutover.** HIR memory authority, verified SSA, validated bytecode, evaluator,
+VM, forced baseline, and forced proof execution select compact structural roots
+for dynamic strings, paths, deterministic nonrecursive products and enums,
+structural results, destinations, projections, and exact cleanup. Builtin
+storage is removed; capture-free functions and symbols use inline artifact IDs.
+The closed legacy tracing registry contains exactly `enum`, `pair`, and
+`product`.
 
 ## Implemented Facts
 
@@ -55,8 +59,9 @@ and symbols use inline artifact IDs. Six traced representation families remain.
 
 ## Focused Evidence
 
-Environment: Linux x86-64, Rust locked workspace, starting revision
-`0d961d43efa944583375758e30f249472ba96f39`.
+Environment: Linux x86-64, locked Rust workspace, revision-10 integration tree
+based on `1517f17f70c8222378c9123179e79db7b380f0e6`. Every command below exited
+zero on that integration tree.
 
 Commands actually run after implementation:
 
@@ -88,7 +93,24 @@ LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/durable-files-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sha256-smoke.sh
 LKJSCRIPT_BIN=target/release/lkjscript meta/scripts/sqlite-smoke.sh
 docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
-cargo miri --version  # unavailable for installed stable toolchain
+cargo +nightly miri test --locked -p lkjscript-core --lib \
+  gc::tests::collection::collection_preserves_nested_graph_and_reports_exact_counters
+cargo +nightly miri test --locked -p lkjscript-vm --lib \
+  run::unique::tests::trap_cleanup_releases_owner_and_exclusive_loan_once
+MIRIFLAGS='-Zmiri-disable-isolation' cargo +nightly miri test --locked \
+  -p lkjscript-vm --lib \
+  run::tests::teardown::trap_and_exit_preserve_primary_outcomes_during_emergency_resource_cleanup
+cargo +nightly miri test --locked -p lkjscript-native --test plan_validation \
+  suite::runtime_abi::failure_cleanup_calls_are_typed_and_independently_verified
+CARGO_TARGET_DIR=target/sanitizer-address RUSTFLAGS='-Zsanitizer=address' \
+  ASAN_OPTIONS='detect_leaks=1:halt_on_error=1' cargo +nightly test \
+  --workspace --lib --target x86_64-unknown-linux-gnu
+CARGO_TARGET_DIR=target/sanitizer-leak RUSTFLAGS='-Zsanitizer=leak' \
+  LSAN_OPTIONS='exitcode=23' cargo +nightly test --workspace --lib \
+  --target x86_64-unknown-linux-gnu
+CARGO_TARGET_DIR=target/sanitizer-thread RUSTFLAGS='-Zsanitizer=thread' \
+  TSAN_OPTIONS='halt_on_error=1' cargo +nightly test -Zbuild-std \
+  --workspace --lib --target x86_64-unknown-linux-gnu
 ```
 
 Focused tests cover cross-runtime rejection, internal cycles, bounded ordinary
@@ -141,7 +163,7 @@ duplicate owner rejection, shared and exclusive conflict, live-loan release
 rejection, move/drop state, root and loan slot reuse, generation retirement,
 capacity failure without partial state, sealed region-level leases, and empty
 completion. The final no-tracing gate is implemented but remains inactive while
-the six-family registry is nonempty. Address, leak, and thread sanitizers and
+the three-family registry is nonempty. Address, leak, and thread sanitizers and
 Miri passed the focused table tests. Rust nightly does not provide an undefined
 sanitizer, `cargo-fuzz` and repository fuzz harnesses are absent, and the WASI
 probe built but could not execute because `wasmtime` is unavailable.
@@ -149,12 +171,13 @@ probe built but could not execute because `wasmtime` is unavailable.
 ## Explicit Limits
 
 - The structural contract digest is
-  `c5430a7a987bc4ce23e5b76210a9c446fd1dfb4e4047b059f907c4c48037aa74`.
+  `9ba894d9d214c84ec286ecfb11df5da52b570c5d5d650ad2151559d582300d38`.
 - Pool borrowing is currently bounded by Rust references inside the safe core;
   cross-call runtime loan slots remain a backend integration target.
 - No sealed compact image is implemented.
 - No per-node precise reference count is implemented or selected.
 - The no-RC candidate comparison, real region/pool HIR and backend selection,
-  retained migration measurements for the six remaining families, sanitizers,
-  and fuzzing remain untested. Miri is unavailable on the installed toolchain.
+  retained migration measurements for the three remaining families, undefined
+  sanitizer, and fuzzing remain untested. Current Miri plus address, leak, and
+  thread sanitizer gates pass; `cargo-fuzz` and `wasmtime` are unavailable.
 - No collector-free-runtime or no-tracing-runtime claim follows from this work.

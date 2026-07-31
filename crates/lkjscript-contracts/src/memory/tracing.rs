@@ -11,10 +11,6 @@ pub struct LegacyTracedFamily {
 /// architectural reversal and changed contract evidence.
 pub const LEGACY_TRACED_FAMILIES: &[LegacyTracedFamily] = &[
     LegacyTracedFamily {
-        identity: "buf",
-        heap_variant: "Buf",
-    },
-    LegacyTracedFamily {
         identity: "enum",
         heap_variant: "Enum",
     },
@@ -23,15 +19,33 @@ pub const LEGACY_TRACED_FAMILIES: &[LegacyTracedFamily] = &[
         heap_variant: "Pair",
     },
     LegacyTracedFamily {
-        identity: "path",
-        heap_variant: "Path",
-    },
-    LegacyTracedFamily {
         identity: "product",
         heap_variant: "Product",
     },
-    LegacyTracedFamily {
-        identity: "string",
-        heap_variant: "Str",
-    },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_non_increasing_registry_contains_only_enum_pair_and_product() {
+        assert_eq!(
+            LEGACY_TRACED_FAMILIES,
+            [
+                LegacyTracedFamily {
+                    identity: "enum",
+                    heap_variant: "Enum",
+                },
+                LegacyTracedFamily {
+                    identity: "pair",
+                    heap_variant: "Pair",
+                },
+                LegacyTracedFamily {
+                    identity: "product",
+                    heap_variant: "Product",
+                },
+            ]
+        );
+    }
+}

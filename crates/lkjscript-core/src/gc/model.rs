@@ -39,6 +39,7 @@ pub struct GcStats {
 pub enum GcLimit {
     Allocations,
     HeapBytes,
+    MixedOwnershipGraph,
 }
 
 /// Stable-index, non-moving mark/sweep heap. An object is inserted into the

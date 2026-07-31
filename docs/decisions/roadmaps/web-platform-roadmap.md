@@ -35,10 +35,10 @@ Protocol parsing, routing, middleware, application composition, and framework
 policy belong in lkjscript. Native code exposes thin safe capabilities for
 sockets, polling, timers, bulk bytes, and audited provider boundaries.
 
-`buf-slice` remains a bounded copying operation. It is not the future borrowed
-`Slice T`. `Bytes` is an immutable ownership-aware byte type; `Vec T` is a
-unique growable container; `Slice T` is a checked lexical borrow. Their exact
-syntax and layout require separate contracts before implementation.
+`copy-bytes-slice` is a bounded owned-copy operation, not a borrowed view.
+`bytes` is immutable ownership-aware byte data; `byte-vector` is unique mutable
+storage; `byte-slice` and `byte-slice-mut` are checked lexical borrows. Ranged
+source view syntax remains a separate accepted contract.
 
 ## TLS
 
@@ -64,6 +64,6 @@ JIT cycle.
 ## Rejected
 
 A fat Rust Web framework hidden behind host calls, unbounded body buffering,
-calling copying `buf-slice` a zero-copy borrow, implementing unaudited
+calling `copy-bytes-slice` a zero-copy borrow, implementing unaudited
 cryptography in lkjscript, and adopting HTTP/3 without measured need are
 **Rejected**.

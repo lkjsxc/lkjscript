@@ -37,8 +37,20 @@ impl fmt::Debug for Value {
         if let Some(index) = self.as_legacy_traced() {
             return write!(formatter, "legacy-traced#{index}");
         }
+        if let Some(key) = self.as_aggregate_adapter() {
+            return write!(formatter, "aggregate-adapter#{key}");
+        }
         if let Some(key) = self.as_structural_root() {
             return write!(formatter, "structural-root#{}", key.get());
+        }
+        if let Some(key) = self.as_structural_view() {
+            return write!(formatter, "structural-view#{key}");
+        }
+        if let Some(key) = self.as_structural_destination() {
+            return write!(formatter, "structural-destination#{key}");
+        }
+        if let Some(index) = self.as_static_string() {
+            return write!(formatter, "static-string#{index}");
         }
         if let Some(index) = self.as_static_bytes() {
             return write!(formatter, "static-bytes#{index}");

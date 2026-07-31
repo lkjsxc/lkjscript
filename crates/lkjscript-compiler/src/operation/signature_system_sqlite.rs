@@ -42,7 +42,7 @@ pub(super) fn sqlite_signature(operation: Operation) -> Option<Type> {
         Operation::SysSqliteBindI64 => sqlite_bind(Type::I64),
         Operation::SysSqliteBindF64 => sqlite_bind(Type::F64),
         Operation::SysSqliteBindText => sqlite_bind(Type::Str),
-        Operation::SysSqliteBindBytes => sqlite_bind(Type::Buf),
+        Operation::SysSqliteBindBytes => sqlite_bind(Type::ByteSlice),
         Operation::SysSqliteStep | Operation::SysSqliteColumnCount => function(
             vec![resource(ResourceKind::SqliteStatement)],
             system_result(Type::I64),
@@ -60,7 +60,7 @@ pub(super) fn sqlite_signature(operation: Operation) -> Option<Type> {
         Operation::SysSqliteColumnI64 => sqlite_column(Type::I64),
         Operation::SysSqliteColumnF64 => sqlite_column(Type::F64),
         Operation::SysSqliteColumnText => sqlite_column(Type::Str),
-        Operation::SysSqliteColumnBytes => sqlite_column(Type::Buf),
+        Operation::SysSqliteColumnBytes => sqlite_column(Type::Bytes),
         Operation::SysSqliteBackup => function(
             vec![
                 Type::Capability(Sqlite),

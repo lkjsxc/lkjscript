@@ -83,10 +83,26 @@ pub(crate) fn scalar_to_execution(
                 {
                     session.take_returned_unique(function, true)?
                 }
+                NativeValue::StructuralOwner(_) => {
+                    let value = session.take_returned_structural(function)?;
+                    OwnedValue::from_structural(
+                        value,
+                        lkjscript_core::StructuralSnapshotLimits::default(),
+                    )
+                    .map_err(|error| {
+                        EngineError::new(
+                            FailureCode::InvocationFailure,
+                            Some(function),
+                            error.to_string(),
+                        )
+                    })?
+                }
                 NativeValue::Capability(_)
                 | NativeValue::Resource(_)
                 | NativeValue::Unique(_)
-                | NativeValue::Loan(_) => {
+                | NativeValue::Loan(_)
+                | NativeValue::StructuralView(_)
+                | NativeValue::StructuralDestination(_) => {
                     return Err(EngineError::new(
                         FailureCode::InvocationFailure,
                         Some(function),
@@ -131,10 +147,14 @@ pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedVa
             OwnedValue::from_vm_snapshot(Value::from_f64_bits(bits), Vec::new())
         }
         NativeValue::StaticBytes(_)
+        | NativeValue::StaticString(_)
         | NativeValue::Capability(_)
         | NativeValue::Resource(_)
         | NativeValue::Unique(_)
         | NativeValue::Loan(_)
+        | NativeValue::StructuralOwner(_)
+        | NativeValue::StructuralView(_)
+        | NativeValue::StructuralDestination(_)
         | NativeValue::Reference(_) => Err(lkjscript_core::Error::msg(
             "scalar JIT cannot return a native adapter value",
         )),

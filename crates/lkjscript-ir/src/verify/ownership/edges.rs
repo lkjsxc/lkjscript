@@ -1,19 +1,24 @@
 use std::collections::BTreeSet;
 
 use crate::verify::*;
-use crate::{BlockId, Function, IrError, SsaType, ValueId};
+use crate::{BlockId, Function, IrError, Program, SsaType, ValueId};
 
 pub(crate) fn consume_affine_arguments(
+    program: &Program,
     arguments: &[ValueId],
     state: &mut OwnershipState,
     types: &[SsaType],
+    nonowned_affine: &std::collections::HashSet<ValueId>,
     user_call: bool,
     consume_handles: bool,
 ) -> crate::Result<()> {
     let mut seen = BTreeSet::new();
     for argument in arguments {
         let ty = value_type(types, *argument)?;
-        if !is_affine(ty) {
+        if !is_affine(program, ty)
+            || nonowned_affine.contains(argument)
+            || program.memory.is_immutable(ty)
+        {
             continue;
         }
         if !seen.insert(*argument) {
@@ -29,7 +34,7 @@ pub(crate) fn consume_affine_arguments(
         if resource && !fact.transferred && !consume_handles {
             continue;
         }
-        if user_call && is_owned_buf(ty) && !fact.transferred {
+        if user_call && is_byte_vector(ty) && !fact.transferred {
             return fail("SSA Owned call argument requires explicit Move transfer provenance");
         }
         if let Some(place) = current_owner_place(state, *argument) {
@@ -47,15 +52,24 @@ pub(crate) fn consume_affine_arguments(
     Ok(())
 }
 
+pub(crate) struct EdgeTransferContext<'a> {
+    pub(crate) program: &'a Program,
+    pub(crate) function: &'a Function,
+    pub(crate) types: &'a [SsaType],
+    pub(crate) nonowned_affine: &'a std::collections::HashSet<ValueId>,
+}
+
 pub(crate) fn transfer_edge(
-    function: &Function,
+    context: &EdgeTransferContext<'_>,
     state: &OwnershipState,
     target: BlockId,
     arguments: &[ValueId],
-    types: &[SsaType],
     work: &mut usize,
 ) -> crate::Result<OwnershipState> {
-    let target_block = block_by_id(function, target)?;
+    let program = context.program;
+    let types = context.types;
+    let nonowned_affine = context.nonowned_affine;
+    let target_block = block_by_id(context.function, target)?;
     charge_ownership_work(work, ownership_state_cells(state)?)?;
     if !state.pending_drops.is_empty() {
         return fail("SSA edge leaves an explicit resource drop event pending");
@@ -75,11 +89,15 @@ pub(crate) fn transfer_edge(
     let mut seen = BTreeSet::new();
     for (argument, parameter) in arguments.iter().zip(&target_block.parameters) {
         let ty = value_type(types, *argument)?;
-        if !is_affine(ty) {
+        if !is_affine(program, ty) || nonowned_affine.contains(argument) {
             continue;
         }
         if !seen.insert(*argument) {
-            return fail("SSA edge duplicates one affine argument");
+            return fail(format!(
+                "SSA edge to block {} duplicates affine argument {}",
+                target.raw(),
+                argument.raw(),
+            ));
         }
         let fact = state
             .affine

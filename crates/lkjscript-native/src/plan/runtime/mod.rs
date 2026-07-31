@@ -42,6 +42,8 @@ pub enum RuntimeCallSlot {
     BytesDrop,
     FreezeByteVector,
     ThawBytes,
+    /// Generic direct structural operation selected by verified site metadata.
+    StructuralDispatch,
     /// Collecting reference round trip used by the closed runtime contract.
     CollectReference,
     /// Generic verified-frame-home heap dispatch. Plans create it only through
@@ -63,6 +65,10 @@ pub enum InternalMachineArgument {
     FramePointer,
     SafepointId,
     HeapSiteId,
+    StructuralSiteId,
+    StructuralArgument0,
+    StructuralArgument1,
+    StructuralArgument2,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

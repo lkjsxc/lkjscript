@@ -26,14 +26,15 @@ truncate-file:
   forall resource; resource one-of file-writer,file-appender;
   fn inputs resource i64 output result unit system-error
 rename-path: fn inputs capability file-system path path output result unit system-error
-fill-random: fn inputs capability entropy buf i64 i64 output result unit system-error
+fill-random: fn inputs capability entropy byte-slice-mut output result unit system-error
 ```
 
 Append uses `O_APPEND`; it is not a multi-process transaction. Create-new is
 exclusive. Rename is atomic only within a filesystem; durable replacement needs
 file sync, rename, then parent-directory sync. Random fill invokes Linux
 `getrandom` only, retries interruption, and has no PRNG or time-based fallback.
-Offset/length range validation follows the lossless bulk-byte contract.
+The exclusive view and its complete length validation follow the lossless
+bulk-byte contract.
 
 ## Safety
 

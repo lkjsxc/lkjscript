@@ -9,6 +9,7 @@ mod root_table;
 mod runtime;
 mod sealed;
 mod unique;
+mod value_runtime;
 
 pub use error::{StructuralError, StructuralLimit};
 pub use identity::{
@@ -33,4 +34,13 @@ pub use unique::{
     ByteVectorKey, BytesKey, InvalidUniqueKeyWord, InvalidUniqueStoreLimits, PathKey, StaticBytes,
     UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
     UniqueStoreLimits, UniqueStoreStats,
+};
+pub use value_runtime::{
+    DestinationCleanupReport, InlineStructuralValue, SemanticPayload, SemanticValue,
+    StaticArtifactPayload, StaticStructuralArtifact, StaticStructuralLeaf,
+    StructuralDestinationKey, StructuralEvent, StructuralEventKind, StructuralEventLog,
+    StructuralFieldPath, StructuralInitializationFailure, StructuralKind, StructuralProjection,
+    StructuralPublishFailure, StructuralType, StructuralValueError, StructuralValueLimit,
+    StructuralValueRuntime, StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics,
+    StructuralViewKey,
 };

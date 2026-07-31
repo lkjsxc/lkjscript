@@ -1,6 +1,4 @@
-use super::super::{MemoryCallTarget, MemoryExpressionId};
 use super::*;
-use crate::hir::{BindingStorage, ExprKind};
 
 pub(super) fn verify_work(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()> {
     let expected_entries = u64::try_from(facts.expressions.len())
@@ -19,7 +17,6 @@ pub(super) fn verify_work(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()>
         || plan.work.loans != facts.loans
         || plan.work.constants != facts.constants
         || plan.work.calls != facts.calls
-        || plan.work.obligations != facts.obligations
     {
         return Err(Error::msg(format!(
             concat!(
@@ -41,7 +38,7 @@ pub(super) fn verify_work(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Result<()>
             plan.work.constants,
             facts.calls,
             plan.work.calls,
-            facts.obligations,
+            plan.obligations.len(),
             plan.work.obligations,
         )));
     }
@@ -55,11 +52,11 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
             expression,
             parent,
             child_index,
-            ..
+            ref kind,
         } = entry.subject
         {
             if found
-                .insert(expression, (entry, parent, child_index))
+                .insert(expression, (entry, parent, child_index, kind))
                 .is_some()
             {
                 return Err(Error::msg(
@@ -69,7 +66,7 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
         }
     }
     for fact in &facts.expressions {
-        let (entry, parent, child_index) = found
+        let (entry, parent, child_index, kind) = found
             .get(&fact.id)
             .copied()
             .ok_or_else(|| Error::msg("HIR memory plan omits an expression result"))?;
@@ -78,6 +75,7 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
             || entry.effects != fact.expression.effects.bits()
             || entry.origin.source != fact.expression.origin.raw()
             || entry.origin.expression != Some(fact.id)
+            || *kind != verified_expression_kind(&fact.expression.kind)
             || !type_matches(&fact.expression.ty, &entry.ty)
         {
             return Err(Error::msg("HIR memory expression fact mismatch"));
@@ -92,77 +90,6 @@ pub(super) fn verify_expressions(plan: &HirMemoryPlan, facts: &Facts<'_>) -> Res
             .ok_or_else(|| Error::msg("HIR memory function body is missing"))?;
         if function.body != *body {
             return Err(Error::msg("HIR memory function body identity mismatch"));
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn verify_calls(
-    program: &hir::Program,
-    plan: &HirMemoryPlan,
-    facts: &Facts<'_>,
-) -> Result<()> {
-    let function_ids: BTreeMap<u32, MemoryFunctionId> = program
-        .functions
-        .iter()
-        .enumerate()
-        .map(|(index, function)| {
-            Ok((
-                function.binding.raw(),
-                MemoryFunctionId::new(index_u32(index)?),
-            ))
-        })
-        .collect::<Result<_>>()?;
-    let calls: BTreeMap<MemoryExpressionId, _> = plan
-        .calls
-        .iter()
-        .map(|call| (call.expression, call))
-        .collect();
-    for fact in &facts.expressions {
-        match &fact.expression.kind {
-            ExprKind::Call { callee, args, .. } => {
-                let call = calls
-                    .get(&fact.id)
-                    .ok_or_else(|| Error::msg("HIR call plan is missing"))?;
-                if call.function != fact.function || call.parameters.len() != args.len() {
-                    return Err(Error::msg("HIR call memory arity mismatch"));
-                }
-                match callee.storage {
-                    BindingStorage::Function => {
-                        let target = function_ids
-                            .get(&callee.binding.raw())
-                            .copied()
-                            .ok_or_else(|| Error::msg("direct HIR call target is missing"))?;
-                        let signature = &plan
-                            .function(target)
-                            .ok_or_else(|| Error::msg("direct HIR call signature is missing"))?
-                            .signature;
-                        if call.target != MemoryCallTarget::Direct(target)
-                            || call.parameters != signature.parameters
-                            || call.result != signature.result
-                        {
-                            return Err(Error::msg("direct HIR call memory signature mismatch"));
-                        }
-                    }
-                    BindingStorage::Local(_)
-                        if !matches!(call.target, MemoryCallTarget::Indirect(_)) =>
-                    {
-                        return Err(Error::msg("indirect HIR call memory target mismatch"));
-                    }
-                    BindingStorage::Local(_) => {}
-                }
-            }
-            ExprKind::Operation { operation, .. } => {
-                let call = calls
-                    .get(&fact.id)
-                    .ok_or_else(|| Error::msg("operation memory plan is missing"))?;
-                if call.function != fact.function
-                    || call.target != MemoryCallTarget::Operation(operation.identity().as_u16())
-                {
-                    return Err(Error::msg("operation memory identity mismatch"));
-                }
-            }
-            _ => {}
         }
     }
     Ok(())

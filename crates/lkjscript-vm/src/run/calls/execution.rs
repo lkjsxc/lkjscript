@@ -22,81 +22,119 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 .len()
                 .checked_sub(argument_count)
                 .ok_or_else(|| Error::msg("call argument stack underflow"))?;
+            #[cfg(feature = "jit")]
             if let EntryDecision::Native(function) = vm.jit.observe_function_entry(proto) {
-                let signature = vm.jit.scalar_signature(function).ok_or_else(|| {
-                    Error::msg("installed native function has no scalar signature")
-                })?;
-                if signature.parameters().len() != argument_count {
-                    return Err(Error::msg("native scalar signature arity mismatch"));
-                }
-                let argument_values = vm.stack[args_start..].to_vec();
-                let native_arguments = signature
-                    .parameters()
-                    .iter()
-                    .copied()
-                    .zip(argument_values)
-                    .map(|(ty, value)| native_from_value(ty, value))
-                    .collect::<Result<Vec<_>>>()?;
-                let mut execution = vm.config.clone();
-                execution.instruction_fuel = vm.fuel_remaining;
-                execution.wall_time = vm.remaining_wall_time()?;
-                execution.max_stack_values =
-                    execution.max_stack_values.saturating_sub(vm.stack.len());
-                match vm
-                    .jit
-                    .invoke_scalar(function, &native_arguments, &execution)
-                {
-                    Ok(invocation) => {
-                        vm.fuel_remaining = vm.fuel_remaining.saturating_sub(invocation.poll_count);
-                        vm.cleanup_failures.append(invocation.cleanup_failures);
-                        match invocation.outcome {
-                            ScalarInvocationOutcome::Returned(value) => {
-                                vm.stack.truncate(args_start);
-                                let value = value_from_native(value)?;
-                                vm.push(value);
-                                return Ok(());
-                            }
-                            ScalarInvocationOutcome::Trapped(trap, site) => {
-                                let message = vm.jit.trap_message(function, trap, site);
-                                return Err(Error::msg(message));
-                            }
-                            ScalarInvocationOutcome::Exited(code) => {
-                                let code = i32::try_from(code)
-                                    .map_err(|_| Error::msg("exit code out of range"))?;
-                                vm.stack.truncate(args_start);
-                                vm.exit_code = Some(code);
-                                return Ok(());
-                            }
-                            ScalarInvocationOutcome::DeadlineExceeded => {
-                                return Err(Error::deadline(
-                                    "execution wall deadline exceeded in native Poll",
-                                ));
-                            }
-                            ScalarInvocationOutcome::ResourceLimitExceeded(kind) => {
-                                return Err(Error::resource(
-                                    kind,
-                                    "native execution resource limit exceeded",
-                                ));
-                            }
-                            ScalarInvocationOutcome::HostFailure => {
-                                return Err(Error::host("native Poll host clock failure"));
+                if !vm.chunk.proto_has_structural_execution(proto as usize) {
+                    let signature = vm.jit.scalar_signature(function).ok_or_else(|| {
+                        Error::msg("installed native function has no scalar signature")
+                    })?;
+                    if signature.parameters().len() != argument_count {
+                        return Err(Error::msg("native scalar signature arity mismatch"));
+                    }
+                    let argument_values = vm.stack[args_start..].to_vec();
+                    let native_arguments = signature
+                        .parameters()
+                        .iter()
+                        .copied()
+                        .zip(argument_values)
+                        .map(|(ty, value)| native_from_value(ty, value))
+                        .collect::<Result<Vec<_>>>()?;
+                    let mut execution = vm.config.clone();
+                    execution.instruction_fuel = vm.fuel_remaining;
+                    execution.wall_time = vm.remaining_wall_time()?;
+                    execution.max_stack_values =
+                        execution.max_stack_values.saturating_sub(vm.stack.len());
+                    match vm
+                        .jit
+                        .invoke_scalar(function, &native_arguments, &execution)
+                    {
+                        Ok(invocation) => {
+                            vm.fuel_remaining =
+                                vm.fuel_remaining.saturating_sub(invocation.poll_count);
+                            vm.cleanup_failures.append(invocation.cleanup_failures);
+                            match invocation.outcome {
+                                ScalarInvocationOutcome::Returned(value) => {
+                                    vm.stack.truncate(args_start);
+                                    let value = value_from_native(value)?;
+                                    vm.push(value);
+                                    return Ok(());
+                                }
+                                ScalarInvocationOutcome::Trapped(trap, site) => {
+                                    let message = vm.jit.trap_message(function, trap, site);
+                                    return Err(Error::msg(message));
+                                }
+                                ScalarInvocationOutcome::Exited(code) => {
+                                    let code = i32::try_from(code)
+                                        .map_err(|_| Error::msg("exit code out of range"))?;
+                                    vm.stack.truncate(args_start);
+                                    vm.exit_code = Some(code);
+                                    return Ok(());
+                                }
+                                ScalarInvocationOutcome::DeadlineExceeded => {
+                                    return Err(Error::deadline(
+                                        "execution wall deadline exceeded in native Poll",
+                                    ));
+                                }
+                                ScalarInvocationOutcome::ResourceLimitExceeded(kind) => {
+                                    return Err(Error::resource(
+                                        kind,
+                                        "native execution resource limit exceeded",
+                                    ));
+                                }
+                                ScalarInvocationOutcome::HostFailure => {
+                                    return Err(Error::host("native Poll host clock failure"));
+                                }
                             }
                         }
-                    }
-                    Err(_) => {
-                        // Auto mode remains VM-correct. The session disables the
-                        // failed object in this epoch before this untouched
-                        // scalar function body is interpreted.
-                        vm.jit.record_invocation_failure(function);
+                        Err(error) => {
+                            return Err(Error::msg(format!(
+                                "native invocation failed without VM fallback: {error}"
+                            )))
+                        }
                     }
                 }
             }
-            let unique_places = initial_unique_places(
+            let arguments = vm
+                .stack
+                .get(args_start..args_start.saturating_add(argument_count))
+                .ok_or_else(|| Error::msg("call argument range is out of bounds"))?
+                .to_vec();
+            let borrowed_resources = p
+                .parameter_resources
+                .iter()
+                .enumerate()
+                .filter_map(|(index, kind)| {
+                    (kind.is_some()
+                        && p.parameter_resource_places
+                            .get(index)
+                            .is_none_or(Option::is_none))
+                    .then(|| arguments.get(index).copied())
+                    .flatten()
+                })
+                .collect::<Vec<_>>();
+            for (index, place) in p.parameter_resource_places.iter().enumerate() {
+                let Some(value) = place.and_then(|_| arguments.get(index)).copied() else {
+                    continue;
+                };
+                if value.as_resource().is_none() || vm.resources.is_borrowed_handle(value) {
+                    continue;
+                }
+                let argument_slot = args_start.saturating_add(index);
+                for (slot, candidate) in vm.stack.iter_mut().enumerate() {
+                    if slot != argument_slot && *candidate == value {
+                        *candidate = Value::INVALID;
+                    }
+                }
+            }
+            let mut unique_places = initial_unique_places(p, &arguments)?;
+            super::super::structural_ops::initialize_call_places(
+                vm.chunk,
+                vm.structural.as_ref(),
                 p,
-                vm.stack
-                    .get(args_start..args_start.saturating_add(argument_count))
-                    .ok_or_else(|| Error::msg("call unique argument range is out of bounds"))?,
+                &arguments,
+                &mut unique_places,
             )?;
+            super::super::structural_ops::commit_call_arguments(vm, &arguments, p)?;
             if is_tail_position(vm) {
                 let stack_base = vm.frames.last().map(|frame| frame.stack_base).unwrap_or(0);
                 let args = vm.stack[args_start..].to_vec();
@@ -112,6 +150,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                         stack_base,
                         locals_base: stack_base,
                         unique_places,
+                        borrowed_resources,
                     };
                 }
                 return Ok(());
@@ -125,6 +164,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 stack_base: args_start,
                 locals_base: args_start,
                 unique_places,
+                borrowed_resources,
             });
             Ok(())
         }
@@ -132,44 +172,9 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
     }
 }
 
-fn initial_unique_places(
-    proto: &lkjscript_core::FunctionProto,
-    arguments: &[Value],
-) -> Result<Vec<crate::run::unique::RuntimePlace>> {
-    let mut places =
-        vec![crate::run::unique::RuntimePlace::Inactive; usize::from(proto.unique_places)];
-    for (index, place) in proto.parameter_unique_places.iter().copied().enumerate() {
-        let Some(place) = place else {
-            continue;
-        };
-        let kind = proto
-            .parameter_uniques
-            .get(index)
-            .copied()
-            .flatten()
-            .ok_or_else(|| Error::msg("owner-place parameter lacks unique kind metadata"))?;
-        let owner = arguments
-            .get(index)
-            .and_then(|value| match kind {
-                lkjscript_core::UniqueValueKind::Bytes => value.as_bytes_key(),
-                lkjscript_core::UniqueValueKind::ByteVector => value.as_byte_vector_key(),
-                _ => None,
-            })
-            .ok_or_else(|| Error::msg("call parameter lacks exact unique owner payload"))?;
-        let target = places
-            .get_mut(usize::from(place))
-            .ok_or_else(|| Error::msg("byte-vector call parameter PlaceId is out of range"))?;
-        if !matches!(target, crate::run::unique::RuntimePlace::Inactive) {
-            return Err(Error::msg("duplicate byte-vector call parameter PlaceId"));
-        }
-        *target = crate::run::unique::RuntimePlace::Active {
-            owner: Some(owner),
-            transferred: None,
-        };
-    }
-    Ok(places)
-}
+include!("execution/setup.rs");
 
+#[cfg(feature = "jit")]
 include!("execution/native.rs");
 
 fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {

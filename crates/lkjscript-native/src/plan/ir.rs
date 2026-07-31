@@ -7,6 +7,7 @@ pub(crate) enum Operation {
     BoolConst(bool),
     Unit,
     StaticBytesConst(StaticBytesIdentity),
+    StaticStringConst(StaticBytesIdentity, StructuralTypeIdentity),
     I64Add(ValueId, ValueId),
     I64Sub(ValueId, ValueId),
     I64Mul(ValueId, ValueId),
@@ -25,9 +26,11 @@ pub(crate) enum Operation {
     BoolCompare(BoolComparison, ValueId, ValueId),
     BoolNot(ValueId),
     ReadLocal(LocalId),
+    ObserveLocal(LocalId),
     WriteLocal(LocalId, ValueId),
     Call(FunctionId, Vec<ValueId>),
     RuntimeCall(RuntimeCallSlot, Vec<ValueId>),
+    StructuralCall(Box<StructuralCallDescriptor>, Vec<ValueId>),
     HeapCall(Box<HeapCallDescriptor>, Vec<ValueId>),
 }
 
@@ -39,7 +42,9 @@ impl Operation {
             | Self::BoolConst(_)
             | Self::Unit
             | Self::StaticBytesConst(_)
-            | Self::ReadLocal(_) => Vec::new(),
+            | Self::StaticStringConst(_, _)
+            | Self::ReadLocal(_)
+            | Self::ObserveLocal(_) => Vec::new(),
             Self::BoolNot(value) | Self::I64ToF64(value) | Self::WriteLocal(_, value) => {
                 vec![*value]
             }
@@ -60,21 +65,39 @@ impl Operation {
             | Self::BoolCompare(_, left, right) => vec![*left, *right],
             Self::Call(_, arguments)
             | Self::RuntimeCall(_, arguments)
+            | Self::StructuralCall(_, arguments)
             | Self::HeapCall(_, arguments) => arguments.clone(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FailureCleanupOperation {
+    Runtime(RuntimeCallSlot),
+    Structural(Box<StructuralCallDescriptor>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FailureCleanupCall {
-    pub(crate) slot: RuntimeCallSlot,
+    pub(crate) operation: FailureCleanupOperation,
     pub(crate) local: LocalId,
 }
 
 impl FailureCleanupCall {
     #[must_use]
     pub const fn new(slot: RuntimeCallSlot, local: LocalId) -> Self {
-        Self { slot, local }
+        Self {
+            operation: FailureCleanupOperation::Runtime(slot),
+            local,
+        }
+    }
+
+    #[must_use]
+    pub fn structural(descriptor: StructuralCallDescriptor, local: LocalId) -> Self {
+        Self {
+            operation: FailureCleanupOperation::Structural(Box::new(descriptor)),
+            local,
+        }
     }
 }
 
@@ -100,7 +123,6 @@ pub(crate) enum Terminator {
     Trap {
         trap: TrapCode,
         site: Option<u32>,
-        value: Option<ValueId>,
     },
     Exit(ValueId),
     Outcome(RuntimeOutcome),
@@ -109,8 +131,7 @@ pub(crate) enum Terminator {
 impl Terminator {
     pub(crate) fn operands(&self) -> Vec<ValueId> {
         match self {
-            Self::Branch(_) | Self::Outcome(_) => Vec::new(),
-            Self::Trap { value, .. } => value.iter().copied().collect(),
+            Self::Branch(_) | Self::Trap { .. } | Self::Outcome(_) => Vec::new(),
             Self::BranchIf { condition, .. } | Self::Return(condition) | Self::Exit(condition) => {
                 vec![*condition]
             }

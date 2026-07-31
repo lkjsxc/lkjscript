@@ -19,7 +19,6 @@ pub fn parse_one(atoms: &[String], i: usize) -> Result<(Type, usize), String> {
             "unsupported numeric type {atom}; use canonical i64 or f64"
         )),
         "string" => Ok((Type::Str, i + 1)),
-        "buf" => Ok((Type::Buf, i + 1)),
         "bytes" => Ok((Type::Bytes, i + 1)),
         "byte-vector" => Ok((Type::ByteVector, i + 1)),
         "byte-slice" => Ok((Type::ByteSlice, i + 1)),

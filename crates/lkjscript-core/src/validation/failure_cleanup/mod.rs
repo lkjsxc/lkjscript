@@ -4,7 +4,10 @@ use super::{Kind, State, UniquePlaceState};
 use crate::{
     Error, FailureCleanupAction, FailureCleanupPlan, FunctionProto, Result, UniqueValueKind,
 };
-use checks::{local_owner, validate_loan, validate_unique_drop};
+use checks::{
+    local_owner, validate_loan, validate_structural_drop, validate_structural_loan,
+    validate_unique_drop,
+};
 
 mod checks;
 
@@ -21,10 +24,16 @@ pub(super) fn validate_at_offset(
         .unique_places
         .iter()
         .any(|place| matches!(place, UniquePlaceState::Active { owner: Some(_), .. }))
+        || !state.structural_destinations.is_empty()
         || state.locals.iter().enumerate().any(|(index, kind)| {
             kind.is_some_and(|kind| {
-                matches!(kind, Kind::BytesBorrow { .. } | Kind::ByteSlice { .. })
-                    && !borrowed_parameter(proto, index)
+                matches!(
+                    kind,
+                    Kind::BytesBorrow { .. }
+                        | Kind::ByteSlice { .. }
+                        | Kind::StructuralView { .. }
+                        | Kind::StructuralDestination { .. }
+                ) && !borrowed_parameter(proto, index)
             })
         });
     let Some(range) = range else {
@@ -46,7 +55,12 @@ pub(super) fn validate_at_offset(
             .failure_cleanups
             .get(usize::from(plan))
             .ok_or_else(|| Error::msg("bytecode failure-cleanup range lost its plan"))?;
-        validate_plan(proto, plan, state, true)?;
+        validate_plan(proto, plan, state, true).map_err(|error| {
+            Error::msg(format!(
+                "failure cleanup at byte {offset} opcode {}: {error}",
+                proto.code.get(offset).copied().unwrap_or(u8::MAX)
+            ))
+        })?;
     } else if required {
         return Err(Error::msg(format!(
             "bytecode live unique state has an empty failure-cleanup range at offset {offset} opcode {}",
@@ -58,7 +72,11 @@ pub(super) fn validate_at_offset(
             .failure_cleanups
             .get(usize::from(unentered))
             .ok_or_else(|| Error::msg("bytecode unentered cleanup range lost its plan"))?;
-        validate_plan(proto, unentered, state, false)?;
+        validate_plan(proto, unentered, state, false).map_err(|error| {
+            Error::msg(format!(
+                "unentered failure cleanup at byte {offset}: {error}"
+            ))
+        })?;
     }
     Ok(())
 }
@@ -71,68 +89,4 @@ fn borrowed_parameter(proto: &FunctionProto, index: usize) -> bool {
         )
 }
 
-fn validate_plan(
-    proto: &FunctionProto,
-    plan: &FailureCleanupPlan,
-    state: &State,
-    require_place_coverage: bool,
-) -> Result<()> {
-    let mut locals = HashSet::new();
-    for action in &plan.actions {
-        let local = match action {
-            FailureCleanupAction::EndBorrow { local, place, kind } => {
-                validate_loan(*local, *place, *kind, state)?;
-                *local
-            }
-            FailureCleanupAction::DropUnique { local, place, kind } => {
-                validate_unique_drop(*local, *place, *kind, state)?;
-                *local
-            }
-            FailureCleanupAction::DropResource { local, kind, .. } => {
-                if state.locals.get(usize::from(*local)).copied().flatten()
-                    != Some(Kind::Resource(*kind))
-                {
-                    return Err(Error::msg(
-                        "bytecode failure cleanup resource local has wrong kind",
-                    ));
-                }
-                *local
-            }
-        };
-        if !locals.insert(local) {
-            return Err(Error::msg(
-                "bytecode failure cleanup duplicates one local action",
-            ));
-        }
-    }
-    if !require_place_coverage {
-        return Ok(());
-    }
-    for (place, state_place) in state.unique_places.iter().enumerate() {
-        let UniquePlaceState::Active {
-            owner: Some(owner), ..
-        } = state_place
-        else {
-            continue;
-        };
-        let place =
-            u8::try_from(place).map_err(|_| Error::msg("bytecode unique place exceeds u8"))?;
-        let covered = plan.actions.iter().any(|action| {
-            matches!(
-                action,
-                FailureCleanupAction::DropUnique {
-                    local,
-                    place: Some(actual),
-                    ..
-                } if *actual == place && local_owner(state, *local) == Some(*owner)
-            )
-        });
-        if !covered {
-            return Err(Error::msg(
-                "bytecode failure cleanup omits a current unique place owner",
-            ));
-        }
-    }
-    let _ = proto;
-    Ok(())
-}
+include!("plan.rs");

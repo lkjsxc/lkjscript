@@ -36,6 +36,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
     let signature = Signature::monomorphic(Vec::new(), SsaType::I64);
     let call_effects = EffectSet::CONSERVATIVE_CALL;
     let program = Program {
+        memory: StructuralMemoryMetadata::default(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -83,6 +84,7 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                             kind: InstructionKind::Call {
                                 target: CallTarget::Indirect(ValueId::new(0)),
                                 arguments: Vec::new(),
+                                consuming: Vec::new(),
                                 signature,
                                 instantiation: None,
                             },

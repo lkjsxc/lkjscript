@@ -37,6 +37,11 @@ fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         fields.push(vm.pop()?);
     }
     fields.reverse();
+    if fields.iter().copied().any(is_structural_runtime_value) {
+        return Err(Error::msg(
+            "legacy traced product cannot contain a structural runtime value",
+        ));
+    }
     let value = vm.arena.alloc(HeapObj::Product { product, fields })?;
     vm.push(value);
     Ok(())
@@ -67,6 +72,11 @@ fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let descriptor = vm.read_u16()? as usize;
     let field_ref = product_field_ref(vm, descriptor)?;
     let replacement = vm.pop()?;
+    if is_structural_runtime_value(replacement) {
+        return Err(Error::msg(
+            "legacy traced product cannot contain a structural runtime value",
+        ));
+    }
     let value = vm.pop()?;
     if value.as_legacy_traced().is_none() {
         return Err(Error::msg("product field replacement expects Product"));

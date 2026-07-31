@@ -29,6 +29,9 @@ dense_id!(ImplId, u32);
 dense_id!(PlaceId, u32);
 dense_id!(LoanId, u32);
 dense_id!(FailureCleanupId, u32);
+dense_id!(StructuralTypeId, u16);
+dense_id!(StructuralLayoutId, u16);
+dense_id!(StructuralRepresentationId, u16);
 
 macro_rules! stable_id {
     ($name:ident) => {
@@ -55,3 +58,4 @@ stable_id!(EnumId);
 stable_id!(VariantId);
 stable_id!(VariantFieldId);
 stable_id!(RuntimeLayoutId);
+stable_id!(MemoryPlanId);

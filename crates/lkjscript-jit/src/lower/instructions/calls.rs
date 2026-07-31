@@ -17,6 +17,7 @@ pub(super) fn lower_direct_call(
     block: lkjscript_native::BlockId,
     locals: &[LocalId],
     value_types: &[ValueType],
+    layouts: &LayoutInterner,
     native_functions: &[(FunctionId, lkjscript_native::FunctionId)],
     builder: &mut FunctionBuilder,
 ) -> Result<Result<lkjscript_native::ValueId, lkjscript_native::PlanError>, LoweringError> {
@@ -30,14 +31,44 @@ pub(super) fn lower_direct_call(
         instruction,
         locals,
         value_types,
+        layouts,
     )?);
     builder
         .set_instruction_failure_cleanup(poll, poll_cleanup)
         .map_err(LoweringError::backend)?;
-    let arguments = read_values(builder, block, locals, arguments, function.id)?;
+    let consuming = match &instruction.kind {
+        InstructionKind::Call { consuming, .. } => consuming,
+        _ => {
+            return Err(LoweringError::new(
+                LoweringFailureCode::InvalidFunction,
+                Some(function.id),
+                "direct call lowering received a non-call instruction",
+            ));
+        }
+    };
+    let mut lowered_arguments = Vec::with_capacity(arguments.len());
+    for (argument, consuming) in arguments.iter().zip(consuming) {
+        if !*consuming
+            && matches!(
+                value_type(value_types, *argument)?,
+                ValueType::StructuralOwner(_)
+            )
+        {
+            lowered_arguments.push(copy_structural_call_argument(
+                function,
+                *argument,
+                block,
+                locals,
+                value_types,
+                builder,
+            )?);
+        } else {
+            lowered_arguments.push(read_value(builder, block, locals, *argument, function.id)?);
+        }
+    }
     let callee = native_function(native_functions, callee)?;
     let call = builder
-        .call(block, callee, arguments)
+        .call(block, callee, lowered_arguments)
         .map_err(LoweringError::backend)?;
     builder
         .set_instruction_unentered_cleanup(call, unentered)

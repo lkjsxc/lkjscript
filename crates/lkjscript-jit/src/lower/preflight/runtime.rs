@@ -1,16 +1,24 @@
 use super::*;
 
 pub(super) fn supported_runtime(operation: RuntimeOp, domain: LoweringDomain) -> bool {
+    if domain == LoweringDomain::StructuralIsland
+        && matches!(
+            operation,
+            RuntimeOp::EmptyStr | RuntimeOp::StrFromI64 | RuntimeOp::StrLen
+        )
+    {
+        return true;
+    }
     if domain == LoweringDomain::ResourceIsland && operation == RuntimeOp::StdinHandle {
         return true;
     }
     if domain == LoweringDomain::UniqueIsland
         && matches!(
             operation,
-            RuntimeOp::OwnedBufNew
-                | RuntimeOp::OwnedBufLen
-                | RuntimeOp::OwnedBufRef
-                | RuntimeOp::OwnedBufSet
+            RuntimeOp::ByteVectorNew
+                | RuntimeOp::ByteSliceLength
+                | RuntimeOp::ByteSliceByteAt
+                | RuntimeOp::ByteSliceMutSetByte
                 | RuntimeOp::ByteSliceReadU32Le
                 | RuntimeOp::ByteSliceMutWriteU32Le
                 | RuntimeOp::BytesLength
@@ -39,29 +47,10 @@ pub(super) fn supported_runtime(operation: RuntimeOp, domain: LoweringDomain) ->
             | RuntimeOp::BitAnd
             | RuntimeOp::BitOr
             | RuntimeOp::BitXor
-            | RuntimeOp::SameObject
             | RuntimeOp::ListEqual
             | RuntimeOp::Cons
             | RuntimeOp::Car
             | RuntimeOp::Cdr
             | RuntimeOp::IsEmptyList
-            | RuntimeOp::EmptyStr
-            | RuntimeOp::BufNew
-            | RuntimeOp::BufLen
-            | RuntimeOp::BufRef
-            | RuntimeOp::BufSet
-            | RuntimeOp::BufClone
-            | RuntimeOp::BufFromStr
-            | RuntimeOp::BufToStr
-            | RuntimeOp::BufSlice
-            | RuntimeOp::BufGetU32
-            | RuntimeOp::BufSetU32
-            | RuntimeOp::StrLen
-            | RuntimeOp::StrRef
-            | RuntimeOp::StrAppend
-            | RuntimeOp::StrSlice
-            | RuntimeOp::StrFromByte
-            | RuntimeOp::StrFromI64
-            | RuntimeOp::StrFromF64
     )
 }

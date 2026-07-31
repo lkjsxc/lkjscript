@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) fn verify_failure_cleanup(
+    program: &Program,
     function: &Function,
     instruction: &Instruction,
     state: &OwnershipState,
@@ -9,19 +10,28 @@ pub(super) fn verify_failure_cleanup(
     nonowned_affine: &HashSet<ValueId>,
 ) -> crate::Result<()> {
     let exclusions = match &instruction.kind {
-        InstructionKind::Call { arguments, .. } => arguments.as_slice(),
-        _ => &[],
+        InstructionKind::Call {
+            arguments,
+            consuming,
+            ..
+        } => arguments
+            .iter()
+            .zip(consuming)
+            .filter_map(|(argument, consuming)| consuming.then_some(*argument))
+            .collect::<Vec<_>>(),
+        _ => Vec::new(),
     };
     verify_failure_cleanup_plan(
         function,
         instruction.metadata.failure_cleanup,
         &expected_failure_cleanup(
+            program,
             function,
             state,
             live_loans,
             types,
             nonowned_affine,
-            exclusions,
+            &exclusions,
         )?,
         &format!(
             "instruction {} {:?}",
@@ -32,6 +42,7 @@ pub(super) fn verify_failure_cleanup(
 }
 
 pub(super) fn expected_failure_cleanup(
+    program: &Program,
     function: &Function,
     state: &OwnershipState,
     live_loans: &BTreeMap<crate::PlaceId, Vec<LiveLoan>>,
@@ -59,14 +70,14 @@ pub(super) fn expected_failure_cleanup(
         if !exclusions.contains(value)
             && !placed.contains(value)
             && !nonowned_affine.contains(value)
-            && is_owned_value(value_type(types, *value)?)
+            && is_owned_value(program, value_type(types, *value)?)
         {
             unplaced.push(*value);
         }
     }
     unplaced.sort();
     for value in unplaced.into_iter().rev() {
-        let glue = expected_drop_glue(value_type(types, value)?)
+        let glue = expected_drop_glue(program, value_type(types, value)?)
             .ok_or_else(|| IrError::new("SSA unplaced failure owner has no drop glue"))?;
         expected.push(FailureCleanupAction::DropOwner {
             place: None,
@@ -99,7 +110,9 @@ pub(super) fn verify_failure_cleanup_plan(
         return if expected.is_empty() {
             Ok(())
         } else {
-            fail(format!("SSA {site} lacks nonempty failure cleanup"))
+            fail(format!(
+                "SSA {site} lacks nonempty failure cleanup {expected:?}"
+            ))
         };
     };
     let plan = function

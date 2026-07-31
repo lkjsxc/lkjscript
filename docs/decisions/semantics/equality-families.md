@@ -51,22 +51,20 @@ Currently supported types are:
 
 Current immutable products do not gain `equal-value` automatically; a later
 recursive-comparability contract must opt them in. Future enums follow the same
-rule. Bytes is not yet a current language type.
+rule. Immutable bytes and byte-vector owners likewise have no implicit equality
+operation in this slice.
 
-`equal-value` is rejected for Product, List, Buf, Handle, Fn, unresolved type parameters,
-and polymorphic schemes. In particular, closure allocation or duplication
-remains unobservable.
+`equal-value` is rejected for Product, List, bytes, byte-vector, typed resources,
+Fn, unresolved type parameters, and polymorphic schemes. In particular, closure
+allocation or duplication remains unobservable.
 
 ## `is-same-object`
 
-Both operands have exactly the same static type. Current supported types are:
-
-- Buf: equality of the exact mutable buffer object, never byte-content equality;
-- Handle: equality of the opaque capability token.
-
-`copy-buf` produces a distinct object. Copies of one Handle token remain the
-same identity even after close; operations on a closed token still fail through
-the existing stale-handle contract. Integers cannot be compared to handles.
+Both operands have exactly the same static type. Current support is limited to
+typed resources: equality compares the opaque guest resource token. Copies of
+one token remain the same identity even after close; operations on a closed
+token still fail through the existing stale-resource contract. Integers cannot
+be compared to resources. Byte owners expose no object-identity operation.
 
 No source operation exposes closure identity. Future Cell/Ref identity requires
 those types to be implemented first.
@@ -139,7 +137,7 @@ The complete cutover covers:
 - Unit, Bool, complete inline I64, exact-bit inline F64, Str, and Symbol value equality;
 - recursive Option and Result value equality;
 - Str/Symbol category separation;
-- same/different Buf and Handle identity;
+- same/different typed-resource identity and rejection of byte-owner identity;
 - empty/equal/unequal/different-length List values;
 - list bound and malformed/improper-list errors;
 - F64 NaN payloads and signed zero under both F64 equality operations;

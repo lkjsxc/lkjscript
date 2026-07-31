@@ -18,6 +18,25 @@ pub(in crate::ssa) fn construct_program(
             (function.binding, FunctionId::new(raw))
         })
         .collect();
+    let structural = lower_structural_memory(program, memory_plan, &product_ids)?;
+    let function_parameter_consumption: HashMap<FunctionId, Vec<bool>> = function_ids
+        .values()
+        .copied()
+        .map(|id| {
+            let modes = memory_plan
+                .function(MemoryFunctionId::new(id.raw()))
+                .map(|function| {
+                    function
+                        .signature
+                        .parameters
+                        .iter()
+                        .map(|mode| *mode == crate::memory_plan::MemoryParameterMode::Consume)
+                        .collect()
+                })
+                .unwrap_or_default();
+            (id, modes)
+        })
+        .collect();
     let function_effects: HashMap<FunctionId, EffectSet> = program
         .functions
         .iter()
@@ -59,12 +78,19 @@ pub(in crate::ssa) fn construct_program(
             &product_ids,
             &function_ids,
             &function_effects,
+            &function_parameter_consumption,
+            &structural,
             id,
             binding.name.clone(),
             signature,
             effects(function.summary),
             origin(function.origin.raw(), 0),
-            CleanupPlan::new(memory_plan, MemoryFunctionId::new(id.raw()))?,
+            CleanupPlan::new(
+                memory_plan,
+                MemoryFunctionId::new(id.raw()),
+                &product_ids,
+                &structural,
+            )?,
         );
         let entry = builder.new_block(origin(function.origin.raw(), 0), false)?;
         builder.entry = entry;
@@ -88,7 +114,7 @@ pub(in crate::ssa) fn construct_program(
             builder.register_place(place, binding_id, ty.clone())?;
             let owner_place = builder
                 .owned_place_for_binding(binding_id)?
-                .filter(|_| is_owned_value(&ty));
+                .filter(|_| is_owned_value(&structural, &ty));
             let parameter = builder.add_block_parameter(
                 entry,
                 ty,
@@ -105,6 +131,7 @@ pub(in crate::ssa) fn construct_program(
         }
         let body = builder.lower_expr(&function.body)?;
         if let Some(result) = body {
+            builder.drop_abandoned_structural_owners(result, function.origin)?;
             builder.cleanup_all_places(function.origin)?;
             builder.terminate(Terminator::Return(result))?;
         }
@@ -119,79 +146,28 @@ pub(in crate::ssa) fn construct_program(
         &product_ids,
         &function_ids,
         &function_effects,
+        &function_parameter_consumption,
         main_id,
         memory_plan,
+        &structural,
     )?);
 
+    let enums = lower_enums(&program.enums, &product_ids, &structural)?;
     Ok(Program {
+        memory: structural,
         sources: program
             .sources
             .iter()
-            .map(|source| {
-                let path = source.path.to_str().ok_or_else(|| {
-                    Error::msg(format!(
-                        "validated source path is not UTF-8: {:?}",
-                        source.path
-                    ))
-                })?;
-                Ok(SourceMetadata {
-                    id: source.id.raw(),
-                    path: path.to_owned(),
-                })
-            })
+            .map(lower_source_metadata)
             .collect::<Result<Vec<_>>>()?,
-        enums: lower_enums(&program.enums, &product_ids)?,
-        products: program
-            .products
-            .iter()
-            .map(|product| {
-                Ok(ProductMetadata {
-                    id: ProductId::new(product.id.raw()),
-                    name: product.name.clone(),
-                    fields: product
-                        .fields
-                        .iter()
-                        .map(|field| {
-                            Ok(ProductField {
-                                name: field.name.clone(),
-                                ty: lower_type(&field.ty, &product_ids)?,
-                            })
-                        })
-                        .collect::<Result<Vec<_>>>()?,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?,
-        traits: program
-            .traits
-            .iter()
-            .map(|definition| TraitMetadata {
-                id: TraitId::new(definition.id.raw()),
-                name: definition.name.clone(),
-                role: match definition.core {
-                    Some(hir::CoreTrait::Copy) => TraitRole::Copy,
-                    Some(hir::CoreTrait::Clone) => TraitRole::Clone,
-                    Some(hir::CoreTrait::Drop) => TraitRole::Drop,
-                    Some(hir::CoreTrait::Send) => TraitRole::Send,
-                    Some(hir::CoreTrait::Sync) => TraitRole::Sync,
-                    None => TraitRole::User,
-                },
-                source: match definition.origin {
-                    hir::Origin::Source(source) => Some(source.raw()),
-                    hir::Origin::Builtin => None,
-                },
-            })
-            .collect(),
-        implementations: program
-            .implementations
-            .iter()
-            .map(|implementation| ImplMetadata {
-                id: ImplId::new(implementation.id.raw()),
-                trait_id: TraitId::new(implementation.trait_id.raw()),
-                product: ProductId::new(implementation.product.raw()),
-                source: implementation.origin.raw(),
-            })
-            .collect(),
+        enums,
+        products: lower_product_metadata(program, &product_ids)?,
+        traits: lower_trait_metadata(program),
+        implementations: lower_implementation_metadata(program),
         functions,
         main: main_id,
     })
 }
+
+include!("program/source.rs");
+include!("program/metadata.rs");

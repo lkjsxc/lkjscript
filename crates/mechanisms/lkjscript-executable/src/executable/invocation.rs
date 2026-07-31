@@ -31,6 +31,12 @@ impl RawReturn {
             (Self::Integer(_), ValueType::StaticBytes) => {
                 Err(InvocationError::UnsupportedSignature)
             }
+            (Self::Integer(value), ValueType::StaticString(value_type)) if value != 0 => Ok(
+                NativeValue::StaticString(NativeStaticString::new(value_type, value)),
+            ),
+            (Self::Integer(_), ValueType::StaticString(_)) => {
+                Err(InvocationError::UnsupportedSignature)
+            }
             (Self::Integer(value), ValueType::Capability(kind))
                 if value == capability_word(kind) =>
             {
@@ -53,6 +59,25 @@ impl RawReturn {
                 Ok(NativeValue::Loan(NativeLoan::new(kind, value)))
             }
             (Self::Integer(_), ValueType::Loan(_)) => Err(InvocationError::UnsupportedSignature),
+            (Self::Integer(value), ValueType::StructuralOwner(value_type)) if value != 0 => Ok(
+                NativeValue::StructuralOwner(NativeStructuralOwner::new(value_type, value)),
+            ),
+            (Self::Integer(value), ValueType::StructuralView(view_type)) if value != 0 => Ok(
+                NativeValue::StructuralView(NativeStructuralView::new(view_type, value)),
+            ),
+            (Self::Integer(value), ValueType::StructuralDestination(destination_type))
+                if value != 0 =>
+            {
+                Ok(NativeValue::StructuralDestination(
+                    NativeStructuralDestination::new(destination_type, value),
+                ))
+            }
+            (
+                Self::Integer(_),
+                ValueType::StructuralOwner(_)
+                | ValueType::StructuralView(_)
+                | ValueType::StructuralDestination(_),
+            ) => Err(InvocationError::UnsupportedSignature),
             (Self::Integer(value), ValueType::Reference(reference_type)) => Ok(
                 NativeValue::Reference(NativeReference::new(reference_type, value)),
             ),
@@ -71,10 +96,14 @@ pub(super) fn native_value_word(value: NativeValue, expected: ValueType) -> Opti
         NativeValue::Bool(value) => u64::from(value),
         NativeValue::Unit => 0,
         NativeValue::StaticBytes(identity) => identity.opaque_word(),
+        NativeValue::StaticString(identity) => identity.opaque_word(),
         NativeValue::Capability(kind) => capability_word(kind),
         NativeValue::Resource(resource) => resource.opaque_word(),
         NativeValue::Unique(unique) => unique.opaque_word(),
         NativeValue::Loan(loan) => loan.opaque_word(),
+        NativeValue::StructuralOwner(owner) => owner.opaque_word(),
+        NativeValue::StructuralView(view) => view.opaque_word(),
+        NativeValue::StructuralDestination(destination) => destination.opaque_word(),
         NativeValue::Reference(reference) => reference.opaque_word(),
     })
 }
@@ -99,8 +128,8 @@ pub(super) fn validate_arguments(
         if expected != actual.value_type() {
             return Err(InvocationError::ArgumentType {
                 index,
-                expected,
-                actual: actual.value_type(),
+                expected: Box::new(expected),
+                actual: Box::new(actual.value_type()),
             });
         }
     }
@@ -118,12 +147,22 @@ pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgumen
             NativeValue::StaticBytes(identity) => {
                 Some(MachineArgument::Integer(identity.opaque_word()))
             }
+            NativeValue::StaticString(identity) => {
+                Some(MachineArgument::Integer(identity.opaque_word()))
+            }
             NativeValue::Capability(kind) => Some(MachineArgument::Integer(capability_word(*kind))),
             NativeValue::Resource(resource) => {
                 Some(MachineArgument::Integer(resource.opaque_word()))
             }
             NativeValue::Unique(unique) => Some(MachineArgument::Integer(unique.opaque_word())),
             NativeValue::Loan(loan) => Some(MachineArgument::Integer(loan.opaque_word())),
+            NativeValue::StructuralOwner(owner) => {
+                Some(MachineArgument::Integer(owner.opaque_word()))
+            }
+            NativeValue::StructuralView(view) => Some(MachineArgument::Integer(view.opaque_word())),
+            NativeValue::StructuralDestination(destination) => {
+                Some(MachineArgument::Integer(destination.opaque_word()))
+            }
             NativeValue::Reference(reference) => {
                 Some(MachineArgument::Integer(reference.opaque_word()))
             }

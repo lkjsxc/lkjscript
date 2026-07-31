@@ -2,6 +2,8 @@ mod append;
 
 use crate::ssa::*;
 
+type EdgeStateParameters = (BTreeMap<BindingId, ValueId>, Vec<ValueId>, Vec<ValueId>);
+
 impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn new_block(
         &mut self,
@@ -73,6 +75,41 @@ impl FunctionBuilder<'_> {
         environment: &BTreeMap<BindingId, ValueId>,
     ) -> Vec<ValueId> {
         environment.values().copied().collect()
+    }
+
+    pub(in crate::ssa) fn add_edge_state_parameters(
+        &mut self,
+        block: BlockId,
+        incoming_environment: &BTreeMap<BindingId, ValueId>,
+        incoming_unplaced: &[ValueId],
+        parameter_origin: Origin,
+    ) -> Result<EdgeStateParameters> {
+        let environment =
+            self.add_environment_parameters(block, incoming_environment, parameter_origin)?;
+        let mut mapped = BTreeMap::new();
+        for ((_, incoming), (_, parameter)) in incoming_environment.iter().zip(&environment) {
+            mapped.entry(*incoming).or_insert(*parameter);
+        }
+        let mut arguments = Self::environment_arguments(incoming_environment);
+        for value in incoming_unplaced {
+            if mapped.contains_key(value) {
+                continue;
+            }
+            let parameter =
+                self.add_block_parameter(block, self.value_type(*value)?, None, parameter_origin)?;
+            mapped.insert(*value, parameter);
+            arguments.push(*value);
+        }
+        let unplaced = incoming_unplaced
+            .iter()
+            .map(|value| {
+                mapped
+                    .get(value)
+                    .copied()
+                    .ok_or_else(|| Error::msg("SSA edge lost an unplaced owner parameter"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok((environment, unplaced, arguments))
     }
 
     pub(in crate::ssa) fn next_value(&mut self, ty: &SsaType) -> Result<ValueId> {

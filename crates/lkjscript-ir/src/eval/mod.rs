@@ -1,7 +1,3 @@
-use std::cell::RefCell;
-use std::fmt;
-use std::rc::Rc;
-
 use crate::{
     CallTarget, Constant, EnumId, FunctionId, Instruction, InstructionKind, ProductId,
     RuntimeLayoutId, RuntimeOp, StructuredOutcome, Terminator, ValueId, VariantId, VerifiedProgram,
@@ -14,24 +10,40 @@ include!("value.rs");
 
 pub use outcome::EvalOutcome;
 pub(crate) use outcome::Flow;
+pub use values::EvalStructuralObservation;
 
 mod failure_cleanup;
 
 pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
+    evaluate_observed(program, config).0
+}
+
+pub fn evaluate_observed(
+    program: &VerifiedProgram,
+    config: &EvalConfig,
+) -> (EvalOutcome, EvalStructuralObservation) {
     let arguments = match capabilities::main_arguments(program, config) {
         Ok(arguments) => arguments,
-        Err(message) => return EvalOutcome::HostFailure(message),
+        Err(message) => return (EvalOutcome::HostFailure(message), Default::default()),
     };
     let Some(unique) = unique::EvalUniqueRuntime::new(config) else {
-        return EvalOutcome::HostFailure("invalid evaluator unique-store limits".into());
+        return (
+            EvalOutcome::HostFailure("invalid evaluator unique-store limits".into()),
+            Default::default(),
+        );
     };
+    let structural =
+        match EvaluatorStructuralSession::new(program.program(), config.structural_limits) {
+            Ok(structural) => structural,
+            Err(message) => return (EvalOutcome::HostFailure(message), Default::default()),
+        };
     let resources = match resources::EvalResources::new(
         config.max_resources,
         config.resource_policy,
         config.cleanup_failure_limits,
     ) {
         Ok(resources) => resources,
-        Err(message) => return EvalOutcome::HostFailure(message),
+        Err(message) => return (EvalOutcome::HostFailure(message), Default::default()),
     };
     let mut evaluator = Evaluator {
         static_bytes: collect_static_bytes(program),
@@ -41,62 +53,35 @@ pub fn evaluate(program: &VerifiedProgram, config: &EvalConfig) -> EvalOutcome {
         allocations: 0,
         logical_aggregate_constructions: 0,
         heap_bytes: 0,
-        next_buffer_id: 1,
         cleanup_failures: lkjscript_core::CleanupFailures::new(config.cleanup_failure_limits),
         resources,
         unique,
+        structural,
     };
-    let (primary, unique_cleanup_error) = match evaluator.call(program.program().main, arguments, 0)
-    {
-        Ok(value @ EvalValue::ByteVector(_)) => match evaluator.unique.export_owner(value) {
-            Ok(bytes) => (
-                EvalOutcome::Returned(EvalValue::ReturnedByteVector(bytes)),
-                None,
-            ),
-            Err(flow) => (
-                flow.outcome(),
-                evaluator.unique.cleanup().err().map(Flow::detail),
-            ),
-        },
-        Ok(value @ EvalValue::Bytes(_)) => match evaluator.unique.export_owner(value) {
-            Ok(bytes) => (EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes)), None),
-            Err(flow) => (
-                flow.outcome(),
-                evaluator.unique.cleanup().err().map(Flow::detail),
-            ),
-        },
-        Ok(EvalValue::StaticBytes(index)) => (
-            evaluator
-                .static_bytes
-                .get(index as usize)
-                .map(|bytes| EvalOutcome::Returned(EvalValue::ReturnedBytes(bytes.to_vec())))
-                .unwrap_or_else(|| EvalOutcome::Trapped("invalid returned static bytes".into())),
-            None,
-        ),
-        Ok(value) => match evaluator.unique.verify_empty() {
-            Ok(()) => (EvalOutcome::Returned(value), None),
-            Err(flow) => (
-                flow.outcome(),
-                evaluator.unique.cleanup().err().map(Flow::detail),
-            ),
-        },
-        Err(flow) => (
-            flow.outcome(),
-            evaluator.unique.cleanup().err().map(Flow::detail),
-        ),
-    };
-    let mut cleanup_failures = std::mem::replace(
+    let result = evaluator.call(program.program().main, arguments, 0);
+    let primary = match result {
+        Ok(value) => evaluator.adapt_return(value),
+        Err(flow) => Err(flow),
+    }
+    .unwrap_or_else(Flow::outcome);
+    if evaluator.unique.verify_empty().is_err() {
+        if let Err(cleanup) = evaluator.unique.cleanup() {
+            evaluator.note_structural_cleanup_failure(cleanup.detail());
+        }
+    }
+    let final_empty = evaluator.structural.runtime.verify_empty().is_ok();
+    if !final_empty {
+        evaluator.note_structural_cleanup_failure(
+            "structural runtime retained roots, views, or destinations".into(),
+        );
+    }
+    let observation = EvalStructuralObservation::capture(&evaluator.structural, final_empty);
+    let cleanup_failures = std::mem::replace(
         &mut evaluator.cleanup_failures,
         lkjscript_core::CleanupFailures::new(config.cleanup_failure_limits),
     );
-    if let Some(error) = unique_cleanup_error {
-        cleanup_failures.push(
-            lkjscript_core::CleanupPhase::Emergency,
-            lkjscript_core::CleanupSubject::UniqueStorage,
-            error,
-        );
-    }
-    resources::finish_evaluation(&mut evaluator.resources, primary, cleanup_failures)
+    let outcome = resources::finish_evaluation(&mut evaluator.resources, primary, cleanup_failures);
+    (outcome, observation)
 }
 
 pub(crate) struct Evaluator<'a> {
@@ -107,10 +92,10 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) allocations: u64,
     pub(crate) logical_aggregate_constructions: u64,
     pub(crate) heap_bytes: usize,
-    pub(crate) next_buffer_id: u64,
     pub(crate) cleanup_failures: lkjscript_core::CleanupFailures,
     pub(crate) resources: resources::EvalResources,
     pub(crate) unique: unique::EvalUniqueRuntime,
+    pub(crate) structural: EvaluatorStructuralSession,
 }
 
 mod allocation;
