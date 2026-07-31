@@ -114,7 +114,6 @@ pub(crate) fn duplicate_call_caller() -> Function {
                     metadata: InstructionMetadata {
                         origin: Origin::SYNTHETIC,
                         effects: EffectSet::PURE,
-                        safepoint: Safepoint::Required,
                         failure: FailureBehavior::None,
                         failure_cleanup: None,
                         frame_state: Some(FrameState {

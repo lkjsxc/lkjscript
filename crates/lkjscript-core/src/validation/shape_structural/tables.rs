@@ -47,7 +47,8 @@ fn validate_table_limits(chunk: &Chunk, limits: &ValidationLimits) -> Result<()>
         || !chunk.structural_destinations.is_empty()
         || !chunk.structural_destination_fields.is_empty()
         || !chunk.structural_aggregate_fields.is_empty()
-        || !chunk.structural_payloads.is_empty();
+        || !chunk.structural_payloads.is_empty()
+        || chunk.products.iter().any(|product| product.region);
     if carries_structural != chunk.memory_plan.is_some() {
         return Err(Error::msg(
             "bytecode structural metadata requires one exact MemoryPlanId",

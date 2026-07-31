@@ -1,8 +1,7 @@
 use super::super::*;
 
-pub(crate) const fn evaluator_heap_object_bytes() -> usize {
-    // Mirrors the deterministic base estimate of the current `HeapObj` enum
-    // without coupling the dependency-free IR crate to the runtime crate.
+pub(crate) const fn evaluator_runtime_value_bytes() -> usize {
+    // Deterministic base estimate for one evaluator-owned aggregate record.
     4 * std::mem::size_of::<usize>()
 }
 

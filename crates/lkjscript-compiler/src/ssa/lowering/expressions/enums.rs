@@ -1,39 +1,30 @@
 impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_enum_value(
         &mut self,
-        enum_id: hir::EnumId,
+        _enum_id: hir::EnumId,
         variant: hir::VariantId,
-        layout: hir::RuntimeLayoutId,
+        _layout: hir::RuntimeLayoutId,
         fields: &[Expr],
         ty: SsaType,
         origin: hir::SourceId,
     ) -> Result<Option<ValueId>> {
+        if self.structural.type_for(&ty).is_none() {
+            return Err(Error::msg(
+                "enum construction lacks deterministic structural metadata",
+            ));
+        }
         let Some(fields) = self.lower_arguments(fields)? else {
             return Ok(None);
         };
         let variant = lkjscript_ir::VariantId::new(variant.bytes());
-        if self.structural.type_for(&ty).is_some() {
-            return self.construct_structural_aggregate(ty, Some(variant), fields, origin);
-        }
-        let value = self.append(
-            ty,
-            InstructionKind::EnumValue {
-                enum_id: lkjscript_ir::EnumId::new(enum_id.bytes()),
-                variant,
-                layout: lkjscript_ir::RuntimeLayoutId::new(layout.bytes()),
-                fields,
-            },
-            EffectSet::ALLOCATES,
-            origin,
-        )?;
-        Ok(Some(value))
+        self.construct_structural_aggregate(ty, Some(variant), fields, origin)
     }
 
     pub(in crate::ssa) fn lower_enum_test(
         &mut self,
-        enum_id: hir::EnumId,
+        _enum_id: hir::EnumId,
         variant: hir::VariantId,
-        layout: hir::RuntimeLayoutId,
+        _layout: hir::RuntimeLayoutId,
         input: &Expr,
         origin: hir::SourceId,
     ) -> Result<Option<ValueId>> {
@@ -75,18 +66,9 @@ impl FunctionBuilder<'_> {
                 )
                 .map(Some);
         }
-        self.append(
-            SsaType::Bool,
-            InstructionKind::EnumIsVariant {
-                enum_id: lkjscript_ir::EnumId::new(enum_id.bytes()),
-                variant: lkjscript_ir::VariantId::new(variant.bytes()),
-                layout: lkjscript_ir::RuntimeLayoutId::new(layout.bytes()),
-                value,
-            },
-            EffectSet::READS_MEMORY,
-            origin,
-        )
-        .map(Some)
+        Err(Error::msg(
+            "enum variant test lacks deterministic structural metadata",
+        ))
     }
 
     pub(in crate::ssa) fn lower_enum_field(

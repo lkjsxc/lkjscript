@@ -81,6 +81,22 @@ pub(super) fn lower_structural_instruction(
                 vec![input],
             );
         }
+        InstructionKind::ProductField { field, value, .. } => {
+            let root = structural_type(catalog, source_type(function, *value)?)?;
+            return lower_field_projection(
+                function,
+                instruction,
+                u16::from(*field),
+                *value,
+                root,
+                false,
+                block,
+                locals,
+                value_types,
+                catalog,
+                builder,
+            );
+        }
         InstructionKind::AggregateFieldBorrow {
             representation,
             field,
@@ -90,41 +106,19 @@ pub(super) fn lower_structural_instruction(
             let (_, root_ty) = catalog
                 .representation(*representation, lkjscript_ir::StructuralValueCategory::View)?;
             let root = structural_type(catalog, &root_ty)?;
-            let projected = structural_type(catalog, &instruction.ty)?;
-            let projection = catalog.view(
+            return lower_field_projection(
+                function,
+                instruction,
+                *field,
+                *value,
                 root,
-                projected,
-                vec![*field],
-                lkjscript_native::StructuralProjectionKind::Field,
-                false,
+                true,
+                block,
+                locals,
+                value_types,
+                catalog,
+                builder,
             );
-            let input = observe_value(function, *value, block, locals, builder)?;
-            let view = structural_call(
-                builder,
-                block,
-                lkjscript_native::StructuralOperation::Borrow {
-                    projection: projection.clone(),
-                },
-                vec![input],
-            )?;
-            if value_type(value_types, instruction.id)?
-                == ValueType::StructuralView(projection.view_type())
-            {
-                return Ok(view);
-            }
-            let copied = structural_call(
-                builder,
-                block,
-                lkjscript_native::StructuralOperation::CopyView(projection.view_type()),
-                vec![view],
-            )?;
-            let _ = structural_call(
-                builder,
-                block,
-                lkjscript_native::StructuralOperation::EndView(projection.view_type()),
-                vec![view],
-            )?;
-            return Ok(copied);
         }
         InstructionKind::AggregateTag { value, .. } => {
             let root = structural_type(catalog, source_type(function, *value)?)?;

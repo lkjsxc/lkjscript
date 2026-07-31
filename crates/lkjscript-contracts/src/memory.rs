@@ -8,10 +8,8 @@ mod templates;
 mod templates_runtime;
 mod templates_scalar;
 mod templates_special;
-mod tracing;
 
 pub use model::MemoryObligation;
-pub use tracing::{LegacyTracedFamily, LEGACY_TRACED_FAMILIES};
 
 use templates_special::resource;
 

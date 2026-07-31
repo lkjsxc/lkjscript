@@ -45,7 +45,7 @@ impl InstalledImage {
                 let mut services = NoopNativeIslandRuntimeServices;
                 self.invoke_island_with_services(entry, arguments, config, &mut services)
             }
-            NativeExecutionDomain::LegacyHeap => {
+            NativeExecutionDomain::InvocationRegion => {
                 let mut services = NoopNativeRuntimeServices;
                 self.invoke_with_services(entry, arguments, config, &mut services)
             }
@@ -59,7 +59,7 @@ impl InstalledImage {
         config: &NativeInvocationConfig,
         services: &mut dyn NativeRuntimeServices,
     ) -> Result<InvocationReport, InvocationError> {
-        if self.image.execution_domain() != NativeExecutionDomain::LegacyHeap {
+        if self.image.execution_domain() != NativeExecutionDomain::InvocationRegion {
             return Err(InvocationError::ExecutionDomain);
         }
         let entry = self
@@ -109,7 +109,6 @@ impl InstalledImage {
             4 => InvocationOutcome::ResourceLimitExceeded(match state.payload {
                 1 => NativeResourceLimitKind::PollFuel,
                 2 => NativeResourceLimitKind::ActiveFrames,
-                3 => NativeResourceLimitKind::MaterializedRoots,
                 4 => NativeResourceLimitKind::RuntimeService,
                 5 => NativeResourceLimitKind::NativeStackBytes,
                 6 => NativeResourceLimitKind::ActiveValues,
@@ -140,14 +139,10 @@ impl InstalledImage {
             native_entries,
             peak_active_frame_depth: state.peak_active_depth,
             active_frame_depth: state.active_depth,
-            collection_calls: state.collection_calls,
-            maximum_roots: state.maximum_roots,
-            exact_root_counts: state.exact_root_counts.clone(),
             peak_native_stack_bytes: state.peak_native_stack_bytes,
             reserved_native_stack_bytes: state.reserved_native_stack_bytes,
             heap_operation_attempts: state.heap_operation_attempts,
             heap_operation_successes: state.heap_operation_successes,
-            barrier_count: state.barrier_count,
             peak_active_value_homes: state.peak_active_value_homes,
             active_value_homes: state.active_value_homes,
             resource_calls: 0,
@@ -155,7 +150,6 @@ impl InstalledImage {
             structural_calls: 0,
             cleanup_failures: Vec::new(),
             omitted_cleanup_failures: 0,
-            collector_runtime: true,
         })
     }
 

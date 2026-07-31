@@ -19,6 +19,8 @@ pub use eval::{
 };
 pub use memory::{derive_memory_inventory, verify_memory_inventory};
 pub use model::{
+    runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
+    runtime_product_semantic_type, runtime_structural_semantic_type, runtime_structural_type,
     BindingId, Block, BlockId, BlockMetadata, BlockParameter, BorrowKind, BytecodeBlockLink,
     BytecodeInstructionLink, BytecodeLinkMetadata, CallTarget, Constant, DropEventKind,
     DropGlueIdentity, EffectSet, EnumFieldMetadata, EnumId, EnumLayoutFacts, EnumMetadata,
@@ -28,14 +30,14 @@ pub use model::{
     IrError, LoanId, MemoryAliasing, MemoryContention, MemoryDestruction, MemoryIdentity,
     MemoryLocality, MemoryMode, MemoryMultiplicity, MemoryObligationSubject, MemoryPlanId,
     MemoryPortability, MemoryStorage, Origin, PlaceId, PlaceMetadata, ProductField, ProductId,
-    ProductMetadata, Program, Result, RuntimeLayoutId, RuntimeOp, Safepoint, Signature,
+    ProductMetadata, Program, RegionProductMetadata, Result, RuntimeLayoutId, RuntimeOp, Signature,
     SourceMetadata, SsaMemoryInventory, SsaMemoryObligation, SsaType, StructuralDropGlueIdentity,
     StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
     StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
     StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
     StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound, TraitId, TraitMetadata,
     TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VariantFieldId,
-    VariantId, MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS,
+    VariantId, MAX_REGION_PRODUCTS, MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS,
     MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 pub use optimize::{

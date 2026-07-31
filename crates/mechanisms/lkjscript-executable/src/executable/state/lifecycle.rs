@@ -7,35 +7,10 @@ impl<'a> NativeCallState<'a> {
         services: &'a mut dyn NativeRuntimeServices,
     ) -> Result<Self, InvocationError> {
         let maximum_active_frames = config.max_active_frames.min(MAX_ACTIVE_FRAMES);
-        let maximum_map_roots = image
-            .safepoints()
-            .iter()
-            .map(|safepoint| safepoint.stack_map().roots().len())
-            .max()
-            .unwrap_or(0);
-        let initial_root_capacity = maximum_map_roots.min(MAX_MATERIALIZED_ROOTS);
-        let mut roots = Vec::new();
-        let mut root_addresses = Vec::new();
-        let mut exact_root_counts = Vec::new();
         let mut heap_arguments = Vec::new();
-        roots
-            .try_reserve_exact(initial_root_capacity)
-            .map_err(|_| InvocationError::RootCapacityExceeded)?;
-        root_addresses
-            .try_reserve_exact(initial_root_capacity)
-            .map_err(|_| InvocationError::RootCapacityExceeded)?;
-        if image
-            .runtime_calls()
-            .contains(&RuntimeCallSlot::CollectReference)
-            || !image.heap_runtime_sites().is_empty()
-        {
-            exact_root_counts
-                .try_reserve(1)
-                .map_err(|_| InvocationError::RootCapacityExceeded)?;
-        }
         heap_arguments
             .try_reserve_exact(16)
-            .map_err(|_| InvocationError::RootCapacityExceeded)?;
+            .map_err(|_| InvocationError::RuntimeValueCapacityExceeded)?;
         // One generated invocation cannot migrate threads. Cache the current
         // thread's fixed stack bounds once instead of repeating pthread
         // attribute queries at every generated function entry.
@@ -75,17 +50,24 @@ impl<'a> NativeCallState<'a> {
             peak_active_depth: 0,
             active_value_homes: 0,
             peak_active_value_homes: 0,
-            collection_calls: 0,
-            maximum_roots: 0,
-            exact_root_counts,
-            roots,
-            root_addresses,
             heap_arguments,
             heap_operation_attempts: 0,
             heap_operation_successes: 0,
-            barrier_count: 0,
             metadata_invalid: false,
         })
+    }
+
+    pub(in crate::executable) fn invalidate_active_frame(&mut self) {
+        if let Some(reservation) = self.pending_reservation.take() {
+            self.reserved_native_stack_bytes = self
+                .reserved_native_stack_bytes
+                .saturating_sub(reservation.frame_bytes);
+            self.active_value_homes = self
+                .active_value_homes
+                .saturating_sub(reservation.value_homes);
+        }
+        self.metadata_invalid = true;
+        self.status = 5;
     }
 
     pub(in crate::executable) fn poll(&mut self) {

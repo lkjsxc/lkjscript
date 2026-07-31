@@ -111,28 +111,22 @@ pub(in crate::executable) fn runtime_symbol(
         (NativeExecutionDomain::CollectorFree, RuntimeCallSlot::UnregisterFrame) => {
             runtime_island_unregister as *const () as usize
         }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::Poll) => {
+        (NativeExecutionDomain::InvocationRegion, RuntimeCallSlot::Poll) => {
             runtime_poll as *const () as usize
         }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::EnterFunction) => {
+        (NativeExecutionDomain::InvocationRegion, RuntimeCallSlot::EnterFunction) => {
             runtime_enter_function as *const () as usize
         }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::CollectReference) => {
-            runtime_collect_reference as *const () as usize
+        (NativeExecutionDomain::InvocationRegion, RuntimeCallSlot::HeapDispatch) => {
+            runtime_value_dispatch as *const () as usize
         }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::HeapDispatch) => {
-            runtime_heap_dispatch as *const () as usize
-        }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::ReserveFrame) => {
+        (NativeExecutionDomain::InvocationRegion, RuntimeCallSlot::ReserveFrame) => {
             runtime_reserve_frame as *const () as usize
         }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::RegisterFrame) => {
+        (NativeExecutionDomain::InvocationRegion, RuntimeCallSlot::RegisterFrame) => {
             runtime_register_frame as *const () as usize
         }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::PublishSafepoint) => {
-            runtime_publish_safepoint as *const () as usize
-        }
-        (NativeExecutionDomain::LegacyHeap, RuntimeCallSlot::UnregisterFrame) => {
+        (NativeExecutionDomain::InvocationRegion, RuntimeCallSlot::UnregisterFrame) => {
             runtime_unregister_frame as *const () as usize
         }
         _ => return None,

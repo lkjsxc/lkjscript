@@ -72,7 +72,11 @@ impl<'a> ClosureReconstructor<'a> {
     }
 
     fn product(&mut self, id: ProductId, depth: u16) -> Result<ClosureClass, String> {
-        self.enter(SsaType::Product(id))?;
+        let concrete = SsaType::Product(id);
+        if self.active.contains(&concrete) {
+            return Ok(ClosureClass::Dynamic);
+        }
+        self.enter(concrete);
         let fields = self
             .program
             .products
@@ -94,10 +98,14 @@ impl<'a> ClosureReconstructor<'a> {
         arguments: &[SsaType],
         depth: u16,
     ) -> Result<ClosureClass, String> {
-        self.enter(SsaType::Enum {
+        let concrete = SsaType::Enum {
             id,
             arguments: arguments.to_vec(),
-        })?;
+        };
+        if self.active.contains(&concrete) {
+            return Ok(ClosureClass::Dynamic);
+        }
+        self.enter(concrete);
         let definition = self
             .program
             .enums
@@ -155,12 +163,8 @@ impl<'a> ClosureReconstructor<'a> {
         })
     }
 
-    fn enter(&mut self, concrete_type: SsaType) -> Result<(), String> {
-        if self.active.contains(&concrete_type) {
-            return Err("recursive aggregate SCC rejected by evaluator".into());
-        }
+    fn enter(&mut self, concrete_type: SsaType) {
         self.active.push(concrete_type);
-        Ok(())
     }
 }
 

@@ -75,41 +75,7 @@ impl JitSession {
             .iter()
             .filter(|object| object.tier == Tier::Optimizing)
             .count() as u64;
-        let optimization_totals = self
-            .objects
-            .iter()
-            .filter_map(|object| object.optimization_stats.as_ref())
-            .fold(OptimizationStats::default(), |mut total, stats| {
-                total.iterations = total.iterations.saturating_add(stats.iterations);
-                total.discovery_passes = total
-                    .discovery_passes
-                    .saturating_add(stats.discovery_passes);
-                total.checker_passes = total.checker_passes.saturating_add(stats.checker_passes);
-                total.reconstruction_passes = total
-                    .reconstruction_passes
-                    .saturating_add(stats.reconstruction_passes);
-                total.cleanup_passes = total.cleanup_passes.saturating_add(stats.cleanup_passes);
-                total.validation_passes = total
-                    .validation_passes
-                    .saturating_add(stats.validation_passes);
-                total.optimizing_passes = total
-                    .optimizing_passes
-                    .saturating_add(stats.optimizing_passes);
-                total.certificate_records = total
-                    .certificate_records
-                    .saturating_add(stats.certificate_records);
-                total.certificate_bytes_estimate = total
-                    .certificate_bytes_estimate
-                    .saturating_add(stats.certificate_bytes_estimate);
-                total.algebraic_rewrites = total
-                    .algebraic_rewrites
-                    .saturating_add(stats.algebraic_rewrites);
-                total.gvn_rewrites = total.gvn_rewrites.saturating_add(stats.gvn_rewrites);
-                total.checked_i64_rewrites = total
-                    .checked_i64_rewrites
-                    .saturating_add(stats.checked_i64_rewrites);
-                total
-            });
+        let optimization_totals = self.optimization_totals();
         JitStats {
             functions: self.functions.clone(),
             code_objects: self
@@ -126,11 +92,6 @@ impl JitSession {
                     relocation_count: object.relocations.len(),
                     runtime_calls: object.runtime_calls.clone(),
                     numeric_conversion_sites: object.numeric_conversion_sites,
-                    safepoint_count: object.safepoints.len(),
-                    exact_scalar_stack_maps: object
-                        .safepoints
-                        .iter()
-                        .all(|point| point.stack_map().roots().is_empty()),
                     diagnostic_machine_code: object.diagnostic_machine_code.clone(),
                     compile_stats: object.compile_stats.clone(),
                     optimization_certificate: object.optimization_certificate.clone(),
@@ -158,18 +119,20 @@ impl JitSession {
             code_cache_peak_bytes,
             metadata_cache_peak_bytes,
             accounted_allocation_peak_bytes,
-            allocations: self.heap.as_ref().map_or(0, GcHeap::total_allocations),
-            allocation_bytes_estimate: self.heap.as_ref().map_or(0, GcHeap::total_allocated_bytes),
-            collections: self.heap.as_ref().map_or(0, GcHeap::collections),
-            peak_live_heap_bytes_estimate: self
-                .heap
-                .as_ref()
-                .map_or(0, GcHeap::peak_live_heap_bytes),
-            maximum_roots: self.maximum_roots,
             runtime_heap_attempts: self.runtime_heap_attempts,
             runtime_heap_successes: self.runtime_heap_successes,
-            barrier_count: self.barrier_count,
-            collector_runtime_invocations: self.collector_runtime_invocations,
+            segmented_lists: self.lists.as_ref().map_or_else(
+                Default::default,
+                lkjscript_core::SegmentedListArena::metrics,
+            ),
+            segmented_list_reserved_bytes_estimate: self.lists.as_ref().map_or(
+                0,
+                lkjscript_core::SegmentedListArena::reserved_bytes_estimate,
+            ),
+            region_products: self.region_products.as_ref().map_or_else(
+                Default::default,
+                lkjscript_core::RegionProductArena::metrics,
+            ),
             resource_runtime_calls: self.resource_runtime_calls,
             unique_runtime_calls: self.unique_runtime_calls,
             structural_runtime_calls: self.structural_runtime_calls,

@@ -16,16 +16,43 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 Ok(runtime) => (Some(runtime), None),
                 Err(error) => (None, Some(error)),
             };
+        let (lists, list_initialization_error) = match lkjscript_core::SegmentedListArena::new(
+            lkjscript_core::SegmentedListArenaLimits::default(),
+        ) {
+            Ok(lists) => (Some(lists), None),
+            Err(error) => (
+                None,
+                Some(Error::msg(format!(
+                    "segmented-list arena initialization failed: {error:?}"
+                ))),
+            ),
+        };
+        let region_limit = u32::try_from(config.max_allocations)
+            .unwrap_or(u32::MAX)
+            .max(1);
+        let region_limits = lkjscript_core::RegionProductLimits {
+            max_records: std::num::NonZeroU32::new(region_limit)
+                .unwrap_or(std::num::NonZeroU32::MIN),
+            max_fields: std::num::NonZeroU32::new(region_limit.saturating_mul(16))
+                .unwrap_or(std::num::NonZeroU32::MIN),
+        };
+        let (region_products, region_product_initialization_error) =
+            match lkjscript_core::RegionProductArena::new(region_limits) {
+                Ok(arena) => (Some(arena), None),
+                Err(error) => (
+                    None,
+                    Some(Error::msg(format!(
+                        "region-product arena initialization failed: {error:?}"
+                    ))),
+                ),
+            };
         Self {
             chunk,
             globals: vec![Value::INVALID; chunk.global_names().len()],
             stack: Vec::new(),
             frames: Vec::new(),
-            arena: Arena::new(GcConfig {
-                max_allocations: config.max_allocations,
-                max_heap_bytes: config.max_heap_bytes,
-                ..GcConfig::default()
-            }),
+            lists,
+            region_products,
             jit,
             exit_code: None,
             inputs,
@@ -33,11 +60,15 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
             unique: unique::UniqueRuntime::new(&config),
             structural,
             structural_initialization_error,
+            list_initialization_error,
+            region_product_initialization_error,
             fuel_remaining: config.instruction_fuel,
             output_bytes: 0,
             allocation_error: None,
             cleanup_failures: CleanupFailures::new(config.cleanup_failure_limits),
             logical_aggregate_constructions: 0,
+            list_allocations: 0,
+            region_product_allocations: 0,
             started: Instant::now(),
             config,
         }

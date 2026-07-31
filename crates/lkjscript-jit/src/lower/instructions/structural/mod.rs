@@ -6,5 +6,6 @@ include!("lifecycle.rs");
 include!("ownership.rs");
 include!("operands.rs");
 include!("runtime.rs");
+include!("projection.rs");
 include!("instruction.rs");
 include!("helpers.rs");

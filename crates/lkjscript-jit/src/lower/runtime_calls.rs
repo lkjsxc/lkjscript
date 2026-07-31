@@ -18,11 +18,11 @@ pub(super) fn lower_runtime(
     let reference_equality = operation == RuntimeOp::EqualValue
         && input_types
             .first()
-            .is_some_and(|ty| matches!(ty, ValueType::Reference(_)));
+            .is_some_and(|ty| matches!(ty, ValueType::Reference(ReferenceType::List(_, _))));
     let heap = heap_operation(operation);
     if reference_equality || heap.is_some() {
         let operation = if reference_equality {
-            HeapOperation::EqualValue
+            HeapOperation::ListEqual
         } else {
             heap.ok_or(lkjscript_native::PlanError::InvalidHeapCall)?
         };

@@ -58,7 +58,6 @@ pub struct MemoryPlanEntry {
     pub execution: MemoryExecution,
     pub execution_cutover: Option<MemoryExecutionCutover>,
     pub origin: MemoryOrigin,
-    pub legacy_family: Option<String>,
     pub drop_glue: Option<MemoryDropGlueId>,
 }
 

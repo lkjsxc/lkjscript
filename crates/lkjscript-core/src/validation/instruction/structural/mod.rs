@@ -12,7 +12,7 @@ pub(super) fn apply(
     state: &mut State,
 ) -> Result<()> {
     match instruction.op() {
-        Op::StoreStructuralLocal => store_local(proto, instruction, state),
+        Op::StoreStructuralLocal => store_local(chunk, proto, instruction, state),
         Op::TakeStructuralLocal => take_local(proto, instruction, state),
         Op::LoadStructuralViewLocal => load_view(proto, instruction, state),
         Op::EndStructuralBorrowLocal => end_view(proto, instruction, state),
@@ -32,6 +32,7 @@ pub(super) fn apply(
         Op::StructuralAggregateFieldBorrow => {
             aggregate_field_borrow(chunk, proto, instruction, state)
         }
+        Op::StructuralAggregateFieldCopy => aggregate_field_copy(chunk, proto, instruction, state),
         Op::StructuralAggregateTag => aggregate_tag(chunk, proto, instruction, state),
         Op::StructuralAggregateConsumePayload => {
             aggregate_consume_payload(chunk, proto, instruction, state)
@@ -43,10 +44,12 @@ pub(super) fn apply(
 }
 
 include!("locals.rs");
+include!("local_copy.rs");
 include!("places.rs");
 include!("borrows.rs");
 include!("destination.rs");
 include!("aggregate.rs");
+include!("aggregate_field.rs");
 include!("copy.rs");
 include!("lookup.rs");
 include!("checks.rs");

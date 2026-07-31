@@ -48,7 +48,6 @@ pub(super) fn allocating_metadata(position: u32, effects: EffectSet) -> Instruct
     InstructionMetadata {
         origin: Origin::SYNTHETIC,
         effects,
-        safepoint: Safepoint::Required,
         failure: match (
             effects.contains(EffectSet::MAY_TRAP),
             effects.contains(EffectSet::MAY_EXIT) || effects.contains(EffectSet::ALLOCATES),

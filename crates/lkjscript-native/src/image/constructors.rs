@@ -62,48 +62,9 @@ pub(crate) const fn frame_home(
     }
 }
 
-pub(crate) fn exact_safepoint(
-    id: u32,
-    function: FunctionId,
-    code_offset: u32,
-    roots: Vec<RootLocation>,
-) -> Safepoint {
-    Safepoint {
-        id,
-        function,
-        code_offset,
-        stack_map: ExactStackMap { roots },
-    }
-}
-
-pub(crate) fn root_map_requirement(
-    id: u32,
-    function: FunctionId,
-    roots: Vec<RootLocation>,
-) -> RootMapRequirement {
-    RootMapRequirement {
-        id,
-        function,
-        roots,
-    }
-}
-
-pub(crate) const fn root_location(
-    rbp_displacement: i32,
-    kind: FrameHomeKind,
-    reference_type: ReferenceType,
-) -> RootLocation {
-    RootLocation {
-        rbp_displacement,
-        kind,
-        reference_type,
-    }
-}
-
 pub(crate) fn heap_runtime_site(
     id: u32,
     function: FunctionId,
-    safepoint: u32,
     descriptor: HeapCallDescriptor,
     arguments: Vec<FrameHome>,
     result: FrameHome,
@@ -112,7 +73,6 @@ pub(crate) fn heap_runtime_site(
     HeapRuntimeSite {
         id,
         function,
-        safepoint,
         descriptor,
         arguments,
         result,

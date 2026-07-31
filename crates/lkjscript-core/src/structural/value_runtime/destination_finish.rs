@@ -5,8 +5,9 @@ use crate::Value;
 use super::super::StructuralValueKey;
 use super::destination::{DestinationRecord, DestinationShape, DestinationSlot};
 use super::{
-    DestinationCleanupReport, SemanticPayload, SemanticValue, StructuralDestinationKey,
-    StructuralEventKind, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
+    DestinationCleanupReport, StructuralDestinationKey, StructuralEventKind, StructuralImage,
+    StructuralObject, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
+    TreeFacts,
 };
 
 impl StructuralValueRuntime {
@@ -14,42 +15,39 @@ impl StructuralValueRuntime {
         &mut self,
         key: StructuralDestinationKey,
     ) -> Result<StructuralValueKey, StructuralValueError> {
-        let count = {
+        let (image, facts) = {
             let record = self.destination(key)?;
             if record.values.iter().any(Option::is_none) {
                 return Err(StructuralValueError::IncompleteDestination);
             }
-            record.values.len()
-        };
-        let mut fields = Vec::new();
-        fields
-            .try_reserve_exact(count)
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
-        let (value_type, shape) = {
-            let record = self.destination_mut(key)?;
-            for field in &mut record.values {
-                fields.push(
-                    field
-                        .take()
+            let facts = TreeFacts {
+                nodes: 1,
+                ..TreeFacts::default()
+            }
+            .checked_add(record.total)
+            .ok_or(StructuralValueError::ArithmeticOverflow)?;
+            let mut children = Vec::new();
+            children.try_reserve_exact(record.values.len())?;
+            for value in &record.values {
+                children.push(
+                    value
+                        .as_ref()
                         .ok_or(StructuralValueError::InvariantViolation)?,
                 );
             }
-            (
+            let image = StructuralImage::merge(
                 record.value_type,
                 match record.shape {
-                    DestinationShape::Product => DestinationShape::Product,
-                    DestinationShape::Enum(tag) => DestinationShape::Enum(tag),
+                    DestinationShape::Product => None,
+                    DestinationShape::Enum(tag) => Some(tag),
                 },
-            )
+                &children,
+                facts,
+                self.limits,
+            )?;
+            (image, facts)
         };
-        let payload = match shape {
-            DestinationShape::Product => SemanticPayload::Product(fields),
-            DestinationShape::Enum(tag) => SemanticPayload::Enum {
-                tag,
-                active_payload: fields,
-            },
-        };
-        match self.publish_owned(SemanticValue::new(value_type, payload)) {
+        match self.publish_image(image, facts) {
             Ok(root) => {
                 self.retire_destination(key)?;
                 self.metrics.destinations_completed =
@@ -58,21 +56,7 @@ impl StructuralValueRuntime {
                 self.record(StructuralEventKind::DestinationComplete, key.slot(), 0);
                 Ok(root)
             }
-            Err(failure) => {
-                let fields = match failure.value.payload {
-                    SemanticPayload::Product(fields)
-                    | SemanticPayload::Enum {
-                        active_payload: fields,
-                        ..
-                    } => fields,
-                    _ => return Err(StructuralValueError::InvariantViolation),
-                };
-                let record = self.destination_mut(key)?;
-                for (slot, field) in record.values.iter_mut().zip(fields) {
-                    *slot = Some(field);
-                }
-                Err(failure.error)
-            }
+            Err(failure) => Err(failure.0),
         }
     }
 
@@ -102,7 +86,7 @@ impl StructuralValueRuntime {
         self.cleanup_sequence = self.cleanup_sequence.saturating_add(1);
         for &field in &report.cleanup_order {
             let index = usize::from(field);
-            let value = record.values[index]
+            let image = record.values[index]
                 .take()
                 .ok_or(StructuralValueError::InvariantViolation)?;
             let facts = record.facts[index]
@@ -110,7 +94,7 @@ impl StructuralValueRuntime {
                 .ok_or(StructuralValueError::InvariantViolation)?;
             report.nodes_released = report.nodes_released.saturating_add(facts.nodes);
             report.bytes_released = report.bytes_released.saturating_add(facts.bytes);
-            self.release_tree(value, facts);
+            self.release_image(image, facts);
         }
         self.metrics.destinations_aborted = self.metrics.destinations_aborted.saturating_add(1);
         self.metrics.live_destinations = self.metrics.live_destinations.saturating_sub(1);
@@ -170,10 +154,10 @@ impl StructuralValueRuntime {
         expected: super::StructuralType,
     ) -> Result<(), StructuralValueError> {
         let root = self.resolve_root(root_key, expected)?;
-        let super::StructuralObject::Owned { value, .. } = self.objects.get(root)? else {
+        let StructuralObject::Owned { image, facts } = self.objects.get(root)? else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
-        self.initialize_node_inner(key, field, value).map(|_| ())
+        self.preflight_field(key, field, image.root().value_type(), *facts)
     }
 
     fn retire_destination(

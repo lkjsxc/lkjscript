@@ -5,7 +5,8 @@ use lkjscript_ir::{SsaType, StructuralValueCategory};
 fn product(field_type: &str, field_value: &str) -> String {
     format!(
         concat!(
-            "product/\nname/\nbox\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\n{}\n/type\n/field\n/fields\n/product\n",
+            "product/\nname/\nbox\n/name\nfields/\nfield/\nname/\nvalue\n/name\n",
+            "type/\n{}\n/type\n/field\n/fields\n/product\n",
             "main/\nsig/\ninputs/\n/inputs\noutput/\nproduct/\nbox\n/product\n/output\n/sig\n",
             "product-value/\nbox\nfield/\nvalue\n{}\n/field\n/product-value\n/main\n",
         ),
@@ -14,7 +15,7 @@ fn product(field_type: &str, field_value: &str) -> String {
 }
 
 #[test]
-fn deterministic_hir_authority_is_not_published_as_inert_bytecode() {
+fn deterministic_copy_product_executes_as_structural_bytecode() {
     let compiled = compile_source(
         &product("bool", "true"),
         "deterministic-product.lkjscript",
@@ -35,18 +36,45 @@ fn deterministic_hir_authority_is_not_published_as_inert_bytecode() {
         .memory
         .representation(&product.ty, StructuralValueCategory::Owner)
         .is_some());
-    assert_eq!(compiled.bytecode().main().memory_plan, None);
-    assert!(!compiled.bytecode().has_structural_execution());
+    assert!(compiled.bytecode().main().memory_plan.is_some());
+    assert!(compiled.bytecode().has_structural_execution());
+    assert!(compiled
+        .bytecode()
+        .main_instructions()
+        .iter()
+        .any(|instruction| instruction.op() == Op::StructuralDestinationCreate));
+    assert!(compiled
+        .bytecode()
+        .main_instructions()
+        .iter()
+        .all(|instruction| instruction.op() != Op::MakeProduct));
 }
 
 #[test]
-fn legacy_closed_product_and_enum_retain_heap_route() {
-    let product = compile_source(
+fn region_product_cannot_escape_the_process_boundary() {
+    let error = compile_source(
         &product("list/\ni64\n/list", "empty-list/\ni64\n/empty-list"),
-        "legacy-product.lkjscript",
+        "escaping-region-product.lkjscript",
         &Limits::default(),
     )
-    .expect("compile legacy-closed product");
+    .expect_err("region product process escape rejects");
+    assert!(error
+        .to_string()
+        .contains("cannot cross the process boundary"));
+}
+
+#[test]
+fn region_product_uses_exact_route_and_unresolved_enum_rejects() {
+    let source = concat!(
+        "product/\nname/\nbox\n/name\nfields/\nfield/\nname/\nvalue\n/name\n",
+        "type/\nlist/\ni64\n/list\n/type\n/field\n/fields\n/product\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nlist-first/\n",
+        "field/\nproduct-value/\nbox\nfield/\nvalue\nlist-prepend/\n7\n",
+        "empty-list/\ni64\n/empty-list\n/list-prepend\n/field\n/product-value\nvalue\n/field\n",
+        "/list-first\n/main\n",
+    );
+    let product = compile_source(source, "region-product.lkjscript", &Limits::default())
+        .expect("compile region product");
     assert!(product
         .ssa()
         .program()
@@ -54,11 +82,13 @@ fn legacy_closed_product_and_enum_retain_heap_route() {
         .types
         .iter()
         .all(|item| !matches!(item.ty, SsaType::Product(_))));
+    assert_eq!(product.ssa().program().region_products.len(), 1);
     assert!(product
         .bytecode()
         .main_instructions()
         .iter()
         .any(|instruction| instruction.op() == Op::MakeProduct));
+    assert!(product.bytecode().products()[0].region);
     assert!(!product.bytecode().has_structural_execution());
 
     let source = concat!(
@@ -67,21 +97,10 @@ fn legacy_closed_product_and_enum_retain_heap_route() {
         "/fields\n/variant\n/variants\n/enum\n",
         "main/\nsig/\ninputs/\n/inputs\noutput/\nboxed/\n/boxed\n/output\n/sig\n",
         "variant-value/\ntype/\nboxed/\n/boxed\n/type\nvariant/\nvalue\n/variant\nfields/\n",
-        "variant-field/\nname/\nitems\n/name\nempty-list/\ni64\n/empty-list\n/variant-field\n/fields\n/variant-value\n/main\n",
+        "variant-field/\nname/\nitems\n/name\nempty-list/\ni64\n/empty-list\n",
+        "/variant-field\n/fields\n/variant-value\n/main\n",
     );
-    let enum_program = compile_source(source, "legacy-enum.lkjscript", &Limits::default())
-        .expect("compile legacy-closed enum");
-    assert!(enum_program
-        .ssa()
-        .program()
-        .memory
-        .types
-        .iter()
-        .all(|item| !matches!(item.ty, SsaType::Enum { .. })));
-    assert!(enum_program
-        .bytecode()
-        .main_instructions()
-        .iter()
-        .any(|instruction| instruction.op() == Op::MakeEnum));
-    assert!(!enum_program.bytecode().has_structural_execution());
+    let error = compile_source(source, "unresolved-enum.lkjscript", &Limits::default())
+        .expect_err("enum with an unresolved list witness rejects");
+    assert!(error.to_string().contains("LKJ-MEM-ENUM-UNRESOLVED"));
 }

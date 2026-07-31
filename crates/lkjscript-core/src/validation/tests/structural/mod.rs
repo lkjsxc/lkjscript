@@ -26,8 +26,17 @@ fn copy_field() -> crate::StructuralFieldMetadata {
 fn product_chunk() -> Chunk {
     let mut chunk = Chunk::new();
     let plan = crate::MemoryPlanId::new([7; 32]);
+    let product_identity = crate::RuntimeLayoutId::new([9; 32]);
     chunk.memory_plan = Some(plan);
     chunk.main.memory_plan = Some(plan);
+    chunk.products = vec![crate::ProductMetadata {
+        id: crate::ProductId::new(0),
+        identity: product_identity,
+        region: false,
+        name: "product".into(),
+        fields: vec!["value".into()],
+        region_fields: Vec::new(),
+    }];
     chunk.structural_layouts = vec![crate::StructuralLayoutMetadata {
         id: crate::StructuralLayoutId::new(0),
         identity: identity(1),
@@ -39,7 +48,11 @@ fn product_chunk() -> Chunk {
     chunk.structural_types = vec![crate::StructuralTypeMetadata {
         id: crate::StructuralTypeId::new(0),
         identity: identity(2),
-        runtime_type: runtime_type(2, crate::StructuralKind::Product),
+        runtime_type: crate::StructuralType::new(
+            crate::product_layout_identity(product_identity),
+            crate::product_semantic_identity(product_identity),
+            crate::StructuralKind::Product,
+        ),
         kind: crate::StructuralTypeKind::Product(crate::ProductId::new(0)),
         layout: crate::StructuralLayoutId::new(0),
         mode: crate::StructuralTypeMode::Affine,

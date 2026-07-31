@@ -29,7 +29,8 @@ pub(super) use cleanup::{
     cleanup_failure_action, cleanup_failure_roots, export_return, prepare_exit, teardown,
 };
 pub(super) use locals::{
-    commit_call_arguments, initialize_call_places, prepare_return, restore_handoffs,
+    call_return_type_variable_representation, commit_call_arguments, initialize_call_places,
+    prepare_return, restore_handoffs,
 };
 pub(super) use values::{
     copy_path, copy_string, export_plain_return, publish_string, semantic_snapshot,
@@ -58,6 +59,7 @@ pub(super) fn handles(op: u8) -> bool {
                 | lkjscript_core::Op::StructuralDestinationFinish
                 | lkjscript_core::Op::StructuralDestinationAbort
                 | lkjscript_core::Op::StructuralAggregateFieldBorrow
+                | lkjscript_core::Op::StructuralAggregateFieldCopy
                 | lkjscript_core::Op::StructuralAggregateTag
                 | lkjscript_core::Op::StructuralAggregateConsumePayload
                 | lkjscript_core::Op::StructuralStringUtf8View
@@ -88,6 +90,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         | lkjscript_core::Op::StructuralDestinationFinish
         | lkjscript_core::Op::StructuralDestinationAbort => destination::dispatch(vm, op),
         lkjscript_core::Op::StructuralAggregateFieldBorrow
+        | lkjscript_core::Op::StructuralAggregateFieldCopy
         | lkjscript_core::Op::StructuralAggregateTag
         | lkjscript_core::Op::StructuralAggregateConsumePayload
         | lkjscript_core::Op::StructuralStringUtf8View => aggregate::dispatch(vm, op),

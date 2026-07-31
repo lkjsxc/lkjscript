@@ -26,7 +26,7 @@ fn static_and_dynamic_strings_use_artifacts_and_roots() -> crate::Result<()> {
     ));
     assert_eq!(observation.static_string_artifacts, 1);
     assert_eq!(observation.metrics.allocations, 0);
-    assert!(observation.assert_collector_free_and_empty().is_ok());
+    assert!(observation.assert_empty().is_ok());
 
     let mut dynamic_program = one_block_program();
     install_structural_type(
@@ -72,7 +72,7 @@ fn static_and_dynamic_strings_use_artifacts_and_roots() -> crate::Result<()> {
         .events
         .iter()
         .any(|event| event.kind == StructuralEventKind::Publish));
-    assert!(observation.assert_collector_free_and_empty().is_ok());
+    assert!(observation.assert_empty().is_ok());
     Ok(())
 }
 

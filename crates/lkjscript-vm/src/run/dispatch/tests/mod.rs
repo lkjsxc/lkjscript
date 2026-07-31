@@ -1,4 +1,4 @@
-use lkjscript_core::{ExecutionConfig, HeapObj, Op, Value, MAX_LIST_EQUAL_STEPS};
+use lkjscript_core::{ExecutionConfig, Op, Value, MAX_LIST_EQUAL_STEPS};
 
 use crate::run::NoTier as NullJit;
 
@@ -32,15 +32,11 @@ fn test_i64(_vm: &mut Vm<'_, NullJit>, number: i64) -> Value {
     Value::from_i64(number)
 }
 
-fn test_alloc(vm: &mut Vm<'_, NullJit>, object: HeapObj) -> Value {
-    vm.arena.alloc(object).expect("test heap allocation")
-}
-
 fn i64_list(vm: &mut Vm<'_, NullJit>, values: &[i64]) -> Value {
     let mut list = Value::EMPTY_LIST;
     for number in values.iter().rev() {
-        let car = test_i64(vm, *number);
-        list = test_alloc(vm, HeapObj::Pair { car, cdr: list });
+        let head = test_i64(vm, *number);
+        list = vm.list_prepend(head, list).expect("test list prepend");
     }
     list
 }

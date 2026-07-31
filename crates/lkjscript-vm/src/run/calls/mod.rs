@@ -1,6 +1,6 @@
-//! Call and pair opcodes.
+//! Call and list opcodes.
 
-use lkjscript_core::{Error, HeapObj, Op, Result, Value};
+use lkjscript_core::{Error, Op, Result, Value};
 #[cfg(feature = "jit")]
 use lkjscript_jit::{EntryDecision, NativeValue, ScalarInvocationOutcome, ValueType};
 
@@ -22,27 +22,17 @@ pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 }
 
 pub fn car<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let p = vm.pop()?;
-    match vm.arena.get(p)? {
-        HeapObj::Pair { car, .. } => {
-            let c = *car;
-            vm.push(c);
-            Ok(())
-        }
-        _ => Err(Error::msg("car expects pair")),
-    }
+    let list = vm.pop()?;
+    let value = vm.list_first(list)?;
+    vm.push(value);
+    Ok(())
 }
 
 pub fn cdr<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
-    let p = vm.pop()?;
-    match vm.arena.get(p)? {
-        HeapObj::Pair { cdr, .. } => {
-            let c = *cdr;
-            vm.push(c);
-            Ok(())
-        }
-        _ => Err(Error::msg("cdr expects pair")),
-    }
+    let list = vm.pop()?;
+    let value = vm.list_rest(list)?;
+    vm.push(value);
+    Ok(())
 }
 
 mod execution;

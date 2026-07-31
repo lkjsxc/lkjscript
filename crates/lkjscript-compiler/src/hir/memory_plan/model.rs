@@ -75,7 +75,8 @@ pub enum MemoryAliasing {
     BorrowedShared,
     BorrowedExclusive,
     StaticShared,
-    LegacyTracedShared,
+    RegionShared,
+    UnresolvedShared,
     External,
 }
 
@@ -95,14 +96,15 @@ pub enum MemoryDestruction {
     EndBorrow,
     DropGlue,
     ExternalClose,
-    LegacyTraced,
+    RegionReset,
+    Unsupported,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryIdentity {
     Value,
     ExternalResource,
-    LegacyObject,
+    UnsupportedValue,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -118,7 +120,7 @@ pub enum MemoryContention {
     None,
     SingleOwner,
     ImmutableShared,
-    LegacyShared,
+    UnresolvedShared,
     ProviderSerialized,
 }
 
@@ -147,3 +149,4 @@ include!("model/types.rs");
 include!("model/authority.rs");
 include!("model/records.rs");
 include!("model/obligations.rs");
+include!("model/witness.rs");

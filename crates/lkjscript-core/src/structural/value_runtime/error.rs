@@ -75,7 +75,9 @@ impl fmt::Display for StructuralValueError {
             Self::InvalidPath => output.write_str("invalid structural path"),
             Self::InvalidRange => output.write_str("invalid structural range"),
             Self::InvalidFieldPath => output.write_str("invalid structural field path"),
-            Self::MixedValue => output.write_str("collector or key value cannot enter structure"),
+            Self::MixedValue => {
+                output.write_str("runtime key or mixed ownership cannot enter structure")
+            }
             Self::FieldAlreadyInitialized => output.write_str("field already initialized"),
             Self::FieldOutOfRange => output.write_str("field is outside destination"),
             Self::IncompleteDestination => output.write_str("destination is incomplete"),

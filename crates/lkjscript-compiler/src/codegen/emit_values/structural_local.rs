@@ -20,7 +20,8 @@ impl Emitter<'_> {
             Some(InstructionKind::StructuralPublish { .. })
             | Some(InstructionKind::StructuralCopy { .. })
             | Some(InstructionKind::DestinationFinish { .. })
-            | Some(InstructionKind::AggregateConsumePayload { .. }) => {
+            | Some(InstructionKind::AggregateConsumePayload { .. })
+            | Some(InstructionKind::ProductField { .. }) => {
                 Some(StructuralLocalKind::Owner)
             }
             Some(InstructionKind::Move { place, .. }) if self.is_structural_owner_place(*place) => {
@@ -49,7 +50,6 @@ impl Emitter<'_> {
                 | InstructionKind::FunctionRef(_)
                 | InstructionKind::F64FromI64Rounded { .. }
                 | InstructionKind::ProductValue { .. }
-                | InstructionKind::ProductField { .. }
                 | InstructionKind::WithProductField { .. }
                 | InstructionKind::EnumValue { .. }
                 | InstructionKind::EnumIsVariant { .. }

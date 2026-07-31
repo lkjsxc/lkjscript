@@ -38,8 +38,7 @@ impl<'a> Producer<'a> {
         );
         let type_fact = self.type_planner.intern(ty)?;
         let fact = self.type_planner.fact(type_fact)?.clone();
-        let (mode, legacy_family, execution, execution_cutover) =
-            memory_mode(ty, &fact, effects, escape);
+        let (mode, execution, execution_cutover) = memory_mode(ty, &fact, effects, escape)?;
         let owns_glue = fact.mode != MemoryAggregateMode::Copy;
         self.entries.push(MemoryPlanEntry {
             id,
@@ -56,7 +55,6 @@ impl<'a> Producer<'a> {
             execution,
             execution_cutover,
             origin,
-            legacy_family: legacy_family.map(str::to_owned),
             drop_glue: owns_glue.then_some(fact.drop_glue).flatten(),
         });
         Ok(id)

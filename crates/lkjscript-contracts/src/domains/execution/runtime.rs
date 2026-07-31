@@ -33,7 +33,7 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "execution-domain",
                     "execution-domain",
-                    "closed collector-free or legacy-heap dispatch table",
+                    "closed structural/unique or invocation-region dispatch table",
                 ))
                 .fact(fact(
                     "unique-values",
@@ -61,11 +61,10 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                     "immutable accounted image bytes addressed only by verified tokens",
                 ))
                 .fact(fact(
-                    "heap-sites",
-                    "heap-sites",
-                    "closed bounded fallible heap operation descriptors",
+                    "runtime-value-sites",
+                    "runtime-value-sites",
+                    "closed bounded fallible list and invocation-region operation descriptors",
                 ))
-                .fact(fact("roots", "roots", "exact stack-map and root layout"))
                 .fact(fact(
                     "integrity",
                     "integrity",
@@ -97,12 +96,17 @@ pub(crate) fn metrics() -> ContractDescriptor {
             .fact(fact(
                 "native",
                 "native",
-                "entries calls runtime calls frames roots",
+                "entries calls runtime calls frames and cleanup obligations",
             ))
             .fact(fact(
-                "heap",
-                "heap",
-                "allocations collections roots and barriers",
+                "runtime-values",
+                "runtime-values",
+                "list segments region products runtime calls and reserved bytes",
+            ))
+            .fact(fact(
+                "segmented-lists",
+                "segmented-lists",
+                "segments entries physical allocations logical prepends reads and reserved-byte estimates",
             ))
             .fact(fact(
                 "unique",

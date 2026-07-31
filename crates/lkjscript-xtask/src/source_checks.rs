@@ -24,8 +24,7 @@ pub fn check_sources(root: &Path) -> i32 {
         return 1;
     }
     files.sort();
-    let mut failures = crate::tracing_ratchet::check(root);
-    failures += crate::no_tracing::check(root);
+    let mut failures = crate::no_tracing::check(root);
     failures += check_removed_buf_family(root);
     if root.join("examples").exists() {
         eprintln!("obsolete examples/ directory; use src/examples/");
@@ -107,7 +106,6 @@ pub fn check_sources(root: &Path) -> i32 {
 
 fn check_removed_buf_family(root: &Path) -> usize {
     const RUNTIME_NAMES: &[&str] = &[
-        "HeapObj::Buf",
         "ReferenceType::Buf",
         "Type::Buf",
         "SsaType::Buf",

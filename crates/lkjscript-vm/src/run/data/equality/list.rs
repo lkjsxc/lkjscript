@@ -1,11 +1,5 @@
 fn list_node<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Option<(Value, Value)>> {
-    if value.is_empty_list() {
-        return Ok(None);
-    }
-    match vm.arena.get(value)? {
-        HeapObj::Pair { car, cdr } => Ok(Some((*car, *cdr))),
-        _ => Err(Error::msg("list-equal expects proper List values")),
-    }
+    vm.list_view(value)
 }
 
 pub(crate) fn list_values_equal<J: RuntimeTier>(

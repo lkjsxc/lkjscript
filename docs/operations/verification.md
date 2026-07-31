@@ -128,32 +128,32 @@ checked slice copy, clone independence, zero-copy freeze and dynamic thaw,
 one-copy static thaw, direct calls, exact returned payload transfer, allocation
 failure, stale/wrong-layout/forged identities, traps, and cleanup. Differentials
 require evaluator/VM/native equality, nonzero selected-tier entries,
-optimizing-only proof entries, zero fallback/transitions/collector counters,
-and zero final owners, loans, or release backlog.
+optimizing-only proof entries, zero fallback/transitions, and zero final owners,
+loans, or release backlog.
 
 Focused native resource-island tests cover exact capability/resource ABI
 categories, wrong capability and resource kinds, whole-group rejection of
-unsupported operations and reachable traced types, forced baseline/proof
-`standard-input` entries, VM outcome equality, zero fallback/transitions,
-zero collector runtime construction/calls/roots/safepoints/heap/barriers, and
-exact borrowed reservation/install/reuse/removal with zero obligations.
+unsupported operations and reachable mixed ownership types, forced
+baseline/proof `standard-input` entries, VM outcome equality, zero
+fallback/transitions, no invocation-region runtime-value dispatch, and exact
+borrowed reservation/install/reuse/removal with zero obligations.
 
 Focused scalar tests cover the safe closed 16-byte `Value`, complete-range i64,
 exact f64 payloads including NaNs and signed zero, inline constants/locals/calls/
 returns, VM/native and detached-return transitions, SQLite f64 binding, zero
-scalar heap allocation through evaluator/VM/baseline/proof fixtures, synchronous
-generated entry, and zero forced fallback. Gc tests prove that only explicit
-legacy-traced values retain objects.
+scalar aggregate allocation through evaluator/VM/baseline/proof fixtures,
+synchronous generated entry, and zero forced fallback. The unconditional
+`LKJ-RUNTIME-NO-TRACING-COLLECTOR` source gate rejects any collector mechanism.
 
 Focused enum tests cover exact Schema declaration nodes and roundtrip,
 stable nominal/member/layout identities, source order, generic substitutions,
 invariance, duplicate/empty/malformed rejection, nested ownership rejection,
 recursion exact/+1 bounds, exact constructor field order/arity/type rejection,
 SSA metadata/provenance/layout/substitution rejection, inactive projection
-rejection, stable physical tags, boxed active-payload tracing, validated
-bytecode descriptors, evaluator/VM/native/proof differential values and logical
-exhaustion, exact generated entries/runtime calls/roots, malformed native
-metadata/tag/projection rejection, and zero forced fallback. Numeric conversion tests add stable `NumericError`
+rejection, stable physical tags, structural active payloads, validated bytecode
+descriptors, evaluator/VM/native/proof differential values and logical
+exhaustion, exact generated entries and structural runtime calls, malformed
+native metadata/tag/projection rejection, and zero forced fallback. Numeric conversion tests add stable `NumericError`
 identity/cases, exact bit/exponent boundaries, F64-bit outcomes, malformed SSA,
 four-engine differentials, direct rounded I64-to-F64 native conversion with
 exact result bits and no heap call, exact generated structural-runtime calls

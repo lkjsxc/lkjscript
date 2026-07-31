@@ -1,4 +1,5 @@
 fn store_local(
+    chunk: &Chunk,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
     state: &mut State,
@@ -26,7 +27,10 @@ fn store_local(
             "structural local index is out of range",
         )
     })?;
-    if target.is_some_and(|kind| !matches!(kind, Kind::StructuralOwnerRef { .. })) {
+    if target.is_some_and(|kind| {
+        !matches!(kind, Kind::StructuralOwnerRef { .. })
+            && !structural_local_is_copy(chunk, kind)
+    }) {
         return fail(
             proto,
             instruction,

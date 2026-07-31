@@ -1,7 +1,5 @@
 use crate::verify::*;
-use crate::{
-    EffectSet, FailureBehavior, Function, Instruction, InstructionKind, Program, Safepoint, SsaType,
-};
+use crate::{EffectSet, FailureBehavior, Function, Instruction, InstructionKind, Program, SsaType};
 
 pub(crate) fn verify_instruction(
     program: &Program,
@@ -18,19 +16,12 @@ pub(crate) fn verify_instruction(
             instruction.id.raw()
         ));
     }
-    let expected_safepoint = if matches!(instruction.kind, InstructionKind::Call { .. })
+    let needs_frame_state = matches!(instruction.kind, InstructionKind::Call { .. })
         || expected_effects.contains(EffectSet::ALLOCATES)
-        || expected_effects.contains(EffectSet::HOST_IO)
-    {
-        Safepoint::Required
-    } else {
-        Safepoint::None
-    };
-    if instruction.metadata.safepoint != expected_safepoint
-        || (expected_safepoint == Safepoint::Required && instruction.metadata.frame_state.is_none())
-    {
+        || expected_effects.contains(EffectSet::HOST_IO);
+    if needs_frame_state && instruction.metadata.frame_state.is_none() {
         return fail(format!(
-            "SSA value {} has invalid safepoint metadata",
+            "SSA value {} requires frame-state metadata",
             instruction.id.raw()
         ));
     }

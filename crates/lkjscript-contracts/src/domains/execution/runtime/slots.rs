@@ -160,12 +160,7 @@ pub(super) fn runtime_slots() -> ContractItem {
         (
             "structural-dispatch",
             "StructuralDispatch",
-            "(island-state,verified-structural-site,up-to-three-words)->typed-word noncollecting",
-        ),
-        (
-            "collect-reference",
-            "CollectReference",
-            "(state,reference)->status",
+            "(island-state,verified-structural-site,up-to-three-words)->typed-word",
         ),
         (
             "heap-dispatch",
@@ -174,11 +169,6 @@ pub(super) fn runtime_slots() -> ContractItem {
         ),
         ("reserve-frame", "ReserveFrame", "(state,slots)->status"),
         ("register-frame", "RegisterFrame", "(state,frame)->status"),
-        (
-            "publish-safepoint",
-            "PublishSafepoint",
-            "(state,map)->status",
-        ),
         (
             "unregister-frame",
             "UnregisterFrame",

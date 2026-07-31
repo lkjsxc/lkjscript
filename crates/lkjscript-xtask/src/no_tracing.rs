@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-use lkjscript_contracts::LEGACY_TRACED_FAMILIES;
-
 use crate::util::walk;
 
 const RULE: &str = "LKJ-RUNTIME-NO-TRACING-COLLECTOR";
@@ -43,9 +41,6 @@ const FORBIDDEN_MARKERS: &[&str] = &[
 ];
 
 pub fn check(root: &Path) -> usize {
-    if !LEGACY_TRACED_FAMILIES.is_empty() {
-        return 0;
-    }
     let mut failures = 0;
     for relative in FORBIDDEN_DIRECTORIES {
         let path = root.join(relative);

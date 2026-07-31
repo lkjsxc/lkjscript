@@ -57,6 +57,21 @@ pub(super) fn lower_instruction(
         {
             structural::lower_borrow(function, *kind, *value, block, locals, layouts, builder)?
         }
+        InstructionKind::ProductField { value, .. }
+            if layouts
+                .structural()
+                .selected(structural::source_type(function, *value)?) =>
+        {
+            structural::lower_structural_instruction(
+                function,
+                instruction,
+                block,
+                locals,
+                value_types,
+                layouts,
+                builder,
+            )?
+        }
         InstructionKind::StructuralPublish { .. }
         | InstructionKind::DestinationCreate { .. }
         | InstructionKind::DestinationFieldInit { .. }

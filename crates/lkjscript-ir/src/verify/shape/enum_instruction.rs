@@ -8,20 +8,9 @@ pub(super) fn verify(
     kind: &InstructionKind,
 ) -> crate::Result<EffectSet> {
     match kind {
-        InstructionKind::EnumValue {
-            enum_id,
-            variant,
-            layout,
-            fields,
-        } => construction(
-            program,
-            instruction,
-            types,
-            *enum_id,
-            *variant,
-            *layout,
-            fields,
-        ),
+        InstructionKind::EnumValue { .. } => {
+            fail("SSA enum construction is unsupported without structural metadata and operations")
+        }
         InstructionKind::EnumIsVariant {
             enum_id,
             variant,
@@ -54,39 +43,6 @@ pub(super) fn verify(
     }
 }
 
-fn construction(
-    program: &Program,
-    instruction: &Instruction,
-    types: &[SsaType],
-    enum_id: crate::EnumId,
-    variant: crate::VariantId,
-    layout: crate::RuntimeLayoutId,
-    fields: &[ValueId],
-) -> crate::Result<EffectSet> {
-    if program.memory.is_owned(&instruction.ty) {
-        return fail("SSA EnumValue cannot construct a type with structural metadata");
-    }
-    let definition = enum_by_id(program, enum_id)?;
-    check_layout(definition, layout)?;
-    let selected = variant_by_id(definition, variant)?;
-    let SsaType::Enum { id, arguments } = &instruction.ty else {
-        return fail("SSA enum construction result is not an enum type");
-    };
-    if *id != enum_id
-        || arguments.len() != definition.type_parameters.len()
-        || fields.len() != selected.fields.len()
-    {
-        return fail("SSA enum construction identity/substitution/field mismatch");
-    }
-    for (value, field) in fields.iter().zip(&selected.fields) {
-        let expected = substitute(&field.ty, &definition.type_parameters, arguments);
-        if value_type(types, *value)? != &expected {
-            return fail("SSA enum construction field substitution/type mismatch");
-        }
-    }
-    Ok(EffectSet::ALLOCATES)
-}
-
 fn variant_test(
     program: &Program,
     instruction: &Instruction,
@@ -99,12 +55,8 @@ fn variant_test(
     let definition = enum_by_id(program, enum_id)?;
     check_layout(definition, layout)?;
     let _selected = variant_by_id(definition, variant)?;
-    match value_type(types, value)? {
-        SsaType::Enum { id, arguments }
-            if *id == enum_id
-                && arguments.len() == definition.type_parameters.len()
-                && instruction.ty == SsaType::Bool => {}
-        _ => return fail("SSA enum variant test identity/type mismatch"),
+    if instruction.ty != SsaType::Bool || !is_resource_result(value_type(types, value)?, enum_id) {
+        return fail("SSA resource-result variant test identity/type mismatch");
     }
     Ok(EffectSet::READS_MEMORY)
 }
@@ -124,13 +76,24 @@ fn projection(
         .fields
         .iter()
         .find(|candidate| candidate.id == ids.2)
-        .ok_or_else(|| crate::IrError::new("SSA enum projection field/variant mismatch"))?;
-    let SsaType::Enum { id, arguments } = value_type(types, value)? else {
-        return fail("SSA enum projection input is not enum");
+        .ok_or_else(|| crate::IrError::new("SSA resource-result projection field mismatch"))?;
+    let input = value_type(types, value)?;
+    let SsaType::Enum { arguments, .. } = input else {
+        return fail("SSA resource-result projection input is not enum");
     };
     let expected = substitute(&field.ty, &definition.type_parameters, arguments);
-    if *id != ids.0 || instruction.ty != expected {
-        return fail("SSA enum projection identity/substitution/type mismatch");
+    if !is_resource_result(input, ids.0) || instruction.ty != expected {
+        return fail("SSA resource-result projection identity/substitution/type mismatch");
     }
     Ok(EffectSet::READS_MEMORY)
+}
+
+fn is_resource_result(ty: &SsaType, enum_id: crate::EnumId) -> bool {
+    matches!(
+        ty,
+        SsaType::Enum { id, arguments }
+            if enum_id.bytes() == crate::prelude_contract::RESULT_ID
+                && id.bytes() == crate::prelude_contract::RESULT_ID
+                && matches!(arguments.as_slice(), [SsaType::Resource(_), _])
+    )
 }

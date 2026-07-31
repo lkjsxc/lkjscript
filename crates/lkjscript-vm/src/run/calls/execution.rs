@@ -99,6 +99,10 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 .get(args_start..args_start.saturating_add(argument_count))
                 .ok_or_else(|| Error::msg("call argument range is out of bounds"))?
                 .to_vec();
+            let return_type_variable_representation =
+                super::super::structural_ops::call_return_type_variable_representation(
+                    vm, p, &arguments,
+                )?;
             let borrowed_resources = p
                 .parameter_resources
                 .iter()
@@ -151,6 +155,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                         locals_base: stack_base,
                         unique_places,
                         borrowed_resources,
+                        return_type_variable_representation,
                     };
                 }
                 return Ok(());
@@ -165,6 +170,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 locals_base: args_start,
                 unique_places,
                 borrowed_resources,
+                return_type_variable_representation,
             });
             Ok(())
         }

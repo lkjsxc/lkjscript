@@ -1,5 +1,11 @@
+#[path = "prototypes/copy_parameters.rs"]
+mod copy_parameters;
 #[path = "prototypes/failure.rs"]
 mod failure;
+#[path = "prototypes/region_products.rs"]
+mod region_products;
+#[path = "prototypes/type_variables.rs"]
+mod type_variables;
 use failure::*;
 
 fn validate_proto_shape(
@@ -29,6 +35,9 @@ fn validate_proto_shape(
             proto.name
         )));
     }
+    type_variables::validate(proto, category)?;
+    copy_parameters::validate(proto, category)?;
+    region_products::validate(proto, category)?;
     if proto.memory_plan.is_none()
         && (proto.parameter_structurals.iter().any(Option::is_some)
             || proto.return_structural.is_some())

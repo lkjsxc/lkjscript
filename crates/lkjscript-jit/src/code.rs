@@ -19,7 +19,6 @@ pub struct CodeObject {
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,
     pub(crate) numeric_conversion_sites: NumericConversionSiteCounts,
     pub(crate) frames: Vec<FrameFacts>,
-    pub(crate) safepoints: Vec<Safepoint>,
     pub(crate) source_map: Vec<SourceMapEntry>,
     pub(crate) trap_map: Vec<TrapMapEntry>,
     pub(crate) outcome_map: Vec<OutcomeMapEntry>,
@@ -72,10 +71,6 @@ impl CodeObject {
 
     pub fn frames(&self) -> &[FrameFacts] {
         &self.frames
-    }
-
-    pub fn safepoints(&self) -> &[Safepoint] {
-        &self.safepoints
     }
 
     pub fn source_map(&self) -> &[SourceMapEntry] {
@@ -131,8 +126,6 @@ pub struct CodeObjectRecord {
     pub relocation_count: usize,
     pub runtime_calls: Vec<RuntimeCallSlot>,
     pub numeric_conversion_sites: NumericConversionSiteCounts,
-    pub safepoint_count: usize,
-    pub exact_scalar_stack_maps: bool,
     pub diagnostic_machine_code: Option<Vec<u8>>,
     pub compile_stats: CompileStats,
     pub optimization_certificate: Option<OptimizationCertificate>,

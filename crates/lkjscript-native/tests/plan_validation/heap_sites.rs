@@ -1,9 +1,12 @@
 use super::*;
 
 #[test]
-fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
+fn runtime_value_sites_verify_arbitrary_frame_home_arguments_and_classes(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
+    let product = ValueType::Reference(ReferenceType::RegionProduct(
+        LayoutIdentity::product(0),
+        [7; 32],
+    ));
     let operation = || HeapOperation::WithProductField {
         product: 0,
         field: 0,
@@ -60,6 +63,5 @@ fn heap_dispatch_sites_verify_arbitrary_frame_home_arguments_and_classes(
     assert!(image
         .runtime_calls()
         .contains(&RuntimeCallSlot::HeapDispatch));
-    assert_eq!(image.safepoints()[0].stack_map().roots().len(), 1);
     Ok(())
 }

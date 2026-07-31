@@ -33,6 +33,7 @@ pub(super) enum Kind {
         owner: u32,
     },
     Product(ProductId),
+    RegionProduct(ProductId),
     Enum(EnumId, Option<VariantId>),
     StructuralOwner {
         representation: crate::StructuralRepresentationId,
@@ -80,6 +81,7 @@ impl std::fmt::Display for Kind {
             Self::Resource { .. } => "resource",
             Self::ResourceResult { .. } => "result resource",
             Self::Product(_) => "product",
+            Self::RegionProduct(_) => "region-product",
             Self::Enum(_, _) => "enum",
             Self::StructuralOwner { .. } => "structural-owner",
             Self::StructuralOwnerRef { .. } => "structural-owner-reference",
@@ -99,7 +101,9 @@ impl std::fmt::Display for Kind {
             | Self::ByteSlice { owner, .. } => {
                 write!(formatter, " owner {owner}")
             }
-            Self::Product(id) => write!(formatter, " {}", id.raw()),
+            Self::Product(id) | Self::RegionProduct(id) => {
+                write!(formatter, " {}", id.raw())
+            }
             Self::Enum(_, Some(_)) => formatter.write_str(" variant"),
             Self::Enum(_, None) => Ok(()),
             Self::StructuralOwner {

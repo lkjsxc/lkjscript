@@ -38,7 +38,6 @@ fn verifier_rejects_direct_malformed_id_use_dominance_edge_loop_and_metadata() {
             metadata: InstructionMetadata {
                 origin: Origin::SYNTHETIC,
                 effects: EffectSet::CONSERVATIVE_CALL,
-                safepoint: Safepoint::Required,
                 failure: FailureBehavior::TrapOrOutcome,
                 failure_cleanup: None,
                 frame_state: Some(FrameState {
@@ -60,6 +59,13 @@ fn verifier_rejects_direct_malformed_id_use_dominance_edge_loop_and_metadata() {
         .operands();
     assert_eq!(indirect_operands, vec![ValueId::new(1)]);
     assert!(verify(indirect_target_after_call).is_err());
+
+    let mut missing_frame_state = bounded_call_program();
+    missing_frame_state.functions[1].blocks[0].instructions[1]
+        .metadata
+        .frame_state = None;
+    let error = verify(missing_frame_state).expect_err("call without frame state must fail");
+    assert!(error.to_string().contains("requires frame-state metadata"));
 
     let mut bad_return = one_block_program();
     bad_return.functions[0].blocks[0].terminator = Terminator::Return(ValueId::new(8));

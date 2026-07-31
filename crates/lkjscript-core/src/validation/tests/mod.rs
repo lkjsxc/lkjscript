@@ -17,9 +17,13 @@ fn error(chunk: Chunk) -> String {
 }
 
 mod control;
+mod copy_calls;
 mod enums;
 mod failure_cleanup;
 mod metadata;
+mod product_metadata;
+mod resource_calls;
+mod signature_metadata;
 mod structural;
 mod types;
 mod unique;

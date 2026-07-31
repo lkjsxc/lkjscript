@@ -30,13 +30,13 @@ fn require_active_variant<J: RuntimeTier>(
         return Ok(());
     };
     let expected_tag = physical_tag(vm.chunk, value_type, variant)?;
-    let value = invocation(vm)?
+    let node = invocation(vm)?
         .runtime
-        .value(owner, value_type)
+        .value_node(owner, value_type)
         .map_err(map_value_error)?;
-    match value.payload {
-        SemanticPayload::Enum { tag, .. } if tag == expected_tag => Ok(()),
-        SemanticPayload::Enum { .. } => Err(Error::msg(
+    match node.payload() {
+        StructuralNodeView::Enum { tag, .. } if tag == expected_tag => Ok(()),
+        StructuralNodeView::Enum { .. } => Err(Error::msg(
             "structural operation selected an inactive enum variant",
         )),
         _ => Err(Error::msg(
@@ -56,21 +56,19 @@ fn preflight_payload<J: RuntimeTier>(
         .result
         .runtime_type
         .ok_or_else(|| Error::msg("structural payload result lacks exact runtime type"))?;
-    let value = invocation(vm)?
+    let node = invocation(vm)?
         .runtime
-        .value(owner, value_type)
+        .value_node(owner, value_type)
         .map_err(map_value_error)?;
-    match &value.payload {
-        SemanticPayload::Enum {
-            tag,
-            active_payload,
-        } if *tag == expected_tag
-            && active_payload.len() == 1
-            && active_payload[0].value_type == expected_type =>
+    match node.payload() {
+        StructuralNodeView::Enum { tag, fields }
+            if tag == expected_tag
+                && fields.len() == 1
+                && node.child(0).is_some_and(|field| field.value_type() == expected_type) =>
         {
             Ok(())
         }
-        SemanticPayload::Enum { .. } => Err(Error::msg(
+        StructuralNodeView::Enum { .. } => Err(Error::msg(
             "structural payload consume selected an inactive or malformed payload",
         )),
         _ => Err(Error::msg(
@@ -104,6 +102,34 @@ fn physical_tag(
         .ok_or_else(|| Error::msg("structural enum variant metadata is missing"))
 }
 
+fn structural_node_to_value(
+    chunk: &ValidatedChunk,
+    node: lkjscript_core::StructuralNode<'_>,
+) -> Result<Value> {
+    match node.payload() {
+        StructuralNodeView::Inline(InlineStructuralValue::Unit) => Ok(Value::UNIT),
+        StructuralNodeView::Inline(InlineStructuralValue::Bool(value)) => {
+            Ok(Value::from_bool(value))
+        }
+        StructuralNodeView::Inline(InlineStructuralValue::I64(value)) => Ok(Value::from_i64(value)),
+        StructuralNodeView::Inline(InlineStructuralValue::F64Bits(value)) => {
+            Ok(Value::from_f64_bits(value))
+        }
+        StructuralNodeView::Static(StaticStructuralLeaf::Function(value)) => {
+            chunk.function_value(value)
+        }
+        StructuralNodeView::Static(StaticStructuralLeaf::Symbol(value)) => chunk.symbol_value(value),
+        StructuralNodeView::Static(StaticStructuralLeaf::Bytes(value)) => {
+            Ok(Value::from_static_bytes(value))
+        }
+        StructuralNodeView::Bytes(_)
+        | StructuralNodeView::Product(_)
+        | StructuralNodeView::Enum { .. } => Err(Error::msg(
+            "owned structural payload cannot be represented as a copied VM value",
+        )),
+    }
+}
+
 fn semantic_to_value(chunk: &ValidatedChunk, value: &SemanticValue) -> Result<Value> {
     match value.payload {
         SemanticPayload::Inline(InlineStructuralValue::Unit) => Ok(Value::UNIT),
@@ -119,14 +145,25 @@ fn semantic_to_value(chunk: &ValidatedChunk, value: &SemanticValue) -> Result<Va
         SemanticPayload::Static(StaticStructuralLeaf::Bytes(value)) => {
             Ok(Value::from_static_bytes(value))
         }
-        SemanticPayload::String(_)
-        | SemanticPayload::Path(_)
-        | SemanticPayload::Bytes(_)
-        | SemanticPayload::ByteVector(_)
-        | SemanticPayload::Product(_)
-        | SemanticPayload::Enum { .. } => Err(Error::msg(
+        _ => Err(Error::msg(
             "owned structural payload cannot be represented as a copied VM value",
         )),
+    }
+}
+
+fn register_view_or_end<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    view: lkjscript_core::StructuralViewKey,
+    representation: StructuralRepresentationId,
+    expected: StructuralType,
+    utf8: bool,
+) -> Result<Value> {
+    match invocation_mut(vm)?.register_view(view, representation, expected, utf8) {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            let _ = invocation_mut(vm)?.runtime.end_view(view);
+            Err(error)
+        }
     }
 }
 

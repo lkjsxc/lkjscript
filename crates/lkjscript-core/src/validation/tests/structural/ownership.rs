@@ -37,6 +37,82 @@ fn structural_use_after_move_and_copy_attempt_fail_closed() {
 }
 
 #[test]
+fn aggregate_field_copy_rejects_noncopy_structural_targets() {
+    let mut chunk = product_chunk();
+    let target_type = runtime_type(4, crate::StructuralKind::String);
+    let target_id = crate::StructuralTypeId::new(1);
+    let field = crate::StructuralFieldMetadata {
+        identity: identity(7),
+        runtime_type: Some(target_type),
+        route: crate::StructuralFieldRoute::Structural(target_id),
+        resource: None,
+    };
+    assert!(matches!(
+        chunk.structural_layouts[0].kind,
+        crate::StructuralLayoutKind::Product { .. }
+    ));
+    if let crate::StructuralLayoutKind::Product { fields, .. } =
+        &mut chunk.structural_layouts[0].kind
+    {
+        fields[0] = field;
+    }
+    chunk.structural_destinations[0].fields[0] = field;
+    chunk.structural_layouts.push(crate::StructuralLayoutMetadata {
+        id: crate::StructuralLayoutId::new(1),
+        identity: identity(6),
+        kind: crate::StructuralLayoutKind::String,
+    });
+    chunk.structural_types.push(crate::StructuralTypeMetadata {
+        id: target_id,
+        identity: identity(7),
+        runtime_type: target_type,
+        kind: crate::StructuralTypeKind::String,
+        layout: crate::StructuralLayoutId::new(1),
+        mode: crate::StructuralTypeMode::Immutable,
+    });
+    chunk.structural_representations.push(
+        crate::StructuralRepresentationMetadata {
+            id: crate::StructuralRepresentationId::new(3),
+            type_id: target_id,
+            layout: crate::StructuralLayoutId::new(1),
+            category: crate::StructuralValueCategory::Owner,
+            storage: crate::StructuralStorage::Unique,
+        },
+    );
+    chunk.structural_aggregate_fields = vec![crate::StructuralAggregateFieldRef {
+        representation: crate::StructuralRepresentationId::new(1),
+        active_variant: None,
+        field: 0,
+        result: field,
+    }];
+    let mut proto = Chunk::new().main;
+    proto.name = "malicious-field-copy".into();
+    proto.arity = 1;
+    proto.locals = 1;
+    proto.memory_plan = chunk.memory_plan;
+    proto.parameter_structurals = vec![Some(crate::StructuralRepresentationId::new(0))];
+    proto.parameter_structural_places = vec![None];
+    proto.parameter_type_variables = vec![None];
+    proto.return_structural = Some(crate::StructuralRepresentationId::new(3));
+    proto.code = vec![
+        Op::LoadStructuralOwnerLocal as u8,
+        0,
+        Op::StructuralAggregateFieldCopy as u8,
+        0,
+        0,
+        Op::Return as u8,
+    ];
+    chunk.protos.push(proto);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    let message = error(chunk);
+    assert!(
+        message.contains("copy field target is not copy-mode"),
+        "{message}"
+    );
+}
+
+#[test]
 fn structural_owner_reference_blocks_owner_drop() {
     let mut chunk = product_chunk();
     emit_finished_product(&mut chunk);

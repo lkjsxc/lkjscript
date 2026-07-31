@@ -11,7 +11,8 @@
 <!-- LKJ-STATUS id=jit-proof-forced status=current -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
 <!-- LKJ-STATUS id=memory-plan status=current -->
-<!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
+<!-- LKJ-STATUS id=memory-tracing-ratchet status=superseded -->
+<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=native-byte-vector-island status=current -->
 <!-- LKJ-STATUS id=native-bytes-island status=current -->
@@ -101,13 +102,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   connection/statement acquisition and close/finalize. One exact kind can fail
   acquisition or close deterministically. Native tiers still support only
   borrowed `standard-input`; complete evaluator host and owned-native operations remain incomplete.
-- Core provides deterministic unique byte/byte-vector storage and a bounded
-  structural runtime for strings, paths, deterministic nonrecursive aggregates,
-  results, destinations, and views. These groups execute through evaluator, VM,
-  forced baseline, and forced proof with bounded tables and exact cleanup.
+- Core provides deterministic byte/byte-vector storage and a bounded flat-image
+  runtime for strings, paths, deterministic aggregates, regular recursive enums,
+  copy-leaf segmented lists, results, destinations, and views. They execute in
+  all four engines with bounded tables and exact cleanup.
 - Immutable bytes literal/read/copy/clone/freeze/thaw operations execute through
   all four engines. Native static identities select verified image data; dynamic
-  byte values remain affine. Owned resources and mixed legacy graphs remain outside.
+  byte values remain affine. Owned resources and mixed ownership graphs remain outside.
 ## Compiler and execution
 - One validated source tree feeds module resolution, typed HIR, ownership and
   effect analysis, verified SSA, bytecode, evaluator, VM, and both JIT tiers.
@@ -118,34 +119,35 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - The reference VM uses a safe closed 16-byte value with complete inline i64
   and exact-bit f64 payloads. Scalar constants, stack/locals, operations,
   conversions, calls, returns, host adapters, and JIT transitions allocate no
-  traced scalar objects. A focused scalar group with direct calls, loops, bool,
-  i64, and f64 proves both forced tiers have nonzero generated entries, zero
-  fallback, no collector-capable runtime call or safepoint metadata, and zero
-  allocation, collection, root, and barrier counters. Collector-free scalar and
-  supported resource groups use a distinct noncollecting sys dispatch and do
-  not construct or configure `GcHeap` or `JitHeapServices`. Exact byte-vector
-  and bytes groups use closed byte/u32 access, mutation, borrow, copy, clone,
-  freeze, thaw, end-borrow, and drop calls with no collector metadata and zero
-  final live owners, loans, or release backlog.
+  aggregate records. Deterministic aggregates use bounded structural images;
+  selected lists and products use invocation-local segmented/region storage.
+  Native images retain typed frame homes for call and cleanup validation but no
+  liveness maps or collection services. Exact byte-vector and bytes groups use
+  closed byte/u32 access, mutation, borrow, copy, clone, freeze, thaw,
+  end-borrow, and drop calls with zero final live owners, loans, or release
+  backlog.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests; public metrics use stable unnumbered names.
 - Metrics use `lkjscript.metrics` and its full contract digest. `lkjscript
-  memory inventory` exposes 61 sorted memory-obligation records under
-  `lkjscript.memory-obligations`. It truthfully reports the Current tracing heap,
-  exact roots, executable evaluator/VM bytes island, and accepted deterministic
-  candidates; it is derived evidence, not semantic authority.
-  Every executable program retains a content-addressed pre-backend HIR memory
-  plan covering every result, place, loan, constant, and call. Independent
+  memory inventory` exposes sorted memory-obligation records under
+  `lkjscript.memory-obligations`. It reports deterministic structural, region,
+  unique, resource, artifact, and host ownership; it is derived evidence, not
+  semantic authority.
+  Every executable program retains a platform-bound canonical HIR memory plan
+  covering every result, place, loan, constant, and call without Rust formatting. Independent
   production and verification require byte-vector unique storage and static
   artifact values before checked HIR enters SSA. The direct-affine SSA inventory
   remains independently recomputed derived evidence.
-- `LKJ-MEMORY-TRACING-RATCHET` protects the exact three registered `HeapObj`
-  families, `enum`, `pair`, and `product`, exposed by `lkjscript memory traced
-  [--json]`. `buf`, dynamic string, and path heap families are absent. The
-  [substrate](current-state/structural-memory-evidence.md) includes compact
-  stale-safe roots, destinations, views, and direct evaluator, VM, baseline,
-  and proof runtime services. Independently verified HIR/SSA authority selects
-  every eligible deterministic nonrecursive source aggregate.
+- `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
+  object families, services, liveness maps, configuration, and metrics across
+  all crate sources. No tracing-family registry or `memory traced` command
+  remains. Lists use segmented regions and flat snapshots. The
+  [product decrement](history/evidence/product-tracing-removal.md) and
+  [substrate](current-state/structural-memory-evidence.md) include compact
+  stale-safe structural roots, destinations, views, and direct evaluator, VM,
+  baseline, and proof services. HIR/SSA rejects aggregates outside structural
+  or invocation-region storage. Runtime keys cannot cross processes. VM
+  copy-variable metadata is not a witness ABI.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
   compiler/runtime ledger remains an accepted target.
@@ -174,18 +176,18 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - evaluator dispatch beyond the fake-provider slice and native owned resources beyond borrowed `standard-input`;
 - ranged lexical byte-slice source syntax and borrowed `str`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
-- structural domains, ordinary/sealed regions, and typed pools have a Current
-  internal substrate; recursive and remaining legacy aggregate migration,
-  no-RC falsification, three-family tracing removal, and final collector
-  deletion remain targets;
+- structural domains and ordinary regions have a Current internal substrate;
+  sealed regions and typed pools remain targets; recursive products,
+  transformed/nonregular recursive types, and unresolved generic witnesses
+  remain specialization blockers; nested-list expansion and no-RC
+  falsification remain targets;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;
 - component interfaces, Wasm, AOT, native caches, and remote distribution;
 - automatic baseline-to-proof promotion acceptance beyond its selected measured candidate;
 - the semantic resource plane beyond its Current runtime slice: elastic/adaptive
-  locality, blocking pools, real multi-domain adoption, and source structured
-  concurrency;
+  locality, blocking pools, real multi-domain adoption, and source structured concurrency;
 - portability beyond Linux x86-64; host/database build for `wasm32-wasip1`
   and a fake-storage recovery probe runs, but VM/runtime-system do not build there;
 The listed `bytes` subset is Current in all four tiers; the complete island remains Accepted.

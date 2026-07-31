@@ -72,7 +72,7 @@ impl StructuralValueRuntime {
         if self.objects.live != 0 {
             return Err(StructuralValueError::LiveObject);
         }
-        if !self.release_stack.is_empty() || self.metrics.release_backlog != 0 {
+        if self.metrics.release_backlog != 0 {
             return Err(StructuralValueError::ReleaseBacklog);
         }
         self.runtime.validate()?;

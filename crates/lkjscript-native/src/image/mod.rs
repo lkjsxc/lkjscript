@@ -22,8 +22,6 @@ mod integrity;
 mod layouts;
 mod maps;
 mod structural_sites;
-#[cfg(test)]
-mod tests;
 mod values;
 
 use accounting::*;
@@ -46,8 +44,6 @@ pub struct InstallableImage {
     runtime_calls: Box<[RuntimeCallSlot]>,
     execution_domain: NativeExecutionDomain,
     frames: Box<[FrameFacts]>,
-    safepoints: Box<[Safepoint]>,
-    root_requirements: Box<[RootMapRequirement]>,
     heap_runtime_sites: Box<[HeapRuntimeSite]>,
     structural_runtime_sites: Box<[StructuralRuntimeSite]>,
     source_map: Box<[SourceMapEntry]>,
@@ -65,8 +61,6 @@ pub(crate) struct ImageParts {
     pub(crate) runtime_calls: Vec<RuntimeCallSlot>,
     pub(crate) execution_domain: NativeExecutionDomain,
     pub(crate) frames: Vec<FrameFacts>,
-    pub(crate) safepoints: Vec<Safepoint>,
-    pub(crate) root_requirements: Vec<RootMapRequirement>,
     pub(crate) heap_runtime_sites: Vec<HeapRuntimeSite>,
     pub(crate) structural_runtime_sites: Vec<StructuralRuntimeSite>,
     pub(crate) source_map: Vec<SourceMapEntry>,

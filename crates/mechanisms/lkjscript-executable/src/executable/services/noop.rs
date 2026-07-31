@@ -144,8 +144,4 @@ impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
 #[derive(Default)]
 pub(in crate::executable) struct NoopNativeRuntimeServices;
 
-impl NativeRuntimeServices for NoopNativeRuntimeServices {
-    fn collect_references(&mut self, _roots: &mut [NativeRoot]) -> Result<(), NativeServiceError> {
-        Ok(())
-    }
-}
+impl NativeRuntimeServices for NoopNativeRuntimeServices {}

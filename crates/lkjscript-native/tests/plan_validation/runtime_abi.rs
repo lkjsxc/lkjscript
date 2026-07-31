@@ -41,16 +41,6 @@ fn internal_runtime_abi_describes_encoder_owned_arguments_exactly(
         ]
     );
     assert_eq!(
-        RuntimeCallSlot::PublishSafepoint
-            .internal_abi_signature()
-            .ok_or_else(|| missing("missing publish ABI"))?
-            .parameters(),
-        &[
-            InternalMachineArgument::InvocationContext,
-            InternalMachineArgument::SafepointId,
-        ]
-    );
-    assert_eq!(
         RuntimeCallSlot::HeapDispatch
             .internal_abi_signature()
             .ok_or_else(|| missing("missing heap dispatch ABI"))?

@@ -50,14 +50,11 @@ impl JitStructuralRuntime {
     ) -> Result<NativeStructuralView, NativeServiceError> {
         let expected = core_type(owner.structural_type())?;
         let length = {
-            let value = match self.runtime.value(owner_key(owner)?, expected) {
-                Ok(value) => value,
+            let node = match self.runtime.value_node(owner_key(owner)?, expected) {
+                Ok(node) => node,
                 Err(error) => return Err(self.map_error(error)),
             };
-            let SemanticPayload::String(bytes) = &value.payload else {
-                return Err(NativeServiceError::Trap);
-            };
-            std::str::from_utf8(bytes).map_err(|_| NativeServiceError::Trap)?;
+            let bytes = node_bytes(node)?;
             i64::try_from(bytes.len()).map_err(|_| NativeServiceError::ResourceLimitExceeded)?
         };
         self.borrow(owner, projection, 0, length)
@@ -76,14 +73,14 @@ impl JitStructuralRuntime {
     pub(super) fn tag(&mut self, view: NativeStructuralView) -> Result<i64, NativeServiceError> {
         self.note_call();
         let key = view_key(view)?;
-        let value = match self.runtime.projected(key) {
-            Ok(value) => value,
+        let node = match self.runtime.projected_node(key) {
+            Ok(node) => node,
             Err(error) => return Err(self.map_error(error)),
         };
-        let SemanticPayload::Enum { tag, .. } = &value.payload else {
+        let StructuralNodeView::Enum { tag, .. } = node.payload() else {
             return Err(NativeServiceError::Trap);
         };
-        Ok(i64::from(*tag))
+        Ok(i64::from(tag))
     }
 
     pub(super) fn owned_tag(
@@ -92,14 +89,14 @@ impl JitStructuralRuntime {
     ) -> Result<i64, NativeServiceError> {
         self.note_call();
         let expected = core_type(owner.structural_type())?;
-        let value = match self.runtime.value(owner_key(owner)?, expected) {
-            Ok(value) => value,
+        let node = match self.runtime.value_node(owner_key(owner)?, expected) {
+            Ok(node) => node,
             Err(error) => return Err(self.map_error(error)),
         };
-        let SemanticPayload::Enum { tag, .. } = &value.payload else {
+        let StructuralNodeView::Enum { tag, .. } = node.payload() else {
             return Err(NativeServiceError::Trap);
         };
-        Ok(i64::from(*tag))
+        Ok(i64::from(tag))
     }
 
     pub(super) fn length(
@@ -108,11 +105,11 @@ impl JitStructuralRuntime {
     ) -> Result<i64, NativeServiceError> {
         self.note_call();
         let expected = core_type(owner.structural_type())?;
-        let value = match self.runtime.value(owner_key(owner)?, expected) {
-            Ok(value) => value,
+        let node = match self.runtime.value_node(owner_key(owner)?, expected) {
+            Ok(node) => node,
             Err(error) => return Err(self.map_error(error)),
         };
-        i64::try_from(bytes(value)?.len()).map_err(|_| {
+        i64::try_from(node_bytes(node)?.len()).map_err(|_| {
             self.last_resource = Some(ResourceLimitKind::HeapBytes);
             NativeServiceError::ResourceLimitExceeded
         })
@@ -121,14 +118,14 @@ impl JitStructuralRuntime {
     pub(super) fn i64(&mut self, view: NativeStructuralView) -> Result<i64, NativeServiceError> {
         self.note_call();
         let key = view_key(view)?;
-        let value = match self.runtime.projected(key) {
-            Ok(value) => value,
+        let node = match self.runtime.projected_node(key) {
+            Ok(node) => node,
             Err(error) => return Err(self.map_error(error)),
         };
-        let SemanticPayload::Inline(InlineStructuralValue::I64(value)) = &value.payload else {
+        let StructuralNodeView::Inline(InlineStructuralValue::I64(value)) = node.payload() else {
             return Err(NativeServiceError::Trap);
         };
-        Ok(*value)
+        Ok(value)
     }
 
     pub(super) fn bytes_equal(
@@ -140,13 +137,13 @@ impl JitStructuralRuntime {
         let left_key = view_key(left)?;
         let right_key = view_key(right)?;
         let pair = match (
-            self.runtime.projected(left_key),
-            self.runtime.projected(right_key),
+            self.runtime.projected_node(left_key),
+            self.runtime.projected_node(right_key),
         ) {
             (Ok(left), Ok(right)) => (left, right),
             (Err(error), _) | (_, Err(error)) => return Err(self.map_error(error)),
         };
-        Ok(bytes(pair.0)? == bytes(pair.1)?)
+        Ok(node_bytes(pair.0)? == node_bytes(pair.1)?)
     }
 
     pub(super) fn utf8_valid(
@@ -155,10 +152,10 @@ impl JitStructuralRuntime {
     ) -> Result<bool, NativeServiceError> {
         self.note_call();
         let key = view_key(view)?;
-        let value = match self.runtime.projected(key) {
-            Ok(value) => value,
+        let node = match self.runtime.projected_node(key) {
+            Ok(node) => node,
             Err(error) => return Err(self.map_error(error)),
         };
-        Ok(std::str::from_utf8(bytes(value)?).is_ok())
+        Ok(std::str::from_utf8(node_bytes(node)?).is_ok())
     }
 }

@@ -9,7 +9,7 @@ pub enum MemoryDomain {
     SealedRegion,
     BorrowedView,
     ExternalResource,
-    RegisteredLegacyTraced,
+    UnsupportedRuntime,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,24 +28,25 @@ pub enum MemoryAggregateMode {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryClosureClass {
     Deterministic,
-    LegacyClosed,
-    IllegalMixedBridge,
+    RegionClosed,
+    Unresolved,
+    IllegalDomainBridge,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryBlockerReason {
-    RegisteredLegacyValue,
-    RecursiveDeclarationScc,
+    UnsupportedRuntimeValue,
     UnknownTypeParameter,
-    ListPair,
+    ListElementWitnessRequired,
+    RegionDomainBoundary,
     CapturedClosure,
     DynamicDeterministicOwner,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryMixedBridgeDirection {
-    LegacyContainsDeterministic,
-    DeterministicContainsLegacy,
+    UnresolvedContainsDeterministic,
+    DeterministicContainsUnresolved,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -78,7 +79,8 @@ pub enum MemoryCopySharePlan {
     BorrowExclusive,
     Move,
     SealedShare,
-    LegacyTracing,
+    RegionHandleCopy,
+    Unsupported,
     ExternalHandle,
 }
 
@@ -99,6 +101,7 @@ pub enum MemoryExecutionCutover {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryTypeFact {
     pub id: MemoryTypeFactId,
+    pub witness: MemoryWitnessId,
     pub ty: MemoryType,
     pub mode: MemoryAggregateMode,
     pub closure: MemoryClosureFact,
@@ -117,7 +120,7 @@ pub enum MemoryDestinationKind {
     UniqueStructural,
     OrdinaryRegion,
     SealedRegion,
-    RegisteredLegacyTraced,
+    UnsupportedRuntime,
     CutoverRequired,
 }
 

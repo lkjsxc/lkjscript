@@ -15,7 +15,13 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
         memory_plan: None,
         parameter_structurals: Vec::new(),
         parameter_structural_places: Vec::new(),
+        parameter_type_variables: Vec::new(),
+        parameter_copy_kinds: Vec::new(),
+        parameter_region_products: Vec::new(),
+        return_copy_kind: None,
+        return_region_product: None,
         return_structural: None,
+        return_type_variable: None,
         parameter_resources: Vec::new(),
         parameter_resource_places: Vec::new(),
         return_resource: None,
@@ -37,25 +43,6 @@ fn indexes_metadata_categories_and_capture_metadata_are_checked() {
         Op::Return as u8,
     ];
     assert!(error(captures).contains("capture metadata"));
-
-    let mut product = unit_chunk();
-    product.products.push(ProductMetadata {
-        id: ProductId::new(0),
-        name: "p".into(),
-        fields: vec!["x".into()],
-    });
-    product.product_fields.push(ProductFieldRef {
-        product: ProductId::new(0),
-        field: 0,
-    });
-    product.main.code = vec![
-        Op::Unit as u8,
-        Op::LoadProductField as u8,
-        0,
-        0,
-        Op::Return as u8,
-    ];
-    assert!(error(product).contains("product operation category"));
 }
 
 #[test]
@@ -71,7 +58,13 @@ fn global_closures_must_match_declared_prototypes() {
             memory_plan: None,
             parameter_structurals: Vec::new(),
             parameter_structural_places: Vec::new(),
+            parameter_type_variables: Vec::new(),
+            parameter_copy_kinds: Vec::new(),
+            parameter_region_products: Vec::new(),
+            return_copy_kind: None,
+            return_region_product: None,
             return_structural: None,
+            return_type_variable: None,
             parameter_resources: Vec::new(),
             parameter_resource_places: Vec::new(),
             return_resource: None,

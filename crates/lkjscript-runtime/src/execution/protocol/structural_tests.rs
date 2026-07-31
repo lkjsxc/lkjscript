@@ -29,7 +29,8 @@ fn option_string() -> SemanticValue {
                 101,
                 StructuralKind::String,
                 SemanticPayload::String("daemon value".as_bytes().to_vec()),
-            )],
+            )]
+            .into(),
         },
     )
 }
@@ -44,7 +45,8 @@ fn result_path_system_error() -> SemanticValue {
                 201,
                 StructuralKind::Path,
                 SemanticPayload::Path(b"/var/lib/lkjscript/result".to_vec()),
-            )],
+            )]
+            .into(),
         },
     )
 }
@@ -59,7 +61,8 @@ fn result_bytes_system_error() -> SemanticValue {
                 301,
                 StructuralKind::Bytes,
                 SemanticPayload::Bytes(vec![0, 1, 254, 255]),
-            )],
+            )]
+            .into(),
         },
     )
 }
@@ -68,26 +71,29 @@ fn nested_deterministic_aggregate() -> SemanticValue {
     semantic(
         400,
         StructuralKind::Product,
-        SemanticPayload::Product(vec![
-            option_string(),
-            result_path_system_error(),
-            result_bytes_system_error(),
-            semantic(
-                401,
-                StructuralKind::ByteVector,
-                SemanticPayload::ByteVector(vec![9, 8, 7]),
-            ),
-            semantic(
-                402,
-                StructuralKind::I64,
-                SemanticPayload::Inline(InlineStructuralValue::I64(-1)),
-            ),
-            semantic(
-                403,
-                StructuralKind::Static,
-                SemanticPayload::Static(StaticStructuralLeaf::Function(11)),
-            ),
-        ]),
+        SemanticPayload::Product(
+            vec![
+                option_string(),
+                result_path_system_error(),
+                result_bytes_system_error(),
+                semantic(
+                    401,
+                    StructuralKind::ByteVector,
+                    SemanticPayload::ByteVector(vec![9, 8, 7]),
+                ),
+                semantic(
+                    402,
+                    StructuralKind::I64,
+                    SemanticPayload::Inline(InlineStructuralValue::I64(-1)),
+                ),
+                semantic(
+                    403,
+                    StructuralKind::Static,
+                    SemanticPayload::Static(StaticStructuralLeaf::Function(11)),
+                ),
+            ]
+            .into(),
+        ),
     )
 }
 
@@ -126,7 +132,7 @@ fn process_protocol_rejects_structural_field_bound_before_publication() {
     let product = semantic(
         500,
         StructuralKind::Product,
-        SemanticPayload::Product(Vec::new()),
+        SemanticPayload::Product(Vec::new().into()),
     );
     let outcome = ExecutionOutcome::Returned(
         OwnedValue::from_structural(product, StructuralSnapshotLimits::DEFAULT)

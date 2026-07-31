@@ -74,6 +74,7 @@ const fn operand_width(op: Op) -> usize {
         | Op::StructuralDestinationFinish
         | Op::StructuralDestinationAbort
         | Op::StructuralAggregateFieldBorrow
+        | Op::StructuralAggregateFieldCopy
         | Op::StructuralAggregateTag
         | Op::StructuralAggregateConsumePayload
         | Op::StructuralStringUtf8View

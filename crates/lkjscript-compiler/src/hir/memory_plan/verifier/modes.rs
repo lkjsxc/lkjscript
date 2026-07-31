@@ -50,7 +50,6 @@ fn is_unique_byte_vector(entry: &MemoryPlanEntry) -> bool {
         && entry.mode.identity == MemoryIdentity::Value
         && entry.mode.portability == MemoryPortability::WorkerLocal
         && entry.mode.contention == MemoryContention::SingleOwner
-        && entry.legacy_family.is_none()
 }
 
 fn is_static_artifact_value(entry: &MemoryPlanEntry) -> bool {
@@ -62,5 +61,4 @@ fn is_static_artifact_value(entry: &MemoryPlanEntry) -> bool {
         && entry.mode.portability == MemoryPortability::WorkerLocal
         && entry.mode.contention == MemoryContention::ImmutableShared
         && entry.drop_glue.is_none()
-        && entry.legacy_family.is_none()
 }

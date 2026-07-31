@@ -11,6 +11,53 @@ fn structural_plan_identity_propagates_and_tamper_fails() {
 }
 
 #[test]
+fn product_runtime_identity_tamper_is_rejected() {
+    let mut chunk = product_chunk();
+    chunk.structural_types[0].runtime_type = runtime_type(2, crate::StructuralKind::Product);
+    chunk.main.emit(Op::Unit);
+    chunk.main.emit(Op::Return);
+    assert!(error(chunk).contains("product runtime identity is noncanonical"));
+}
+
+#[test]
+fn region_product_contract_identity_tamper_is_rejected() {
+    let mut chunk = unit_chunk();
+    let plan = crate::MemoryPlanId::new([9; 32]);
+    chunk.memory_plan = Some(plan);
+    chunk.main.memory_plan = Some(plan);
+    chunk.products.push(crate::ProductMetadata {
+        id: crate::ProductId::new(0),
+        identity: crate::runtime_product_contract_identity(plan, "record")
+            .expect("canonical product identity"),
+        region: true,
+        name: "record".into(),
+        fields: vec!["value".into()],
+        region_fields: vec![crate::RegionProductFieldKind::I64],
+    });
+    validate_chunk(chunk.clone(), &ValidationLimits::default())
+        .expect("canonical region-product identity validates");
+    chunk.products[0].identity = crate::RuntimeLayoutId::new([3; 32]);
+    assert!(error(chunk).contains("noncanonical region identity"));
+}
+
+#[test]
+fn region_product_metadata_cycles_are_rejected() {
+    let mut chunk = unit_chunk();
+    let plan = crate::MemoryPlanId::new([7; 32]);
+    chunk.memory_plan = Some(plan);
+    chunk.products.push(crate::ProductMetadata {
+        id: crate::ProductId::new(0),
+        identity: crate::runtime_product_contract_identity(plan, "recursive")
+            .expect("canonical product identity"),
+        region: true,
+        name: "recursive".into(),
+        fields: vec!["next".into()],
+        region_fields: vec![crate::RegionProductFieldKind::Product(crate::ProductId::new(0))],
+    });
+    assert!(error(chunk).contains("dependency graph is cyclic"));
+}
+
+#[test]
 fn owner_view_and_destination_metadata_are_opcode_checked() {
     let mut owner = product_chunk();
     let product = owner.add_const(crate::Constant::I64(0));

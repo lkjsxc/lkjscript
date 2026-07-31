@@ -45,7 +45,7 @@ fn structural_constructor_rejects_each_exact_bound_plus_one() {
         value(
             1,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![leaf(2)]),
+            SemanticPayload::Product(vec![leaf(2)].into()),
         ),
         limits,
     );
@@ -56,7 +56,7 @@ fn structural_constructor_rejects_each_exact_bound_plus_one() {
         value(
             3,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![leaf(4), leaf(5)]),
+            SemanticPayload::Product(vec![leaf(4), leaf(5)].into()),
         ),
         limits,
     );
@@ -67,7 +67,7 @@ fn structural_constructor_rejects_each_exact_bound_plus_one() {
         value(
             6,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![leaf(7), leaf(8)]),
+            SemanticPayload::Product(vec![leaf(7), leaf(8)].into()),
         ),
         limits,
     );
@@ -170,7 +170,7 @@ fn structural_decoder_checks_work_and_field_bounds_before_publication() {
     let product = value(
         31,
         StructuralKind::Product,
-        SemanticPayload::Product(Vec::new()),
+        SemanticPayload::Product(Vec::new().into()),
     );
     let mut malformed = encoded(product);
     malformed[20..24].copy_from_slice(&2_u32.to_le_bytes());

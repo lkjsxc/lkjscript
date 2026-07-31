@@ -33,13 +33,6 @@ impl RuntimeCallSlot {
                 parameters: FRAME_PARAMETERS,
                 result: InternalMachineResult::Unit,
             }),
-            Self::PublishSafepoint => Some(InternalRuntimeSignature {
-                parameters: &[
-                    InternalMachineArgument::InvocationContext,
-                    InternalMachineArgument::SafepointId,
-                ],
-                result: InternalMachineResult::Unit,
-            }),
             Self::HeapDispatch => Some(InternalRuntimeSignature {
                 parameters: &[
                     InternalMachineArgument::InvocationContext,
@@ -87,14 +80,8 @@ impl RuntimeCallSlot {
             | Self::BytesEndBorrow
             | Self::BytesDrop
             | Self::FreezeByteVector
-            | Self::ThawBytes
-            | Self::CollectReference => None,
+            | Self::ThawBytes => None,
         }
-    }
-
-    #[must_use]
-    pub const fn may_collect(self) -> bool {
-        matches!(self, Self::CollectReference | Self::HeapDispatch)
     }
 
     pub(crate) const fn plan_callable(self) -> bool {
@@ -131,7 +118,6 @@ impl RuntimeCallSlot {
                 | Self::BytesDrop
                 | Self::FreezeByteVector
                 | Self::ThawBytes
-                | Self::CollectReference
         )
     }
 }

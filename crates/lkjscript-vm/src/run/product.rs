@@ -1,69 +1,71 @@
 use super::*;
-fn product_metadata<'a, J: RuntimeTier>(
-    vm: &'a Vm<'_, J>,
-    product: ProductId,
-) -> Result<&'a lkjscript_core::ProductMetadata> {
-    let metadata = vm
-        .chunk
-        .products()
-        .get(product.index())
-        .filter(|metadata| metadata.id == product)
-        .ok_or_else(|| Error::msg("product metadata index or identity is invalid"))?;
-    if metadata.fields.len() > MAX_PRODUCT_FIELDS {
-        return Err(Error::msg("product metadata exceeds field limit"));
-    }
-    Ok(metadata)
-}
 
-fn product_field_ref<J: RuntimeTier>(vm: &Vm<'_, J>, index: usize) -> Result<ProductFieldRef> {
-    let field_ref = vm
-        .chunk
-        .product_fields()
-        .get(index)
-        .copied()
-        .ok_or_else(|| Error::msg("product field descriptor index out of range"))?;
-    let metadata = product_metadata(vm, field_ref.product)?;
-    if usize::from(field_ref.field) >= metadata.fields.len() {
-        return Err(Error::msg("product field index out of range"));
-    }
-    Ok(field_ref)
-}
+#[path = "structural_ops/aggregate/product_metadata.rs"]
+mod metadata;
+#[path = "structural_ops/aggregate/product_region.rs"]
+mod region;
+use metadata::*;
+use region::*;
 
 fn make_product<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let product = ProductId::new(vm.read_u16()?);
-    let field_count = product_metadata(vm, product)?.fields.len();
+    let (field_count, identity, routes) = {
+        let metadata = product_metadata(vm, product)?;
+        if !metadata.region {
+            return Err(Error::msg(
+                "product construction requires invocation-region metadata",
+            ));
+        }
+        (
+            metadata.fields.len(),
+            metadata.identity,
+            metadata.region_fields.clone(),
+        )
+    };
     let mut fields = Vec::with_capacity(field_count);
     for _ in 0..field_count {
         fields.push(vm.pop()?);
     }
     fields.reverse();
-    if fields.iter().copied().any(is_structural_runtime_value) {
-        return Err(Error::msg(
-            "legacy traced product cannot contain a structural runtime value",
-        ));
+    for (route, value) in routes.iter().copied().zip(fields.iter().copied()) {
+        if !region_field_value(vm, route, value)? {
+            return Err(Error::msg(
+                "region-product construction field route mismatch",
+            ));
+        }
     }
-    let value = vm.arena.alloc(HeapObj::Product { product, fields })?;
-    vm.push(value);
+    charge_region_product(vm, fields.capacity())?;
+    let key = vm
+        .region_products
+        .as_mut()
+        .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
+        .publish(identity, fields)
+        .map_err(region_product_error)?;
+    vm.region_product_allocations = vm.region_product_allocations.saturating_add(1);
+    vm.push(Value::from_region_product(key));
     Ok(())
 }
 
 fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let descriptor = vm.read_u16()? as usize;
     let field_ref = product_field_ref(vm, descriptor)?;
-    let value = vm.pop()?;
-    if value.as_legacy_traced().is_none() {
-        return Err(Error::msg("product field access expects Product"));
-    }
-    let field = match vm.arena.get(value)? {
-        HeapObj::Product { product, fields } if *product == field_ref.product => fields
-            .get(usize::from(field_ref.field))
-            .copied()
-            .ok_or_else(|| Error::msg("product value field count does not match metadata"))?,
-        HeapObj::Product { .. } => {
-            return Err(Error::msg("product field access identity mismatch"));
+    let identity = {
+        let metadata = product_metadata(vm, field_ref.product)?;
+        if !metadata.region {
+            return Err(Error::msg(
+                "product projection requires invocation-region metadata",
+            ));
         }
-        _ => return Err(Error::msg("product field access expects Product")),
+        metadata.identity
     };
+    let value = vm.pop()?;
+    let key = region_product_key(vm, value)?;
+    let field = *vm
+        .region_products
+        .as_ref()
+        .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
+        .field(key, identity, u16::from(field_ref.field))
+        .map_err(region_product_error)?;
     vm.push(field);
     Ok(())
 }
@@ -71,32 +73,46 @@ fn load_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
 fn with_product_field<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let descriptor = vm.read_u16()? as usize;
     let field_ref = product_field_ref(vm, descriptor)?;
+    let (identity, route) = {
+        let metadata = product_metadata(vm, field_ref.product)?;
+        if !metadata.region {
+            return Err(Error::msg(
+                "product update requires invocation-region metadata",
+            ));
+        }
+        (
+            metadata.identity,
+            metadata
+                .region_fields
+                .get(usize::from(field_ref.field))
+                .copied(),
+        )
+    };
     let replacement = vm.pop()?;
-    if is_structural_runtime_value(replacement) {
+    let route = route.ok_or_else(|| Error::msg("region-product field route is missing"))?;
+    if !region_field_value(vm, route, replacement)? {
         return Err(Error::msg(
-            "legacy traced product cannot contain a structural runtime value",
+            "region-product replacement field route mismatch",
         ));
     }
     let value = vm.pop()?;
-    if value.as_legacy_traced().is_none() {
-        return Err(Error::msg("product field replacement expects Product"));
-    }
-    let mut fields = match vm.arena.get(value)? {
-        HeapObj::Product { product, fields } if *product == field_ref.product => fields.clone(),
-        HeapObj::Product { .. } => {
-            return Err(Error::msg("product field replacement identity mismatch"));
-        }
-        _ => return Err(Error::msg("product field replacement expects Product")),
-    };
-    let field = fields
-        .get_mut(usize::from(field_ref.field))
-        .ok_or_else(|| Error::msg("product value field count does not match metadata"))?;
-    *field = replacement;
-    let updated = vm.arena.alloc(HeapObj::Product {
-        product: field_ref.product,
-        fields,
-    })?;
-    vm.push(updated);
+    let key = region_product_key(vm, value)?;
+    let field_count = vm
+        .region_products
+        .as_ref()
+        .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
+        .fields(key, identity)
+        .map_err(region_product_error)?
+        .len();
+    charge_region_product(vm, field_count)?;
+    let updated = vm
+        .region_products
+        .as_mut()
+        .ok_or_else(|| Error::msg("region-product arena is unavailable"))?
+        .update(key, identity, u16::from(field_ref.field), replacement)
+        .map_err(region_product_error)?;
+    vm.region_product_allocations = vm.region_product_allocations.saturating_add(1);
+    vm.push(Value::from_region_product(updated));
     Ok(())
 }
 

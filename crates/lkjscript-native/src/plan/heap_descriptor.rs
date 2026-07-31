@@ -54,11 +54,7 @@ impl HeapCallDescriptor {
             self.operation,
             HeapOperation::ProductValue { .. }
                 | HeapOperation::WithProductField { .. }
-                | HeapOperation::EnumValue { .. }
                 | HeapOperation::Cons
-                | HeapOperation::F64FromI64Exact { .. }
-                | HeapOperation::I64FromF64Exact { .. }
-                | HeapOperation::I64FromF64Trunc { .. }
         );
         let expected_allocation = if allocates {
             AllocationClass::Bounded

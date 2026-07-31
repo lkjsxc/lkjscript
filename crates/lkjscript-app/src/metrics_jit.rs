@@ -4,6 +4,20 @@ use crate::metrics_json::string;
 
 pub fn render(stats: &JitStats) -> String {
     let island = crate::metrics_jit_island::render(stats);
+    let lists = format!(
+        concat!(
+            "{{\"live_segments\":{},\"live_entries\":{},",
+            "\"segment_allocations\":{},\"prepends\":{},",
+            "\"first_reads\":{},\"rest_reads\":{},\"reserved_bytes_estimate\":{}}}"
+        ),
+        stats.segmented_lists.live_segments,
+        stats.segmented_lists.live_entries,
+        stats.segmented_lists.segment_allocations,
+        stats.segmented_lists.prepends,
+        stats.segmented_lists.first_reads,
+        stats.segmented_lists.rest_reads,
+        stats.segmented_list_reserved_bytes_estimate,
+    );
     let functions = stats
         .functions
         .iter()
@@ -41,7 +55,7 @@ pub fn render(stats: &JitStats) -> String {
                 concat!(
                     "{{\"identity\":{},\"tier\":{},\"functions\":{},\"code_bytes\":{},",
                     "\"metadata_bytes\":{},\"optimization_metadata_bytes_estimate\":{},",
-                    "\"accounted_allocation_bytes\":{},\"relocations\":{},\"safepoints\":{},",
+                    "\"accounted_allocation_bytes\":{},\"relocations\":{},",
                     "\"optimization_ns\":{},\"lowering_encoding_ns\":{},",
                     "\"installation_ns\":{},\"work_units\":{},",
                     "\"optimization_work_units\":{},\"input_instructions\":{},",
@@ -63,7 +77,6 @@ pub fn render(stats: &JitStats) -> String {
                 object.optimization_metadata_bytes_estimate,
                 object.accounted_allocation_bytes,
                 object.relocation_count,
-                object.safepoint_count,
                 object.compile_stats.optimization().as_nanos(),
                 object.compile_stats.lowering_and_encoding().as_nanos(),
                 object.compile_stats.installation().as_nanos(),
@@ -105,11 +118,10 @@ pub fn render(stats: &JitStats) -> String {
             "\"poll_calls\":{},\"native_invocations\":{},\"auto_threshold\":{},",
             "\"auto_enabled\":{},\"code_cache_peak_objects\":{},",
             "\"code_cache_peak_bytes\":{},\"metadata_cache_peak_bytes\":{},",
-            "\"accounted_allocation_peak_bytes\":{},\"allocations\":{},",
-            "\"allocation_bytes_estimate\":{},\"collections\":{},",
-            "\"peak_live_heap_bytes_estimate\":{},\"maximum_roots\":{},",
-            "\"runtime_heap_attempts\":{},\"runtime_heap_successes\":{},",
-            "\"barrier_count\":{},\"island\":{},\"peak_native_frame_depth\":{},",
+            "\"accounted_allocation_peak_bytes\":{},",
+            "\"runtime_value_attempts\":{},\"runtime_value_successes\":{},",
+            "\"segmented_lists\":{},\"island\":{},",
+            "\"peak_native_frame_depth\":{},",
             "\"vm_to_native_transitions\":{},\"native_to_vm_transitions\":{},",
             "\"functions\":[{}],\"objects\":[{}]}}"
         ),
@@ -140,14 +152,9 @@ pub fn render(stats: &JitStats) -> String {
         stats.code_cache_peak_bytes,
         stats.metadata_cache_peak_bytes,
         stats.accounted_allocation_peak_bytes,
-        stats.allocations,
-        stats.allocation_bytes_estimate,
-        stats.collections,
-        stats.peak_live_heap_bytes_estimate,
-        stats.maximum_roots,
         stats.runtime_heap_attempts,
         stats.runtime_heap_successes,
-        stats.barrier_count,
+        lists,
         island,
         stats.peak_native_frame_depth,
         stats.vm_to_native_transitions,

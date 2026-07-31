@@ -21,7 +21,8 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=typed-holes status=current -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
 <!-- LKJ-STATUS id=memory-obligations status=current -->
-<!-- LKJ-STATUS id=memory-tracing-ratchet status=current -->
+<!-- LKJ-STATUS id=memory-tracing-ratchet status=superseded -->
+<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
 <!-- LKJ-STATUS id=memory-plan status=current -->
 <!-- LKJ-STATUS id=modules-and-packages status=current -->
 <!-- LKJ-STATUS id=deterministic-drop status=accepted-contract -->
@@ -34,10 +35,11 @@ Repository topology and graph/context, bounded task state, exact modules and
 packages, canonical Semantic Source and local sessions, explicit capabilities,
 generic ADTs and structured control, validated VM, callable baseline JIT, and
 forced proof JIT are Current. `lkjscript.memory-obligations` and its inventory
-and explain commands are Current descriptive evidence. The machine tracing
-ratchet and `memory traced` expose exactly `enum`, `pair`, and `product` as the
-remaining allowed `HeapObj` families; buffer, dynamic string, and path storage
-are removed, and capture-free functions and symbols use artifact IDs.
+and explain commands are Current descriptive evidence. The migration tracing
+ratchet and `memory traced` command are removed. The unconditional
+`LKJ-RUNTIME-NO-TRACING-COLLECTOR` gate rejects collector directories, object
+families, services, liveness maps, barriers, configuration, and metrics.
+Capture-free functions and symbols use artifact IDs.
 The measured semantic resource runtime is Current: Linux observation, verified
 task graphs, six real policies, owner homes, forced scheduled proof discovery,
 scheduled native kernels, shared sealed-image invocation, and retained policy
@@ -68,13 +70,12 @@ are Current for process apps. Authenticated ephemeral session-broker presence is
 Current on Linux. File, terminal, network, SQLite, stream-resource, database
 process/VM operations, interactive cells, GUI, and SQLite replacement remain absent.
 
-The authoritative pre-backend HIR memory plan is Current. Safe internal ordinary
-regions, sealed shared regions, typed generational pools, and structural owner
-homes are Current substrate. They are not selected by HIR or an execution tier.
-Exact byte-vector, byte-slice, immutable-bytes, capture-free-function, and
-symbol subsets execute without collector interaction. The whole runtime still
-traces the remaining structural values; collector-free deterministic memory is
-not Current.
+The authoritative pre-backend HIR memory plan is Current. A narrow ordinary-region
+route is selected for acyclic products closed over copy lists and scalar leaves; broader regions,
+sealed sharing, pools, and owner homes remain substrate only. Exact bytes,
+functions, symbols, copy products, enums, errors, options, results, selected
+region products, lists, strings, and paths execute through deterministic
+storage. The zero-family no-tracing runtime is Current.
 
 ## Product Intent
 
@@ -94,13 +95,16 @@ not Current.
 
 ## Current Memory Foundation
 
-The stable-index non-moving `GcHeap` still traces explicit legacy-traced
-reference values, exact roots, and generated native stack maps. Complete i64
-and exact-bit f64 values are inline and never collector allocated. Exact
-`bytes` and affine `byte-vector` use static or deterministic unique storage in
-all four engines. Dynamic string and path leaves use deterministic structural
-owners; their traced heap variants and registry entries are absent. Generic
-product/enum selection remains bounded by explicit structural SSA evidence.
+Complete i64 and exact-bit f64 values are inline. Exact `bytes` and affine
+`byte-vector` use static or deterministic unique storage in all four engines.
+Strings, paths, products, enums, errors, options, and results use deterministic
+structural owners/images. Lists use capacity-32 segmented invocation regions.
+Acyclic products closed over copy lists, scalar leaves, and region products use
+invocation-owned records in all four tiers. Their keys cannot cross processes.
+Aggregates outside structural or invocation-region storage reject; VM
+copy-variable transport is not a native witness ABI. No collector, liveness
+map, collection service, barrier, collector configuration, or collector metric
+remains.
 
 The structural substrate uses nonwrapping domain/root generations, bounded
 fallible capacity, typed layout and semantic identities, ledger-only iterative
@@ -140,22 +144,24 @@ resources remain absent.
   aggregate payload transfer, and exact generation-safe resource adapters are
   Current; borrowed returns and unrestricted partial moves remain rejected.
 - Forced native claims require synchronous generated entry with zero fallback.
-- Collection roots remain required for non-island native functions.
-- Execution-tier region/pool selection, cross-call pool loans, sealed compact
-  images, no-RC falsification, and family migration remain later work.
+- Native frames retain typed homes, bounds, cleanup obligations, and structured
+  outcome state; no liveness root map or collector publication remains.
+- Broader region/pool selection, cross-call pool loans, and sealed compact
+  images remain later work; the zero-family cutover and no-per-node-RC evidence
+  are Current.
 
 ## Accepted Next Sequence
 
 1. Retain adversarial ownership, borrowing, destination, failure-cleanup,
    resource-adapter, recursive-call, and limit evidence for every Current
    structural group.
-2. Migrate the remaining recursive and legacy `enum`, `pair`, and `product`
-   groups only through the shared HIR/SSA authority and without mixed graphs.
-3. Infer collector-free ownership, borrowing, regions, sealed sharing, and
-   pools without exposing lifetime syntax or retaining a tracing fallback.
-4. At zero families, delete collector code and enable the automatically guarded
-   no-tracing closure; only then resume provider, interactive, and database
-   product expansion.
+2. Expand independently reconstructed witnesses for structural-image region
+   fields and immutable or nested list elements without accepting unknown
+   generic substitutions.
+3. Infer ownership, borrowing, regions, sealed sharing, and pools without
+   exposing lifetime syntax or retaining atomic/shared counts or tracing.
+4. Measure complete alternatives and remove rejected implementations before
+   selecting additional language storage domains.
 5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the Current
    WASI database probe is not platform acceptance.
 

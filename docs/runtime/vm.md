@@ -14,20 +14,25 @@ next repairs.
 - Dense bytecode with contiguous value and frame stacks.
 - Safe closed 16-byte `Value` records with a 64-bit payload and explicit
   metadata for private invalid storage, unit, bool, complete i64, exact-bit f64,
-  typed empty lists, capabilities, resources, legacy-traced references, and
-  opaque unique keys.
-- Arena objects for strings, symbols, pairs, closures, buffers, `option` and
-  language `result` wrappers, immutable nominal products, and boxed enums storing
-  validated layout identity, physical tag, and only active initialized payload.
+  typed empty lists, capabilities, resources, opaque unique keys, structural
+  roots/views/destinations, typed segmented-list handles, and invocation-scoped
+  region-product keys.
+- Products, enums, strings, paths, and results use deterministic structural
+  stores. Lists use segmented invocation regions. Acyclic products closed over
+  selected copy lists, scalar leaves, and region products use a bounded
+  invocation-owned typed record arena.
 - `i64`-preserving constants, checked `i64` arithmetic, IEEE `f64` arithmetic,
-  exact value/object/`f64`-bit equality, structural list equality
-  bounded to 1,000,000 pair nodes, immutable product construction/access/update,
-  exact enum construction/test/active projection primitives, and checked narrow
+  exact value/structural/`f64`-bit equality, segmented structural list equality
+  bounded to 1,000,000 entries, flat copy-product construction/projection/update,
+  region-product construction/projection/immutable update and exact calls, exact
+  enum construction/test/active projection primitives, and checked narrow
   host domains.
-- Precise non-moving mark-sweep collection after 1,024 allocations.
+- Exact scalar parameter/return metadata seeds validator kinds across builds and calls.
+  Direct-call type-variable metadata binds copy arguments and returns to one
+  representation; mixed repeats reject. It is not a hidden witness ABI.
 - Return-adjacent frame reuse for tail recursion.
 - Synchronous, single-threaded execution with explicit fuel, stack/frame,
-  estimated-live-heap, allocation, logical aggregate construction, handle-slot,
+  runtime-storage bytes, allocation, logical aggregate construction, handle-slot,
   output, and wall-time budgets.
 - One compiler invocation and one VM per CLI process.
 - Process-global console/terminal behavior, but no process termination from VM
@@ -44,9 +49,10 @@ statically known operation categories. Compiler output uses this same path.
 
 Execution returns `Returned(OwnedValue)`, `Exited`, `Trapped`,
 `DeadlineExceeded`, `ResourceLimitExceeded`, or `HostFailure`. Validation errors
-are separate. `OwnedValue` privately retains a reachable heap snapshot, so no
-arena index escapes arena lifetime. Resources are dropped, terminal restoration
-is attempted, and stdout is flushed before the CLI translates the outcome.
+are separate. `OwnedValue` retains only key-free structural images, canonical
+owned-list tables, unique bytes, symbols, and scalars; no invocation key escapes
+its arena lifetime. Resources are dropped, terminal restoration is attempted,
+and stdout is flushed before the CLI translates the outcome.
 
 ## Current Resource Boundary
 
@@ -81,9 +87,9 @@ is attempted, and stdout is flushed before the CLI translates the outcome.
   and cleanup wrappers are not cancellable and can overrun cooperative mode.
   `require_hard_deadline` rejects known unsupported operations before effects
   with `HostFailure`; it does not claim cancellable cleanup.
-- Heap byte accounting estimates object and owned-capacity sizes and is checked
-  at instruction boundaries; one bounded allocation can transiently occur
-  before the aggregate check. `print` currently constructs its temporary host
+- Runtime-storage byte accounting estimates owned capacities and is checked at
+  instruction boundaries; one bounded allocation can transiently occur before
+  the aggregate check. `print` currently constructs its temporary host
   formatting string before applying the output-byte limit.
 
 The numeric representation and behavior are specified by
@@ -100,11 +106,12 @@ function entries and uses installed code only on later calls. The complete
 subset and unsupported reference/allocation/host boundary are in
 [Callable Baseline JIT](baseline-jit.md).
 
-Native PollV1 applies cooperative deadline and native-poll fuel limits. VM
-instruction fuel and native poll fuel are separately placed safepoint measures;
+Native `Poll` applies cooperative deadline and native-poll fuel limits. VM
+instruction fuel and native poll fuel are separately placed bounded measures;
 they preserve the same structured resource category but do not claim identical
 instruction-by-instruction exhaustion points.
 
-Host-service injection, instruction quanta, fully cancellable filesystem and
-output services, terminal leases, generation-reused handle slots, loop OSR, and
-native reference/allocation paths remain **Deferred** to later measured cycles.
+Complete host-service injection, instruction quanta, fully cancellable
+filesystem and output services, terminal leases, generation-reused handle
+slots, loop OSR, and broader invocation-region witnesses remain **Deferred** to
+later measured cycles.

@@ -45,7 +45,6 @@ pub struct EnumVariantMetadata {
 pub struct EnumFieldMetadata {
     pub id: VariantFieldId,
     pub name: String,
-    pub traced: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

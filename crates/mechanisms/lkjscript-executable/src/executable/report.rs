@@ -8,14 +8,10 @@ pub struct InvocationReport {
     pub(super) native_entries: Vec<NativeEntryCount>,
     pub(super) peak_active_frame_depth: usize,
     pub(super) active_frame_depth: usize,
-    pub(super) collection_calls: u64,
-    pub(super) maximum_roots: usize,
-    pub(super) exact_root_counts: Vec<usize>,
     pub(super) peak_native_stack_bytes: usize,
     pub(super) reserved_native_stack_bytes: usize,
     pub(super) heap_operation_attempts: u64,
     pub(super) heap_operation_successes: u64,
-    pub(super) barrier_count: u64,
     pub(super) peak_active_value_homes: usize,
     pub(super) active_value_homes: usize,
     pub(super) resource_calls: u64,
@@ -23,7 +19,6 @@ pub struct InvocationReport {
     pub(super) structural_calls: u64,
     pub(super) cleanup_failures: Vec<NativeCleanupFailure>,
     pub(super) omitted_cleanup_failures: usize,
-    pub(super) collector_runtime: bool,
 }
 
 impl InvocationReport {
@@ -58,21 +53,6 @@ impl InvocationReport {
     }
 
     #[must_use]
-    pub const fn collection_calls(&self) -> u64 {
-        self.collection_calls
-    }
-
-    #[must_use]
-    pub const fn maximum_roots(&self) -> usize {
-        self.maximum_roots
-    }
-
-    #[must_use]
-    pub fn exact_root_counts(&self) -> &[usize] {
-        &self.exact_root_counts
-    }
-
-    #[must_use]
     pub const fn peak_native_stack_bytes(&self) -> usize {
         self.peak_native_stack_bytes
     }
@@ -90,11 +70,6 @@ impl InvocationReport {
     #[must_use]
     pub const fn heap_operation_successes(&self) -> u64 {
         self.heap_operation_successes
-    }
-
-    #[must_use]
-    pub const fn barrier_count(&self) -> u64 {
-        self.barrier_count
     }
 
     #[must_use]
@@ -130,11 +105,6 @@ impl InvocationReport {
     #[must_use]
     pub const fn omitted_cleanup_failures(&self) -> usize {
         self.omitted_cleanup_failures
-    }
-
-    #[must_use]
-    pub const fn collector_runtime(&self) -> bool {
-        self.collector_runtime
     }
 }
 

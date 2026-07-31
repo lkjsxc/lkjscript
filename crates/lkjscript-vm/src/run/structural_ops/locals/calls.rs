@@ -1,3 +1,46 @@
+pub(in crate::run) fn call_return_type_variable_representation<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+    proto: &lkjscript_core::FunctionProto,
+    arguments: &[Value],
+) -> Result<Option<StructuralRepresentationId>> {
+    let Some(return_variable) = proto.return_type_variable else {
+        return Ok(None);
+    };
+    let mut result = None;
+    for (index, variable) in proto.parameter_type_variables.iter().enumerate() {
+        if *variable != Some(return_variable) {
+            continue;
+        }
+        let Some(value) = arguments.get(index).copied() else {
+            return Err(Error::msg("type-variable call argument is missing"));
+        };
+        if value.as_structural_root().is_none() {
+            continue;
+        }
+        let (_, owner) = invocation(vm)?.owner(value)?;
+        if result.is_some_and(|existing| existing != owner.representation) {
+            return Err(Error::msg("type-variable structural arguments disagree at runtime"));
+        }
+        result = Some(owner.representation);
+    }
+    if let Some(expected) = result {
+        for (index, variable) in proto.parameter_type_variables.iter().enumerate() {
+            if *variable != Some(return_variable) {
+                continue;
+            }
+            let value = arguments
+                .get(index)
+                .copied()
+                .ok_or_else(|| Error::msg("type-variable call argument is missing"))?;
+            let (_, owner) = invocation(vm)?.owner(value)?;
+            if owner.representation != expected {
+                return Err(Error::msg("type-variable call arguments disagree at runtime"));
+            }
+        }
+    }
+    Ok(result)
+}
+
 pub(in crate::run) fn initialize_call_places(
     chunk: &ValidatedChunk,
     structural: Option<&StructuralInvocation>,
@@ -67,48 +110,6 @@ pub(in crate::run) fn commit_call_arguments<J: RuntimeTier>(
         }
     }
     Ok(())
-}
-
-pub(in crate::run) fn prepare_return<J: RuntimeTier>(
-    vm: &mut Vm<'_, J>,
-    value: Value,
-    prototype: u32,
-) -> Result<()> {
-    cleanup_copy_roots(vm, value, prototype == u32::MAX)?;
-    let expected = if prototype == u32::MAX {
-        vm.chunk.main().return_structural
-    } else {
-        vm.chunk
-            .protos()
-            .get(prototype as usize)
-            .ok_or_else(|| Error::msg("return prototype metadata is missing"))?
-            .return_structural
-    };
-    match (expected, value.as_structural_root()) {
-        (Some(expected), Some(_)) => {
-            let (_, record) = invocation(vm)?.owner(value)?;
-            let expected_type =
-                representation_type(vm.chunk, expected, StructuralValueCategory::Owner)?;
-            if record.value_type != expected_type
-                || !same_representation_type(vm.chunk, record.representation, expected)?
-            {
-                return Err(Error::msg("structural return representation mismatch"));
-            }
-            commit_handoff(vm, value)
-        }
-        (Some(_), None) => Err(Error::msg("structural function returned a non-owner value")),
-        (None, Some(_)) if values::is_host_owner(invocation(vm)?, value) => Ok(()),
-        (None, Some(_)) => Err(Error::msg(
-            "structural owner escaped a function without return metadata",
-        )),
-        (None, None)
-            if value.as_structural_view().is_some()
-                || value.as_structural_destination().is_some() =>
-        {
-            Err(Error::msg("private structural value escaped a function"))
-        }
-        (None, None) => Ok(()),
-    }
 }
 
 fn cleanup_copy_roots<J: RuntimeTier>(

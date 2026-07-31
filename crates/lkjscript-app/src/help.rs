@@ -12,7 +12,6 @@ pub fn print() {
     println!("  lkjscript package <lock|check> [package-path]");
     println!("  lkjscript memory inventory [--json]");
     println!("  lkjscript memory explain <identity>");
-    println!("  lkjscript memory traced [--json]");
     println!("  lkjscript runtime topology [--json]");
     println!("  lkjscript runtime topology explain <snapshot|cpu:N|cache:LEVEL:ID|numa:N>");
     println!("  lkjscript runtime host-scheduler [--json]");

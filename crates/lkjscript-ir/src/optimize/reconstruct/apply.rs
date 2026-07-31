@@ -1,7 +1,5 @@
 use crate::optimize::*;
-use crate::{
-    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, Program, Safepoint, ValueId,
-};
+use crate::{BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, Program, ValueId};
 
 pub(crate) fn discovery_apply_record(
     candidate: &mut Program,
@@ -90,7 +88,6 @@ pub(crate) fn checker_apply_record(
 pub(crate) fn replace_with_copy(instruction: &mut Instruction, replacement: ValueId) {
     instruction.kind = InstructionKind::Copy(replacement);
     instruction.metadata.effects = EffectSet::PURE;
-    instruction.metadata.safepoint = Safepoint::None;
     instruction.metadata.failure = FailureBehavior::None;
     instruction.metadata.frame_state = None;
 }

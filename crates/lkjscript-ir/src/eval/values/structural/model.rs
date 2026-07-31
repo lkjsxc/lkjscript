@@ -33,6 +33,7 @@ pub(crate) struct StaticStringArtifact {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum AggregateMode {
     Structural,
+    Region,
     Legacy,
     ResourceAdapter,
 }

@@ -15,6 +15,7 @@ impl Evaluator<'_> {
             .map_err(Flow::Trap)?
             {
                 AggregateMode::Structural => self.structural_product(*product, fields, values),
+                AggregateMode::Region => self.region_product(*product, fields, values),
                 AggregateMode::Legacy | AggregateMode::ResourceAdapter => {
                     self.charge_aggregate()?;
                     self.allocate()?;
@@ -34,6 +35,9 @@ impl Evaluator<'_> {
                     self.structural_product_field(*product, *field, input)
                 } else {
                     match input {
+                        EvalValue::RegionProduct(key) => {
+                            self.region_product_field(*product, *field, *key)
+                        }
                         EvalValue::Product(actual, fields) if actual == product => fields
                             .get(usize::from(*field))
                             .ok_or_else(|| Flow::Trap("product field out of bounds".into()))
@@ -70,6 +74,36 @@ impl Evaluator<'_> {
         ) {
             return self.structural_with_product_field(product, field, input, replacement);
         }
+        if let EvalValue::RegionProduct(key) = input {
+            let identity = self.region_product_identity(product)?;
+            let replacement = clone_plain_eval_value(replacement)?;
+            let fields = self
+                .region_products
+                .fields(*key, identity)
+                .map_err(region_product_error)?;
+            let mut copied = Vec::new();
+            copied
+                .try_reserve_exact(fields.len())
+                .map_err(|_| Flow::Resource("region product replacement".into()))?;
+            for value in fields {
+                copied.push(clone_plain_eval_value(value)?);
+            }
+            let Some(slot) = copied.get_mut(usize::from(field)) else {
+                return Err(Flow::Trap("product replacement field out of bounds".into()));
+            };
+            *slot = replacement;
+            self.charge_aggregate()?;
+            self.allocate_dynamic(
+                copied
+                    .len()
+                    .saturating_mul(std::mem::size_of::<EvalValue>()),
+            )?;
+            let key = self
+                .region_products
+                .publish(identity, copied)
+                .map_err(region_product_error)?;
+            return Ok(EvalValue::RegionProduct(key));
+        }
         let EvalValue::Product(actual, fields) = input else {
             return Err(Flow::Trap("product replacement identity mismatch".into()));
         };
@@ -90,5 +124,62 @@ impl Evaluator<'_> {
         self.charge_aggregate()?;
         self.allocate()?;
         Ok(EvalValue::Product(product, copied))
+    }
+
+    fn region_product(
+        &mut self,
+        product: ProductId,
+        fields: &[ValueId],
+        values: &mut [Option<EvalValue>],
+    ) -> Result<EvalValue, Flow> {
+        let identity = self.region_product_identity(product)?;
+        let fields = values_for(values, fields)?;
+        self.charge_aggregate()?;
+        self.allocate_dynamic(
+            fields
+                .len()
+                .saturating_mul(std::mem::size_of::<EvalValue>()),
+        )?;
+        self.region_products
+            .publish(identity, fields)
+            .map(EvalValue::RegionProduct)
+            .map_err(region_product_error)
+    }
+
+    fn region_product_field(
+        &self,
+        product: ProductId,
+        field: u8,
+        key: lkjscript_core::RegionProductKey,
+    ) -> Result<EvalValue, Flow> {
+        let identity = self.region_product_identity(product)?;
+        self.region_products
+            .field(key, identity, u16::from(field))
+            .map_err(region_product_error)
+            .and_then(clone_plain_eval_value)
+    }
+
+    fn region_product_identity(
+        &self,
+        product: ProductId,
+    ) -> Result<lkjscript_core::RuntimeLayoutId, Flow> {
+        self.program
+            .program()
+            .region_products
+            .iter()
+            .find(|metadata| metadata.product == product)
+            .map(|metadata| lkjscript_core::RuntimeLayoutId::new(metadata.identity.bytes()))
+            .ok_or_else(|| Flow::Trap("region product metadata is missing".into()))
+    }
+}
+
+fn region_product_error(error: lkjscript_core::RegionProductError) -> Flow {
+    match error {
+        lkjscript_core::RegionProductError::Records
+        | lkjscript_core::RegionProductError::Fields
+        | lkjscript_core::RegionProductError::HostAllocation => {
+            Flow::Resource("region product".into())
+        }
+        _ => Flow::Trap(format!("region product: {error:?}")),
     }
 }

@@ -60,12 +60,9 @@ pub(super) fn payload(bytes: Vec<u8>, kind: StructuralPayloadKind) -> SemanticPa
     }
 }
 
-pub(super) fn bytes(value: &SemanticValue) -> Result<&[u8], NativeServiceError> {
-    match &value.payload {
-        SemanticPayload::String(bytes)
-        | SemanticPayload::Path(bytes)
-        | SemanticPayload::Bytes(bytes)
-        | SemanticPayload::ByteVector(bytes) => Ok(bytes),
+pub(super) fn node_bytes(node: StructuralNode<'_>) -> Result<&[u8], NativeServiceError> {
+    match node.payload() {
+        StructuralNodeView::Bytes(bytes) => Ok(bytes),
         _ => Err(NativeServiceError::Trap),
     }
 }

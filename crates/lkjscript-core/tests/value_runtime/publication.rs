@@ -17,12 +17,12 @@ fn strings_and_paths_publish_with_exact_typed_access() -> Result<(), StructuralV
     let string_key = publish(&mut runtime, string.clone())?;
     let path_key = publish(&mut runtime, path.clone())?;
 
-    assert_eq!(runtime.value(string_key, string_type)?, &string);
+    assert_eq!(runtime.value(string_key, string_type)?, string);
     assert_eq!(
         runtime.value(string_key, string_type)?.utf8(),
         Some("héllo")
     );
-    assert_eq!(runtime.value(path_key, path_type)?, &path);
+    assert_eq!(runtime.value(path_key, path_type)?, path);
     assert_eq!(
         runtime.value(path_key, path_type)?.path_bytes(),
         Some(&b"/tmp/value"[..])

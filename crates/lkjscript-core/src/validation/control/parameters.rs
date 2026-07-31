@@ -43,6 +43,18 @@ fn initial_locals(chunk: &Chunk, proto: &FunctionProto, is_main: bool) -> Vec<Op
                     used: false,
                 },
             });
+        let region_product = proto
+            .parameter_region_products
+            .get(index)
+            .copied()
+            .flatten()
+            .map(Kind::RegionProduct);
+        let copy = proto
+            .parameter_copy_kinds
+            .get(index)
+            .copied()
+            .flatten()
+            .and_then(copy_parameter_kind);
         let structural = proto
             .parameter_structurals
             .get(index)
@@ -70,7 +82,12 @@ fn initial_locals(chunk: &Chunk, proto: &FunctionProto, is_main: bool) -> Vec<Op
                     }
                 }
             });
-        *slot = resource.or(unique).or(structural).or(Some(Kind::Any));
+        *slot = resource
+            .or(unique)
+            .or(structural)
+            .or(region_product)
+            .or(copy)
+            .or(Some(Kind::Any));
     }
     if is_main {
         for (slot, kind) in locals.iter_mut().zip(&chunk.required_capabilities) {
@@ -78,4 +95,20 @@ fn initial_locals(chunk: &Chunk, proto: &FunctionProto, is_main: bool) -> Vec<Op
         }
     }
     locals
+}
+
+fn copy_parameter_kind(kind: crate::StructuralKind) -> Option<Kind> {
+    match kind {
+        crate::StructuralKind::Unit => Some(Kind::Unit),
+        crate::StructuralKind::Bool => Some(Kind::Bool),
+        crate::StructuralKind::I64 => Some(Kind::I64),
+        crate::StructuralKind::F64 => Some(Kind::F64),
+        crate::StructuralKind::Static => Some(Kind::Symbol),
+        crate::StructuralKind::String
+        | crate::StructuralKind::Path
+        | crate::StructuralKind::Bytes
+        | crate::StructuralKind::ByteVector
+        | crate::StructuralKind::Product
+        | crate::StructuralKind::Enum => None,
+    }
 }

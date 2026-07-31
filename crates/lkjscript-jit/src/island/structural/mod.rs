@@ -2,9 +2,9 @@ use crate::*;
 use lkjscript_core::{
     InlineStructuralValue, LayoutIdentity, NumericError, SemanticPayload, SemanticTypeIdentity,
     SemanticValue, StructuralDestinationKey, StructuralError, StructuralFieldPath, StructuralKind,
-    StructuralProjection, StructuralRootTableError, StructuralType, StructuralValueError,
-    StructuralValueKey, StructuralValueRuntime, StructuralValueRuntimeLimits, StructuralViewKey,
-    Value,
+    StructuralNode, StructuralNodeView, StructuralProjection, StructuralRootTableError,
+    StructuralType, StructuralValueError, StructuralValueKey, StructuralValueRuntime,
+    StructuralValueRuntimeLimits, StructuralViewKey, Value,
 };
 use lkjscript_executable::NativeServiceError;
 use lkjscript_native::{

@@ -11,7 +11,7 @@ use lkjscript_native::{
 };
 
 pub(super) fn ty(id: u64, kind: NativeStructuralKind) -> StructuralTypeIdentity {
-    StructuralTypeIdentity::new(id * 2 + 1, id * 2 + 2, kind)
+    StructuralTypeIdentity::new(id * 2 + 1, id * 2 + 2, kind, false)
 }
 
 pub(super) fn declare_owner(
@@ -57,7 +57,6 @@ pub(super) fn invoke(
     assert!(!image.bytes().is_empty());
     assert!(!image.entries().is_empty());
     assert!(!image.structural_runtime_sites().is_empty());
-    assert!(image.safepoints().is_empty());
     assert!(image.heap_runtime_sites().is_empty());
     assert!(image
         .frames()
@@ -67,14 +66,9 @@ pub(super) fn invoke(
     assert!(image
         .runtime_calls()
         .contains(&RuntimeCallSlot::StructuralDispatch));
-    assert!(!image.runtime_calls().iter().any(|slot| {
-        matches!(
-            slot,
-            RuntimeCallSlot::CollectReference
-                | RuntimeCallSlot::HeapDispatch
-                | RuntimeCallSlot::PublishSafepoint
-        )
-    }));
+    assert!(!image
+        .runtime_calls()
+        .contains(&RuntimeCallSlot::HeapDispatch));
     for entry in image.entries() {
         if matches!(entry.signature().result(), ValueType::StructuralOwner(_)) {
             let frame = image
@@ -125,13 +119,8 @@ pub(super) fn invoke(
     assert_eq!(structural.teardown_failures, 0);
     assert_eq!(unique.live_owners, 0);
     assert_eq!(unique.live_loans, 0);
-    assert!(!report.collector_runtime());
-    assert_eq!(report.collection_calls(), 0);
-    assert_eq!(report.maximum_roots(), 0);
-    assert!(report.exact_root_counts().is_empty());
     assert_eq!(report.heap_operation_attempts(), 0);
     assert_eq!(report.heap_operation_successes(), 0);
-    assert_eq!(report.barrier_count(), 0);
     assert!(report.cleanup_failures().is_empty());
     assert_eq!(report.omitted_cleanup_failures(), 0);
     assert_eq!(report.active_frame_depth(), 0);

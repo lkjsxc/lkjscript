@@ -7,7 +7,7 @@ import sys
 
 from jit_protocol.artifacts import artifact
 from jit_protocol.constants import (
-    CASE_NAMES, CONTRACT, EXACT_I64_1, EXACT_I64_3333, SCALAR_ITERATIONS, SCHEMA,
+    CASE_NAMES, CONTRACT, EXACT_I64_42, EXACT_I64_3333, SCALAR_ITERATIONS, SCHEMA,
 )
 from jit_protocol.environment import command_version, cpu_model, git_output, memory_kib
 
@@ -79,8 +79,8 @@ def assemble(root, arguments, repository_before, build, binary, workloads, oracl
                 "iterations": SCALAR_ITERATIONS, "expected_outcome": scalar_expected,
             },
             "allocation_graph": {
-                "mechanism": "exact known graph result plus runtime accounting invariants",
-                "expected_outcome": EXACT_I64_1, "sample": allocation_check,
+                "mechanism": "exact known graph result plus runtime-value accounting invariants",
+                "expected_outcome": EXACT_I64_42, "sample": allocation_check,
             },
         },
         "normal_stream_checks": silence_checks, "exact_case_jit_facts": signatures,

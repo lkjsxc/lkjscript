@@ -6,23 +6,24 @@ impl OwnedValue {
     ) -> Result<Self> {
         let structural_symbols = self.structural_symbol_order()?;
         let mut pending = vec![self.root];
-        let mut visited = vec![false; self.heap.len()];
+        let mut visited_lists = vec![false; self.lists.len()];
         while let Some(value) = pending.pop() {
             if let Some(symbol) = value.as_symbol() {
                 self.retain_symbol(symbol, resolve(symbol)?)?;
                 continue;
             }
-            let Some(index) = value.as_legacy_traced().map(|index| index as usize) else {
-                continue;
-            };
-            if index >= self.heap.len() || visited[index] {
+            if let Some(index) = value.as_owned_list().map(|index| index as usize) {
+                let node = self
+                    .lists
+                    .get(index)
+                    .ok_or_else(|| Error::msg("owned symbol traversal lost list node"))?;
+                if !visited_lists[index] {
+                    visited_lists[index] = true;
+                    pending.push(node.tail);
+                    pending.push(node.head);
+                }
                 continue;
             }
-            let object = self.heap[index]
-                .as_ref()
-                .ok_or_else(|| Error::msg("owned value references a missing heap object"))?;
-            visited[index] = true;
-            object.trace(&mut |child| pending.push(child));
         }
         for symbol in structural_symbols {
             self.retain_symbol(symbol, resolve(symbol)?)?;
@@ -97,8 +98,9 @@ impl OwnedValue {
             mapping[old] = u32::try_from(unique.len() - 1).ok();
         }
         rewrite_symbol(&mut self.root, &mapping)?;
-        for object in self.heap.iter_mut().flatten() {
-            rewrite_object_symbols(object, &mapping)?;
+        for node in &mut self.lists {
+            rewrite_symbol(&mut node.head, &mapping)?;
+            rewrite_symbol(&mut node.tail, &mapping)?;
         }
         if let Some(structural) = self.structural.as_mut() {
             rewrite_structural_symbols(&mut structural.value, &mapping)?;
@@ -135,59 +137,4 @@ impl OwnedValue {
         }
         Ok(())
     }
-}
-
-fn rewrite_object_symbols(object: &mut HeapObj, mapping: &[Option<u32>]) -> Result<()> {
-    match object {
-        HeapObj::Pair { car, cdr } => {
-            rewrite_symbol(car, mapping)?;
-            rewrite_symbol(cdr, mapping)?;
-        }
-        HeapObj::Product { fields, .. } => {
-            for field in fields {
-                rewrite_symbol(field, mapping)?;
-            }
-        }
-        HeapObj::Enum { active_payload, .. } => {
-            for field in active_payload {
-                rewrite_symbol(field, mapping)?;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn rewrite_structural_symbols(value: &mut SemanticValue, mapping: &[Option<u32>]) -> Result<()> {
-    match &mut value.payload {
-        SemanticPayload::Static(crate::StaticStructuralLeaf::Symbol(symbol)) => {
-            *symbol = canonical_symbol(*symbol, mapping)?;
-        }
-        SemanticPayload::Product(fields)
-        | SemanticPayload::Enum {
-            active_payload: fields,
-            ..
-        } => {
-            for field in fields {
-                rewrite_structural_symbols(field, mapping)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn rewrite_symbol(value: &mut Value, mapping: &[Option<u32>]) -> Result<()> {
-    let Some(old) = value.as_symbol() else {
-        return Ok(());
-    };
-    *value = Value::from_symbol(canonical_symbol(old, mapping)?);
-    Ok(())
-}
-
-fn canonical_symbol(old: u32, mapping: &[Option<u32>]) -> Result<u32> {
-    mapping
-        .get(old as usize)
-        .copied()
-        .flatten()
-        .ok_or_else(|| Error::msg("owned symbol mapping is incomplete"))
 }

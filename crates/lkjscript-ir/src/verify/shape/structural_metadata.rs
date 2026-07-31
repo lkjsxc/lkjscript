@@ -10,8 +10,12 @@ use crate::{
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
     let memory = &program.memory;
     if memory.types.is_empty() && memory.layouts.is_empty() && memory.representations.is_empty() {
-        if memory.plan.is_resolved() {
-            return fail("SSA empty structural tables cannot carry a resolved MemoryPlanId");
+        if program.region_products.is_empty() {
+            if memory.plan.is_resolved() {
+                return fail("SSA empty structural tables cannot carry a resolved MemoryPlanId");
+            }
+        } else if !memory.plan.is_resolved() {
+            return fail("SSA region-product metadata requires a resolved MemoryPlanId");
         }
         return Ok(());
     }

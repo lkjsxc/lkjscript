@@ -39,8 +39,7 @@ impl Evaluator<'_> {
             .structural
             .runtime
             .projected(view)
-            .map_err(map_structural_error)
-            .cloned();
+            .map_err(map_structural_error);
         let ended = self
             .structural
             .runtime

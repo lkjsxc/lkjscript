@@ -84,10 +84,16 @@ pub(super) fn expect_pop(
 pub(super) fn expect_product(
     actual: Kind,
     expected: ProductId,
+    region: bool,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<()> {
-    if actual == Kind::Any || actual == Kind::Product(expected) {
+    let expected_kind = if region {
+        Kind::RegionProduct(expected)
+    } else {
+        Kind::Product(expected)
+    };
+    if actual == Kind::Any || actual == expected_kind {
         return Ok(());
     }
     Err(instruction_error(

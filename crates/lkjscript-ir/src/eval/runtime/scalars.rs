@@ -28,14 +28,13 @@ impl Evaluator<'_> {
                 Ok(EvalValue::Bool(same))
             }),
             Op::ListEqual => binary(&arguments, |left, right| {
-                let (EvalValue::List(left), EvalValue::List(right)) = (left, right) else {
+                let (EvalValue::SegmentedList(left), EvalValue::SegmentedList(right)) =
+                    (left, right)
+                else {
                     return Err(Flow::Trap("list-equal category mismatch".into()));
                 };
-                Ok(EvalValue::Bool(list_values_equal(
-                    left,
-                    right,
-                    self.config.max_list_equal_steps,
-                )?))
+                self.segmented_list_equal(*left, *right)
+                    .map(EvalValue::Bool)
             }),
             Op::F64BitsEqual => binary(&arguments, |left, right| {
                 Ok(EvalValue::Bool(
@@ -59,6 +58,40 @@ impl Evaluator<'_> {
             _ => unreachable!("runtime operation dispatched to the wrong family"),
         }
     }
+    fn segmented_list_equal(
+        &self,
+        mut left: lkjscript_core::SegmentedListKey,
+        mut right: lkjscript_core::SegmentedListKey,
+    ) -> std::result::Result<bool, Flow> {
+        let mut steps = 0_usize;
+        loop {
+            let left_view = self
+                .lists
+                .view(left)
+                .map_err(|error| Flow::Trap(format!("left segmented list: {error:?}")))?;
+            let right_view = self
+                .lists
+                .view(right)
+                .map_err(|error| Flow::Trap(format!("right segmented list: {error:?}")))?;
+            let (Some((left_value, left_tail)), Some((right_value, right_tail))) =
+                (left_view, right_view)
+            else {
+                return Ok(left_view.is_none() && right_view.is_none());
+            };
+            if steps >= self.config.max_list_equal_steps {
+                return Err(Flow::Trap("list-equal step limit exceeded".into()));
+            }
+            if !value_equal(left_value, right_value)? {
+                return Ok(false);
+            }
+            left = left_tail;
+            right = right_tail;
+            steps = steps
+                .checked_add(1)
+                .ok_or_else(|| Flow::Trap("list-equal step overflow".into()))?;
+        }
+    }
+
     pub(crate) fn numeric(
         &self,
         operation: RuntimeOp,

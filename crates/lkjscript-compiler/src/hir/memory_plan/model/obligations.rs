@@ -95,6 +95,7 @@ pub struct MemoryPlanWork {
     pub calls: u64,
     pub obligations: u64,
     pub type_nodes: u64,
+    pub witnesses: u64,
     pub type_edges: u64,
     pub scc_work: u64,
     pub aggregate_fields: u64,
@@ -117,6 +118,7 @@ pub struct HirMemoryPlan {
     pub calls: Vec<MemoryCallPlan>,
     pub obligations: Vec<MemoryObligation>,
     pub type_facts: Vec<MemoryTypeFact>,
+    pub witnesses: Vec<MemoryWitness>,
     pub destinations: Vec<MemoryDestinationPlan>,
     pub borrow_scopes: Vec<MemoryBorrowScopePlan>,
     pub drop_paths: Vec<MemoryDropPathPlan>,
@@ -135,6 +137,10 @@ impl HirMemoryPlan {
 
     pub fn type_fact(&self, id: MemoryTypeFactId) -> Option<&MemoryTypeFact> {
         id.index().and_then(|index| self.type_facts.get(index))
+    }
+
+    pub fn witness(&self, id: MemoryWitnessId) -> Option<&MemoryWitness> {
+        self.witnesses.iter().find(|witness| witness.id == id)
     }
 
     pub fn destination(&self, id: MemoryDestinationId) -> Option<&MemoryDestinationPlan> {

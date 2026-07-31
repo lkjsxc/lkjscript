@@ -107,22 +107,7 @@ pub(super) fn assert_unique_metrics(stats: &JitStats, proof: bool) {
         ),
         (0, 0, 0)
     );
-    assert_eq!(
-        (
-            stats.collector_runtime_invocations,
-            stats.allocations,
-            stats.collections
-        ),
-        (0, 0, 0)
-    );
-    assert_eq!(
-        (
-            stats.maximum_roots,
-            stats.runtime_heap_attempts,
-            stats.barrier_count
-        ),
-        (0, 0, 0)
-    );
+    assert_eq!(stats.runtime_heap_attempts, 0);
     assert_eq!(
         (
             stats.native_unique.live_owners,
@@ -132,20 +117,12 @@ pub(super) fn assert_unique_metrics(stats: &JitStats, proof: bool) {
         ),
         (0, 0, 0, 0)
     );
-    assert!(stats
-        .code_objects
-        .iter()
-        .all(|object| object.safepoint_count == 0
-            && !object
-                .runtime_calls
-                .contains(&RuntimeCallSlot::CollectReference)
-            && !object
-                .runtime_calls
-                .contains(&RuntimeCallSlot::HeapDispatch)
-            && !object
-                .runtime_calls
-                .contains(&RuntimeCallSlot::PublishSafepoint)
-            && object.wx_transition_verified));
+    assert!(stats.code_objects.iter().all(|object| {
+        !object
+            .runtime_calls
+            .contains(&RuntimeCallSlot::HeapDispatch)
+            && object.wx_transition_verified
+    }));
     if proof {
         assert!(stats.optimizing_native_entries > 0);
         assert_eq!(

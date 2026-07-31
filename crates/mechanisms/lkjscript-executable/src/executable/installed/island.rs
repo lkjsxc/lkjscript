@@ -83,14 +83,10 @@ impl InstalledImage {
             native_entries,
             peak_active_frame_depth: state.peak_active_depth,
             active_frame_depth: 0,
-            collection_calls: 0,
-            maximum_roots: 0,
-            exact_root_counts: Vec::new(),
             peak_native_stack_bytes: state.peak_native_stack_bytes,
             reserved_native_stack_bytes: 0,
             heap_operation_attempts: 0,
             heap_operation_successes: 0,
-            barrier_count: 0,
             peak_active_value_homes: state.peak_active_value_homes,
             active_value_homes: 0,
             resource_calls: state.resource_calls,
@@ -98,7 +94,6 @@ impl InstalledImage {
             structural_calls: state.structural_calls,
             cleanup_failures: state.cleanup_failures,
             omitted_cleanup_failures: state.omitted_cleanup_failures,
-            collector_runtime: false,
         })
     }
 }

@@ -22,11 +22,18 @@ impl InstallableImage {
                     .flat_map(|frame| frame.homes.iter().map(|home| home.value_type)),
             );
         let mut has_reference = false;
+        let mut has_invocation_reference = false;
         let mut has_resource = false;
         let mut has_unique = false;
         let mut has_structural = false;
         for value_type in value_types {
             has_reference |= matches!(value_type, ValueType::Reference(_));
+            has_invocation_reference |= matches!(
+                value_type,
+                ValueType::Reference(
+                    ReferenceType::List(_, _) | ReferenceType::RegionProduct(_, _)
+                )
+            );
             has_resource |= matches!(
                 value_type,
                 ValueType::Capability(_) | ValueType::Resource(_)
@@ -48,17 +55,15 @@ impl InstallableImage {
             NativeExecutionDomain::CollectorFree
                 if has_reference
                     || (has_resource && (has_unique || has_structural))
-                    || !self.safepoints.is_empty()
-                    || !self.root_requirements.is_empty()
                     || !self.heap_runtime_sites.is_empty()
-                    || runtime_calls.contains(&RuntimeCallSlot::CollectReference)
-                    || runtime_calls.contains(&RuntimeCallSlot::HeapDispatch)
-                    || runtime_calls.contains(&RuntimeCallSlot::PublishSafepoint) =>
+                    || runtime_calls.contains(&RuntimeCallSlot::HeapDispatch) =>
             {
                 Err(ImageIntegrityError::ExecutionDomain)
             }
-            NativeExecutionDomain::LegacyHeap
-                if has_island_value || runtime_calls.contains(&RuntimeCallSlot::StdinHandle) =>
+            NativeExecutionDomain::InvocationRegion
+                if !has_invocation_reference
+                    || has_island_value
+                    || runtime_calls.contains(&RuntimeCallSlot::StdinHandle) =>
             {
                 Err(ImageIntegrityError::ExecutionDomain)
             }

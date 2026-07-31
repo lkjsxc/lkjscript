@@ -60,7 +60,7 @@ pub(crate) fn verified_ssa(hir: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "frames",
                     "frames",
-                    "exact safepoints frame states and roots",
+                    "exact proof frame states and failure cleanup obligations",
                 ))
                 .fact(fact(
                     "charges",

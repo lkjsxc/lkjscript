@@ -61,7 +61,7 @@ pub enum InvocationError {
     InvalidNativeStatus(u32),
     InvalidNativeTrap(u32),
     InvalidBoolReturn(u64),
-    RootCapacityExceeded,
+    RuntimeValueCapacityExceeded,
     InvalidActiveFrame,
     LeakedActiveFrames(usize),
     ExecutionDomain,
@@ -98,8 +98,8 @@ impl fmt::Display for InvocationError {
                 formatter,
                 "generated code returned non-canonical Bool {value}"
             ),
-            Self::RootCapacityExceeded => {
-                formatter.write_str("native root materialization capacity is exceeded")
+            Self::RuntimeValueCapacityExceeded => {
+                formatter.write_str("native runtime-value capacity is exceeded")
             }
             Self::InvalidActiveFrame => {
                 formatter.write_str("generated active-frame metadata is invalid")
@@ -123,7 +123,6 @@ impl std::error::Error for InvocationError {}
 pub enum NativeResourceLimitKind {
     PollFuel,
     ActiveFrames,
-    MaterializedRoots,
     RuntimeService,
     NativeStackBytes,
     ActiveValues,

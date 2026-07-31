@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-from jit_protocol.constants import CASE_NAMES, EXACT_I64_1, EXACT_I64_3333
+from jit_protocol.constants import CASE_NAMES, EXACT_I64_42, EXACT_I64_3333
 from jit_protocol.evidence import validate_allocation_sample
 from jit_protocol.process import engine_command, run_silent
 from jit_protocol.statistics import run_metric_sample, summarize
@@ -21,7 +21,7 @@ def run_oracles(root, binary, optimizing, allocation, cases):
     if vm_oracle["metrics"]["jit"] is not None:
         raise RuntimeError("reference VM oracle unexpectedly reported JIT state")
     allocation_check = run_metric_sample(
-        root, binary, allocation, "optimizing-jit", EXACT_I64_1, tier="optimizing"
+        root, binary, allocation, "optimizing-jit", EXACT_I64_42, tier="optimizing"
     )
     validate_allocation_sample(allocation_check)
     return checks, vm_oracle, allocation_check

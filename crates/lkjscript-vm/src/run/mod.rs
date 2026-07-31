@@ -1,5 +1,4 @@
 //! Bytecode interpreter over a validated immutable chunk.
-
 mod calls;
 mod control;
 mod data;
@@ -12,16 +11,20 @@ mod numeric;
 mod product;
 mod state;
 mod structural_ops;
+#[cfg(test)]
+#[path = "data/test_support.rs"]
+mod test_support;
 pub(crate) mod unique;
+#[cfg(test)]
+pub(crate) use test_support::test_chunk;
 mod unique_ops;
 
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    CleanupFailures, CleanupPhase, CleanupSubject, Constant, EnumConstructionRef, EnumFieldRef,
-    EnumId, EnumVariantRef, Error, ErrorClass, ExecutionConfig, ExecutionOutcome,
-    FailureCleanupAction, GcConfig, GcHeap as Arena, HeapObj, HostError, Op, ProductFieldRef,
-    ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
+    CleanupFailures, CleanupPhase, CleanupSubject, Constant, EnumFieldRef, EnumId, EnumVariantRef,
+    Error, ErrorClass, ExecutionConfig, ExecutionOutcome, FailureCleanupAction, HostError, Op,
+    ProductFieldRef, ProductId, ResourceLimitKind, Result, Trap, ValidatedChunk, Value, VariantId,
     MAX_LIST_EQUAL_STEPS, MAX_PRODUCT_FIELDS,
 };
 #[cfg(feature = "jit")]
@@ -42,6 +45,7 @@ pub(crate) struct Frame {
     pub locals_base: usize,
     pub unique_places: Vec<unique::RuntimePlace>,
     pub borrowed_resources: Vec<Value>,
+    pub return_type_variable_representation: Option<lkjscript_core::StructuralRepresentationId>,
 }
 
 enum Stop {
@@ -124,7 +128,8 @@ pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) globals: Vec<Value>,
     pub(crate) stack: Vec<Value>,
     pub(crate) frames: Vec<Frame>,
-    pub(crate) arena: Arena,
+    pub(crate) lists: Option<lkjscript_core::SegmentedListArena<Value>>,
+    pub(crate) region_products: Option<lkjscript_core::RegionProductArena<Value>>,
     pub(crate) jit: J,
     pub(crate) exit_code: Option<i32>,
     pub(crate) inputs: ExecutionInputs,
@@ -132,51 +137,17 @@ pub struct Vm<'a, J: RuntimeTier> {
     pub(crate) unique: unique::UniqueRuntime,
     pub(crate) structural: Option<structural_ops::StructuralInvocation>,
     structural_initialization_error: Option<Error>,
+    list_initialization_error: Option<Error>,
+    region_product_initialization_error: Option<Error>,
     config: ExecutionConfig,
     fuel_remaining: u64,
     output_bytes: usize,
     allocation_error: Option<Error>,
     cleanup_failures: CleanupFailures,
     logical_aggregate_constructions: u64,
+    list_allocations: u64,
+    region_product_allocations: u64,
     started: Instant,
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used)]
-pub(crate) fn test_chunk() -> ValidatedChunk {
-    let mut chunk = lkjscript_core::Chunk::new();
-    chunk.main.emit(lkjscript_core::Op::Unit);
-    chunk.main.emit(lkjscript_core::Op::Return);
-    chunk.protos.push(lkjscript_core::FunctionProto {
-        name: "test-function".into(),
-        arity: 0,
-        locals: 0,
-        memory_plan: None,
-        parameter_structurals: Vec::new(),
-        parameter_structural_places: Vec::new(),
-        return_structural: None,
-        parameter_resources: Vec::new(),
-        parameter_resource_places: Vec::new(),
-        return_resource: None,
-        parameter_uniques: Vec::new(),
-        parameter_unique_places: Vec::new(),
-        return_unique: None,
-        unique_places: 0,
-        failure_cleanups: Vec::new(),
-        failure_cleanup_ranges: Vec::new(),
-        code: vec![
-            lkjscript_core::Op::Unit as u8,
-            lkjscript_core::Op::Return as u8,
-        ],
-    });
-    lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
-        .expect("VM unit-test chunk validates")
-}
-
-fn is_structural_runtime_value(value: Value) -> bool {
-    value.as_structural_root().is_some()
-        || value.as_structural_view().is_some()
-        || value.as_structural_destination().is_some()
 }
 
 fn outcome_from_error(error: Error) -> ExecutionOutcome {

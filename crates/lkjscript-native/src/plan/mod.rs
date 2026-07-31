@@ -6,7 +6,6 @@ use crate::{BackendLimits, NativeError};
 
 mod builder;
 mod comparisons;
-mod enum_heap_validity;
 mod error;
 mod heap;
 mod heap_descriptor;

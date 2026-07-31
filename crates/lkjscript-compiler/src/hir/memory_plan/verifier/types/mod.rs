@@ -7,6 +7,7 @@ mod plan;
 mod recursive;
 mod scc;
 mod support;
+mod witness;
 
 pub(super) use graph::*;
 pub(super) use plan::*;

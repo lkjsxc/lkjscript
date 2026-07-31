@@ -1,9 +1,10 @@
 use std::num::NonZeroU32;
 
+use super::super::image::{discard_semantic, prepare_discard};
 use super::{
-    SemanticValue, StructuralDestinationKey, StructuralEventKind, StructuralInitializationFailure,
-    StructuralKind, StructuralType, StructuralValueError, StructuralValueLimit,
-    StructuralValueRuntime, TreeFacts,
+    SemanticValue, StructuralDestinationKey, StructuralEventKind, StructuralImage,
+    StructuralInitializationFailure, StructuralKind, StructuralType, StructuralValueError,
+    StructuralValueLimit, StructuralValueRuntime, TreeFacts,
 };
 
 #[derive(Debug)]
@@ -17,7 +18,7 @@ pub(super) struct DestinationRecord {
     pub value_type: StructuralType,
     pub shape: DestinationShape,
     pub field_types: Vec<StructuralType>,
-    pub values: Vec<Option<SemanticValue>>,
+    pub values: Vec<Option<StructuralImage>>,
     pub facts: Vec<Option<TreeFacts>>,
     pub order: Vec<u16>,
     pub total: TreeFacts,
@@ -69,19 +70,13 @@ impl StructuralValueRuntime {
             ));
         }
         let mut values = Vec::new();
-        values
-            .try_reserve_exact(field_types.len())
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
+        values.try_reserve_exact(field_types.len())?;
         values.resize_with(field_types.len(), || None);
         let mut facts = Vec::new();
-        facts
-            .try_reserve_exact(field_types.len())
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
+        facts.try_reserve_exact(field_types.len())?;
         facts.resize(field_types.len(), None);
         let mut order = Vec::new();
-        order
-            .try_reserve_exact(field_types.len())
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
+        order.try_reserve_exact(field_types.len())?;
         let key = self.allocate_destination(DestinationRecord {
             value_type,
             shape,
@@ -103,56 +98,45 @@ impl StructuralValueRuntime {
         field: u16,
         value: SemanticValue,
     ) -> Result<(), StructuralInitializationFailure> {
-        let result = self.initialize_node_inner(key, field, &value);
-        let facts = match result {
+        if let Err(error) = self.preflight_field_type(key, field, value.value_type) {
+            return Err(StructuralInitializationFailure { error, value });
+        }
+        let facts = match self.validate_tree(&value) {
             Ok(facts) => facts,
             Err(error) => return Err(StructuralInitializationFailure { error, value }),
         };
-        let record = match self.destination_mut(key) {
-            Ok(record) => record,
+        if let Err(error) = self.preflight_field(key, field, value.value_type, facts) {
+            return Err(StructuralInitializationFailure { error, value });
+        }
+        let mut discard = match prepare_discard(facts) {
+            Ok(stack) => stack,
             Err(error) => return Err(StructuralInitializationFailure { error, value }),
         };
-        let Some(total) = record.total.checked_add(facts) else {
-            return Err(StructuralInitializationFailure {
-                error: StructuralValueError::InvariantViolation,
-                value,
-            });
+        let image = match StructuralImage::build(&value, facts, self.limits) {
+            Ok(image) => image,
+            Err(error) => return Err(StructuralInitializationFailure { error, value }),
         };
-        let index = usize::from(field);
-        record.values[index] = Some(value);
-        record.facts[index] = Some(facts);
-        record.order.push(field);
-        record.total = total;
-        self.metrics.initializations = self.metrics.initializations.saturating_add(1);
-        self.metrics.destination_fields_initialized = self
-            .metrics
-            .destination_fields_initialized
-            .saturating_add(1);
-        self.record(
-            StructuralEventKind::Initialize,
-            key.slot(),
-            u64::from(field),
-        );
-        Ok(())
+        match self.initialize_image(key, field, image, facts) {
+            Ok(()) => {
+                discard_semantic(value, &mut discard);
+                Ok(())
+            }
+            Err(failure) => Err(StructuralInitializationFailure {
+                error: failure.0,
+                value,
+            }),
+        }
     }
 
-    pub(super) fn initialize_node_inner(
+    pub(super) fn preflight_field(
         &self,
         key: StructuralDestinationKey,
         field: u16,
-        value: &SemanticValue,
-    ) -> Result<TreeFacts, StructuralValueError> {
+        actual: StructuralType,
+        facts: TreeFacts,
+    ) -> Result<(), StructuralValueError> {
+        self.preflight_field_type(key, field, actual)?;
         let record = self.destination(key)?;
-        let index = usize::from(field);
-        let expected = *record
-            .field_types
-            .get(index)
-            .ok_or(StructuralValueError::FieldOutOfRange)?;
-        if record.values[index].is_some() {
-            return Err(StructuralValueError::FieldAlreadyInitialized);
-        }
-        self.require_type(value.value_type, expected)?;
-        let facts = self.validate_tree(value)?;
         let total = record
             .total
             .checked_add(facts)
@@ -167,34 +151,41 @@ impl StructuralValueRuntime {
                 StructuralValueLimit::PayloadBytes,
             ));
         }
-        Ok(facts)
+        Ok(())
     }
 
-    pub(super) fn destination(
-        &self,
-        key: StructuralDestinationKey,
-    ) -> Result<&DestinationRecord, StructuralValueError> {
-        match self.destinations.get(key.slot() as usize) {
-            Some(DestinationSlot::Live { generation, record })
-                if generation.get() == key.generation() =>
-            {
-                Ok(record)
-            }
-            _ => Err(StructuralValueError::StaleDestination),
-        }
-    }
-
-    pub(super) fn destination_mut(
+    pub(super) fn initialize_image(
         &mut self,
         key: StructuralDestinationKey,
-    ) -> Result<&mut DestinationRecord, StructuralValueError> {
-        match self.destinations.get_mut(key.slot() as usize) {
-            Some(DestinationSlot::Live { generation, record })
-                if generation.get() == key.generation() =>
-            {
-                Ok(record)
-            }
-            _ => Err(StructuralValueError::StaleDestination),
+        field: u16,
+        image: StructuralImage,
+        facts: TreeFacts,
+    ) -> Result<(), Box<(StructuralValueError, StructuralImage)>> {
+        if let Err(error) = self.preflight_field(key, field, image.root().value_type(), facts) {
+            return Err(Box::new((error, image)));
         }
+        let record = match self.destination_mut(key) {
+            Ok(record) => record,
+            Err(error) => return Err(Box::new((error, image))),
+        };
+        let Some(total) = record.total.checked_add(facts) else {
+            return Err(Box::new((StructuralValueError::ArithmeticOverflow, image)));
+        };
+        let index = usize::from(field);
+        record.values[index] = Some(image);
+        record.facts[index] = Some(facts);
+        record.order.push(field);
+        record.total = total;
+        self.metrics.initializations = self.metrics.initializations.saturating_add(1);
+        self.metrics.destination_fields_initialized = self
+            .metrics
+            .destination_fields_initialized
+            .saturating_add(1);
+        self.record(
+            StructuralEventKind::Initialize,
+            key.slot(),
+            u64::from(field),
+        );
+        Ok(())
     }
 }

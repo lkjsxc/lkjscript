@@ -46,39 +46,11 @@ impl NativeCallState<'_> {
         self.active_frames[self.active_depth] = ActiveFrame {
             function_ordinal,
             rbp,
-            safepoint: INVALID_SAFEPOINT,
             reserved_bytes: reservation.frame_bytes,
             value_homes: reservation.value_homes,
         };
         self.active_depth += 1;
         self.peak_active_depth = self.peak_active_depth.max(self.active_depth);
-    }
-
-    pub(in crate::executable) fn publish_safepoint(&mut self, safepoint: u32) {
-        if self.status != 0 {
-            return;
-        }
-        let Some(frame) = self
-            .active_frames
-            .get_mut(self.active_depth.saturating_sub(1))
-        else {
-            self.invalidate_active_frame();
-            return;
-        };
-        let Some(entry) = self.image.entries().get(frame.function_ordinal as usize) else {
-            self.invalidate_active_frame();
-            return;
-        };
-        let valid = self
-            .image
-            .safepoints()
-            .get(safepoint as usize)
-            .is_some_and(|map| map.id() == safepoint && map.function() == entry.function());
-        if !valid {
-            self.invalidate_active_frame();
-            return;
-        }
-        frame.safepoint = safepoint;
     }
 
     pub(in crate::executable) fn unregister_frame(&mut self, function_ordinal: u32, rbp: *mut u8) {

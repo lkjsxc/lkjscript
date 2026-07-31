@@ -20,13 +20,14 @@ pub(in crate::codegen) fn install_structural_metadata(
             })
         })
     }) {
+        if !program.region_products.is_empty() {
+            chunk.memory_plan = Some(BytecodeMemoryPlanId::new(program.memory.plan.bytes()));
+        }
         return Ok(());
     }
     if program.memory.types.is_empty() {
         if !program.memory.layouts.is_empty() || !program.memory.representations.is_empty() {
-            return Err(Error::msg(
-                "SSA structural metadata tables are inconsistent",
-            ));
+            return Err(Error::msg("SSA structural metadata tables are inconsistent"));
         }
         return Ok(());
     }

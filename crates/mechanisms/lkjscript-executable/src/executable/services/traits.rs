@@ -1,7 +1,6 @@
 use super::*;
 
-/// Safe runtime boundary. Implementations receive only copied typed values and
-/// roots; frame addresses and stack traversal remain private to this crate.
+/// Safe runtime boundary. Implementations receive only copied typed values.
 pub trait NativeIslandRuntimeServices: NativeStructuralRuntimeServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError>;
     fn new_byte_vector(&mut self, size: i64) -> Result<NativeUnique, NativeServiceError>;
@@ -66,19 +65,6 @@ pub trait NativeIslandRuntimeServices: NativeStructuralRuntimeServices {
 }
 
 pub trait NativeRuntimeServices {
-    fn collect_references(&mut self, roots: &mut [NativeRoot]) -> Result<(), NativeServiceError>;
-
-    /// Optionally collect for a verified site. Sys writes any updated roots
-    /// back to generated homes before calling `heap_operation`.
-    fn prepare_heap_operation(
-        &mut self,
-        _site: &HeapRuntimeSite,
-        _arguments: &[NativeValue],
-        _roots: &mut [NativeRoot],
-    ) -> Result<bool, NativeServiceError> {
-        Ok(false)
-    }
-
     fn heap_operation(
         &mut self,
         _site: &HeapRuntimeSite,

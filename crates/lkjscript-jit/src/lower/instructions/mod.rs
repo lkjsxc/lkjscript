@@ -12,7 +12,7 @@ include!("imports.rs");
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
-    program: &lkjscript_ir::Program,
+    _program: &lkjscript_ir::Program,
     function: &Function,
     instruction: &Instruction,
     block: lkjscript_native::BlockId,
@@ -122,16 +122,12 @@ pub(super) fn lower_instruction(
         }
         InstructionKind::EnumValue { .. }
         | InstructionKind::EnumIsVariant { .. }
-        | InstructionKind::EnumField { .. } => lower_enum_instruction(
-            program,
-            function,
-            instruction,
-            block,
-            locals,
-            value_types,
-            layouts,
-            builder,
-        ),
+        | InstructionKind::EnumField { .. } => {
+            return unsupported_operation(
+                function.id,
+                "enum instruction without structural metadata and operations",
+            );
+        }
         InstructionKind::Borrow { kind, value, .. } => {
             lower_borrow(function, *kind, *value, block, locals, value_types, builder)
         }

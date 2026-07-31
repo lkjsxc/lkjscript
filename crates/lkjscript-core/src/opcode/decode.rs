@@ -188,7 +188,7 @@ impl Op {
         Self::StructuralDestinationFinish, Self::StructuralDestinationAbort,
         Self::StructuralAggregateFieldBorrow, Self::StructuralAggregateTag,
         Self::StructuralAggregateConsumePayload, Self::StructuralStringUtf8View,
-        Self::StructuralCopy, Self::ResourceDrop,
+        Self::StructuralCopy, Self::ResourceDrop, Self::StructuralAggregateFieldCopy,
     ];
 
     pub fn from_byte(byte: u8) -> Option<Self> {

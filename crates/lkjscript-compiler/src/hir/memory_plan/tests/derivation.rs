@@ -53,10 +53,11 @@ fn products_fold_copy_immutable_affine_and_nested_fields() -> Result<()> {
         Vec::new(),
     );
     let plan = derive(&hir_program)?;
-    assert_eq!(
-        fact(&plan, &MemoryType::Product(copy.name))?.mode,
-        MemoryAggregateMode::Copy
-    );
+    let copy_fact = fact(&plan, &MemoryType::Product(copy.name))?;
+    assert_eq!(copy_fact.mode, MemoryAggregateMode::Copy);
+    assert_eq!(copy_fact.root_projection, MemoryRootProjection::Structural);
+    assert_eq!(copy_fact.copy_share, MemoryCopySharePlan::StructuralCopy);
+    assert!(copy_fact.contains_dynamic_owner);
     assert_eq!(
         fact(&plan, &MemoryType::Product(immutable.name))?.mode,
         MemoryAggregateMode::ImmutableValue

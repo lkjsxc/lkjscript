@@ -27,18 +27,18 @@ impl Evaluator<'_> {
         if owner.value_type != value_type {
             return Err(Flow::Trap("payload consume owner type mismatch".into()));
         }
-        match &self
+        match self
             .structural
             .runtime
-            .value(owner.key, value_type)
+            .value_node(owner.key, value_type)
             .map_err(map_structural_error)?
-            .payload
+            .payload()
         {
-            lkjscript_core::SemanticPayload::Enum {
+            StructuralNodeView::Enum {
                 tag: actual,
-                active_payload,
-            } if *actual == tag && active_payload.len() == 1 => {}
-            lkjscript_core::SemanticPayload::Enum { .. } => {
+                fields,
+            } if actual == tag && fields.len() == 1 => {}
+            StructuralNodeView::Enum { .. } => {
                 return Err(Flow::Trap(
                     "payload consume selected inactive variant".into(),
                 ))

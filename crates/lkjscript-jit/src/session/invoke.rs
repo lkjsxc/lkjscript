@@ -79,34 +79,15 @@ impl JitSession {
                 &config,
                 execution,
             ),
-            lkjscript_native::NativeExecutionDomain::LegacyHeap => {
-                self.collector_runtime_invocations =
-                    self.collector_runtime_invocations.saturating_add(1);
-                let heap = self.heap.get_or_insert_with(GcHeap::default);
-                heap.set_config(GcConfig {
-                    max_allocations: execution.max_allocations,
-                    max_heap_bytes: execution.max_heap_bytes,
-                    collect_before_every_allocation: self.config.force_gc_before_allocation,
-                    ..heap.config()
-                });
-                let force_collection = self.config.force_gc_before_allocation;
-                let enums = &self.program.program().enums;
-                let mut services = JitHeapServices::new(
-                    heap,
-                    enums,
-                    force_collection,
-                    execution.max_logical_aggregate_constructions,
-                );
-                let report = self.objects[object_index].installed.invoke_with_services(
+            lkjscript_native::NativeExecutionDomain::InvocationRegion => self
+                .invoke_invocation_region(
+                    function,
+                    object_index,
                     native,
                     arguments,
                     &config,
-                    &mut services,
-                );
-                self.last_runtime_trap = services.last_trap.take();
-                self.last_runtime_resource = services.last_resource;
-                report.map_err(|error| invocation_error(function, error))
-            }
+                    execution,
+                ),
         };
         if self.links.is_some() {
             self.native_to_vm_transitions = self.native_to_vm_transitions.saturating_add(1);
@@ -130,14 +111,12 @@ impl JitSession {
         self.structural_runtime_calls = self
             .structural_runtime_calls
             .saturating_add(report.structural_calls());
-        self.maximum_roots = self.maximum_roots.max(report.maximum_roots());
         self.runtime_heap_attempts = self
             .runtime_heap_attempts
             .saturating_add(report.heap_operation_attempts());
         self.runtime_heap_successes = self
             .runtime_heap_successes
             .saturating_add(report.heap_operation_successes());
-        self.barrier_count = self.barrier_count.saturating_add(report.barrier_count());
         self.peak_native_frame_depth = self
             .peak_native_frame_depth
             .max(report.peak_active_frame_depth());
@@ -177,8 +156,7 @@ impl JitSession {
                     NativeResourceLimitKind::PollFuel => ResourceLimitKind::InstructionFuel,
                     NativeResourceLimitKind::ActiveFrames
                     | NativeResourceLimitKind::NativeStackBytes => ResourceLimitKind::FrameDepth,
-                    NativeResourceLimitKind::MaterializedRoots
-                    | NativeResourceLimitKind::ActiveValues => ResourceLimitKind::StackValues,
+                    NativeResourceLimitKind::ActiveValues => ResourceLimitKind::StackValues,
                     NativeResourceLimitKind::RuntimeService => self
                         .last_runtime_resource
                         .unwrap_or(ResourceLimitKind::Allocations),

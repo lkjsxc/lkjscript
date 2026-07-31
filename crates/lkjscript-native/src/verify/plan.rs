@@ -43,9 +43,6 @@ pub(super) fn verify_plan_inner(
     let mut total_blocks = 0_usize;
     let mut total_values = 0_usize;
     let mut total_work = 0_u64;
-    let mut total_root_records = 0_u64;
-    let maximum_root_records = limits.max_metadata_bytes() / ROOT_RECORD_METADATA_BYTES;
-    let mut root_requirements = Vec::with_capacity(declarations.len());
 
     for declaration in declarations {
         if !source_functions.insert(declaration.source_function) {
@@ -96,21 +93,12 @@ pub(super) fn verify_plan_inner(
         if total_work > limits.max_work_units() {
             return Err(VerificationError::LimitExceeded("work units"));
         }
-        let requirements = derive_call_root_requirements(
-            &function,
-            &mut total_work,
-            limits.max_work_units(),
-            &mut total_root_records,
-            maximum_root_records,
-        )?;
-        root_requirements.push(requirements);
         functions.push(function);
     }
 
     Ok(VerifiedMachinePlan {
         functions,
         static_bytes,
-        root_requirements,
         limits,
         work_units: total_work,
     })

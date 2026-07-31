@@ -1,5 +1,4 @@
 use super::*;
-
 mod bytes;
 mod bytes_edges;
 mod bytes_graph;
@@ -14,7 +13,6 @@ use failure_cleanup::preflight_failure_cleanups;
 use runtime::*;
 pub(in crate::lower) use structural::{explicit_structural, unsupported_operation};
 use structural::{preflight_instruction_type, require_domain_type};
-
 pub(super) fn preflight_function(
     program: &lkjscript_ir::Program,
     function: &Function,
@@ -72,6 +70,9 @@ pub(super) fn preflight_function(
                     return unsupported_operation(function.id, "copy of affine value");
                 }
                 InstructionKind::Copy(_) => {}
+                InstructionKind::ProductField { value, .. }
+                    if domain == LoweringDomain::StructuralIsland
+                        && structural::selected_structural_source(function, *value, layouts)? => {}
                 kind if explicit_structural(kind) && domain == LoweringDomain::StructuralIsland => {
                 }
                 InstructionKind::StructuralPublish { .. }

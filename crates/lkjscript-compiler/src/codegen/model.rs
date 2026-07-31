@@ -1,10 +1,8 @@
 mod emitter;
 mod failure;
+use crate::codegen::*;
 pub(in crate::codegen) use emitter::Emitter;
 use failure::*;
-
-use crate::codegen::*;
-
 pub(in crate::codegen) fn compile_function(
     chunk: &mut Chunk,
     globals: &HashMap<FunctionId, u16>,
@@ -58,7 +56,31 @@ pub(in crate::codegen) fn compile_function(
                     .transpose()
             })
             .collect::<Result<Vec<_>>>()?,
+        parameter_type_variables: function
+            .signature
+            .parameters
+            .iter()
+            .map(|ty| type_variable(&function.signature, ty))
+            .collect::<Result<Vec<_>>>()?,
+        parameter_copy_kinds: function
+            .signature
+            .parameters
+            .iter()
+            .map(copy_parameter_kind)
+            .collect(),
+        return_copy_kind: copy_parameter_kind(&function.signature.result),
+        parameter_region_products: function
+            .signature
+            .parameters
+            .iter()
+            .map(|ty| region_product(chunk, ty))
+            .collect(),
+        return_region_product: region_product(chunk, &function.signature.result),
         return_structural: structural_owner_representation(chunk, &function.signature.result),
+        return_type_variable: type_variable(
+            &function.signature,
+            function.signature.result.as_ref(),
+        )?,
         parameter_resources: function
             .signature
             .parameters
@@ -131,53 +153,7 @@ pub(in crate::codegen) fn compile_function(
         instruction_links: Vec::new(),
         failure_cleanup_map,
     };
-    for block in &function.blocks {
-        let offset = emitter.offset()?;
-        emitter.block_offsets.insert(block.id, offset);
-        emitter.block_links.push(BytecodeBlockLink {
-            block: block.id,
-            offset: u32::from(offset),
-        });
-        let tail_call = block.instructions.last().and_then(|instruction| {
-            if matches!(&instruction.kind, InstructionKind::Call { .. })
-                && instruction.metadata.failure_cleanup.is_none()
-                && tail_path_returns(function, &block.terminator, instruction.id)
-            {
-                Some(instruction.id)
-            } else {
-                None
-            }
-        });
-        for instruction in &block.instructions {
-            let offset = emitter.offset()?;
-            emitter.instruction_links.push(BytecodeInstructionLink {
-                value: instruction.id,
-                offset: u32::from(offset),
-            });
-            emitter.emit_instruction(instruction, tail_call != Some(instruction.id))?;
-            let end = emitter.offset()?;
-            let unentered_plan = emitter.intern_unentered_cleanup(instruction)?;
-            emitter.record_failure_range(
-                offset,
-                end,
-                instruction.metadata.failure_cleanup.map(|id| id.raw()),
-                unentered_plan,
-            )?;
-        }
-        if tail_call.is_some() {
-            emitter.proto.emit(Op::Return);
-        } else {
-            let offset = emitter.offset()?;
-            emitter.emit_terminator(block.id, &block.terminator)?;
-            let end = emitter.offset()?;
-            emitter.record_failure_range(
-                offset,
-                end,
-                block.metadata.failure_cleanup.map(|id| id.raw()),
-                None,
-            )?;
-        }
-    }
+    emit_blocks(&mut emitter)?;
     emitter.patch_jumps()?;
     Ok((
         emitter.proto,

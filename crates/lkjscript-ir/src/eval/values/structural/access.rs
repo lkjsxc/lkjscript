@@ -1,6 +1,7 @@
 use lkjscript_core::{
     InlineStructuralValue, SemanticPayload, SemanticValue, StructuralFieldPath, StructuralKind,
-    StructuralProjection, StructuralType, StructuralValueError, StructuralValueKey,
+    StructuralNodeView, StructuralProjection, StructuralType, StructuralValueError,
+    StructuralValueKey,
 };
 
 use crate::eval::{EvalStructuralOwner, EvalValue, Evaluator, Flow};
@@ -48,14 +49,14 @@ impl Evaluator<'_> {
             _ => {}
         }
         let (owner, value_type) = structural_root(value, StructuralKind::String)?;
-        let length = match &self
+        let length = match self
             .structural
             .runtime
-            .value(owner, value_type)
+            .value_node(owner, value_type)
             .map_err(map_structural_error)?
-            .payload
+            .payload()
         {
-            SemanticPayload::String(bytes) => bytes.len(),
+            StructuralNodeView::Bytes(bytes) => bytes.len(),
             _ => return Err(Flow::Trap("expected structural string payload".into())),
         };
         let end = u32::try_from(length)
@@ -104,16 +105,15 @@ impl Evaluator<'_> {
         }
         let (owner, value_type) = structural_root(value, StructuralKind::Path)?;
         let view = self.borrow_whole(owner, value_type)?;
-        let result = match &self
+        let result = self
             .structural
             .runtime
-            .projected(view)
-            .map_err(map_structural_error)?
-            .payload
-        {
-            SemanticPayload::Path(bytes) => copy_bytes(bytes),
-            _ => Err(Flow::Trap("expected structural path payload".into())),
-        };
+            .projected_node(view)
+            .map_err(map_structural_error)
+            .and_then(|node| match node.payload() {
+                StructuralNodeView::Bytes(bytes) => copy_bytes(bytes),
+                _ => Err(Flow::Trap("expected structural path payload".into())),
+            });
         let ended = self
             .structural
             .runtime

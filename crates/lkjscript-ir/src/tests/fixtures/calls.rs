@@ -14,6 +14,7 @@ pub(crate) fn bounded_call_program() -> Program {
     let resolved = Signature::monomorphic(vec![SsaType::I64], SsaType::I64);
     Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: vec![SourceMetadata {
             id: 0,
             path: "traits.lkjscript".into(),
@@ -81,7 +82,6 @@ pub(crate) fn bounded_call_program() -> Program {
                             metadata: InstructionMetadata {
                                 origin: Origin::SYNTHETIC,
                                 effects: EffectSet::PURE,
-                                safepoint: Safepoint::Required,
                                 failure: FailureBehavior::None,
                                 failure_cleanup: None,
                                 frame_state: Some(FrameState {

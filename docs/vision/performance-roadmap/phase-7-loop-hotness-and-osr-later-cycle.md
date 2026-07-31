@@ -46,16 +46,16 @@ gates.
 ## Native Representations
 
 Reference tagged `Value` is not the native hot-path ABI. Native lowering uses
-I64/F64/Bool scalars, typed pointer/length views, flattened products, specialized
-Option layouts, and typed heap references visible in precise stack maps. Generic
-code is monomorphized where measured code growth permits. Dynamic dispatch is
-explicit rather than the default call path.
+I64/F64/Bool scalars, typed pointer/length views, flattened products,
+specialized Option layouts, and typed structural homes with deterministic
+cleanup obligations. Generic code is monomorphized where measured code growth
+permits. Dynamic dispatch is explicit rather than the default call path.
 
 Vec, Slice, Bytes, Str, views, and fixed products are performance-default data
-shapes. Candidate memory strategies include unique owned buffers, regions,
-stack placement, worker-local generational collection, immutable shared bytes,
-and explicit GC references where cycles require them. These remain measured
-candidates, not assumed JIT results.
+shapes. Candidate memory strategies include unique owned buffers, ordinary or
+sealed regions, stack placement, pools, and immutable shared bytes. Tracing,
+generational collection, and explicit collector references are rejected
+fallbacks rather than later performance candidates.
 ## Runtime Observation And Privacy
 
 Function-entry, loop-backedge, and later selected block counters are bounded,

@@ -3,21 +3,21 @@
 ## Status
 
 <!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
-<!-- LKJ-STATUS id=collector-free-strings status=accepted-target -->
-<!-- LKJ-STATUS id=collector-free-products status=accepted-target -->
-<!-- LKJ-STATUS id=collector-free-enums status=accepted-target -->
-<!-- LKJ-STATUS id=collector-free-lists status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-strings status=current -->
+<!-- LKJ-STATUS id=collector-free-products status=current -->
+<!-- LKJ-STATUS id=collector-free-enums status=current -->
+<!-- LKJ-STATUS id=collector-free-lists status=current -->
 <!-- LKJ-STATUS id=collector-free-closures status=accepted-target -->
-<!-- LKJ-STATUS id=collector-free-runtime status=accepted-target -->
-<!-- LKJ-STATUS id=no-tracing-runtime status=accepted-target -->
+<!-- LKJ-STATUS id=collector-free-runtime status=current -->
+<!-- LKJ-STATUS id=no-tracing-runtime status=current -->
 
-**Accepted contract; production cutover is not Current.** The Current VM and native tiers still use the
-stable-index, non-moving tracing `GcHeap`. The Current inventory records that fact. No collector-free claim is
-valid until every production object family is migrated and the no-tracing gate is clean.
+**Current contract and implementation.** No tracing object family, liveness
+traversal, collector fallback, collecting poll, root/map service, barrier,
+configuration, or metric remains in production code. Unsupported aggregate
+shapes reject before executable publication.
 
 ## Decision
-
-[Research evidence](research-evidence.md), [plans](authoritative-memory-plan.md),
+[Research evidence](evidence/research-evidence.md), [plans](authoritative-memory-plan.md),
 [drop](deterministic-drop.md), [structural domains](structural-ownership-domains.md), and the
 [first island](collector-free-value-island.md) record the selected mechanisms and executable cut.
 
@@ -34,8 +34,7 @@ tracing liveness traversal or collector fallback. The compiler tries, in order:
 8. precise immutable acyclic reference counting only for retained
    counterexamples to every earlier choice.
 
-Tracing is not a fallback. The migration collector is a private differential
-control and must be deleted at cutover.
+Tracing is not a fallback. The migration collector and its differential controls are deleted.
 
 ## Terminology
 
@@ -157,29 +156,32 @@ frames retain owner, borrow, region, release, resource, deadline, cancellation,
 deoptimization, and transition metadata. Polls remain for budgets, deadlines,
 cancellation, tiering, OSR, and bounded release work; collecting polls do not.
 
-## Inventory And Migration
+## Final Runtime Form
+Dynamic ADTs and lists use flat typed images. Same-domain recursive edges are
+non-owning node IDs; shared immutable children are exact sealed dependencies.
+Private write-once builders publish only after validation. Release executes side
+drops and dependencies iteratively without traversing internal edges. Ordinary
+values are finite acyclic graphs; mutable identity cycles use typed pools.
 
-`lkjscript.memory-obligations` identifies the inventory schema and closed
-memory taxonomy. `lkjscript memory inventory [--json]` and
-`lkjscript memory explain <identity>` expose derived Current evidence, including
-collector dependencies and non-Current candidate plans. Inventory evidence does
-not override semantic authorities.
+Every exact instantiated type has a content-addressed static memory witness.
+Whole-program specialization is preferred; residual polymorphism passes one
+hidden witness through verified interfaces. Missing or mismatched witnesses,
+reflection, source-string dispatch, and tracing fallback are rejected.
 
-**Current initial compiler slice.** `ExecutableProgram` retains an independently
-recomputed SSA inventory for direct `byte-vector` owners, byte loans, and direct
-typed resources. It labels traced buffer storage and incomplete cleanup rather
-than pretending the target plan is Current. Aggregates and general storage
-planning remain absent.
+Persistent lists use unique front builders and sealed bounded segments with one
+coarse tail dependency. Segment size is measured and absent from source/wire
+semantics. Unique copying, regions, one-node sealed regions, segments, and a
+private per-node-count control are compared. Per-node counting is selected only
+if all earlier plans materially fail; losing code and negative evidence are
+removed and retained respectively. Sealed-region counts remain explicit coarse
+reference counting.
 
-Migration first makes HIR and SSA memory-complete, unboxes scalars, then moves
-static/byte values, ADTs, lists, closures, returned owners, compiler structures,
-VM storage, and generated execution. Exact root guarantees become exact owner,
-borrow, cleanup, region, pool, and resource guarantees. Root publication,
-writeback, mark/sweep, collection policy, barriers, collector metrics, and
-stable-handle indirection are removed only after stronger verification passes.
+The zero-family runtime has deleted legacy values, traced object storage,
+liveness roots/maps, barriers, collection services, collector configuration,
+collector metrics, and fallback. Deterministic frame ownership metadata and
+non-collection polls remain.
 
 ## Acceptance And Falsification
-
 Acceptance requires evaluator, VM, forced baseline JIT, and forced proof JIT
 execution with zero forced fallback; persistent, cyclic, compiler, Semantic
 Source, Web, game ECS/frame/world, database, closure, destruction, failure, and
@@ -193,8 +195,6 @@ precise immutable counting, and copying. No such counterexample is accepted.
 
 ## Rejected
 
-Rejected designs are process-lifetime arenas, hidden root scans, cycle
-collectors, universal atomic counting, strong count cycles, unbounded recursive
-release, unbounded deferred release, collector finalizers, manual memory APIs,
-source lifetime punctuation, untyped pool IDs, and separate backend memory
-semantics.
+Rejected designs are process-lifetime arenas, root scans, cycle collectors,
+universal atomic counting, strong cycles, unbounded release, finalizers, manual
+memory APIs, source lifetime syntax, untyped pool IDs, and backend divergence.

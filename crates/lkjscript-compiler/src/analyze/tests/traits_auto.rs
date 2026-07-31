@@ -12,7 +12,8 @@ fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles(
             &format!("accept/\n{value}\n/accept")
         )
     );
-    analyze_one(&copy_source).expect("nested immutable GC handles are copy within one worker");
+    analyze_one(&copy_source)
+        .expect("nested immutable aggregate values are copy within one worker");
     for worker_trait in ["send", "sync"] {
         let source = format!(
             "{nested_products}{}{}",
@@ -24,7 +25,7 @@ fn structural_auto_traits_cover_nested_products_and_reject_resources_and_cycles(
         );
         assert!(
             analysis_error(&source).contains("does not satisfy trait"),
-            "worker-local GC product unexpectedly satisfied {worker_trait}"
+            "worker-local aggregate unexpectedly satisfied {worker_trait}"
         );
     }
     for worker_trait in ["send", "sync"] {

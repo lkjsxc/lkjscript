@@ -1,16 +1,16 @@
 use std::collections::HashSet;
 
 use crate::image::{
-    entry_metadata, exact_safepoint, frame_facts, frame_home, heap_runtime_site, outcome_map_entry,
-    relocation, root_location, root_map_requirement, source_map_entry, structural_runtime_site,
-    trap_map_entry, FrameHomeKind, ImageContracts, ImageParts, InstallableImage,
-    NativeExecutionDomain, OutcomeKind, RelocationKind, RelocationTarget, RootLocation,
+    entry_metadata, frame_facts, frame_home, heap_runtime_site, outcome_map_entry, relocation,
+    source_map_entry, structural_runtime_site, trap_map_entry, FrameHomeKind, ImageContracts,
+    ImageParts, InstallableImage, NativeExecutionDomain, OutcomeKind, RelocationKind,
+    RelocationTarget,
 };
 use crate::plan::{
     BlockId, BoolComparison, F64Comparison, FunctionId, FunctionPlan, I64Comparison, Instruction,
     Operation, RuntimeCallSlot, RuntimeOutcome, Terminator, TrapCode, ValueId, ValueType,
 };
-use crate::verify::{CertifiedRoot, FunctionRootRequirements, VerifiedMachinePlan};
+use crate::verify::VerifiedMachinePlan;
 use crate::{EncodeError, NativeError};
 
 mod calls;
@@ -22,12 +22,10 @@ mod layouts;
 mod lifecycle;
 mod numeric;
 mod relocations;
-mod roots;
 
 pub use entry::encode;
 use layouts::*;
 use relocations::*;
-use roots::*;
 
 const SCRATCH_INTEGER_ARGUMENT_0: u8 = 16;
 const SCRATCH_INTEGER_ARGUMENT_1: u8 = 24;
@@ -75,12 +73,8 @@ struct FunctionEncoder<'a> {
     function: &'a FunctionPlan,
     function_ordinal: u32,
     signatures: &'a [(FunctionId, crate::Signature)],
-    execution_domain: NativeExecutionDomain,
-    collecting_functions: &'a HashSet<FunctionId>,
     bytes: &'a mut Vec<u8>,
     relocations: &'a mut Vec<crate::Relocation>,
-    safepoints: &'a mut Vec<crate::Safepoint>,
-    root_requirements: &'a mut Vec<crate::image::RootMapRequirement>,
     heap_runtime_sites: &'a mut Vec<crate::HeapRuntimeSite>,
     structural_runtime_sites: &'a mut Vec<crate::StructuralRuntimeSite>,
     source_map: &'a mut Vec<crate::SourceMapEntry>,
@@ -92,7 +86,6 @@ struct FunctionEncoder<'a> {
     trap_offsets: [Option<usize>; 3],
     status_return_offset: Option<usize>,
     unregistered_status_return_offset: Option<usize>,
-    certified_call_roots: &'a FunctionRootRequirements,
     frame_bytes: u32,
     maximum_code_bytes: usize,
 }

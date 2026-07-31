@@ -93,8 +93,8 @@ pub(crate) fn query(
                 ProducerStage::Ssa,
                 &revision,
             ),
-            frame_states_safepoints_roots: unavailable(
-                FactSchema::FrameStatesSafepointsRoots,
+            frame_states_cleanup_homes: unavailable(
+                FactSchema::FrameStatesCleanupHomes,
                 ProducerStage::Runtime,
                 &revision,
                 UnavailableReason::NotProduced,

@@ -6,26 +6,7 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
             "encoder-owned runtime call",
         ));
     }
-    let signature = slot
-        .plan_signature()
-        .ok_or(VerificationError::TypeMismatch(
-            "encoder-owned runtime call",
-        ))?;
     match slot {
-        RuntimeCallSlot::CollectReference
-            if signature.parameters()
-                == [ValueType::Reference(crate::ReferenceType::Product(
-                    crate::LayoutIdentity::product(0),
-                ))]
-                && signature.result()
-                    == ValueType::Reference(crate::ReferenceType::Product(
-                        crate::LayoutIdentity::product(0),
-                    )) => {}
-        RuntimeCallSlot::CollectReference => {
-            return Err(VerificationError::TypeMismatch(
-                "collecting runtime-call signature",
-            ));
-        }
         RuntimeCallSlot::IdentityI64
         | RuntimeCallSlot::Poll
         | RuntimeCallSlot::EnterFunction
@@ -62,7 +43,6 @@ pub(super) fn verify_runtime_slot(slot: RuntimeCallSlot) -> Result<(), Verificat
         | RuntimeCallSlot::TakeRejectedEntry
         | RuntimeCallSlot::ReserveFrame
         | RuntimeCallSlot::RegisterFrame
-        | RuntimeCallSlot::PublishSafepoint
         | RuntimeCallSlot::UnregisterFrame => {
             return Err(VerificationError::TypeMismatch(
                 "encoder-owned runtime call",

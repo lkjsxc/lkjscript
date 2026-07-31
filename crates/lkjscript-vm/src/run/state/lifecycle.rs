@@ -55,6 +55,11 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                     ))),
                 }
             }
+            Ok(Stop::Returned(_)) if self.chunk.main().return_region_product.is_some() => {
+                ExecutionOutcome::Trapped(Trap::new(
+                    "invocation-region product cannot cross the process boundary",
+                ))
+            }
             Ok(Stop::Returned(value))
                 if value.as_static_string().is_some() || value.as_structural_root().is_some() =>
             {
@@ -68,21 +73,12 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                     ))),
                 }
             }
-            Ok(Stop::Returned(value)) => {
-                let arena = std::mem::take(&mut self.arena);
-                let retained = arena.into_owned(value).and_then(|owned| {
-                    owned.retain_symbols(|index| match self.chunk.constants().get(index as usize) {
-                        Some(lkjscript_core::Constant::Symbol(text)) => Ok(text.as_str()),
-                        _ => Err(Error::msg("invalid returned symbol constant index")),
-                    })
-                });
-                match retained {
-                    Ok(value) => ExecutionOutcome::Returned(value),
-                    Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
-                        "invalid returned VM value: {error}"
-                    ))),
-                }
-            }
+            Ok(Stop::Returned(value)) => match self.snapshot_list_aware_return(value) {
+                Ok(value) => ExecutionOutcome::Returned(value),
+                Err(error) => ExecutionOutcome::Trapped(Trap::new(format!(
+                    "invalid returned VM value: {error}"
+                ))),
+            },
             Ok(Stop::Exited(code)) => ExecutionOutcome::Exited(code),
             Err(error) => outcome_from_error(error),
         };

@@ -6,11 +6,11 @@
 <!-- LKJ-STATUS id=structural-root-values status=current -->
 
 **Current for the safe core substrate, resource-plane owner-home adapter, and
-nonrecursive deterministic language island.** Dynamic strings, paths, eligible
-products/enums/results, destinations, and key-free snapshots use this service in
-the evaluator, VM, forced baseline, and forced proof tiers. Recursive legacy
-families remain outside the island, so this does not support a whole-runtime
-collector-free claim.
+deterministic language runtime.** Dynamic strings, paths, eligible products,
+enums, results, regular recursive aggregates, copy-leaf segmented lists,
+narrow list-bearing ordinary-region products, destinations, and key-free
+snapshots execute in all four tiers. No traced object family or tracing
+collector remains.
 
 ## Decision
 
@@ -20,8 +20,7 @@ value semantics, not domain keys, slots, generations, offsets, or addresses.
 
 The closed domain classes are static, unique, region-building, region-owned,
 region-sealing, region-sealed, pool, and external. Unknown analysis never
-selects legacy tracing. Physical placement does not change logical resource
-charges or source semantics.
+selects legacy tracing. Physical placement does not change resource charges or source semantics.
 
 ## Identity
 
@@ -84,6 +83,91 @@ strings. It rejects wrong runtime, stale generation, wrong layout or semantic
 type, conflicting borrow, drop while borrowed, and a domain/root mismatch
 before mutation. Structural keys and loan tokens are invocation-private and
 never returned through a process codec.
+
+## Current Flat Image Cutover
+
+Production recursive aggregates and lists use one flat typed structural image,
+not nested Rust-owned semantic trees. An image contains bounded typed node
+records, field cells, local node IDs, immutable byte storage, exact external
+dependencies, and an exact side-drop ledger. A node records semantic type,
+runtime layout, product or enum identity/tag, field range, and private build or
+published state.
+
+A field cell is closed: inline scalar, static artifact, local node reference,
+external deterministic dependency, owned leaf payload, or an allowed side-drop
+entry. It never stores a runtime root key, session key, raw pointer, collector
+index, or untyped handle. Internal node IDs are non-owning. Publication proves
+complete initialization, local-edge validity, ordinary-value acyclicity, and an
+acyclic external-domain dependency graph.
+
+A unique private builder is backed by one bounded ordinary region. Immutable
+escape seals the completed image and publishes one typed root. Final release
+runs side drops, releases external dependencies with an iterative bounded
+worklist, frees flat storage, and invalidates domain/root generations. It does
+not traverse internal payload edges and cannot recurse on the native stack.
+Key-free semantic snapshots remain bounded observation and wire values, not
+production ownership storage.
+
+Copy-mode products use this image despite copy multiplicity: construction uses
+a private destination, field access copies a projection, and immutable update
+reconstructs the whole value. An exact-plan and nominal-name content contract
+drives bytecode/native identities; validation rejects noncanonical reductions.
+Copy roots need no language drop obligation;
+dead locals may release early and remaining roots bulk-release at session end.
+No collector service participates.
+
+## Current Segmented Lists
+
+Empty lists remain inline. A nonempty list is an invocation-owned ordinary
+region of append-only fixed-capacity segments. Each entry stores one value, its
+immutable tail key, and exact list-type identity. Adding an entry never changes
+an existing logical list, so retained and branched tails share storage without
+an element or cons-node count. All segments release in one session-region reset;
+list values are copyable region handles and carry no root projection or
+per-value drop.
+
+Current ownership selection accepts only `unit`, `bool`, `i64`, and `f64`
+elements. Each list witness records whether region ownership is selected.
+Residual generic, borrowed, affine, and immutable structural element types
+remain `ListElementWitnessRequired`-blocked. Operations in all four engines use
+the same physical arena without promoting containing ownership; unsupported
+aggregate elements reject rather than materializing through another ownership
+domain. Each prepend charges the inherited aggregate-allocation limit.
+Capacity 32 is fixed by
+[measurement](evidence/segmented-list-capacity-evidence.md).
+Returns use a flat key-free codec-stable owned-list table. The pair heap family,
+its boundary adapter, and its wire encoding are removed.
+
+## Current Invocation-Region Products
+
+Products transitively closed over copy-leaf lists, scalar leaves, and acyclic
+region-product fields may use invocation-owned records. Canonical identities
+guard projection/update; limits preflight and teardown resets without tracing.
+
+Worker-local handles have no codec or main return. Exact internal calls work;
+malformed identity, foreign keys, region cycles, nested owners, and unsupported fields reject.
+Native region dispatch has no root, publication, barrier, collection, or collector metric.
+
+## Accepted Segmented List Extension
+
+Empty list remains inline. A nonempty root binds an exact element witness, one
+sealed or unique front-segment domain, a logical cursor, and at most one older
+tail dependency. Each segment stores a bounded block of elements; a uniquely
+moved front may be extended in place before sealing. Escape, independent share,
+call/task transfer, or capacity seals the builder.
+
+`list-prepend` borrows or shares its element by witness and consumes or shares
+the tail from the verified use plan. `list-first` returns a copy, nonescaping
+borrow, sealed share, or explicit clone as authorized by the witness.
+`list-rest` advances a borrowed cursor, transfers a consumed owner without a
+count change, or creates one coarse segment/domain owner for independent escape.
+`equal-list` preserves the existing static element-comparability contract and
+global step bound. Segment layout and size are not source or wire semantics.
+
+A sealed segment/domain may retain a non-atomic region-level owner count. This
+is coarse reference counting and is reported as such; no logical list node has
+a count. Release is iterative by segment dependencies. Improper pairs cannot be
+constructed because no pair object remains.
 
 ## Thread And Scheduler Boundary
 

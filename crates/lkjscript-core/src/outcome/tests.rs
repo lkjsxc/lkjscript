@@ -1,5 +1,53 @@
 use super::*;
-use crate::ResourceKind;
+use crate::{ResourceKind, Value};
+
+#[test]
+fn owned_list_snapshots_reject_noncanonical_or_runtime_local_graphs() {
+    let forward = vec![
+        OwnedListNode {
+            head: Value::UNIT,
+            tail: Value::from_owned_list(1),
+        },
+        OwnedListNode {
+            head: Value::UNIT,
+            tail: Value::EMPTY_LIST,
+        },
+    ];
+    assert!(OwnedValue::from_materialized_snapshot(Value::from_owned_list(0), forward).is_err());
+
+    let unreachable = vec![
+        OwnedListNode {
+            head: Value::UNIT,
+            tail: Value::EMPTY_LIST,
+        },
+        OwnedListNode {
+            head: Value::UNIT,
+            tail: Value::from_owned_list(0),
+        },
+    ];
+    assert!(
+        OwnedValue::from_materialized_snapshot(Value::from_owned_list(0), unreachable,).is_err()
+    );
+
+    let runtime_local = vec![OwnedListNode {
+        head: Value::from_segmented_list(1),
+        tail: Value::EMPTY_LIST,
+    }];
+    assert!(
+        OwnedValue::from_materialized_snapshot(Value::from_owned_list(0), runtime_local,).is_err()
+    );
+}
+
+#[test]
+fn owned_snapshots_reject_list_cycles() {
+    let self_cycle = vec![OwnedListNode {
+        head: Value::from_owned_list(0),
+        tail: Value::EMPTY_LIST,
+    }];
+    assert!(
+        OwnedValue::from_materialized_snapshot(Value::from_owned_list(0), self_cycle,).is_err()
+    );
+}
 
 #[test]
 fn cleanup_failures_bound_records_bytes_and_utf8() {

@@ -5,7 +5,7 @@ pub(super) fn render(stats: &JitStats) -> String {
     let unique = stats.native_unique;
     format!(
         concat!(
-            "{{\"collector_runtime_invocations\":{},\"resource_runtime_calls\":{},",
+            "{{\"resource_runtime_calls\":{},",
             "\"unique_runtime_calls\":{},\"native_resources\":{{",
             "\"reservations\":{},\"borrowed_installs\":{},\"borrowed_reuses\":{},",
             "\"borrowed_removals\":{},\"ordinary_obligations\":{},",
@@ -18,7 +18,6 @@ pub(super) fn render(stats: &JitStats) -> String {
             "\"stale_or_forged_failures\":{},\"live_owners\":{},",
             "\"live_loans\":{},\"release_backlog\":{},\"teardown_failures\":{}}}}}"
         ),
-        stats.collector_runtime_invocations,
         stats.resource_runtime_calls,
         stats.unique_runtime_calls,
         resources.reservations,

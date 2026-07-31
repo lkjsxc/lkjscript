@@ -112,7 +112,7 @@ pub(crate) fn verified_declaration_fields<'a>(
     }
 }
 
-fn verified_collect_declarations(ty: &Type, output: &mut Vec<VerifiedDeclarationKey>) {
+pub(super) fn verified_collect_declarations(ty: &Type, output: &mut Vec<VerifiedDeclarationKey>) {
     match ty {
         Type::Product(name) => output.push(VerifiedDeclarationKey::Product(name.clone())),
         Type::Enum { id, arguments, .. } => {

@@ -14,13 +14,12 @@ use std::fmt;
 
 pub use encode::{encode, EncodingConfig};
 pub use image::{
-    CodeAccounting, EntryMetadata, ExactStackMap, FrameFacts, FrameHome, FrameHomeKind,
-    HeapRuntimeSite, ImageContracts, ImageIntegrityError, InstallableImage, NativeExecutionDomain,
-    NativeLoan, NativeReference, NativeResource, NativeStaticBytes, NativeStaticString,
+    CodeAccounting, EntryMetadata, FrameFacts, FrameHome, FrameHomeKind, HeapRuntimeSite,
+    ImageContracts, ImageIntegrityError, InstallableImage, NativeExecutionDomain, NativeLoan,
+    NativeReference, NativeResource, NativeStaticBytes, NativeStaticString,
     NativeStructuralDestination, NativeStructuralOwner, NativeStructuralView, NativeUnique,
     NativeValue, OutcomeKind, OutcomeMapEntry, Relocation, RelocationKind, RelocationTarget,
-    RootLocation, Safepoint, SourceMapEntry, StructuralFrameCategory, StructuralRuntimeSite,
-    TrapMapEntry,
+    SourceMapEntry, StructuralFrameCategory, StructuralRuntimeSite, TrapMapEntry,
 };
 pub use lkjscript_contracts::{CapabilityKind, ResourceKind};
 pub use plan::{

@@ -22,7 +22,7 @@ pub use ids::{
 pub use instruction::{BlockParameter, BorrowKind, CallTarget, Instruction, InstructionKind};
 pub use instruction_metadata::{
     FailureBehavior, FailureCleanupAction, FailureCleanupPlan, FrameLocal, FrameState,
-    InstructionMetadata, Safepoint,
+    InstructionMetadata,
 };
 pub use memory::{
     DropEventKind, DropGlueIdentity, MemoryAliasing, MemoryContention, MemoryDestruction,
@@ -39,11 +39,13 @@ pub use program::{
 };
 pub use runtime::RuntimeOp;
 pub use structural::{
-    StructuralDropGlueIdentity, StructuralLayoutKind, StructuralLayoutMetadata,
-    StructuralMemoryMetadata, StructuralRepresentationMetadata, StructuralStorage,
-    StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
-    MAX_STRUCTURAL_TYPES,
+    runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
+    runtime_product_semantic_type, runtime_structural_semantic_type, runtime_structural_type,
+    RegionProductMetadata, StructuralDropGlueIdentity, StructuralLayoutKind,
+    StructuralLayoutMetadata, StructuralMemoryMetadata, StructuralRepresentationMetadata,
+    StructuralStorage, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
+    StructuralVariantLayout, MAX_REGION_PRODUCTS, MAX_STRUCTURAL_LAYOUTS,
+    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 pub use terminator::{BlockMetadata, StructuredOutcome, Terminator};
 pub use types::{

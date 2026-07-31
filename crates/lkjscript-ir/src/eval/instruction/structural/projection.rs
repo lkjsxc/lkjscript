@@ -1,4 +1,6 @@
-use lkjscript_core::{SemanticPayload, StructuralFieldPath, StructuralKind, StructuralProjection};
+use lkjscript_core::{
+    StructuralFieldPath, StructuralKind, StructuralNodeView, StructuralProjection,
+};
 
 use super::*;
 
@@ -51,9 +53,9 @@ impl Evaluator<'_> {
         let facts =
             self.representation_facts(representation, crate::StructuralValueCategory::View)?;
         let expected = self.structural_type(&facts.ty)?;
-        let payload = self.explicit_structural_payload(value(values, source)?, expected)?;
-        match payload.payload {
-            SemanticPayload::Enum { tag, .. } => Ok(EvalValue::I64(i64::from(tag))),
+        let node = self.explicit_structural_node(value(values, source)?, expected)?;
+        match node.payload() {
+            StructuralNodeView::Enum { tag, .. } => Ok(EvalValue::I64(i64::from(tag))),
             _ => Err(Flow::Trap("aggregate tag expects structural enum".into())),
         }
     }
@@ -110,13 +112,9 @@ impl Evaluator<'_> {
         }
         let input = value(values, source)?;
         let owner = self.explicit_structural_owner(input, root_type)?;
-        let length = match self.explicit_structural_payload(input, root_type)?.payload {
-            SemanticPayload::String(bytes) => {
-                std::str::from_utf8(&bytes)
-                    .map_err(|_| Flow::Trap("structural string is not UTF-8".into()))?;
-                u32::try_from(bytes.len())
-                    .map_err(|_| Flow::Resource("structural UTF-8 range".into()))?
-            }
+        let length = match self.explicit_structural_node(input, root_type)?.payload() {
+            StructuralNodeView::Bytes(bytes) => u32::try_from(bytes.len())
+                .map_err(|_| Flow::Resource("structural UTF-8 range".into()))?,
             _ => return Err(Flow::Trap("UTF-8 view expects string payload".into())),
         };
         let key = self

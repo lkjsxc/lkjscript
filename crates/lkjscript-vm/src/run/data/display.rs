@@ -34,6 +34,24 @@ pub(in crate::run) fn value<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Res
     if value.as_static_string().is_some() {
         return crate::run::structural_ops::copy_string(vm, value);
     }
+    if value.as_region_product_word().is_some() {
+        return Ok("#<region-product>".into());
+    }
+    if value.as_segmented_list().is_some() {
+        let mut cursor = value;
+        let mut elements = Vec::new();
+        for _ in 0..MAX_LIST_EQUAL_STEPS {
+            let Some((head, tail)) = vm.list_view(cursor)? else {
+                return Ok(format!("({})", elements.join(" ")));
+            };
+            elements
+                .try_reserve(1)
+                .map_err(|_| Error::msg("list display allocation failed"))?;
+            elements.push(self::value(vm, head)?);
+            cursor = tail;
+        }
+        return Err(Error::msg("list display step limit exceeded"));
+    }
     if value.as_structural_root().is_some() {
         if let Ok(text) = crate::run::structural_ops::copy_string(vm, value) {
             return Ok(text);
@@ -43,45 +61,5 @@ pub(in crate::run) fn value<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Res
         }
         return Ok("#<structural-owner>".into());
     }
-    let object = vm.arena.get(value)?.clone();
-    match object {
-        HeapObj::Pair { car, cdr } => Ok(format!(
-            "({} . {})",
-            self::value(vm, car)?,
-            self::value(vm, cdr)?
-        )),
-        HeapObj::Product { product, .. } => Ok(format!("#<product:{}>", product.raw())),
-        HeapObj::Enum {
-            layout,
-            physical_tag,
-            active_payload,
-        } => display_enum(vm, layout.bytes(), physical_tag, &active_payload),
-    }
-}
-
-fn display_enum<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    layout: [u8; 32],
-    tag: u16,
-    payload: &[Value],
-) -> Result<String> {
-    if layout == lkjscript_core::OPTION_LAYOUT {
-        return match (tag, payload) {
-            (0, [value]) => Ok(format!("some({})", self::value(vm, *value)?)),
-            (1, []) => Ok("none".into()),
-            _ => Err(Error::msg("malformed option value")),
-        };
-    }
-    if layout == lkjscript_core::RESULT_LAYOUT {
-        return match (tag, payload) {
-            (0, [value]) => Ok(format!("ok({})", self::value(vm, *value)?)),
-            (1, [value]) => Ok(format!("err({})", self::value(vm, *value)?)),
-            _ => Err(Error::msg("malformed result value")),
-        };
-    }
-    let mut fields = Vec::with_capacity(payload.len());
-    for field in payload {
-        fields.push(self::value(vm, *field)?);
-    }
-    Ok(format!("#<enum:{tag}>({})", fields.join(", ")))
+    Err(Error::msg("value display category is unsupported"))
 }

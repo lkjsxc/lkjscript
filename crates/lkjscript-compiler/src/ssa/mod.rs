@@ -11,8 +11,8 @@ use lkjscript_ir::{
     FailureCleanupAction, FailureCleanupId, FailureCleanupPlan, FrameLocal, FrameState, Function,
     FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
     InstructionMetadata, LoanId as SsaLoanId, Origin, PlaceId as SsaPlaceId, PlaceMetadata,
-    ProductField, ProductId, ProductMetadata, Program, RuntimeLayoutId, RuntimeOp, Safepoint,
-    Signature, SourceMetadata, SsaType, StructuralDropGlueIdentity, StructuralLayoutId,
+    ProductField, ProductId, ProductMetadata, Program, RegionProductMetadata, RuntimeLayoutId,
+    RuntimeOp, Signature, SourceMetadata, SsaType, StructuralDropGlueIdentity, StructuralLayoutId,
     StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
     StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
     StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
@@ -88,7 +88,9 @@ mod lowering;
 mod model;
 mod operations;
 mod program;
+mod region_products;
 mod structural;
+use region_products::lower_region_products;
 
 use enums::*;
 use facts::*;

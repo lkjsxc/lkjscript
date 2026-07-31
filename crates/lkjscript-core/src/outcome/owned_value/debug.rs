@@ -33,6 +33,9 @@ impl fmt::Debug for OwnedValue {
         if let Some(prototype) = self.as_function() {
             return write!(formatter, "#<owned-fn:{prototype}>");
         }
+        if let Some(index) = self.root.as_owned_list() {
+            return write!(formatter, "#<owned-list:{}>", index.saturating_add(1));
+        }
         if let Some(value) = self.as_structural() {
             return match &value.payload {
                 SemanticPayload::Product(fields) => {
@@ -50,15 +53,6 @@ impl fmt::Debug for OwnedValue {
                 _ => formatter.write_str("#<owned-structural-value>"),
             };
         }
-        match self.object() {
-            Some(HeapObj::Pair { .. }) => formatter.write_str("#<owned-pair>"),
-            Some(HeapObj::Product { product, .. }) => {
-                write!(formatter, "#<owned-product:{}>", product.raw())
-            }
-            Some(HeapObj::Enum { physical_tag, .. }) => {
-                write!(formatter, "#<owned-enum:{physical_tag}>")
-            }
-            None => self.root.fmt(formatter),
-        }
+        self.root.fmt(formatter)
     }
 }

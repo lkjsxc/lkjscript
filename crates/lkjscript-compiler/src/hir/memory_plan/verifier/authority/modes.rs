@@ -17,7 +17,7 @@ pub(super) fn verify_entry_authority(
         }
     };
     let (aliasing, domain, destruction, identity, portability, contention) =
-        verified_domain_axes(ty, fact);
+        verified_domain_axes(ty, fact)?;
     let mut mode = MemoryMode {
         multiplicity,
         aliasing,
@@ -42,7 +42,7 @@ pub(super) fn verify_entry_authority(
     } else {
         None
     };
-    let execution = if execution_cutover.is_some() {
+    let execution = if execution_cutover.is_some() || domain == MemoryDomain::UnsupportedRuntime {
         MemoryExecution::CutoverRequired
     } else {
         MemoryExecution::Current
@@ -51,10 +51,12 @@ pub(super) fn verify_entry_authority(
     let root = if static_bytes {
         MemoryRootProjection::None
     } else {
-        if fact.derived.contains_dynamic_owner
+        if fact.derived.closure.class == MemoryClosureClass::RegionClosed {
+            MemoryRootProjection::None
+        } else if fact.derived.contains_dynamic_owner
             || matches!(ty, Type::Str | Type::Path)
             || (matches!(ty, Type::Product(_) | Type::Enum { .. })
-                && fact.derived.mode != MemoryAggregateMode::Copy)
+                && fact.derived.closure.class == MemoryClosureClass::Deterministic)
         {
             MemoryRootProjection::Structural
         } else {

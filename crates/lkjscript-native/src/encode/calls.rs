@@ -10,28 +10,6 @@ impl FunctionEncoder<'_> {
         arguments: &[ValueId],
         target: RelocationTarget,
     ) -> Result<(), NativeError> {
-        let safepoint_id = to_u32(self.safepoints.len())?;
-        let roots = if self.execution_domain == NativeExecutionDomain::LegacyHeap {
-            let certificate = self
-                .certified_call_roots
-                .get(instruction.output.index as usize)
-                .and_then(Option::as_deref)
-                .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
-            certified_root_locations(self.function, certificate)?
-        } else {
-            Vec::new()
-        };
-        let may_collect = match target {
-            RelocationTarget::Function(function) => self.collecting_functions.contains(&function),
-            RelocationTarget::Runtime(slot) => slot.may_collect(),
-        };
-        if may_collect {
-            if self.execution_domain != NativeExecutionDomain::LegacyHeap {
-                return Err(NativeError::Encode(EncodeError::InvalidCall));
-            }
-            self.emit_publish_safepoint(safepoint_id)?;
-        }
-
         self.load_integer_register(7, self.context_offset())?;
         let mut integer_index = 0_usize;
         let mut float_index = 0_usize;
@@ -64,21 +42,7 @@ impl FunctionEncoder<'_> {
             }
         }
         self.emit_call_target(target)?;
-        let call_offset = self.bytes.len();
         self.emit(&[0x41, 0xff, 0xd3])?;
-        if self.execution_domain == NativeExecutionDomain::LegacyHeap {
-            self.safepoints.push(exact_safepoint(
-                safepoint_id,
-                self.function.id,
-                to_u32(call_offset)?,
-                roots.clone(),
-            ));
-            self.root_requirements.push(root_map_requirement(
-                safepoint_id,
-                self.function.id,
-                roots,
-            ));
-        }
         self.load_integer_register(1, self.context_offset())?;
         self.emit(&[0x83, 0x39, 0x00])?;
         self.emit_call_status_cleanup(instruction)?;
@@ -112,29 +76,12 @@ impl FunctionEncoder<'_> {
         descriptor: &crate::HeapCallDescriptor,
         arguments: &[ValueId],
     ) -> Result<(), NativeError> {
-        let safepoint_id = to_u32(self.safepoints.len())?;
         let site_id = to_u32(self.heap_runtime_sites.len())?;
-        let certificate = self
-            .certified_call_roots
-            .get(instruction.output.index as usize)
-            .and_then(Option::as_deref)
-            .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
-        let roots = certified_root_locations(self.function, certificate)?;
-        self.emit_publish_safepoint(safepoint_id)?;
         self.runtime_calls.insert(RuntimeCallSlot::HeapDispatch);
         self.load_integer_register(7, self.context_offset())?;
         self.load_integer_register_immediate(6, u64::from(site_id))?;
         self.emit_call_target(RelocationTarget::Runtime(RuntimeCallSlot::HeapDispatch))?;
-        let call_offset = self.bytes.len();
         self.emit(&[0x41, 0xff, 0xd3])?;
-        self.safepoints.push(exact_safepoint(
-            safepoint_id,
-            self.function.id,
-            to_u32(call_offset)?,
-            roots.clone(),
-        ));
-        self.root_requirements
-            .push(root_map_requirement(safepoint_id, self.function.id, roots));
         let argument_homes = arguments
             .iter()
             .map(|argument| value_frame_home(self.function, *argument))
@@ -143,7 +90,6 @@ impl FunctionEncoder<'_> {
         self.heap_runtime_sites.push(heap_runtime_site(
             site_id,
             self.function.id,
-            safepoint_id,
             descriptor.clone(),
             argument_homes,
             result,
@@ -152,13 +98,6 @@ impl FunctionEncoder<'_> {
         self.load_integer_register(1, self.context_offset())?;
         self.emit(&[0x83, 0x39, 0x00])?;
         self.emit_status_cleanup(instruction)
-    }
-
-    pub(super) fn emit_publish_safepoint(&mut self, safepoint_id: u32) -> Result<(), NativeError> {
-        self.runtime_calls.insert(RuntimeCallSlot::PublishSafepoint);
-        self.load_integer_register(7, self.context_offset())?;
-        self.load_integer_register_immediate(6, u64::from(safepoint_id))?;
-        self.emit_runtime_call_target(RuntimeCallSlot::PublishSafepoint)
     }
 
     pub(super) fn emit_call_target(&mut self, target: RelocationTarget) -> Result<(), NativeError> {

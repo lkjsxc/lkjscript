@@ -25,8 +25,7 @@ impl LayoutIdentity {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ReferenceType {
     List(LayoutIdentity, LayoutIdentity),
-    Product(LayoutIdentity),
-    Enum(LayoutIdentity, [u8; 32]),
+    RegionProduct(LayoutIdentity, [u8; 32]),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -88,10 +87,11 @@ impl ValueType {
 
     #[must_use]
     pub const fn is_affine(self) -> bool {
-        matches!(
-            self,
-            Self::StructuralOwner(_) | Self::StructuralView(_) | Self::StructuralDestination(_)
-        )
+        match self {
+            Self::StructuralOwner(value_type) => !value_type.copyable(),
+            Self::StructuralView(_) | Self::StructuralDestination(_) => true,
+            _ => false,
+        }
     }
 
     #[must_use]
@@ -116,9 +116,8 @@ impl ValueType {
             Self::Loan(LoanType::ByteSlice) => LayoutIdentity::new(29),
             Self::Loan(LoanType::ByteSliceMut) => LayoutIdentity::new(30),
             Self::Unique(UniqueType::Bytes) => LayoutIdentity::new(31),
-            Self::Reference(ReferenceType::Product(layout))
-            | Self::Reference(ReferenceType::List(layout, _))
-            | Self::Reference(ReferenceType::Enum(layout, _)) => layout,
+            Self::Reference(ReferenceType::RegionProduct(layout, _))
+            | Self::Reference(ReferenceType::List(layout, _)) => layout,
         }
     }
 }

@@ -122,8 +122,9 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     assert!(inventory.stderr.is_empty());
     let json = String::from_utf8(inventory.stdout).expect("inventory is UTF-8");
     assert!(json.contains("\"schema\":\"lkjscript.memory-obligations\""));
-    assert!(json.contains("\"identity\":\"gc-heap\""));
-    assert!(json.contains("\"current_trace_fields\":\"HeapObj::trace from exact roots\""));
+    assert!(json.contains("\"identity\":\"enum\""));
+    assert!(json.contains("\"current_trace_fields\":\"none\""));
+    assert!(json.contains("current deterministic storage; unsupported shapes reject"));
     assert!(json.contains("verified static image data or execution-owned unique store"));
 
     let explain = Command::new(binary)
@@ -135,22 +136,4 @@ fn memory_inventory_and_explain_are_deterministic_public_evidence() {
     let text = String::from_utf8(explain.stdout).expect("explanation is UTF-8");
     assert!(text.contains("memory-identity=byte-vector"));
     assert!(text.contains("current exact evaluator/VM/forced-native byte-vector subset"));
-
-    let traced = Command::new(binary)
-        .args(["memory", "traced", "--json"])
-        .output()
-        .expect("run memory tracing ratchet");
-    assert!(traced.status.success());
-    assert!(traced.stderr.is_empty());
-    let json = String::from_utf8(traced.stdout).expect("tracing ratchet is UTF-8");
-    assert!(json.contains("\"schema\":\"lkjscript.memory-tracing-ratchet\""));
-    for (identity, variant) in [("enum", "Enum"), ("pair", "Pair"), ("product", "Product")] {
-        assert!(json.contains(&format!(
-            "\"identity\":\"{identity}\",\"heap_variant\":\"{variant}\""
-        )));
-    }
-    for removed in ["buf", "path", "string"] {
-        assert!(!json.contains(&format!("\"identity\":\"{removed}\"")));
-    }
-    assert_eq!(json.matches("\"heap_variant\":").count(), 3);
 }

@@ -5,9 +5,11 @@ mod bounds;
 mod call_fixture;
 mod derivation;
 mod fixtures;
+mod lists;
 mod moves;
 mod signatures;
 mod verifier;
+mod witnesses;
 
 #[test]
 fn executable_retains_dense_independently_verified_hir_memory_plan() -> Result<()> {
@@ -83,7 +85,7 @@ fn owned_main(result: &str, body: &str) -> String {
 }
 
 #[test]
-fn deterministic_byte_vector_is_never_registered_as_traced() -> Result<()> {
+fn deterministic_byte_vector_uses_only_unique_structural_storage() -> Result<()> {
     let program = crate::compile_source(
         &owned_main("byte-vector", "move/\nb\n/move"),
         "unique-byte-vector-plan.lkjscript",
@@ -101,14 +103,13 @@ fn deterministic_byte_vector_is_never_registered_as_traced() -> Result<()> {
         assert_eq!(entry.mode.aliasing, super::MemoryAliasing::Unique);
         assert_eq!(entry.mode.domain, super::MemoryDomain::UniqueStructural);
         assert_eq!(entry.mode.destruction, super::MemoryDestruction::DropGlue);
-        assert!(entry.legacy_family.is_none());
         assert_eq!(entry.drop_glue.map(|glue| glue.raw()), Some(0));
     }
     Ok(())
 }
 
 #[test]
-fn complete_numeric_scalars_are_planned_inline_without_legacy_tracing() -> Result<()> {
+fn complete_numeric_scalars_are_planned_inline() -> Result<()> {
     let source = concat!(
         "main/\nsig/\ninputs/\n/inputs\noutput/\nf64\n/output\n/sig\n",
         "add/\n1.0\nconvert-i64-to-f64-rounded/\n2\n",
@@ -121,7 +122,6 @@ fn complete_numeric_scalars_are_planned_inline_without_legacy_tracing() -> Resul
             scalar_entries = scalar_entries.saturating_add(1);
             assert_eq!(entry.mode.domain, super::MemoryDomain::Inline);
             assert_eq!(entry.mode.destruction, super::MemoryDestruction::Trivial);
-            assert!(entry.legacy_family.is_none());
         }
     }
     assert!(scalar_entries >= 3);

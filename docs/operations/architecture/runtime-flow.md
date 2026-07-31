@@ -28,9 +28,10 @@ ValidatedChunk main
 
 The VM is synchronous and single-threaded. It never terminates the Rust process;
 exit, traps, limits, deadlines, and host failures stop only the current VM.
-Returned heap values own a private reachable-object snapshot, and later VM
-instances have fresh globals, arenas, resource scopes, generation-bearing
-slots, counters, and deadlines. Borrowed standard input is table-bound but
+Returned values own key-free structural/list snapshots or explicit unique
+bytes, and later VM instances have fresh globals, invocation regions,
+structural stores, resource scopes, generation-bearing slots, counters, and
+deadlines. Borrowed standard input is table-bound but
 remains provider-owned. Process-global stdin/stdout and the terminal guard still
 prevent parallel VM supervision. Cooperative deadlines can overrun inside current filesystem and
 write/send wrappers; hard-deadline mode rejects those operations before effects
@@ -39,17 +40,16 @@ rather than claiming cancellation.
 The current native flow is:
 
 ```text
-forced main or hot scalar VM function entry
-  -> verified scalar or host-independent reference eligibility and reachable SCC group
-  -> synchronous typed-SSA lowering at a safepoint
-  -> bounded W^X callable canonical native contract code object via lkjscript-executable
+forced main or hot VM function entry
+  -> verified scalar, structural, unique, or invocation-region eligibility and reachable SCC group
+  -> synchronous typed-SSA lowering at an explicit tier transition
+  -> bounded W^X callable native-contract code object via lkjscript-executable
   -> one invocation-time pthread stack-bounds query
   -> cached descriptor/budget/bounds frame reservation before each stack subtraction
-  -> initialized registered frame and verifier-certified exact scalar or typed-reference call map
-  -> unboxed direct call or canonical-fact verified-home HeapDispatchV1 safe runtime service
-  -> GcHeap collection/allocation with root writeback, argument re-materialization,
-     transactional mutation, and transitive owned return snapshot
-  -> PollV1/CollectReferenceV1 and structured return/trap/exit/deadline/resource/host status
+  -> initialized registered frame with verified typed homes and cleanup obligations
+  -> unboxed direct call, structural service, or typed invocation-region runtime-value service
+  -> key-free owned return snapshot
+  -> Poll and structured return/trap/exit/deadline/resource/host status
   -> exactly one unregister on every registered outcome
 ```
 
@@ -61,11 +61,10 @@ eligible scalar-adapter function entry and uses the baseline object only on late
 reference-signature helpers may be generated direct callees but remain
 ineligible VM/native entries. Unsupported code stays VM-correct with same-epoch
 retry suppression. The old observation-only hook is
-removed. Closed plans retain exact registered-reference collection. Forced
-SSA/source execution also supports collector-free bytes and byte-vector
-operations plus Str, Product, List, Option, and Result allocation and
-direct/mutual recursion. Auto intentionally keeps reference-typed functions in
-VM because reference transitions remain absent. Loop OSR, automatic optimizing promotion, broader
+removed. Forced SSA/source execution supports bytes and byte-vector operations
+plus structural String, Product, Enum, Option, and Result values, segmented
+Lists, invocation-region products, and direct/mutual recursion. Auto
+conservatively retains unsupported transition signatures in the VM. Loop OSR, automatic optimizing promotion, broader
 proof passes, background
 compilation, speculative tiers, persistent profiles, and persistent code caches
 are absent. The selected but unimplemented automatic flow is:
@@ -110,7 +109,7 @@ Current](../../decisions/semantics/semantic-core.md). Its exact path remains the
 validated Semantic Source tree through resolved HIR and verified SSA. Match is
 verified then lowered to SSA CFG; evaluators and backends implement only ADT,
 numeric, layout, charge, and terminator primitives. Acceptance requires actual
-generated calls in forced engines with no fallback and exact roots; no current
+generated calls in forced engines with no fallback and exact typed homes; no current
 runtime behavior is changed by that contract.
 
 ## Change Guide
@@ -130,8 +129,8 @@ Explicit main, effect-free imported libraries, local-only mutation,
 product-threaded editor/terminal/Brainfuck state, whole-chunk validation,
 structured process-safe outcomes, bounded VM execution, deterministic
 fixed-point effects, resolved typed HIR, verified typed SSA, independent
-evaluation, baseline normalization, reference bytecode, exact roots, owned
-x86-64/W^X code, callable baseline execution, and forced proof-checked
+evaluation, baseline normalization, reference bytecode, typed frame homes,
+owned x86-64/W^X code, callable baseline execution, and forced proof-checked
 optimizing execution are Current.
 
 The accepted Target architecture is:

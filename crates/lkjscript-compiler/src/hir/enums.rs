@@ -36,5 +36,4 @@ pub struct EnumVariantField {
     pub source_order: u16,
     pub ty: Type,
     pub indirect: bool,
-    pub traced: bool,
 }

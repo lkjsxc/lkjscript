@@ -99,8 +99,8 @@ snapshot.
 Eligible groups have zero collector allocation, collector-capable call,
 collecting safepoint, GC root map/materialization/writeback, or barrier. Forced
 native execution requires nonzero generated entries and zero VM or collector
-fallback. `product` and `enum` remain registered until every production
-instantiation migrates.
+fallback. `product` has left tracing; `enum` remains registered until every
+production instantiation migrates.
 
 ## Acceptance
 

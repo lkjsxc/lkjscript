@@ -28,7 +28,7 @@ impl Evaluator<'_> {
         if self.allocations >= self.config.max_allocations {
             return Err(Flow::Resource("allocations".into()));
         }
-        let object_bytes = evaluator_heap_object_bytes().saturating_add(dynamic_bytes);
+        let object_bytes = evaluator_runtime_value_bytes().saturating_add(dynamic_bytes);
         let next_heap_bytes = self
             .heap_bytes
             .checked_add(object_bytes)

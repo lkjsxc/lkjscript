@@ -12,7 +12,9 @@ impl Producer<'_> {
         }
         let id = self.type_planner.intern(ty)?;
         let fact = self.type_planner.fact(id)?;
-        Ok(if fact.closure.class == MemoryClosureClass::LegacyClosed {
+        Ok(if fact.closure.class != MemoryClosureClass::Deterministic
+            || matches!(ty, Type::List(_))
+        {
             MemoryParameterMode::Copy
         } else {
             match fact.mode {
@@ -33,8 +35,10 @@ impl Producer<'_> {
             )));
         }
         if matches!(ty, Type::Resource(_)) { return Ok(MemoryResultMode::External); }
-        Ok(if fact.closure.class == MemoryClosureClass::LegacyClosed
-            || fact.mode == MemoryAggregateMode::Copy {
+        Ok(if fact.closure.class != MemoryClosureClass::Deterministic
+            || fact.mode == MemoryAggregateMode::Copy
+            || matches!(ty, Type::List(_))
+        {
             MemoryResultMode::Trivial
         } else { MemoryResultMode::Owned })
     }
@@ -44,6 +48,13 @@ impl Producer<'_> {
             .map_err(|_| Error::msg("HIR memory-plan type facts exceed u64"))?;
         if self.work.type_nodes > MAX_MEMORY_PLAN_TYPE_NODES {
             return Err(Error::msg("HIR memory-plan type facts exceed bounded maximum"));
+        }
+        self.work.witnesses = u64::try_from(self.type_planner.witnesses.len())
+            .map_err(|_| Error::msg("HIR memory-plan witnesses exceed u64"))?;
+        if self.work.witnesses != self.work.type_nodes
+            || self.work.witnesses > MAX_MEMORY_PLAN_WITNESSES
+        {
+            return Err(Error::msg("HIR memory-plan witness table is not exact"));
         }
         self.work.type_edges = self.type_planner.graph.edges;
         self.work.scc_work = self.type_planner.graph.scc_work;
@@ -104,12 +115,23 @@ impl Producer<'_> {
         let fields = children.into_iter().map(|(index, expression, drop_path)| {
             MemoryDestinationField { index, expression, drop_path }
         }).collect();
-        let (kind, execution, execution_cutover) =
-            if fact.closure.class == MemoryClosureClass::Deterministic {
-                (MemoryDestinationKind::CutoverRequired, MemoryExecution::CutoverRequired,
-                    execution_cutover(&expression.ty))
-            } else { (MemoryDestinationKind::RegisteredLegacyTraced,
-                MemoryExecution::Current, None) };
+        let (kind, execution, execution_cutover) = match fact.closure.class {
+            MemoryClosureClass::Deterministic => (
+                MemoryDestinationKind::CutoverRequired,
+                MemoryExecution::CutoverRequired,
+                execution_cutover(&expression.ty),
+            ),
+            MemoryClosureClass::RegionClosed => (
+                MemoryDestinationKind::OrdinaryRegion,
+                MemoryExecution::Current,
+                None,
+            ),
+            MemoryClosureClass::Unresolved | MemoryClosureClass::IllegalDomainBridge => (
+                MemoryDestinationKind::UnsupportedRuntime,
+                MemoryExecution::CutoverRequired,
+                None,
+            ),
+        };
         self.destinations.push(MemoryDestinationPlan { id, function: self.current_function,
             expression: expression_id, kind, execution, execution_cutover, type_fact,
             field_count, fields,

@@ -32,11 +32,43 @@ fn every_baseline_pass_is_isolated_verified_and_deterministic() {
 }
 
 #[test]
+fn product_instructions_without_deterministic_storage_metadata_reject() {
+    let mut program = one_block_program();
+    let product = ProductId::new(0);
+    program.products.push(ProductMetadata {
+        id: product,
+        name: "blocked".into(),
+        fields: vec![ProductField {
+            name: "value".into(),
+            ty: SsaType::I64,
+        }],
+    });
+    let function = &mut program.functions[0];
+    function.signature = Signature::monomorphic(Vec::new(), SsaType::Product(product));
+    function.effects = EffectSet::ALLOCATES;
+    function.blocks[0].instructions.push(Instruction {
+        id: ValueId::new(1),
+        ty: SsaType::Product(product),
+        kind: InstructionKind::ProductValue {
+            product,
+            fields: vec![ValueId::new(0)],
+        },
+        metadata: metadata(EffectSet::ALLOCATES),
+    });
+    function.blocks[0].terminator = Terminator::Return(ValueId::new(1));
+    let error = verify(program).expect_err("product without storage metadata must reject");
+    assert!(error
+        .to_string()
+        .contains("ProductValue requires invocation-region product metadata"));
+}
+
+#[test]
 fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
     let signature = Signature::monomorphic(Vec::new(), SsaType::I64);
     let call_effects = EffectSet::CONSERVATIVE_CALL;
     let program = Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -91,7 +123,6 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                             metadata: InstructionMetadata {
                                 origin: Origin::SYNTHETIC,
                                 effects: call_effects,
-                                safepoint: Safepoint::Required,
                                 failure: FailureBehavior::TrapOrOutcome,
                                 failure_cleanup: None,
                                 frame_state: Some(FrameState {
@@ -101,8 +132,9 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
                                 }),
                             },
                         },
+                        constant(2, 42),
                     ],
-                    terminator: Terminator::Return(ValueId::new(1)),
+                    terminator: Terminator::Return(ValueId::new(2)),
                     metadata: block_metadata(),
                 }],
                 origin: Origin::SYNTHETIC,
@@ -121,8 +153,14 @@ fn direct_call_resolution_is_independent_verified_and_semantics_preserving() {
         } if *target == FunctionId::new(0)
     ));
     assert_eq!(call.metadata.effects, EffectSet::PURE);
+    assert!(call.metadata.frame_state.is_some());
+    let retained = effect_aware_dce(&resolved).expect("retain unused pure call");
+    assert!(retained.program().functions[1].blocks[0]
+        .instructions
+        .iter()
+        .any(|instruction| matches!(instruction.kind, InstructionKind::Call { .. })));
     assert_eq!(
-        evaluate(&resolved, &EvalConfig::default()),
+        evaluate(&retained, &EvalConfig::default()),
         EvalOutcome::Returned(EvalValue::I64(42))
     );
     assert!(matches!(

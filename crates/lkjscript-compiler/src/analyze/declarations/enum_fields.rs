@@ -104,7 +104,6 @@ impl Analyzer {
                 source_order: u16::try_from(order)
                     .map_err(|_| self.error(source, "field order exceeds u16"))?,
                 indirect: contains_enum_type(&ty),
-                traced: is_traced_type(&ty),
                 ty,
             });
         }
@@ -139,29 +138,5 @@ fn contains_enum_type(ty: &Type) -> bool {
         Type::Enum { .. } => true,
         Type::List(inner) => contains_enum_type(inner),
         _ => false,
-    }
-}
-
-fn is_traced_type(ty: &Type) -> bool {
-    matches!(
-        ty,
-        Type::Str
-            | Type::Symbol
-            | Type::Path
-            | Type::Product(_)
-            | Type::Enum { .. }
-            | Type::List(_)
-            | Type::Fn { .. }
-            | Type::Forall { .. }
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn path_enum_fields_are_traced_heap_references() {
-        assert!(is_traced_type(&Type::Path));
     }
 }

@@ -83,14 +83,10 @@ def exact_jit_facts(metrics: dict[str, Any]) -> dict[str, Any] | None:
         "code_cache_peak_bytes",
         "metadata_cache_peak_bytes",
         "accounted_allocation_peak_bytes",
-        "allocations",
-        "allocation_bytes_estimate",
-        "collections",
-        "peak_live_heap_bytes_estimate",
-        "maximum_roots",
-        "runtime_heap_attempts",
-        "runtime_heap_successes",
-        "barrier_count",
+        "runtime_value_attempts",
+        "runtime_value_successes",
+        "segmented_lists",
+        "island",
         "peak_native_frame_depth",
         "vm_to_native_transitions",
         "native_to_vm_transitions",
@@ -104,7 +100,6 @@ def exact_jit_facts(metrics: dict[str, Any]) -> dict[str, Any] | None:
         "optimization_metadata_bytes_estimate",
         "accounted_allocation_bytes",
         "relocations",
-        "safepoints",
         "work_units",
         "optimization_work_units",
         "input_instructions",
@@ -151,9 +146,10 @@ def exact_jit_facts(metrics: dict[str, Any]) -> dict[str, Any] | None:
 
 def validate_allocation_sample(sample: dict[str, Any]) -> None:
     jit = sample["metrics"]["jit"]
-    if jit["allocations"] < 7 or jit["maximum_roots"] <= 0:
-        raise RuntimeError("allocation graph did not report expected allocations and roots")
-    if jit["runtime_heap_attempts"] < 14:
-        raise RuntimeError("allocation graph did not reach expected heap operation count")
-    if jit["runtime_heap_attempts"] != jit["runtime_heap_successes"]:
-        raise RuntimeError("allocation graph reported a failed heap operation")
+    lists = jit["segmented_lists"]
+    if lists["segment_allocations"] < 1 or lists["live_entries"] < 2:
+        raise RuntimeError("allocation graph did not report expected list storage")
+    if jit["runtime_value_attempts"] < 12:
+        raise RuntimeError("allocation graph did not reach expected runtime-value operation count")
+    if jit["runtime_value_attempts"] != jit["runtime_value_successes"]:
+        raise RuntimeError("allocation graph reported a failed runtime-value operation")

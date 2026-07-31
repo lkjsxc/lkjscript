@@ -126,7 +126,8 @@ static representation exists:
 - products flatten or follow an explicit target ABI;
 - Option uses a proven type-specific niche or explicit tag;
 - generic code is monomorphized where bounded code growth justifies it;
-- heap references remain typed and visible in precise stack maps.
+- structural and invocation references remain typed in exact frame homes with
+  deterministic cleanup obligations.
 
 Dynamic dispatch and runtime type tests remain only when an explicit dynamic
 interface requires them. VM/native adapters convert exact scalar categories and

@@ -31,47 +31,14 @@ fn optimization_candidate_equality_is_exact_for_f64_bits() {
 }
 
 #[test]
-fn enum_operations_and_metadata_are_proof_preserved_exactly() {
+fn enum_metadata_is_proof_preserved_exactly() {
     let mut program = one_block_program();
     program.enums.push(enum_metadata());
-    program.functions[0].signature = Signature::monomorphic(Vec::new(), enum_type());
-    program.functions[0].effects = EffectSet::ALLOCATES;
-    program.functions[0].blocks[0].instructions = vec![
-        constant(0, 42),
-        Instruction {
-            id: ValueId::new(1),
-            ty: enum_type(),
-            kind: InstructionKind::EnumValue {
-                enum_id: EnumId::new([1; 32]),
-                variant: VariantId::new([2; 32]),
-                layout: RuntimeLayoutId::new([6; 32]),
-                fields: vec![ValueId::new(0)],
-            },
-            metadata: InstructionMetadata {
-                origin: Origin::SYNTHETIC,
-                effects: EffectSet::ALLOCATES,
-                safepoint: Safepoint::Required,
-                failure: FailureBehavior::StructuredOutcome,
-                failure_cleanup: None,
-                frame_state: Some(FrameState {
-                    bytecode_position: 0,
-                    locals: Vec::new(),
-                    operand_stack: Vec::new(),
-                }),
-            },
-        },
-    ];
-    program.functions[0].blocks[0].terminator = Terminator::Return(ValueId::new(1));
-    let input = verify(program).expect("verify enum proof input");
-    let optimized = optimize(&input, OptimizationLimits::default()).expect("optimize enum");
-    assert!(optimized.certificate().records.is_empty());
-    assert!(matches!(
-        optimized.program().functions[0].blocks[0].instructions[1].kind,
-        InstructionKind::EnumValue { .. }
-    ));
+    let input = verify(program).expect("verify enum metadata proof input");
+    let optimized = optimize(&input, OptimizationLimits::default()).expect("optimize program");
 
     let mut forged = optimized.program().clone();
-    forged.enums[0].name = "Forged".into();
+    forged.enums[0].name = "forged".into();
     let error = verify_optimization(
         &input,
         forged,

@@ -1,5 +1,7 @@
 mod append;
 
+use std::collections::BTreeSet;
+
 use crate::ssa::*;
 
 type EdgeStateParameters = (BTreeMap<BindingId, ValueId>, Vec<ValueId>, Vec<ValueId>);
@@ -84,13 +86,50 @@ impl FunctionBuilder<'_> {
         incoming_unplaced: &[ValueId],
         parameter_origin: Origin,
     ) -> Result<EdgeStateParameters> {
-        let environment =
-            self.add_environment_parameters(block, incoming_environment, parameter_origin)?;
-        let mut mapped = BTreeMap::new();
-        for ((_, incoming), (_, parameter)) in incoming_environment.iter().zip(&environment) {
-            mapped.entry(*incoming).or_insert(*parameter);
+        let mut owner_places = BTreeMap::new();
+        for (binding, value) in incoming_environment {
+            let ty = self.value_type(*value)?;
+            if !is_owned_value(self.structural, &ty) {
+                continue;
+            }
+            let place = self.owned_place_for_binding(*binding)?;
+            match owner_places.get_mut(value) {
+                None => {
+                    owner_places.insert(*value, place);
+                }
+                Some(current) if current.is_none() => *current = place,
+                Some(current) if place.is_some() && *current != place => {
+                    return Err(Error::msg(
+                        "SSA environment aliases one owner through distinct places",
+                    ));
+                }
+                Some(_) => {}
+            }
         }
-        let mut arguments = Self::environment_arguments(incoming_environment);
+        let mut environment = BTreeMap::new();
+        let mut mapped = BTreeMap::new();
+        let mut arguments = Vec::new();
+        for (binding, value) in incoming_environment {
+            let ty = self.value_type(*value)?;
+            let owned = is_owned_value(self.structural, &ty);
+            if owned {
+                if let Some(parameter) = mapped.get(value).copied() {
+                    environment.insert(*binding, parameter);
+                    continue;
+                }
+            }
+            let place = if owned {
+                owner_places.get(value).copied().flatten()
+            } else {
+                self.owned_place_for_binding(*binding)?
+            };
+            let parameter = self.add_block_parameter(block, ty, place, parameter_origin)?;
+            environment.insert(*binding, parameter);
+            if owned {
+                mapped.insert(*value, parameter);
+            }
+            arguments.push(*value);
+        }
         for value in incoming_unplaced {
             if mapped.contains_key(value) {
                 continue;
@@ -109,6 +148,17 @@ impl FunctionBuilder<'_> {
                     .ok_or_else(|| Error::msg("SSA edge lost an unplaced owner parameter"))
             })
             .collect::<Result<Vec<_>>>()?;
+        let mut seen_owners = BTreeSet::new();
+        for argument in &arguments {
+            if is_owned_value(self.structural, &self.value_type(*argument)?)
+                && !seen_owners.insert(*argument)
+            {
+                return Err(Error::msg(format!(
+                    "SSA edge-state builder duplicated owner {argument:?}; \
+                     environment={incoming_environment:?}; unplaced={incoming_unplaced:?}"
+                )));
+            }
+        }
         Ok((environment, unplaced, arguments))
     }
 

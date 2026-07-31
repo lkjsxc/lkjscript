@@ -118,7 +118,6 @@ pub(super) fn enum_definition(
                     source_order: u16::try_from(fi).unwrap_or(u16::MAX),
                     ty,
                     indirect: false,
-                    traced: false,
                 })
                 .collect(),
         })

@@ -22,7 +22,7 @@ impl Evaluator<'_> {
                 .static_symbol_identity(value)
                 .map(EvalValue::StaticSymbol)
                 .map_err(Flow::Trap),
-            Constant::EmptyList => Ok(EvalValue::List(Vec::new())),
+            Constant::EmptyList => Ok(EvalValue::SegmentedList(self.lists.empty())),
         }
     }
 }

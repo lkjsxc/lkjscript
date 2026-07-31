@@ -1,8 +1,8 @@
 use super::*;
 
 #[test]
-fn forced_source_legacy_string_entry_fails_closed_in_both_tiers_until_producer_exists() {
-    let program = legacy_string_entry_program();
+fn forced_source_string_entry_fails_closed_in_both_tiers_until_producer_exists() {
+    let program = source_string_entry_program();
     let baseline = execute_forced(&program, &ExecutionConfig::default(), JitConfig::default())
         .expect_err("baseline source string entry must fail before native entry");
     assert_eq!(baseline.code(), FailureCode::UnsupportedType);
@@ -19,7 +19,7 @@ fn forced_source_legacy_string_entry_fails_closed_in_both_tiers_until_producer_e
         .contains("no compiler-produced native structural owner"));
 }
 
-fn legacy_string_entry_program() -> lkjscript_ir::VerifiedProgram {
+fn source_string_entry_program() -> lkjscript_ir::VerifiedProgram {
     verify(Program {
         memory: lkjscript_ir::StructuralMemoryMetadata::default(),
         sources: vec![SourceMetadata {
@@ -27,6 +27,7 @@ fn legacy_string_entry_program() -> lkjscript_ir::VerifiedProgram {
             path: "structural-cutover.lkjscript".into(),
         }],
         products: Vec::new(),
+        region_products: Vec::new(),
         enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
@@ -44,11 +45,10 @@ fn legacy_string_entry_program() -> lkjscript_ir::VerifiedProgram {
                 instructions: vec![Instruction {
                     id: ValueId::new(0),
                     ty: SsaType::Str,
-                    kind: InstructionKind::Constant(Constant::Str("legacy".into())),
+                    kind: InstructionKind::Constant(Constant::Str("unsupported".into())),
                     metadata: InstructionMetadata {
                         origin: Origin::SYNTHETIC,
                         effects: EffectSet::PURE,
-                        safepoint: IrSafepoint::None,
                         failure: FailureBehavior::None,
                         failure_cleanup: None,
                         frame_state: None,
@@ -66,5 +66,5 @@ fn legacy_string_entry_program() -> lkjscript_ir::VerifiedProgram {
         }],
         main: FunctionId::new(0),
     })
-    .expect("verify source legacy string entry SSA")
+    .expect("verify source string entry SSA")
 }

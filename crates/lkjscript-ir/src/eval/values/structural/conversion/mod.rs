@@ -17,8 +17,7 @@ impl Evaluator<'_> {
                     .structural
                     .runtime
                     .projected(view.key)
-                    .map_err(map_structural_error)?
-                    .clone();
+                    .map_err(map_structural_error)?;
                 self.semantic_to_eval(semantic)
             }
             EvalValue::Bytes(_) => self.unique.clone_bytes(value),

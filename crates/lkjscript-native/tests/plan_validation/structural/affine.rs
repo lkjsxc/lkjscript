@@ -77,6 +77,67 @@ fn structural_affine_plans_reject_wrong_type_copy_missing_drop_and_live_loan(
 }
 
 #[test]
+fn shared_view_locals_can_be_observed_for_copy_with_exact_end(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let plan = owner_plan(|builder, block, owner, value_type| {
+        let owner_local = builder.create_local(ValueType::StructuralOwner(value_type))?;
+        builder.write_local(block, owner_local, owner)?;
+        let observed_owner = builder.observe_local(block, owner_local)?;
+        let noncopy_view = StructuralViewType::new(7, value_type, value_type, false);
+        assert!(
+            StructuralCallDescriptor::new(StructuralOperation::CopyView(noncopy_view)).is_err()
+        );
+        let projected = StructuralTypeIdentity::new(9, 10, StructuralKind::I64, true);
+        let view_type = StructuralViewType::new(7, value_type, projected, false);
+        let projection = StructuralProjectionDescriptor::new(
+            view_type,
+            StructuralProjectionKind::Field,
+            Vec::new(),
+        );
+        let view = sc(
+            builder,
+            block,
+            StructuralOperation::Borrow { projection },
+            vec![observed_owner],
+        )?;
+        let view_local = builder.create_local(ValueType::StructuralView(view_type))?;
+        builder.write_local(block, view_local, view)?;
+        let observed_view = builder.observe_local(block, view_local)?;
+        let copied = sc(
+            builder,
+            block,
+            StructuralOperation::CopyView(view_type),
+            vec![observed_view],
+        )?;
+        builder.set_instruction_failure_cleanup(
+            copied,
+            vec![FailureCleanupCall::structural(
+                StructuralCallDescriptor::new(StructuralOperation::EndView(view_type))?,
+                view_local,
+            )],
+        )?;
+        let view = builder.read_local(block, view_local)?;
+        sc(
+            builder,
+            block,
+            StructuralOperation::EndView(view_type),
+            vec![view],
+        )?;
+        let owner = builder.read_local(block, owner_local)?;
+        sc(
+            builder,
+            block,
+            StructuralOperation::Drop(value_type),
+            vec![owner],
+        )?;
+        let unit = builder.unit(block)?;
+        builder.return_value(block, unit)
+    })?;
+    verify(plan)?;
+    Ok(())
+}
+
+#[test]
 fn observed_structural_locals_support_only_nonconsuming_calls(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let valid = owner_plan(|builder, block, owner, value_type| {

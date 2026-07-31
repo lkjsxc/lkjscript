@@ -106,8 +106,8 @@ impl StructuralOperation {
                     && projection.view_type().root() == projection.view_type().projected()
                     && projection.view_type().root().kind() == StructuralKind::String
             }
-            Self::CopyView(view)
-            | Self::EndView(view)
+            Self::CopyView(view) => view.is_valid() && view.projected().copyable(),
+            Self::EndView(view)
             | Self::ObserveTag(view)
             | Self::ObserveI64(view)
             | Self::PayloadUtf8Valid(view) => view.is_valid(),

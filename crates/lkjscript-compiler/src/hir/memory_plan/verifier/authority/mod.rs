@@ -128,7 +128,9 @@ pub(super) fn verified_parameter_mode(
     let id = types.intern(ty)?;
     let fact = types.expected(id)?;
     Ok(
-        if fact.derived.closure.class == MemoryClosureClass::LegacyClosed {
+        if fact.derived.closure.class != MemoryClosureClass::Deterministic
+            || matches!(ty, Type::List(_))
+        {
             MemoryParameterMode::Copy
         } else {
             match fact.derived.mode {
@@ -156,8 +158,9 @@ pub(super) fn verified_result_mode(
         return Ok(MemoryResultMode::External);
     }
     Ok(
-        if fact.derived.closure.class == MemoryClosureClass::LegacyClosed
+        if fact.derived.closure.class != MemoryClosureClass::Deterministic
             || fact.derived.mode == MemoryAggregateMode::Copy
+            || matches!(ty, Type::List(_))
         {
             MemoryResultMode::Trivial
         } else {

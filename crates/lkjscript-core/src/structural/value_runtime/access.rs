@@ -2,10 +2,9 @@ use crate::Value;
 
 use super::super::StructuralValueKey;
 use super::{
-    select, select_mut, DestinationCleanupReport, InlineStructuralValue, SemanticPayload,
-    SemanticValue, StaticStructuralArtifact, StaticStructuralLeaf, StructuralDestinationKey,
-    StructuralObject, StructuralProjection, StructuralType, StructuralValueError,
-    StructuralValueRuntime, StructuralViewKey, ViewSlot,
+    DestinationCleanupReport, SemanticValue, StaticStructuralArtifact, StructuralDestinationKey,
+    StructuralImage, StructuralNode, StructuralObject, StructuralProjection, StructuralType,
+    StructuralValueError, StructuralValueRuntime, StructuralViewKey, ViewSlot,
 };
 
 impl StructuralValueRuntime {
@@ -13,14 +12,31 @@ impl StructuralValueRuntime {
         &self,
         key: StructuralValueKey,
         expected: StructuralType,
-    ) -> Result<&SemanticValue, StructuralValueError> {
+    ) -> Result<SemanticValue, StructuralValueError> {
+        let image = self.value_image(key, expected)?;
+        image.to_semantic()
+    }
+
+    pub fn value_node(
+        &self,
+        key: StructuralValueKey,
+        expected: StructuralType,
+    ) -> Result<StructuralNode<'_>, StructuralValueError> {
+        Ok(self.value_image(key, expected)?.root())
+    }
+
+    fn value_image(
+        &self,
+        key: StructuralValueKey,
+        expected: StructuralType,
+    ) -> Result<&StructuralImage, StructuralValueError> {
         let root = self
             .roots
             .root(key, expected.layout, expected.semantic_type)?;
         match self.objects.get(root)? {
-            StructuralObject::Owned { value, .. } => {
-                self.require_type(value.value_type, expected)?;
-                Ok(value)
+            StructuralObject::Owned { image, .. } => {
+                self.require_type(image.root().value_type(), expected)?;
+                Ok(image)
             }
             StructuralObject::Static(_) => Err(StructuralValueError::WrongPayloadKind),
         }
@@ -43,21 +59,45 @@ impl StructuralValueRuntime {
         }
     }
 
-    pub fn projected(
-        &self,
-        key: StructuralViewKey,
-    ) -> Result<&SemanticValue, StructuralValueError> {
+    pub fn projected(&self, key: StructuralViewKey) -> Result<SemanticValue, StructuralValueError> {
         let record = self.view(key)?;
-        let StructuralObject::Owned { value, .. } = self.objects.get(record.root)? else {
+        let StructuralObject::Owned { image, .. } = self.objects.get(record.root)? else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
-        select(value, record.projection.path())
+        image.to_semantic_at(record.node)
     }
 
-    pub fn projected_mut(
+    pub fn projected_node(
+        &self,
+        key: StructuralViewKey,
+    ) -> Result<StructuralNode<'_>, StructuralValueError> {
+        let record = self.view(key)?;
+        let StructuralObject::Owned { image, .. } = self.objects.get(record.root)? else {
+            return Err(StructuralValueError::WrongPayloadKind);
+        };
+        image
+            .node(record.node)
+            .ok_or(StructuralValueError::InvariantViolation)
+    }
+
+    pub fn utf8_view(&self, key: StructuralViewKey) -> Result<&str, StructuralValueError> {
+        let record = self.view(key)?;
+        let StructuralProjection::Utf8 { start, end, .. } = record.projection else {
+            return Err(StructuralValueError::WrongPayloadKind);
+        };
+        let StructuralObject::Owned { image, .. } = self.objects.get(record.root)? else {
+            return Err(StructuralValueError::WrongPayloadKind);
+        };
+        let bytes = image.bytes(record.node, super::StructuralKind::String)?;
+        let text = std::str::from_utf8(bytes).map_err(|_| StructuralValueError::InvalidUtf8)?;
+        text.get(start as usize..end as usize)
+            .ok_or(StructuralValueError::InvalidRange)
+    }
+
+    pub fn byte_vector_mut(
         &mut self,
         key: StructuralViewKey,
-    ) -> Result<&mut SemanticValue, StructuralValueError> {
+    ) -> Result<&mut [u8], StructuralValueError> {
         let record = match self.views.get(key.slot() as usize) {
             Some(ViewSlot::Live { generation, record }) if generation.get() == key.generation() => {
                 record
@@ -69,37 +109,12 @@ impl StructuralValueRuntime {
                 super::super::StructuralRootTableError::BorrowConflict,
             ));
         }
-        let StructuralObject::Owned { value, .. } = self.objects.get_mut(record.root)? else {
+        let root = record.root;
+        let node = record.node;
+        let StructuralObject::Owned { image, .. } = self.objects.get_mut(root)? else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
-        select_mut(value, record.projection.path())
-    }
-
-    pub fn utf8_view(&self, key: StructuralViewKey) -> Result<&str, StructuralValueError> {
-        let record = self.view(key)?;
-        let StructuralProjection::Utf8 { start, end, .. } = record.projection else {
-            return Err(StructuralValueError::WrongPayloadKind);
-        };
-        let StructuralObject::Owned { value, .. } = self.objects.get(record.root)? else {
-            return Err(StructuralValueError::WrongPayloadKind);
-        };
-        let selected = select(value, record.projection.path())?;
-        let SemanticPayload::String(bytes) = &selected.payload else {
-            return Err(StructuralValueError::WrongPayloadKind);
-        };
-        let text = std::str::from_utf8(bytes).map_err(|_| StructuralValueError::InvalidUtf8)?;
-        text.get(start as usize..end as usize)
-            .ok_or(StructuralValueError::InvalidRange)
-    }
-
-    pub fn byte_vector_mut(
-        &mut self,
-        key: StructuralViewKey,
-    ) -> Result<&mut Vec<u8>, StructuralValueError> {
-        match &mut self.projected_mut(key)?.payload {
-            SemanticPayload::ByteVector(bytes) => Ok(bytes),
-            _ => Err(StructuralValueError::WrongPayloadKind),
-        }
+        image.bytes_mut(node, super::StructuralKind::ByteVector)
     }
 
     pub fn path_equals(
@@ -108,12 +123,12 @@ impl StructuralValueRuntime {
         right: StructuralValueKey,
         expected: StructuralType,
     ) -> Result<bool, StructuralValueError> {
-        let left = self.value(left, expected)?;
-        let right = self.value(right, expected)?;
-        match (&left.payload, &right.payload) {
-            (SemanticPayload::Path(left), SemanticPayload::Path(right)) => Ok(left == right),
-            _ => Err(StructuralValueError::WrongPayloadKind),
-        }
+        let left = self.value_image(left, expected)?;
+        let right = self.value_image(right, expected)?;
+        Ok(
+            left.bytes(super::LocalNodeId::ROOT, super::StructuralKind::Path)?
+                == right.bytes(super::LocalNodeId::ROOT, super::StructuralKind::Path)?,
+        )
     }
 
     pub fn cleanup_reports(&self) -> impl ExactSizeIterator<Item = &DestinationCleanupReport> {
@@ -127,68 +142,13 @@ impl StructuralValueRuntime {
         value: Value,
     ) -> Result<(), StructuralValueError> {
         let expected = self.expected_field(key, field)?;
-        let node = if let Some(root) = value.as_structural_root() {
+        let (image, facts) = if let Some(root) = value.as_structural_root() {
             self.preflight_root_field(key, field, root, expected)?;
-            self.take_owned_value(root, expected)?
+            self.take_owned_image(root, expected)?
         } else {
-            self.node_from_value(value, expected)?
+            self.image_from_value(value, expected)?
         };
-        self.initialize_node(key, field, node)
-            .map_err(|failure| failure.error)
-    }
-
-    fn expected_field(
-        &self,
-        key: StructuralDestinationKey,
-        field: u16,
-    ) -> Result<StructuralType, StructuralValueError> {
-        let record = self.destination(key)?;
-        let index = usize::from(field);
-        let value = record
-            .values
-            .get(index)
-            .ok_or(StructuralValueError::FieldOutOfRange)?;
-        if value.is_some() {
-            return Err(StructuralValueError::FieldAlreadyInitialized);
-        }
-        Ok(record.field_types[index])
-    }
-
-    fn node_from_value(
-        &self,
-        value: Value,
-        expected: StructuralType,
-    ) -> Result<SemanticValue, StructuralValueError> {
-        let payload = if value.is_unit() {
-            SemanticPayload::Inline(InlineStructuralValue::Unit)
-        } else if let Some(value) = value.as_bool() {
-            SemanticPayload::Inline(InlineStructuralValue::Bool(value))
-        } else if let Some(value) = value.as_i64() {
-            SemanticPayload::Inline(InlineStructuralValue::I64(value))
-        } else if let Some(value) = value.as_f64_bits() {
-            SemanticPayload::Inline(InlineStructuralValue::F64Bits(value))
-        } else if let Some(value) = value.as_function() {
-            SemanticPayload::Static(StaticStructuralLeaf::Function(value))
-        } else if let Some(value) = value.as_symbol() {
-            SemanticPayload::Static(StaticStructuralLeaf::Symbol(value))
-        } else if let Some(value) = value.as_static_bytes() {
-            SemanticPayload::Static(StaticStructuralLeaf::Bytes(value))
-        } else {
-            return Err(StructuralValueError::MixedValue);
-        };
-        let node = SemanticValue::new(expected, payload);
-        self.validate_tree(&node)?;
-        Ok(node)
-    }
-
-    pub(super) fn require_owned_root(
-        &self,
-        root: super::super::RootKey,
-        expected: StructuralType,
-    ) -> Result<(), StructuralValueError> {
-        match self.objects.get(root)? {
-            StructuralObject::Owned { value, .. } => self.require_type(value.value_type, expected),
-            StructuralObject::Static(_) => Err(StructuralValueError::WrongPayloadKind),
-        }
+        self.initialize_image(key, field, image, facts)
+            .map_err(|failure| failure.0)
     }
 }

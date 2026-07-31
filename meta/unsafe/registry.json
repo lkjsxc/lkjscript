@@ -45,16 +45,15 @@
     },
     {
       "id": "native-runtime-bridge",
-      "responsibility": "Serve verified native runtime calls and exact root, heap, and island state.",
+      "responsibility": "Serve verified native calls and exact runtime-value, frame, and island state.",
       "safe_caller_contract": "Verified call IDs and checked handles preserve layout, lifetime, and alias rules.",
       "files": [
         "crates/mechanisms/lkjscript-executable/src/executable/runtime.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/runtime/island.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/runtime/island_unique.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/runtime/island_unique/cleanup.rs",
-        "crates/mechanisms/lkjscript-executable/src/executable/state/collection.rs",
-        "crates/mechanisms/lkjscript-executable/src/executable/state/heap.rs",
-        "crates/mechanisms/lkjscript-executable/src/executable/state/roots.rs"
+        "crates/mechanisms/lkjscript-executable/src/executable/state/runtime_values.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/state/runtime_values/arguments.rs"
       ]
     },
     {

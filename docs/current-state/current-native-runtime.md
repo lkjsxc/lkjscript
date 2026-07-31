@@ -35,22 +35,16 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   bounded owned non-Send code objects through
   `lkjscript-executable`, and actually invokes generated System V AMD64 entries;
   scalar/direct native behavior stays unboxed and unchanged
-- Native runtime ABI: semantic/runtime versions remain 1 and native canonical native contract is
-  required. Enum-identified `EnterFunctionV1` and `PollV1` calls record entries
-  and enforce cooperative fuel/deadlines; generated canonical native contract prologues call the
-  encoder-owned `ReserveFrameV1` after only minimal ABI setup and before frame
-  subtraction/initialization. The executable crate validates descriptor bytes, configured
-  aggregate/per-frame limits, active-frame capacity, the exact configured
-  active value/home/root budget, and guarded current pthread stack bounds. The
-  executable invocation caches immutable current-thread stack bounds once, then checks
-  each generated reservation without repeating pthread attribute queries.
-  Registration itself records source-function entry and consumes the mandatory
-  entry poll before body effects, avoiding two duplicate runtime calls; backedge
-  polls remain explicit. Verified transitive may-collect summaries suppress caller
-  publication calls for non-collecting scalar closures while retaining exact
-  empty maps. The executable crate tracks exact reservation/release across nested frames. Collecting calls publish
-  a dense safepoint, and every structured return/trap/exit/deadline/resource/host
-  edge unregisters before status returns to the execution owner
+- Native runtime ABI: exact contract digests are required. Enum-identified
+  `EnterFunction` and `Poll` calls record entries and enforce cooperative
+  fuel/deadlines; generated prologues reserve frame bytes after minimal ABI
+  setup and before frame initialization. The executable crate validates
+  descriptor bytes, aggregate/per-frame limits, active-frame and active-home
+  capacity, and guarded current pthread stack bounds. One invocation caches its
+  immutable current-thread stack bounds, tracks exact reservation/release across
+  nested frames, and unregisters every structured return, trap, exit, deadline,
+  resource, and host-failure edge. There is no collection publication or
+  liveness-map ABI.
 - Engine modes: explicit `vm`, `baseline-jit`, `optimizing-jit`, and `auto` work; ordinary `run`
   defaults to `auto` at the conservative 64-entry threshold, explicit `vm`
   remains deterministic, forced baseline compiles the complete reachable
@@ -67,15 +61,15 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   and `OptimizedNative`; code-object tier is `Baseline` or `Optimizing`. Records
   retain saturating calls, bounded attempts, epoch/failure/object facts,
   and native entries. Code objects retain ABI/tier/group, size/accounting,
-  relocation/runtime/safepoint/source/outcome, compile/install, invalidation,
+  relocation/runtime/source/outcome, compile/install, invalidation,
   W^X, entry metadata, and bounded optimizing certificate/stat accounting under
   synchronous session ownership. Metrics separately count baseline/optimizing
   objects and entries, actual executed optimization passes, certificate
   byte estimates/records, explicit phase counters, and exact rewrite families
 - Retained JIT evidence: opt-in low-overhead JSON metrics are separate from full
   diagnostics and never use stdout; allocation/object byte fields are labeled
-  deterministic estimates, heap operation attempts and successes are distinct,
-  and no collection-pause distribution is claimed. The standard-library harness
+  deterministic estimates, runtime-value operation attempts and successes are
+  distinct, and no collection metrics are emitted. The standard-library harness
   polls process RSS, checks exact results and stream silence, randomizes at
   least four warmups plus 31 samples, and retains every sample and distribution
   under `meta/benchmarks/jit/results/`. The first `063668e` run is retained as
@@ -85,34 +79,20 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
   every criterion at 2.984780x and is **Adopted** for forced proof-optimizing
   performance. Automatic optimizing promotion remains disabled and unmeasured;
   no OSR, deoptimization, or speculation claim is made
-- Native references and heap sites: typed opaque stable-handle words use exact
-  Str/List/Option/Result/product/concrete-enum layout identities and verified
-  frame homes, not raw object pointers; zero is accepted only for EmptyList/None;
-  the Copy runtime-adapter token
-  is non-Send/non-Sync.
-  Bounded verifier-owned backward-CFG liveness charges every retained root
-  before allocation and certificates sorted/deduplicated typed requirements for
-  every direct/runtime call. The encoder consumes the certificate, and private
-  structural image requirements prevent omitted/stale public maps from
-  validating. `CollectReferenceV1` exercises exact non-empty traced roots while
-  Poll/Enter stay non-collecting. `lkjscript-executable` alone retains raw active-frame
-  addresses, validates the installed image/chain/maps, grows root capacity
-  dynamically under an aggregate cap, copies typed roots to safe runtime
-  services, writes back handles, and reports exact stack/frame/root outcomes.
-  Runtime-service limits are distinct from materialization limits. Generic
-  `HeapDispatchV1` sites retain canonical operation-specific
-  input/result/layout/allocation/store facts, including nominal product field,
-  List/Option/Result payload, and enum/variant/field/layout/tag/substitution
-  identities, plus arbitrary bounded typed arguments/result homes, source
-  identity, and safepoint; the executable crate copies
-  values/roots into safe `GcHeap` services, writes roots back, re-materializes
-  moved arguments, and writes exact results. Caller/callee chains, dead-root
-  exclusion, bounds,
-  structured failures/outcomes, W^X, and repeated installation are tested
+- Native invocation-region values: typed opaque worker-local keys use exact
+  list and region-product layout identities and verified frame homes, not raw
+  object pointers. Generic runtime-value sites retain canonical
+  operation-specific input/result/layout/allocation/store facts plus bounded
+  typed argument/result homes and source identity. `lkjscript-executable`
+  validates the installed image, active frame, and exact homes, copies values
+  into safe invocation-region services, and writes the typed result. Structural
+  aggregates, enums, options, results, strings, and paths use the separate
+  structural service and never enter this key domain. Frame bounds, structured
+  failures/outcomes, W^X, and repeated installation are tested.
 - Native source limits: the callable SSA adapter rejects indirect calls,
   polymorphic/unsupported signatures and enum substitutions, Symbol,
   Handle/host IO, and lexical Owned/Ref/RefMut. Scalar canonical native contract maps remain exactly empty; supported
-  host-independent reference operations have exact non-empty maps. Native/VM
+  host-independent invocation-region operations have exact typed sites. Native/VM
   reference transitions are absent, so per-function auto-entry eligibility
   prevents a compiled reference helper from ever labeling a direct VM call
   native. Explicit trap sites carry deterministic selected message identity

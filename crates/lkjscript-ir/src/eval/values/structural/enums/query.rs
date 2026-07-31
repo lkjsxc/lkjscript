@@ -1,4 +1,4 @@
-use lkjscript_core::{SemanticPayload, StructuralKind};
+use lkjscript_core::{StructuralKind, StructuralNodeView};
 
 use crate::eval::{
     enum_field_index, enum_variant, map_structural_error, structural_root, EvalValue, Evaluator,
@@ -25,16 +25,17 @@ impl Evaluator<'_> {
             return Err(Flow::Trap("enum variant test type mismatch".into()));
         }
         let view = self.borrow_whole(owner, value_type)?;
-        let result = match &self
+        let result = self
             .structural
             .runtime
-            .projected(view)
-            .map_err(map_structural_error)?
-            .payload
-        {
-            SemanticPayload::Enum { tag, .. } => Ok(EvalValue::Bool(*tag == selected.physical_tag)),
-            _ => Err(Flow::Trap("expected structural enum payload".into())),
-        };
+            .projected_node(view)
+            .map_err(map_structural_error)
+            .and_then(|node| match node.payload() {
+                StructuralNodeView::Enum { tag, .. } => {
+                    Ok(EvalValue::Bool(tag == selected.physical_tag))
+                }
+                _ => Err(Flow::Trap("expected structural enum payload".into())),
+            });
         let ended = self
             .structural
             .runtime
@@ -77,10 +78,10 @@ impl Evaluator<'_> {
         if !matches!(
             self.structural
                 .runtime
-                .value(owner, value_type)
+                .value_node(owner, value_type)
                 .map_err(map_structural_error)?
-                .payload,
-            SemanticPayload::Enum { tag, .. } if tag == selected.physical_tag
+                .payload(),
+            StructuralNodeView::Enum { tag, .. } if tag == selected.physical_tag
         ) {
             return Err(Flow::Trap("inactive enum projection".into()));
         }

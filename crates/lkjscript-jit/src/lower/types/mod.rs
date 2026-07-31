@@ -90,28 +90,28 @@ pub(super) fn lower_type(
         SsaType::F64 => Ok(ValueType::F64),
         SsaType::Capability(kind) => Ok(ValueType::Capability(*kind)),
         SsaType::Resource(kind) => Ok(ValueType::Resource(*kind)),
-        SsaType::Product(product) => Ok(ValueType::Reference(ReferenceType::Product(
-            LayoutIdentity::product(u32::from(product.raw())),
-        ))),
+        SsaType::Product(product) => {
+            let identity = layouts.region_product_identity(*product).ok_or_else(|| {
+                LoweringError::new(
+                    LoweringFailureCode::UnsupportedType,
+                    Some(function),
+                    "product lacks structural or invocation-region storage metadata",
+                )
+            })?;
+            Ok(ValueType::Reference(ReferenceType::RegionProduct(
+                LayoutIdentity::product(u32::from(product.raw())),
+                identity,
+            )))
+        }
         SsaType::List(element) => Ok(ValueType::Reference(ReferenceType::List(
             exact_layout_identity(function, layouts, ty)?,
             exact_layout_identity(function, layouts, element)?,
         ))),
-        SsaType::Enum { arguments, .. } => {
-            for argument in arguments {
-                lower_type(function, argument, layouts)?;
-            }
-            Ok(ValueType::Reference(ReferenceType::Enum(
-                exact_layout_identity(function, layouts, ty)?,
-                layouts.enum_layout(ty).ok_or_else(|| {
-                    LoweringError::new(
-                        LoweringFailureCode::UnsupportedType,
-                        Some(function),
-                        "enum type is missing its runtime layout identity",
-                    )
-                })?,
-            )))
-        }
+        SsaType::Enum { .. } => Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            "enum lacks deterministic structural metadata",
+        )),
         SsaType::Bytes => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
             Some(function),

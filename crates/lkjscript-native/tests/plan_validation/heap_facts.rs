@@ -2,17 +2,19 @@ use super::*;
 
 #[test]
 fn public_heap_descriptors_reject_noncanonical_operation_facts_and_structural_owners() {
-    let product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(0)));
-    let other_product = ValueType::Reference(ReferenceType::Product(LayoutIdentity::product(1)));
+    let product = ValueType::Reference(ReferenceType::RegionProduct(
+        LayoutIdentity::product(0),
+        [10; 32],
+    ));
     let list_i64 = ValueType::Reference(ReferenceType::List(
         LayoutIdentity::new(100),
         ValueType::I64.layout_identity(),
     ));
-    let enum_value = ValueType::Reference(ReferenceType::Enum(LayoutIdentity::new(101), [4; 32]));
     let structural = ValueType::StructuralOwner(StructuralTypeIdentity::new(
         201,
         202,
         StructuralKind::String,
+        false,
     ));
     let malformed = [
         HeapCallDescriptor::new(
@@ -29,20 +31,6 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts_and_structural_ow
             },
             vec![structural],
             product,
-            AllocationClass::Bounded,
-            StoreClass::Initialization,
-        ),
-        HeapCallDescriptor::new(
-            HeapOperation::EnumValue {
-                enum_id: [1; 32],
-                variant: [2; 32],
-                layout: [3; 32],
-                physical_tag: 0,
-                substitutions: Vec::new(),
-                fields: 1,
-            },
-            vec![structural],
-            enum_value,
             AllocationClass::Bounded,
             StoreClass::Initialization,
         ),
@@ -87,13 +75,6 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts_and_structural_ow
             StoreClass::None,
         ),
         HeapCallDescriptor::new(
-            HeapOperation::EqualValue,
-            vec![product, other_product],
-            ValueType::Bool,
-            AllocationClass::None,
-            StoreClass::None,
-        ),
-        HeapCallDescriptor::new(
             HeapOperation::WithProductField {
                 product: 0,
                 field: 0,
@@ -113,7 +94,7 @@ fn public_heap_descriptors_reject_noncanonical_operation_facts_and_structural_ow
             vec![product, ValueType::I64],
             product,
             AllocationClass::Bounded,
-            StoreClass::Reference,
+            StoreClass::None,
         ),
     ];
     assert!(malformed

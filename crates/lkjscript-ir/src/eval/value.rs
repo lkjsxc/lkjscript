@@ -42,6 +42,7 @@ pub enum EvalValue {
     Capability(lkjscript_contracts::CapabilityKind),
     Resource(EvalResource),
     Product(ProductId, Vec<Self>),
+    RegionProduct(lkjscript_core::RegionProductKey),
     Enum {
         enum_id: EnumId,
         variant: VariantId,
@@ -49,6 +50,9 @@ pub enum EvalValue {
         physical_tag: u16,
         payload: Vec<Self>,
     },
+    /// Session-region segmented persistent list handle.
+    SegmentedList(lkjscript_core::SegmentedListKey),
+    /// Key-free returned-list snapshot.
     List(Vec<Self>),
     Function(FunctionId),
 }
@@ -83,6 +87,7 @@ impl PartialEq for EvalValue {
             (Self::Product(left_id, left), Self::Product(right_id, right)) => {
                 left_id == right_id && left == right
             }
+            (Self::RegionProduct(left), Self::RegionProduct(right)) => left == right,
             (
                 Self::Enum {
                     enum_id: le,
@@ -99,6 +104,7 @@ impl PartialEq for EvalValue {
                     payload: rp,
                 },
             ) => le == re && lv == rv && ll == rl && lt == rt && lp == rp,
+            (Self::SegmentedList(left), Self::SegmentedList(right)) => left == right,
             (Self::List(left), Self::List(right)) => left == right,
             (Self::Function(left), Self::Function(right)) => left == right,
             _ => false,

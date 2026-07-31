@@ -2,24 +2,53 @@ use super::*;
 
 pub(crate) fn verified_fold(
     children: Vec<(VerifiedDerived, MemoryTypePathElement)>,
+    region_capable: bool,
 ) -> VerifiedDerived {
     let mut mode = MemoryAggregateMode::Copy;
     let mut borrow = false;
     let mut dynamic = false;
+    let mut region = None;
     let mut blocker = None;
     for (child, path) in children {
         mode = mode.max(child.mode);
         borrow |= child.contains_borrow;
         dynamic |= child.contains_dynamic_owner;
-        if child.closure.class != MemoryClosureClass::Deterministic && blocker.is_none() {
-            blocker = Some((child.closure, path));
+        match child.closure.class {
+            MemoryClosureClass::Deterministic => {}
+            MemoryClosureClass::RegionClosed if region.is_none() => {
+                region = Some((child.closure, path));
+            }
+            MemoryClosureClass::RegionClosed => {}
+            MemoryClosureClass::Unresolved | MemoryClosureClass::IllegalDomainBridge
+                if blocker.is_none() =>
+            {
+                blocker = Some((child.closure, path));
+            }
+            MemoryClosureClass::Unresolved | MemoryClosureClass::IllegalDomainBridge => {}
         }
     }
     if let Some((mut closure, path)) = blocker {
         closure.blocker_path.insert(0, path);
         if dynamic {
-            closure.class = MemoryClosureClass::IllegalMixedBridge;
-            closure.mixed_direction = Some(MemoryMixedBridgeDirection::DeterministicContainsLegacy);
+            closure.class = MemoryClosureClass::IllegalDomainBridge;
+            closure.mixed_direction =
+                Some(MemoryMixedBridgeDirection::DeterministicContainsUnresolved);
+        }
+        return VerifiedDerived {
+            mode,
+            closure,
+            contains_borrow: borrow,
+            contains_dynamic_owner: dynamic,
+        };
+    }
+    if let Some((mut closure, path)) = region {
+        closure.blocker_path.insert(0, path);
+        if dynamic || borrow {
+            closure.class = MemoryClosureClass::IllegalDomainBridge;
+            closure.mixed_direction =
+                Some(MemoryMixedBridgeDirection::DeterministicContainsUnresolved);
+        } else if !region_capable {
+            closure.class = MemoryClosureClass::Unresolved;
         }
         return VerifiedDerived {
             mode,
@@ -32,7 +61,7 @@ pub(crate) fn verified_fold(
         mode,
         closure: verified_closed(MemoryClosureClass::Deterministic),
         contains_borrow: borrow,
-        contains_dynamic_owner: dynamic,
+        contains_dynamic_owner: true,
     }
 }
 
@@ -46,11 +75,11 @@ pub(crate) fn verified_closed(class: MemoryClosureClass) -> MemoryClosureFact {
     }
 }
 
-pub(crate) fn verified_legacy(ty: &Type, reason: MemoryBlockerReason) -> VerifiedDerived {
+pub(crate) fn verified_unresolved(ty: &Type, reason: MemoryBlockerReason) -> VerifiedDerived {
     VerifiedDerived {
         mode: MemoryAggregateMode::ImmutableValue,
         closure: MemoryClosureFact {
-            class: MemoryClosureClass::LegacyClosed,
+            class: MemoryClosureClass::Unresolved,
             blocker_path: Vec::new(),
             blocker_type: Some(verified_memory_type(ty)),
             blocker_reason: Some(reason),
@@ -88,14 +117,19 @@ pub(crate) fn verified_is_aggregate(ty: &Type) -> bool {
 }
 
 pub(crate) fn verified_copy_share(ty: &Type, item: &VerifiedDerived) -> MemoryCopySharePlan {
-    if item.closure.class == MemoryClosureClass::LegacyClosed {
-        return MemoryCopySharePlan::LegacyTracing;
+    if item.closure.class == MemoryClosureClass::RegionClosed {
+        return MemoryCopySharePlan::RegionHandleCopy;
+    }
+    if item.closure.class != MemoryClosureClass::Deterministic {
+        return MemoryCopySharePlan::Unsupported;
     }
     match ty {
         Type::Symbol => MemoryCopySharePlan::StaticIdentity,
         Type::ByteSlice => MemoryCopySharePlan::BorrowShared,
         Type::ByteSliceMut => MemoryCopySharePlan::BorrowExclusive,
         Type::Resource(_) => MemoryCopySharePlan::ExternalHandle,
+        Type::List(_) => MemoryCopySharePlan::RegionHandleCopy,
+        Type::Product(_) | Type::Enum { .. } => MemoryCopySharePlan::StructuralCopy,
         _ => match item.mode {
             MemoryAggregateMode::Copy => MemoryCopySharePlan::TrivialCopy,
             MemoryAggregateMode::ImmutableValue if verified_is_aggregate(ty) => {

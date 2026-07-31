@@ -95,7 +95,6 @@ fn verifier_rejects_generic_ownership_substitution() {
                     metadata: InstructionMetadata {
                         origin: Origin::SYNTHETIC,
                         effects: EffectSet::PURE,
-                        safepoint: Safepoint::Required,
                         failure: FailureBehavior::None,
                         failure_cleanup: None,
                         frame_state: Some(FrameState {
@@ -161,7 +160,6 @@ fn verifier_rejects_generic_ownership_substitution() {
                     metadata: InstructionMetadata {
                         origin: Origin::SYNTHETIC,
                         effects: EffectSet::PURE,
-                        safepoint: Safepoint::Required,
                         failure: FailureBehavior::None,
                         failure_cleanup: None,
                         frame_state: Some(FrameState {

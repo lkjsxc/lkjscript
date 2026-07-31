@@ -1,19 +1,15 @@
-mod enum_metadata;
-mod heap_identity;
-mod list_limits;
 mod outcomes;
+mod scalars;
 mod structural_cutover;
 mod trap_sites;
 
 use crate::*;
-use lkjscript_core::{
-    ExecutionConfig, ExecutionOutcome, GcHeap, HeapObj, Value, MAX_LIST_EQUAL_STEPS,
-};
+use lkjscript_core::{ExecutionConfig, ExecutionOutcome};
 use lkjscript_ir::{
     verify, Block, BlockId, BlockMetadata, BlockParameter, CallTarget, Constant, EffectSet,
     FailureBehavior, FrameState, Function, FunctionId, Instruction, InstructionKind,
-    InstructionMetadata, Origin, Program, Safepoint as IrSafepoint, Signature, SourceMetadata,
-    SsaType, StructuredOutcome, Terminator, TraitId, TraitMetadata, TraitRole, ValueId,
+    InstructionMetadata, Origin, Program, Signature, SourceMetadata, SsaType, StructuredOutcome,
+    Terminator, TraitId, TraitMetadata, TraitRole, ValueId,
 };
 
 use super::{execute_forced, JitConfig};
@@ -46,7 +42,6 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
             metadata: InstructionMetadata {
                 origin: Origin::SYNTHETIC,
                 effects: EffectSet::PURE,
-                safepoint: IrSafepoint::None,
                 failure: FailureBehavior::None,
                 failure_cleanup: None,
                 frame_state: None,
@@ -62,6 +57,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
             path: "terminal.lkjscript".into(),
         }],
         products: Vec::new(),
+        region_products: Vec::new(),
         enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),

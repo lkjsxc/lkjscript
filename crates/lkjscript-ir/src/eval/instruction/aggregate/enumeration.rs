@@ -75,6 +75,9 @@ impl Evaluator<'_> {
             AggregateMode::Structural => {
                 self.enum_from_ssa(&instruction.ty, variant, layout, fields, values)
             }
+            AggregateMode::Region => {
+                Err(Flow::Trap("enum region execution is not installed".into()))
+            }
             AggregateMode::Legacy | AggregateMode::ResourceAdapter => {
                 let (selected, _, expected_layout) =
                     enum_variant(self.program.program(), &instruction.ty, variant)

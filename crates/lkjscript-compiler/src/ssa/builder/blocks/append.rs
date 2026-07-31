@@ -25,15 +25,10 @@ impl FunctionBuilder<'_> {
             _ => Vec::new(),
         };
         let id = self.next_value(&ty)?;
-        let safepoint = if matches!(kind, InstructionKind::Call { .. })
+        let needs_frame_state = matches!(kind, InstructionKind::Call { .. })
             || effects.contains(EffectSet::ALLOCATES)
-            || effects.contains(EffectSet::HOST_IO)
-        {
-            Safepoint::Required
-        } else {
-            Safepoint::None
-        };
-        let frame_state = if safepoint == Safepoint::Required {
+            || effects.contains(EffectSet::HOST_IO);
+        let frame_state = if needs_frame_state {
             Some(self.frame_state())
         } else {
             None
@@ -43,7 +38,6 @@ impl FunctionBuilder<'_> {
         let metadata = InstructionMetadata {
             origin: self.next_origin(expression_origin.raw()),
             effects,
-            safepoint,
             failure,
             failure_cleanup,
             frame_state,

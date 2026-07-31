@@ -54,23 +54,7 @@ pub(crate) fn scalar_to_execution(
         ScalarInvocationOutcome::Returned(value) => {
             let owned = match value {
                 NativeValue::Reference(reference) => {
-                    let heap = session.heap.as_ref().ok_or_else(|| {
-                        EngineError::new(
-                            FailureCode::InvocationFailure,
-                            Some(function),
-                            "collector-free invocation returned a legacy reference",
-                        )
-                    })?;
-                    let value = native_reference_value(heap, reference).map_err(|error| {
-                        EngineError::new(FailureCode::InvocationFailure, Some(function), error)
-                    })?;
-                    heap.snapshot(value).map_err(|error| {
-                        EngineError::new(
-                            FailureCode::InvocationFailure,
-                            Some(function),
-                            error.to_string(),
-                        )
-                    })?
+                    session.snapshot_reference_return(function, reference)?
                 }
                 NativeValue::StaticBytes(_) => session.take_returned_unique(function, true)?,
                 NativeValue::Unique(owner)
@@ -138,14 +122,10 @@ pub(crate) fn scalar_to_execution(
 
 pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedValue> {
     match value {
-        NativeValue::Unit => OwnedValue::from_vm_snapshot(Value::UNIT, Vec::new()),
-        NativeValue::Bool(value) => {
-            OwnedValue::from_vm_snapshot(Value::from_bool(value), Vec::new())
-        }
-        NativeValue::I64(value) => OwnedValue::from_vm_snapshot(Value::from_i64(value), Vec::new()),
-        NativeValue::F64Bits(bits) => {
-            OwnedValue::from_vm_snapshot(Value::from_f64_bits(bits), Vec::new())
-        }
+        NativeValue::Unit => OwnedValue::from_value(Value::UNIT),
+        NativeValue::Bool(value) => OwnedValue::from_value(Value::from_bool(value)),
+        NativeValue::I64(value) => OwnedValue::from_value(Value::from_i64(value)),
+        NativeValue::F64Bits(bits) => OwnedValue::from_value(Value::from_f64_bits(bits)),
         NativeValue::StaticBytes(_)
         | NativeValue::StaticString(_)
         | NativeValue::Capability(_)
@@ -168,31 +148,5 @@ pub fn native_type(ty: &SsaType) -> Option<ValueType> {
         SsaType::I64 => Some(ValueType::I64),
         SsaType::F64 => Some(ValueType::F64),
         _ => None,
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::expect_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn detached_native_scalars_retain_exact_payload_without_snapshot_objects() {
-        for value in [i64::MIN, -1, 0, 1, i64::MAX] {
-            let owned = owned_scalar(NativeValue::I64(value)).expect("owned I64");
-            assert_eq!(owned.as_i64(), Some(value));
-            assert_eq!(owned.snapshot_object_count(), 0);
-        }
-        for bits in [
-            0_u64,
-            1_u64 << 63,
-            0x7ff0_0000_0000_0000,
-            0x7ff8_0000_0000_0042,
-            0xfff8_dead_beef_cafe,
-        ] {
-            let owned = owned_scalar(NativeValue::F64Bits(bits)).expect("owned F64");
-            assert_eq!(owned.as_f64_bits(), Some(bits));
-            assert_eq!(owned.snapshot_object_count(), 0);
-        }
     }
 }

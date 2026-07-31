@@ -13,10 +13,10 @@ proof-checked optimizing JIT. The accepted product is one daemon-first
 OS-resident runtime authority with subordinate application cells and session
 brokers; standalone is only an explicit bootstrap, recovery, diagnosis, CI, or
 development path. The language has one content-addressed semantic
-contract, explicit capabilities/effects, and value semantics. Current unique
-islands and a compact typed structural-root table coexist with an exact tracing
-heap during migration; the accepted destination is collector-free inferred
-ownership, borrowing, regions, sealed sharing, and pools. One semantic resource
+contract, explicit capabilities/effects, and value semantics. Current compact
+typed structural roots, segmented lists, invocation regions, unique owners, and
+resource tables provide deterministic storage; expansion continues through
+inferred ownership, borrowing, regions, sealed sharing, and pools. One semantic resource
 plane separates compiler-verified task legality
 from measured topology, scheduling, and memory-home policy while Linux remains
 the system-wide scheduler. Reproducible packages/components and one semantic IR
@@ -83,8 +83,9 @@ support claim.
 18. `[verified: memory authority]` Claim collector-free execution only after no
     tracing liveness traversal, collector fallback, collecting safepoint,
     collector barrier, or collection metric remains in Current production code.
-19. `[machine: LKJ-MEMORY-TRACING-RATCHET]` Legacy traced object families form
-    one closed non-increasing registry; analysis failure never extends it.
+19. `[machine: LKJ-RUNTIME-NO-TRACING-COLLECTOR]` Collector directories,
+    traced object/storage APIs, liveness maps, collection services, barriers,
+    collector configuration, metrics, and fallbacks are forbidden.
 20. `[machine: LKJ-PLATFORM-REVISION]` Use the sole nonzero monotonic integer in
     `meta/platform-revision` plus exact contract digests; public contract changes
     increment it and lkjscript subsystems never own independent versions.

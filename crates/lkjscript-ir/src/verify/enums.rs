@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
 use crate::verify::*;
-use crate::{
-    EnumMetadata, EnumVariantMetadata, Program, RuntimeLayoutId, SsaType, VariantFieldId, VariantId,
-};
+use crate::{EnumMetadata, EnumVariantMetadata, Program, RuntimeLayoutId, SsaType, VariantFieldId};
 
 pub(crate) fn verify_enum_metadata(program: &Program) -> crate::Result<()> {
     let mut enum_ids = HashSet::new();
@@ -77,9 +75,7 @@ fn verify_variant(
             return fail("SSA enum field has invalid or duplicate identity/name");
         }
         verify_type(program, &field.ty, scope)?;
-        if field.indirect != contains_any_enum(&field.ty)
-            || field.traced != is_traced(program, &field.ty)
-        {
+        if field.indirect != contains_any_enum(&field.ty) {
             return fail("SSA enum field has invalid storage/layout facts");
         }
     }
@@ -155,26 +151,5 @@ fn contains_any_enum(ty: &SsaType) -> bool {
         SsaType::Enum { .. } => true,
         SsaType::List(t) => contains_any_enum(t),
         _ => false,
-    }
-}
-
-fn is_traced(program: &Program, ty: &SsaType) -> bool {
-    program.memory.type_for(ty).is_none() && is_legacy_traced_type(ty)
-}
-
-fn is_legacy_traced_type(ty: &SsaType) -> bool {
-    matches!(
-        ty,
-        SsaType::Product(_) | SsaType::Enum { .. } | SsaType::List(_)
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn path_enum_fields_are_never_traced_metadata() {
-        assert!(!is_legacy_traced_type(&SsaType::Path));
     }
 }

@@ -65,19 +65,6 @@ pub(super) fn canonical_home_displacement(frame: &FrameFacts, kind: FrameHomeKin
     i32::try_from(bytes).ok()?.checked_neg()
 }
 
-pub(super) fn valid_stack_map(frame: &FrameFacts, map: &ExactStackMap) -> bool {
-    if map.roots.windows(2).any(|pair| pair[0] >= pair[1]) {
-        return false;
-    }
-    map.roots.iter().all(|root| {
-        frame.homes.iter().any(|home| {
-            home.kind == root.kind
-                && home.rbp_displacement == root.rbp_displacement
-                && home.value_type == ValueType::Reference(root.reference_type)
-        })
-    })
-}
-
 pub(super) fn offset_in_function(
     entries: &[EntryMetadata],
     function: FunctionId,
@@ -105,8 +92,6 @@ pub(super) struct MetadataSlices<'a> {
     pub(super) relocations: &'a [Relocation],
     pub(super) runtime_calls: &'a [RuntimeCallSlot],
     pub(super) frames: &'a [FrameFacts],
-    pub(super) safepoints: &'a [Safepoint],
-    pub(super) root_requirements: &'a [RootMapRequirement],
     pub(super) heap_runtime_sites: &'a [HeapRuntimeSite],
     pub(super) structural_runtime_sites: &'a [StructuralRuntimeSite],
     pub(super) source_map: &'a [SourceMapEntry],

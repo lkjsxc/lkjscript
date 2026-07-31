@@ -63,7 +63,10 @@ impl JitStructuralRuntime {
         Ok(value)
     }
 
-    pub(in crate::island) fn finish(self) -> (NativeStructuralStats, Option<ResourceLimitKind>) {
+    pub(in crate::island) fn finish(
+        mut self,
+    ) -> (NativeStructuralStats, Option<ResourceLimitKind>) {
+        self.cleanup_copy_owners();
         let empty = self.owners.is_empty() && self.runtime.verify_empty().is_ok();
         let roots = self.runtime.root_stats();
         let metrics = self.runtime.metrics();
@@ -93,6 +96,32 @@ impl JitStructuralRuntime {
             teardown_failures: u64::from(!empty),
         };
         (stats, self.last_resource)
+    }
+
+    fn cleanup_copy_owners(&mut self) {
+        let count = self
+            .owners
+            .values()
+            .filter(|value_type| value_type.copyable())
+            .count();
+        let mut owners = Vec::new();
+        if owners.try_reserve_exact(count).is_err() {
+            self.last_resource = Some(ResourceLimitKind::Allocations);
+            self.last_trap = Some("copy structural teardown allocation failed".into());
+            return;
+        }
+        owners.extend(
+            self.owners
+                .iter()
+                .filter(|(_, value_type)| value_type.copyable())
+                .map(|(key, value_type)| (*key, *value_type)),
+        );
+        for (key, value_type) in owners {
+            let owner = NativeStructuralOwner::new(value_type, key);
+            if self.drop_owner(owner).is_err() {
+                return;
+            }
+        }
     }
 
     pub(in crate::island) fn take_last_trap(&mut self) -> Option<String> {

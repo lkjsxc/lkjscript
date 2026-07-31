@@ -46,6 +46,38 @@ pub(super) fn preflight_instruction_type(
     require_domain_type(function.id, &instruction.ty, layouts, domain)
 }
 
+pub(in crate::lower) fn selected_structural_source(
+    function: &Function,
+    value: ValueId,
+    layouts: &LayoutInterner,
+) -> Result<bool, LoweringError> {
+    let ty = function
+        .blocks
+        .iter()
+        .find_map(|block| {
+            block
+                .parameters
+                .iter()
+                .find(|parameter| parameter.id == value)
+                .map(|parameter| &parameter.ty)
+                .or_else(|| {
+                    block
+                        .instructions
+                        .iter()
+                        .find(|instruction| instruction.id == value)
+                        .map(|instruction| &instruction.ty)
+                })
+        })
+        .ok_or_else(|| {
+            LoweringError::new(
+                LoweringFailureCode::InvalidFunction,
+                Some(function.id),
+                "structural product source type is missing",
+            )
+        })?;
+    Ok(layouts.structural().selected(ty))
+}
+
 pub(in crate::lower) fn explicit_structural(kind: &InstructionKind) -> bool {
     matches!(
         kind,

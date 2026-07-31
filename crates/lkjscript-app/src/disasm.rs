@@ -39,8 +39,10 @@ fn disassemble(chunk: &ValidatedChunk) -> Result<(), String> {
     println!("products ({}):", chunk.products().len());
     for (index, product) in chunk.products().iter().enumerate() {
         println!(
-            "  {index:04} {} ({})",
+            "  {index:04} {} region={} routes={:?} ({})",
             product.name,
+            product.region,
+            product.region_fields,
             product.fields.join(", ")
         );
     }
@@ -156,10 +158,17 @@ mod tests {
     #[test]
     fn product_annotations_only_receive_validated_metadata() {
         let mut chunk = Chunk::new();
+        let plan = lkjscript_core::MemoryPlanId::new([2; 32]);
+        chunk.memory_plan = Some(plan);
+        chunk.main.memory_plan = Some(plan);
         chunk.products.push(ProductMetadata {
             id: ProductId::new(0),
+            identity: lkjscript_core::runtime_product_contract_identity(plan, "Point")
+                .expect("canonical product identity"),
+            region: true,
             name: "Point".into(),
             fields: vec!["x".into()],
+            region_fields: vec![lkjscript_core::RegionProductFieldKind::Unit],
         });
         chunk.product_fields.push(ProductFieldRef {
             product: ProductId::new(0),

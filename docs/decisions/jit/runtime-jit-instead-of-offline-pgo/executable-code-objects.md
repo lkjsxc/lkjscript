@@ -16,7 +16,7 @@ A callable code object records at least:
 - source function or region identity;
 - tier identity;
 - relocation metadata;
-- safepoints and precise GC stack maps;
+- typed frame homes, bounds, cleanup obligations, and poll sites;
 - OSR entries when present;
 - trap and side-exit metadata;
 - accounted metadata and executable sizes;
@@ -31,17 +31,18 @@ The code cache has configurable limits for executable bytes, code-object count,
 compilation time, active or queued work, and metadata bytes. Start with bounded
 retention. Eviction is **Deferred** until return addresses, direct calls, OSR
 relationships, and invalidation are modeled safely.
-## GC, Safepoints, And Outcomes
+## Polls, Typed Homes, And Outcomes
 
-Native safepoints are required at allocations, allocation-capable host and
-function calls, loop backedges, yields/deadline checks, and VM/native
-transitions. Every safepoint has an exact map of live references. Arbitrary
-machine words are never conservatively scanned as pointers.
+Native polls are required at function entry, calls, loop backedges, deadline
+checks, and VM/native transitions as specified by verified SSA. Polls carry no
+liveness map and do not collect. Arbitrary machine words are never scanned or
+interpreted as references.
 
-Native frames become visible to the collector before allocation-capable native
-code is accepted. Baseline code may initially call the existing allocator and
-collector; escape analysis, regions, stack allocation, and generational
-strategies remain later measured candidates.
+Native frames publish bounded typed homes and cleanup obligations before
+runtime-value operations. Structural images, invocation regions, unique owners,
+and affine resources dispatch through exact typed services. Frame teardown and
+structured failure cleanup release those obligations deterministically; no
+collector, root publication, barrier, or fallback participates.
 
 Callable native execution does not begin until chunk validation, structured
 process-safe VM outcomes, process-safe exit, explicit traps, exact local/stack
@@ -128,16 +129,17 @@ Baseline JIT acceptance requires:
 1. byte-for-byte output and return-value equality with the VM;
 2. identical structured traps, errors, malformed-input behavior, and exact
    numerics;
-3. GC correctness across native safepoints;
+3. deterministic typed-home cleanup with zero leaked owners, loans, or private
+   destinations across native polls;
 4. identical resource-limit behavior;
 5. VM/native and native/native call correctness;
 6. bounded code and metadata caches;
 7. forced mode evidence that native code actually executed;
 8. repeated performance evidence including compilation cost.
 
-OSR additionally requires exact locals/stack/loop-header reconstruction, GC
-correctness during transfer, timeout/cancellation behavior, repeated transfers,
-and a workload that enters native code during one long invocation.
+OSR additionally requires exact locals, stack, loop-header, typed-home, and
+cleanup-obligation reconstruction; timeout/cancellation behavior; repeated
+transfers; and a workload that enters native code during one long invocation.
 
 Proof-based optimizing JIT additionally requires differential SSA optimization
 tests, isolated and combined variants, compile-time and code-size budgets,
@@ -156,12 +158,13 @@ implied by a non-speculative optimizing tier.
 3. Implement the selected owned
    [Linux x86-64 native backend](../../execution/linux-x86-64-native-backend.md), shared native
    code-object boundary, and minimal non-PGO file emitter; add relocations, ABI
-   tests, runtime calls, and precise stack maps before allocation paths.
+   tests, runtime calls, typed frame homes, and cleanup obligations before
+   structural allocation paths.
 4. Add bounded call counters and synchronous function-triggered baseline JIT,
    VM/native calls, direct native calls, and forced baseline testing.
-5. Add sound ownership/coherent traits, exact native frame roots, allocation,
-   barriers, recursion, and collection exercised while generated frames are
-   active.
+5. Add sound ownership/coherent traits, exact native frame homes, deterministic
+   allocation and cleanup, and recursion exercised while generated frames are
+   active; delete the superseded tracing mechanisms at zero families.
 6. Add a distinct proof-based optimizing engine, then implement the selected
    process-local synchronous promotion boundary and run its retained threshold
    gate. The forced first engine is Current; automatic promotion remains

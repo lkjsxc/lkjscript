@@ -178,4 +178,5 @@ pub enum Op {
     StructuralStringUtf8View = 250,
     StructuralCopy = 251,
     ResourceDrop = 252,
+    StructuralAggregateFieldCopy = 253,
 }

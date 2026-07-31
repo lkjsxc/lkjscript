@@ -9,17 +9,9 @@ fn structural_copy(
             .map_err(|_| crate::Error::msg("structural copy representation exceeds u16"))?,
     );
     let input = pop(state, proto, instruction)?;
-    let (actual, active_variant) = match input {
-        Kind::StructuralOwnerRef {
-            representation,
-            active_variant,
-            ..
-        }
-        | Kind::StructuralOwner {
-            representation,
-            active_variant,
-            ..
-        } => (representation, active_variant),
+    let actual = match input {
+        Kind::StructuralOwnerRef { representation, .. }
+        | Kind::StructuralOwner { representation, .. } => representation,
         _ => return fail(proto, instruction, "structural copy expects an owner reference"),
     };
     require_same_type(chunk, actual, representation, proto, instruction)?;
@@ -52,7 +44,7 @@ fn structural_copy(
     state.stack.push(Kind::StructuralOwner {
         representation,
         owner: fresh_identity(proto, instruction, 2)?,
-        active_variant,
+        active_variant: None,
     });
     Ok(())
 }

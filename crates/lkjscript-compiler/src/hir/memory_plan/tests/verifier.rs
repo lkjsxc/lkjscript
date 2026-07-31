@@ -38,7 +38,7 @@ fn corrupted_mode_closure_destination_and_glue_are_independently_rejected() -> R
         .last_mut()
         .ok_or_else(|| Error::msg("type fact missing"))?
         .closure
-        .class = MemoryClosureClass::LegacyClosed;
+        .class = MemoryClosureClass::Unresolved;
     assert!(rejected(&program, closure)?);
 
     let mut destination = plan.clone();

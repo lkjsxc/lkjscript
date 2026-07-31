@@ -92,13 +92,8 @@ fn assert_resource_metrics(stats: &JitStats) {
     assert_eq!(stats.vm_fallbacks, 0);
     assert_eq!(stats.vm_to_native_transitions, 0);
     assert_eq!(stats.native_to_vm_transitions, 0);
-    assert_eq!(stats.collector_runtime_invocations, 0);
     assert_eq!(stats.resource_runtime_calls, 2);
-    assert_eq!(stats.allocations, 0);
-    assert_eq!(stats.collections, 0);
-    assert_eq!(stats.maximum_roots, 0);
     assert_eq!(stats.runtime_heap_attempts, 0);
-    assert_eq!(stats.barrier_count, 0);
     assert_eq!(stats.native_resources.reservations, 1);
     assert_eq!(stats.native_resources.borrowed_installs, 1);
     assert_eq!(stats.native_resources.borrowed_reuses, 1);
@@ -111,17 +106,10 @@ fn assert_resource_metrics(stats: &JitStats) {
     assert_eq!(stats.native_resources.emergency_obligations, 0);
     assert_eq!(stats.native_resources.teardown_failures, 0);
     assert!(stats.code_objects.iter().all(|object| {
-        object.safepoint_count == 0
-            && object.runtime_calls.contains(&RuntimeCallSlot::StdinHandle)
-            && !object
-                .runtime_calls
-                .contains(&RuntimeCallSlot::CollectReference)
+        object.runtime_calls.contains(&RuntimeCallSlot::StdinHandle)
             && !object
                 .runtime_calls
                 .contains(&RuntimeCallSlot::HeapDispatch)
-            && !object
-                .runtime_calls
-                .contains(&RuntimeCallSlot::PublishSafepoint)
             && object.wx_transition_verified
     }));
 }

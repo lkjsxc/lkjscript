@@ -2,23 +2,23 @@ use std::num::NonZeroU32;
 
 use super::super::{DomainKey, RootClass, RootKey};
 use super::{
-    SemanticValue, StaticStructuralArtifact, StructuralValueError, StructuralValueRuntimeLimits,
+    StaticStructuralArtifact, StructuralImage, StructuralValueError, StructuralValueRuntimeLimits,
     TreeFacts,
 };
 
 #[derive(Debug)]
 pub(super) enum StructuralObject {
     Owned {
-        value: SemanticValue,
+        image: StructuralImage,
         facts: TreeFacts,
     },
     Static(StaticStructuralArtifact),
 }
 
 impl StructuralObject {
-    pub(super) const fn value_type(&self) -> super::StructuralType {
+    pub(super) fn value_type(&self) -> super::StructuralType {
         match self {
-            Self::Owned { value, .. } => value.value_type,
+            Self::Owned { image, .. } => image.root().value_type(),
             Self::Static(artifact) => artifact.value_type,
         }
     }

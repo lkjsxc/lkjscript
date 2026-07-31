@@ -1,7 +1,6 @@
 use crate::optimize::*;
 use crate::{
-    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, RuntimeOp, Safepoint,
-    SsaType, ValueId,
+    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, RuntimeOp, SsaType, ValueId,
 };
 
 pub(crate) fn checker_allowed_identity(
@@ -22,7 +21,6 @@ pub(crate) fn checker_allowed_identity(
     budget.charge(arguments.len() as u64)?;
     let metadata_legal = instruction.metadata.effects == EffectSet::PURE
         && instruction.metadata.failure == FailureBehavior::None
-        && instruction.metadata.safepoint == Safepoint::None
         && instruction.metadata.frame_state.is_none();
     if !metadata_legal
         || !checker_signature_and_operand_types(indexes, signature, arguments, &instruction.ty)
@@ -64,7 +62,6 @@ pub(crate) fn checker_allowed_identity(
             if inner_instruction.ty != SsaType::Bool
                 || inner_instruction.metadata.effects != EffectSet::PURE
                 || inner_instruction.metadata.failure != FailureBehavior::None
-                || inner_instruction.metadata.safepoint != Safepoint::None
                 || inner_instruction.metadata.frame_state.is_some()
             {
                 None

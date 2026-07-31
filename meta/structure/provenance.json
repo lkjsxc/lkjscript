@@ -17,7 +17,7 @@
     {
       "path": "lkjscript.lock.json",
       "class": "generated-mutable",
-      "sha256": "4c34bcd71a9d3f64f801b93b6258994f47c0e5761278f7a7fc83e8cb855d9d27",
+      "sha256": "40dea7ce73ff1df5e4d4cb9d8fcfdb7c654374cb93817126c33ff0122bdc4f43",
       "generator": "lkjscript package lock; canonical local package graph and current contract registry"
     },
     {
@@ -90,6 +90,12 @@
       "path": "meta/benchmarks/jit/results/callable-baseline-jit-linux-x86_64.json",
       "class": "immutable-benchmark-result",
       "sha256": "ffdc3671857e44dfba2cbd2d1c287514a12c5a4c58a07124bfd99645c3bb86a7",
+      "generator": null
+    },
+    {
+      "path": "meta/benchmarks/jit/results/final-no-tracing-linux-x86_64-rejected.json",
+      "class": "immutable-benchmark-result",
+      "sha256": "93b2ed90d94a3196d783b50de3a938f8ca57729b416dff39ef6b9828678bef90",
       "generator": null
     },
     {

@@ -19,11 +19,15 @@ classification for those owners and for static function/symbol artifacts.
 
 The structural runtime now executes compact stale-safe roots, destinations,
 views, dynamic paths and strings, deterministic nonrecursive products and
-enums, structural results, nested returns, and key-free process snapshots
-through evaluator, VM, forced baseline, and forced proof tiers. Ordinary and
-sealed regions, typed pools, and owner homes remain internal substrate rather
-than selected language storage. The three registered traced families remain
-`enum`, `pair`, and `product`; no collector-free-runtime claim follows.
+enums, regular finite recursive enums, copy-product construction/projection/update,
+copy-leaf segmented lists, structural results, nested returns, and key-free snapshots
+through evaluator, VM, forced baseline, and forced proof tiers. A narrow
+ordinary-region product route is also Current for nonrecursive products with
+selected copy lists, scalar leaves, and acyclic region products; keys remain
+invocation-local. Other ordinary and sealed regions, typed pools, and owner
+homes remain internal substrate rather than selected language storage. Lists
+return through flat key-free owned-list snapshots. No traced object family,
+collector, liveness map, collection service, configuration, or metric remains.
 
 The Linux runtime has an authenticated foreground coordinator, durable process
 applications, isolated VM process cells, app-private stdio/clock providers, a
@@ -35,17 +39,16 @@ The accepted immediate sequence remains deterministic structural memory only:
 1. retain adversarial exact cleanup, stale-key, destination, borrowing,
    resource-adapter, recursive-call, and execution-limit evidence for the
    Current structural groups;
-2. migrate recursive and remaining legacy `enum`, `pair`, and `product` groups
-   only when mixed graphs remain impossible and every execution tier uses the
-   same verified structural authority;
-3. infer collector-free ownership, borrowing, regions, sealed sharing, and
-   pools without exposing lifetime syntax or a tracing fallback; and
-4. at zero families, delete collector mechanics and activate the implemented
-   `LKJ-RUNTIME-NO-TRACING-COLLECTOR` closure.
+2. expand independently reconstructible witnesses for structural-image region
+   fields and immutable/nested list elements without admitting unknown generic
+   substitutions;
+3. infer ownership, borrowing, regions, sealed sharing, and pools without
+   exposing lifetime syntax or an atomic/shared-count fallback; and
+4. measure complete alternatives and remove rejected implementations before
+   selecting additional language storage domains.
 
-The next ratchet target is three-to-zero through complete measured production
-groups. It does not claim general product/enum migration or a collector-free
-whole runtime.
+The zero-family cutover is Current. It does not imply that every accepted
+ownership, sealed-sharing, pool, or generic-witness target is implemented.
 
 The previously selected synchronous automatic baseline-to-proof promotion
 remains an **Accepted Implementation Selection** for a later cycle. OSR,

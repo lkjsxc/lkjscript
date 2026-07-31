@@ -43,11 +43,6 @@ impl InstallableImage {
     }
 
     #[must_use]
-    pub fn safepoints(&self) -> &[Safepoint] {
-        &self.safepoints
-    }
-
-    #[must_use]
     pub fn heap_runtime_sites(&self) -> &[HeapRuntimeSite] {
         &self.heap_runtime_sites
     }

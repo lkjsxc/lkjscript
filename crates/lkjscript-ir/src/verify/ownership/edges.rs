@@ -94,9 +94,10 @@ pub(crate) fn transfer_edge(
         }
         if !seen.insert(*argument) {
             return fail(format!(
-                "SSA edge to block {} duplicates affine argument {}",
+                "SSA edge to block {} duplicates affine argument {}; arguments={arguments:?}; parameters={:?}",
                 target.raw(),
                 argument.raw(),
+                target_block.parameters,
             ));
         }
         let fact = state

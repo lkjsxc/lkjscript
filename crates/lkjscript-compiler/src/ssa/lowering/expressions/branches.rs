@@ -72,6 +72,41 @@ impl FunctionBuilder<'_> {
         Ok(())
     }
 
+    fn unbound_residual(branch: &BranchResult, result: ValueId) -> Vec<ValueId> {
+        branch
+            .3
+            .iter()
+            .copied()
+            .filter(|value| *value != result && !branch.2.values().any(|bound| bound == value))
+            .collect()
+    }
+
+    fn merged_bound_unplaced(
+        &self,
+        bindings: &[BindingId],
+        merge_env: &BTreeMap<BindingId, ValueId>,
+        then_result: &BranchResult,
+        else_result: &BranchResult,
+    ) -> Result<Vec<ValueId>> {
+        let mut merged = Vec::new();
+        for binding in bindings {
+            let then_bound = then_result.2.get(binding);
+            let else_bound = else_result.2.get(binding);
+            if then_bound.is_some_and(|value| then_result.3.contains(value))
+                && else_bound.is_some_and(|value| else_result.3.contains(value))
+            {
+                let parameter = merge_env
+                    .get(binding)
+                    .copied()
+                    .ok_or_else(|| Error::msg("SSA merge lost bound owner parameter"))?;
+                if !merged.contains(&parameter) {
+                    merged.push(parameter);
+                }
+            }
+        }
+        Ok(merged)
+    }
+
     fn normalize_structural_branch_result(
         &mut self,
         branch: &mut BranchResult,

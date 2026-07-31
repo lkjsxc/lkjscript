@@ -10,7 +10,7 @@ pub(crate) struct VerifiedDerived {
 
 #[derive(Clone)]
 pub(crate) struct VerifiedExpectedType {
-    pub(crate) ty: MemoryType,
+    pub(crate) witness: MemoryWitnessId,
     pub(crate) derived: VerifiedDerived,
     pub(crate) glue: Option<MemoryDropGlueId>,
     pub(crate) path: Option<MemoryDropPathId>,
@@ -49,7 +49,7 @@ impl<'a> VerifiedTypes<'a> {
             ));
         }
         let derived = self.derive(ty)?;
-        if derived.closure.class == MemoryClosureClass::IllegalMixedBridge {
+        if derived.closure.class == MemoryClosureClass::IllegalDomainBridge {
             return Err(Error::msg(
                 "independent memory verifier reconstructed an illegal mixed bridge",
             ));
@@ -61,20 +61,26 @@ impl<'a> VerifiedTypes<'a> {
             .type_facts
             .get(id.index().unwrap_or(usize::MAX))
             .ok_or_else(|| Error::msg("HIR memory plan omitted a reconstructed type fact"))?;
-        let root = if derived.contains_dynamic_owner
+        let root = if derived.closure.class == MemoryClosureClass::RegionClosed {
+            MemoryRootProjection::None
+        } else if derived.contains_dynamic_owner
             || matches!(ty, Type::Str | Type::Path)
-            || (verified_is_aggregate(ty) && derived.mode != MemoryAggregateMode::Copy)
+            || (verified_is_aggregate(ty)
+                && derived.closure.class == MemoryClosureClass::Deterministic)
         {
             MemoryRootProjection::Structural
         } else {
             MemoryRootProjection::None
         };
+        let copy_share = verified_copy_share(ty, &derived);
+        let witness = self.verify_witness(ty, &derived, root, copy_share, glue, path)?;
         if fact.id != id
+            || fact.witness != witness
             || !type_matches(ty, &fact.ty)
             || fact.mode != derived.mode
             || fact.closure != derived.closure
             || fact.root_projection != root
-            || fact.copy_share != verified_copy_share(ty, &derived)
+            || fact.copy_share != copy_share
             || fact.contains_borrow != derived.contains_borrow
             || fact.contains_dynamic_owner != derived.contains_dynamic_owner
             || fact.drop_glue != glue
@@ -85,7 +91,7 @@ impl<'a> VerifiedTypes<'a> {
             ));
         }
         self.expected.push(VerifiedExpectedType {
-            ty: verified_memory_type(ty),
+            witness,
             derived,
             glue,
             path,
@@ -109,7 +115,13 @@ impl<'a> VerifiedTypes<'a> {
                 .count(),
         )
         .unwrap_or(u64::MAX);
+        let witnesses = u64::try_from(self.plan.witnesses.len()).unwrap_or(u64::MAX);
+        let unique_witnesses: BTreeSet<_> =
+            self.plan.witnesses.iter().map(|item| item.id).collect();
         if type_nodes > MAX_MEMORY_PLAN_TYPE_NODES
+            || witnesses > MAX_MEMORY_PLAN_WITNESSES
+            || witnesses != type_nodes
+            || unique_witnesses.len() != self.plan.witnesses.len()
             || drop_paths > MAX_MEMORY_PLAN_DROP_PATHS
             || self.plan.type_facts.len() != self.expected.len()
             || self.plan.drop_paths.len() != usize::try_from(drop_paths).unwrap_or(usize::MAX)
@@ -119,6 +131,7 @@ impl<'a> VerifiedTypes<'a> {
                     .saturating_add(2)
                     .saturating_add(usize::try_from(drop_paths).unwrap_or(usize::MAX))
             || self.plan.work.type_nodes != type_nodes
+            || self.plan.work.witnesses != witnesses
             || self.plan.work.type_edges != self.graph.edges
             || self.plan.work.scc_work != self.graph.scc_work
             || self.plan.work.aggregate_fields != self.fields

@@ -20,11 +20,7 @@ pub(super) fn heap_descriptor(
         operation,
         HeapOperation::ProductValue { .. }
             | HeapOperation::WithProductField { .. }
-            | HeapOperation::EnumValue { .. }
             | HeapOperation::Cons
-            | HeapOperation::F64FromI64Exact { .. }
-            | HeapOperation::I64FromF64Exact { .. }
-            | HeapOperation::I64FromF64Trunc { .. }
     ) {
         AllocationClass::Bounded
     } else {

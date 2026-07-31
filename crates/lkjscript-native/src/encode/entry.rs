@@ -9,8 +9,6 @@ pub fn encode(
     let mut relocations = Vec::new();
     let mut runtime_call_set = HashSet::new();
     let mut frames = Vec::new();
-    let mut safepoints = Vec::new();
-    let mut root_requirements = Vec::new();
     let mut heap_runtime_sites = Vec::new();
     let mut structural_runtime_sites = Vec::new();
     let mut source_map = Vec::new();
@@ -22,27 +20,18 @@ pub fn encode(
         .map(|function| (function.id, function.signature.clone()))
         .collect();
     let execution_domain = execution_domain(&plan.functions);
-    let collecting_functions = collecting_function_closure(&plan.functions);
 
     for (function_ordinal, function) in plan.functions.iter().enumerate() {
         let start = bytes.len();
         let frame_bytes = calculate_frame_bytes(function)?;
         let outgoing_arguments = maximum_outgoing_arguments(function)?;
-        let certified_call_roots = plan
-            .root_requirements
-            .get(function_ordinal)
-            .ok_or(NativeError::Encode(EncodeError::InvalidCall))?;
         let function_ordinal = to_u32(function_ordinal)?;
         let mut encoder = FunctionEncoder {
             function,
             function_ordinal,
             signatures: &signatures,
-            execution_domain,
-            collecting_functions: &collecting_functions,
             bytes: &mut bytes,
             relocations: &mut relocations,
-            safepoints: &mut safepoints,
-            root_requirements: &mut root_requirements,
             heap_runtime_sites: &mut heap_runtime_sites,
             structural_runtime_sites: &mut structural_runtime_sites,
             source_map: &mut source_map,
@@ -54,7 +43,6 @@ pub fn encode(
             trap_offsets: [None; 3],
             status_return_offset: None,
             unregistered_status_return_offset: None,
-            certified_call_roots,
             frame_bytes,
             maximum_code_bytes: plan.limits.max_code_bytes(),
         };
@@ -114,14 +102,12 @@ pub fn encode(
         RuntimeCallSlot::BytesDrop => 29_u8,
         RuntimeCallSlot::FreezeByteVector => 30_u8,
         RuntimeCallSlot::ThawBytes => 31_u8,
-        RuntimeCallSlot::CollectReference => 32_u8,
-        RuntimeCallSlot::HeapDispatch => 33_u8,
+        RuntimeCallSlot::HeapDispatch => 32_u8,
         RuntimeCallSlot::StructuralDispatch => 34_u8,
         RuntimeCallSlot::ReserveFrame => 35_u8,
         RuntimeCallSlot::RegisterFrame => 36_u8,
-        RuntimeCallSlot::PublishSafepoint => 37_u8,
-        RuntimeCallSlot::UnregisterFrame => 38_u8,
-        RuntimeCallSlot::TakeRejectedEntry => 39_u8,
+        RuntimeCallSlot::UnregisterFrame => 37_u8,
+        RuntimeCallSlot::TakeRejectedEntry => 38_u8,
     });
 
     let image = InstallableImage::new(ImageParts {
@@ -132,8 +118,6 @@ pub fn encode(
         runtime_calls,
         execution_domain,
         frames,
-        safepoints,
-        root_requirements,
         heap_runtime_sites,
         structural_runtime_sites,
         source_map,
@@ -152,27 +136,19 @@ pub fn encode(
 }
 
 fn execution_domain(functions: &[FunctionPlan]) -> NativeExecutionDomain {
-    let uses_collector = functions.iter().any(|function| {
+    let values = functions.iter().flat_map(|function| {
         function
             .values
             .iter()
-            .any(|value| matches!(value.value_type, ValueType::Reference(_)))
-            || function
-                .locals
-                .iter()
-                .any(|local| matches!(local.value_type, ValueType::Reference(_)))
-            || function.blocks.iter().any(|block| {
-                block.instructions.iter().any(|instruction| {
-                    matches!(instruction.operation, Operation::HeapCall(_, _))
-                        || matches!(
-                            instruction.operation,
-                            Operation::RuntimeCall(slot, _) if slot.may_collect()
-                        )
-                })
-            })
+            .map(|value| value.value_type)
+            .chain(function.locals.iter().map(|local| local.value_type))
     });
-    if uses_collector {
-        NativeExecutionDomain::LegacyHeap
+    let mut has_reference = false;
+    for value_type in values {
+        has_reference |= matches!(value_type, ValueType::Reference(_));
+    }
+    if has_reference {
+        NativeExecutionDomain::InvocationRegion
     } else {
         NativeExecutionDomain::CollectorFree
     }

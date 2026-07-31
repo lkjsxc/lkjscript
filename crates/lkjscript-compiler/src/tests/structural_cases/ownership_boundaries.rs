@@ -35,9 +35,9 @@ fn ownership_function_signature_escape_boundary_is_exact() {
     compile_source(valid, "ownership-signatures.lkjscript", &Limits::default())
         .expect("Ref/RefMut parameters and Owned return must remain valid");
 
-    let consumed_ref_mut_before_safepoint = "def/\nname/\nwrite-then-allocate\n/name\nfn/\nsig/\ninputs/\nbyte-slice-mut\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nr\nbyte-slice-mut\n/params\ndo/\nbyte-slice-mut-set-byte/\nr\n0\n1\n/byte-slice-mut-set-byte\nlet/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nbyte-slice-length/\nborrow/\nb\n/borrow\n/byte-slice-length\n/let\n/do\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
+    let consumed_ref_mut_before_allocation = "def/\nname/\nwrite-then-allocate\n/name\nfn/\nsig/\ninputs/\nbyte-slice-mut\n/inputs\noutput/\ni64\n/output\n/sig\nparams/\nr\nbyte-slice-mut\n/params\ndo/\nbyte-slice-mut-set-byte/\nr\n0\n1\n/byte-slice-mut-set-byte\nlet/\nbind/\nb\nnew-byte-vector/\n1\n/new-byte-vector\n/bind\nbyte-slice-length/\nborrow/\nb\n/borrow\n/byte-slice-length\n/let\n/do\n/fn\n/def\nmain/\nsig/\ninputs/\n/inputs\noutput/\nunit\n/output\n/sig\nunit\n/main\n";
     compile_source(
-        consumed_ref_mut_before_safepoint,
+        consumed_ref_mut_before_allocation,
         "consumed-ref-mut-frame.lkjscript",
         &Limits::default(),
     )

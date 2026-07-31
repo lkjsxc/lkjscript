@@ -6,11 +6,10 @@ use lkjscript_native::{
     CapabilityKind, FunctionId, HeapRuntimeSite, ImageContracts, ImageIntegrityError,
     InstallableImage, LoanType, NativeExecutionDomain, NativeLoan, NativeReference, NativeResource,
     NativeStaticBytes, NativeStaticString, NativeStructuralDestination, NativeStructuralOwner,
-    NativeStructuralView, NativeUnique, NativeValue, ReferenceType, RelocationTarget, ResourceKind,
-    RuntimeCallSlot, Signature, StoreClass, StructuralAggregateDescriptor,
-    StructuralCallDescriptor, StructuralNumericConversion, StructuralOperation,
-    StructuralPayloadKind, StructuralProjectionDescriptor, StructuralTypeIdentity, TrapCode,
-    UniqueType, ValueType,
+    NativeStructuralView, NativeUnique, NativeValue, RelocationTarget, ResourceKind,
+    RuntimeCallSlot, Signature, StructuralAggregateDescriptor, StructuralCallDescriptor,
+    StructuralNumericConversion, StructuralOperation, StructuralPayloadKind,
+    StructuralProjectionDescriptor, StructuralTypeIdentity, TrapCode, UniqueType, ValueType,
 };
 
 mod accounting;

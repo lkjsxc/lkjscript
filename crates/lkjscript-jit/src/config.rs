@@ -31,8 +31,6 @@ pub struct JitConfig {
     pub collect_metrics: bool,
     pub max_diagnostic_bytes: u64,
     pub epoch: u64,
-    /// Force exact-root collection before every allocation-capable heap site.
-    pub force_gc_before_allocation: bool,
     pub optimization_limits: OptimizationLimits,
     /// Force bounded scheduled proof discovery; zero or one remains sequential.
     pub proof_discovery_workers: u16,
@@ -52,7 +50,6 @@ impl Default for JitConfig {
             collect_metrics: false,
             max_diagnostic_bytes: 16 * 1024 * 1024,
             epoch: 1,
-            force_gc_before_allocation: false,
             optimization_limits: OptimizationLimits::default(),
             proof_discovery_workers: 0,
         }

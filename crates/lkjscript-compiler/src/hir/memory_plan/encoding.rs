@@ -1,67 +1,39 @@
-use lkjscript_core::{Error, Result};
+use lkjscript_core::Result;
 
-use super::{HirMemoryPlan, MemoryPlanId};
+use super::{HirMemoryPlan, MemoryPlanId, MemoryWitnessFacts, MemoryWitnessId};
+use canonical::Encoder;
 
-const DOMAIN: &[u8] = b"lkjscript.hir-memory-plan\0canonical-dense-records";
+mod canonical;
+
+const PLAN_DOMAIN: &[u8] = b"lkjscript.hir-memory-plan\0canonical-platform-contract";
+const WITNESS_DOMAIN: &[u8] = b"lkjscript.memory-witness\0canonical-platform-contract";
 
 pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
-    let mut bytes = Vec::new();
-    frame(&mut bytes, DOMAIN)?;
-    frame(&mut bytes, plan.schema.as_bytes())?;
-    records(&mut bytes, &plan.functions)?;
-    records(&mut bytes, &plan.entries)?;
-    records(&mut bytes, &plan.uses)?;
-    records(&mut bytes, &plan.loans)?;
-    records(&mut bytes, &plan.constants)?;
-    records(&mut bytes, &plan.calls)?;
-    records(&mut bytes, &plan.obligations)?;
-    records(&mut bytes, &plan.type_facts)?;
-    records(&mut bytes, &plan.destinations)?;
-    records(&mut bytes, &plan.borrow_scopes)?;
-    records(&mut bytes, &plan.drop_paths)?;
-    records(&mut bytes, &plan.drop_glues)?;
-    frame(&mut bytes, &plan.work.functions.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.entries.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.expressions.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.uses.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.loans.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.constants.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.calls.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.obligations.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.type_nodes.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.type_edges.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.scc_work.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.aggregate_fields.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.aggregate_variants.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.destinations.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.borrow_scopes.to_be_bytes())?;
-    frame(&mut bytes, &plan.work.drop_paths.to_be_bytes())?;
-    Ok(MemoryPlanId::from_bytes(lkjscript_core::sha256(&bytes)))
+    let mut output = Encoder::new(PLAN_DOMAIN)?;
+    output.value(plan.schema)?;
+    output.value(&plan.functions)?;
+    output.value(&plan.entries)?;
+    output.value(&plan.uses)?;
+    output.value(&plan.loans)?;
+    output.value(&plan.constants)?;
+    output.value(&plan.calls)?;
+    output.value(&plan.obligations)?;
+    output.value(&plan.type_facts)?;
+    output.value(&plan.witnesses)?;
+    output.value(&plan.destinations)?;
+    output.value(&plan.borrow_scopes)?;
+    output.value(&plan.drop_paths)?;
+    output.value(&plan.drop_glues)?;
+    output.value(&plan.work)?;
+    Ok(MemoryPlanId::from_bytes(lkjscript_core::sha256(
+        &output.finish(),
+    )))
 }
 
-fn records<T: std::fmt::Debug>(output: &mut Vec<u8>, values: &[T]) -> Result<()> {
-    frame(
-        output,
-        &u64::try_from(values.len())
-            .map_err(|_| Error::msg("HIR memory-plan record count exceeds u64"))?
-            .to_be_bytes(),
-    )?;
-    for value in values {
-        let encoded = format!("{value:?}");
-        frame(output, encoded.as_bytes())?;
-    }
-    Ok(())
-}
-
-fn frame(output: &mut Vec<u8>, value: &[u8]) -> Result<()> {
-    let length = u64::try_from(value.len())
-        .map_err(|_| Error::msg("HIR memory-plan canonical field exceeds u64"))?;
-    output
-        .len()
-        .checked_add(8)
-        .and_then(|size| size.checked_add(value.len()))
-        .ok_or_else(|| Error::msg("HIR memory-plan canonical encoding size overflow"))?;
-    output.extend_from_slice(&length.to_be_bytes());
-    output.extend_from_slice(value);
-    Ok(())
+pub(super) fn compute_witness_id(facts: &MemoryWitnessFacts) -> Result<MemoryWitnessId> {
+    let mut output = Encoder::new(WITNESS_DOMAIN)?;
+    output.value(facts)?;
+    Ok(MemoryWitnessId::from_bytes(lkjscript_core::sha256(
+        &output.finish(),
+    )))
 }

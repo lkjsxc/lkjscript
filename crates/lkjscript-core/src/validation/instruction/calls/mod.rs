@@ -53,8 +53,16 @@ pub(super) fn apply(
                 validate_resource_arguments(callee_proto, &arguments, proto, instruction)?;
                 consume_resource_arguments(state, callee_proto, &arguments);
                 validate_unique_arguments(callee_proto, &arguments, proto, instruction)?;
-                validate_structural_arguments(callee_proto, &arguments, proto, instruction)?;
-                call_return_kind(callee_proto, instruction)?
+                validate_copy_arguments(callee_proto, &arguments, proto, instruction)?;
+                validate_region_product_arguments(callee_proto, &arguments, proto, instruction)?;
+                let structural_variables = validate_structural_arguments(
+                    chunk,
+                    callee_proto,
+                    &arguments,
+                    proto,
+                    instruction,
+                )?;
+                call_return_kind(callee_proto, instruction, &structural_variables)?
             } else {
                 if arguments.iter().any(|kind| {
                     matches!(
@@ -67,6 +75,7 @@ pub(super) fn apply(
                             | Kind::StructuralOwnerRef { .. }
                             | Kind::StructuralView { .. }
                             | Kind::StructuralDestination { .. }
+                            | Kind::RegionProduct(_)
                     )
                 }) {
                     return Err(instruction_error(
@@ -94,6 +103,8 @@ pub(super) fn apply(
             consume_resource_return(state, returned);
             validate_unique_exit_state(chunk, state, proto, instruction)?;
             validate_unique_return(proto, returned, instruction)?;
+            validate_copy_return(proto, returned, instruction)?;
+            validate_region_product_return(proto, returned, instruction)?;
             validate_structural_return(proto, returned, instruction)?;
         }
         Op::MakeClosure => {
@@ -125,5 +136,8 @@ pub(super) fn apply(
 }
 
 include!("arguments.rs");
+include!("call_result.rs");
+include!("copy_arguments.rs");
+include!("region_products.rs");
 include!("resource_arguments.rs");
 include!("returns.rs");

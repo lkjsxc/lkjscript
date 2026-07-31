@@ -8,23 +8,26 @@ fn structural_symbol_traversal_and_equality_are_canonical() {
         value(
             40,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![
-                value(
-                    41,
-                    StructuralKind::Static,
-                    SemanticPayload::Static(StaticStructuralLeaf::Symbol(zeta)),
-                ),
-                value(
-                    42,
-                    StructuralKind::Static,
-                    SemanticPayload::Static(StaticStructuralLeaf::Symbol(alpha)),
-                ),
-                value(
-                    43,
-                    StructuralKind::Static,
-                    SemanticPayload::Static(StaticStructuralLeaf::Symbol(zeta)),
-                ),
-            ]),
+            SemanticPayload::Product(
+                vec![
+                    value(
+                        41,
+                        StructuralKind::Static,
+                        SemanticPayload::Static(StaticStructuralLeaf::Symbol(zeta)),
+                    ),
+                    value(
+                        42,
+                        StructuralKind::Static,
+                        SemanticPayload::Static(StaticStructuralLeaf::Symbol(alpha)),
+                    ),
+                    value(
+                        43,
+                        StructuralKind::Static,
+                        SemanticPayload::Static(StaticStructuralLeaf::Symbol(zeta)),
+                    ),
+                ]
+                .into(),
+            ),
         )
     }
     fn text(index: u32, zeta: u32, alpha: u32) -> crate::Result<&'static str> {

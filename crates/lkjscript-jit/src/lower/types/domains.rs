@@ -42,7 +42,7 @@ pub(in crate::lower) fn require_structural_island_type(
         Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,
             Some(function),
-            format!("type {ty:?} is a legacy blocker in a collector-free structural group"),
+            format!("type {ty:?} is unsupported without structural metadata in a structural group"),
         ))
     }
 }

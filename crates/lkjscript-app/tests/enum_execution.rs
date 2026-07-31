@@ -12,6 +12,8 @@ mod adversarial;
 mod enum_source_variants;
 #[path = "enum_execution/native_ssa.rs"]
 mod native_ssa;
+#[path = "enum_execution/recursive.rs"]
+mod recursive;
 
 fn evaluator_owned(program: &lkjscript_compiler::ExecutableProgram) -> OwnedValue {
     match evaluate(program.ssa(), &EvalConfig::default()) {
@@ -153,7 +155,6 @@ fn forced_native_tiers_execute_enum_in_generated_code_without_fallback() {
         assert_eq!(value.enum_field_i64(0), Some(42));
         assert!(execution.stats.native_entries > 0);
         assert_eq!(execution.stats.runtime_heap_successes, 0);
-        assert_eq!(execution.stats.collector_runtime_invocations, 0);
         assert!(execution.stats.structural_runtime_calls > 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_destinations, 0);

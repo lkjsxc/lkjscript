@@ -76,7 +76,7 @@ fn ownership_verifier_bounds_cfg_shape_and_rejects_nested_function_laundering() 
             Signature::monomorphic(vec![byte_vector_type()], SsaType::Unit),
         ))));
     let error = verify(nested_function)
-        .expect_err("collection-nested function signatures cannot launder ownership types");
+        .expect_err("list-nested function signatures cannot launder ownership types");
     assert!(error.to_string().contains("storage position"), "{error}");
 
     let mut deeply_nested_function = one_block_program();

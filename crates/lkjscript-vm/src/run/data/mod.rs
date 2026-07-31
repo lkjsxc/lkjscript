@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) mod display;
 mod equality;
+mod lists;
 mod stack;
 #[cfg(test)]
 pub(crate) use equality::list_values_equal;
@@ -113,20 +114,18 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             Ok(())
         }
         x if x == Op::Cons as u8 => {
-            let cdr_v = vm.pop()?;
-            let car_v = vm.pop()?;
-            let v = vm.arena.alloc(HeapObj::Pair {
-                car: car_v,
-                cdr: cdr_v,
-            })?;
-            vm.push(v);
+            let tail = vm.pop()?;
+            let head = vm.pop()?;
+            let value = vm.list_prepend(head, tail)?;
+            vm.push(value);
             Ok(())
         }
         x if x == Op::Car as u8 => car(vm),
         x if x == Op::Cdr as u8 => cdr(vm),
         x if x == Op::IsEmptyList as u8 => {
-            let v = vm.pop()?;
-            vm.push(Value::from_bool(v.is_empty_list()));
+            let value = vm.pop()?;
+            let empty = vm.list_is_empty(value)?;
+            vm.push(Value::from_bool(empty));
             Ok(())
         }
         x if x == Op::SameObject as u8 => same_object(vm),

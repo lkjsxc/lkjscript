@@ -84,18 +84,6 @@ extern "C" fn runtime_register_frame(
     state.register_frame(function_ordinal, rbp);
 }
 
-extern "C" fn runtime_publish_safepoint(state: *mut NativeCallState<'_>, safepoint: u64) {
-    // SAFETY: context provenance is identical to runtime_register_frame.
-    let Some(state) = (unsafe { state.as_mut() }) else {
-        return;
-    };
-    let Ok(safepoint) = u32::try_from(safepoint) else {
-        state.invalidate_active_frame();
-        return;
-    };
-    state.publish_safepoint(safepoint);
-}
-
 extern "C" fn runtime_unregister_frame(
     state: *mut NativeCallState<'_>,
     function_ordinal: u64,
@@ -112,8 +100,8 @@ extern "C" fn runtime_unregister_frame(
     state.unregister_frame(function_ordinal, rbp);
 }
 
-extern "C" fn runtime_heap_dispatch(state: *mut NativeCallState<'_>, site: u64) {
-    // SAFETY: generated heap sites publish and pass their retained dense site
+extern "C" fn runtime_value_dispatch(state: *mut NativeCallState<'_>, site: u64) {
+    // SAFETY: generated runtime-value sites pass their retained dense site
     // identity. Raw frame homes are validated and accessed only in this module.
     let Some(state) = (unsafe { state.as_mut() }) else {
         return;
@@ -122,14 +110,5 @@ extern "C" fn runtime_heap_dispatch(state: *mut NativeCallState<'_>, site: u64) 
         state.invalidate_active_frame();
         return;
     };
-    state.dispatch_heap_operation(site);
-}
-
-extern "C" fn runtime_collect_reference(state: *mut NativeCallState<'_>, reference: u64) -> u64 {
-    // SAFETY: generated collecting calls publish an exact safepoint before
-    // entering this trampoline; all raw frame access remains in this module.
-    let Some(state) = (unsafe { state.as_mut() }) else {
-        return reference;
-    };
-    state.collect_references(reference)
+    state.dispatch_runtime_value_operation(site);
 }

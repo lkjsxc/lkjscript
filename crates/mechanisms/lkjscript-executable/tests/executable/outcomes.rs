@@ -9,10 +9,6 @@ fn calls_multiblock_loop_scalar_and_structured_outcomes() -> Result<(), Box<dyn 
     assert!(!image.source_map().is_empty());
     assert!(!image.trap_map().is_empty());
     assert!(!image.outcome_map().is_empty());
-    assert!(image
-        .safepoints()
-        .iter()
-        .all(|point| point.stack_map().roots().is_empty()));
     let installer = ExecutableInstaller::default();
     let installed = installer.install(image)?;
     assert_eq!(

@@ -15,7 +15,6 @@ pub(crate) fn enum_metadata() -> EnumMetadata {
                     name: "value".into(),
                     ty: SsaType::TypeParameter("t".into()),
                     indirect: false,
-                    traced: false,
                 }],
             },
             EnumVariantMetadata {
@@ -27,7 +26,6 @@ pub(crate) fn enum_metadata() -> EnumMetadata {
                     name: "value".into(),
                     ty: SsaType::TypeParameter("t".into()),
                     indirect: false,
-                    traced: false,
                 }],
             },
         ],

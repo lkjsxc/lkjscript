@@ -53,10 +53,14 @@ impl StructuralCatalog {
                     lkjscript_native::StructuralKind::Enum
                 }
             };
+            let runtime_type = lkjscript_ir::runtime_structural_type(Some(program), &item.ty)
+                .map_err(|error| invalid_structural(&error.to_string()))?
+                .ok_or_else(|| invalid_structural("structural runtime type is missing"))?;
             let value_type = lkjscript_native::StructuralTypeIdentity::new(
-                identity_word(&layout.identity.bytes()),
-                semantic_word(program.memory.plan, &item.ty),
+                runtime_type.layout.get(),
+                runtime_type.semantic_type.get(),
                 kind,
+                item.mode == lkjscript_ir::StructuralTypeMode::Copy,
             );
             if catalog.types.insert(item.ty.clone(), value_type).is_some()
                 || catalog.modes.insert(item.ty.clone(), item.mode).is_some()

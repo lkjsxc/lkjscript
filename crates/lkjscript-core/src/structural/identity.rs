@@ -152,3 +152,31 @@ impl RootKey {
         }
     }
 }
+
+pub fn product_semantic_identity(identity: crate::RuntimeLayoutId) -> SemanticTypeIdentity {
+    SemanticTypeIdentity::new(product_nonzero(product_fingerprint(
+        0x8f3f_73b5_cf1c_9ade,
+        &identity.bytes(),
+    )))
+}
+
+pub fn product_layout_identity(identity: crate::RuntimeLayoutId) -> LayoutIdentity {
+    LayoutIdentity::new(product_nonzero(product_fingerprint(
+        0xe55a_7341_0a0f_b861,
+        &identity.bytes(),
+    )))
+}
+
+fn product_fingerprint(mut state: u64, bytes: &[u8]) -> u64 {
+    for &byte in bytes {
+        state = (state ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    state
+}
+
+const fn product_nonzero(value: u64) -> NonZeroU64 {
+    match NonZeroU64::new(value) {
+        Some(value) => value,
+        None => NonZeroU64::MIN,
+    }
+}

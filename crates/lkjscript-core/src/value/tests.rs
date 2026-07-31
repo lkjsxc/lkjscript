@@ -24,25 +24,19 @@ fn closed_capabilities_round_trip_without_aliasing_other_categories() {
         assert_eq!(value.as_capability(), Some(kind));
         assert!(value.as_i64().is_none());
         assert!(value.as_resource().is_none());
-        assert!(value.as_legacy_traced().is_none());
     }
 }
 
 #[test]
-fn reference_and_key_categories_remain_disjoint_for_equal_payloads() {
+fn authority_and_key_categories_remain_disjoint_for_equal_payloads() {
     let resource = Value::from_resource(7);
-    let traced = Value::from_legacy_traced(7);
     let adapter = Value::from_aggregate_adapter(7);
     let vector = Value::from_byte_vector_key(7);
     assert_eq!(resource.as_resource(), Some(7));
-    assert_eq!(traced.as_legacy_traced(), Some(7));
     assert_eq!(adapter.as_aggregate_adapter(), Some(7));
     assert_eq!(vector.as_byte_vector_key(), Some(7));
-    assert_ne!(resource, traced);
     assert_ne!(resource, adapter);
     assert_ne!(resource, vector);
-    assert_ne!(traced, adapter);
-    assert_ne!(traced, vector);
     assert_ne!(adapter, vector);
 }
 
@@ -53,7 +47,6 @@ fn function_prototypes_round_trip_inline_without_category_aliasing() {
         assert_eq!(value.as_function(), Some(prototype));
         assert!(value.as_i64().is_none());
         assert!(value.as_resource().is_none());
-        assert!(value.as_legacy_traced().is_none());
         assert_eq!(format!("{value:?}"), format!("function#{prototype}"));
     }
 }
@@ -64,7 +57,6 @@ fn symbol_constants_round_trip_without_reference_aliasing() {
         let value = Value::from_symbol(constant);
         assert_eq!(value.as_symbol(), Some(constant));
         assert!(value.as_i64().is_none());
-        assert!(value.as_legacy_traced().is_none());
         assert_eq!(format!("{value:?}"), format!("symbol#{constant}"));
     }
 }
@@ -85,7 +77,6 @@ fn complete_i64_range_round_trips_inline() {
         let value = Value::from_i64(number);
         assert_eq!(value.as_i64(), Some(number));
         assert!(value.as_f64_bits().is_none());
-        assert!(value.as_legacy_traced().is_none());
     }
 }
 
@@ -105,6 +96,5 @@ fn exact_f64_bits_round_trip_inline() {
         assert_eq!(value.as_f64_bits(), Some(bits));
         assert_eq!(value.as_f64().map(f64::to_bits), Some(bits));
         assert!(value.as_i64().is_none());
-        assert!(value.as_legacy_traced().is_none());
     }
 }

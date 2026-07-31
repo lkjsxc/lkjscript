@@ -64,7 +64,7 @@ fn decode_structural_node(
             StructuralKind::ByteVector,
         ),
         6 => (
-            SemanticPayload::Product(decode_structural_fields(input, budget, depth)?),
+            SemanticPayload::Product(decode_structural_fields(input, budget, depth)?.into()),
             StructuralKind::Product,
         ),
         7 => {
@@ -74,7 +74,7 @@ fn decode_structural_node(
                 ));
             }
             let tag = input.u16()?;
-            let active_payload = decode_structural_fields(input, budget, depth)?;
+            let active_payload = decode_structural_fields(input, budget, depth)?.into();
             (
                 SemanticPayload::Enum {
                     tag,

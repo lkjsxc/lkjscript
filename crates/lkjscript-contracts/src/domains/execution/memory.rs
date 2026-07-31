@@ -39,8 +39,8 @@ pub(crate) fn memory_obligations(language: ContractDigest) -> ContractDescriptor
                 .fact(fact("portability", "worker portability and contention"))
                 .fact(fact("allocation", "frequency and size class"))
                 .fact(fact(
-                    "collector",
-                    "Current trace fields and exact-root requirements",
+                    "deterministic-liveness",
+                    "structural child and invocation-key requirements",
                 ))
                 .fact(fact("object-identity", "observable identity facts"))
                 .fact(fact("placement", "Current and candidate placements"))

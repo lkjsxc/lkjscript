@@ -8,6 +8,8 @@ mod allocation;
 mod auto_tiering;
 #[path = "jit_engines/collector_free_scalar.rs"]
 mod collector_free_scalar;
+#[path = "jit_engines/generic_products.rs"]
+mod generic_products;
 #[path = "jit_engines/reference_graphs.rs"]
 mod reference_graphs;
 #[path = "jit_engines/resource_island.rs"]
@@ -20,6 +22,10 @@ mod scalar_semantics;
 mod scheduled_discovery;
 #[path = "jit_engines/scheduled_kernels.rs"]
 mod scheduled_kernels;
+#[path = "jit_engines/segmented_lists.rs"]
+mod segmented_lists;
+#[path = "jit_engines/structural_products.rs"]
+mod structural_products;
 #[path = "jit_engines/tiering.rs"]
 mod tiering;
 #[path = "jit_engines/unique_island/mod.rs"]

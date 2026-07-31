@@ -80,15 +80,6 @@ fn recursive_substitutions(
     Ok(item.type_parameters.iter().cloned().zip(arguments.iter().cloned()).collect())
 }
 
-fn recursive_mixed(fact: MemoryTypeFact, path: Vec<MemoryTypePathElement>) -> DerivedType {
-    DerivedType { mode: fact.mode, contains_borrow: fact.contains_borrow,
-        contains_dynamic_owner: fact.contains_dynamic_owner,
-        closure: MemoryClosureFact { class: MemoryClosureClass::IllegalMixedBridge,
-            blocker_path: path, blocker_type: Some(fact.ty),
-            blocker_reason: Some(MemoryBlockerReason::DynamicDeterministicOwner),
-            mixed_direction: Some(MemoryMixedBridgeDirection::LegacyContainsDeterministic) } }
-}
-
 fn recursive_root_type(
     program: &hir::Program,
     key: &DeclarationKey,

@@ -23,7 +23,7 @@ fn daemon_persists_restarts_and_controls_runnable_application(
         "--name".into(),
         "persistent-hello".into(),
         "--package".into(),
-        "316925afee5cad89c87ec8f601733d323401769195aa873b1c628f6fdf72967c".into(),
+        "5abaa965951efcfd87b27e57d776a8eddec68e25ae644cf167d62a7b04e47b80".into(),
         "--root".into(),
         root.to_string_lossy().into_owned(),
         "--entry".into(),

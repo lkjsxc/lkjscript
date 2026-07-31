@@ -71,6 +71,11 @@ impl Evaluator<'_> {
             EvalValue::Product(id, fields) => {
                 EvalValue::Product(id, self.adapt_legacy_fields(fields)?)
             }
+            EvalValue::RegionProduct(_) => {
+                return Err(Flow::Trap(
+                    "invocation-region product escaped evaluation".into(),
+                ))
+            }
             EvalValue::Enum {
                 enum_id,
                 variant,
@@ -84,6 +89,7 @@ impl Evaluator<'_> {
                 physical_tag,
                 payload: self.adapt_legacy_fields(payload)?,
             },
+            EvalValue::SegmentedList(key) => self.adapt_segmented_list(key)?,
             EvalValue::List(values) => EvalValue::List(self.adapt_legacy_fields(values)?),
             EvalValue::ReturnedOwned(_)
             | EvalValue::ReturnedByteVector(_)
@@ -99,6 +105,25 @@ impl Evaluator<'_> {
         OwnedValue::from_structural(value, StructuralSnapshotLimits::DEFAULT)
             .map(EvalValue::ReturnedOwned)
             .map_err(|error| Flow::Trap(error.to_string()))
+    }
+
+    fn adapt_segmented_list(
+        &mut self,
+        mut key: lkjscript_core::SegmentedListKey,
+    ) -> Result<EvalValue, Flow> {
+        let mut values = Vec::new();
+        while let Some((value, tail)) = self
+            .lists
+            .view(key)
+            .map_err(|error| Flow::Trap(format!("segmented-list return: {error:?}")))?
+        {
+            values
+                .try_reserve(1)
+                .map_err(|_| Flow::Resource("returned segmented list".into()))?;
+            values.push(crate::eval::clone_plain_eval_value(value)?);
+            key = tail;
+        }
+        Ok(EvalValue::List(self.adapt_legacy_fields(values)?))
     }
 
     fn adapt_legacy_fields(&mut self, values: Vec<EvalValue>) -> Result<Vec<EvalValue>, Flow> {

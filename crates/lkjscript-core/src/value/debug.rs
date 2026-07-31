@@ -34,8 +34,14 @@ impl fmt::Debug for Value {
         if let Some(kind) = self.as_capability() {
             return write!(formatter, "capability#{}", kind.as_str());
         }
-        if let Some(index) = self.as_legacy_traced() {
-            return write!(formatter, "legacy-traced#{index}");
+        if let Some(word) = self.as_segmented_list() {
+            return write!(formatter, "segmented-list#{word}");
+        }
+        if let Some(index) = self.as_owned_list() {
+            return write!(formatter, "owned-list#{index}");
+        }
+        if let Some(word) = self.as_region_product_word() {
+            return write!(formatter, "region-product#{word}");
         }
         if let Some(key) = self.as_aggregate_adapter() {
             return write!(formatter, "aggregate-adapter#{key}");

@@ -183,3 +183,4 @@ fn local_index<J: RuntimeTier>(vm: &Vm<'_, J>, slot: usize) -> Result<usize> {
 
 include!("locals/handoffs.rs");
 include!("locals/calls.rs");
+include!("locals/returns.rs");

@@ -67,20 +67,6 @@ pub(super) fn callable_result(ty: &Type) -> Result<&Type> {
     }
 }
 
-pub(super) fn legacy_family(ty: &MemoryType) -> Option<&'static str> {
-    match ty {
-        MemoryType::String => None,
-        MemoryType::Bytes | MemoryType::ByteVector => None,
-        MemoryType::Path => None,
-        MemoryType::Symbol => None,
-        MemoryType::Product(_) => Some("product"),
-        MemoryType::Enum { .. } => Some("enum"),
-        MemoryType::List(_) => Some("pair"),
-        MemoryType::Function { .. } | MemoryType::ForAll { .. } => None,
-        _ => None,
-    }
-}
-
 pub(super) fn type_matches(expected: &Type, actual: &MemoryType) -> bool {
     match (expected, actual) {
         (Type::Never, MemoryType::Never)

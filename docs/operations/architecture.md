@@ -34,8 +34,9 @@ Immediately after typed HIR, effects, and ownership, separate exhaustive
 producer and verifier traversals establish a dense content-addressed memory
 plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
 and `ExecutableProgram` retains the complete plan. The independently recomputed
-direct-affine SSA inventory remains derived evidence. The public 61-record
-inventory reports Current tracing layouts and deterministic candidates.
+direct-affine SSA inventory remains derived evidence. The public sorted memory
+inventory reports deterministic structural, region, unique, artifact, resource,
+and host ownership.
 The exact byte-vector and immutable-bytes families have explicit
 end-borrow/drop execution and execution-owned `UniqueStore` backing in the
 evaluator, reference VM, and forced native tiers. Native lowering assigns
@@ -43,10 +44,11 @@ separate static-bytes, dynamic-bytes owner, bytes-loan, byte-vector owner,
 shared-loan, and exclusive-loan machine identities. Static literal tokens
 resolve only through immutable verified image data. Whole-group preflight
 selects the invocation-owned bounded unique/loan runtime before effects.
-Compact structural roots for dynamic strings, paths, and deterministic
-nonrecursive aggregates are Current across evaluator, VM, and both forced JIT
-tiers. General region/pool selection and collector removal remain Accepted
-Contract work.
+Compact structural roots for strings, paths, products, enums, errors, options,
+results, and regular recursive aggregates are Current across evaluator, VM, and
+both forced JIT tiers. Segmented lists and selected products use
+invocation-local regions. No tracing collector remains. Broader ordinary/sealed
+region and pool selection remains Accepted Contract work.
 
 Provider authority enters only through explicit closed capability parameters.
 Package verification bounds grants; bytecode records exact main requirements;

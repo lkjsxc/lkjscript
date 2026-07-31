@@ -7,8 +7,8 @@ type DomainAxes = (
     MemoryContention,
 );
 
-fn verified_domain_axes(ty: &Type, fact: &VerifiedExpectedType) -> DomainAxes {
-    match ty {
+fn verified_domain_axes(ty: &Type, fact: &VerifiedExpectedType) -> Result<DomainAxes> {
+    Ok(match ty {
         Type::Never | Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Capability(_) => (
             MemoryAliasing::Unique,
             MemoryDomain::Inline,
@@ -24,14 +24,17 @@ fn verified_domain_axes(ty: &Type, fact: &VerifiedExpectedType) -> DomainAxes {
         {
             verified_structural_axes(MemoryPortability::WorkerLocal)
         }
-        Type::Product(_) | Type::Enum { .. } | Type::List(_) => (
-            MemoryAliasing::LegacyTracedShared,
-            MemoryDomain::RegisteredLegacyTraced,
-            MemoryDestruction::LegacyTraced,
-            MemoryIdentity::Value,
-            MemoryPortability::WorkerLocal,
-            MemoryContention::ImmutableShared,
-        ),
+        Type::List(_) | Type::Product(_) | Type::Enum { .. }
+            if fact.derived.closure.class == MemoryClosureClass::RegionClosed =>
+        {
+            verified_region_axes()
+        }
+        Type::Product(_) => return Err(Error::msg(
+            "memory verifier reached an unresolved product domain",
+        )),
+        Type::List(_) | Type::Enum { .. } => {
+            verified_unsupported_axes(MemoryPortability::WorkerLocal)
+        }
         Type::Bytes | Type::ByteVector => (
             MemoryAliasing::Unique,
             MemoryDomain::UniqueStructural,
@@ -66,7 +69,29 @@ fn verified_domain_axes(ty: &Type, fact: &VerifiedExpectedType) -> DomainAxes {
             MemoryPortability::WorkerLocal,
             MemoryContention::ImmutableShared,
         ),
-    }
+    })
+}
+
+fn verified_unsupported_axes(portability: MemoryPortability) -> DomainAxes {
+    (
+        MemoryAliasing::UnresolvedShared,
+        MemoryDomain::UnsupportedRuntime,
+        MemoryDestruction::Unsupported,
+        MemoryIdentity::UnsupportedValue,
+        portability,
+        MemoryContention::UnresolvedShared,
+    )
+}
+
+fn verified_region_axes() -> DomainAxes {
+    (
+        MemoryAliasing::RegionShared,
+        MemoryDomain::OrdinaryRegion,
+        MemoryDestruction::RegionReset,
+        MemoryIdentity::Value,
+        MemoryPortability::WorkerLocal,
+        MemoryContention::ImmutableShared,
+    )
 }
 
 fn verified_structural_axes(portability: MemoryPortability) -> DomainAxes {

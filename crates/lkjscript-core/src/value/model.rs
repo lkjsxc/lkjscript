@@ -3,6 +3,9 @@
 use super::CapabilityKind;
 
 mod bytes;
+mod list;
+mod region_product;
+mod scalar;
 mod structural;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -14,11 +17,13 @@ enum ValueKind {
     I64,
     F64,
     EmptyList,
+    SegmentedList,
+    OwnedList,
+    RegionProduct,
     Capability,
     Resource,
     Function,
     Symbol,
-    LegacyTraced,
     AggregateAdapter,
     StructuralRoot,
     StructuralView,
@@ -55,23 +60,6 @@ impl Value {
         Self { payload, kind }
     }
 
-    pub(crate) const fn is_forbidden_legacy_payload(self) -> bool {
-        matches!(
-            self.kind,
-            ValueKind::Capability
-                | ValueKind::Resource
-                | ValueKind::AggregateAdapter
-                | ValueKind::StructuralRoot
-                | ValueKind::StructuralView
-                | ValueKind::StructuralDestination
-                | ValueKind::BytesKey
-                | ValueKind::ByteVectorKey
-                | ValueKind::BytesBorrow
-                | ValueKind::ByteSlice
-                | ValueKind::ByteSliceMut
-        )
-    }
-
     pub const fn from_bool(value: bool) -> Self {
         if value {
             Self::TRUE
@@ -97,10 +85,6 @@ impl Value {
             ValueKind::StaticString => Some(self.payload as u16),
             _ => None,
         }
-    }
-
-    pub const fn from_legacy_traced(index: u32) -> Self {
-        Self::new(ValueKind::LegacyTraced, index as u64)
     }
 
     pub const fn from_resource(index: u32) -> Self {
@@ -156,30 +140,9 @@ impl Value {
         self.as_f64_bits().map(f64::from_bits)
     }
 
-    pub const fn as_legacy_traced(self) -> Option<u32> {
-        match self.kind {
-            ValueKind::LegacyTraced => Some(self.payload as u32),
-            _ => None,
-        }
-    }
-
     pub const fn as_resource(self) -> Option<u32> {
         match self.kind {
             ValueKind::Resource => Some(self.payload as u32),
-            _ => None,
-        }
-    }
-
-    pub const fn as_function(self) -> Option<u32> {
-        match self.kind {
-            ValueKind::Function => Some(self.payload as u32),
-            _ => None,
-        }
-    }
-
-    pub const fn as_symbol(self) -> Option<u32> {
-        match self.kind {
-            ValueKind::Symbol => Some(self.payload as u32),
             _ => None,
         }
     }

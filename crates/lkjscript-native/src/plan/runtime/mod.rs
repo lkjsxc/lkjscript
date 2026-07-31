@@ -44,16 +44,13 @@ pub enum RuntimeCallSlot {
     ThawBytes,
     /// Generic direct structural operation selected by verified site metadata.
     StructuralDispatch,
-    /// Collecting reference round trip used by the closed runtime contract.
-    CollectReference,
-    /// Generic verified-frame-home heap dispatch. Plans create it only through
+    /// Generic verified-frame-home runtime-value dispatch. Plans create it only through
     /// `FunctionBuilder::heap_call`; ordinary runtime-call construction cannot
     /// forge its site metadata.
     HeapDispatch,
     /// Encoder-owned frame-chain operations. Plans cannot name these slots.
     ReserveFrame,
     RegisterFrame,
-    PublishSafepoint,
     UnregisterFrame,
 }
 
@@ -63,7 +60,6 @@ pub enum InternalMachineArgument {
     FunctionOrdinal,
     FrameBytes,
     FramePointer,
-    SafepointId,
     HeapSiteId,
     StructuralSiteId,
     StructuralArgument0,

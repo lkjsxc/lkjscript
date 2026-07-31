@@ -1,12 +1,6 @@
 use super::*;
 
 impl<'a, J: RuntimeTier> Vm<'a, J> {
-    pub(crate) fn collect(&mut self) {
-        let mut roots = self.globals.clone();
-        roots.extend_from_slice(&self.stack);
-        self.arena.collect(&roots);
-    }
-
     pub(crate) fn check_runtime_limits(&mut self) -> Result<()> {
         if self.stack.len() > self.config.max_stack_values {
             return Err(Error::resource(
@@ -20,20 +14,28 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 "VM frame depth limit exceeded",
             ));
         }
-        if self.arena.total_allocations() > self.config.max_allocations {
+        if self
+            .list_allocations
+            .saturating_add(self.region_product_allocations)
+            > self.config.max_allocations
+        {
             return Err(Error::resource(
                 ResourceLimitKind::Allocations,
                 "VM aggregate allocation limit exceeded",
             ));
         }
-        if self.arena.heap_bytes() > self.config.max_heap_bytes {
-            self.collect();
-            if self.arena.heap_bytes() > self.config.max_heap_bytes {
-                return Err(Error::resource(
-                    ResourceLimitKind::HeapBytes,
-                    "VM live heap byte limit exceeded",
-                ));
-            }
+        let list_bytes = usize::try_from(self.list_reserved_bytes_estimate()).unwrap_or(usize::MAX);
+        let region_bytes = self
+            .region_products
+            .as_ref()
+            .map_or(0, |arena| arena.metrics().reserved_bytes_estimate);
+        let runtime_bytes =
+            list_bytes.saturating_add(usize::try_from(region_bytes).unwrap_or(usize::MAX));
+        if runtime_bytes > self.config.max_heap_bytes {
+            return Err(Error::resource(
+                ResourceLimitKind::HeapBytes,
+                "VM deterministic runtime byte limit exceeded",
+            ));
         }
         if self.resources.limit_exceeded()
             || self.resources.allocated_handle_slots() > self.config.max_handles

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::plan::{
@@ -12,18 +12,14 @@ mod affine;
 mod functions;
 mod instructions;
 mod layouts;
-mod liveness;
 mod plan;
-mod roots;
 mod terminators;
 
 use affine::*;
 use functions::*;
 use instructions::*;
 use layouts::*;
-use liveness::*;
 pub(crate) use plan::verify_plan;
-use roots::*;
 use terminators::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -112,19 +108,10 @@ impl fmt::Display for VerificationError {
 
 impl std::error::Error for VerificationError {}
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) struct CertifiedRoot {
-    pub(crate) kind: crate::FrameHomeKind,
-    pub(crate) reference_type: ReferenceType,
-}
-
-pub(crate) type FunctionRootRequirements = Vec<Option<Vec<CertifiedRoot>>>;
-
 #[derive(Clone, Debug)]
 pub struct VerifiedMachinePlan {
     pub(crate) functions: Vec<FunctionPlan>,
     pub(crate) static_bytes: Vec<Box<[u8]>>,
-    pub(crate) root_requirements: Vec<FunctionRootRequirements>,
     pub(crate) limits: BackendLimits,
     pub(crate) work_units: u64,
 }

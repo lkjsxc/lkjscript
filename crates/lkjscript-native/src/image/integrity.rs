@@ -14,8 +14,6 @@ impl InstallableImage {
             relocations: &self.relocations,
             runtime_calls: &self.runtime_calls,
             frames: &self.frames,
-            safepoints: &self.safepoints,
-            root_requirements: &self.root_requirements,
             heap_runtime_sites: &self.heap_runtime_sites,
             structural_runtime_sites: &self.structural_runtime_sites,
             source_map: &self.source_map,
@@ -94,67 +92,7 @@ impl InstallableImage {
         if self.frames.len() != self.entries.len() {
             return Err(ImageIntegrityError::FrameFacts);
         }
-        let mut call_offsets = HashSet::new();
-        for (expected_id, safepoint) in self.safepoints.iter().enumerate() {
-            if safepoint.id as usize != expected_id
-                || !offset_in_function(&self.entries, safepoint.function, safepoint.code_offset)
-                || !call_offsets.insert((safepoint.function, safepoint.code_offset))
-            {
-                return Err(ImageIntegrityError::Safepoint);
-            }
-            let frame = self
-                .frames
-                .iter()
-                .find(|frame| frame.function == safepoint.function)
-                .ok_or(ImageIntegrityError::Safepoint)?;
-            if !valid_stack_map(frame, &safepoint.stack_map) {
-                return Err(ImageIntegrityError::Safepoint);
-            }
-        }
-        if self.root_requirements.len() != self.safepoints.len()
-            || self.root_requirements.iter().zip(&self.safepoints).any(
-                |(requirement, safepoint)| {
-                    requirement.id != safepoint.id
-                        || requirement.function != safepoint.function
-                        || requirement.roots != safepoint.stack_map.roots
-                },
-            )
-        {
-            return Err(ImageIntegrityError::RootRequirement);
-        }
-        for (expected_id, site) in self.heap_runtime_sites.iter().enumerate() {
-            let frame = self
-                .frames
-                .iter()
-                .find(|frame| frame.function == site.function)
-                .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
-            let safepoint = self
-                .safepoints
-                .get(site.safepoint as usize)
-                .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
-            if site.id as usize != expected_id
-                || safepoint.id != site.safepoint
-                || safepoint.function != site.function
-                || site.arguments.len() != site.descriptor.input_types().len()
-                || site
-                    .arguments
-                    .iter()
-                    .zip(site.descriptor.input_types())
-                    .any(|(home, expected)| {
-                        home.value_type != *expected || !frame.homes.contains(home)
-                    })
-                || site.result.value_type != site.descriptor.result_type()
-                || !frame.homes.contains(&site.result)
-                || !site.descriptor.canonical_facts_are_valid()
-            {
-                return Err(ImageIntegrityError::HeapRuntimeSite);
-            }
-        }
-        if self.heap_runtime_sites.is_empty()
-            == runtime_calls.contains(&RuntimeCallSlot::HeapDispatch)
-        {
-            return Err(ImageIntegrityError::HeapRuntimeSite);
-        }
+        super::heap_sites::verify_heap_sites(self, &runtime_calls)?;
         for (expected_id, site) in self.structural_runtime_sites.iter().enumerate() {
             if site.id as usize != expected_id
                 || !functions.contains(&site.function)

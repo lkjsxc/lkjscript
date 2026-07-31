@@ -73,7 +73,6 @@ impl JitSession {
         let runtime_calls = lowered.image.runtime_calls().to_vec();
         let numeric_conversion_sites = numeric_conversion_sites(&lowered.image);
         let frames = lowered.image.frames().to_vec();
-        let safepoints = lowered.image.safepoints().to_vec();
         let source_map = lowered.image.source_map().to_vec();
         let trap_map = lowered.image.trap_map().to_vec();
         let outcome_map = lowered.image.outcome_map().to_vec();
@@ -115,7 +114,6 @@ impl JitSession {
             runtime_calls,
             numeric_conversion_sites,
             frames,
-            safepoints,
             source_map,
             trap_map,
             outcome_map,
@@ -175,12 +173,23 @@ fn numeric_conversion_sites(
     image: &lkjscript_native::InstallableImage,
 ) -> NumericConversionSiteCounts {
     let mut counts = NumericConversionSiteCounts::default();
-    for site in image.heap_runtime_sites() {
-        match site.descriptor().operation() {
-            HeapOperation::F64FromI64Exact { .. } => counts.f64_from_i64_exact += 1,
-            HeapOperation::I64FromF64Exact { .. } => counts.i64_from_f64_exact += 1,
-            HeapOperation::I64FromF64Trunc { .. } => counts.i64_from_f64_trunc += 1,
-            _ => {}
+    for site in image.structural_runtime_sites() {
+        let lkjscript_native::StructuralOperation::NumericConversion {
+            kind: conversion, ..
+        } = site.descriptor().operation()
+        else {
+            continue;
+        };
+        match conversion {
+            lkjscript_native::StructuralNumericConversion::F64FromI64Exact => {
+                counts.f64_from_i64_exact += 1;
+            }
+            lkjscript_native::StructuralNumericConversion::I64FromF64Exact => {
+                counts.i64_from_f64_exact += 1;
+            }
+            lkjscript_native::StructuralNumericConversion::I64FromF64Truncating => {
+                counts.i64_from_f64_trunc += 1;
+            }
         }
     }
     counts

@@ -24,12 +24,12 @@ fn shared_and_exclusive_views_conflict_end_and_block_drop() -> Result<(), Struct
     let second =
         runtime.borrow_projected(key, string_type, field_projection(string_type), false)?;
     assert_eq!(runtime.projected(first)?.utf8(), Some("borrow"));
-    assert_eq!(
-        runtime.projected_mut(first),
+    assert!(matches!(
+        runtime.byte_vector_mut(first),
         Err(StructuralValueError::RootTable(
             StructuralRootTableError::BorrowConflict
         ))
-    );
+    ));
     assert_eq!(
         runtime.borrow_projected(key, string_type, field_projection(string_type), true),
         Err(StructuralValueError::RootTable(

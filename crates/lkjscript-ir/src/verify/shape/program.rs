@@ -42,6 +42,7 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
             }
         }
     }
+    super::region_products::verify(program)?;
     verify_enum_metadata(program)?;
     verify_trait_metadata(program)?;
     if program.functions.is_empty() {
@@ -80,6 +81,11 @@ pub(crate) fn verify_program(program: &Program) -> crate::Result<()> {
     let main = function(program, program.main)?;
     if !main.signature.type_parameters.is_empty() {
         return fail("SSA main must be monomorphic");
+    }
+    if matches!(main.signature.result.as_ref(), SsaType::Product(product)
+        if program.region_products.iter().any(|metadata| metadata.product == *product))
+    {
+        return fail("SSA invocation-region product cannot cross the process boundary");
     }
     let mut prior = None;
     for parameter in &main.signature.parameters {

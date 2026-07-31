@@ -7,30 +7,30 @@ to references, allocation, recursion, and versioned host/runtime calls.
 
 ## Status
 
-The allocation-free Unit/Bool/I64/F64 tier and the host-independent source
-allocation/recursion slice are **Current** on Linux x86-64. The complete target
-in this record remains an **Accepted Target**: Handle/host-capability calls,
-lexical `Owned`/`Ref`/`RefMut` adapters, and native/VM reference transitions are
-not Current. This status does not claim an optimizing tier or OSR.
+The Unit/Bool/I64/F64 tier and deterministic host-independent aggregate
+allocation/recursion slice are **Current** on Linux x86-64. The former
+collecting implementation described by older evidence is superseded and
+removed. The complete target remains an **Accepted Target** for additional host
+capabilities, ownership adapters, and native/VM transitions. This status does
+not claim OSR.
 
 ## Selected Delivery Slices
 
 The implementation proceeds through separately honest boundaries:
 
-1. **Current:** native canonical native contract typed references, exact non-empty stack maps,
-   bounded active generated frames, and a safe collection-dispatch boundary;
-2. **Current:** source-to-generated host-independent allocation for Str,
-   products, List, Option, Result, and monomorphic the canonical source contract
-   enums, plus noncollecting unique bytes and byte vectors,
-   including construction, field/tag/read/write operations, direct and mutual
-   recursion, forced collection, and VM/evaluator/native equality;
+1. **Current:** bounded active generated frames, typed homes, structural
+   services, and invocation-region runtime-value dispatch;
+2. **Current:** source-to-generated deterministic storage for String, products,
+   List, Option, Result, and monomorphic enums, plus unique bytes and byte
+   vectors, including construction, field/tag/read/write operations, direct and
+   mutual recursion, and VM/evaluator/native equality;
 3. **Accepted Target:** versioned Handle and host-capability calls, native/VM
    reference continuation, and same-commit allocation workload measurement.
 
 Slices 1 and 2 are Current without claiming the complete target in this record.
 Slice 3 and every uncovered item in **Required Surface** remain required before
 “full allocation-capable baseline JIT” is a valid unqualified claim. `Owned`,
-`Ref`, and `RefMut` lexical values are not silently relabeled GC references;
+`Ref`, and `RefMut` lexical values are not silently relabeled runtime keys;
 the ownership safe island retains a deterministic generated-tier rejection
 until a separate exact adapter is proved.
 
@@ -55,28 +55,20 @@ them.
 
 ## Current Host-Independent Slice
 
-`GcHeap` is the pure stable-index mark/sweep heap in `lkjscript-core`; VM and
-forced JIT sessions use that implementation with exact allocation counts,
-deterministic estimated object-byte accounting, collection counts, estimated
-peak-live bytes, and stress-collection APIs. The independent evaluator mirrors
-these allocation and estimated-live-byte limits for its heap-producing
-operations. Bytes conversion and slicing use separately bounded unique storage;
-traced error and Result envelopes retain their ordinary charges.
-Because a language `Value` has no generation field, swept object indices are
-never reused within a session, and all publication paths reject before the
-stable `u32` handle space is exhausted. Mutation is transactional and
-layout-preserving: growth is estimated and
-checked before accounting commits, and closure, layout, or limit failure
-restores the prior object. canonical native contract images
-retain bounded `HeapDispatchV1` sites with canonical operation-specific
-input/result/layout/allocation/store facts, including nominal product field
-facts and collision-free interned full structural List/Option/Result identities
-plus their payload identities, source, safepoint, and verified frame homes. The
-sys trampoline alone reads raw homes, copies typed
-arguments and roots into a safe service, writes exact roots/results back,
-re-materializes arguments after any moving root writeback, and propagates
-structured status. Empty List and None use only the exact zero niche; other references
-reject zero and every nonzero handle is category/layout checked.
+Bounded structural images own strings, enums, options, results, errors, and
+copy products. Segmented invocation regions own selected lists; typed ordinary
+regions own selected acyclic products. Unique storage owns bytes and byte
+vectors. The evaluator, VM, baseline JIT, and proof JIT consume the same
+verified storage plan and enforce logical construction, allocation, and
+reserved-byte limits.
+
+Native images retain bounded structural and runtime-value sites with canonical
+operation-specific input/result/layout/allocation/store facts, source identity,
+and verified frame homes. The executable trampoline alone reads those homes,
+copies typed arguments into the safe service, writes the exact typed result,
+and propagates structured status. Empty lists use the exact zero niche; every
+nonzero invocation key is category/layout checked and cannot escape its
+invocation.
 
 Forced lowering covers unique bytes and byte vectors plus Str, Product, List,
 Option, Result, and monomorphic host-independent enums, their listed constructors/accessors/
@@ -96,7 +88,7 @@ The tier supports directly or through exact versioned runtime calls:
 - products, Option, Result, Str, bytes, byte-vector, List, and typed resources;
 - construction, field/tag access, immutable replacement, current byte
   operations, and exact equality families;
-- allocation, initialized object publication, and classified heap stores;
+- allocation, structural publication, and checked invocation-region writes;
 - direct calls, direct and mutual recursion, and native-to-native calls;
 - VM-to-native entry and explicitly allowed native-to-VM continuation;
 - structured return, trap, exit, deadline, resource limit, and host failure;
@@ -127,28 +119,26 @@ transfer into an already-running invocation and is not OSR.
 
 ## Resource Ownership
 
-Code objects, runtime sessions, heaps, handles, frame records, and pinned
+Code objects, runtime sessions, structural/region stores, handles, frame records, and pinned
 resources have one bounded owner. Generated code cannot execute after session
 or executable ownership ends. Every terminal edge unwinds registered native
 frames and releases resources before CLI status translation.
 
 ## Metrics
 
-Current retained metrics include allocation counts, deterministic estimated
-object bytes, collections, estimated peak-live object bytes, root count,
-barrier count, native frame depth, distinct attempted and successful heap
-runtime calls, and transition counts in addition to compiler/native/code-cache
+Current retained metrics include deterministic structural/list/region/unique
+operations and reserved bytes, native frame depth, distinct attempted and
+successful runtime-value calls, transitions, and compiler/native/code-cache
 accounting. Normal execution remains silent; metrics are opt-in and never use
-stdout. Collection pause distribution remains an acceptance target and is not
-currently measured or emitted.
+stdout. No collection metric is emitted.
 
 ## Acceptance
 
 This target becomes Current only when:
 
-1. non-empty stack maps validate against active native frames;
-2. collection is forced while generated frames hold live references;
-3. recursion with live references is exercised;
+1. typed homes validate against active native frames;
+2. generated frames exercise structural and invocation-region values;
+3. recursion with deterministic aggregates is exercised;
 4. products, Option, Result, strings, buffers, and lists have exact generated or
    runtime-call paths;
 5. host capability smokes remain exact;
@@ -163,7 +153,7 @@ not satisfy this decision.
 ## Deferred And Rejected
 
 OSR, background compilation, compiler threads, speculative guards,
-deoptimization, persistent profiles/caches, a concurrent collector, and Linux
-AArch64 code generation are **Deferred**. Conservative roots, silent forced
+deoptimization, persistent profiles/caches, and Linux AArch64 code generation
+are **Deferred**. Tracing collectors, conservative roots, silent forced
 fallback, RWX, post-RX patching, raw source pointers, Brainfuck-specific
 lowering, and substituting a second backend are **Rejected**.

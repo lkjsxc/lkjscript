@@ -124,30 +124,6 @@ fn validate_enum_header(
     Ok(())
 }
 
-pub(super) fn enum_substitution_layouts(
-    function: FunctionId,
-    arguments: &[SsaType],
-    layouts: &LayoutInterner,
-) -> Result<Vec<LayoutIdentity>, LoweringError> {
-    arguments
-        .iter()
-        .map(|argument| exact_layout_identity(function, layouts, argument))
-        .collect()
-}
-
-pub(super) fn enum_field_index(
-    selected: &lkjscript_ir::EnumVariantMetadata,
-    field: lkjscript_ir::VariantFieldId,
-    function: FunctionId,
-) -> Result<u8, LoweringError> {
-    selected
-        .fields
-        .iter()
-        .position(|candidate| candidate.id == field)
-        .and_then(|index| u8::try_from(index).ok())
-        .ok_or_else(|| enum_error(function, "enum projection field index is invalid"))
-}
-
 fn invalid_enum<T>(function: FunctionId, detail: &str) -> Result<T, LoweringError> {
     Err(enum_error(function, detail))
 }

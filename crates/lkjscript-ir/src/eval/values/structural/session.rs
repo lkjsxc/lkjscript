@@ -65,6 +65,15 @@ pub(crate) fn aggregate_mode(
     limits: StructuralValueRuntimeLimits,
     ty: &SsaType,
 ) -> Result<AggregateMode, String> {
+    if let SsaType::Product(product) = ty {
+        if program
+            .region_products
+            .iter()
+            .any(|metadata| metadata.product == *product)
+        {
+            return Ok(AggregateMode::Region);
+        }
+    }
     let mode = ClosureReconstructor::new(program, limits.max_tree_nodes, limits.max_tree_depth)
         .aggregate_mode(ty);
     if !structural_eligible(program, ty) {

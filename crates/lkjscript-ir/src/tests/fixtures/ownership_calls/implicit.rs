@@ -63,7 +63,6 @@ pub(crate) fn implicit_call_caller() -> Function {
                     metadata: InstructionMetadata {
                         origin: Origin::SYNTHETIC,
                         effects: EffectSet::PURE,
-                        safepoint: Safepoint::Required,
                         failure: FailureBehavior::None,
                         failure_cleanup: Some(FailureCleanupId::new(1)),
                         frame_state: Some(FrameState {

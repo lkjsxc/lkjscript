@@ -19,16 +19,22 @@ The implementation is not Current until focused tests prove:
 6. replacement leaves the original product unchanged;
 7. same-shaped declarations remain nominally distinct;
 8. product equality is rejected;
-9. products nested through Option, Result, List, and other products survive GC;
-10. malformed bytecode descriptors, categories, identities, and indexes fail
-    without panic;
-11. product declarations add no runtime globals or initialization effects;
-12. all canonical sources, runtime smokes, and bounded diagnostic performance
+9. deterministic products nested through Option, Result, List, and other
+   products execute across evaluator, VM, baseline, and proof tiers with exact
+   teardown;
+10. malformed bytecode descriptors, categories, identities, ownership routes,
+    and indexes fail without panic;
+11. region-product keys reject at process boundaries, and malformed region
+    identity or cross-domain graphs fail before publication;
+12. product identities are content-addressed rather than declaration-order or
+    allocator identities;
+13. product declarations add no runtime globals or initialization effects;
+14. all canonical sources, runtime smokes, and bounded diagnostic performance
     comparisons remain accounted for.
 ## Follow-On Work
 
-Once this contract is Current, Brainfuck, lkjedit, and terminal state can be
-represented as immutable products. The later atomic semantic cutover still must
-add function/main-local `var`/`set`, explicit executable `main`, effect-free
-imported libraries, and removal of source mutable globals. Products do not make
-that unfinished behavior Current by themselves.
+Brainfuck, lkjedit, and terminal state already use immutable products. Follow-on
+work may expand independently reconstructed generic witnesses, structural-image
+region fields, immutable list elements, and product equality. It must not
+reintroduce tracing, mixed ownership graphs, compatibility storage, or hidden
+backend-specific product semantics.

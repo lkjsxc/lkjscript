@@ -128,6 +128,7 @@ fn unreachable_diamond_and_loop_are_cleaned_deterministically() {
     let unreachable_loop_entry = branch(5, 6);
     let program = Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),

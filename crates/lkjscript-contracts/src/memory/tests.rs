@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn inventory_is_sorted_unique_and_complete() {
     let records = memory_obligations();
+    assert_eq!(records.len(), 57);
     assert!(records
         .windows(2)
         .all(|pair| pair[0].identity < pair[1].identity));
@@ -27,7 +28,6 @@ fn inventory_is_sorted_unique_and_complete() {
         "file-reader",
         "file-writer",
         "game-entity",
-        "gc-heap",
         "hir",
         "i64",
         "list",
@@ -36,7 +36,6 @@ fn inventory_is_sorted_unique_and_complete() {
         "option",
         "ordinary-region",
         "package-metadata",
-        "pair",
         "pool",
         "pool-id",
         "precise-shared-node",
@@ -72,22 +71,26 @@ fn inventory_is_sorted_unique_and_complete() {
     assert!(matches!(bytes, Some(record) if record.status.contains("current exact evaluator/VM")));
     let builtin = records.iter().find(|record| record.identity == "builtin");
     assert!(matches!(builtin, Some(record) if record.current_trace_fields == "none"));
-    assert!(matches!(builtin, Some(record) if record.runtime_layout.contains("no HeapObj")));
+    assert!(
+        matches!(builtin, Some(record) if record.runtime_layout.contains("no runtime allocation"))
+    );
     let closure = records.iter().find(|record| record.identity == "closure");
     assert!(matches!(closure, Some(record) if record.current_trace_fields == "none"));
     assert!(matches!(closure, Some(record) if record.runtime_layout.contains("Value::Function")));
     let symbol = records.iter().find(|record| record.identity == "symbol");
     assert!(matches!(symbol, Some(record) if record.current_trace_fields == "none"));
     assert!(matches!(symbol, Some(record) if record.runtime_layout.contains("Value::Symbol")));
-    for removed in ["path", "string"] {
+    for removed in ["gc-heap", "pair", "path", "string"] {
         assert!(
             records.iter().all(|record| record.identity != removed),
-            "removed traced catalog family {removed} reappeared"
+            "removed runtime family {removed} reappeared"
         );
     }
-    let heap = records.iter().find(|record| record.identity == "gc-heap");
-    assert!(matches!(heap, Some(record) if record.current_trace_fields.contains("trace")));
-    assert!(matches!(heap, Some(record) if record.status.contains("current collector")));
+    let enumeration = records.iter().find(|record| record.identity == "enum");
+    assert!(matches!(enumeration, Some(record) if record.current_trace_fields == "none"));
+    assert!(
+        matches!(enumeration, Some(record) if record.current_placement == "structural root table")
+    );
 }
 
 #[test]

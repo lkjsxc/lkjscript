@@ -1,7 +1,6 @@
 use crate::optimize::*;
 use crate::{
-    EffectSet, FailureBehavior, Function, Instruction, InstructionKind, Program, RuntimeOp,
-    Safepoint, SsaType,
+    EffectSet, FailureBehavior, Function, Instruction, InstructionKind, Program, RuntimeOp, SsaType,
 };
 
 pub(crate) fn discover_edits(
@@ -72,8 +71,7 @@ pub(crate) fn discovery_identity_edit(
         return Ok(None);
     };
     budget.charge(arguments.len() as u64)?;
-    if instruction.metadata.safepoint != Safepoint::None
-        || instruction.metadata.frame_state.is_some()
+    if instruction.metadata.frame_state.is_some()
         || instruction.metadata.effects != EffectSet::PURE
         || instruction.metadata.failure != FailureBehavior::None
         || !discovery_signature_matches(indexes, signature, arguments, &instruction.ty)
@@ -110,7 +108,6 @@ pub(crate) fn discovery_identity_edit(
                 if inner_instruction.ty != SsaType::Bool
                     || inner_instruction.metadata.effects != EffectSet::PURE
                     || inner_instruction.metadata.failure != FailureBehavior::None
-                    || inner_instruction.metadata.safepoint != Safepoint::None
                     || inner_instruction.metadata.frame_state.is_some()
                 {
                     return None;

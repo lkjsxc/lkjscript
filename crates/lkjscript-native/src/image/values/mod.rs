@@ -70,7 +70,7 @@ impl Default for ImageContracts {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativeExecutionDomain {
     CollectorFree,
-    LegacyHeap,
+    InvocationRegion,
 }
 
 /// Copyable, worker-local runtime-adapter token. The opaque word is never
@@ -81,7 +81,7 @@ pub enum NativeExecutionDomain {
 /// ```compile_fail
 /// use lkjscript_native::{LayoutIdentity, NativeReference, ReferenceType};
 /// let reference = NativeReference::new(
-///     ReferenceType::Product(LayoutIdentity::product(0)),
+///     ReferenceType::List(LayoutIdentity::new(0), LayoutIdentity::new(1)),
 ///     7,
 /// );
 /// std::thread::spawn(move || reference.opaque_word());

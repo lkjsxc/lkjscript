@@ -18,15 +18,22 @@ pub struct StructuralTypeIdentity {
     layout: u64,
     semantic_type: u64,
     kind: StructuralKind,
+    copyable: bool,
 }
 
 impl StructuralTypeIdentity {
     #[must_use]
-    pub const fn new(layout: u64, semantic_type: u64, kind: StructuralKind) -> Self {
+    pub const fn new(
+        layout: u64,
+        semantic_type: u64,
+        kind: StructuralKind,
+        copyable: bool,
+    ) -> Self {
         Self {
             layout,
             semantic_type,
             kind,
+            copyable,
         }
     }
 
@@ -43,6 +50,11 @@ impl StructuralTypeIdentity {
     #[must_use]
     pub const fn kind(self) -> StructuralKind {
         self.kind
+    }
+
+    #[must_use]
+    pub const fn copyable(self) -> bool {
+        self.copyable
     }
 
     pub(crate) const fn is_valid(self) -> bool {

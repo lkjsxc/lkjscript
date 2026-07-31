@@ -4,8 +4,8 @@ use std::num::NonZeroU64;
 
 use super::*;
 use crate::{
-    HeapObj, LayoutIdentity, OwnedValue, ResourceKind, SemanticPayload, SemanticTypeIdentity,
-    SemanticValue, StructuralKind, StructuralSnapshotLimits, StructuralType, Value,
+    LayoutIdentity, OwnedValue, ResourceKind, SemanticPayload, SemanticTypeIdentity, SemanticValue,
+    StructuralKind, StructuralSnapshotLimits, StructuralType, Value,
 };
 
 fn round_trip(outcome: ExecutionOutcome) {
@@ -55,40 +55,22 @@ fn process_outcome_codec_preserves_closed_outcomes() {
 }
 
 #[test]
-fn process_outcome_codec_preserves_registered_legacy_object_families() {
-    round_trip(ExecutionOutcome::Returned(
-        OwnedValue::from_vm_snapshot(
-            Value::from_legacy_traced(0),
-            vec![
-                Some(HeapObj::Enum {
-                    layout: crate::RuntimeLayoutId::new([7; 32]),
-                    physical_tag: 1,
-                    active_payload: vec![Value::from_legacy_traced(1)],
-                }),
-                Some(HeapObj::Product {
-                    product: crate::ProductId::new(3),
-                    fields: vec![Value::from_legacy_traced(2)],
-                }),
-                Some(HeapObj::Pair {
-                    car: Value::from_i64(9),
-                    cdr: Value::EMPTY_LIST,
-                }),
-            ],
-        )
-        .expect("owned legacy aggregate"),
-    ));
-}
-
-#[test]
-fn process_outcome_codec_rejects_removed_traced_string_and_path_tags() {
-    for removed_tag in [0, 3] {
-        let mut bytes = vec![0, 0, 10];
-        bytes.extend_from_slice(&0_u32.to_le_bytes());
-        bytes.extend_from_slice(&1_u64.to_le_bytes());
-        bytes.push(1);
-        bytes.push(removed_tag);
-        let error = decode_execution_outcome(&bytes, 64).expect_err("removed object tag");
-        assert_eq!(error.as_str(), "unknown owned heap object tag");
+fn process_outcome_codec_rejects_removed_value_tags_and_runtime_values() {
+    for tag in [6, 7, 8, 10] {
+        let error = decode_execution_outcome(&[0, 0, tag], 64).expect_err("removed value tag");
+        assert_eq!(error.as_str(), "unknown value tag");
+    }
+    for value in [
+        Value::from_capability(crate::CapabilityKind::Stdio),
+        Value::from_resource(1),
+        Value::from_function(1),
+        Value::from_bytes_key(1),
+    ] {
+        let error = OwnedValue::from_value(value).expect_err("runtime value must reject");
+        assert_eq!(
+            error.as_str(),
+            "owned snapshot retained a nontransportable runtime value"
+        );
     }
 }
 

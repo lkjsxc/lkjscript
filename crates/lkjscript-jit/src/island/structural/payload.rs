@@ -8,7 +8,7 @@ impl JitStructuralRuntime {
         self.note_call();
         let expected = view.view_type().projected();
         let semantic = match self.runtime.projected(view_key(view)?) {
-            Ok(value) => value.clone(),
+            Ok(value) => value,
             Err(error) => return Err(self.map_error(error)),
         };
         self.payload_value(semantic, expected)
@@ -29,19 +29,18 @@ impl JitStructuralRuntime {
         let owner_type = core_type(owner.structural_type())?;
         let payload_type = core_type(aggregate.fields()[0])?;
         let owner_key = owner_key(owner)?;
-        let value = match self.runtime.value(owner_key, owner_type) {
-            Ok(value) => value,
+        let node = match self.runtime.value_node(owner_key, owner_type) {
+            Ok(node) => node,
             Err(error) => return Err(self.map_error(error)),
         };
-        match &value.payload {
-            SemanticPayload::Enum {
-                tag,
-                active_payload,
-            } if *tag == expected_tag
-                && active_payload.as_slice().first().is_some_and(|value| {
-                    active_payload.len() == 1 && value.value_type == payload_type
-                }) => {}
-            SemanticPayload::Enum { .. } => return Err(NativeServiceError::Trap),
+        match node.payload() {
+            StructuralNodeView::Enum { tag, fields }
+                if tag == expected_tag
+                    && fields.len() == 1
+                    && node
+                        .child(0)
+                        .is_some_and(|field| field.value_type() == payload_type) => {}
+            StructuralNodeView::Enum { .. } => return Err(NativeServiceError::Trap),
             _ => return Err(NativeServiceError::Trap),
         }
         let semantic = self

@@ -18,7 +18,11 @@ pub(in crate::ssa) fn construct_program(
             (function.binding, FunctionId::new(raw))
         })
         .collect();
-    let structural = lower_structural_memory(program, memory_plan, &product_ids)?;
+    let mut structural = lower_structural_memory(program, memory_plan, &product_ids)?;
+    let region_products = lower_region_products(memory_plan, &product_ids)?;
+    if !region_products.is_empty() && structural.types.is_empty() {
+        structural.plan = lkjscript_ir::MemoryPlanId::new(memory_plan.id.as_bytes());
+    }
     let function_parameter_consumption: HashMap<FunctionId, Vec<bool>> = function_ids
         .values()
         .copied()
@@ -152,9 +156,10 @@ pub(in crate::ssa) fn construct_program(
         &structural,
     )?);
 
-    let enums = lower_enums(&program.enums, &product_ids, &structural)?;
+    let enums = lower_enums(&program.enums, &product_ids)?;
     Ok(Program {
         memory: structural,
+        region_products,
         sources: program
             .sources
             .iter()

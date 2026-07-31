@@ -25,7 +25,6 @@ fn prelude_option_chunk() -> Chunk {
                 fields: vec![EnumFieldMetadata {
                     id: VariantFieldId::new(crate::OPTION_VALUE_ID),
                     name: "value".into(),
-                    traced: false,
                 }],
             },
         ],
@@ -59,7 +58,6 @@ fn enum_chunk() -> Chunk {
                 fields: vec![EnumFieldMetadata {
                     id: field,
                     name: "value".into(),
-                    traced: false,
                 }],
             },
         ],
@@ -101,8 +99,9 @@ fn duplicate_enum_identity_collision_is_rejected() {
 }
 
 #[test]
-fn inactive_projection_is_rejected_by_bytecode_validation() {
-    assert!(error(enum_chunk()).contains("inactive enum projection rejected before access"));
+fn enum_construction_without_structural_operations_is_rejected() {
+    assert!(error(enum_chunk())
+        .contains("enum construction is unsupported without structural metadata and operations"));
 }
 
 #[test]

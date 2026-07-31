@@ -6,7 +6,7 @@ use lkjscript_core::{
 use super::support::{runtime, value_type};
 
 #[test]
-fn enum_active_payload_moves_into_nested_product_and_rejects_legacy_traced(
+fn enum_active_payload_moves_into_nested_product_and_rejects_external_value(
 ) -> Result<(), StructuralValueError> {
     let enum_type = value_type(91, 92, StructuralKind::Enum)?;
     let product_type = value_type(93, 94, StructuralKind::Product)?;
@@ -26,7 +26,7 @@ fn enum_active_payload_moves_into_nested_product_and_rejects_legacy_traced(
 
     let product_destination = runtime.begin_product(product_type, vec![enum_type, i64_type])?;
     assert_eq!(
-        runtime.initialize_value(product_destination, 1, Value::from_legacy_traced(4)),
+        runtime.initialize_value(product_destination, 1, Value::from_resource(4)),
         Err(StructuralValueError::MixedValue)
     );
     assert_eq!(
@@ -50,14 +50,14 @@ fn enum_active_payload_moves_into_nested_product_and_rejects_legacy_traced(
         enum_type,
         SemanticPayload::Enum {
             tag: 7,
-            active_payload: vec![text],
+            active_payload: vec![text].into(),
         },
     );
     let expected = SemanticValue::new(
         product_type,
-        SemanticPayload::Product(vec![expected_enum, integer]),
+        SemanticPayload::Product(vec![expected_enum, integer].into()),
     );
-    assert_eq!(runtime.value(nested_key, product_type)?, &expected);
+    assert_eq!(runtime.value(nested_key, product_type)?, expected);
     let exported = runtime.export_semantic(nested_key, product_type)?;
     assert_eq!(exported, expected);
     assert_eq!(runtime.metrics().live_objects, 0);

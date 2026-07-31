@@ -186,6 +186,7 @@ impl FunctionBuilder<'_> {
 include!("expressions/entry.rs");
 include!("expressions/branches.rs");
 include!("expressions/branch_merge.rs");
+include!("expressions/branch_merge_conditionals.rs");
 include!("expressions/control.rs");
 include!("expressions/short_circuit.rs");
 include!("expressions/enums.rs");

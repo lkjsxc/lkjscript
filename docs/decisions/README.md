@@ -35,6 +35,8 @@ Index active architecture decisions separately from superseded history.
   deterministic memory destination, Current inventory, migration, and falsification contract
 - [authoritative-memory-plan.md](memory/authoritative-memory-plan.md): pre-backend
   plan axes, function signatures, bounded analyses, identity, and independent verification
+- [canonical-memory-plan-encoding.md](memory/canonical-memory-plan-encoding.md):
+  versioned exhaustive binary identities for HIR plans and exact witnesses
 - [deterministic-drop.md](memory/deterministic-drop.md): initializedness, exact
   whole-place cleanup, drop flags, outcome routing, and bounded cleanup failures
 - [generation-safe-resources.md](memory/generation-safe-resources.md): typed reusable
@@ -49,9 +51,9 @@ Index active architecture decisions separately from superseded history.
   first-island eligibility, engine support, leak checks, and collector-zero evidence
 - [tracing-ratchet.md](memory/tracing-ratchet.md): closed non-increasing legacy
   tracing-family registry and separation from the final no-tracing gate
-- [ownership-spine-research.md](memory/ownership-spine-research.md): adopted Rust,
+- [ownership-spine-research.md](memory/evidence/ownership-spine-research.md): adopted Rust,
   Swift, Perceus, Lean, Polonius, and destination-passing mechanisms and differences
-- [research-evidence.md](memory/research-evidence.md): primary-source mechanisms,
+- [research-evidence.md](memory/evidence/research-evidence.md): primary-source mechanisms,
   adoption, rejection, and explicit uncertainty for deterministic memory
 - [equality-families.md](semantics/equality-families.md): explicit value, identity, list, and F64-bit equality
 - [immutable-nominal-products.md](semantics/immutable-nominal-products.md): named immutable aggregate state

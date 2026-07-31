@@ -27,9 +27,9 @@ impl VerifiedTypes<'_> {
             }
             Type::Resource(_) => deterministic(MemoryAggregateMode::Affine, true, false),
             Type::List(inner) => self.list(ty, inner)?,
-            Type::Param(_) => verified_legacy(ty, MemoryBlockerReason::UnknownTypeParameter),
+            Type::Param(_) => verified_unresolved(ty, MemoryBlockerReason::UnknownTypeParameter),
             Type::Fn { .. } | Type::Forall { .. } => {
-                verified_legacy(ty, MemoryBlockerReason::CapturedClosure)
+                verified_unresolved(ty, MemoryBlockerReason::CapturedClosure)
             }
             Type::Product(name) => self.product(name)?,
             Type::Enum { id, arguments, .. } => self.enum_type(id.bytes(), arguments)?,
@@ -39,16 +39,28 @@ impl VerifiedTypes<'_> {
     fn list(&mut self, ty: &Type, inner: &Type) -> Result<VerifiedDerived> {
         let child = self.intern(inner)?;
         let fact = self.expected(child)?.clone();
-        let mut result = verified_legacy(ty, MemoryBlockerReason::ListPair);
+        if verified_list_region_element(inner)
+            && fact.derived.mode == MemoryAggregateMode::Copy
+            && fact.derived.closure.class == MemoryClosureClass::Deterministic
+            && !fact.derived.contains_borrow
+        {
+            return Ok(VerifiedDerived {
+                mode: MemoryAggregateMode::ImmutableValue,
+                closure: MemoryClosureFact {
+                    class: MemoryClosureClass::RegionClosed,
+                    blocker_path: Vec::new(),
+                    blocker_type: Some(verified_memory_type(ty)),
+                    blocker_reason: Some(MemoryBlockerReason::RegionDomainBoundary),
+                    mixed_direction: None,
+                },
+                contains_borrow: false,
+                contains_dynamic_owner: false,
+            });
+        }
+        let mut result = verified_unresolved(ty, MemoryBlockerReason::ListElementWitnessRequired);
         result.mode = fact.derived.mode;
         result.contains_borrow = fact.derived.contains_borrow;
         result.contains_dynamic_owner = fact.derived.contains_dynamic_owner;
-        if fact.derived.contains_dynamic_owner {
-            result.closure.class = MemoryClosureClass::IllegalMixedBridge;
-            result.closure.blocker_path = vec![MemoryTypePathElement::TypeArgument(0)];
-            result.closure.mixed_direction =
-                Some(MemoryMixedBridgeDirection::LegacyContainsDeterministic);
-        }
         Ok(result)
     }
 
@@ -80,7 +92,18 @@ impl VerifiedTypes<'_> {
                 },
             ));
         }
-        Ok(verified_fold(children))
+        let region_capable = item
+            .fields
+            .iter()
+            .zip(&children)
+            .all(|(field, (derived, _))| verified_region_product_field(&field.ty, derived));
+        let derived = verified_fold(children, region_capable);
+        if derived.closure.class == MemoryClosureClass::Unresolved {
+            return Err(Error::msg(format!(
+                "memory verifier rejects unresolved product {name}"
+            )));
+        }
+        Ok(derived)
     }
 
     fn enum_type(&mut self, id: [u8; 32], arguments: &[Type]) -> Result<VerifiedDerived> {
@@ -130,8 +153,29 @@ impl VerifiedTypes<'_> {
                 ));
             }
         }
-        Ok(verified_fold(children))
+        let derived = verified_fold(children, false);
+        if derived.closure.class == MemoryClosureClass::Unresolved {
+            return Err(Error::msg(format!(
+                "memory verifier rejects unresolved enum {}",
+                item.name
+            )));
+        }
+        Ok(derived)
     }
+}
+
+fn verified_list_region_element(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::Never | Type::Unit | Type::Bool | Type::I64 | Type::F64
+    )
+}
+
+fn verified_region_product_field(ty: &Type, derived: &VerifiedDerived) -> bool {
+    matches!(ty, Type::Unit | Type::Bool | Type::I64 | Type::F64)
+        || matches!(ty, Type::List(element) if verified_list_region_element(element))
+        || matches!(ty, Type::Product(_))
+            && derived.closure.class == MemoryClosureClass::RegionClosed
 }
 
 include!("derive/recursive.rs");

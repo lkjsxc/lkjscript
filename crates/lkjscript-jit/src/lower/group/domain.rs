@@ -7,6 +7,8 @@ pub(super) fn lowering_domain(
     let mut resource = false;
     let mut unique = false;
     let mut structural = false;
+    let mut region_product = false;
+    let mut legacy_aggregate = false;
     for id in functions {
         let function = source_function(program, *id)?;
         let types = function
@@ -29,6 +31,13 @@ pub(super) fn lowering_domain(
         for ty in types {
             resource |= contains_capability_or_resource(ty);
             unique |= contains_unique(ty);
+            structural |= program.memory.type_for(ty).is_some();
+            region_product |= matches!(ty, SsaType::Product(product)
+                if program.region_products.iter().any(|metadata| metadata.product == *product));
+            legacy_aggregate |= matches!(ty, SsaType::Product(product)
+                if !program.region_products.iter().any(|metadata| metadata.product == *product)
+                    && program.memory.type_for(ty).is_none())
+                || matches!(ty, SsaType::Enum { .. }) && program.memory.type_for(ty).is_none();
         }
         resource |= function.blocks.iter().any(|block| {
             block.instructions.iter().any(|instruction| {
@@ -57,6 +66,13 @@ pub(super) fn lowering_domain(
                 )
             })
         });
+    }
+    if region_product && (resource || unique || structural || legacy_aggregate) {
+        return Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(functions[0]),
+            "native invocation-region products cannot bridge another ownership domain",
+        ));
     }
     match (resource, unique, structural) {
         (true, true, _) | (true, _, true) | (_, true, true) => Err(LoweringError::new(

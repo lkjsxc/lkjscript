@@ -10,7 +10,7 @@ CASE_NAMES = (
     "scalar-workload-baseline",
 )
 EXACT_I64_3333 = {"kind": "returned", "value_kind": "i64", "exact": "3333"}
-EXACT_I64_1 = {"kind": "returned", "value_kind": "i64", "exact": "1"}
+EXACT_I64_42 = {"kind": "returned", "value_kind": "i64", "exact": "42"}
 SCALAR_ITERATIONS = 100_000
 HISTORICAL_NATIVE_MEDIAN_NS = 7_647_935
 HISTORICAL_PROCESS_MEDIAN_NS = 9_372_036

@@ -3,7 +3,6 @@
 mod budget;
 mod bytecode;
 mod error;
-mod gc;
 mod limits;
 mod numeric_conversion;
 mod opcode;
@@ -23,21 +22,21 @@ pub use budget::{
     ResourceUsage, MAX_BUDGET_JOURNAL_ENTRIES, MAX_BUDGET_PATH_DEPTH,
 };
 pub use bytecode::{
-    Chunk, ConstId, Constant, EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId,
-    EnumMetadata, EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupPlan,
-    FailureCleanupRange, FunctionProto, MemoryPlanId, ProductFieldRef, ProductId, ProductMetadata,
-    ResourceReturnKind, RuntimeLayoutId, StructuralAggregateFieldRef,
-    StructuralDestinationFieldRef, StructuralDestinationId, StructuralDestinationMetadata,
-    StructuralFieldMetadata, StructuralFieldRoute, StructuralLayoutId, StructuralLayoutKind,
-    StructuralLayoutMetadata, StructuralPayloadRef, StructuralRepresentationId,
-    StructuralRepresentationMetadata, StructuralStorage, StructuralTypeId, StructuralTypeKind,
-    StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout,
-    UniqueValueKind, VariantFieldId, VariantId, MAX_STRUCTURAL_DESTINATIONS,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_OPERATION_REFS,
-    MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
+    runtime_product_contract_identity, Chunk, ConstId, Constant, EnumConstructionRef,
+    EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata, EnumVariantMetadata, EnumVariantRef,
+    FailureCleanupAction, FailureCleanupPlan, FailureCleanupRange, FunctionProto, MemoryPlanId,
+    ProductFieldRef, ProductId, ProductMetadata, RegionProductFieldKind, ResourceReturnKind,
+    RuntimeLayoutId, StructuralAggregateFieldRef, StructuralDestinationFieldRef,
+    StructuralDestinationId, StructuralDestinationMetadata, StructuralFieldMetadata,
+    StructuralFieldRoute, StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata,
+    StructuralPayloadRef, StructuralRepresentationId, StructuralRepresentationMetadata,
+    StructuralStorage, StructuralTypeId, StructuralTypeKind, StructuralTypeMetadata,
+    StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout, UniqueValueKind,
+    VariantFieldId, VariantId, MAX_STRUCTURAL_DESTINATIONS, MAX_STRUCTURAL_LAYOUTS,
+    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_OPERATION_REFS, MAX_STRUCTURAL_REPRESENTATIONS,
+    MAX_STRUCTURAL_TYPES,
 };
 pub use error::{Error, ErrorClass, Result};
-pub use gc::{GcConfig, GcHeap, GcLimit, GcStats};
 pub use limits::{
     ExecutionConfig, Limits, ValidationLimits, MAX_BULK_IO_BYTES, MAX_BYTECODE_METADATA_BYTES,
     MAX_BYTECODE_TABLE_ENTRIES, MAX_BYTE_STORAGE_BYTES, MAX_CHILDREN, MAX_CHUNK_ENCODED_BYTES,
@@ -70,23 +69,29 @@ pub use resource_table::{
 };
 pub use sha256::sha256;
 pub use structural::{
-    ByteVectorKey, BytesKey, DestinationCleanupReport, DomainClass, DomainKey,
-    InlineStructuralValue, InvalidUniqueKeyWord, InvalidUniqueStoreLimits, LayoutIdentity, PathKey,
-    PoolId, PoolMetrics, PoolPartition, RegionMetrics, RegionOwner, RegionRef, RegionReleaseReport,
-    RegionStore, RootClass, RootKey, SealFailure, SealedBorrow, SealedBuilder, SealedOwner,
-    SealedRef, SealedRegionMetrics, SealedRegionStore, SealedReleaseReport, SealedUpgrade,
-    SemanticPayload, SemanticTypeIdentity, SemanticValue, StaticArtifactPayload, StaticBytes,
-    StaticStructuralArtifact, StaticStructuralLeaf, StructuralBorrow, StructuralBorrowKey,
-    StructuralDestinationKey, StructuralError, StructuralEvent, StructuralEventKind,
-    StructuralEventLog, StructuralFieldPath, StructuralInitializationFailure, StructuralKind,
-    StructuralLimit, StructuralLimits, StructuralProjection, StructuralPublishFailure,
-    StructuralRootOwnership, StructuralRootState, StructuralRootTable, StructuralRootTableError,
-    StructuralRootTableLimit, StructuralRootTableLimits, StructuralRootTableStats,
-    StructuralRuntime, StructuralRuntimeId, StructuralRuntimeMetrics, StructuralType,
-    StructuralValueError, StructuralValueKey, StructuralValueLimit, StructuralValueRuntime,
-    StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics, StructuralViewKey, TypedPool,
-    UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak,
-    UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
+    product_layout_identity, product_semantic_identity, ByteVectorKey, BytesKey, CheckedU32Range,
+    DestinationCleanupReport, DomainClass, DomainKey, InlineStructuralValue, InvalidUniqueKeyWord,
+    InvalidUniqueStoreLimits, LayoutIdentity, LocalNodeId, PathKey, PoolId, PoolMetrics,
+    PoolPartition, RegionMetrics, RegionOwner, RegionProductArena, RegionProductArenaId,
+    RegionProductError, RegionProductKey, RegionProductLimits, RegionProductMetrics, RegionRef,
+    RegionReleaseReport, RegionStore, RootClass, RootKey, SealFailure, SealedBorrow, SealedBuilder,
+    SealedOwner, SealedRef, SealedRegionMetrics, SealedRegionStore, SealedReleaseReport,
+    SealedUpgrade, SegmentedListArena, SegmentedListArenaId, SegmentedListArenaLimits,
+    SegmentedListError, SegmentedListKey, SegmentedListLimit, SegmentedListMetrics,
+    SemanticChildren, SemanticPayload, SemanticTypeIdentity, SemanticValue, StaticArtifactPayload,
+    StaticBytes, StaticStructuralArtifact, StaticStructuralLeaf, StructuralBorrow,
+    StructuralBorrowKey, StructuralDestinationKey, StructuralError, StructuralEvent,
+    StructuralEventKind, StructuralEventLog, StructuralFieldPath, StructuralImage,
+    StructuralImageConversionFailure, StructuralInitializationFailure, StructuralKind,
+    StructuralLimit, StructuralLimits, StructuralNode, StructuralNodePayload, StructuralNodeRecord,
+    StructuralNodeView, StructuralProjection, StructuralPublishFailure, StructuralRootOwnership,
+    StructuralRootState, StructuralRootTable, StructuralRootTableError, StructuralRootTableLimit,
+    StructuralRootTableLimits, StructuralRootTableStats, StructuralRuntime, StructuralRuntimeId,
+    StructuralRuntimeMetrics, StructuralType, StructuralValueError, StructuralValueKey,
+    StructuralValueLimit, StructuralValueRuntime, StructuralValueRuntimeLimits,
+    StructuralValueRuntimeMetrics, StructuralViewKey, TypedPool, UniqueKeyWord, UniqueLayout,
+    UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits,
+    UniqueStoreStats, WeakSealedRef,
 };
 pub use validation::{validate_chunk, ValidatedChunk};
-pub use value::{CapabilityKind, HeapObj, ResourceKind, Value};
+pub use value::{CapabilityKind, ResourceKind, Value};

@@ -15,6 +15,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
     };
     Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -102,7 +103,6 @@ pub(crate) fn optimizable_checked_program() -> Program {
                             metadata: InstructionMetadata {
                                 origin: Origin::SYNTHETIC,
                                 effects: checked,
-                                safepoint: Safepoint::Required,
                                 failure: FailureBehavior::Trap,
                                 failure_cleanup: None,
                                 frame_state: Some(FrameState {

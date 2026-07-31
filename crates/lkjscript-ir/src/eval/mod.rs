@@ -32,6 +32,35 @@ pub fn evaluate_observed(
             Default::default(),
         );
     };
+    let lists = match lkjscript_core::SegmentedListArena::new(
+        lkjscript_core::SegmentedListArenaLimits::default(),
+    ) {
+        Ok(lists) => lists,
+        Err(error) => {
+            return (
+                EvalOutcome::HostFailure(format!("segmented-list arena: {error:?}")),
+                Default::default(),
+            );
+        }
+    };
+    let region_limit = u32::try_from(config.max_allocations)
+        .unwrap_or(u32::MAX)
+        .max(1);
+    let region_products =
+        match lkjscript_core::RegionProductArena::new(lkjscript_core::RegionProductLimits {
+            max_records: std::num::NonZeroU32::new(region_limit)
+                .unwrap_or(std::num::NonZeroU32::MIN),
+            max_fields: std::num::NonZeroU32::new(region_limit.saturating_mul(16))
+                .unwrap_or(std::num::NonZeroU32::MIN),
+        }) {
+            Ok(arena) => arena,
+            Err(error) => {
+                return (
+                    EvalOutcome::HostFailure(format!("region-product arena: {error:?}")),
+                    Default::default(),
+                );
+            }
+        };
     let structural =
         match EvaluatorStructuralSession::new(program.program(), config.structural_limits) {
             Ok(structural) => structural,
@@ -57,6 +86,8 @@ pub fn evaluate_observed(
         resources,
         unique,
         structural,
+        lists,
+        region_products,
     };
     let result = evaluator.call(program.program().main, arguments, 0);
     let primary = match result {
@@ -96,6 +127,8 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) resources: resources::EvalResources,
     pub(crate) unique: unique::EvalUniqueRuntime,
     pub(crate) structural: EvaluatorStructuralSession,
+    pub(crate) lists: lkjscript_core::SegmentedListArena<EvalValue>,
+    pub(crate) region_products: lkjscript_core::RegionProductArena<EvalValue>,
 }
 
 mod allocation;

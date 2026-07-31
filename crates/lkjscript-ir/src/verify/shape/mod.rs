@@ -7,6 +7,8 @@ mod instruction_effects;
 mod memory_instruction;
 mod numeric_conversion;
 mod program;
+#[path = "instruction_effects/region_products.rs"]
+mod region_products;
 mod structural_instruction;
 mod structural_metadata;
 mod terminator;

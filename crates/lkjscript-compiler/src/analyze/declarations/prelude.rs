@@ -164,17 +164,6 @@ fn field(id: [u8; 32], name: &str, ty: Type, indirect: bool) -> EnumVariantField
         name: name.into(),
         source_order: 0,
         indirect,
-        traced: matches!(
-            ty,
-            Type::Str
-                | Type::Symbol
-                | Type::Path
-                | Type::Product(_)
-                | Type::Enum { .. }
-                | Type::List(_)
-                | Type::Fn { .. }
-                | Type::Forall { .. }
-        ),
         ty,
     }
 }

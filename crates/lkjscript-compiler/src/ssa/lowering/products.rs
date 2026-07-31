@@ -11,7 +11,7 @@ impl FunctionBuilder<'_> {
             return Ok(None);
         };
         let ty = SsaType::Product(product);
-        if self.structural.is_owned(&ty) {
+        if self.structural.type_for(&ty).is_some() {
             return self.construct_structural_aggregate(ty, None, fields, origin);
         }
         let value = self.append(
@@ -37,9 +37,14 @@ impl FunctionBuilder<'_> {
         let owner_ty = SsaType::Product(product);
         if self.structural.is_owned(&owner_ty) {
             return Err(Error::msg(
-                "structural product field projection requires explicit owner lowering",
+                "owned structural product field projection requires explicit owner lowering",
             ));
         }
+        let effects = if self.structural.type_for(&owner_ty).is_some() {
+            EffectSet::READS_MEMORY.union(EffectSet::ALLOCATES)
+        } else {
+            EffectSet::READS_MEMORY
+        };
         let value = self.append(
             ty,
             InstructionKind::ProductField {
@@ -47,7 +52,7 @@ impl FunctionBuilder<'_> {
                 field,
                 value,
             },
-            EffectSet::READS_MEMORY,
+            effects,
             origin,
         )?;
         Ok(Some(value))
@@ -68,10 +73,42 @@ impl FunctionBuilder<'_> {
             return Ok(None);
         };
         let ty = SsaType::Product(product);
-        if self.structural.is_owned(&ty) {
-            return Err(Error::msg(
-                "structural product update is unavailable without whole-owner reconstruction",
-            ));
+        if let Some(item) = self.structural.type_for(&ty) {
+            if item.mode != StructuralTypeMode::Copy {
+                return Err(Error::msg(
+                    "owned structural product update requires explicit owner lowering",
+                ));
+            }
+            let fields = self.structural_product_fields(item)?.to_vec();
+            if usize::from(field) >= fields.len() {
+                return Err(Error::msg(
+                    "structural product update field is out of range",
+                ));
+            }
+            let mut rebuilt = Vec::new();
+            rebuilt
+                .try_reserve_exact(fields.len())
+                .map_err(|_| Error::msg("structural product update allocation failed"))?;
+            for (index, field_ty) in fields.into_iter().enumerate() {
+                if index == usize::from(field) {
+                    rebuilt.push(replacement);
+                } else {
+                    rebuilt.push(self.append(
+                        field_ty,
+                        InstructionKind::ProductField {
+                            product,
+                            field:
+                                u8::try_from(index).map_err(|_| {
+                                    Error::msg("structural product field exceeds u8")
+                                })?,
+                            value,
+                        },
+                        EffectSet::READS_MEMORY.union(EffectSet::ALLOCATES),
+                        origin,
+                    )?);
+                }
+            }
+            return self.construct_structural_aggregate(ty, None, rebuilt, origin);
         }
         let value = self.append(
             ty,
@@ -85,5 +122,17 @@ impl FunctionBuilder<'_> {
             origin,
         )?;
         Ok(Some(value))
+    }
+
+    fn structural_product_fields(&self, item: &StructuralTypeMetadata) -> Result<&[SsaType]> {
+        let layout = self
+            .structural
+            .layouts
+            .get(item.layout.index().unwrap_or(usize::MAX))
+            .ok_or_else(|| Error::msg("structural product layout is missing"))?;
+        let StructuralLayoutKind::Product { fields, .. } = &layout.kind else {
+            return Err(Error::msg("structural product type has non-product layout"));
+        };
+        Ok(fields)
     }
 }

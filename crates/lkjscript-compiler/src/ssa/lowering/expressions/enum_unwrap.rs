@@ -3,7 +3,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_enum_unwrap(
         &mut self,
         ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
-        layout: hir::RuntimeLayoutId,
+        _layout: hir::RuntimeLayoutId,
         input: &Expr,
         trap: &str,
         ty: SsaType,
@@ -23,6 +23,27 @@ impl FunctionBuilder<'_> {
                 .lower_structural_copy_enum_unwrap(ids, input, trap, ty, source, value, owner_ty)
                 .map(Some);
         }
+        if resource_result_adapter(ids.0, &owner_ty) {
+            return self
+                .lower_resource_result_unwrap(ids, _layout, input, trap, ty, source, value)
+                .map(Some);
+        }
+        Err(Error::msg(
+            "enum unwrap lacks deterministic structural metadata",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn lower_resource_result_unwrap(
+        &mut self,
+        ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
+        layout: hir::RuntimeLayoutId,
+        input: &Expr,
+        trap: &str,
+        ty: SsaType,
+        source: hir::SourceId,
+        value: ValueId,
+    ) -> Result<ValueId> {
         let test = self.append(
             SsaType::Bool,
             InstructionKind::EnumIsVariant {
@@ -54,7 +75,7 @@ impl FunctionBuilder<'_> {
             block_origin,
         )?;
         if arguments != failure_arguments {
-            return Err(Error::msg("SSA enum branch edge schemas diverged"));
+            return Err(Error::msg("SSA resource-result branch edge schemas diverged"));
         }
         self.terminate(Terminator::ConditionalBranch {
             condition: test,
@@ -78,36 +99,25 @@ impl FunctionBuilder<'_> {
         self.unplaced_owners = success_unplaced;
         self.env = success_env;
         self.slots = incoming_slots;
-        let value = self.enum_unwrap_successor_value(input, value, &incoming_unplaced)?;
-        self.append_enum_field(ids, layout, value, ty, source)
-            .map(Some)
-    }
-
-    fn enum_unwrap_successor_value(
-        &self,
-        input: &Expr,
-        value: ValueId,
-        incoming_unplaced: &[ValueId],
-    ) -> Result<ValueId> {
-        if let ExprKind::Load(reference) = input.kind {
-            return self
-                .env
+        let value = if let ExprKind::Load(reference) = input.kind {
+            self.env
                 .get(&reference.binding)
                 .copied()
-                .ok_or_else(|| Error::msg("enum unwrap successor state lost loaded value"));
-        }
-        Ok(incoming_unplaced
-            .iter()
-            .position(|candidate| *candidate == value)
-            .and_then(|index| self.unplaced_owners.get(index))
-            .copied()
-            .unwrap_or(value))
+                .ok_or_else(|| Error::msg("resource-result unwrap lost loaded value"))?
+        } else {
+            incoming_unplaced
+                .iter()
+                .copied()
+                .find(|candidate| *candidate == value)
+                .unwrap_or(value)
+        };
+        self.append_enum_field(ids, layout, value, ty, source)
     }
 
     fn append_enum_field(
         &mut self,
         ids: (hir::EnumId, hir::VariantId, hir::VariantFieldId),
-        layout: hir::RuntimeLayoutId,
+        _layout: hir::RuntimeLayoutId,
         value: ValueId,
         ty: SsaType,
         source: hir::SourceId,
@@ -153,17 +163,34 @@ impl FunctionBuilder<'_> {
                 source,
             );
         }
-        self.append(
-            ty,
-            InstructionKind::EnumField {
-                enum_id: lkjscript_ir::EnumId::new(ids.0.bytes()),
-                variant: lkjscript_ir::VariantId::new(ids.1.bytes()),
-                field: lkjscript_ir::VariantFieldId::new(ids.2.bytes()),
-                layout: lkjscript_ir::RuntimeLayoutId::new(layout.bytes()),
-                value,
-            },
-            EffectSet::READS_MEMORY,
-            source,
-        )
+        if resource_result_adapter(ids.0, &owner_ty) {
+            return self.append(
+                ty,
+                InstructionKind::EnumField {
+                    enum_id: lkjscript_ir::EnumId::new(ids.0.bytes()),
+                    variant: lkjscript_ir::VariantId::new(ids.1.bytes()),
+                    field: lkjscript_ir::VariantFieldId::new(ids.2.bytes()),
+                    layout: lkjscript_ir::RuntimeLayoutId::new(_layout.bytes()),
+                    value,
+                },
+                EffectSet::READS_MEMORY,
+                source,
+            );
+        }
+        Err(Error::msg(
+            "enum field projection lacks deterministic structural metadata",
+        ))
     }
+}
+
+fn resource_result_adapter(id: hir::EnumId, ty: &SsaType) -> bool {
+    matches!(
+        ty,
+        SsaType::Enum {
+            id: enum_id,
+            arguments,
+        } if id.bytes() == lkjscript_core::RESULT_ID
+            && enum_id.bytes() == lkjscript_core::RESULT_ID
+            && matches!(arguments.as_slice(), [SsaType::Resource(_), _])
+    )
 }

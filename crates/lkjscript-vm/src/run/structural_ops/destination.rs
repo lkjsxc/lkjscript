@@ -112,7 +112,7 @@ fn initialize<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         }
         StructuralFieldRoute::LegacyHeap => {
             return Err(Error::msg(
-                "structural destination cannot bridge a legacy heap field",
+                "structural destination cannot bridge an unsupported runtime field",
             ));
         }
     }

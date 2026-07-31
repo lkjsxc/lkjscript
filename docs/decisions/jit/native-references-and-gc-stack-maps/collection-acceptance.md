@@ -4,8 +4,9 @@
 
 ## Status
 
-**Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
-explicit labels in this capsule and its authority; this capsule cannot promote a capability.
+**Historical, superseded acceptance record.** The remaining sections retain
+pre-cutover collection evidence and do not describe Current runtime behavior.
+The Current runtime has no collection path or GC sequence.
 
 ## Collection Acceptance
 

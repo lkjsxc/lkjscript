@@ -45,7 +45,7 @@ fn product_destination_handles_double_init_incomplete_finish_and_success(
     );
     assert_eq!(
         runtime.value(key, product_type)?.payload,
-        SemanticPayload::Product(vec![integer, string])
+        SemanticPayload::Product(vec![integer, string].into())
     );
     assert_eq!(runtime.metrics().initializations, 2);
     assert_eq!(runtime.metrics().destinations_completed, 1);
@@ -99,16 +99,19 @@ fn abort_releases_initialized_fields_in_reverse_order_with_exact_work(
     let string = SemanticValue::new(string_type, SemanticPayload::String(b"abc".to_vec()));
     let inner = SemanticValue::new(
         inner_type,
-        SemanticPayload::Product(vec![
-            SemanticValue::new(
-                i64_type,
-                SemanticPayload::Inline(InlineStructuralValue::I64(1)),
-            ),
-            SemanticValue::new(
-                i64_type,
-                SemanticPayload::Inline(InlineStructuralValue::I64(2)),
-            ),
-        ]),
+        SemanticPayload::Product(
+            vec![
+                SemanticValue::new(
+                    i64_type,
+                    SemanticPayload::Inline(InlineStructuralValue::I64(1)),
+                ),
+                SemanticValue::new(
+                    i64_type,
+                    SemanticPayload::Inline(InlineStructuralValue::I64(2)),
+                ),
+            ]
+            .into(),
+        ),
     );
     runtime
         .initialize_node(destination, 0, string)

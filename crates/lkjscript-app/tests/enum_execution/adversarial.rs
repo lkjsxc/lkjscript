@@ -40,9 +40,7 @@ fn structural_enum_bypasses_legacy_heap_allocation_limits() {
             .expect("proof returns enum allocation resource outcome"),
     ] {
         assert!(matches!(result.outcome, ExecutionOutcome::Returned(_)));
-        assert_eq!(result.stats.allocations, 0);
         assert_eq!(result.stats.runtime_heap_successes, 0);
-        assert_eq!(result.stats.collector_runtime_invocations, 0);
         assert!(result.stats.structural_runtime_calls > 0);
         assert!(result.stats.native_entries > 0);
         assert_eq!(result.stats.vm_fallbacks, 0);

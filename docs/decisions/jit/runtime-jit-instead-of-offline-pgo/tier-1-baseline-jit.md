@@ -10,7 +10,7 @@ explicit labels in this capsule and its authority; this capsule cannot promote a
 ## Tier 1: Baseline JIT
 
 The baseline JIT synchronously compiles a whole eligible function from typed SSA
-at a safepoint. Its priorities are low compilation latency, exact semantics,
+at a verified tier boundary. Its priorities are low compilation latency, exact semantics,
 predictable typed layouts, direct control flow, unboxed scalar operations,
 straightforward register allocation, correct VM/native transitions, and
 bounded executable memory.
@@ -98,8 +98,8 @@ not add one: invalidation unlinks the object's exact tokens and changes
 selection/state directly. The complete ownership and transition contract is
 [Proof-Based Optimizing JIT](../proof-based-optimizing-jit.md).
 
-Initial compilation is synchronous at a safepoint. Background compiler threads
-are **Deferred** until VM outcomes, heap access, code-cache ownership,
+Initial compilation is synchronous at a verified tier boundary. Background
+compiler threads are **Deferred** until VM outcomes, runtime-value access, code-cache ownership,
 cancellation, and synchronization are process-safe.
 
 Transitions are available through test-only structured diagnostics and
@@ -150,8 +150,8 @@ support only exactly representable loop headers. Unsupported loop shapes stay
 in the VM.
 
 OSR preserves exact numerics, Unit/Option/Result/collection semantics, pending
-traps, precise GC roots, resource handles, output, deterministic metering,
-deadlines, and program arguments. Workload reports state separately when no
+traps, typed structural homes, cleanup obligations, resource handles, output,
+deterministic metering, deadlines, and program arguments. Workload reports state separately when no
 benefit is possible before OSR; Brainfuck Mandelbrot interpreted by lkjscript
 is the principal long-running-loop acceptance workload.
 ## Native ABI And Representations
@@ -166,7 +166,7 @@ hot paths:
 - Str, Bytes, Slice, and views: typed pointer/length layouts;
 - products: flattened or target-ABI layouts;
 - Option: a proven typed niche or explicit tag;
-- heap references: typed references visible to precise stack maps.
+- invocation references: typed values confined to exact frame homes and services.
 
 Explicit adapters own VM/native and runtime/native transitions and preserve
 scalar categories and bits without collector allocation. Native callers call

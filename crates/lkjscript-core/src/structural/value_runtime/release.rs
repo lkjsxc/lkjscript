@@ -1,5 +1,7 @@
+use super::super::StructuralValueKey;
 use super::{
-    SemanticPayload, SemanticValue, StructuralEventKind, StructuralValueRuntime, TreeFacts,
+    StructuralEventKind, StructuralImage, StructuralObject, StructuralType, StructuralValueError,
+    StructuralValueRuntime, TreeFacts,
 };
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -65,26 +67,53 @@ impl StructuralValueRuntime {
             self.metrics.payload_bytes_live.saturating_sub(facts.bytes);
     }
 
-    pub(super) fn release_tree(&mut self, value: SemanticValue, facts: TreeFacts) {
-        self.release_stack.clear();
-        self.release_stack.push(value);
-        let mut work = 0_u64;
-        while let Some(value) = self.release_stack.pop() {
-            work = work.saturating_add(1);
-            match value.payload {
-                SemanticPayload::Product(fields)
-                | SemanticPayload::Enum {
-                    active_payload: fields,
-                    ..
-                } => self.release_stack.extend(fields),
-                SemanticPayload::Inline(_)
-                | SemanticPayload::Static(_)
-                | SemanticPayload::String(_)
-                | SemanticPayload::Path(_)
-                | SemanticPayload::Bytes(_)
-                | SemanticPayload::ByteVector(_) => {}
-            }
-        }
+    pub(super) fn take_owned_image(
+        &mut self,
+        key: StructuralValueKey,
+        expected: StructuralType,
+    ) -> Result<(StructuralImage, TreeFacts), StructuralValueError> {
+        let image = self.remove_owned_image(key, expected)?;
+        self.metrics.moves = self.metrics.moves.saturating_add(1);
+        Ok(image)
+    }
+
+    pub(super) fn drop_owned_image(
+        &mut self,
+        key: StructuralValueKey,
+        expected: StructuralType,
+    ) -> Result<(StructuralImage, TreeFacts), StructuralValueError> {
+        let root = self.resolve_root(key, expected)?;
+        self.require_owned_root(root, expected)?;
+        self.runtime.preflight_release(&[root.domain()])?;
+        let root = self.roots.drop_owned(key)?;
+        let StructuralObject::Owned { image, facts } = self.objects.take(root)? else {
+            return Err(StructuralValueError::InvariantViolation);
+        };
+        self.runtime.release(root.domain())?;
+        self.note_object_removed(facts);
+        Ok((image, facts))
+    }
+
+    pub(super) fn remove_owned_image(
+        &mut self,
+        key: StructuralValueKey,
+        expected: StructuralType,
+    ) -> Result<(StructuralImage, TreeFacts), StructuralValueError> {
+        let root = self.resolve_root(key, expected)?;
+        self.require_owned_root(root, expected)?;
+        self.runtime.preflight_release(&[root.domain()])?;
+        let root = self.roots.take_owned(key)?;
+        let StructuralObject::Owned { image, facts } = self.objects.take(root)? else {
+            return Err(StructuralValueError::InvariantViolation);
+        };
+        self.runtime.release(root.domain())?;
+        self.note_object_removed(facts);
+        Ok((image, facts))
+    }
+
+    pub(super) fn release_image(&mut self, image: StructuralImage, facts: TreeFacts) {
+        let work = u64::from(facts.nodes);
+        drop(image);
         self.metrics.releases = self.metrics.releases.saturating_add(1);
         self.metrics.release_work = self.metrics.release_work.saturating_add(work);
         self.metrics.string_bytes_released = self

@@ -2,14 +2,15 @@ use std::collections::VecDeque;
 
 use crate::Value;
 
+use super::super::image::{discard_semantic, prepare_discard};
 use super::super::{
     DomainClass, RootClass, StructuralRootOwnership, StructuralRootTable, StructuralRuntime,
     StructuralValueKey,
 };
 use super::{
-    ObjectSlab, SemanticValue, StructuralEventKind, StructuralEventLog, StructuralObject,
-    StructuralPublishFailure, StructuralType, StructuralValueError, StructuralValueRuntime,
-    StructuralValueRuntimeLimits,
+    ObjectSlab, SemanticValue, StructuralEventKind, StructuralEventLog, StructuralImage,
+    StructuralObject, StructuralPublishFailure, StructuralType, StructuralValueError,
+    StructuralValueRuntime, StructuralValueRuntimeLimits, TreeFacts,
 };
 
 impl StructuralValueRuntime {
@@ -17,10 +18,6 @@ impl StructuralValueRuntime {
         let limits = limits.validate()?;
         let runtime = StructuralRuntime::new(limits.domains)?;
         let roots = StructuralRootTable::new(runtime.identity(), limits.roots)?;
-        let mut release_stack = Vec::new();
-        release_stack
-            .try_reserve_exact(limits.max_tree_nodes as usize)
-            .map_err(|_| StructuralValueError::AllocationFailed)?;
         let mut cleanup_reports = VecDeque::new();
         cleanup_reports
             .try_reserve_exact(limits.max_cleanup_reports as usize)
@@ -37,7 +34,6 @@ impl StructuralValueRuntime {
             events: StructuralEventLog::new(limits.max_events)?,
             cleanup_reports,
             cleanup_sequence: 1,
-            release_stack,
             limits,
         })
     }
@@ -50,25 +46,52 @@ impl StructuralValueRuntime {
             Ok(facts) => facts,
             Err(error) => return Err(StructuralPublishFailure { error, value }),
         };
+        let mut discard = match prepare_discard(facts) {
+            Ok(stack) => stack,
+            Err(error) => return Err(StructuralPublishFailure { error, value }),
+        };
+        let image = match StructuralImage::build(&value, facts, self.limits) {
+            Ok(image) => image,
+            Err(error) => return Err(StructuralPublishFailure { error, value }),
+        };
+        match self.publish_image(image, facts) {
+            Ok(key) => {
+                discard_semantic(value, &mut discard);
+                Ok(key)
+            }
+            Err(failure) => Err(StructuralPublishFailure {
+                error: failure.0,
+                value,
+            }),
+        }
+    }
+
+    pub fn publish_value(
+        &mut self,
+        value: SemanticValue,
+    ) -> Result<Value, StructuralPublishFailure> {
+        self.publish_owned(value).map(Value::from_structural_root)
+    }
+
+    pub(super) fn publish_image(
+        &mut self,
+        image: StructuralImage,
+        facts: TreeFacts,
+    ) -> Result<StructuralValueKey, Box<(StructuralValueError, StructuralImage)>> {
+        if let Err(error) = image.validate(self.limits, facts) {
+            return Err(Box::new((error, image)));
+        }
         let domain = match self.runtime.allocate(DomainClass::Unique) {
             Ok(domain) => domain,
-            Err(error) => {
-                return Err(StructuralPublishFailure {
-                    error: error.into(),
-                    value,
-                })
-            }
+            Err(error) => return Err(Box::new((error.into(), image))),
         };
-        let object = StructuralObject::Owned { value, facts };
+        let object = StructuralObject::Owned { image, facts };
         let (root, reused) = match self.objects.insert(domain, RootClass::UniquePublic, object) {
             Ok(root) => root,
             Err(failure) => {
                 let (error, object) = *failure;
                 self.runtime.rollback_allocation(domain);
-                return Err(StructuralPublishFailure {
-                    error,
-                    value: owned_value(object),
-                });
+                return Err(Box::new((error, owned_image(object))));
             }
         };
         match self.roots.publish(root, StructuralRootOwnership::Owned) {
@@ -86,19 +109,9 @@ impl StructuralValueRuntime {
             Err(error) => {
                 let object = self.objects.rollback_insert(root, reused);
                 self.runtime.rollback_allocation(domain);
-                Err(StructuralPublishFailure {
-                    error: error.into(),
-                    value: owned_value(object),
-                })
+                Err(Box::new((error.into(), owned_image(object))))
             }
         }
-    }
-
-    pub fn publish_value(
-        &mut self,
-        value: SemanticValue,
-    ) -> Result<Value, StructuralPublishFailure> {
-        self.publish_owned(value).map(Value::from_structural_root)
     }
 
     pub fn move_owned(
@@ -123,11 +136,11 @@ impl StructuralValueRuntime {
             Err(error) => {
                 let object = self.objects.take(root)?;
                 self.runtime.release(root.domain())?;
-                let StructuralObject::Owned { value, facts } = object else {
+                let StructuralObject::Owned { image, facts } = object else {
                     return Err(StructuralValueError::InvariantViolation);
                 };
                 self.note_object_removed(facts);
-                self.release_tree(value, facts);
+                self.release_image(image, facts);
                 Err(error.into())
             }
         }
@@ -138,22 +151,14 @@ impl StructuralValueRuntime {
         key: StructuralValueKey,
         expected: StructuralType,
     ) -> Result<(), StructuralValueError> {
-        let root = self.resolve_root(key, expected)?;
-        self.require_owned_root(root, expected)?;
-        self.runtime.preflight_release(&[root.domain()])?;
-        let root = self.roots.drop_owned(key)?;
-        let StructuralObject::Owned { value, facts } = self.objects.take(root)? else {
-            return Err(StructuralValueError::InvariantViolation);
-        };
-        self.runtime.release(root.domain())?;
-        self.note_object_removed(facts);
+        let (image, facts) = self.drop_owned_image(key, expected)?;
         self.metrics.drops = self.metrics.drops.saturating_add(1);
         self.record(
             StructuralEventKind::Drop,
             key.slot(),
             u64::from(facts.nodes),
         );
-        self.release_tree(value, facts);
+        self.release_image(image, facts);
         Ok(())
     }
 
@@ -162,33 +167,22 @@ impl StructuralValueRuntime {
         key: StructuralValueKey,
         expected: StructuralType,
     ) -> Result<SemanticValue, StructuralValueError> {
-        let value = self.take_owned_value(key, expected)?;
-        self.record(StructuralEventKind::Export, key.slot(), 0);
-        Ok(value)
-    }
-
-    pub(super) fn take_owned_value(
-        &mut self,
-        key: StructuralValueKey,
-        expected: StructuralType,
-    ) -> Result<SemanticValue, StructuralValueError> {
         let root = self.resolve_root(key, expected)?;
         self.require_owned_root(root, expected)?;
-        self.runtime.preflight_release(&[root.domain()])?;
-        let root = self.roots.take_owned(key)?;
-        let StructuralObject::Owned { value, facts } = self.objects.take(root)? else {
-            return Err(StructuralValueError::InvariantViolation);
+        let StructuralObject::Owned { image, .. } = self.objects.get(root)? else {
+            return Err(StructuralValueError::WrongPayloadKind);
         };
-        self.runtime.release(root.domain())?;
-        self.note_object_removed(facts);
-        self.metrics.moves = self.metrics.moves.saturating_add(1);
+        let value = image.to_semantic()?;
+        let (image, _) = self.take_owned_image(key, expected)?;
+        drop(image);
+        self.record(StructuralEventKind::Export, key.slot(), 0);
         Ok(value)
     }
 }
 
-fn owned_value(object: StructuralObject) -> SemanticValue {
+fn owned_image(object: StructuralObject) -> StructuralImage {
     match object {
-        StructuralObject::Owned { value, .. } => value,
+        StructuralObject::Owned { image, .. } => image,
         StructuralObject::Static(_) => unreachable!("owned publication object"),
     }
 }

@@ -1,69 +1,80 @@
 fn fold_aggregate(
     children: Vec<(MemoryTypeFact, MemoryTypePathElement)>,
     recursive: bool,
+    region_capable: bool,
 ) -> DerivedType {
     let mut mode = MemoryAggregateMode::Copy;
     let mut contains_borrow = false;
     let mut contains_dynamic_owner = false;
+    let mut region = None;
     let mut blocker = None;
     for (fact, path) in children {
         mode = mode.max(fact.mode);
         contains_borrow |= fact.contains_borrow;
         contains_dynamic_owner |= fact.contains_dynamic_owner;
-        if fact.closure.class != MemoryClosureClass::Deterministic && blocker.is_none() {
-            blocker = Some((fact.closure, path));
+        match fact.closure.class {
+            MemoryClosureClass::Deterministic => {}
+            MemoryClosureClass::RegionClosed if region.is_none() => {
+                region = Some((fact.closure, path));
+            }
+            MemoryClosureClass::RegionClosed => {}
+            MemoryClosureClass::Unresolved | MemoryClosureClass::IllegalDomainBridge
+                if blocker.is_none() =>
+            {
+                blocker = Some((fact.closure, path));
+            }
+            MemoryClosureClass::Unresolved | MemoryClosureClass::IllegalDomainBridge => {}
         }
     }
     if let Some((mut closure, path)) = blocker {
         closure.blocker_path.insert(0, path);
         if contains_dynamic_owner {
-            closure.class = MemoryClosureClass::IllegalMixedBridge;
+            closure.class = MemoryClosureClass::IllegalDomainBridge;
             closure.mixed_direction = Some(if recursive {
-                MemoryMixedBridgeDirection::LegacyContainsDeterministic
-            } else { MemoryMixedBridgeDirection::DeterministicContainsLegacy });
+                MemoryMixedBridgeDirection::UnresolvedContainsDeterministic
+            } else { MemoryMixedBridgeDirection::DeterministicContainsUnresolved });
         }
         return DerivedType { mode, closure, contains_borrow, contains_dynamic_owner };
+    }
+    if let Some((mut closure, path)) = region {
+        closure.blocker_path.insert(0, path);
+        if contains_dynamic_owner || contains_borrow || recursive {
+            closure.class = MemoryClosureClass::IllegalDomainBridge;
+            closure.mixed_direction = Some(MemoryMixedBridgeDirection::DeterministicContainsUnresolved);
+        } else if !region_capable {
+            closure.class = MemoryClosureClass::Unresolved;
+        }
+        return DerivedType {
+            mode,
+            closure,
+            contains_borrow,
+            contains_dynamic_owner,
+        };
     }
     DerivedType {
         mode,
         closure: closed(MemoryClosureClass::Deterministic),
         contains_borrow,
-        contains_dynamic_owner,
+        contains_dynamic_owner: true,
     }
 }
 
-fn type_contains_resource(ty: &Type) -> bool {
-    match ty {
-        Type::Resource(_) => true,
-        Type::List(inner) => type_contains_resource(inner),
-        Type::Enum { arguments, .. } => arguments.iter().any(type_contains_resource),
-        Type::Fn { params, ret, .. } => {
-            params.iter().any(type_contains_resource) || type_contains_resource(ret)
-        }
-        Type::Forall { body, .. } => type_contains_resource(body),
-        _ => false,
-    }
-}
-
-fn declaration_key(ty: &Type) -> Option<DeclarationKey> {
-    match ty {
-        Type::Product(name) => Some(DeclarationKey::Product(name.clone())),
-        Type::Enum { id, .. } => Some(DeclarationKey::Enum(id.bytes())),
-        _ => None,
-    }
-}
-
-fn is_aggregate(ty: &Type) -> bool { matches!(ty, Type::Product(_) | Type::Enum { .. }) }
+include!("type_plan/type_helpers_resources.rs");
 
 fn copy_share(ty: &Type, derived: &DerivedType) -> MemoryCopySharePlan {
-    if derived.closure.class == MemoryClosureClass::LegacyClosed {
-        return MemoryCopySharePlan::LegacyTracing;
+    if derived.closure.class == MemoryClosureClass::RegionClosed {
+        return MemoryCopySharePlan::RegionHandleCopy;
+    }
+    if derived.closure.class != MemoryClosureClass::Deterministic {
+        return MemoryCopySharePlan::Unsupported;
     }
     match ty {
         Type::Symbol => MemoryCopySharePlan::StaticIdentity,
         Type::ByteSlice => MemoryCopySharePlan::BorrowShared,
         Type::ByteSliceMut => MemoryCopySharePlan::BorrowExclusive,
         Type::Resource(_) => MemoryCopySharePlan::ExternalHandle,
+        Type::List(_) => MemoryCopySharePlan::RegionHandleCopy,
+        Type::Product(_) | Type::Enum { .. } => MemoryCopySharePlan::StructuralCopy,
         _ => match derived.mode {
             MemoryAggregateMode::Copy => MemoryCopySharePlan::TrivialCopy,
             MemoryAggregateMode::ImmutableValue if is_aggregate(ty) => MemoryCopySharePlan::StructuralCopy,
@@ -175,14 +186,5 @@ impl TypePlanner<'_> {
             }
             Ok(MemoryDropBranch { active_variant: Some(variant.id.bytes()), actions })
         }).collect()
-    }
-}
-
-fn leaf_glue(ty: &Type) -> Option<MemoryDropGlueId> {
-    match ty {
-        Type::ByteVector => Some(MemoryDropGlueId::new(0)),
-        Type::Bytes => Some(bytes_glue()),
-        Type::Resource(kind) => Some(resource_glue(*kind)),
-        _ => None,
     }
 }

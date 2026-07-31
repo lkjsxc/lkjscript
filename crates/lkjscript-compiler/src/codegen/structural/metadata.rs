@@ -3,10 +3,7 @@ fn structural_representation(
     ty: &SsaType,
     category: BytecodeStructuralValueCategory,
 ) -> Option<BytecodeStructuralRepresentationId> {
-    let semantic = lkjscript_core::SemanticTypeIdentity::new(nonzero(fingerprint(
-        0x8f3f_73b5_cf1c_9ade,
-        ty,
-    )));
+    let semantic = structural_semantic_type_from_chunk(chunk, ty)?;
     let ty = chunk
         .structural_types
         .iter()
@@ -43,10 +40,8 @@ fn structural_field(
 }
 
 fn structural_field_from_chunk(chunk: &Chunk, ty: &SsaType) -> Result<StructuralFieldMetadata> {
-    let semantic = lkjscript_core::SemanticTypeIdentity::new(nonzero(fingerprint(
-        0x8f3f_73b5_cf1c_9ade,
-        ty,
-    )));
+    let semantic = structural_semantic_type_from_chunk(chunk, ty)
+        .ok_or_else(|| Error::msg("structural field semantic identity is unavailable"))?;
     let type_id = chunk
         .structural_types
         .iter()
@@ -73,6 +68,22 @@ fn structural_field_from_chunk(chunk: &Chunk, ty: &SsaType) -> Result<Structural
         route,
         resource: resource_kind(ty),
     })
+}
+
+fn structural_semantic_type_from_chunk(
+    chunk: &Chunk,
+    ty: &SsaType,
+) -> Option<lkjscript_core::SemanticTypeIdentity> {
+    if let SsaType::Product(id) = ty {
+        let product = chunk
+            .products
+            .iter()
+            .find(|product| product.id.raw() == id.raw())?;
+        return Some(lkjscript_ir::runtime_product_semantic_type(
+            product.identity.bytes(),
+        ));
+    }
+    lkjscript_ir::runtime_structural_semantic_type(None, ty).ok()
 }
 
 fn resource_kind(ty: &SsaType) -> Option<lkjscript_core::ResourceKind> {
@@ -113,63 +124,13 @@ fn runtime_structural_type(
     program: &lkjscript_ir::Program,
     ty: &SsaType,
 ) -> Result<Option<lkjscript_core::StructuralType>> {
-    runtime_structural_type_inner(Some(program), ty)
+    lkjscript_ir::runtime_structural_type(Some(program), ty)
+        .map_err(|error| Error::msg(error.to_string()))
 }
 
 fn runtime_structural_type_without_program(
     ty: &SsaType,
 ) -> Result<Option<lkjscript_core::StructuralType>> {
-    runtime_structural_type_inner(None, ty)
+    lkjscript_ir::runtime_structural_type(None, ty)
+        .map_err(|error| Error::msg(error.to_string()))
 }
-
-fn runtime_structural_type_inner(
-    program: Option<&lkjscript_ir::Program>,
-    ty: &SsaType,
-) -> Result<Option<lkjscript_core::StructuralType>> {
-    let kind = match ty {
-        SsaType::Unit => lkjscript_core::StructuralKind::Unit,
-        SsaType::Bool => lkjscript_core::StructuralKind::Bool,
-        SsaType::I64 => lkjscript_core::StructuralKind::I64,
-        SsaType::F64 => lkjscript_core::StructuralKind::F64,
-        SsaType::Str => lkjscript_core::StructuralKind::String,
-        SsaType::Path => lkjscript_core::StructuralKind::Path,
-        SsaType::Bytes => lkjscript_core::StructuralKind::Bytes,
-        SsaType::ByteVector => lkjscript_core::StructuralKind::ByteVector,
-        SsaType::Product(_) => lkjscript_core::StructuralKind::Product,
-        SsaType::Enum { .. } => lkjscript_core::StructuralKind::Enum,
-        SsaType::Symbol => lkjscript_core::StructuralKind::Static,
-        SsaType::ByteSlice
-        | SsaType::ByteSliceMut
-        | SsaType::Capability(_)
-        | SsaType::Resource(_)
-        | SsaType::StructuralDestination(_)
-        | SsaType::List(_)
-        | SsaType::Function(_)
-        | SsaType::TypeParameter(_) => return Ok(None),
-    };
-    let semantic = fingerprint(0x8f3f_73b5_cf1c_9ade, ty);
-    let layout = match ty {
-        SsaType::Enum { id, .. } => {
-            let program = program.ok_or_else(|| {
-                Error::msg("enum field runtime identity requires installed structural metadata")
-            })?;
-            let definition = program
-                .enums
-                .iter()
-                .find(|definition| definition.id == *id)
-                .ok_or_else(|| Error::msg("structural enum runtime identity is missing"))?;
-            fingerprint_bytes(0x9c2a_45d1_76e8_03bf, &definition.layout.identity.bytes())
-        }
-        SsaType::Product(id) => {
-            mix(fingerprint_tag(0xe55a_7341_0a0f_b861, 12), u64::from(id.raw()))
-        }
-        _ => fingerprint(0x4d7c_51a9_284e_b603, ty),
-    };
-    Ok(Some(lkjscript_core::StructuralType::new(
-        lkjscript_core::LayoutIdentity::new(nonzero(layout)),
-        lkjscript_core::SemanticTypeIdentity::new(nonzero(semantic)),
-        kind,
-    )))
-}
-
-include!("metadata/fingerprint.rs");

@@ -15,7 +15,13 @@ fn tail_call_reuses_the_current_frame() {
         memory_plan: None,
         parameter_structurals: Vec::new(),
         parameter_structural_places: Vec::new(),
+        parameter_type_variables: Vec::new(),
+        parameter_copy_kinds: vec![Some(lkjscript_core::StructuralKind::I64)],
+        parameter_region_products: vec![None],
+        return_copy_kind: None,
+        return_region_product: None,
         return_structural: None,
+        return_type_variable: None,
         parameter_resources: Vec::new(),
         parameter_resource_places: Vec::new(),
         return_resource: None,
@@ -34,7 +40,13 @@ fn tail_call_reuses_the_current_frame() {
         memory_plan: None,
         parameter_structurals: Vec::new(),
         parameter_structural_places: Vec::new(),
+        parameter_type_variables: Vec::new(),
+        parameter_copy_kinds: Vec::new(),
+        parameter_region_products: Vec::new(),
+        return_copy_kind: None,
+        return_region_product: None,
         return_structural: None,
+        return_type_variable: None,
         parameter_resources: Vec::new(),
         parameter_resource_places: Vec::new(),
         return_resource: None,
@@ -61,6 +73,7 @@ fn tail_call_reuses_the_current_frame() {
         locals_base: 0,
         unique_places: Vec::new(),
         borrowed_resources: Vec::new(),
+        return_type_variable_representation: None,
     });
     let argument = Value::from_i64(42);
     vm.push(argument);
@@ -109,6 +122,7 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
         locals_base: 0,
         unique_places: Vec::new(),
         borrowed_resources: Vec::new(),
+        return_type_variable_representation: None,
     });
     let resource = Value::from_resource(17);
     vm.push(resource);

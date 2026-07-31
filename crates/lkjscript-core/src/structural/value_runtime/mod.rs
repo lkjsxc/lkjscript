@@ -3,12 +3,12 @@ mod borrow;
 mod cloning;
 mod destination;
 mod destination_finish;
+mod destination_storage;
 mod error;
 mod events;
 mod lifecycle;
 mod limits;
 mod model;
-mod navigation;
 mod object_slab;
 mod release;
 mod static_lifecycle;
@@ -31,13 +31,14 @@ pub use model::{
 };
 pub use release::DestinationCleanupReport;
 
+use super::image::{
+    LocalNodeId, StructuralImage, StructuralNode, StructuralNodePayload, TreeFacts,
+};
 use super::{
     RootKey, StructuralRootTable, StructuralRootTableError, StructuralRuntime, StructuralValueKey,
 };
 use borrow::ViewSlot;
 use destination::DestinationSlot;
-use events::TreeFacts;
-use navigation::{select, select_mut};
 use object_slab::{ObjectSlab, StructuralObject};
 
 #[derive(Debug)]
@@ -54,7 +55,6 @@ pub struct StructuralValueRuntime {
     events: StructuralEventLog,
     cleanup_reports: VecDeque<DestinationCleanupReport>,
     cleanup_sequence: u64,
-    release_stack: Vec<SemanticValue>,
 }
 
 impl StructuralValueRuntime {

@@ -43,20 +43,23 @@ pub(super) fn verify_destinations(
             })
             .collect::<Vec<_>>();
         let initialized_order: Vec<u32> = (0..field_count).collect();
-        let (kind, execution, execution_cutover) =
-            if type_fact.derived.closure.class == MemoryClosureClass::Deterministic {
-                (
-                    MemoryDestinationKind::CutoverRequired,
-                    MemoryExecution::CutoverRequired,
-                    verified_execution_cutover(&fact.expression.ty),
-                )
-            } else {
-                (
-                    MemoryDestinationKind::RegisteredLegacyTraced,
-                    MemoryExecution::Current,
-                    None,
-                )
-            };
+        let (kind, execution, execution_cutover) = match type_fact.derived.closure.class {
+            MemoryClosureClass::Deterministic => (
+                MemoryDestinationKind::CutoverRequired,
+                MemoryExecution::CutoverRequired,
+                verified_execution_cutover(&fact.expression.ty),
+            ),
+            MemoryClosureClass::RegionClosed => (
+                MemoryDestinationKind::OrdinaryRegion,
+                MemoryExecution::Current,
+                None,
+            ),
+            MemoryClosureClass::Unresolved | MemoryClosureClass::IllegalDomainBridge => (
+                MemoryDestinationKind::UnsupportedRuntime,
+                MemoryExecution::CutoverRequired,
+                None,
+            ),
+        };
         let expected = MemoryDestinationPlan {
             id: destination.id,
             function: fact.function,

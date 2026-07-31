@@ -126,7 +126,11 @@ pub(super) fn memory_homes() -> ContractItem {
             "remote release",
             "bounded exactly-once home release",
         ))
-        .fact(fact("heap", "control storage", "never allocated in GcHeap"))
+        .fact(fact(
+            "storage",
+            "control storage",
+            "never allocated in language aggregate storage",
+        ))
 }
 
 pub(super) fn metrics() -> ContractItem {

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn list_equality_is_structural_bounded_and_rejects_improper_lists() {
+fn list_equality_is_segmented_bounded_and_rejects_forged_handles() {
     test_vm!(vm);
     assert!(compare(
         &mut vm,
@@ -23,24 +23,12 @@ fn list_equality_is_structural_bounded_and_rejects_improper_lists() {
     );
     assert!(list_values_equal(&vm, first, same, 1).is_err());
 
-    let improper_car = test_i64(&mut vm, 1);
-    let improper_cdr = test_i64(&mut vm, 2);
-    let improper = test_alloc(
-        &mut vm,
-        HeapObj::Pair {
-            car: improper_car,
-            cdr: improper_cdr,
-        },
-    );
-    vm.push(improper);
+    let forged = Value::from_segmented_list(u64::MAX);
+    vm.push(forged);
     vm.push(first);
     assert!(dispatch(&mut vm, Op::ListEqual as u8).is_err());
     vm.push(Value::EMPTY_LIST);
-    vm.push(improper_cdr);
-    assert!(dispatch(&mut vm, Op::ListEqual as u8).is_err());
-    let one = i64_list(&mut vm, &[1]);
-    vm.push(one);
-    vm.push(improper);
+    vm.push(Value::UNIT);
     assert!(dispatch(&mut vm, Op::ListEqual as u8).is_err());
 }
 #[test]
@@ -48,24 +36,16 @@ fn list_equality_accepts_exact_global_limit_and_rejects_one_more() {
     test_vm!(vm);
     let mut at_limit = Value::EMPTY_LIST;
     for _ in 0..MAX_LIST_EQUAL_STEPS {
-        at_limit = test_alloc(
-            &mut vm,
-            HeapObj::Pair {
-                car: Value::UNIT,
-                cdr: at_limit,
-            },
-        );
+        at_limit = vm
+            .list_prepend(Value::UNIT, at_limit)
+            .expect("prepend exact-bound list element");
     }
     assert_eq!(
         list_values_equal(&vm, at_limit, at_limit, MAX_LIST_EQUAL_STEPS).ok(),
         Some(true)
     );
-    let over_limit = test_alloc(
-        &mut vm,
-        HeapObj::Pair {
-            car: Value::UNIT,
-            cdr: at_limit,
-        },
-    );
+    let over_limit = vm
+        .list_prepend(Value::UNIT, at_limit)
+        .expect("prepend over-bound list element");
     assert!(list_values_equal(&vm, over_limit, over_limit, MAX_LIST_EQUAL_STEPS,).is_err());
 }

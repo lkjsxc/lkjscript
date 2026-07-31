@@ -17,21 +17,10 @@ pub(super) fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
         bytes = add_records(bytes, frame.homes.len(), 16)?;
         bytes = add_records(bytes, frame.returned_structural_owners.len(), 8)?;
     }
-    bytes = add_records(bytes, parts.safepoints.len(), 24)?;
-    for safepoint in parts.safepoints {
-        bytes = add_records(bytes, safepoint.stack_map.roots.len(), 16)?;
-    }
-    bytes = add_records(bytes, parts.root_requirements.len(), 16)?;
-    for requirement in parts.root_requirements {
-        bytes = add_records(bytes, requirement.roots.len(), 16)?;
-    }
     bytes = add_records(bytes, parts.heap_runtime_sites.len(), 48)?;
     for site in parts.heap_runtime_sites {
         bytes = add_records(bytes, site.arguments.len(), 16)?;
         bytes = add_records(bytes, site.descriptor.input_types().len(), 1)?;
-        if let crate::HeapOperation::EnumValue { substitutions, .. } = site.descriptor.operation() {
-            bytes = add_records(bytes, substitutions.len(), 4)?;
-        }
     }
     bytes = add_records(bytes, parts.structural_runtime_sites.len(), 96)?;
     for site in parts.structural_runtime_sites {

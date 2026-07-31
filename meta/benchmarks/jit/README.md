@@ -31,10 +31,11 @@ than an algorithm-equivalent optimizer comparison: compiler, metrics, native
 ABI, stack checks, and workload-adjacent code have evolved since the retained
 callable-baseline commit.
 
-One forced optimizing execution of the allocation-graph fixture is retained as
-a correctness/accounting check. It must return exact I64 `1`, enter optimizing
-code with no baseline entry or VM fallback, and report successful heap calls,
-allocations, roots, and W^X objects. It is not a timed workload.
+One forced optimizing execution of the structural allocation-graph fixture is
+retained as a correctness/accounting check. It must return exact I64 `42`, enter
+optimizing code with no baseline entry or VM fallback, and report successful
+runtime-value operations, segmented-list storage, and W^X objects. It is not a
+timed workload.
 
 ## Optimizing Protocol
 
@@ -86,6 +87,21 @@ pass:
 
 A failed gate produces a retained **Rejected** verdict; it does not permit an
 optimizing performance claim or automatic promotion.
+## Rejected Final No-Tracing Result At `41982582`
+
+The clean revision-11 commit retained 4 warmups and 31 samples per case in
+[`final-no-tracing-linux-x86_64-rejected.json`](results/final-no-tracing-linux-x86_64-rejected.json),
+SHA-256 `93b2ed90d94a3196d783b50de3a938f8ca57729b416dff39ef6b9828678bef90`.
+Optimizing native median improved from 5,155,943 ns to 4,247,615 ns (1.213844x);
+its 908,328 ns improvement exceeded twice the combined 51,307 ns MAD. Exact
+outcomes, streams, tier entries, proof evidence, and W^X passed. The structural
+check returned I64 `42`, 12 successful runtime-value operations, one segment
+with two entries, six optimizing native entries, and zero fallback.
+
+The verdict is **Rejected**: scalar native was 10,354,617/7,647,935 ns =
+1.353910 and process wall was 27,329,109/9,372,036 ns = 2.916027, both above the
+1.05 ceilings. This cross-evolution sentinel permits no no-regression or
+optimizing-performance claim.
 
 ## Rejected Persistent Native Cache Candidate
 

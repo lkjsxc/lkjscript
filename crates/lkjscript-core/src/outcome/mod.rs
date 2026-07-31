@@ -16,6 +16,8 @@ pub use cleanup_limits::{
 pub use codec::{decode_execution_outcome, encode_execution_outcome, ExecutionOutcomeCodecLimits};
 pub use errors::{HostError, ResourceLimitKind, Trap};
 pub use execution::ExecutionOutcome;
+#[cfg(test)]
+pub(crate) use owned_value::OwnedListNode;
 pub use owned_value::OwnedValue;
 pub use structural::{
     StructuralSnapshotLimits, StructuralSnapshotMetrics, MAX_STRUCTURAL_SNAPSHOT_BYTES,

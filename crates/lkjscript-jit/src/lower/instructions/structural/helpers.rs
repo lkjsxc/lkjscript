@@ -30,10 +30,12 @@ fn structural_type(
 ) -> Result<lkjscript_native::StructuralTypeIdentity, LoweringError> {
     catalog
         .value_type(ty)
-        .ok_or_else(|| invalid_structural("structural native type identity is missing"))
+        .ok_or_else(|| {
+            invalid_structural(&format!("structural native type identity is missing for {ty:?}"))
+        })
 }
 
-fn source_type(function: &Function, value: ValueId) -> Result<&SsaType, LoweringError> {
+pub(super) fn source_type(function: &Function, value: ValueId) -> Result<&SsaType, LoweringError> {
     function
         .blocks
         .iter()

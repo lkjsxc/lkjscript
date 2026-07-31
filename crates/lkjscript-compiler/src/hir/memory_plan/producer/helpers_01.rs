@@ -76,7 +76,7 @@ fn binding_storage(storage: BindingStorage) -> MemoryBindingStorage {
         BindingStorage::Function => MemoryBindingStorage::Function,
     }
 }
-fn memory_type(ty: &Type) -> MemoryType {
+pub(super) fn memory_type(ty: &Type) -> MemoryType {
     match ty {
         Type::Never => MemoryType::Never,
         Type::Unit => MemoryType::Unit,

@@ -11,8 +11,6 @@ pub enum ImageIntegrityError {
     RelocationRange,
     RelocationTarget,
     FrameFacts,
-    Safepoint,
-    RootRequirement,
     HeapRuntimeSite,
     StructuralRuntimeSite,
     SourceMap,
@@ -36,10 +34,6 @@ impl fmt::Display for ImageIntegrityError {
             Self::RelocationRange => "installable image relocation range is invalid",
             Self::RelocationTarget => "installable image relocation target is invalid",
             Self::FrameFacts => "installable image frame facts are invalid",
-            Self::Safepoint => "installable image safepoint is invalid",
-            Self::RootRequirement => {
-                "installable image stack map disagrees with its verifier requirement"
-            }
             Self::HeapRuntimeSite => "installable image heap runtime site is invalid",
             Self::StructuralRuntimeSite => "installable image structural runtime site is invalid",
             Self::SourceMap => "installable image source map is invalid",

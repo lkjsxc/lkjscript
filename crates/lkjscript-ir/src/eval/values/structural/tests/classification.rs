@@ -4,6 +4,7 @@ use super::*;
 fn exact_memory_metadata_selects_structural_execution() {
     let mut program = Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -73,6 +74,7 @@ fn structural_type_metadata_rejects_duplicate_semantic_types() {
 fn closure_reconstruction_rejects_mixed_and_recursive_metadata() {
     let mut program = Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),
@@ -123,7 +125,7 @@ fn closure_reconstruction_rejects_mixed_and_recursive_metadata() {
             fields: vec![recursive.clone()],
         },
     );
-    assert!(mode(&program, recursive).is_err());
+    assert_eq!(mode(&program, recursive), Ok(AggregateMode::Structural));
 }
 
 #[test]
@@ -144,7 +146,7 @@ fn ordinary_unplanned_string_execution_remains_legacy() -> crate::Result<()> {
         EvalOutcome::Returned(EvalValue::Str("legacy".into()))
     );
     assert_eq!(observation.static_string_artifacts, 1);
-    assert!(observation.assert_collector_free_and_empty().is_ok());
+    assert!(observation.assert_empty().is_ok());
     Ok(())
 }
 

@@ -1,31 +1,25 @@
 use super::*;
 
-mod collection;
 mod frames;
-mod heap;
 mod island;
 mod island_frames;
 mod island_stack;
 mod lifecycle;
-mod roots;
+mod runtime_values;
 mod stack;
 
 pub(super) use island::*;
 
 pub(super) const MAX_NATIVE_ENTRY_COUNTS: usize = 64;
 pub(super) const MAX_ACTIVE_FRAMES: usize = 64;
-pub(super) const MAX_MATERIALIZED_ROOTS: usize = 65_536;
-pub(super) const MAX_COLLECTION_REPORTS: usize = 65_536;
 pub(super) const DEFAULT_MAX_NATIVE_STACK_BYTES: usize = 4 * 1024 * 1024;
 pub(super) const DEFAULT_MAX_NATIVE_FRAME_BYTES: usize = 1024 * 1024;
 pub(super) const NATIVE_STACK_GUARD_BYTES: usize = 16 * 1024;
-pub(super) const INVALID_SAFEPOINT: u32 = u32::MAX;
 
 #[derive(Clone, Copy)]
 pub(super) struct ActiveFrame {
     pub(super) function_ordinal: u32,
     pub(super) rbp: *mut u8,
-    pub(super) safepoint: u32,
     pub(super) reserved_bytes: usize,
     pub(super) value_homes: usize,
 }
@@ -33,7 +27,6 @@ pub(super) struct ActiveFrame {
 const EMPTY_ACTIVE_FRAME: ActiveFrame = ActiveFrame {
     function_ordinal: u32::MAX,
     rbp: std::ptr::null_mut(),
-    safepoint: INVALID_SAFEPOINT,
     reserved_bytes: 0,
     value_homes: 0,
 };
@@ -44,20 +37,6 @@ pub(super) struct PendingFrameReservation {
     pub(super) rbp: *mut u8,
     pub(super) frame_bytes: usize,
     pub(super) value_homes: usize,
-}
-
-#[derive(Clone, Copy)]
-pub(super) struct RootAddress {
-    pub(super) address: *mut u64,
-    pub(super) original_word: u64,
-    pub(super) reference_type: ReferenceType,
-    pub(super) frame_index: usize,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum MaterializeRootError {
-    InvalidFrame,
-    Capacity,
 }
 
 #[repr(C)]
@@ -90,14 +69,8 @@ pub(super) struct NativeCallState<'a> {
     pub(super) peak_active_depth: usize,
     pub(super) active_value_homes: usize,
     pub(super) peak_active_value_homes: usize,
-    pub(super) collection_calls: u64,
-    pub(super) maximum_roots: usize,
-    pub(super) exact_root_counts: Vec<usize>,
-    pub(super) roots: Vec<NativeRoot>,
-    pub(super) root_addresses: Vec<RootAddress>,
     pub(super) heap_arguments: Vec<NativeValue>,
     pub(super) heap_operation_attempts: u64,
     pub(super) heap_operation_successes: u64,
-    pub(super) barrier_count: u64,
     pub(super) metadata_invalid: bool,
 }

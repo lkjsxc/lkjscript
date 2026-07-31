@@ -1,6 +1,6 @@
 use std::num::NonZeroU32;
 
-use super::super::{LayoutIdentity, SemanticTypeIdentity};
+use super::super::{image::SemanticChildren, LayoutIdentity, SemanticTypeIdentity};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum StructuralKind {
@@ -61,10 +61,10 @@ pub enum SemanticPayload {
     Path(Vec<u8>),
     Bytes(Vec<u8>),
     ByteVector(Vec<u8>),
-    Product(Vec<SemanticValue>),
+    Product(SemanticChildren),
     Enum {
         tag: u16,
-        active_payload: Vec<SemanticValue>,
+        active_payload: SemanticChildren,
     },
 }
 

@@ -73,7 +73,7 @@ pub(super) fn verify(plan: MachinePlanBuilder) -> Result<(), VerificationError> 
 }
 
 pub(super) fn ty(id: u64, kind: StructuralKind) -> StructuralTypeIdentity {
-    StructuralTypeIdentity::new(id * 2 + 1, id * 2 + 2, kind)
+    StructuralTypeIdentity::new(id * 2 + 1, id * 2 + 2, kind, false)
 }
 
 pub(super) fn sc(

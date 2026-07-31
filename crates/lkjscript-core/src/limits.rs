@@ -14,7 +14,7 @@ pub const MAX_DIR_CHILDREN: u32 = 16;
 pub const MAX_TOPLEVEL_FORMS: u32 = 8;
 /// Maximum fields in one nominal product declaration.
 pub const MAX_PRODUCT_FIELDS: usize = 15;
-/// Maximum pair-node comparisons performed by one structural list equality.
+/// Maximum entry comparisons performed by one structural list equality.
 pub const MAX_LIST_EQUAL_STEPS: usize = 1_000_000;
 /// Maximum bytes owned by one language buffer.
 pub const MAX_BYTE_STORAGE_BYTES: usize = 1_000_000;

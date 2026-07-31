@@ -27,10 +27,10 @@ pub const fn runtime_state(
         current_ownership: "session or explicit wrapper owner",
         escape_behavior: "only through validated runtime boundary",
         lifetime,
-        strong_cycles: "only inside traced snapshot where applicable",
+        strong_cycles: "declared by each storage domain",
         weak_links: "none Current",
         destructor: "Rust field drop and explicit runtime cleanup",
-        external_resources: "tracked separately from heap references",
+        external_resources: "tracked separately from aggregate values",
         portability: "worker-local Current",
         contention: "single-owner",
         allocation_frequency: "call or session dependent",
@@ -43,6 +43,6 @@ pub const fn runtime_state(
         reclamation_plan: reclamation,
         producers,
         tests,
-        status: "current collector boundary; deterministic replacement accepted",
+        status: "current deterministic runtime ownership",
     }
 }

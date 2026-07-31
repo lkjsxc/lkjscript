@@ -80,43 +80,7 @@ fn value_equal<J: RuntimeTier>(vm: &Vm<'_, J>, left: Value, right: Value) -> Res
                 _ => Err(Error::msg("equal-value runtime type mismatch")),
             };
         }
-        match (vm.arena.get(left)?, vm.arena.get(right)?) {
-            (
-                HeapObj::Enum {
-                    layout: left_layout,
-                    physical_tag: left_tag,
-                    ..
-                },
-                HeapObj::Enum {
-                    layout: right_layout,
-                    physical_tag: right_tag,
-                    ..
-                },
-            ) if left_layout == right_layout && left_tag != right_tag => return Ok(false),
-            (
-                HeapObj::Enum {
-                    layout: left_layout,
-                    physical_tag: left_tag,
-                    active_payload: left_payload,
-                },
-                HeapObj::Enum {
-                    layout: right_layout,
-                    physical_tag: right_tag,
-                    active_payload: right_payload,
-                },
-            ) if left_layout == right_layout
-                && left_tag == right_tag
-                && left_payload.len() == right_payload.len() =>
-            {
-                pending.extend(
-                    left_payload
-                        .iter()
-                        .copied()
-                        .zip(right_payload.iter().copied()),
-                );
-            }
-            _ => return Err(Error::msg("equal-value runtime type mismatch")),
-        }
+        return Err(Error::msg("equal-value runtime type mismatch"));
     }
     Ok(true)
 }

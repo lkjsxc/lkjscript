@@ -2,13 +2,12 @@ use super::*;
 
 #[test]
 fn selected_conditional_callee_trap_retains_exact_site_message() {
-    let metadata = |effects, safepoint, failure| InstructionMetadata {
+    let metadata = |effects, with_frame_state: bool, failure| InstructionMetadata {
         origin: Origin::SYNTHETIC,
         effects,
-        safepoint,
         failure,
         failure_cleanup: None,
-        frame_state: (safepoint == IrSafepoint::Required).then_some(FrameState {
+        frame_state: with_frame_state.then_some(FrameState {
             bytecode_position: 0,
             locals: Vec::new(),
             operand_stack: Vec::new(),
@@ -28,6 +27,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
             path: "selected-trap.lkjscript".into(),
         }],
         products: Vec::new(),
+        region_products: Vec::new(),
         enums: Vec::new(),
         traits: core_traits(),
         implementations: Vec::new(),
@@ -66,11 +66,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                             id: ValueId::new(1),
                             ty: SsaType::Str,
                             kind: InstructionKind::Constant(Constant::Str("first trap".into())),
-                            metadata: metadata(
-                                EffectSet::PURE,
-                                IrSafepoint::None,
-                                FailureBehavior::None,
-                            ),
+                            metadata: metadata(EffectSet::PURE, false, FailureBehavior::None),
                         }],
                         terminator: Terminator::Trap {
                             value: ValueId::new(1),
@@ -86,11 +82,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                             kind: InstructionKind::Constant(Constant::Str(
                                 "selected callee trap".into(),
                             )),
-                            metadata: metadata(
-                                EffectSet::PURE,
-                                IrSafepoint::None,
-                                FailureBehavior::None,
-                            ),
+                            metadata: metadata(EffectSet::PURE, false, FailureBehavior::None),
                         }],
                         terminator: Terminator::Trap {
                             value: ValueId::new(2),
@@ -116,11 +108,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                             id: ValueId::new(0),
                             ty: SsaType::Bool,
                             kind: InstructionKind::Constant(Constant::Bool(false)),
-                            metadata: metadata(
-                                EffectSet::PURE,
-                                IrSafepoint::None,
-                                FailureBehavior::None,
-                            ),
+                            metadata: metadata(EffectSet::PURE, false, FailureBehavior::None),
                         },
                         Instruction {
                             id: ValueId::new(1),
@@ -132,11 +120,7 @@ fn selected_conditional_callee_trap_retains_exact_site_message() {
                                 signature: callee_signature,
                                 instantiation: None,
                             },
-                            metadata: metadata(
-                                EffectSet::MAY_TRAP,
-                                IrSafepoint::Required,
-                                FailureBehavior::Trap,
-                            ),
+                            metadata: metadata(EffectSet::MAY_TRAP, true, FailureBehavior::Trap),
                         },
                     ],
                     terminator: Terminator::Return(ValueId::new(1)),

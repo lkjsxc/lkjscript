@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::optimize::passes::*;
 use crate::{
-    EffectSet, FailureBehavior, FrameState, InstructionKind, Safepoint, ValueId, VerifiedProgram,
+    EffectSet, FailureBehavior, FrameState, Instruction, InstructionKind, ValueId, VerifiedProgram,
 };
 
 pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedProgram> {
@@ -21,18 +21,7 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
                 add_frame_values(&mut live, frame);
             }
             for instruction in &block.instructions {
-                if !instruction.metadata.effects.is_pure()
-                    || instruction.metadata.safepoint == Safepoint::Required
-                    || matches!(
-                        instruction.kind,
-                        InstructionKind::PlaceInit { .. }
-                            | InstructionKind::PlaceEnd { .. }
-                            | InstructionKind::EndBorrow { .. }
-                            | InstructionKind::Drop { .. }
-                            | InstructionKind::Move { .. }
-                            | InstructionKind::Borrow { .. }
-                    )
-                {
+                if must_retain_instruction(instruction) {
                     live.insert(instruction.id);
                 }
                 if let Some(frame) = &instruction.metadata.frame_state {
@@ -52,23 +41,27 @@ pub fn effect_aware_dce(verified: &VerifiedProgram) -> crate::Result<VerifiedPro
         }
         for block in &mut function.blocks {
             block.instructions.retain(|instruction| {
-                live.contains(&instruction.id)
-                    || matches!(
-                        instruction.kind,
-                        InstructionKind::PlaceInit { .. }
-                            | InstructionKind::PlaceEnd { .. }
-                            | InstructionKind::EndBorrow { .. }
-                            | InstructionKind::Drop { .. }
-                            | InstructionKind::Move { .. }
-                            | InstructionKind::Borrow { .. }
-                    )
-                    || !instruction.metadata.effects.is_pure()
-                    || instruction.metadata.safepoint == Safepoint::Required
+                live.contains(&instruction.id) || must_retain_instruction(instruction)
             });
         }
     }
     compact_values(&mut program)?;
     finish(program)
+}
+
+fn must_retain_instruction(instruction: &Instruction) -> bool {
+    !instruction.metadata.effects.is_pure()
+        || instruction.metadata.frame_state.is_some()
+        || matches!(
+            instruction.kind,
+            InstructionKind::Call { .. }
+                | InstructionKind::PlaceInit { .. }
+                | InstructionKind::PlaceEnd { .. }
+                | InstructionKind::EndBorrow { .. }
+                | InstructionKind::Drop { .. }
+                | InstructionKind::Move { .. }
+                | InstructionKind::Borrow { .. }
+        )
 }
 
 pub(crate) fn add_frame_values(live: &mut HashSet<ValueId>, frame: &FrameState) {

@@ -153,6 +153,7 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::StructuralDestinationFinish
         | Op::StructuralDestinationAbort
         | Op::StructuralAggregateFieldBorrow
+        | Op::StructuralAggregateFieldCopy
         | Op::StructuralAggregateTag
         | Op::StructuralAggregateConsumePayload
         | Op::StructuralStringUtf8View

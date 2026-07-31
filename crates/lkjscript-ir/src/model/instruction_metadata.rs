@@ -1,12 +1,6 @@
 use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Safepoint {
-    None,
-    Required,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailureBehavior {
     None,
     Trap,
@@ -32,7 +26,6 @@ pub struct FrameState {
 pub struct InstructionMetadata {
     pub origin: Origin,
     pub effects: EffectSet,
-    pub safepoint: Safepoint,
     pub failure: FailureBehavior,
     pub failure_cleanup: Option<FailureCleanupId>,
     pub frame_state: Option<FrameState>,

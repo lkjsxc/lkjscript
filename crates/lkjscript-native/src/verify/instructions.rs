@@ -91,11 +91,14 @@ pub(super) fn verify_instruction(
                 return Err(VerificationError::LocalNotInitialized(*local));
             }
             let value_type = function.locals[index].value_type;
-            if matches!(instruction.operation, Operation::ObserveLocal(_))
-                && !matches!(value_type, ValueType::StructuralOwner(_))
-            {
+            let observable = match value_type {
+                ValueType::StructuralOwner(_) => true,
+                ValueType::StructuralView(view) => !view.exclusive(),
+                _ => false,
+            };
+            if matches!(instruction.operation, Operation::ObserveLocal(_)) && !observable {
                 return Err(VerificationError::TypeMismatch(
-                    "observed local is not structural owner",
+                    "observed local is not a structural owner or shared view",
                 ));
             }
             require_output(instruction, value_type, "local read")

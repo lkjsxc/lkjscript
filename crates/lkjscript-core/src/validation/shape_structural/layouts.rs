@@ -82,6 +82,21 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
                 "bytecode structural type has invalid value-runtime metadata",
             ));
         }
+        if let crate::StructuralTypeKind::Product(id) = ty.kind {
+            let product = chunk
+                .products
+                .get(id.index())
+                .filter(|product| product.id == id)
+                .ok_or_else(|| Error::msg("bytecode structural product identity is missing"))?;
+            if ty.runtime_type.layout != crate::product_layout_identity(product.identity)
+                || ty.runtime_type.semantic_type
+                    != crate::product_semantic_identity(product.identity)
+            {
+                return Err(Error::msg(
+                    "bytecode structural product runtime identity is noncanonical",
+                ));
+            }
+        }
         bytes = add(bytes, 93, "structural metadata byte size")?;
     }
     Ok(bytes)

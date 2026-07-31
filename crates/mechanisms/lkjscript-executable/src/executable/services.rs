@@ -87,28 +87,6 @@ impl NativeEntryCount {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NativeRoot {
-    pub(super) reference_type: ReferenceType,
-    pub(super) opaque_word: u64,
-}
-
-impl NativeRoot {
-    #[must_use]
-    pub const fn reference_type(self) -> ReferenceType {
-        self.reference_type
-    }
-
-    #[must_use]
-    pub const fn opaque_word(self) -> u64 {
-        self.opaque_word
-    }
-
-    pub fn set_opaque_word(&mut self, opaque_word: u64) {
-        self.opaque_word = opaque_word;
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NativeServiceError {
     Trap,
     ResourceLimitExceeded,

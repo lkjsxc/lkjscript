@@ -35,7 +35,6 @@ fn variant_test_and_active_projection_execute_in_both_generated_tiers() {
         assert_eq!(value.as_i64(), Some(42));
         assert!(execution.stats.native_entries > 0);
         assert_eq!(execution.stats.runtime_heap_successes, 0);
-        assert_eq!(execution.stats.collector_runtime_invocations, 0);
         assert!(execution.stats.structural_runtime_calls > 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);
         assert_eq!(execution.stats.native_structural.live_loans, 0);
@@ -87,7 +86,7 @@ fn nullary_enum_is_differential_and_enters_generated_tiers() {
 }
 
 #[test]
-fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
+fn nested_generic_enum_uses_structural_storage_in_generated_tiers() {
     let compiled = compile_source(
         &nested_source(),
         "enum-nested.lkjscript",
@@ -97,10 +96,7 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
     let physical_tag = evaluator_owned(&compiled)
         .enum_physical_tag()
         .expect("evaluator returns nested structural enum");
-    let config = JitConfig {
-        force_gc_before_allocation: true,
-        ..JitConfig::default()
-    };
+    let config = JitConfig::default();
     for execution in [
         execute_forced(compiled.ssa(), &ExecutionConfig::default(), config)
             .expect("baseline returns nested enum"),
@@ -112,10 +108,7 @@ fn nested_generic_enum_survives_forced_collection_in_generated_tiers() {
         };
         assert_eq!(value.enum_physical_tag(), Some(physical_tag));
         assert!(value.snapshot_object_count() >= 2);
-        assert_eq!(execution.stats.collections, 0);
-        assert_eq!(execution.stats.maximum_roots, 0);
         assert_eq!(execution.stats.runtime_heap_successes, 0);
-        assert_eq!(execution.stats.collector_runtime_invocations, 0);
         assert!(execution.stats.structural_runtime_calls > 0);
         assert!(execution.stats.native_structural.calls > 0);
         assert_eq!(execution.stats.native_structural.live_roots, 0);

@@ -1,7 +1,7 @@
 use crate::optimize::*;
 use crate::{
-    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, RuntimeOp, Safepoint,
-    Signature, SsaType, ValueId,
+    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, RuntimeOp, Signature,
+    SsaType, ValueId,
 };
 
 pub(crate) fn discovery_gvn_edit(
@@ -78,8 +78,7 @@ pub(crate) fn discovery_expression_key<'a>(
         return Ok(None);
     };
     budget.charge(arguments.len() as u64)?;
-    if instruction.metadata.safepoint != Safepoint::None
-        || instruction.metadata.frame_state.is_some()
+    if instruction.metadata.frame_state.is_some()
         || !discovery_scalar(&instruction.ty)
         || !discovery_signature_matches(indexes, signature, arguments, &instruction.ty)
     {

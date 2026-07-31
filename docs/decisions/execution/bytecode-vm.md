@@ -81,9 +81,10 @@ globals. `Trap` names an exact validated Str diagnostic and terminates only the
 current VM execution. `MakeProduct` names a product metadata index;
 `LoadProductField` and `WithProductField` name resolved product/field
 descriptors. The VM validates metadata, descriptor, field, category, and nominal
-identity boundaries before access. Construction and immutable replacement
-allocate traced product objects; access returns an existing field. Product
-metadata never installs a global value or executes initialization code.
+identity boundaries before access. These three opcodes are region-product only;
+construction and immutable update publish invocation records, and access copies
+an existing field. Structural products use structural opcodes. Product
+operations without structural or invocation-region metadata reject. Metadata never installs globals or initialization.
 
 ## Tier 0 Current Boundary
 
@@ -93,7 +94,7 @@ loop-backedge events, with optional selected block counts after baseline JIT
 works. It does not profile every ordinary instruction. Counters are process-
 local, consumed by the same process, discarded at exit, and never telemetry.
 
-Initial compilation remains synchronous at a safepoint. Unsupported functions,
+Initial compilation remains synchronous at an explicit tier transition. Unsupported functions,
 resource exhaustion, or ordinary `auto` backend failure stay correct in the VM
 and record structured fallback. Forced JIT tests fail visibly instead of
 silently using the VM.
@@ -107,9 +108,8 @@ loop-header OSR. Compiling only for a later call is not OSR.
 - Runtime semantics and process outcomes must be normalized before native calls.
 - Public chunks need validation before arbitrary construction is supported.
 - Closed `Value` remains a reference-VM representation, not the typed native ABI.
-- Current scalar native frames have exact empty reference stack maps; nonempty
-  maps remain required before allocation-capable code executes.
-- VM/native transitions preserve traps, roots, handles, metering, deadlines,
+- Native frames retain typed homes and cleanup obligations, not liveness maps.
+- VM/native transitions preserve traps, owned values, handles, metering, deadlines,
   output, and arguments.
 - Runtime JIT measurements include trigger, compilation, warmup, fallback, and
   whole-program cost rather than only steady state.

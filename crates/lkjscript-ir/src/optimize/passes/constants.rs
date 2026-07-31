@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use crate::optimize::passes::*;
-use crate::{
-    Constant, EffectSet, FailureBehavior, InstructionKind, RuntimeOp, Safepoint, VerifiedProgram,
-};
+use crate::{Constant, EffectSet, FailureBehavior, InstructionKind, RuntimeOp, VerifiedProgram};
 
 pub fn constant_fold_and_propagate(verified: &VerifiedProgram) -> crate::Result<VerifiedProgram> {
     let mut program = verified.program().clone();
@@ -30,7 +28,6 @@ pub fn constant_fold_and_propagate(verified: &VerifiedProgram) -> crate::Result<
                 if let Some(constant) = replacement {
                     instruction.kind = InstructionKind::Constant(constant.clone());
                     instruction.metadata.effects = EffectSet::PURE;
-                    instruction.metadata.safepoint = Safepoint::None;
                     instruction.metadata.failure = FailureBehavior::None;
                     instruction.metadata.frame_state = None;
                     constants.insert(instruction.id, constant);

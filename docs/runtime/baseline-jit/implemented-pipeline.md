@@ -21,8 +21,9 @@ canonical source -> typed HIR -> VerifiedProgram SSA
 The adapter consumes only `VerifiedProgram`. It does not read source syntax,
 HIR, or bytecode. One installed group contains the requested function and its complete reachable
 direct-call SCC closure. Compatible generated callers use direct relocated
-native calls and exact I64/F64/Bool/Unit values. Forced reference results are
-marshaled as owned `GcHeap` snapshots; auto does not transfer references.
+native calls and exact typed values. Forced aggregate results are marshaled as
+key-free structural/list snapshots or explicit unique bytes; auto does not
+transfer unsupported runtime keys.
 
 Current generated coverage is Unit, Bool, I64, F64, bytes, byte-vector and
 whole-owner byte views, Str, nominal Product, List, Option, Result, block
@@ -32,16 +33,14 @@ constructors/accessors/immutable replacement, string and byte operations,
 direct and mutual recursion, return, trap,
 exit, and structured outcome propagation. Indirect calls remain unsupported.
 
-Native entry, call, and loop transitions use enum-identified versioned runtime
-calls. canonical native contract frame registration records exact per-source-function native entries
-and consumes the mandatory entry poll before body effects without duplicate
-source-level `EnterFunctionV1` or entry `PollV1` calls. Explicit and backedge
-`PollV1` calls consume bounded native poll fuel, check a monotonic deadline,
-count polls, and propagate deadline, resource-limit, or host-clock status through the shared
-invocation state. Native canonical native contract prologues register initialized frames; verified
-transitive may-collect summaries publish dense caller safepoints only where a
-callee closure can collect, and every structured edge unregisters. Generated
-code never exits the host process.
+Native entry, call, and loop transitions use enum-identified runtime calls.
+Frame registration records exact per-source-function native entries and
+consumes the mandatory entry poll before body effects without duplicate
+source-level entry calls. Explicit and backedge polls consume bounded native
+poll fuel, check a monotonic deadline, count polls, and propagate deadline,
+resource-limit, or host-clock status through the shared invocation state.
+Native prologues register initialized typed frames, and every structured edge
+unregisters. Generated code never exits the host process.
 ## Engine Behavior
 
 The CLI accepts:

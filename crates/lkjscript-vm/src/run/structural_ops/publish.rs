@@ -41,9 +41,16 @@ fn borrow<J: RuntimeTier>(vm: &mut Vm<'_, J>, exclusive: bool) -> Result<()> {
             exclusive,
         )
         .map_err(map_value_error)?;
-    let value = invocation_mut(vm)?.register_view(view, view_representation, view_type, false)?;
-    vm.push(value);
-    Ok(())
+    match invocation_mut(vm)?.register_view(view, view_representation, view_type, false) {
+        Ok(value) => {
+            vm.push(value);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = invocation_mut(vm)?.runtime.end_view(view);
+            Err(error)
+        }
+    }
 }
 
 fn copy_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
@@ -153,7 +160,7 @@ fn semantic_from_input<J: RuntimeTier>(
         }
         StructuralLayoutKind::Product { .. } | StructuralLayoutKind::Enum { .. } => {
             return Err(Error::msg(
-                "legacy traced aggregates cannot publish structural values",
+                "unsupported aggregates cannot publish structural values",
             ));
         }
         _ => {

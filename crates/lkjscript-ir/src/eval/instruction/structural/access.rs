@@ -1,4 +1,4 @@
-use lkjscript_core::StructuralType;
+use lkjscript_core::{StructuralNode, StructuralType};
 
 use super::*;
 
@@ -21,23 +21,21 @@ impl Evaluator<'_> {
         }
     }
 
-    pub(super) fn explicit_structural_payload(
-        &self,
+    pub(super) fn explicit_structural_node<'a>(
+        &'a self,
         value: &EvalValue,
         expected: StructuralType,
-    ) -> Result<lkjscript_core::SemanticValue, Flow> {
+    ) -> Result<StructuralNode<'a>, Flow> {
         match value {
             EvalValue::StructuralOwner(owner) if owner.value_type == expected => self
                 .structural
                 .runtime
-                .value(owner.key, expected)
-                .cloned()
+                .value_node(owner.key, expected)
                 .map_err(map_structural_error),
             EvalValue::StructuralView(view) if view.value_type == expected => self
                 .structural
                 .runtime
-                .projected(view.key)
-                .cloned()
+                .projected_node(view.key)
                 .map_err(map_structural_error),
             _ => Err(Flow::Trap(
                 "structural aggregate value type mismatch".into(),

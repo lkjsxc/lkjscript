@@ -1,7 +1,7 @@
 use crate::optimize::*;
 use crate::{
-    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, RuntimeOp, Safepoint,
-    Signature, SsaType, ValueId,
+    BlockId, EffectSet, FailureBehavior, Instruction, InstructionKind, RuntimeOp, Signature,
+    SsaType, ValueId,
 };
 
 pub(crate) fn checker_allowed_gvn(
@@ -88,8 +88,7 @@ pub(crate) fn checker_exact_expression_key<'a>(
         return Ok(None);
     };
     budget.charge(arguments.len() as u64)?;
-    if instruction.metadata.safepoint != Safepoint::None
-        || instruction.metadata.frame_state.is_some()
+    if instruction.metadata.frame_state.is_some()
         || !checker_is_nonownership_scalar(&instruction.ty)
         || !checker_signature_and_operand_types(indexes, signature, arguments, &instruction.ty)
     {

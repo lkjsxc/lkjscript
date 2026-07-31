@@ -9,7 +9,7 @@ use lkjscript_core::{
     EnumVariantRef, Error, FailureCleanupAction as BytecodeFailureCleanupAction,
     FailureCleanupPlan as BytecodeFailureCleanupPlan, FailureCleanupRange, FunctionProto,
     MemoryPlanId as BytecodeMemoryPlanId, Op, ProductFieldRef, ProductId as BytecodeProductId,
-    ProductMetadata as BytecodeProductMetadata, ResourceReturnKind, Result,
+    ProductMetadata as BytecodeProductMetadata, RegionProductFieldKind, ResourceReturnKind, Result,
     RuntimeLayoutId as BytecodeLayoutId, StructuralAggregateFieldRef,
     StructuralDestinationFieldRef, StructuralDestinationId, StructuralDestinationMetadata,
     StructuralFieldMetadata, StructuralFieldRoute,

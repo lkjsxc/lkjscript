@@ -12,15 +12,15 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use lkjscript_core::{
-    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionConfig, ExecutionOutcome, GcConfig,
-    GcHeap, GcLimit, HeapObj, HostError, OwnedValue, ProductId, ResourceLimitKind, SemanticValue,
-    Trap, UniqueKeyWord, UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value,
-    MAX_BYTE_STORAGE_BYTES, MAX_LIST_EQUAL_STEPS,
+    CleanupFailures, CleanupPhase, CleanupSubject, ExecutionConfig, ExecutionOutcome, HostError,
+    OwnedValue, ResourceLimitKind, SemanticValue, Trap, UniqueKeyWord, UniqueStore,
+    UniqueStoreError, UniqueStoreId, UniqueStoreLimits, Value, MAX_BYTE_STORAGE_BYTES,
+    MAX_LIST_EQUAL_STEPS,
 };
 use lkjscript_executable::{
     ExecutableInstaller, ExecutableLimits, InstallError, InstalledImage, InvocationError,
     InvocationOutcome, InvocationReport, NativeInvocationConfig, NativeResourceLimitKind,
-    NativeRoot, NativeRuntimeServices, NativeServiceError,
+    NativeRuntimeServices, NativeServiceError,
 };
 use lkjscript_ir::{
     optimize, optimize_scheduled, BytecodeLinkMetadata, OptimizationCertificate,
@@ -30,7 +30,7 @@ use lkjscript_ir::{
 use lkjscript_native::{
     BackendLimits, CodeAccounting, EntryMetadata, FrameFacts, HeapOperation, HeapRuntimeSite,
     ImageContracts, LoanType, NativeLoan, NativeUnique, OutcomeMapEntry, ReferenceType, Relocation,
-    RuntimeCallSlot, Safepoint, SourceMapEntry, TrapMapEntry,
+    RuntimeCallSlot, SourceMapEntry, TrapMapEntry,
 };
 
 pub use lkjscript_ir::FunctionId;
@@ -41,9 +41,9 @@ mod code;
 mod config;
 mod error;
 mod execute;
-mod heap;
 mod island;
 mod resource_plan;
+mod runtime_values;
 mod scalar;
 mod session;
 mod stats;
@@ -52,8 +52,8 @@ mod stats;
 mod tests;
 
 use execute::optimization_metadata_bytes_estimate;
-use heap::*;
 use island::*;
+use runtime_values::*;
 use scalar::scalar_to_execution;
 
 pub use code::{CodeObject, CodeObjectRecord, NumericConversionSiteCounts};
@@ -71,6 +71,8 @@ pub use stats::{
     CompileStats, FunctionTierRecord, JitStats, NativeResourceStats, NativeStructuralStats,
     NativeUniqueStats,
 };
+
+struct ReturnedStructuralValue(SemanticValue);
 
 enum ProgramAuthority {
     Baseline(VerifiedProgram),
@@ -114,12 +116,10 @@ pub struct JitSession {
     first_native_call: Option<Duration>,
     native_execution: Duration,
     diagnostic_bytes: u64,
-    heap: Option<GcHeap>,
-    maximum_roots: usize,
+    lists: Option<lkjscript_core::SegmentedListArena<Value>>,
+    region_products: Option<lkjscript_core::RegionProductArena<Value>>,
     runtime_heap_attempts: u64,
     runtime_heap_successes: u64,
-    barrier_count: u64,
-    collector_runtime_invocations: u64,
     resource_runtime_calls: u64,
     unique_runtime_calls: u64,
     structural_runtime_calls: u64,
@@ -127,7 +127,7 @@ pub struct JitSession {
     native_unique: NativeUniqueStats,
     native_structural: NativeStructuralStats,
     returned_unique: Option<Vec<u8>>,
-    returned_structural: Option<SemanticValue>,
+    returned_structural: Option<ReturnedStructuralValue>,
     next_resource_scope: u64,
     peak_native_frame_depth: usize,
     vm_to_native_transitions: u64,
@@ -147,12 +147,22 @@ impl fmt::Debug for JitSession {
     }
 }
 
-struct JitHeapServices<'a> {
-    heap: &'a mut GcHeap,
-    enums: &'a [lkjscript_ir::EnumMetadata],
-    force_collection: bool,
+#[derive(Clone, Copy)]
+struct JitValueLimits {
+    logical_aggregates: u64,
+    allocations: u64,
+    runtime_bytes: u64,
+}
+
+struct JitValueServices<'a> {
+    lists: &'a mut lkjscript_core::SegmentedListArena<Value>,
+    region_products: &'a mut lkjscript_core::RegionProductArena<Value>,
     logical_aggregate_constructions: u64,
     max_logical_aggregate_constructions: u64,
+    list_allocations: u64,
+    region_product_allocations: u64,
+    max_list_allocations: u64,
+    max_runtime_bytes: u64,
     last_trap: Option<String>,
     last_resource: Option<ResourceLimitKind>,
 }

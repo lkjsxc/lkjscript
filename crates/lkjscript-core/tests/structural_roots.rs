@@ -62,7 +62,6 @@ fn compact_roots_move_borrow_reuse_and_round_trip_through_value() {
         .expect("publish");
     let value = Value::from_structural_root(key);
     assert_eq!(value.as_structural_root(), Some(key));
-    assert!(value.as_legacy_traced().is_none());
     assert_eq!(table.state(key), Ok(StructuralRootState::Owned));
     assert_eq!(
         table.root(

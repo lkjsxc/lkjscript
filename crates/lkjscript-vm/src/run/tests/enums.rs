@@ -7,7 +7,7 @@ use lkjscript_core::{
 };
 
 #[test]
-fn hand_built_validated_enum_constructs_and_projects_active_payload() {
+fn hand_built_nonstructural_enum_rejects_validation() {
     let enum_id = EnumId::new([1; 32]);
     let variant = VariantId::new([2; 32]);
     let field = VariantFieldId::new([3; 32]);
@@ -25,7 +25,6 @@ fn hand_built_validated_enum_constructs_and_projects_active_payload() {
             fields: vec![EnumFieldMetadata {
                 id: field,
                 name: "value".into(),
-                traced: false,
             }],
         }],
     });
@@ -46,16 +45,9 @@ fn hand_built_validated_enum_constructs_and_projects_active_payload() {
     chunk.main.emit_op_u16(Op::MakeEnum, 0);
     chunk.main.emit_op_u16(Op::LoadEnumField, 0);
     chunk.main.emit(Op::Return);
-    let chunk = validate(chunk);
-    let outcome = Vm::new(
-        &chunk,
-        NullJit,
-        crate::ExecutionInputs::default(),
-        ExecutionConfig::default(),
-    )
-    .run();
-    let ExecutionOutcome::Returned(value) = outcome else {
-        panic!("enum VM program must return")
-    };
-    assert_eq!(value.as_i64(), Some(42));
+    let error = lkjscript_core::validate_chunk(chunk, &lkjscript_core::ValidationLimits::default())
+        .expect_err("enum construction without structural metadata rejects");
+    assert!(error
+        .as_str()
+        .contains("enum construction is unsupported without structural metadata"));
 }

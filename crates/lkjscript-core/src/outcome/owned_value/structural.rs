@@ -42,7 +42,7 @@ impl OwnedValue {
     pub(super) fn from_owned_structural(structural: OwnedStructuralValue) -> Self {
         Self {
             root: Value::UNIT,
-            heap: Vec::new(),
+            lists: Vec::new(),
             unique_byte_vector: None,
             unique_bytes: None,
             symbols: Vec::new(),

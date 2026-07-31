@@ -127,6 +127,7 @@ impl ValidatedChunk {
                             | crate::Op::StructuralDestinationFinish
                             | crate::Op::StructuralDestinationAbort
                             | crate::Op::StructuralAggregateFieldBorrow
+                            | crate::Op::StructuralAggregateFieldCopy
                             | crate::Op::StructuralAggregateTag
                             | crate::Op::StructuralAggregateConsumePayload
                             | crate::Op::StructuralStringUtf8View
@@ -166,6 +167,7 @@ fn is_structural_opcode(op: crate::Op) -> bool {
             | crate::Op::StructuralDestinationFinish
             | crate::Op::StructuralDestinationAbort
             | crate::Op::StructuralAggregateFieldBorrow
+            | crate::Op::StructuralAggregateFieldCopy
             | crate::Op::StructuralAggregateTag
             | crate::Op::StructuralAggregateConsumePayload
             | crate::Op::StructuralStringUtf8View

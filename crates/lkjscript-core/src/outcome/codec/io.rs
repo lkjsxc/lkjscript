@@ -134,10 +134,6 @@ impl<'a> Decoder<'a> {
         usize::try_from(self.u64()?).map_err(|_| Error::msg("wire usize exceeds platform"))
     }
 
-    pub(crate) fn fixed(&mut self, length: usize) -> Result<&'a [u8]> {
-        self.take(length)
-    }
-
     pub(crate) fn bytes(&mut self) -> Result<&'a [u8]> {
         let length = usize::try_from(self.u32()?).map_err(|_| Error::msg("wire field length"))?;
         self.take(length)

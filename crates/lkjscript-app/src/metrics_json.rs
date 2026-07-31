@@ -7,9 +7,7 @@ pub fn outcome(outcome: &ExecutionOutcome) -> String {
                 ("unit", "unit".to_string())
             } else if value.is_empty_list() {
                 ("empty-list", "empty-list".to_string())
-            } else if value.enum_identity().is_some_and(|(layout, tag)| {
-                layout.bytes() == lkjscript_core::OPTION_LAYOUT && tag == 1
-            }) {
+            } else if value.enum_physical_tag() == Some(1) && value.enum_payload_len() == Some(0) {
                 ("none", "none".to_string())
             } else if let Some(value) = value.as_bool() {
                 ("bool", value.to_string())
@@ -21,8 +19,6 @@ pub fn outcome(outcome: &ExecutionOutcome) -> String {
                 ("str-or-symbol", value.to_string())
             } else if let Some(value) = value.as_resource() {
                 ("resource", value.to_string())
-            } else if let Some(value) = value.product_id() {
-                ("product", value.raw().to_string())
             } else {
                 ("owned-value", format!("{value:?}"))
             };

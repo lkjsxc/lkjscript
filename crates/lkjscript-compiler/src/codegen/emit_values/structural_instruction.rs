@@ -86,6 +86,24 @@ impl Emitter<'_> {
                 self.proto
                     .emit_op_u16(Op::StructuralDestinationAbort, metadata.raw());
             }
+            InstructionKind::ProductField { field, value, .. }
+                if structural_view_representation(self.chunk, self.value_type(*value)?).is_some() =>
+            {
+                let representation =
+                    structural_view_representation(self.chunk, self.value_type(*value)?)
+                        .ok_or_else(|| {
+                            Error::msg("structural product-field representation is missing")
+                        })?;
+                self.load_observed_structural(*value)?;
+                let reference = intern_aggregate_field_for_representation(
+                    self.chunk,
+                    representation,
+                    u16::from(*field),
+                    &instruction.ty,
+                )?;
+                self.proto
+                    .emit_op_u16(Op::StructuralAggregateFieldCopy, reference);
+            }
             InstructionKind::AggregateFieldBorrow {
                 representation,
                 field,

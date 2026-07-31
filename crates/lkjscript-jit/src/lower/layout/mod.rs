@@ -16,7 +16,11 @@ impl LayoutInterner {
     ) -> Result<Self, LoweringError> {
         let mut interner = Self {
             identities: HashMap::new(),
-            enum_layouts: HashMap::new(),
+            region_products: program
+                .region_products
+                .iter()
+                .map(|metadata| (metadata.product, metadata.identity.bytes()))
+                .collect(),
             structural: StructuralCatalog::build(program)?,
             next: Self::FIRST_NESTED_IDENTITY,
         };
@@ -36,24 +40,6 @@ impl LayoutInterner {
                 }))
             {
                 interner.intern(ty)?;
-            }
-        }
-        let enum_types: Vec<_> = interner.identities.keys().cloned().collect();
-        for ty in enum_types {
-            if let SsaType::Enum { id, .. } = &ty {
-                let layout = program
-                    .enums
-                    .iter()
-                    .find(|item| item.id == *id)
-                    .map(|item| item.layout.identity.bytes())
-                    .ok_or_else(|| {
-                        LoweringError::new(
-                            LoweringFailureCode::UnsupportedType,
-                            None,
-                            "enum type has no stable runtime layout identity",
-                        )
-                    })?;
-                interner.enum_layouts.insert(ty, layout);
             }
         }
         Ok(interner)
@@ -83,8 +69,11 @@ impl LayoutInterner {
         Ok(())
     }
 
-    pub(super) fn enum_layout(&self, ty: &SsaType) -> Option<[u8; 32]> {
-        self.enum_layouts.get(ty).copied()
+    pub(super) fn region_product_identity(
+        &self,
+        product: lkjscript_ir::ProductId,
+    ) -> Option<[u8; 32]> {
+        self.region_products.get(&product).copied()
     }
 
     pub(super) const fn structural(&self) -> &StructuralCatalog {

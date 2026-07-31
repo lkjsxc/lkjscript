@@ -55,6 +55,7 @@ impl<'a> Producer<'a> {
         self.finish_drop_classes()?;
         self.finish_type_work()?;
         let type_facts = std::mem::take(&mut self.type_planner.facts);
+        let witnesses = std::mem::take(&mut self.type_planner.witnesses);
         let drop_paths = std::mem::take(&mut self.type_planner.drop_paths);
         let drop_glues = std::mem::take(&mut self.type_planner.glues);
         let mut plan = HirMemoryPlan {
@@ -68,6 +69,7 @@ impl<'a> Producer<'a> {
             calls: self.calls,
             obligations: self.obligations,
             type_facts,
+            witnesses,
             destinations: self.destinations,
             borrow_scopes: self.borrow_scopes,
             drop_paths,

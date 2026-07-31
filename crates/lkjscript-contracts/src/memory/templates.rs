@@ -40,52 +40,6 @@ pub const fn inline(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub const fn traced(
-    identity: &'static str,
-    semantic_type: &'static str,
-    layout: &'static str,
-    mutability: &'static str,
-    trace_fields: &'static str,
-    cycles: &'static str,
-    object_identity: &'static str,
-    size: &'static str,
-    candidates: &'static str,
-    producers: &'static str,
-    tests: &'static str,
-) -> MemoryObligation {
-    MemoryObligation {
-        identity,
-        authority: "source, HIR, SSA, bytecode, VM, native",
-        semantic_type,
-        runtime_layout: layout,
-        value_semantics: "value unless object identity says otherwise",
-        mutability,
-        possible_aliases: "stable-index handles may alias",
-        copyability: "handle copy in Current runtime",
-        current_ownership: "session tracing heap",
-        escape_behavior: "stack, globals, closures, fields, result snapshot",
-        lifetime: "collector reachability or returned snapshot",
-        strong_cycles: cycles,
-        weak_links: "none Current",
-        destructor: "sweep drops Rust payload",
-        external_resources: "prohibited",
-        portability: "worker-local Current",
-        contention: "single-owner",
-        allocation_frequency: "allocation-site dependent",
-        size_class: size,
-        current_trace_fields: trace_fields,
-        current_exact_roots: "VM stack/globals and exact native frame maps",
-        object_identity,
-        current_placement: "GcHeap stable-index object",
-        candidate_placements: candidates,
-        reclamation_plan: "migrate, then remove tracing; selected candidate owns cleanup",
-        producers,
-        tests,
-        status: "current collector; accepted deterministic candidates",
-    }
-}
-
 pub const fn borrowed(
     identity: &'static str,
     semantic_type: &'static str,

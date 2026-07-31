@@ -12,7 +12,6 @@ use lkjscript_native::{
     Signature, SourceFunctionId, SourceOrigin, StoreClass, TrapCode, UniqueType, ValueType,
 };
 
-mod enum_lower;
 mod enum_types;
 mod enums;
 mod functions;
@@ -31,7 +30,6 @@ mod tests;
 mod types;
 mod values;
 
-use enum_lower::*;
 use enum_types::*;
 use enums::*;
 use functions::*;
@@ -124,7 +122,7 @@ pub(crate) struct LoweredGroup {
 #[derive(Default)]
 struct LayoutInterner {
     identities: HashMap<SsaType, LayoutIdentity>,
-    enum_layouts: HashMap<SsaType, [u8; 32]>,
+    region_products: HashMap<lkjscript_ir::ProductId, [u8; 32]>,
     structural: StructuralCatalog,
     next: u32,
 }

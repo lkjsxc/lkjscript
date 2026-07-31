@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 
 use lkjscript_core::{
     Constant, LayoutIdentity, OwnedValue, SemanticPayload, SemanticTypeIdentity, SemanticValue,
-    StructuralKind, StructuralSnapshotLimits, StructuralType,
+    StructuralKind, StructuralNodeView, StructuralSnapshotLimits, StructuralType,
 };
 
 use super::*;
@@ -59,7 +59,6 @@ pub(in crate::run) fn semantic_snapshot<J: RuntimeTier>(
     structural
         .runtime
         .value(key, value_type)
-        .cloned()
         .map_err(map_value_error)
 }
 
@@ -71,11 +70,11 @@ pub(in crate::run) fn copy_string<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) 
         };
     }
     let (key, value_type) = leaf_owner(vm, value, StructuralKind::String)?;
-    let semantic = invocation(vm)?
+    let node = invocation(vm)?
         .runtime
-        .value(key, value_type)
+        .value_node(key, value_type)
         .map_err(map_value_error)?;
-    let SemanticPayload::String(bytes) = &semantic.payload else {
+    let StructuralNodeView::Bytes(bytes) = node.payload() else {
         return Err(Error::msg("structural string owner has the wrong payload"));
     };
     std::str::from_utf8(bytes)
@@ -85,14 +84,14 @@ pub(in crate::run) fn copy_string<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) 
 
 pub(in crate::run) fn copy_path<J: RuntimeTier>(vm: &Vm<'_, J>, value: Value) -> Result<Vec<u8>> {
     let (key, value_type) = leaf_owner(vm, value, StructuralKind::Path)?;
-    let semantic = invocation(vm)?
+    let node = invocation(vm)?
         .runtime
-        .value(key, value_type)
+        .value_node(key, value_type)
         .map_err(map_value_error)?;
-    let SemanticPayload::Path(bytes) = &semantic.payload else {
+    let StructuralNodeView::Bytes(bytes) = node.payload() else {
         return Err(Error::msg("structural path owner has the wrong payload"));
     };
-    Ok(bytes.clone())
+    Ok(bytes.to_vec())
 }
 
 fn leaf_owner<J: RuntimeTier>(

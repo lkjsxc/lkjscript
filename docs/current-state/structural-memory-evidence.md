@@ -5,22 +5,41 @@
 **Current for the safe runtime substrate and deterministic structural-value
 cutover.** HIR memory authority, verified SSA, validated bytecode, evaluator,
 VM, forced baseline, and forced proof execution select compact structural roots
-for dynamic strings, paths, deterministic nonrecursive products and enums,
-structural results, destinations, projections, and exact cleanup. Builtin
-storage is removed; capture-free functions and symbols use inline artifact IDs.
-The closed legacy tracing registry contains exactly `enum`, `pair`, and
-`product`.
+for dynamic strings, paths, deterministic products/enums, recursive enums,
+copy-leaf lists, structural results, destinations, projections, and cleanup.
+Builtin storage is removed; capture-free functions and symbols use artifact
+IDs. The later zero-family cutover removed the migration registry and collector;
+this file retains earlier substrate commands as historical evidence.
 
 ## Implemented Facts
 
-- Revisions `32374e9`, `e8de299`, `2d694a6`, `7e03b79`, and `5354ff9`
-  implement the substrate and first monotonic tracing-family decrements.
 - `StructuralRuntime` internally issues process-unique runtime identities and
   exact class/slot/nonzero-generation domain keys. Safe callers cannot forge an
   identity or mutate runtime state outside a typed store. Generation changes
   before reuse, exhausted slots retire, and release capacity is preflighted.
-- Typed roots bind domain, root class, slot generation, layout identity, and
-  semantic type identity. Safe constructors cannot fabricate a live key.
+- Typed roots bind domain, class, generation, layout, and semantic identity; safe constructors cannot fabricate keys.
+- Production structural aggregate objects store one validated flat image with
+  local node identifiers, node records, field ranges, and byte ranges rather
+  than nested semantic values. Import, validation, clone, observation, merge,
+  and release use bounded iterative work; a 12,000-level test covers conversion,
+  clone, export, and release without host-stack recursion.
+- Copy products construct, project, update, and return through flat images without
+  collector service. Bytecode/native share the exact plan/name identity and scalar signatures.
+  VM copy variables are not a native generic witness ABI.
+- Every interned HIR type has a platform-bound canonical exact-facts witness independently
+  reconstructed by the verifier over the resolved type and declaration set.
+  Concrete regular recursive enums derive SCC closure; transformed, wrapped, or
+  affine recursion fails. Deterministic products permit process codecs; residual
+  generic hidden-witness ABI and package export are not Current.
+- Acyclic products closed over copy lists, scalar leaves, and selected region
+  products use bounded records under canonical plan/name identities. All four tiers
+  construct, project, update, call, and bulk-reset them. Native dispatch is
+  noncollecting: no stack map, root, barrier, or collection call exists. Process
+  codecs and main returns reject keys; see [evidence](invocation-region-product-evidence.md).
+- Copy-leaf lists use capacity-32 invocation segments; retained tails share
+  immutable entries and no engine allocates pairs. Prepends retain allocation
+  limits and bulk teardown. Flat snapshots reject unreachable tables and cycles;
+  no runtime key or pair crosses boundaries.
 - `StructuralRootTable` projects a typed root to one compact session-private
   64-bit slot/generation key. Entries retain exact runtime, layout, semantic
   type, owner state, and stale-safe shared or exclusive loans. Move, drop,
@@ -39,8 +58,7 @@ The closed legacy tracing registry contains exactly `enum`, `pair`, and
   allocation-free commit. Failure returns only still-valid builders. Published
   roots use checked non-atomic region-level owner counts.
 - Weak sealed roots never retain. Upgrade is generation/layout/type checked.
-  Structured borrows block final release. Cascading final release follows only
-  dependency and side-drop ledgers.
+  Structured borrows block final release; cascading release follows dependency and side-drop ledgers.
 - Typed pools bind pool, slot, generation, layout, semantic type, and Rust type.
   Stale and wrong-pool IDs fail before access; exhausted slots retire; iteration
   and destruction use ascending slot order. Cycles use non-owning typed IDs.
@@ -157,17 +175,15 @@ CARGO_TARGET_DIR=target/lkjscript/sanitizers/thread-std \
 CARGO_TARGET_DIR=target/lkjscript/cross cargo build --locked \
   -p lkjscript-host -p lkjscript-database --target wasm32-wasip1
 ```
-
 The table tests cover compact-key category separation, wrong runtime/layout/type,
 duplicate owner rejection, shared and exclusive conflict, live-loan release
 rejection, move/drop state, root and loan slot reuse, generation retirement,
 capacity failure without partial state, sealed region-level leases, and empty
-completion. The final no-tracing gate is implemented but remains inactive while
-the three-family registry is nonempty. Address, leak, and thread sanitizers and
+completion. At this evidence checkpoint, the final no-tracing gate was
+implemented but inactive while the migration registry was nonempty. Address, leak, and thread sanitizers and
 Miri passed the focused table tests. Rust nightly does not provide an undefined
 sanitizer, `cargo-fuzz` and repository fuzz harnesses are absent, and the WASI
 probe built but could not execute because `wasmtime` is unavailable.
-
 ## Explicit Limits
 
 - The structural contract digest is
@@ -180,4 +196,5 @@ probe built but could not execute because `wasmtime` is unavailable.
   retained migration measurements for the three remaining families, undefined
   sanitizer, and fuzzing remain untested. Current Miri plus address, leak, and
   thread sanitizer gates pass; `cargo-fuzz` and `wasmtime` are unavailable.
-- No collector-free-runtime or no-tracing-runtime claim follows from this work.
+- This substrate checkpoint alone did not establish the later whole-runtime
+  no-tracing claim; the final zero-family evidence does.

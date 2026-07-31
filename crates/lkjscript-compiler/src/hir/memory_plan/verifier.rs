@@ -41,7 +41,6 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
     verify_expressions(plan, &facts)?;
     verify_uses_and_constants(plan, &facts)?;
     verify_entries(plan)?;
-    verify_legacy_registration(plan)?;
     verify_drop_glues(plan)?;
     verify_drop_classes(program, plan)?;
     let authority_steps = verify_authority(program, plan, &facts)?;
@@ -93,35 +92,6 @@ fn verify_functions(program: &hir::Program, plan: &HirMemoryPlan) -> Result<()> 
         || main.signature.parameters.len() != program.main.param_types.len()
     {
         return Err(Error::msg("HIR main memory signature mismatch"));
-    }
-    Ok(())
-}
-
-fn verify_legacy_registration(plan: &HirMemoryPlan) -> Result<()> {
-    let registered: BTreeSet<&str> = lkjscript_contracts::LEGACY_TRACED_FAMILIES
-        .iter()
-        .map(|family| family.identity)
-        .collect();
-    for entry in &plan.entries {
-        let expected = (entry.mode.domain == MemoryDomain::RegisteredLegacyTraced)
-            .then(|| legacy_family(&entry.ty))
-            .flatten();
-        if entry.legacy_family.as_deref() != expected {
-            return Err(Error::msg("HIR memory plan has a wrong legacy family"));
-        }
-        if let Some(family) = expected {
-            if !registered.contains(family)
-                || entry.mode.domain != MemoryDomain::RegisteredLegacyTraced
-            {
-                return Err(Error::msg(
-                    "HIR memory plan selected unregistered legacy tracing",
-                ));
-            }
-        } else if entry.mode.domain == MemoryDomain::RegisteredLegacyTraced {
-            return Err(Error::msg(
-                "HIR memory plan selected legacy tracing without an exact family",
-            ));
-        }
     }
     Ok(())
 }

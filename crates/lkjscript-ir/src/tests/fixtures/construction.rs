@@ -7,7 +7,6 @@ pub(crate) fn metadata(effects: EffectSet) -> InstructionMetadata {
     InstructionMetadata {
         origin: Origin::SYNTHETIC,
         effects,
-        safepoint: Safepoint::None,
         failure: if effects.contains(EffectSet::MAY_TRAP) {
             FailureBehavior::Trap
         } else {
@@ -70,6 +69,7 @@ pub(crate) fn runtime(
 pub(crate) fn one_block_program() -> Program {
     Program {
         memory: StructuralMemoryMetadata::default(),
+        region_products: Vec::new(),
         sources: Vec::new(),
         products: Vec::new(),
         enums: Vec::new(),

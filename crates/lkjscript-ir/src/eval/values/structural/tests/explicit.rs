@@ -117,7 +117,7 @@ fn explicit_publish_destination_and_finish_execute_in_structural_runtime() -> cr
         .any(|event| event.kind == StructuralEventKind::Publish));
     assert_eq!(observation.metrics.destinations_created, 1);
     assert_eq!(observation.metrics.destinations_completed, 1);
-    assert!(observation.assert_collector_free_and_empty().is_ok());
+    assert!(observation.assert_empty().is_ok());
     Ok(())
 }
 

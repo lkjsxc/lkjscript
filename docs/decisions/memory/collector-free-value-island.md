@@ -11,8 +11,7 @@ collector-free native `byte-vector`/`byte-slice`/`byte-slice-mut` subset and the
 separate immutable `bytes` subset are **Current** for forced baseline and proof
 execution, alongside the scalar set and `stdio` capability to borrowed
 `input-stream`. This promotion does not include `path`, owned resources, mixed
-resource and unique groups, transitional legacy removal, or the complete
-island.
+resource and unique groups, owned native resources, or the complete island.
 
 The evaluator, VM, forced baseline, and forced proof tiers consume the same
 verified byte-vector and immutable-bytes operations with whole-group native
@@ -32,14 +31,15 @@ The minimum island is:
 The integrated cutover extends the island with owned `string`, internal
 borrowed UTF-8 views, `path`, and every eligible monomorphized nonrecursive
 product or enum whose transitive fields already belong to this set. General
-products, enums, list/pair nodes, captured closures, unknown generic arguments,
-and recursive aggregate SCCs remain outside.
+products and enums without complete structural witnesses, remaining list
+element witnesses, captured closures, unknown generic arguments, and
+transformed/nonregular recursive aggregate SCCs remain outside.
 
 ## Eligibility
 
 A function is eligible only when every parameter, result, local, constant,
 instruction result, call signature, runtime operation, owner, loan, allocation,
-and cleanup edge has an island plan. No legacy-traced value may be reachable.
+and cleanup edge has an island plan. No unsupported runtime value may be reachable.
 Eligibility is computed before source effects.
 
 Missing operation support is a verifier or engine error. VM, baseline JIT, and
@@ -55,26 +55,20 @@ unique/runtime call table. The invocation-owned noncollecting service contains a
 bounded
 `UniqueStore`, a generation-bearing owner set, and a bounded generation-bearing
 loan table. Exact owner, shared-loan, and exclusive-loan machine categories are
-opaque words, never collector references or integers. Every operation validates
+opaque words, never structural/invocation-region keys or integers. Every operation validates
 the key layout/generation, loan identity/range/kind, and exclusivity. Island
 native frames contain owners, loans, flags, supported borrowed resources,
-budgets, deadlines, outcomes, and transitions, but no collector root map,
-collection poll, heap dispatch, or barrier.
+budgets, deadlines, outcomes, and transitions, but no invocation-region
+runtime-value dispatch.
 
 ## Required Evidence
 
-The implemented native subset selects a separate noncollecting call state and
-closed dispatch table before entry. Its images contain no safepoints or root
-maps, and invocation does not construct `GcHeap` or `JitHeapServices`.
+The implemented native subset selects a separate unique call state and closed
+dispatch table before entry. Its images contain only typed frame homes and
+cleanup obligations.
 
-Each island execution records zero deltas for:
-
-- `GcHeap` allocations;
-- collections;
-- root materializations;
-- collector barriers;
-- VM fallback;
-- collector fallback.
+Each island execution records zero VM fallback/transitions and zero
+invocation-region runtime-value calls.
 
 Completion additionally requires zero untransferred unique owners, live loans,
 owned resource obligations, cleanup flags, and release backlog.
@@ -100,12 +94,16 @@ execution, and semantic process snapshots. Eligible forced tiers retain
 nonzero selected-tier entries, zero fallback, zero collector metadata/counters,
 and exact final root/loan/destination/release accounting.
 
-Recursive products and enums, persistent pairs/lists, captured closures, and
-unknown generic graphs remain outside the Current island. Completed leaf,
-aggregate, resource, and borrowed-host evidence does not promote those families
-or the whole runtime.
+Regular finite recursive aggregates, flat key-free list snapshots, and
+capacity-32 segmented invocation lists are Current. Unknown generic graphs,
+transformed recursion, borrowed or affine aggregate storage, and unsupported
+list elements remain compile-time blockers rather than fallback families.
+Captured closures remain outside this structural storage record.
 
-## Remaining Collector
+## Closed Runtime Cutover
 
-The existing collector remains only for exact registered non-island structural
-families. This capability does not promote the whole runtime to collector-free.
+The former migration collector and traced-family registry are deleted. Runtime
+storage has no tracing traversal, collecting safepoint, root map, collector
+barrier, collector service, configuration, metric, or fallback. The
+collector-free claim applies to Current production execution; unsupported
+ownership shapes still reject.

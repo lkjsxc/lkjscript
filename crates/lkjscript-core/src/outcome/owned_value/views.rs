@@ -13,6 +13,34 @@ impl OwnedValue {
         self.structural.is_none() && self.root.is_empty_list()
     }
 
+    pub fn list_len(&self) -> Option<usize> {
+        if self.root.is_empty_list() {
+            return Some(0);
+        }
+        let mut value = self.root;
+        let mut length = 0_usize;
+        while let Some(index) = value.as_owned_list().map(|index| index as usize) {
+            let node = self.lists.get(index)?;
+            length = length.checked_add(1)?;
+            value = node.tail;
+        }
+        value.is_empty_list().then_some(length)
+    }
+
+    pub fn list_i64(&self, requested: usize) -> Option<i64> {
+        let mut value = self.root;
+        let mut index = 0_usize;
+        while let Some(node_index) = value.as_owned_list().map(|value| value as usize) {
+            let node = self.lists.get(node_index)?;
+            if index == requested {
+                return node.head.as_i64();
+            }
+            index = index.checked_add(1)?;
+            value = node.tail;
+        }
+        None
+    }
+
     pub fn as_bool(&self) -> Option<bool> {
         if let Some(value) = self.as_structural() {
             return match &value.payload {

@@ -3,9 +3,9 @@ mod enum_metadata;
 mod structural;
 
 pub use chunk::{
-    Chunk, ConstId, Constant, FailureCleanupAction, FailureCleanupPlan, FailureCleanupRange,
-    FunctionProto, ProductFieldRef, ProductId, ProductMetadata, ResourceReturnKind,
-    UniqueValueKind,
+    runtime_product_contract_identity, Chunk, ConstId, Constant, FailureCleanupAction,
+    FailureCleanupPlan, FailureCleanupRange, FunctionProto, ProductFieldRef, ProductId,
+    ProductMetadata, RegionProductFieldKind, ResourceReturnKind, UniqueValueKind,
 };
 pub use enum_metadata::{
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,

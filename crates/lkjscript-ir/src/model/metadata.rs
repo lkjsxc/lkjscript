@@ -42,7 +42,6 @@ pub struct EnumFieldMetadata {
     pub name: String,
     pub ty: SsaType,
     pub indirect: bool,
-    pub traced: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

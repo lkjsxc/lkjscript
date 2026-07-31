@@ -41,19 +41,18 @@ fn forced_mode_executes_host_independent_allocation_and_recursion_without_fallba
         "main/\nsig/\ninputs/\n/inputs\noutput/\nstring\n/output\n/sig\nempty-string/\n/empty-string\n/main\n",
         "allocation.lkjscript",
     );
-    let mut config = JitConfig::default();
-    config.force_gc_before_allocation = true;
-    let executed = execute_forced(allocation.ssa(), &ExecutionConfig::default(), config)
-        .expect("source allocation reaches generated heap dispatch");
+    let executed = execute_forced(
+        allocation.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .expect("source allocation reaches generated structural dispatch");
     assert!(
         matches!(executed.outcome, ExecutionOutcome::Returned(value) if value.as_str() == Some(""))
     );
     assert_eq!(executed.stats.vm_fallbacks, 0);
-    assert_eq!(executed.stats.allocations, 0);
-    assert_eq!(executed.stats.collections, 0);
     assert_eq!(executed.stats.runtime_heap_attempts, 0);
     assert_eq!(executed.stats.runtime_heap_successes, 0);
-    assert_eq!(executed.stats.collector_runtime_invocations, 0);
     assert!(executed.stats.structural_runtime_calls > 0);
     assert_eq!(executed.stats.native_structural.live_roots, 0);
     assert!(executed.stats.native_entries > 0);
@@ -87,7 +86,7 @@ fn bytes_conversion_results_match_evaluator_vm_and_forced_native_fails_closed() 
             &ExecutionConfig::default(),
             JitConfig::default(),
         )
-        .expect_err("mixed traced string and unique bytes reject before native entry")
+        .expect_err("mixed structural string and unique bytes reject before native entry")
         .code(),
         FailureCode::UnsupportedType
     );
@@ -128,7 +127,7 @@ fn bytes_conversion_results_match_evaluator_vm_and_forced_native_fails_closed() 
     ] {
         assert_eq!(
             result
-                .expect_err("mixed traced string and unique bytes reject before native entry")
+                .expect_err("mixed structural string and unique bytes reject before native entry")
                 .code(),
             FailureCode::UnsupportedType
         );

@@ -142,9 +142,13 @@ The effects are:
 - `field`: value effects plus `ReadsMemory`;
 - `with-field`: original/replacement effects plus `ReadsMemory | Allocates`.
 
-Product values are GC-managed. Tracing visits every field. Recursive product
-types are allowed through existing indirection such as `Option` and `List`, but
-all runtime values remain finite and resource-bounded.
+The authoritative memory plan selects one closed ownership domain. Deterministic
+products use bounded flat structural images; selected acyclic products closed
+over copy-leaf lists use invocation-owned region records. Unknown generic,
+borrowed, affine, transformed-recursive, unresolved, and mixed-domain storage
+rejects rather than selecting a fallback. Construction, projection, immutable
+replacement, return, and teardown remain finite and resource-bounded. No
+product uses tracing storage.
 
 Products are not accepted by `equal-value`, `same-object`, or `list-equal`.
 Product equality begins only after a separate recursive-comparability decision;
@@ -153,17 +157,18 @@ identity is not silently substituted for value equality.
 
 The shared typed pipeline lowers products to:
 
-- immutable chunk product metadata with product and field names;
-- `MakeProduct` with a resolved product identity;
-- `LoadProductField` with a resolved product/field descriptor;
-- `WithProductField` with a resolved product/field descriptor.
+- immutable chunk metadata with content-addressed product and field identities;
+- structural destinations, field publication, projection, and whole-value
+  reconstruction for flat-image products; and
+- `MakeProduct`, `LoadProductField`, and `WithProductField` only for exact
+  invocation-region product metadata.
 
 Product metadata is not part of the mutable VM global table. A declaration must
 not consume a global value slot or execute an initializer.
 
 The VM validates descriptor indexes, product identities, field indexes, operand
-categories, and constructor arity even for malformed public chunks. Construction
-and replacement allocate through the ordinary GC heap path. The later general
-heap/resource-limit phase remains pending. Field access does not allocate.
-Display may use a stable opaque product marker until a
-separate formatting contract exists.
+categories, ownership routes, constructor arity, and process-boundary legality
+even for malformed public chunks. Construction and replacement preflight exact
+structural or invocation-region limits before publication. Field access may
+copy a structural projection but does not mutate the original. Display may use
+a stable opaque product marker until a separate formatting contract exists.

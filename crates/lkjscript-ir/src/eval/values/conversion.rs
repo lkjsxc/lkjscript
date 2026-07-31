@@ -29,6 +29,7 @@ pub(crate) fn as_numeric_f64(value: &EvalValue) -> std::result::Result<f64, Flow
     }
 }
 
+#[cfg(test)]
 pub(crate) fn list_values_equal(
     left: &[EvalValue],
     right: &[EvalValue],

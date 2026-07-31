@@ -125,13 +125,13 @@ fn merge_kind(left: Kind, right: Kind) -> Option<Kind> {
                     active_variant: right_variant,
                     ..
                 },
-            ) if left_representation == right_representation && left_variant == right_variant => {
-                Some(Kind::StructuralOwner {
-                    representation: left_representation,
-                    owner: u32::MAX,
-                    active_variant: left_variant,
-                })
-            }
+            ) if left_representation == right_representation => Some(Kind::StructuralOwner {
+                representation: left_representation,
+                owner: u32::MAX,
+                active_variant: (left_variant == right_variant)
+                    .then_some(left_variant)
+                    .flatten(),
+            }),
             (
                 Kind::StructuralOwnerRef {
                     representation: left_representation,
@@ -143,13 +143,13 @@ fn merge_kind(left: Kind, right: Kind) -> Option<Kind> {
                     active_variant: right_variant,
                     ..
                 },
-            ) if left_representation == right_representation && left_variant == right_variant => {
-                Some(Kind::StructuralOwnerRef {
-                    representation: left_representation,
-                    owner: u32::MAX,
-                    active_variant: left_variant,
-                })
-            }
+            ) if left_representation == right_representation => Some(Kind::StructuralOwnerRef {
+                representation: left_representation,
+                owner: u32::MAX,
+                active_variant: (left_variant == right_variant)
+                    .then_some(left_variant)
+                    .flatten(),
+            }),
             _ => None,
         }
     }

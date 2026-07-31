@@ -28,6 +28,8 @@ pub(crate) fn clone_plain_eval_value(value: &EvalValue) -> Result<EvalValue, Flo
             physical_tag: *physical_tag,
             payload,
         }),
+        EvalValue::SegmentedList(key) => Ok(EvalValue::SegmentedList(*key)),
+        EvalValue::RegionProduct(key) => Ok(EvalValue::RegionProduct(*key)),
         EvalValue::List(values) => clone_plain_values(values).map(EvalValue::List),
         EvalValue::Function(function) => Ok(EvalValue::Function(*function)),
         EvalValue::StructuralOwner(_)

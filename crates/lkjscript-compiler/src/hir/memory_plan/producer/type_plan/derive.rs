@@ -25,9 +25,9 @@ impl TypePlanner<'_> {
             }
             Type::Resource(_) => deterministic(MemoryAggregateMode::Affine, true, false),
             Type::List(inner) => self.derive_list(ty, inner)?,
-            Type::Param(_) => legacy(ty, MemoryBlockerReason::UnknownTypeParameter),
+            Type::Param(_) => unresolved(ty, MemoryBlockerReason::UnknownTypeParameter),
             Type::Fn { .. } | Type::Forall { .. } => {
-                legacy(ty, MemoryBlockerReason::CapturedClosure)
+                unresolved(ty, MemoryBlockerReason::CapturedClosure)
             }
             Type::Product(name) => self.derive_product(name)?,
             Type::Enum { id, arguments, .. } => self.derive_enum(id.bytes(), arguments)?,
@@ -37,16 +37,28 @@ impl TypePlanner<'_> {
     fn derive_list(&mut self, ty: &Type, inner: &Type) -> Result<DerivedType> {
         let child = self.intern(inner)?;
         let fact = self.fact(child)?.clone();
-        let mut result = legacy(ty, MemoryBlockerReason::ListPair);
+        if list_region_element(inner)
+            && fact.mode == MemoryAggregateMode::Copy
+            && fact.closure.class == MemoryClosureClass::Deterministic
+            && !fact.contains_borrow
+        {
+            return Ok(DerivedType {
+                mode: MemoryAggregateMode::ImmutableValue,
+                closure: MemoryClosureFact {
+                    class: MemoryClosureClass::RegionClosed,
+                    blocker_path: Vec::new(),
+                    blocker_type: Some(memory_type(ty)),
+                    blocker_reason: Some(MemoryBlockerReason::RegionDomainBoundary),
+                    mixed_direction: None,
+                },
+                contains_borrow: false,
+                contains_dynamic_owner: false,
+            });
+        }
+        let mut result = unresolved(ty, MemoryBlockerReason::ListElementWitnessRequired);
         result.mode = fact.mode;
         result.contains_borrow = fact.contains_borrow;
         result.contains_dynamic_owner = fact.contains_dynamic_owner;
-        if fact.contains_dynamic_owner {
-            result.closure.class = MemoryClosureClass::IllegalMixedBridge;
-            result.closure.blocker_path = vec![MemoryTypePathElement::TypeArgument(0)];
-            result.closure.mixed_direction =
-                Some(MemoryMixedBridgeDirection::LegacyContainsDeterministic);
-        }
         Ok(result)
     }
 
@@ -78,7 +90,19 @@ impl TypePlanner<'_> {
                 },
             ));
         }
-        Ok(fold_aggregate(children, false))
+        let region_capable = definition
+            .fields
+            .iter()
+            .zip(&children)
+            .all(|(field, (fact, _))| region_product_field(&field.ty, fact));
+        let derived = fold_aggregate(children, false, region_capable);
+        if derived.closure.class == MemoryClosureClass::Unresolved {
+            return Err(Error::msg(format!(
+                "LKJ-MEM-PRODUCT-UNRESOLVED product={name} blocker={:?} path={:?}",
+                derived.closure.blocker_reason, derived.closure.blocker_path
+            )));
+        }
+        Ok(derived)
     }
 
     fn derive_enum(&mut self, id: [u8; 32], arguments: &[Type]) -> Result<DerivedType> {
@@ -129,6 +153,27 @@ impl TypePlanner<'_> {
                 ));
             }
         }
-        Ok(fold_aggregate(children, false))
+        let derived = fold_aggregate(children, false, false);
+        if derived.closure.class == MemoryClosureClass::Unresolved {
+            return Err(Error::msg(format!(
+                "LKJ-MEM-ENUM-UNRESOLVED enum={} blocker={:?} path={:?}",
+                definition.name, derived.closure.blocker_reason, derived.closure.blocker_path
+            )));
+        }
+        Ok(derived)
     }
+}
+
+fn list_region_element(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::Never | Type::Unit | Type::Bool | Type::I64 | Type::F64
+    )
+}
+
+fn region_product_field(ty: &Type, fact: &MemoryTypeFact) -> bool {
+    matches!(ty, Type::Unit | Type::Bool | Type::I64 | Type::F64)
+        || matches!(ty, Type::List(element) if list_region_element(element))
+        || matches!(ty, Type::Product(_))
+            && fact.closure.class == MemoryClosureClass::RegionClosed
 }

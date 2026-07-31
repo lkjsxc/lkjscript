@@ -4,8 +4,10 @@
 
 ## Status
 
-**Mixed.** Current, Accepted Target, Deferred, Rejected, and historical evidence status follows the
-explicit labels in this capsule and its authority; this capsule cannot promote a capability.
+**Historical, superseded implementation record.** The remaining sections
+preserve the former collecting-frame implementation and are not Current. Typed
+frame homes, bounds, W^X installation, and structured cleanup survive under
+the parent authority; collection-specific mechanisms do not.
 
 ## Selected Implementation Contract
 

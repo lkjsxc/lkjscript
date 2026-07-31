@@ -56,7 +56,7 @@ fn explicit_clone_is_deep_and_semantic_export_contains_no_runtime_key(
     )?;
     runtime.byte_vector_mut(view)?[0] = 9;
     runtime.end_view(view)?;
-    assert_eq!(runtime.value(original, vector_type)?, &original_value);
+    assert_eq!(runtime.value(original, vector_type)?, original_value);
 
     let exported = runtime.export_semantic(copy, vector_type)?;
     assert_eq!(

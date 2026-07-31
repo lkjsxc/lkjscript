@@ -40,7 +40,7 @@ fn structural_decoder_rejects_descriptor_payload_and_enum_corruption() {
         StructuralKind::Enum,
         SemanticPayload::Enum {
             tag: 0,
-            active_payload: Vec::new(),
+            active_payload: Vec::new().into(),
         },
     );
     let mut duplicate_active_section = encoded(enumeration);

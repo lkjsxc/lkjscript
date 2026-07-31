@@ -7,11 +7,13 @@ state with explicit values passed through helpers.
 ## Status
 
 **Current.** The compiler, resolved typed HIR, verified SSA, evaluator,
-bytecode, disassembler, precise GC, reference VM, and supported native tier
-implement this contract. Brainfuck, terminal, and editor workload state is
-product-threaded; the obsolete mutable-singleton migration is complete. General
-product equality, ownership-generic storage, and broader host/native behavior
-remain outside this record. [Current State](../../current-state.md) is exact.
+validated bytecode, disassembler, reference VM, and supported native tiers
+implement this contract. Deterministic products use flat structural images or
+selected invocation regions; no product uses tracing storage. Brainfuck,
+terminal, and editor workload state is product-threaded, and the obsolete
+mutable-singleton migration is complete. General product equality,
+ownership-generic storage, and broader host/native behavior remain outside this
+record. [Current State](../../current-state.md) is exact.
 
 ## Authority And Status Vocabulary
 

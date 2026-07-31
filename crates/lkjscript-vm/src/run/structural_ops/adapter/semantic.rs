@@ -130,7 +130,7 @@ fn enum_semantic(
         value_type,
         SemanticPayload::Enum {
             tag: variant.physical_tag,
-            active_payload,
+            active_payload: active_payload.into(),
         },
     ))
 }

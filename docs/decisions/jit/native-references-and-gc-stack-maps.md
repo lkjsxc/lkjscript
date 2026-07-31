@@ -2,22 +2,19 @@
 
 ## Purpose
 
-Define the safety boundary that must be Current before generated code may
-allocate or carry heap references across a collecting safepoint.
+Retain the historical safety boundary used while generated code could carry
+traced references across collection calls.
 ## Status
 
-The closed machine-plan boundary and remaining host-independent traced
-allocation slice are **Current** on Linux x86-64. The native contract carries
-typed stable reference words, derives exact typed maps, registers generated
-frames, and reaches `GcHeap` through safe copied-root/typed-operation callbacks
-only for the registered legacy `enum`, `pair`, and `product` families. Dynamic
-strings, paths, and eligible nonrecursive products, enums, options, and results
-use compact structural roots instead and carry no GC stack-map obligation.
-Bytes and byte vectors use the separate noncollecting unique runtime.
-Reference-capable lowering remains Current for persistent lists and remaining
-legacy aggregate instantiations. Handle/host-capability allocation, lexical
-ownership references, and native/VM reference transitions remain **Accepted
-Targets**.
+**Superseded by the zero-family cutover.** The machine-plan and typed-frame
+parts remain Current, but exact liveness maps, root publication, collection
+callbacks, barriers, and the traced reference domain were deleted. Dynamic
+strings, paths, products, enums, options, results, and errors use structural
+storage. Selected products and copy-leaf lists use invocation-local region
+keys. Bytes and byte vectors use the unique runtime. Generated frames retain
+only typed homes, cleanup obligations, bounds, and structured outcome state.
+Handle/host-capability allocation, complete lexical ownership references, and
+additional native/VM ownership transitions remain **Accepted Targets**.
 
 ## Authority And Status Vocabulary
 

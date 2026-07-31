@@ -13,9 +13,9 @@ impl HeapCallDescriptor {
             Op::ProductValue { product, fields } => {
                 usize::from(*fields) == inputs.len()
                     && usize::from(*fields) <= 15
-                    && inputs.iter().copied().all(is_legacy_heap_value)
                     && u16::try_from(*product).is_ok()
-                    && result == Ty::Reference(Ref::Product(LayoutIdentity::product(*product)))
+                    && product_reference_matches(result, *product)
+                    && inputs.iter().copied().all(is_region_product_field)
             }
             Op::ProductField {
                 product,
@@ -24,10 +24,12 @@ impl HeapCallDescriptor {
             } => {
                 *field < 15
                     && u16::try_from(*product).is_ok()
-                    && is_legacy_heap_value(*field_type)
+                    && is_region_product_field(*field_type)
                     && result == *field_type
-                    && matches!(inputs, [Ty::Reference(Ref::Product(layout))]
-                        if *layout == LayoutIdentity::product(*product))
+                    && matches!(inputs, [input]
+                        if product_reference_matches(*input, *product)
+                            && (!matches!(input, Ty::Reference(Ref::RegionProduct(_, _)))
+                                || is_region_product_field(*field_type)))
             }
             Op::WithProductField {
                 product,
@@ -36,47 +38,26 @@ impl HeapCallDescriptor {
             } => {
                 *field < 15
                     && u16::try_from(*product).is_ok()
-                    && is_legacy_heap_value(*field_type)
-                    && matches!(inputs, [Ty::Reference(Ref::Product(layout)), replacement]
-                        if *layout == LayoutIdentity::product(*product) && replacement == field_type)
-                    && result == Ty::Reference(Ref::Product(LayoutIdentity::product(*product)))
-            }
-            Op::EnumValue { .. } | Op::EnumIsVariant { .. } | Op::EnumField { .. } => {
-                super::enum_heap_validity::enum_operation_types_are_valid(
-                    &self.operation,
-                    inputs,
-                    result,
-                )
+                    && is_region_product_field(*field_type)
+                    && matches!(inputs, [input, replacement]
+                        if product_reference_matches(*input, *product)
+                            && replacement == field_type
+                            && *input == result
+                            && (!matches!(input, Ty::Reference(Ref::RegionProduct(_, _)))
+                                || is_region_product_field(*field_type)))
             }
             Op::Cons => matches!(inputs, [payload, list]
-                if is_legacy_heap_value(*payload)
+                if is_region_product_field(*payload)
                     && *list == result
                     && matches!(result, Ty::Reference(Ref::List(_, element))
                         if element == payload.layout_identity())),
             Op::Car => matches!(inputs, [Ty::Reference(Ref::List(_, element))]
-                if is_legacy_heap_value(result) && *element == result.layout_identity()),
+                if is_region_product_field(result) && *element == result.layout_identity()),
             Op::Cdr => {
                 matches!(inputs, [list] if *list == result && matches!(result, Ty::Reference(Ref::List(_, _))))
             }
             Op::IsEmptyList => {
                 matches!(inputs, [Ty::Reference(Ref::List(_, _))]) && result == Ty::Bool
-            }
-            Op::F64FromI64Exact { error_type } => {
-                inputs == [Ty::I64]
-                    && matches!(result, Ty::Reference(Ref::Enum(_, _)))
-                    && matches!(error_type, Ty::Reference(Ref::Enum(_, _)))
-            }
-            Op::I64FromF64Exact { error_type } | Op::I64FromF64Trunc { error_type } => {
-                inputs == [Ty::F64]
-                    && matches!(result, Ty::Reference(Ref::Enum(_, _)))
-                    && matches!(error_type, Ty::Reference(Ref::Enum(_, _)))
-            }
-            Op::EqualValue => {
-                matches!(
-                    inputs,
-                    [left @ Ty::Reference(Ref::Enum(_, _)), right]
-                        if left == right
-                ) && result == Ty::Bool
             }
             Op::ListEqual => {
                 matches!(
@@ -91,13 +72,21 @@ impl HeapCallDescriptor {
     }
 }
 
-pub(super) const fn is_legacy_heap_value(value_type: ValueType) -> bool {
+fn product_reference_matches(value_type: ValueType, product: u32) -> bool {
+    matches!(
+        value_type,
+        ValueType::Reference(ReferenceType::RegionProduct(layout, _))
+            if layout == LayoutIdentity::product(product)
+    )
+}
+
+const fn is_region_product_field(value_type: ValueType) -> bool {
     matches!(
         value_type,
         ValueType::Unit
             | ValueType::Bool
             | ValueType::I64
             | ValueType::F64
-            | ValueType::Reference(_)
+            | ValueType::Reference(ReferenceType::List(_, _) | ReferenceType::RegionProduct(_, _))
     )
 }

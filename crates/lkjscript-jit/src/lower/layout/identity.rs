@@ -1,10 +1,10 @@
 use super::*;
 
 pub(in crate::lower) fn scalar_structural_type(
-    plan: lkjscript_ir::MemoryPlanId,
+    _plan: lkjscript_ir::MemoryPlanId,
     ty: &SsaType,
 ) -> Option<lkjscript_native::StructuralTypeIdentity> {
-    let (layout, kind) = match ty {
+    let (_layout, kind) = match ty {
         SsaType::Unit => (
             ValueType::Unit.layout_identity().get(),
             lkjscript_native::StructuralKind::Unit,
@@ -23,18 +23,15 @@ pub(in crate::lower) fn scalar_structural_type(
         ),
         _ => return None,
     };
+    let runtime_type = lkjscript_ir::runtime_structural_type(None, ty)
+        .ok()
+        .flatten()?;
     Some(lkjscript_native::StructuralTypeIdentity::new(
-        u64::from(layout),
-        semantic_word(plan, ty),
+        runtime_type.layout.get(),
+        runtime_type.semantic_type.get(),
         kind,
+        true,
     ))
-}
-
-pub(in crate::lower) fn semantic_word(plan: lkjscript_ir::MemoryPlanId, ty: &SsaType) -> u64 {
-    let mut bytes = b"lkjscript.jit.structural-semantic-type\0".to_vec();
-    bytes.extend_from_slice(&plan.bytes());
-    bytes.extend_from_slice(format!("{ty:?}").as_bytes());
-    identity_word(&bytes)
 }
 
 pub(in crate::lower) fn identity_word(bytes: &[u8]) -> u64 {

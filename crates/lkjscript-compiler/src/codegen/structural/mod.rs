@@ -57,7 +57,20 @@ pub(in crate::codegen) fn intern_aggregate_field(
     field: u16,
     result: &SsaType,
 ) -> Result<u16> {
-    let representation = BytecodeStructuralRepresentationId::new(representation.raw());
+    intern_aggregate_field_for_representation(
+        chunk,
+        BytecodeStructuralRepresentationId::new(representation.raw()),
+        field,
+        result,
+    )
+}
+
+pub(in crate::codegen) fn intern_aggregate_field_for_representation(
+    chunk: &mut Chunk,
+    representation: BytecodeStructuralRepresentationId,
+    field: u16,
+    result: &SsaType,
+) -> Result<u16> {
     let metadata = chunk
         .structural_representations
         .get(representation.index())

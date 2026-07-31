@@ -1,5 +1,4 @@
 # Authoritative Memory Plan
-
 ## Status
 
 <!-- LKJ-STATUS id=memory-plan status=current -->
@@ -25,13 +24,13 @@ legacy tracing because analysis failed.
 
 `MemoryPlanId` is content-addressed by the plan schema, source and HIR identity,
 function signatures, use/escape facts, value plans, borrow scopes, drop
-obligations, whole-place drop classes, and drop glue. Canonical encoding is ordered by dense semantic
-identity and never by map iteration, address, time, thread, or process state.
+obligations, whole-place drop classes, and drop glue. The
+[versioned encoding](canonical-memory-plan-encoding.md) uses exhaustive stable tags
+and dense order, never Rust formatting, maps, addresses, time, or process state.
 
-`ExecutableProgram` retains the exact ID and opaque verified plan authority gates
-SSA construction. Incorporating the plan ID into serialized SSA, bytecode,
-native-image, and package artifact identities remains accepted follow-on work;
-no artifact identity claim is made for that integration yet.
+`ExecutableProgram` retains the ID and opaque verified authority through SSA.
+Structural and region metadata derive bytecode/native identities from it. Exact
+package witness export remains accepted follow-on work.
 
 ## Value Axes
 
@@ -39,14 +38,14 @@ Each value plan records:
 
 - multiplicity: `copy`, `immutable-value`, `affine`, or `borrowed`;
 - aliasing: `unique`, `borrowed-shared`, `borrowed-exclusive`,
-  `static-shared`, `legacy-traced-shared`, or `external`;
-- escape: `local`, `caller`, `returned`, `captured`, `runtime`, `static`, or
-  `legacy-unknown`;
-- storage: `inline`, `static`, `stack`, `caller-destination`, `unique-slot`,
-  `borrowed-view`, `external-slot`, or `legacy-traced`;
-- destruction: `trivial`, `end-borrow`, `drop-glue`, `external-close`, or
-  `legacy-traced`;
-- identity: `value`, `external-resource`, or `legacy-object`;
+  `static-shared`, `region-shared`, `unresolved-shared`, or `external`;
+- escape: `local`, `caller`, `returned`, `captured`, `runtime`, or `static`;
+- storage: `inline`, `static`, `stack`, `caller-destination`, unique structural,
+  ordinary/sealed region, borrowed view, external resource, or
+  `unsupported-runtime`;
+- destruction: `trivial`, `end-borrow`, `drop-glue`, `external-close`,
+  `region-reset`, or `unsupported`;
+- identity: `value`, `external-resource`, or `unsupported-value`;
 - portability and contention;
 - checked allocation-failure behavior;
 - exact source and HIR origin.
@@ -81,12 +80,12 @@ Immutable transient call uses borrow where the signature permits it. Mutation
 requires an exclusive loan. Loans end after their last reachable use, not at
 function end.
 
-## Deterministic Aggregate Cutover Contract
+## Current Aggregate Cutover
 
-The integrated aggregate cutover extends each plan with separate domain and
+The Current aggregate island extends each plan with separate domain and
 root-projection facts. Domain/storage is exactly inline, static, stack, caller
 destination, unique owner, ordinary region, sealed region, borrowed view,
-external resource, or registered legacy tracing. A compact structural root is
+external resource, or an unsupported-runtime blocker. A compact structural root is
 a runtime projection of a typed domain root, never a storage class.
 
 Each planned value additionally records aggregate mode, transitive deterministic
@@ -96,27 +95,67 @@ Destinations are private write-once state. Stack, caller, unique, ordinary-regio
 and sealed-builder destinations are permitted only where construction and abort
 execute; complete initialization precedes publication.
 
-Aggregate mode is reconstructed recursively from monomorphized field types:
-`copy` requires every field to be physically and semantically trivial;
-`immutable-value` permits borrow, static identity, explicit structural copy, or
-sealed sharing; `affine` follows any unique owner, external owner, or exact drop
-obligation. All declaration variants participate in enum mode derivation, while
-only the active payload initializes or drops. Unknown type arguments and
-recursive declaration SCCs cannot select the first deterministic island.
+Aggregate mode comes from monomorphized fields. Copy products require copy fields and use flat `StructuralCopy` roots.
+`immutable-value` permits borrow, static identity, structural copy, or sealed
+sharing; `affine` follows a unique/external owner or drop obligation. Copy
+products execute structurally in all tiers and permit process codecs. A nonrecursive product containing a selected
+copy-leaf list transitively and only `unit`, `bool`, `i64`, `f64`, or already
+selected acyclic region-product fields uses `OrdinaryRegion`, `RegionHandleCopy`,
+no root, and a Current destination. Invocation records support exact calls and
+bulk teardown but no process codec or entry result. Structural-image, symbolic,
+owned, recursive, cyclic-region, or unsupported-list fields do not enter. VM copy-variable metadata is
+not a native or unknown generic witness. Only active enum payloads initialize.
 
-The first island is transitively closed. Inline, static, deterministic leaf, and
-eligible nested aggregate fields are legal. A list/pair, captured closure,
-unknown type argument, or other registered legacy-traced field keeps the whole
-aggregate traced. A traced object cannot own a deterministic dynamic root, and
-a deterministic domain cannot own or borrow a collector-dependent value.
-Producer flags do not establish this closure: the verifier reconstructs it from
-the resolved type graph.
+The first island is transitively closed. Structural images admit eligible nested
+aggregates; ordinary-region products admit only the closed acyclic fields above. Missing
+product list witnesses, captures, unknown arguments, or unsupported siblings
+reject rather than select storage. Unsupported runtime values cannot own or
+borrow deterministic roots. The verifier reconstructs closure from the type
+graph.
 
-## Legacy Tracing
+Every Current `list<T>` uses a capacity-32 segmented session region and exact
+witness. Handles need no root or per-value drop; prepends retain the allocation
+charge. Selection accepts exact copy leaves. Other lists remain
+`ListElementWitnessRequired`-blocked while their container still uses segments.
 
-`legacy-traced` is valid only for a family named by the tracing ratchet and an
-exact independently reconstructed closure blocker. An island value cannot use
-`legacy-unknown`, `legacy-traced-shared`, or `legacy-traced`. Unknown families,
+## Accepted Final Structural Extension
+
+The final cutover resolves the remaining blockers without relaxing verification. Every exact instantiated type has a
+content-addressed memory witness. Monomorphic call sites specialize witnesses
+away; residual polymorphic declarations carry hidden static witness parameters.
+A missing or mismatched witness is a compile error, never a tracing selection.
+
+A witness closes semantic type and runtime layout identity, aggregate mode,
+size/alignment, storage/domain class, move/borrow/share/clone behavior, drop and
+side-drop behavior, equality operation eligibility, process-codec eligibility,
+list-element storage, portability, contention, and checked sizing. Recursive
+witness cycles are static declaration metadata and never runtime ownership
+edges. Package interfaces export exact hidden witness requirements.
+
+Product/enum declaration SCCs are recomputed after substitution. Their least
+stable mode is derived from nonrecursive fields and exact arguments while
+same-SCC fields become local structural-image edges. One recursive construction
+uses one private destination/region plan and publishes only after complete
+initialization. Ordinary values are finite and acyclic; a back edge to an
+initializing node is rejected. Unsupported affine recursive ownership is a
+structured compile error.
+
+Lists use an exact element witness and a segmented immutable domain plan.
+Accepted list elements are `copy` or `immutable-value`; affine resource or unique
+mutable elements are rejected until a complete linear collection contract
+exists. HIR records segment construction, source/tail ownership, nonescaping
+borrow versus escaping owner, seal point, equality witness, and failure cleanup.
+
+The producer and independent verifier separately reconstruct witness identity,
+SCC fixed points, local-edge legality, dependency DAGs, list eligibility, and
+all ownership transitions before SSA. No accepted final plan contains
+`UnsupportedRuntime`, `Unsupported`, `CutoverRequired`,
+`ListElementWitnessRequired`, `RecursiveDeclarationScc`, or `UnknownTypeParameter`.
+
+## Unsupported Runtime Values
+
+`unsupported-runtime`, `unresolved-shared`, and `unsupported` destruction are
+blocker evidence only and never executable storage modes. Unknown families,
 analysis failure, and stale plan contracts fail before effects.
 
 ## Budgets
@@ -135,9 +174,10 @@ The verifier independently traverses HIR and proves dense identities, complete
 expression/parameter/result/place/loan/constant/call coverage, exact function
 and direct-call memory signatures, use accounting, origin/type/effect agreement,
 storage-axis eligibility, drop-glue/type agreement, allocation-failure facts,
-and exact legacy-tracing registration. It independently requires byte-vector
+and exact unsupported-runtime rejection. It independently requires byte-vector
 owners to use deterministic `unique-slot` storage and capture-free function and
-symbol artifacts to use static trivial storage; none may claim a traced family.
+symbol artifacts to use static trivial storage; none may claim executable
+storage without a valid witness.
 Producer failure or verifier mismatch is
 a compile error and never selects tracing.
 

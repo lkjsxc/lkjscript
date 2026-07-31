@@ -11,14 +11,33 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
                 "SSA product IDs are inconsistent during bytecode lowering",
             ));
         }
+        let region = program
+            .region_products
+            .iter()
+            .any(|metadata| metadata.product == product.id);
         chunk.products.push(BytecodeProductMetadata {
             id: BytecodeProductId::new(product.id.raw()),
+            identity: lkjscript_core::RuntimeLayoutId::new(
+                lkjscript_ir::runtime_product_identity(program, product.id)
+                    .map_err(|error| Error::msg(error.to_string()))?
+                    .bytes(),
+            ),
+            region,
             name: product.name.clone(),
             fields: product
                 .fields
                 .iter()
                 .map(|field| field.name.clone())
                 .collect(),
+            region_fields: if region {
+                product
+                    .fields
+                    .iter()
+                    .map(|field| region_product_field_kind(program, &field.ty))
+                    .collect::<Result<Vec<_>>>()?
+            } else {
+                Vec::new()
+            },
         });
     }
     install_structural_metadata(&mut chunk, program)?;
@@ -103,7 +122,13 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     chunk.main.memory_plan = main_proto.memory_plan;
     chunk.main.parameter_structurals = main_proto.parameter_structurals;
     chunk.main.parameter_structural_places = main_proto.parameter_structural_places;
+    chunk.main.parameter_type_variables = main_proto.parameter_type_variables;
+    chunk.main.parameter_copy_kinds = main_proto.parameter_copy_kinds;
+    chunk.main.return_copy_kind = main_proto.return_copy_kind;
+    chunk.main.parameter_region_products = main_proto.parameter_region_products;
+    chunk.main.return_region_product = main_proto.return_region_product;
     chunk.main.return_structural = main_proto.return_structural;
+    chunk.main.return_type_variable = main_proto.return_type_variable;
     chunk.main.parameter_resources = main_proto.parameter_resources;
     chunk.main.parameter_resource_places = main_proto.parameter_resource_places;
     chunk.main.return_resource = main_proto.return_resource;
@@ -124,4 +149,33 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
             functions: links,
         },
     ))
+}
+
+fn region_product_field_kind(
+    program: &lkjscript_ir::Program,
+    ty: &SsaType,
+) -> Result<RegionProductFieldKind> {
+    Ok(match ty {
+        SsaType::Unit => RegionProductFieldKind::Unit,
+        SsaType::Bool => RegionProductFieldKind::Bool,
+        SsaType::I64 => RegionProductFieldKind::I64,
+        SsaType::F64 => RegionProductFieldKind::F64,
+        SsaType::List(inner)
+            if matches!(
+                inner.as_ref(),
+                SsaType::Unit | SsaType::Bool | SsaType::I64 | SsaType::F64
+            ) =>
+        {
+            RegionProductFieldKind::List
+        }
+        SsaType::Product(product)
+            if program
+                .region_products
+                .iter()
+                .any(|metadata| metadata.product == *product) =>
+        {
+            RegionProductFieldKind::Product(lkjscript_core::ProductId::new(product.raw()))
+        }
+        _ => return Err(Error::msg("region product field route is unsupported")),
+    })
 }

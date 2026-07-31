@@ -1,12 +1,11 @@
 use super::*;
 
-/// One generic heap-dispatch site whose arguments and result are copied only
+/// One generic runtime-value dispatch site whose arguments and result are copied only
 /// through verified generated-frame homes.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HeapRuntimeSite {
     pub(super) id: u32,
     pub(super) function: FunctionId,
-    pub(super) safepoint: u32,
     pub(super) descriptor: HeapCallDescriptor,
     pub(super) arguments: Vec<FrameHome>,
     pub(super) result: FrameHome,
@@ -22,11 +21,6 @@ impl HeapRuntimeSite {
     #[must_use]
     pub const fn function(&self) -> FunctionId {
         self.function
-    }
-
-    #[must_use]
-    pub const fn safepoint(&self) -> u32 {
-        self.safepoint
     }
 
     #[must_use]
@@ -48,4 +42,36 @@ impl HeapRuntimeSite {
     pub const fn source(&self) -> Option<SourceOrigin> {
         self.source
     }
+}
+
+pub(super) fn verify_heap_sites(
+    image: &InstallableImage,
+    runtime_calls: &std::collections::HashSet<RuntimeCallSlot>,
+) -> Result<(), ImageIntegrityError> {
+    for (expected_id, site) in image.heap_runtime_sites.iter().enumerate() {
+        let frame = image
+            .frames
+            .iter()
+            .find(|frame| frame.function == site.function)
+            .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
+        if site.id as usize != expected_id
+            || image.execution_domain != NativeExecutionDomain::InvocationRegion
+            || site.arguments.len() != site.descriptor.input_types().len()
+            || site
+                .arguments
+                .iter()
+                .zip(site.descriptor.input_types())
+                .any(|(home, expected)| home.value_type != *expected || !frame.homes.contains(home))
+            || site.result.value_type != site.descriptor.result_type()
+            || !frame.homes.contains(&site.result)
+            || !site.descriptor.canonical_facts_are_valid()
+        {
+            return Err(ImageIntegrityError::HeapRuntimeSite);
+        }
+    }
+    if image.heap_runtime_sites.is_empty() == runtime_calls.contains(&RuntimeCallSlot::HeapDispatch)
+    {
+        return Err(ImageIntegrityError::HeapRuntimeSite);
+    }
+    Ok(())
 }

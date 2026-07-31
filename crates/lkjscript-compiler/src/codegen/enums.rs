@@ -25,7 +25,6 @@ pub(in crate::codegen) fn install_enum_metadata(
                         .map(|field| BytecodeEnumFieldMetadata {
                             id: BytecodeVariantFieldId::new(field.id.bytes()),
                             name: field.name.clone(),
-                            traced: field.traced,
                         })
                         .collect(),
                 })

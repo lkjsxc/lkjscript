@@ -31,13 +31,16 @@ impl JitSession {
         &mut self,
         function: FunctionId,
     ) -> Result<SemanticValue, EngineError> {
-        self.returned_structural.take().ok_or_else(|| {
-            EngineError::new(
-                FailureCode::InvocationFailure,
-                Some(function),
-                "native structural return has no exported semantic tree",
-            )
-        })
+        self.returned_structural
+            .take()
+            .map(|returned| returned.0)
+            .ok_or_else(|| {
+                EngineError::new(
+                    FailureCode::InvocationFailure,
+                    Some(function),
+                    "native structural return has no exported semantic tree",
+                )
+            })
     }
 
     pub(super) fn invoke_collector_free(
@@ -128,7 +131,9 @@ impl JitSession {
             None => {}
         }
         match structural_export {
-            Some(Ok(value)) => self.returned_structural = Some(value),
+            Some(Ok(value)) => {
+                self.returned_structural = Some(ReturnedStructuralValue(value));
+            }
             Some(Err(_)) => {
                 return Err(EngineError::new(
                     FailureCode::InvocationFailure,

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use crate::{Chunk, Error, Result, MAX_PRODUCT_FIELDS};
 
@@ -11,6 +11,23 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
                 product.id.raw()
             )));
         }
+        if !product.identity.is_resolved() {
+            return Err(Error::msg(format!(
+                "product metadata {index} has an unresolved runtime identity"
+            )));
+        }
+        if product.region {
+            let plan = chunk.memory_plan.ok_or_else(|| {
+                Error::msg("region-product metadata lacks a canonical memory plan")
+            })?;
+            let expected = crate::runtime_product_contract_identity(plan, &product.name)?;
+            if product.identity != expected {
+                return Err(Error::msg(format!(
+                    "product metadata {index} has a noncanonical region identity"
+                )));
+            }
+        }
+        metadata_bytes = checked_add(metadata_bytes, 33)?;
         if product.name.is_empty() {
             return Err(Error::msg(format!(
                 "product metadata {index} has an empty name"
@@ -22,6 +39,28 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
                 product.name
             )));
         }
+        if (product.region && product.region_fields.len() != product.fields.len())
+            || (!product.region && !product.region_fields.is_empty())
+        {
+            return Err(Error::msg(format!(
+                "product metadata {} has inconsistent region field routes",
+                product.name
+            )));
+        }
+        let region_bytes = product
+            .region_fields
+            .iter()
+            .try_fold(0_usize, |bytes, route| {
+                checked_add(
+                    bytes,
+                    if matches!(route, crate::RegionProductFieldKind::Product(_)) {
+                        3
+                    } else {
+                        1
+                    },
+                )
+            })?;
+        metadata_bytes = checked_add(metadata_bytes, region_bytes)?;
         if product.fields.len() > MAX_PRODUCT_FIELDS {
             return Err(Error::msg(format!(
                 "product metadata {} exceeds field limit {MAX_PRODUCT_FIELDS}",
@@ -44,6 +83,28 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
                 )));
             }
             metadata_bytes = checked_add(metadata_bytes, field.len())?;
+        }
+    }
+
+    validate_region_graph(chunk)?;
+
+    for proto in std::iter::once(&chunk.main).chain(&chunk.protos) {
+        for id in proto
+            .parameter_region_products
+            .iter()
+            .copied()
+            .flatten()
+            .chain(proto.return_region_product)
+        {
+            let valid = chunk
+                .products
+                .get(id.index())
+                .is_some_and(|product| product.id == id && product.region);
+            if !valid {
+                return Err(Error::msg(
+                    "region-product signature references non-region product metadata",
+                ));
+            }
         }
     }
 
@@ -77,6 +138,53 @@ pub(super) fn validate(chunk: &Chunk, mut metadata_bytes: usize) -> Result<usize
         }
     }
     Ok(metadata_bytes)
+}
+
+fn validate_region_graph(chunk: &Chunk) -> Result<()> {
+    let mut edges = vec![Vec::new(); chunk.products.len()];
+    let mut indegree = vec![0_usize; chunk.products.len()];
+    let mut region_count = 0_usize;
+    for product in chunk.products.iter().filter(|product| product.region) {
+        region_count = region_count.saturating_add(1);
+        for route in &product.region_fields {
+            let crate::RegionProductFieldKind::Product(target) = route else {
+                continue;
+            };
+            let valid = chunk
+                .products
+                .get(target.index())
+                .is_some_and(|metadata| metadata.id == *target && metadata.region);
+            if !valid {
+                return Err(Error::msg(
+                    "region-product field references non-region product metadata",
+                ));
+            }
+            edges[product.id.index()].push(target.index());
+            indegree[target.index()] = indegree[target.index()].saturating_add(1);
+        }
+    }
+    let mut ready: VecDeque<_> = chunk
+        .products
+        .iter()
+        .filter(|product| product.region && indegree[product.id.index()] == 0)
+        .map(|product| product.id.index())
+        .collect();
+    let mut visited = 0_usize;
+    while let Some(source) = ready.pop_front() {
+        visited = visited.saturating_add(1);
+        for target in &edges[source] {
+            indegree[*target] = indegree[*target].saturating_sub(1);
+            if indegree[*target] == 0 {
+                ready.push_back(*target);
+            }
+        }
+    }
+    if visited != region_count {
+        return Err(Error::msg(
+            "region-product metadata dependency graph is cyclic",
+        ));
+    }
+    Ok(())
 }
 
 fn checked_add(left: usize, right: usize) -> Result<usize> {

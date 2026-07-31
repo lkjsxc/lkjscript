@@ -21,46 +21,14 @@ fn construction(
     instruction: DecodedInstruction,
     state: &mut State,
 ) -> Result<()> {
-    let index = instruction_operand(proto, instruction)?;
-    let descriptor = chunk.enum_constructions.get(index).ok_or_else(|| {
-        instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "enum constructor is missing",
-        )
-    })?;
-    let definition = definition(chunk, descriptor.enum_id, proto, instruction)?;
-    if definition.layout != descriptor.layout
-        || usize::from(descriptor.substitution_arity)
-            != usize::from(definition.type_parameter_count)
-    {
-        return Err(instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "enum construction layout/substitution mismatch",
-        ));
-    }
-    let variant = definition
-        .variants
-        .iter()
-        .find(|item| item.id == descriptor.variant)
-        .ok_or_else(|| {
-            instruction_error(
-                proto,
-                instruction.op(),
-                instruction.offset(),
-                "enum construction variant is missing",
-            )
-        })?;
-    for _ in 0..variant.fields.len() {
-        let _field = pop(state, proto, instruction)?;
-    }
-    state
-        .stack
-        .push(Kind::Enum(definition.id, Some(variant.id)));
-    Ok(())
+    let _index = instruction_operand(proto, instruction)?;
+    let _ = (chunk, state);
+    Err(instruction_error(
+        proto,
+        instruction.op(),
+        instruction.offset(),
+        "enum construction is unsupported without structural metadata and operations",
+    ))
 }
 
 fn variant_test(
@@ -93,15 +61,15 @@ fn variant_test(
         ));
     }
     let actual = pop(state, proto, instruction)?;
-    if actual != Kind::Any
-        && !matches!(actual, Kind::Enum(id, _) if id == definition.id)
-        && !matches!(actual, Kind::ResourceResult { .. } if definition.id.bytes() == crate::RESULT_ID)
-    {
+    if !matches!(
+        actual,
+        Kind::ResourceResult { .. } if definition.id.bytes() == crate::RESULT_ID
+    ) {
         return Err(instruction_error(
             proto,
             instruction.op(),
             instruction.offset(),
-            "enum identity mismatch",
+            "enum variant test is unsupported without structural metadata and operations",
         ));
     }
     state.stack.push(Kind::Bool);
@@ -150,13 +118,10 @@ fn projection(
         ));
     }
     let actual = pop(state, proto, instruction)?;
-    let active = match actual {
-        Kind::Any => true,
-        Kind::Enum(id, None) => id == definition.id,
-        Kind::Enum(id, Some(active)) => id == definition.id && active == variant.id,
-        Kind::ResourceResult { .. } => definition.id.bytes() == crate::RESULT_ID,
-        _ => false,
-    };
+    let active = matches!(
+        actual,
+        Kind::ResourceResult { .. } if definition.id.bytes() == crate::RESULT_ID
+    );
     if !active {
         return Err(instruction_error(
             proto,

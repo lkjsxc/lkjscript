@@ -158,7 +158,7 @@ pub(super) fn validate_instruction_operands(
                     );
                 }
             }
-            Op::StructuralAggregateFieldBorrow => {
+            Op::StructuralAggregateFieldBorrow | Op::StructuralAggregateFieldCopy => {
                 let index = operand_index(operand, proto, op, at)?;
                 if index >= chunk.structural_aggregate_fields.len() {
                     return operand_error(

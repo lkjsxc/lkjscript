@@ -35,6 +35,7 @@ pub struct Function {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub memory: StructuralMemoryMetadata,
+    pub region_products: Vec<RegionProductMetadata>,
     pub sources: Vec<SourceMetadata>,
     pub products: Vec<ProductMetadata>,
     pub enums: Vec<EnumMetadata>,

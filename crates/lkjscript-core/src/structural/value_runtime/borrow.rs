@@ -2,7 +2,7 @@ use std::num::NonZeroU32;
 
 use super::super::{RootKey, StructuralBorrow, StructuralValueKey};
 use super::{
-    select, SemanticPayload, StructuralEventKind, StructuralObject, StructuralProjection,
+    LocalNodeId, StructuralEventKind, StructuralNode, StructuralObject, StructuralProjection,
     StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
     StructuralViewKey,
 };
@@ -10,6 +10,7 @@ use super::{
 #[derive(Debug)]
 pub(super) struct ViewRecord {
     pub root: RootKey,
+    pub node: LocalNodeId,
     pub loan: StructuralBorrow,
     pub projection: StructuralProjection,
 }
@@ -37,12 +38,12 @@ impl StructuralValueRuntime {
         }
         let root = self.resolve_root(key, root_type)?;
         let object = self.objects.get(root)?;
-        let StructuralObject::Owned { value, .. } = object else {
+        let StructuralObject::Owned { image, .. } = object else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
-        self.require_type(value.value_type, root_type)?;
-        let selected = select(value, projection.path())?;
-        self.require_type(selected.value_type, projection.expected())?;
+        self.require_type(image.root().value_type(), root_type)?;
+        let selected = image.selected_node(projection.path())?;
+        self.require_type(selected.value_type(), projection.expected())?;
         self.validate_projection(selected, &projection)?;
         let loan = if exclusive {
             self.roots.borrow_exclusive(key)?
@@ -51,6 +52,7 @@ impl StructuralValueRuntime {
         };
         let record = ViewRecord {
             root,
+            node: selected.id(),
             loan,
             projection,
         };
@@ -82,15 +84,18 @@ impl StructuralValueRuntime {
 
     fn validate_projection(
         &self,
-        value: &super::SemanticValue,
+        value: StructuralNode<'_>,
         projection: &StructuralProjection,
     ) -> Result<(), StructuralValueError> {
         let StructuralProjection::Utf8 { start, end, .. } = projection else {
             return Ok(());
         };
-        let SemanticPayload::String(bytes) = &value.payload else {
+        let super::super::image::StructuralNodeView::Bytes(bytes) = value.payload() else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
+        if value.value_type().kind != super::StructuralKind::String {
+            return Err(StructuralValueError::WrongPayloadKind);
+        }
         let text = std::str::from_utf8(bytes).map_err(|_| StructuralValueError::InvalidUtf8)?;
         let start = usize::try_from(*start).map_err(|_| StructuralValueError::InvalidRange)?;
         let end = usize::try_from(*end).map_err(|_| StructuralValueError::InvalidRange)?;

@@ -5,6 +5,9 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
         if let Some(error) = self.structural_initialization_error.take() {
             return Err(error);
         }
+        if let Some(error) = self.region_product_initialization_error.take() {
+            return Err(error);
+        }
         if self.inputs.capabilities != self.chunk.required_capabilities() {
             return Err(Error::msg(format!(
                 "execution capability mismatch: required {:?}, received {:?}",
@@ -22,6 +25,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 usize::from(self.chunk.main().unique_places)
             ],
             borrowed_resources: Vec::new(),
+            return_type_variable_representation: None,
         });
         for kind in &self.inputs.capabilities {
             self.stack.push(Value::from_capability(*kind));
@@ -54,9 +58,6 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                     return Err(error);
                 }
                 self.fuel_remaining -= 1;
-            }
-            if self.arena.needs_collect() {
-                self.collect();
             }
             if let Err(error) = self.step() {
                 self.restore_structural_handoffs();

@@ -44,7 +44,7 @@ fn structural_decoder_rejects_every_exact_bound_plus_one() {
         value(
             1,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![leaf(2)]),
+            SemanticPayload::Product(vec![leaf(2)].into()),
         ),
         limits,
     );
@@ -55,7 +55,7 @@ fn structural_decoder_rejects_every_exact_bound_plus_one() {
         value(
             3,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![leaf(4), leaf(5)]),
+            SemanticPayload::Product(vec![leaf(4), leaf(5)].into()),
         ),
         limits,
     );
@@ -66,7 +66,7 @@ fn structural_decoder_rejects_every_exact_bound_plus_one() {
         value(
             6,
             StructuralKind::Product,
-            SemanticPayload::Product(vec![leaf(7), leaf(8)]),
+            SemanticPayload::Product(vec![leaf(7), leaf(8)].into()),
         ),
         limits,
     );
