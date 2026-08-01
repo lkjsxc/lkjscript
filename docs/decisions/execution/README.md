@@ -11,3 +11,4 @@ label later execution modes as Accepted Targets rather than capabilities.
 - [bytecode VM](bytecode-vm.md)
 - [Linux x86-64 native backend](linux-x86-64-native-backend.md)
 - [measured execution portfolio](execution-portfolio.md)
+- [polymorphic deterministic value plane](polymorphic-value-plane/README.md)
