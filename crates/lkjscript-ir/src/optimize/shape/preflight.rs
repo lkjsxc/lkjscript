@@ -6,6 +6,7 @@ pub(crate) fn preflight_program(
     budget: &mut Budget,
 ) -> Result<ProgramShape, OptimizationError> {
     let mut counter = ShapeCounter::new(budget);
+    super::memory::preflight(program, &mut counter)?;
     counter.add_bounded(
         ShapeField::Functions,
         u64::try_from(program.functions.len()).map_err(|_| budget_error())?,

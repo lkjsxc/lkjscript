@@ -3,7 +3,9 @@ use super::equality_numeric::exact_numeric_instruction_kind_equal;
 use crate::{Constant, Function, Instruction, InstructionKind, Program};
 
 pub(crate) fn exact_program_equal(left: &Program, right: &Program) -> bool {
-    left.sources == right.sources
+    left.memory == right.memory
+        && left.region_products == right.region_products
+        && left.sources == right.sources
         && left.products == right.products
         && left.enums == right.enums
         && left.traits == right.traits

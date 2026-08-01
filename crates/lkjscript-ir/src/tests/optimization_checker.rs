@@ -50,6 +50,43 @@ fn enum_metadata_is_proof_preserved_exactly() {
 }
 
 #[test]
+fn structural_memory_metadata_is_proof_preserved_exactly() {
+    let input = verify(one_block_program()).expect("verify memory metadata proof input");
+    let optimized = optimize(&input, OptimizationLimits::default()).expect("optimize program");
+
+    let mut forged = optimized.program().clone();
+    forged.memory.plan = MemoryPlanId::new([1; 32]);
+    let error = verify_optimization(
+        &input,
+        forged,
+        optimized.certificate().clone(),
+        OptimizationLimits::default(),
+    )
+    .expect_err("memory metadata forgery must fail exact reconstruction");
+    assert_eq!(error.code(), OptimizationFailureCode::CandidateMismatch);
+}
+
+#[test]
+fn region_product_metadata_is_proof_preserved_exactly() {
+    let input = verify(one_block_program()).expect("verify region-product proof input");
+    let optimized = optimize(&input, OptimizationLimits::default()).expect("optimize program");
+
+    let mut forged = optimized.program().clone();
+    forged.region_products.push(RegionProductMetadata {
+        product: ProductId::new(0),
+        identity: RuntimeLayoutId::new([1; 32]),
+    });
+    let error = verify_optimization(
+        &input,
+        forged,
+        optimized.certificate().clone(),
+        OptimizationLimits::default(),
+    )
+    .expect_err("region-product metadata forgery must fail exact reconstruction");
+    assert_eq!(error.code(), OptimizationFailureCode::CandidateMismatch);
+}
+
+#[test]
 fn independent_checker_rejects_plausible_xor_and_commutative_gvn_discovery_bugs() {
     let mut xor = one_block_program();
     xor.functions[0].blocks[0].instructions = vec![

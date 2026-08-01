@@ -1,4 +1,5 @@
 mod counter;
+mod memory;
 mod model;
 mod preflight;
 pub(crate) use model::*;
