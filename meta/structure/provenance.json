@@ -151,6 +151,18 @@
       "class": "immutable-fixture",
       "sha256": "a1a5ae28621091381d93b068ba4c62daba74afbc5febc710722af2f7cd3876da",
       "generator": null
+    },
+    {
+      "path": "src/examples/polymorphic-transport/history/lkjscript.lock.json",
+      "class": "generated-mutable",
+      "sha256": "23fbc6f4b6f0eaccb7a17c0846a3db4c034e272774b901ac0bf3b1d0faec4bb5",
+      "generator": "lkjscript package lock; canonical polymorphic-history dependency graph"
+    },
+    {
+      "path": "src/examples/polymorphic-transport/lkjscript.lock.json",
+      "class": "generated-mutable",
+      "sha256": "539f6b768bcd2f60ddba1024729c77dcd4a15ccce4f2122c6f061b4ff02af219",
+      "generator": "lkjscript package lock; canonical polymorphic-history consumer graph"
     }
   ]
 }

@@ -30,12 +30,12 @@ this file retains earlier substrate commands as historical evidence.
   reconstructed by the verifier over the resolved type and declaration set.
   Concrete regular recursive enums derive SCC closure; transformed, wrapped, or
   affine recursion fails. Deterministic products permit process codecs; residual
-  generic hidden-witness ABI and package export are not Current.
+  witness/package export is not Current; see [experimental evidence](memory/polymorphic-value-plane-evidence.md).
 - Acyclic products closed over copy lists, scalar leaves, and selected region
   products use bounded records under canonical plan/name identities. All four tiers
   construct, project, update, call, and bulk-reset them. Native dispatch is
   noncollecting: no stack map, root, barrier, or collection call exists. Process
-  codecs and main returns reject keys; see [evidence](invocation-region-product-evidence.md).
+  codecs and main returns reject keys; see [evidence](memory/invocation-region-product-evidence.md).
 - Copy-leaf lists use capacity-32 invocation segments; retained tails share
   immutable entries and no engine allocates pairs. Prepends retain allocation
   limits and bulk teardown. Flat snapshots reject unreachable tables and cycles;
@@ -56,7 +56,7 @@ this file retains earlier substrate commands as historical evidence.
 - Sealed builders are private and unique. Batch seal validates a deterministic
   dependency graph and every transitive release-work bound before one atomic,
   allocation-free commit. Failure returns only still-valid builders. Published
-  roots use checked non-atomic region-level owner counts.
+  region-owner traffic is identical for 8 and 2,048 nodes; payloads carry no counts.
 - Weak sealed roots never retain. Upgrade is generation/layout/type checked.
   Structured borrows block final release; cascading release follows dependency and side-drop ledgers.
 - Typed pools bind pool, slot, generation, layout, semantic type, and Rust type.

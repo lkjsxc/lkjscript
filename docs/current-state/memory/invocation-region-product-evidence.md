@@ -1,6 +1,6 @@
 # Invocation-Region Product Evidence
 
-[Authority](../decisions/memory/authoritative-memory-plan.md)
+[Authority](../../decisions/memory/authoritative-memory-plan.md)
 
 ## Status
 

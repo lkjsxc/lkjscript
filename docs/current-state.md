@@ -68,9 +68,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   private names, and path/symlink escape are rejected.
 - Equal declaration spellings coexist in distinct module scopes; qualification
   occurs once before HIR and runtime metrics retain source-visible names.
-- `lkjscript.package.json` and canonical `lkjscript.lock.json` bind exact
-  modules, exports, local dependency hashes, targets, package content, and full
-  language/source/module/package contract identities.
+- Package manifests and locks bind exact modules, dependencies, targets, content, and contract identities.
+  Experimental generic locks add interface and transport-requirement digests without promotion.
 - `lkjscript package lock` writes atomically. `package check`, `run`, and
   `disasm` reject missing, noncanonical, stale, or mismatched locks. Registry,
   network, home-directory, and environment fallback resolution do not exist.
@@ -135,9 +134,12 @@ Git history. They do not provide aliases or acceptance fallbacks.
   semantic authority.
   Every executable program retains a platform-bound canonical HIR memory plan
   covering every result, place, loan, constant, and call without Rust formatting.
-  Concrete structural witness identities reach SSA and validated bytecode, which
-  reject zero or duplicate identities. Independent production and verification
-  still precede SSA; the direct-affine inventory remains derived evidence.
+  Concrete SSA/bytecode witnesses reject zero or duplicate identities.
+  An experimental direct naked-parameter transport slice verifies missing,
+  cyclic, stale, and bounded routes through HIR, SSA, evaluator, and VM.
+  Forced native tiers use one bounded exact identity specialization with zero fallback.
+  A locked 4,096-operation nested-list workload passes all four tiers without promotion.
+  Independent verification still precedes SSA; inventory remains derived.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
   object families, services, liveness maps, configuration, and metrics across
   all crate sources. No tracing-family registry or `memory traced` command
@@ -146,8 +148,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   [substrate](current-state/structural-memory-evidence.md) include compact
   stale-safe structural roots, destinations, views, and direct evaluator, VM,
   baseline, and proof services. HIR/SSA rejects aggregates outside structural
-  or invocation-region storage. Runtime keys cannot cross processes. VM
-  copy-variable metadata is not a witness ABI.
+  or invocation-region storage. Runtime keys and witness slots cannot cross
+  processes; an experimental nested copy-list crosses an isolated process only
+  as a semantic [snapshot](current-state/memory/polymorphic-value-plane-evidence.md).
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
   compiler/runtime ledger remains an accepted target.
@@ -176,11 +179,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - evaluator dispatch beyond the fake-provider slice and native owned resources beyond borrowed `standard-input`;
 - ranged lexical byte-slice source syntax and borrowed `str`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
-- structural domains and ordinary regions have a Current internal substrate;
-  sealed regions and typed pools remain targets; recursive products,
-  transformed/nonregular recursive types, and unresolved generic witnesses
-  remain specialization blockers; structural-owner list elements and no-RC
-  falsification remain targets;
+- structural domains, regions, and typed pools are Current and sealed owner traffic is node-count invariant.
+  Language `sealed`, recursive products, indirect generics, structural lists, and full no-node-RC remain targets;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;

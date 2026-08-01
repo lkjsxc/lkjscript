@@ -85,7 +85,11 @@ fn witness_operations(
     if matches!(facts.process_codec, crate::memory_plan::MemoryProcessCodecEligibility::Eligible) {
         operations.extend([MemoryWitnessOperation::Encode, MemoryWitnessOperation::Decode]);
     }
-    if matches!(facts.list_element, crate::memory_plan::MemoryListElementEligibility::Copy | crate::memory_plan::MemoryListElementEligibility::ImmutableValue) {
+    if matches!(
+        facts.list_element,
+        crate::memory_plan::MemoryListElementEligibility::Copy
+            | crate::memory_plan::MemoryListElementEligibility::ImmutableValue
+    ) {
         operations.extend([MemoryWitnessOperation::ListImport, MemoryWitnessOperation::ListExport]);
     }
     operations.sort_unstable();
