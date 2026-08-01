@@ -20,6 +20,23 @@ impl MemoryPlanId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct MemoryWitnessId([u8; 32]);
+
+impl MemoryWitnessId {
+    pub const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+
+    pub fn is_resolved(self) -> bool {
+        self.0 != [0; 32]
+    }
+}
+
 macro_rules! structural_id {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -79,6 +96,7 @@ pub enum StructuralTypeKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructuralTypeMetadata {
     pub id: StructuralTypeId,
+    pub witness: MemoryWitnessId,
     pub identity: RuntimeLayoutId,
     pub runtime_type: crate::StructuralType,
     pub kind: StructuralTypeKind,

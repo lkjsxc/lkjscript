@@ -33,8 +33,10 @@ semantic IR rather than reinterpret syntax.
 Immediately after typed HIR, effects, and ownership, separate exhaustive
 producer and verifier traversals establish a dense content-addressed memory
 plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
-and `ExecutableProgram` retains the complete plan. The independently recomputed
-direct-affine SSA inventory remains derived evidence. The public sorted memory
+and `ExecutableProgram` retains the complete plan. Exact concrete structural
+witness identities reach SSA and validated bytecode; both reject unresolved or
+duplicate identities. The independently recomputed direct-affine SSA inventory
+remains derived evidence. The public sorted memory
 inventory reports deterministic structural, region, unique, artifact, resource,
 and host ownership.
 The exact byte-vector and immutable-bytes families have explicit
@@ -46,8 +48,8 @@ resolve only through immutable verified image data. Whole-group preflight
 selects the invocation-owned bounded unique/loan runtime before effects.
 Compact structural roots for strings, paths, products, enums, errors, options,
 results, and regular recursive aggregates are Current across evaluator, VM, and
-both forced JIT tiers. Segmented lists and selected products use
-invocation-local regions. No tracing collector remains. Broader ordinary/sealed
+both forced JIT tiers. Segmented lists, recursively nested copy lists, and
+selected products use invocation-local regions. No tracing collector remains. Broader ordinary/sealed
 region and pool selection remains Accepted Contract work.
 
 Provider authority enters only through explicit closed capability parameters.

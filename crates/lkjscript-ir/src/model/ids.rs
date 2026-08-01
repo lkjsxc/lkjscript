@@ -59,3 +59,4 @@ stable_id!(VariantId);
 stable_id!(VariantFieldId);
 stable_id!(RuntimeLayoutId);
 stable_id!(MemoryPlanId);
+stable_id!(MemoryWitnessId);

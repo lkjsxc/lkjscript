@@ -8,6 +8,27 @@ use crate::agent::validate;
 use super::support;
 
 #[test]
+fn checkpoint_accepts_exact_current_agent_work_state_contract() {
+    let repo = support::repository("current-contract");
+    let contracts = lkjscript_contracts::current_contracts().unwrap();
+    let authority_digest = contracts
+        .get(lkjscript_contracts::AGENT_WORK_STATE)
+        .map(lkjscript_contracts::RegisteredContract::digest)
+        .unwrap();
+    let mut state = support::state(&repo, "current-contract-task");
+    state.contract = authority_digest.to_hex();
+    let mut request = support::request(state, 0);
+    request.contract = authority_digest.to_hex();
+
+    validate::checkpoint(&repo.root, &request, None).unwrap();
+
+    request.contract = lkjscript_contracts::AGENT_PROTOCOL_DIGEST.to_hex();
+    assert!(validate::checkpoint(&repo.root, &request, None)
+        .unwrap_err()
+        .contains("checkpoint contract mismatch"));
+}
+
+#[test]
 fn rejects_stale_and_non_monotonic_checkpoint_preconditions() {
     let repo = support::repository("stale");
     let old = support::state(&repo, "stale-task");

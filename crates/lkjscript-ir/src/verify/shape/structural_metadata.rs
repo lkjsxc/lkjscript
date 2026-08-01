@@ -87,6 +87,7 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
         }
     }
     let mut exact_types = HashSet::new();
+    let mut exact_witnesses = HashSet::new();
     for (index, item) in memory.types.iter().enumerate() {
         if item.id.index() != Some(index)
             || !exact_types.insert(item.ty.clone())
@@ -96,6 +97,12 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
                 .is_none_or(|layout| layout.id != item.layout)
         {
             return fail("SSA structural types must be dense and unique by semantic type");
+        }
+        if !item.witness.is_resolved() {
+            return fail("SSA structural types require resolved memory witness identities");
+        }
+        if !exact_witnesses.insert(item.witness) {
+            return fail("SSA structural memory witness identities must be unique");
         }
         verify_type(program, &item.ty, &[])?;
         verify_type_layout(program, &item.ty, item.layout)?;

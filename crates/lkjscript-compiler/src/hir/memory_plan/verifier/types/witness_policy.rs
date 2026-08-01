@@ -101,12 +101,20 @@ fn verified_witness_codec_type(ty: &Type) -> bool {
     }
 }
 
-fn verified_witness_list_element(
+pub(super) fn verified_witness_list_element(
     ty: &Type,
     derived: &VerifiedDerived,
 ) -> MemoryListElementEligibility {
     if matches!(ty, Type::Param(_)) {
         return MemoryListElementEligibility::CallerWitnessRequired;
+    }
+    if matches!(ty, Type::List(_))
+        && derived.mode == MemoryAggregateMode::ImmutableValue
+        && derived.closure.class == MemoryClosureClass::RegionClosed
+        && !derived.contains_borrow
+        && !derived.contains_dynamic_owner
+    {
+        return MemoryListElementEligibility::Copy;
     }
     if derived.closure.class != MemoryClosureClass::Deterministic {
         return MemoryListElementEligibility::UnsupportedUnresolved;

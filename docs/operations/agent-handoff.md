@@ -98,7 +98,8 @@ storage. The zero-family no-tracing runtime is Current.
 Complete i64 and exact-bit f64 values are inline. Exact `bytes` and affine
 `byte-vector` use static or deterministic unique storage in all four engines.
 Strings, paths, products, enums, errors, options, and results use deterministic
-structural owners/images. Lists use capacity-32 segmented invocation regions.
+structural owners/images. Lists use capacity-32 segmented invocation regions;
+copy leaves and recursively nested copy lists have selected exact witnesses.
 Acyclic products closed over copy lists, scalar leaves, and region products use
 invocation-owned records in all four tiers. Their keys cannot cross processes.
 Aggregates outside structural or invocation-region storage reject; VM
@@ -116,8 +117,9 @@ stale-safe loans without deciding liveness. See the
 
 `ExecutableProgram` retains the complete content-addressed HIR plan plus a
 narrow independently recomputed SSA inventory for direct byte-vector owners,
-byte loans, and direct typed resources. Only the opaque memory-verified HIR
-wrapper enters SSA lowering. The verified static/dead SSA drop spine carries
+byte loans, and direct typed resources. Concrete structural witness IDs reach
+SSA and validated bytecode; zero or duplicate IDs reject before execution. Only
+the opaque memory-verified HIR wrapper enters SSA lowering. The verified static/dead SSA drop spine carries
 closed glue identities, explicit loan-end/drop events, and rejects active-owner
 `place-end`. Exact byte-vector, slice, checked little-endian u32, and bytes
 operations use bounded unique services in evaluator, VM, and forced native
@@ -155,9 +157,9 @@ resources remain absent.
 1. Retain adversarial ownership, borrowing, destination, failure-cleanup,
    resource-adapter, recursive-call, and limit evidence for every Current
    structural group.
-2. Expand independently reconstructed witnesses for structural-image region
-   fields and immutable or nested list elements without accepting unknown
-   generic substitutions.
+2. Expand the Current concrete structural witness propagation into package and
+   residual generic ABIs, then admit structural-owner list elements without
+   accepting unknown substitutions.
 3. Infer ownership, borrowing, regions, sealed sharing, and pools without
    exposing lifetime syntax or retaining atomic/shared counts or tracing.
 4. Measure complete alternatives and remove rejected implementations before

@@ -43,6 +43,7 @@ pub(in crate::ssa) fn lower_structural_memory(
         });
         memory.types.push(StructuralTypeMetadata {
             id: type_id,
+            witness: MemoryWitnessId::new(fact.witness.as_bytes()),
             ty,
             layout: layout_id,
             mode: match fact.mode {

@@ -71,6 +71,36 @@ fn structural_type_metadata_rejects_duplicate_semantic_types() {
 }
 
 #[test]
+fn structural_type_metadata_rejects_zero_and_duplicate_memory_witnesses() {
+    let mut zero = one_block_program();
+    install_structural_type(&mut zero, SsaType::Str, StructuralLayoutKind::String);
+    zero.memory.types[0].witness = MemoryWitnessId::new([0; 32]);
+    let result = crate::verify::verify_program(&zero);
+    assert!(result.is_err(), "zero structural memory witness verified");
+    let message = result
+        .err()
+        .map_or_else(String::new, |error| error.to_string());
+    assert!(message.contains("resolved memory witness"), "{message}");
+
+    let mut duplicate = one_block_program();
+    install_structural_type(&mut duplicate, SsaType::Str, StructuralLayoutKind::String);
+    install_structural_type(&mut duplicate, SsaType::Path, StructuralLayoutKind::Path);
+    duplicate.memory.types[1].witness = duplicate.memory.types[0].witness;
+    let result = crate::verify::verify_program(&duplicate);
+    assert!(
+        result.is_err(),
+        "duplicate structural memory witness verified"
+    );
+    let message = result
+        .err()
+        .map_or_else(String::new, |error| error.to_string());
+    assert!(
+        message.contains("witness identities must be unique"),
+        "{message}"
+    );
+}
+
+#[test]
 fn closure_reconstruction_rejects_mixed_and_recursive_metadata() {
     let mut program = Program {
         memory: StructuralMemoryMetadata::default(),

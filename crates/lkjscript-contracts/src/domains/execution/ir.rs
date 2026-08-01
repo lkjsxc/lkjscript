@@ -24,6 +24,11 @@ pub(crate) fn typed_hir(language: ContractDigest) -> ContractDescriptor {
                     "places moves borrows and cleanup obligations",
                 ))
                 .fact(fact(
+                    "memory-witnesses",
+                    "memory witnesses",
+                    "content-addressed concrete type facts and nested copy-list plans",
+                ))
+                .fact(fact(
                     "capabilities",
                     "capabilities",
                     "closed provider types with explicit value flow",
@@ -58,6 +63,11 @@ pub(crate) fn verified_ssa(hir: ContractDigest) -> ContractDescriptor {
                     "affine transfer and explicit cleanup",
                 ))
                 .fact(fact(
+                    "memory-witnesses",
+                    "memory witnesses",
+                    "resolved unique structural witness identities",
+                ))
+                .fact(fact(
                     "frames",
                     "frames",
                     "exact proof frame states and failure cleanup obligations",
@@ -87,6 +97,11 @@ pub(crate) fn bytecode(ssa: ContractDigest) -> ContractDescriptor {
                     "bounded typed constant table",
                 ))
                 .fact(fact("functions", "functions", "bounded function metadata"))
+                .fact(fact(
+                    "memory-witnesses",
+                    "memory witnesses",
+                    "validated resolved unique structural witness identities",
+                ))
                 .fact(fact(
                     "capabilities",
                     "capabilities",

@@ -64,6 +64,7 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
     });
     chunk.structural_types.push(crate::StructuralTypeMetadata {
         id: target_id,
+        witness: witness(2),
         identity: identity(7),
         runtime_type: target_type,
         kind: crate::StructuralTypeKind::String,

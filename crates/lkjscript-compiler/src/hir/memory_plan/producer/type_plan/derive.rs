@@ -37,11 +37,11 @@ impl TypePlanner<'_> {
     fn derive_list(&mut self, ty: &Type, inner: &Type) -> Result<DerivedType> {
         let child = self.intern(inner)?;
         let fact = self.fact(child)?.clone();
-        if list_region_element(inner)
+        let scalar_element = list_region_element(inner)
             && fact.mode == MemoryAggregateMode::Copy
             && fact.closure.class == MemoryClosureClass::Deterministic
-            && !fact.contains_borrow
-        {
+            && !fact.contains_borrow;
+        if scalar_element || self.selected_copy_list_element(inner, &fact) {
             return Ok(DerivedType {
                 mode: MemoryAggregateMode::ImmutableValue,
                 closure: MemoryClosureFact {
@@ -60,6 +60,21 @@ impl TypePlanner<'_> {
         result.contains_borrow = fact.contains_borrow;
         result.contains_dynamic_owner = fact.contains_dynamic_owner;
         Ok(result)
+    }
+
+    fn selected_copy_list_element(&self, ty: &Type, fact: &MemoryTypeFact) -> bool {
+        matches!(ty, Type::List(_))
+            && fact.mode == MemoryAggregateMode::ImmutableValue
+            && fact.closure.class == MemoryClosureClass::RegionClosed
+            && !fact.contains_borrow
+            && !fact.contains_dynamic_owner
+            && self.witnesses.iter().find(|item| item.id == fact.witness)
+                .filter(|item| item.facts.requirement == MemoryWitnessRequirement::Concrete)
+                .and_then(|item| item.facts.list.as_ref())
+                .is_some_and(|list| list.selected
+                    && list.eligibility == MemoryListElementEligibility::Copy
+                    && list.storage == MemoryListStorageKind::SegmentedSessionRegion
+                    && list.segment_capacity == 32)
     }
 
     fn derive_product(&mut self, name: &str) -> Result<DerivedType> {

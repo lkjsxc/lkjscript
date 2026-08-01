@@ -14,8 +14,9 @@ OS-resident runtime authority with subordinate application cells and session
 brokers; standalone is only an explicit bootstrap, recovery, diagnosis, CI, or
 development path. The language has one content-addressed semantic
 contract, explicit capabilities/effects, and value semantics. Current compact
-typed structural roots, segmented lists, invocation regions, unique owners, and
-resource tables provide deterministic storage; expansion continues through
+typed structural roots, concrete witness-bearing SSA/bytecode, nested copy-list
+segments, invocation regions, unique owners, and resource tables provide
+deterministic storage; expansion continues through
 inferred ownership, borrowing, regions, sealed sharing, and pools. One semantic resource
 plane separates compiler-verified task legality
 from measured topology, scheduling, and memory-home policy while Linux remains

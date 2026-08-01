@@ -9,6 +9,7 @@ fn structural_table_accepts_configured_max_and_rejects_plus_one() {
         .structural_types
         .extend((1..3).map(|raw| crate::StructuralTypeMetadata {
             id: crate::StructuralTypeId::new(raw),
+            witness: witness(u8::try_from(raw).unwrap_or(u8::MAX).saturating_add(1)),
             identity: identity(u8::try_from(raw).unwrap_or(u8::MAX)),
             runtime_type: product_type,
             kind: crate::StructuralTypeKind::Product(crate::ProductId::new(0)),
@@ -24,6 +25,7 @@ fn structural_table_accepts_configured_max_and_rejects_plus_one() {
     validate_chunk(chunk.clone(), &limits).expect("configured structural maximum validates");
     chunk.structural_types.push(crate::StructuralTypeMetadata {
         id: crate::StructuralTypeId::new(3),
+        witness: witness(4),
         identity: identity(6),
         runtime_type: product_type,
         kind: crate::StructuralTypeKind::Product(crate::ProductId::new(0)),

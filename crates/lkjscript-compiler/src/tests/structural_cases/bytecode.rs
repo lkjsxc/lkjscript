@@ -48,6 +48,25 @@ fn deterministic_copy_product_executes_as_structural_bytecode() {
         .main_instructions()
         .iter()
         .all(|instruction| instruction.op() != Op::MakeProduct));
+
+    let expected = compiled
+        .memory_plan()
+        .witnesses
+        .iter()
+        .find(|item| item.id.as_bytes() == product.witness.bytes())
+        .expect("SSA structural witness exists in HIR authority");
+    assert!(matches!(
+        expected.facts.ty,
+        crate::memory_plan::MemoryType::Product(_)
+    ));
+    let expected = expected.id.as_bytes();
+    let bytecode = compiled
+        .bytecode()
+        .structural_types()
+        .iter()
+        .find(|item| matches!(item.kind, lkjscript_core::StructuralTypeKind::Product(_)))
+        .expect("product bytecode structural metadata exists");
+    assert_eq!(bytecode.witness.bytes(), expected);
 }
 
 #[test]

@@ -11,6 +11,23 @@ fn structural_plan_identity_propagates_and_tamper_fails() {
 }
 
 #[test]
+fn structural_memory_witness_tamper_is_rejected() {
+    let mut zero = product_chunk();
+    zero.structural_types[0].witness = crate::MemoryWitnessId::new([0; 32]);
+    zero.main.emit(Op::Unit);
+    zero.main.emit(Op::Return);
+    assert!(error(zero).contains("unresolved memory witness identity"));
+
+    let mut duplicate = product_chunk();
+    let mut forged = duplicate.structural_types[0].clone();
+    forged.id = crate::StructuralTypeId::new(1);
+    duplicate.structural_types.push(forged);
+    duplicate.main.emit(Op::Unit);
+    duplicate.main.emit(Op::Return);
+    assert!(error(duplicate).contains("witness identities are not unique"));
+}
+
+#[test]
 fn product_runtime_identity_tamper_is_rejected() {
     let mut chunk = product_chunk();
     chunk.structural_types[0].runtime_type = runtime_type(2, crate::StructuralKind::Product);

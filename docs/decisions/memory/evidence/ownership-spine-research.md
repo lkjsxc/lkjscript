@@ -77,6 +77,32 @@ Sources: <https://doi.org/10.4230/LIPIcs.ECOOP.2025.15> and Lean revision
 `f696c4686b327b271b3488d757dc4fcd80f298ce`, especially
 `src/Lean/CompactedRegion.lean` and `src/runtime/compact.cpp`.
 
+## Typed Closure Conversion
+
+Minamide, Morrisett, and Harper, *Typed Closure Conversion*, POPL 1996,
+separates code identity, an existentially hidden environment type, environment
+value, and call signature while preserving types. lkjscript adopts that
+separation, exact environment ownership, and typed indirect calls. It rejects
+source-visible layouts, environment pointers, closure equality, serialization,
+and host-language closure capture as semantic authority. Whether one shared
+sealed environment outperforms a unique environment remains measured rather
+than assumed.
+
+Source: <https://www.cs.cmu.edu/~rwh/papers/closures/popl96.pdf>.
+
+## Stateful Service Ownership
+
+Erlang/OTP applications, supervisors, and server behaviours provide evidence
+for one service-state owner, explicit initialization/call/termination
+callbacks, isolated failure, and bounded supervision policy. lkjscript adopts
+those lifecycle principles for one app-private VM session and transactional
+state publication. It does not adopt BEAM tracing collection, dynamic typing,
+mailbox semantics, or arbitrary process linking.
+
+Source: <https://www.erlang.org/doc/system/design_principles.html>, checked
+2026-08-01. Exact restart intensity and callback failure policy remain runtime
+contract decisions, not imported defaults.
+
 ## Tool Boundary
 
 Miri borrow models and sanitizers are implementation oracles for unsafe or host

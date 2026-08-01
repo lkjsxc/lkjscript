@@ -43,6 +43,7 @@ pub enum StructuralTypeMode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuralTypeMetadata {
     pub id: StructuralTypeId,
+    pub witness: MemoryWitnessId,
     pub ty: SsaType,
     pub layout: StructuralLayoutId,
     pub mode: StructuralTypeMode,

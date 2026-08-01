@@ -34,9 +34,20 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
             bytes = add(bytes, 59, "structural metadata byte size")?;
         }
     }
+    let mut witnesses = std::collections::HashSet::with_capacity(chunk.structural_types.len());
     for (index, ty) in chunk.structural_types.iter().enumerate() {
         if ty.id.index() != index {
             return Err(Error::msg("bytecode structural TypeIds are not dense"));
+        }
+        if !ty.witness.is_resolved() {
+            return Err(Error::msg(
+                "bytecode structural type has an unresolved memory witness identity",
+            ));
+        }
+        if !witnesses.insert(ty.witness) {
+            return Err(Error::msg(
+                "bytecode structural memory witness identities are not unique",
+            ));
         }
         let layout = chunk
             .structural_layouts
@@ -97,7 +108,7 @@ fn validate_layouts_and_types(chunk: &Chunk) -> Result<usize> {
                 ));
             }
         }
-        bytes = add(bytes, 93, "structural metadata byte size")?;
+        bytes = add(bytes, 125, "structural metadata byte size")?;
     }
     Ok(bytes)
 }

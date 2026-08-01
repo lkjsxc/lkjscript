@@ -18,6 +18,7 @@ pub(super) fn install_structural_type(
     });
     program.memory.types.push(StructuralTypeMetadata {
         id: type_id,
+        witness: MemoryWitnessId::new([index.saturating_add(1) as u8; 32]),
         ty,
         layout,
         mode: StructuralTypeMode::Immutable,

@@ -55,6 +55,7 @@ pub(in crate::codegen) fn install_structural_metadata(
         };
         chunk.structural_types.push(BytecodeStructuralTypeMetadata {
             id: BytecodeStructuralTypeId::new(item.id.raw()),
+            witness: BytecodeMemoryWitnessId::new(item.witness.bytes()),
             identity: field_identity(&item.ty),
             runtime_type: runtime_structural_type(program, &item.ty)?.ok_or_else(|| {
                 Error::msg("SSA structural type has no exact value-runtime identity")
@@ -182,9 +183,8 @@ pub(in crate::codegen) fn install_structural_metadata(
                     .collect(),
             };
         for (active_variant, fields) in candidates {
-            let raw = u16::try_from(chunk.structural_destinations.len()).map_err(|_| {
-                Error::msg("bytecode structural destination table exceeds addressable u16 IDs")
-            })?;
+            let raw = u16::try_from(chunk.structural_destinations.len())
+                .map_err(|_| Error::msg("bytecode structural destinations exceed u16"))?;
             chunk
                 .structural_destinations
                 .push(StructuralDestinationMetadata {

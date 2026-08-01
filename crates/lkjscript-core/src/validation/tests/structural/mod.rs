@@ -4,6 +4,10 @@ fn identity(byte: u8) -> crate::RuntimeLayoutId {
     crate::RuntimeLayoutId::new([byte; 32])
 }
 
+fn witness(byte: u8) -> crate::MemoryWitnessId {
+    crate::MemoryWitnessId::new([byte; 32])
+}
+
 fn runtime_type(id: u64, kind: crate::StructuralKind) -> crate::StructuralType {
     crate::StructuralType::new(
         crate::LayoutIdentity::new(std::num::NonZeroU64::new(id).expect("test layout identity")),
@@ -47,6 +51,7 @@ fn product_chunk() -> Chunk {
     }];
     chunk.structural_types = vec![crate::StructuralTypeMetadata {
         id: crate::StructuralTypeId::new(0),
+        witness: witness(1),
         identity: identity(2),
         runtime_type: crate::StructuralType::new(
             crate::product_layout_identity(product_identity),

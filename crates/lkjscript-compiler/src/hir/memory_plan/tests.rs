@@ -7,6 +7,7 @@ mod derivation;
 mod fixtures;
 mod lists;
 mod moves;
+mod nested_lists;
 mod signatures;
 mod verifier;
 mod witnesses;

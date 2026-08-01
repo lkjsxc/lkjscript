@@ -16,8 +16,8 @@ pub use constant::Constant;
 pub use error::{IrError, Result};
 pub use ids::{
     BindingId, BlockId, EnumId, FailureCleanupId, FunctionId, ImplId, LoanId, MemoryPlanId,
-    PlaceId, ProductId, RuntimeLayoutId, StructuralLayoutId, StructuralRepresentationId,
-    StructuralTypeId, TraitId, ValueId, VariantFieldId, VariantId,
+    MemoryWitnessId, PlaceId, ProductId, RuntimeLayoutId, StructuralLayoutId,
+    StructuralRepresentationId, StructuralTypeId, TraitId, ValueId, VariantFieldId, VariantId,
 };
 pub use instruction::{BlockParameter, BorrowKind, CallTarget, Instruction, InstructionKind};
 pub use instruction_metadata::{

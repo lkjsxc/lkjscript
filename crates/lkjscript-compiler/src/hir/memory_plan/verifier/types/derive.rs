@@ -39,11 +39,11 @@ impl VerifiedTypes<'_> {
     fn list(&mut self, ty: &Type, inner: &Type) -> Result<VerifiedDerived> {
         let child = self.intern(inner)?;
         let fact = self.expected(child)?.clone();
-        if verified_list_region_element(inner)
+        let scalar_element = verified_list_region_element(inner)
             && fact.derived.mode == MemoryAggregateMode::Copy
             && fact.derived.closure.class == MemoryClosureClass::Deterministic
-            && !fact.derived.contains_borrow
-        {
+            && !fact.derived.contains_borrow;
+        if scalar_element || self.verified_selected_copy_list_element(inner, &fact) {
             return Ok(VerifiedDerived {
                 mode: MemoryAggregateMode::ImmutableValue,
                 closure: MemoryClosureFact {
@@ -62,6 +62,16 @@ impl VerifiedTypes<'_> {
         result.contains_borrow = fact.derived.contains_borrow;
         result.contains_dynamic_owner = fact.derived.contains_dynamic_owner;
         Ok(result)
+    }
+
+    fn verified_selected_copy_list_element(&self, ty: &Type, fact: &VerifiedExpectedType) -> bool {
+        matches!(ty, Type::List(_))
+            && fact.derived.mode == MemoryAggregateMode::ImmutableValue
+            && fact.derived.closure.class == MemoryClosureClass::RegionClosed
+            && !fact.derived.contains_borrow
+            && !fact.derived.contains_dynamic_owner
+            && super::witness::verified_witness_list_element(ty, &fact.derived)
+                == MemoryListElementEligibility::Copy
     }
 
     fn product(&mut self, name: &str) -> Result<VerifiedDerived> {

@@ -21,7 +21,6 @@ and relevant call edge. Missing analysis is a compile error. It never selects
 legacy tracing because analysis failed.
 
 ## Plan Identity
-
 `MemoryPlanId` is content-addressed by the plan schema, source and HIR identity,
 function signatures, use/escape facts, value plans, borrow scopes, drop
 obligations, whole-place drop classes, and drop glue. The
@@ -29,8 +28,8 @@ obligations, whole-place drop classes, and drop glue. The
 and dense order, never Rust formatting, maps, addresses, time, or process state.
 
 `ExecutableProgram` retains the ID and opaque verified authority through SSA.
-Structural and region metadata derive bytecode/native identities from it. Exact
-package witness export remains accepted follow-on work.
+Each concrete structural type carries its exact witness identity through SSA and
+validated bytecode. Package and residual-ABI witness export remains follow-on work.
 
 ## Value Axes
 
@@ -115,15 +114,17 @@ graph.
 
 Every Current `list<T>` uses a capacity-32 segmented session region and exact
 witness. Handles need no root or per-value drop; prepends retain the allocation
-charge. Selection accepts exact copy leaves. Other lists remain
-`ListElementWitnessRequired`-blocked while their container still uses segments.
+charge. Selection accepts exact copy leaves and recursively nested selected copy
+lists. Lists with structural owners remain `ListElementWitnessRequired`-blocked.
 
 ## Accepted Final Structural Extension
 
-The final cutover resolves the remaining blockers without relaxing verification. Every exact instantiated type has a
-content-addressed memory witness. Monomorphic call sites specialize witnesses
-away; residual polymorphic declarations carry hidden static witness parameters.
-A missing or mismatched witness is a compile error, never a tracing selection.
+The Current first vertical extension carries each concrete structural witness
+into verified SSA and validated bytecode and selects recursively nested lists of
+already selected copy-list values. It does not claim a residual generic ABI or
+lists of independently owned structural roots. Ultimately every exact type has
+a content-addressed witness; residual polymorphism carries hidden static witness
+parameters. Missing or mismatched witnesses are compile errors, never tracing.
 
 A witness closes semantic type and runtime layout identity, aggregate mode,
 size/alignment, storage/domain class, move/borrow/share/clone behavior, drop and

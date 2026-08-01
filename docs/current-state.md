@@ -104,8 +104,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   borrowed `standard-input`; complete evaluator host and owned-native operations remain incomplete.
 - Core provides deterministic byte/byte-vector storage and a bounded flat-image
   runtime for strings, paths, deterministic aggregates, regular recursive enums,
-  copy-leaf segmented lists, results, destinations, and views. They execute in
-  all four engines with bounded tables and exact cleanup.
+  copy-leaf and recursively nested copy-list segments, results, destinations,
+  and views. They execute in all four engines with bounded tables and cleanup.
 - Immutable bytes literal/read/copy/clone/freeze/thaw operations execute through
   all four engines. Native static identities select verified image data; dynamic
   byte values remain affine. Owned resources and mixed ownership graphs remain outside.
@@ -134,10 +134,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   unique, resource, artifact, and host ownership; it is derived evidence, not
   semantic authority.
   Every executable program retains a platform-bound canonical HIR memory plan
-  covering every result, place, loan, constant, and call without Rust formatting. Independent
-  production and verification require byte-vector unique storage and static
-  artifact values before checked HIR enters SSA. The direct-affine SSA inventory
-  remains independently recomputed derived evidence.
+  covering every result, place, loan, constant, and call without Rust formatting.
+  Concrete structural witness identities reach SSA and validated bytecode, which
+  reject zero or duplicate identities. Independent production and verification
+  still precede SSA; the direct-affine inventory remains derived evidence.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
   object families, services, liveness maps, configuration, and metrics across
   all crate sources. No tracing-family registry or `memory traced` command
@@ -179,7 +179,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - structural domains and ordinary regions have a Current internal substrate;
   sealed regions and typed pools remain targets; recursive products,
   transformed/nonregular recursive types, and unresolved generic witnesses
-  remain specialization blockers; nested-list expansion and no-RC
+  remain specialization blockers; structural-owner list elements and no-RC
   falsification remain targets;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
