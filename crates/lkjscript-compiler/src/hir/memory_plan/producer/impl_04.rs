@@ -60,62 +60,25 @@ impl<'a> Producer<'a> {
         hir_expression: &Expr,
         escape: MemoryEscape,
     ) -> Result<MemoryCallId> {
-        let (target, mut parameters, mut result) = match callee.storage {
-            BindingStorage::Function => {
-                let target = self
-                    .function_ids
-                    .get(&callee.binding)
-                    .copied()
-                    .ok_or_else(|| Error::msg("HIR direct call has no memory-signature target"))?;
-                let signature = self.signature(target)?;
-                (
-                    MemoryCallTarget::Direct(target),
-                    signature.parameters.clone(),
-                    signature.result,
-                )
-            }
-            BindingStorage::Local(_) => {
-                let ty = self.binding_type(callee.binding)?;
-                let (parameters, result_ty) = callable_type(ty)?;
-                let modes: Vec<_> = parameters
-                    .iter()
-                    .map(|parameter| parameter_mode(parameter, false))
-                    .collect();
-                if modes.iter().any(|mode| *mode != MemoryParameterMode::Copy)
-                    || result_mode(result_ty) != MemoryResultMode::Trivial
-                {
-                    return Err(Error::msg(
-                        "affine or borrowed indirect call has no complete Current memory signature",
-                    ));
-                }
-                (
-                    MemoryCallTarget::Indirect(callee.binding.raw()),
-                    modes,
-                    result_mode(result_ty),
-                )
-            }
+        let ExprKind::Call { instantiation, .. } = &hir_expression.kind else {
+            return Err(Error::msg("HIR memory call record lost call expression"));
         };
-        if matches!(hir_expression.kind, ExprKind::Call { instantiation: Some(_), .. })
-            && matches!(target, MemoryCallTarget::Direct(_))
+        let mut resolved = self.resolved_call_signature(callee, instantiation.as_ref())?;
+        if instantiation.is_some()
+            && matches!(resolved.target, MemoryCallTarget::Direct(_))
         {
-            parameters = args.iter().map(|argument| {
-                self.planned_parameter_mode(&argument.ty, false)
-            }).collect::<Result<Vec<_>>>()?;
-            result = self.planned_result_mode(&hir_expression.ty)?;
+            resolved.parameters = args
+                .iter()
+                .map(|argument| self.planned_parameter_mode(&argument.ty, false))
+                .collect::<Result<Vec<_>>>()?;
+            resolved.result = self.planned_result_mode(&hir_expression.ty)?;
         }
-        if args.len() != parameters.len() {
+        if args.len() != resolved.parameters.len() {
             return Err(Error::msg(
                 "HIR direct call argument count does not match memory signature",
             ));
         }
-        self.add_call_record(
-            expression,
-            hir_expression,
-            target,
-            parameters,
-            result,
-            escape,
-        )
+        self.add_call_record(expression, hir_expression, resolved, escape)
     }
     fn add_operation_call(
         &mut self,
@@ -131,22 +94,20 @@ impl<'a> Producer<'a> {
             .iter()
             .map(|parameter| operation_parameter_mode(operation, parameter))
             .collect();
-        self.add_call_record(
-            expression,
-            hir_expression,
-            MemoryCallTarget::Operation(operation.identity().as_u16()),
+        let resolved = ResolvedMemoryCall {
+            target: MemoryCallTarget::Operation(operation.identity().as_u16()),
+            witness_arguments: Vec::new(),
             parameters,
-            result_mode(result_ty),
-            escape,
-        ).map(|_| ())
+            result: result_mode(result_ty),
+        };
+        self.add_call_record(expression, hir_expression, resolved, escape)
+            .map(|_| ())
     }
     fn add_call_record(
         &mut self,
         expression: MemoryExpressionId,
         hir_expression: &Expr,
-        target: MemoryCallTarget,
-        parameters: Vec<MemoryParameterMode>,
-        result: MemoryResultMode,
+        resolved: ResolvedMemoryCall,
         escape: MemoryEscape,
     ) -> Result<MemoryCallId> {
         self.charge_calls(1)?;
@@ -158,10 +119,11 @@ impl<'a> Producer<'a> {
             id,
             function: self.current_function,
             expression,
-            target,
-            borrow_scopes: vec![None; parameters.len()],
-            parameters,
-            result,
+            target: resolved.target,
+            witness_arguments: resolved.witness_arguments,
+            borrow_scopes: vec![None; resolved.parameters.len()],
+            parameters: resolved.parameters,
+            result: resolved.result,
         });
         self.add_entry(
             MemorySubject::Call {

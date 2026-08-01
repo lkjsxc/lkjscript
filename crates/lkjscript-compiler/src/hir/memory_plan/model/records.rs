@@ -61,9 +61,27 @@ pub struct MemoryPlanEntry {
     pub drop_glue: Option<MemoryDropGlueId>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MemoryWitnessOperation {
+    Transport,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryWitnessParameter {
+    pub parameter: String,
+    pub operations: Vec<MemoryWitnessOperation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryWitnessArgument {
+    pub parameter: String,
+    pub witness: MemoryWitnessId,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionMemorySignature {
     pub function: MemoryFunctionId,
+    pub witness_parameters: Vec<MemoryWitnessParameter>,
     pub parameters: Vec<MemoryParameterMode>,
     pub result: MemoryResultMode,
 }
@@ -131,6 +149,7 @@ pub struct MemoryCallPlan {
     pub function: MemoryFunctionId,
     pub expression: MemoryExpressionId,
     pub target: MemoryCallTarget,
+    pub witness_arguments: Vec<MemoryWitnessArgument>,
     pub parameters: Vec<MemoryParameterMode>,
     pub result: MemoryResultMode,
     pub borrow_scopes: Vec<Option<MemoryBorrowScopeId>>,

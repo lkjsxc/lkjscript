@@ -7,6 +7,12 @@ unit_enum!(MemoryUseKind {
     DirectCallTarget = 3,
     IndirectCallTarget = 4,
 });
+unit_enum!(MemoryWitnessOperation { Transport = 0 });
+canonical_struct!(MemoryWitnessParameter {
+    parameter,
+    operations
+});
+canonical_struct!(MemoryWitnessArgument { parameter, witness });
 canonical_struct!(MemoryOrigin { source, expression });
 canonical_struct!(MemoryPlanEntry {
     id,
@@ -27,6 +33,7 @@ canonical_struct!(MemoryPlanEntry {
 });
 canonical_struct!(FunctionMemorySignature {
     function,
+    witness_parameters,
     parameters,
     result
 });
@@ -58,6 +65,7 @@ canonical_struct!(MemoryCallPlan {
     function,
     expression,
     target,
+    witness_arguments,
     parameters,
     result,
     borrow_scopes,

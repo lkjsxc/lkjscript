@@ -107,6 +107,7 @@ impl<'a> Producer<'a> {
             let result = self.planned_result_mode(&result_ty)?;
             self.signatures.push(FunctionMemorySignature {
                 function: function_id,
+                witness_parameters: memory_witness_parameters(&binding.ty)?,
                 parameters,
                 result,
             });
@@ -117,10 +118,10 @@ impl<'a> Producer<'a> {
         );
         let main_parameters = self.program.main.param_types.clone().into_iter()
             .map(|ty| self.planned_parameter_mode(&ty, false)).collect::<Result<Vec<_>>>()?;
-        let main_result = self.program.main.return_type.clone();
-        let main_result = self.planned_result_mode(&main_result)?;
+        let main_result = self.planned_result_mode(&self.program.main.return_type.clone())?;
         self.signatures.push(FunctionMemorySignature {
             function: main_id,
+            witness_parameters: Vec::new(),
             parameters: main_parameters,
             result: main_result,
         });

@@ -8,6 +8,7 @@ mod escapes;
 mod loans;
 mod modes;
 mod obligations;
+mod witnesses;
 
 use call_signatures::*;
 use calls::*;
@@ -17,6 +18,7 @@ use escapes::*;
 use loans::*;
 use modes::*;
 use obligations::*;
+use witnesses::*;
 
 pub(super) fn verify_authority(
     program: &hir::Program,
@@ -36,9 +38,9 @@ pub(super) fn verify_authority(
         verify_entry_authority(entry, ty, types.expected(expected)?, facts)?;
     }
     verify_no_partial_or_affine_copy(facts, &mut types)?;
-    types.verify_totals()?;
     verify_destinations(program, plan, facts, &types)?;
     verify_authority_calls(program, plan, facts, &mut types)?;
+    types.verify_totals()?;
     verify_loans(plan, facts)?;
     verify_obligations(program, plan)?;
     let steps = plan
@@ -81,7 +83,13 @@ fn verify_authority_signatures(
             .binding(function.binding)
             .ok_or_else(|| Error::msg("memory authority lost callable"))?;
         let result = verified_result_mode(types, callable_result(&binding.ty)?)?;
-        if actual.parameters != parameters || actual.result != result {
+        let witness_parameters = verified_witness_parameters(&binding.ty)?;
+        if u64::try_from(actual.witness_parameters.len()).unwrap_or(u64::MAX)
+            > MAX_MEMORY_WITNESS_PARAMETERS
+            || actual.witness_parameters != witness_parameters
+            || actual.parameters != parameters
+            || actual.result != result
+        {
             return Err(Error::msg(
                 "independent verifier rejected function memory signature",
             ));
@@ -99,7 +107,10 @@ fn verify_authority_signatures(
         .map(|ty| verified_parameter_mode(types, ty, false))
         .collect::<Result<Vec<_>>>()?;
     let result = verified_result_mode(types, &program.main.return_type)?;
-    if actual.parameters != parameters || actual.result != result {
+    if !actual.witness_parameters.is_empty()
+        || actual.parameters != parameters
+        || actual.result != result
+    {
         return Err(Error::msg(
             "independent verifier rejected main memory signature",
         ));

@@ -2,6 +2,7 @@ use super::*;
 
 type VerifiedCall<'a> = (
     MemoryCallTarget,
+    Vec<MemoryWitnessArgument>,
     Vec<MemoryParameterMode>,
     MemoryResultMode,
     bool,
@@ -30,6 +31,16 @@ pub(super) fn verified_call_signature<'a>(
                     .function(MemoryFunctionId::new(index_u32(target)?))
                     .ok_or_else(|| Error::msg("memory verifier lost direct signature"))?
                     .signature;
+                let binding = program
+                    .binding(callee.binding)
+                    .ok_or_else(|| Error::msg("memory verifier lost direct callable"))?;
+                let witness_parameters = verified_witness_parameters(&binding.ty)?;
+                let witness_arguments = verified_witness_arguments(
+                    types,
+                    &binding.ty,
+                    &witness_parameters,
+                    instantiation.as_ref(),
+                )?;
                 if instantiation.is_some() {
                     let parameters = args
                         .iter()
@@ -37,6 +48,7 @@ pub(super) fn verified_call_signature<'a>(
                         .collect::<Result<Vec<_>>>()?;
                     Ok((
                         MemoryCallTarget::Direct(signature.function),
+                        witness_arguments,
                         parameters,
                         verified_result_mode(types, &fact.expression.ty)?,
                         true,
@@ -45,6 +57,7 @@ pub(super) fn verified_call_signature<'a>(
                 } else {
                     Ok((
                         MemoryCallTarget::Direct(signature.function),
+                        witness_arguments,
                         signature.parameters.clone(),
                         signature.result,
                         true,
@@ -56,9 +69,13 @@ pub(super) fn verified_call_signature<'a>(
                 let binding = program
                     .binding(callee.binding)
                     .ok_or_else(|| Error::msg("memory verifier lost indirect callable"))?;
+                if instantiation.is_some() || matches!(binding.ty, Type::Forall { .. }) {
+                    return Err(Error::msg("memory verifier rejected indirect generic call"));
+                }
                 let (parameters, result) = verified_callable_type(&binding.ty)?;
                 Ok((
                     MemoryCallTarget::Indirect(callee.binding.raw()),
+                    Vec::new(),
                     parameters.iter().map(verified_indirect_parameter).collect(),
                     verified_call_result(result),
                     false,
@@ -75,6 +92,7 @@ pub(super) fn verified_call_signature<'a>(
             let (parameters, result) = verified_callable_type(resolved_signature)?;
             Ok((
                 MemoryCallTarget::Operation(operation.identity().as_u16()),
+                Vec::new(),
                 parameters
                     .iter()
                     .map(|ty| verified_operation_parameter(*operation, ty))

@@ -26,10 +26,13 @@ pub(super) fn verify_authority_calls(
         if !call_expression {
             return Err(Error::msg("stale HIR call plan"));
         }
-        let (target, parameters, result, direct, arguments) =
+        let (target, witness_arguments, parameters, result, direct, arguments) =
             verified_call_signature(program, plan, fact, types)?;
-        if call.function != fact.function
+        if u64::try_from(call.witness_arguments.len()).unwrap_or(u64::MAX)
+            > MAX_MEMORY_WITNESS_ARGUMENTS
+            || call.function != fact.function
             || call.target != target
+            || call.witness_arguments != witness_arguments
             || call.parameters != parameters
             || call.result != result
             || call.borrow_scopes.len() != arguments.len()
