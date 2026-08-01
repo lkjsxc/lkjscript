@@ -75,7 +75,8 @@ pub(in crate::ssa) fn lower_structural_memory(
                 });
         }
     }
-    if !memory.types.is_empty() {
+    install_memory_witnesses(&mut memory, plan, products)?;
+    if !memory.types.is_empty() || !memory.witnesses.is_empty() {
         memory.plan = lkjscript_ir::MemoryPlanId::new(plan.id.as_bytes());
     }
     Ok(memory)
@@ -171,3 +172,4 @@ fn structural_layout_identity(plan: &HirMemoryPlan, ty: &MemoryType) -> RuntimeL
 }
 
 include!("structural_support.rs");
+include!("model/witness.rs");

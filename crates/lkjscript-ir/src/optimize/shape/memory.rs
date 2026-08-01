@@ -9,6 +9,27 @@ pub(super) fn preflight(
         ShapeField::StringAndMetadataBytes,
         u64::try_from(program.memory.plan.bytes().len()).map_err(|_| budget_error())?,
     )?;
+    for witness in &program.memory.witnesses {
+        counter.add_metadata()?;
+        counter.add_type(&witness.ty)?;
+        counter.add_bounded(
+            ShapeField::StringAndMetadataBytes,
+            128_u64
+                .checked_add(
+                    u64::try_from(witness.facts.operations.len()).map_err(|_| budget_error())?,
+                )
+                .and_then(|value| {
+                    u64::try_from(witness.dependencies.len())
+                        .ok()
+                        .and_then(|count| count.checked_mul(32))
+                        .and_then(|bytes| value.checked_add(bytes))
+                })
+                .ok_or_else(budget_error)?,
+        )?;
+        for _ in &witness.dependencies {
+            counter.add_metadata()?;
+        }
+    }
     for item in &program.memory.types {
         counter.add_metadata()?;
         counter.add_type(&item.ty)?;

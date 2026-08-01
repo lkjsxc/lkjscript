@@ -81,8 +81,12 @@ impl Evaluator<'_> {
                 self.numeric_conversion(kind, value(values, *input)?, &instruction.ty)
             }
             InstructionKind::Call {
-                target, arguments, ..
+                target,
+                arguments,
+                instantiation,
+                ..
             } => {
+                let indirect = matches!(target, CallTarget::Indirect(_));
                 let target = match target {
                     CallTarget::Direct(target) => *target,
                     CallTarget::Indirect(target) => match value(values, *target)? {
@@ -94,8 +98,17 @@ impl Evaluator<'_> {
                         }
                     },
                 };
+                let memory_witnesses = instantiation
+                    .as_ref()
+                    .map(|instantiation| instantiation.memory_witnesses.clone())
+                    .unwrap_or_default();
+                if indirect && !memory_witnesses.is_empty() {
+                    return Err(Flow::Trap(
+                        "evaluator indirect generic witness call is unavailable".into(),
+                    ));
+                }
                 let arguments = self.call_arguments(function, target, values, arguments)?;
-                self.call(target, arguments, depth.saturating_add(1))
+                self.call(target, arguments, memory_witnesses, depth.saturating_add(1))
             }
             InstructionKind::ProductValue { .. }
             | InstructionKind::ProductField { .. }
@@ -111,6 +124,7 @@ impl Evaluator<'_> {
 
 mod aggregate;
 mod structural;
+mod witness;
 
 include!("constants.rs");
 include!("resource_drop.rs");

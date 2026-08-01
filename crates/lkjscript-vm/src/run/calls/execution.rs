@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
+pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8, call_offset: usize) -> Result<()> {
     let callee = vm.pop()?;
     match callee.as_function() {
         Some(proto) => {
@@ -99,10 +99,13 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 .get(args_start..args_start.saturating_add(argument_count))
                 .ok_or_else(|| Error::msg("call argument range is out of bounds"))?
                 .to_vec();
-            let return_type_variable_representation =
-                super::super::structural_ops::call_return_type_variable_representation(
-                    vm, p, &arguments,
-                )?;
+            let memory_witnesses = super::super::structural_ops::call_memory_witnesses(
+                vm,
+                proto,
+                p,
+                &arguments,
+                call_offset,
+            )?;
             let borrowed_resources = p
                 .parameter_resources
                 .iter()
@@ -155,7 +158,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                         locals_base: stack_base,
                         unique_places,
                         borrowed_resources,
-                        return_type_variable_representation,
+                        memory_witnesses,
                     };
                 }
                 return Ok(());
@@ -170,7 +173,7 @@ pub fn call<J: RuntimeTier>(vm: &mut Vm<'_, J>, argc: u8) -> Result<()> {
                 locals_base: args_start,
                 unique_places,
                 borrowed_resources,
-                return_type_variable_representation,
+                memory_witnesses,
             });
             Ok(())
         }
@@ -182,18 +185,3 @@ include!("execution/setup.rs");
 
 #[cfg(feature = "jit")]
 include!("execution/native.rs");
-
-fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {
-    let Some(frame) = vm.frames.last() else {
-        return false;
-    };
-    if frame.proto == u32::MAX {
-        return false;
-    }
-    vm.chunk
-        .protos()
-        .get(frame.proto as usize)
-        .and_then(|proto| proto.code.get(frame.ip))
-        .copied()
-        == Some(Op::Return as u8)
-}

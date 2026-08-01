@@ -1,5 +1,6 @@
 fn validate_table_limits(chunk: &Chunk, limits: &ValidationLimits) -> Result<()> {
     let lengths = [
+        ("witnesses", chunk.memory_witnesses.len(), crate::MAX_MEMORY_WITNESSES),
         ("types", chunk.structural_types.len(), MAX_STRUCTURAL_TYPES),
         (
             "layouts",
@@ -41,7 +42,8 @@ fn validate_table_limits(chunk: &Chunk, limits: &ValidationLimits) -> Result<()>
         }
     }
 
-    let carries_structural = !chunk.structural_types.is_empty()
+    let carries_structural = !chunk.memory_witnesses.is_empty()
+        || !chunk.structural_types.is_empty()
         || !chunk.structural_layouts.is_empty()
         || !chunk.structural_representations.is_empty()
         || !chunk.structural_destinations.is_empty()

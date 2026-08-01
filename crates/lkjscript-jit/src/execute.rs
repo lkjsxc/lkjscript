@@ -22,6 +22,9 @@ pub fn execute_forced_with_capabilities(
     execution: &ExecutionConfig,
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
+    let (specialized, _specialization) =
+        lkjscript_ir::specialize_native_transport(program).map_err(specialization_error)?;
+    let program = &specialized;
     let main = program.program().main;
     let mut session = JitSession::new_baseline(program, config);
     session.compile_group(main)?;
@@ -58,6 +61,9 @@ pub fn execute_optimizing_with_capabilities(
     config: JitConfig,
 ) -> Result<JitExecution, EngineError> {
     let started = Instant::now();
+    let (specialized, _specialization) =
+        lkjscript_ir::specialize_native_transport(program).map_err(specialization_error)?;
+    let program = &specialized;
     let optimized = if config.proof_discovery_workers > 1 {
         let plan = crate::resource_plan::proof_discovery_plan(config.proof_discovery_workers)
             .map_err(|error| {
@@ -169,6 +175,10 @@ fn capability_arguments(
         .copied()
         .map(NativeValue::Capability)
         .collect())
+}
+
+fn specialization_error(error: lkjscript_ir::IrError) -> EngineError {
+    EngineError::new(FailureCode::UnsupportedSignature, None, error.to_string())
 }
 
 fn optimization_error(error: lkjscript_ir::OptimizationError) -> EngineError {

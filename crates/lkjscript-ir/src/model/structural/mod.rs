@@ -1,9 +1,14 @@
 use super::*;
 
 mod identity;
+mod witness;
 pub use identity::{
     runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
     runtime_product_semantic_type, runtime_structural_semantic_type, runtime_structural_type,
+};
+pub use witness::{
+    MemoryWitnessDescriptor, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
+    MAX_MEMORY_WITNESS_PARAMETERS,
 };
 
 pub const MAX_STRUCTURAL_TYPES: usize = 16_384;
@@ -90,6 +95,7 @@ pub struct StructuralRepresentationMetadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuralMemoryMetadata {
     pub plan: MemoryPlanId,
+    pub witnesses: Vec<MemoryWitnessDescriptor>,
     pub types: Vec<StructuralTypeMetadata>,
     pub layouts: Vec<StructuralLayoutMetadata>,
     pub representations: Vec<StructuralRepresentationMetadata>,
@@ -99,6 +105,7 @@ impl Default for StructuralMemoryMetadata {
     fn default() -> Self {
         Self {
             plan: MemoryPlanId::new([0; 32]),
+            witnesses: Vec::new(),
             types: Vec::new(),
             layouts: Vec::new(),
             representations: Vec::new(),
@@ -107,6 +114,13 @@ impl Default for StructuralMemoryMetadata {
 }
 
 impl StructuralMemoryMetadata {
+    pub fn witness(&self, id: MemoryWitnessId) -> Option<&MemoryWitnessDescriptor> {
+        self.witnesses
+            .binary_search_by_key(&id, |item| item.id)
+            .ok()
+            .and_then(|index| self.witnesses.get(index))
+    }
+
     pub fn type_for(&self, ty: &SsaType) -> Option<&StructuralTypeMetadata> {
         self.types.iter().find(|item| &item.ty == ty)
     }

@@ -1,6 +1,7 @@
 mod contracts;
 mod encoding;
 mod graph;
+mod interface;
 mod manifest;
 mod model;
 
@@ -8,7 +9,9 @@ use std::path::{Path, PathBuf};
 
 use lkjscript_core::{Error, Result};
 
-pub use model::{Dependency, LockFile, LockedModule, LockedPackage, Manifest, Target};
+pub use model::{
+    Dependency, LockFile, LockedModule, LockedPackage, LockedWitnessRequirement, Manifest, Target,
+};
 
 pub const MANIFEST_FILE: &str = manifest::MANIFEST;
 pub const LOCK_FILE: &str = manifest::LOCK;

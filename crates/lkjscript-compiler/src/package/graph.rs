@@ -87,38 +87,27 @@ fn modules(root: &Path, manifest: &Manifest) -> Result<Vec<LockedModule>> {
         let bytes = fs::read(root.join(id))
             .map_err(|error| Error::host(format!("read module {id}: {error}")))?;
         let source_hash = sha256(&bytes);
-        let exports = exports(&bytes, id)?;
+        let (exports, witness_requirements, interface_sha256) =
+            super::interface::build(&bytes, id, module_contract)?;
         let module_hash = framed_hash(
             b"lkjscript.module",
             &[
                 &module_contract.as_bytes(),
                 id.as_bytes(),
                 &source_hash,
-                exports.join("\0").as_bytes(),
+                interface_sha256.as_bytes(),
             ],
         )?;
         result.push(LockedModule {
             id: id.clone(),
             source_sha256: hex(source_hash),
+            interface_sha256,
             module_sha256: module_hash,
             exports,
+            witness_requirements,
         });
     }
     Ok(result)
-}
-
-fn exports(bytes: &[u8], id: &str) -> Result<Vec<String>> {
-    let source = std::str::from_utf8(bytes)
-        .map_err(|error| Error::msg(format!("module {id} is not UTF-8: {error}")))?;
-    let tree = crate::source::validate(source, id, &lkjscript_core::Limits::default())
-        .map_err(|error| Error::msg(error.to_string()))?;
-    let file = tree
-        .files()
-        .first()
-        .ok_or_else(|| Error::msg(format!("module source is absent: {id}")))?;
-    crate::source::module_public_names(file)
-        .map(|names| names.into_iter().collect())
-        .map_err(|error| Error::msg(error.to_string()))
 }
 
 fn package_hash(manifest_hash: &str, modules: &[LockedModule]) -> Result<String> {
@@ -132,7 +121,7 @@ fn package_hash(manifest_hash: &str, modules: &[LockedModule]) -> Result<String>
     framed_hash(b"lkjscript.package", &[&contract.as_bytes(), &records])
 }
 
-fn framed_hash(domain: &[u8], fields: &[&[u8]]) -> Result<String> {
+pub(super) fn framed_hash(domain: &[u8], fields: &[&[u8]]) -> Result<String> {
     let mut bytes = Vec::new();
     frame(&mut bytes, domain)?;
     for field in fields {

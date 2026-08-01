@@ -44,6 +44,7 @@ impl FunctionBuilder<'_> {
     pub(in crate::ssa) fn lower_instantiation(
         &self,
         instantiation: &hir::GenericInstantiation,
+        witness_parameters: &[MemoryWitnessParameter],
     ) -> Result<GenericInstantiation> {
         Ok(GenericInstantiation {
             substitutions: instantiation
@@ -69,6 +70,32 @@ impl FunctionBuilder<'_> {
                                 TraitWitnessKind::Explicit(ImplId::new(id.raw()))
                             }
                         },
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+            memory_witnesses: witness_parameters
+                .iter()
+                .map(|requirement| {
+                    let substitution = instantiation
+                        .substitutions
+                        .iter()
+                        .find(|substitution| substitution.parameter == requirement.parameter)
+                        .ok_or_else(|| Error::msg("generic call lost witness substitution"))?;
+                    let ty = lower_type(&substitution.ty, self.product_ids)?;
+                    let descriptor = self
+                        .structural
+                        .witnesses
+                        .iter()
+                        .find(|descriptor| descriptor.ty == ty)
+                        .ok_or_else(|| {
+                            Error::msg(format!(
+                                "generic substitution {} has no executable memory witness",
+                                substitution.parameter
+                            ))
+                        })?;
+                    Ok(MemoryWitnessBinding {
+                        parameter: requirement.parameter.clone(),
+                        witness: descriptor.id,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?,

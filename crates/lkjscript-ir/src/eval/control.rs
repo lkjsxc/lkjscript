@@ -5,6 +5,7 @@ impl Evaluator<'_> {
         &mut self,
         function_id: FunctionId,
         arguments: Vec<EvalValue>,
+        memory_witnesses: Vec<crate::MemoryWitnessBinding>,
         depth: usize,
     ) -> std::result::Result<EvalValue, Flow> {
         let function = match self
@@ -40,6 +41,12 @@ impl Evaluator<'_> {
             self.execute_unentered_argument_cleanup(arguments);
             return Err(Flow::Trap("evaluator function arity mismatch".into()));
         }
+        if let Err(flow) =
+            self.validate_call_memory_witnesses(&function, &arguments, &memory_witnesses)
+        {
+            self.execute_unentered_argument_cleanup(arguments);
+            return Err(flow);
+        }
         let value_count = function
             .blocks
             .iter()
@@ -64,6 +71,13 @@ impl Evaluator<'_> {
             return Err(flow);
         }
         let result = self.run_function(&function, &mut values, depth);
+        if let Ok(value) = &result {
+            if let Err(flow) = self.validate_call_memory_result(&function, value, &memory_witnesses)
+            {
+                self.cleanup_frame_values(&mut values);
+                return Err(flow);
+            }
+        }
         match result {
             Ok(EvalValue::StructuralView(view) | EvalValue::StructuralUtf8View(view)) => {
                 if let Err(error) = self.structural.runtime.end_view(view.key) {

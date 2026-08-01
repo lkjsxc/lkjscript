@@ -8,7 +8,12 @@ use crate::{
 
 pub(super) fn validate(chunk: &Chunk, limits: &ValidationLimits) -> Result<usize> {
     validate_table_limits(chunk, limits)?;
-    let mut bytes = validate_layouts_and_types(chunk)?;
+    let mut bytes = validate_witnesses(chunk)?;
+    bytes = add(
+        bytes,
+        validate_layouts_and_types(chunk)?,
+        "structural metadata bytes",
+    )?;
     for (index, representation) in chunk.structural_representations.iter().enumerate() {
         if representation.id.index() != index {
             return Err(Error::msg(
@@ -35,6 +40,7 @@ pub(super) fn validate(chunk: &Chunk, limits: &ValidationLimits) -> Result<usize
 }
 
 include!("tables.rs");
+include!("witnesses.rs");
 include!("layouts.rs");
 include!("references.rs");
 include!("metadata.rs");

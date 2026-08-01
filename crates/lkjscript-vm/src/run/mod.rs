@@ -45,7 +45,7 @@ pub(crate) struct Frame {
     pub locals_base: usize,
     pub unique_places: Vec<unique::RuntimePlace>,
     pub borrowed_resources: Vec<Value>,
-    pub return_type_variable_representation: Option<lkjscript_core::StructuralRepresentationId>,
+    pub memory_witnesses: Vec<lkjscript_core::MemoryWitnessBinding>,
 }
 
 enum Stop {

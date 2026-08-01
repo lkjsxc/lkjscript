@@ -23,34 +23,9 @@ pub(in crate::ssa) fn construct_program(
     if !region_products.is_empty() && structural.types.is_empty() {
         structural.plan = lkjscript_ir::MemoryPlanId::new(memory_plan.id.as_bytes());
     }
-    let function_parameter_consumption: HashMap<FunctionId, Vec<bool>> = function_ids
-        .values()
-        .copied()
-        .map(|id| {
-            let modes = memory_plan
-                .function(MemoryFunctionId::new(id.raw()))
-                .map(|function| {
-                    function
-                        .signature
-                        .parameters
-                        .iter()
-                        .map(|mode| *mode == crate::memory_plan::MemoryParameterMode::Consume)
-                        .collect()
-                })
-                .unwrap_or_default();
-            (id, modes)
-        })
-        .collect();
-    let function_effects: HashMap<FunctionId, EffectSet> = program
-        .functions
-        .iter()
-        .filter_map(|function| {
-            function_ids
-                .get(&function.binding)
-                .copied()
-                .map(|id| (id, effects(function.summary)))
-        })
-        .collect();
+    let function_parameter_consumption = parameter_consumption(&function_ids, memory_plan);
+    let function_witness_parameters = witness_parameters(memory_plan)?;
+    let function_effects = function_effects(program, &function_ids);
 
     let mut functions = Vec::with_capacity(program.functions.len().saturating_add(1));
     for function in &program.functions {
@@ -78,11 +53,16 @@ pub(in crate::ssa) fn construct_program(
                 trait_id: TraitId::new(bound.trait_id.raw()),
             })
             .collect();
+        signature.memory_witness_parameters = function_witness_parameters
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| Error::msg("HIR function lost verified memory witness parameters"))?;
         let mut builder = FunctionBuilder::new(
             &product_ids,
             &function_ids,
             &function_effects,
             &function_parameter_consumption,
+            &function_witness_parameters,
             &structural,
             id,
             binding.name.clone(),
@@ -151,6 +131,7 @@ pub(in crate::ssa) fn construct_program(
         &function_ids,
         &function_effects,
         &function_parameter_consumption,
+        &function_witness_parameters,
         main_id,
         memory_plan,
         &structural,
@@ -174,5 +155,6 @@ pub(in crate::ssa) fn construct_program(
     })
 }
 
+include!("program/maps.rs");
 include!("program/source.rs");
 include!("program/metadata.rs");

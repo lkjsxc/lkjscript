@@ -44,6 +44,17 @@ pub(in crate::ssa) fn signature_from_type(
             Ok(Signature {
                 type_parameters: vars.clone(),
                 bounds: Vec::new(),
+                memory_witness_parameters: vars
+                    .iter()
+                    .filter(|variable| {
+                        params.iter().any(|ty| naked_parameter(ty, variable))
+                            || naked_parameter(ret, variable)
+                    })
+                    .map(|parameter| MemoryWitnessParameter {
+                        parameter: parameter.clone(),
+                        operations: vec![lkjscript_contracts::MemoryWitnessOperation::Transport],
+                    })
+                    .collect(),
                 parameters: params
                     .iter()
                     .map(|parameter| lower_type(parameter, products))
@@ -53,6 +64,10 @@ pub(in crate::ssa) fn signature_from_type(
         }
         _ => Err(Error::msg("HIR callable does not have a function type")),
     }
+}
+
+fn naked_parameter(ty: &Type, parameter: &str) -> bool {
+    matches!(ty, Type::Param(name) if name == parameter)
 }
 
 pub(in crate::ssa) fn lower_type(

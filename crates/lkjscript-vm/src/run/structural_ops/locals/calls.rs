@@ -1,45 +1,4 @@
-pub(in crate::run) fn call_return_type_variable_representation<J: RuntimeTier>(
-    vm: &Vm<'_, J>,
-    proto: &lkjscript_core::FunctionProto,
-    arguments: &[Value],
-) -> Result<Option<StructuralRepresentationId>> {
-    let Some(return_variable) = proto.return_type_variable else {
-        return Ok(None);
-    };
-    let mut result = None;
-    for (index, variable) in proto.parameter_type_variables.iter().enumerate() {
-        if *variable != Some(return_variable) {
-            continue;
-        }
-        let Some(value) = arguments.get(index).copied() else {
-            return Err(Error::msg("type-variable call argument is missing"));
-        };
-        if value.as_structural_root().is_none() {
-            continue;
-        }
-        let (_, owner) = invocation(vm)?.owner(value)?;
-        if result.is_some_and(|existing| existing != owner.representation) {
-            return Err(Error::msg("type-variable structural arguments disagree at runtime"));
-        }
-        result = Some(owner.representation);
-    }
-    if let Some(expected) = result {
-        for (index, variable) in proto.parameter_type_variables.iter().enumerate() {
-            if *variable != Some(return_variable) {
-                continue;
-            }
-            let value = arguments
-                .get(index)
-                .copied()
-                .ok_or_else(|| Error::msg("type-variable call argument is missing"))?;
-            let (_, owner) = invocation(vm)?.owner(value)?;
-            if owner.representation != expected {
-                return Err(Error::msg("type-variable call arguments disagree at runtime"));
-            }
-        }
-    }
-    Ok(result)
-}
+include!("calls/witnesses.rs");
 
 pub(in crate::run) fn initialize_call_places(
     chunk: &ValidatedChunk,

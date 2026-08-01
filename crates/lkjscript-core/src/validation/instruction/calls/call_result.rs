@@ -1,12 +1,39 @@
 fn call_return_kind(
+    chunk: &Chunk,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
     structural_variables: &[(u16, crate::StructuralRepresentationId)],
+    memory_witnesses: &[crate::MemoryWitnessBinding],
 ) -> Result<Kind> {
     if let Some(representation) = proto.return_structural {
         return structural_call_result(proto, instruction, representation);
     }
     if let Some(variable) = proto.return_type_variable {
+        if !proto.memory_witness_parameters.is_empty() {
+            let binding = memory_witnesses
+                .iter()
+                .find(|binding| binding.parameter == variable)
+                .ok_or_else(|| {
+                    instruction_error(
+                        proto,
+                        instruction.op(),
+                        instruction.offset(),
+                        "generic return is missing its hidden memory witness",
+                    )
+                })?;
+            let witness = chunk
+                .memory_witnesses
+                .get(usize::from(binding.witness))
+                .ok_or_else(|| {
+                    instruction_error(
+                        proto,
+                        instruction.op(),
+                        instruction.offset(),
+                        "generic return memory witness slot is invalid",
+                    )
+                })?;
+            return witness_call_result(proto, instruction, witness.value_kind);
+        }
         if let Some((_, representation)) = structural_variables
             .iter()
             .find(|(index, _)| *index == variable)
@@ -51,6 +78,31 @@ fn call_return_kind(
         }
         None => Ok(Kind::Any),
     }
+}
+
+fn witness_call_result(
+    proto: &FunctionProto,
+    instruction: DecodedInstruction,
+    kind: crate::MemoryWitnessValueKind,
+) -> Result<Kind> {
+    Ok(match kind {
+        crate::MemoryWitnessValueKind::Unit => Kind::Unit,
+        crate::MemoryWitnessValueKind::Bool => Kind::Bool,
+        crate::MemoryWitnessValueKind::I64 => Kind::I64,
+        crate::MemoryWitnessValueKind::F64 => Kind::F64,
+        crate::MemoryWitnessValueKind::List => Kind::List,
+        crate::MemoryWitnessValueKind::Structural(representation) => {
+            return structural_call_result(proto, instruction, representation)
+        }
+        crate::MemoryWitnessValueKind::Unsupported => {
+            return Err(instruction_error(
+                proto,
+                instruction.op(),
+                instruction.offset(),
+                "generic return witness has no executable value route",
+            ))
+        }
+    })
 }
 
 fn structural_call_result(

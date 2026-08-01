@@ -58,6 +58,17 @@ pub struct LockedPackage {
 pub struct LockedModule {
     pub id: String,
     pub source_sha256: String,
+    pub interface_sha256: String,
     pub module_sha256: String,
     pub exports: Vec<String>,
+    pub witness_requirements: Vec<LockedWitnessRequirement>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LockedWitnessRequirement {
+    pub export: String,
+    pub parameter: String,
+    pub operations: Vec<String>,
+    pub digest: String,
 }

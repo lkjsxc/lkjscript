@@ -120,6 +120,8 @@ pub(crate) fn compile_program(verified: &VerifiedProgram) -> Result<(Chunk, Byte
     chunk.main.locals = main_proto.locals;
     chunk.main.arity = main_proto.arity;
     chunk.main.memory_plan = main_proto.memory_plan;
+    chunk.main.memory_witness_parameters = main_proto.memory_witness_parameters;
+    chunk.main.call_witnesses = main_proto.call_witnesses;
     chunk.main.parameter_structurals = main_proto.parameter_structurals;
     chunk.main.parameter_structural_places = main_proto.parameter_structural_places;
     chunk.main.parameter_type_variables = main_proto.parameter_type_variables;

@@ -47,6 +47,14 @@ impl FunctionBuilder<'_> {
                 (CallTarget::Indirect(target), EffectSet::CONSERVATIVE_CALL)
             }
         };
+        let witness_parameters = match &target {
+            CallTarget::Direct(function) => self
+                .function_witness_parameters
+                .get(function)
+                .cloned()
+                .ok_or_else(|| Error::msg("SSA call target has no memory witness signature"))?,
+            CallTarget::Indirect(_) => Vec::new(),
+        };
         let consuming = match target {
             CallTarget::Direct(function) => self
                 .function_parameter_consumption
@@ -77,7 +85,9 @@ impl FunctionBuilder<'_> {
                 consuming,
                 signature,
                 instantiation: instantiation
-                    .map(|instantiation| self.lower_instantiation(instantiation))
+                    .map(|instantiation| {
+                        self.lower_instantiation(instantiation, &witness_parameters)
+                    })
                     .transpose()?,
             },
             call_effects,

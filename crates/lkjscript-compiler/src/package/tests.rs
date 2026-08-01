@@ -106,6 +106,41 @@ fn public_enum_identity_includes_its_variants() {
 }
 
 #[test]
+fn public_generic_interface_binds_hidden_transport_witness() {
+    let root = fixture("generic-witness");
+    fs::write(
+        root.join("history.lkjscript"),
+        concat!(
+            "def/\nname/\nkeep\n/name\npublic\nfn/\nforall/\nt\n/forall\n",
+            "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+            "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n"
+        ),
+    )
+    .unwrap();
+    let manifest_path = root.join(MANIFEST_FILE);
+    let mut manifest: Manifest =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest.modules.push("history.lkjscript".into());
+    manifest.modules.sort();
+    fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+    let lock = graph::build(&root).unwrap();
+    let module = lock.packages[0]
+        .modules
+        .iter()
+        .find(|module| module.id == "history.lkjscript")
+        .unwrap();
+    assert_eq!(module.exports, ["keep"]);
+    assert_eq!(module.witness_requirements.len(), 1);
+    let requirement = &module.witness_requirements[0];
+    assert_eq!(requirement.export, "keep");
+    assert_eq!(requirement.parameter, "t");
+    assert_eq!(requirement.operations, ["transport"]);
+    assert_eq!(requirement.digest.len(), 64);
+    assert_eq!(module.interface_sha256.len(), 64);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn package_capabilities_are_closed_and_exact() {
     let root = fixture("capabilities");
     let path = root.join(MANIFEST_FILE);

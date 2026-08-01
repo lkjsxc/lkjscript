@@ -1,12 +1,13 @@
 use lkjscript_core::Result;
 
-use super::{HirMemoryPlan, MemoryPlanId, MemoryWitnessFacts, MemoryWitnessId};
+use super::{HirMemoryPlan, MemoryPlanId, MemoryType, MemoryWitnessFacts, MemoryWitnessId};
 use canonical::Encoder;
 
 mod canonical;
 
 const PLAN_DOMAIN: &[u8] = b"lkjscript.hir-memory-plan\0canonical-platform-contract";
 const WITNESS_DOMAIN: &[u8] = b"lkjscript.memory-witness\0canonical-platform-contract";
+const TYPE_DOMAIN: &[u8] = b"lkjscript.memory-type\0canonical-platform-contract";
 
 pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
     let mut output = Encoder::new(PLAN_DOMAIN)?;
@@ -28,6 +29,12 @@ pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
     Ok(MemoryPlanId::from_bytes(lkjscript_core::sha256(
         &output.finish(),
     )))
+}
+
+pub(super) fn compute_type_id(ty: &MemoryType) -> Result<[u8; 32]> {
+    let mut output = Encoder::new(TYPE_DOMAIN)?;
+    output.value(ty)?;
+    Ok(lkjscript_core::sha256(&output.finish()))
 }
 
 pub(super) fn compute_witness_id(facts: &MemoryWitnessFacts) -> Result<MemoryWitnessId> {

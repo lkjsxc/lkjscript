@@ -35,3 +35,18 @@ fn initial_unique_places(
     }
     Ok(places)
 }
+
+fn is_tail_position<J: RuntimeTier>(vm: &Vm<'_, J>) -> bool {
+    let Some(frame) = vm.frames.last() else {
+        return false;
+    };
+    if frame.proto == u32::MAX {
+        return false;
+    }
+    vm.chunk
+        .protos()
+        .get(frame.proto as usize)
+        .and_then(|proto| proto.code.get(frame.ip))
+        .copied()
+        == Some(Op::Return as u8)
+}

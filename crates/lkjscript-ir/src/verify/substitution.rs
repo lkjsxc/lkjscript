@@ -93,6 +93,7 @@ pub(crate) fn substitute_type(ty: &SsaType, substitutions: &HashMap<&str, SsaTyp
             SsaType::Function(Box::new(Signature {
                 type_parameters: signature.type_parameters.clone(),
                 bounds: signature.bounds.clone(),
+                memory_witness_parameters: signature.memory_witness_parameters.clone(),
                 parameters: signature
                     .parameters
                     .iter()

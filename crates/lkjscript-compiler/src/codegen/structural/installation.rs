@@ -2,24 +2,13 @@ pub(in crate::codegen) fn install_structural_metadata(
     chunk: &mut Chunk,
     program: &lkjscript_ir::Program,
 ) -> Result<()> {
-    if !program.functions.iter().any(|function| {
-        function.blocks.iter().any(|block| {
-            block.instructions.iter().any(|instruction| {
-                matches!(
-                    instruction.kind,
-                    InstructionKind::StructuralPublish { .. }
-                        | InstructionKind::DestinationCreate { .. }
-                        | InstructionKind::DestinationFieldInit { .. }
-                        | InstructionKind::DestinationFinish { .. }
-                        | InstructionKind::DestinationAbort { .. }
-                        | InstructionKind::AggregateFieldBorrow { .. }
-                        | InstructionKind::AggregateTag { .. }
-                        | InstructionKind::AggregateConsumePayload { .. }
-                        | InstructionKind::StringUtf8View { .. }
-                )
-            })
-        })
-    }) {
+    let install_structural_routes = requirements::structural_routes(program);
+    let install_executable_witnesses =
+        requirements::executable_witnesses(program, install_structural_routes);
+    if install_executable_witnesses {
+        install_memory_witnesses(chunk, program, install_structural_routes)?;
+    }
+    if !install_structural_routes {
         if !program.region_products.is_empty() {
             chunk.memory_plan = Some(BytecodeMemoryPlanId::new(program.memory.plan.bytes()));
         }

@@ -32,6 +32,25 @@ pub(in crate::codegen) fn compile_function(
         arity,
         locals,
         memory_plan: chunk.memory_plan,
+        memory_witness_parameters: function
+            .signature
+            .memory_witness_parameters
+            .iter()
+            .map(|requirement| {
+                let parameter = function
+                    .signature
+                    .type_parameters
+                    .iter()
+                    .position(|name| name == &requirement.parameter)
+                    .and_then(|index| u16::try_from(index).ok())
+                    .ok_or_else(|| Error::msg("SSA memory witness parameter is not canonical"))?;
+                Ok(lkjscript_core::MemoryWitnessParameter {
+                    parameter,
+                    operations: requirement.operations.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+        call_witnesses: Vec::new(),
         parameter_structurals: entry
             .parameters
             .iter()

@@ -1,0 +1,42 @@
+{
+  "schema": "lkjscript.package",
+  "contract": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
+  "name": "polymorphic-history-consumer",
+  "source_root": ".",
+  "modules": [
+    "history-blocks-large.lkjscript",
+    "history-blocks.lkjscript",
+    "history-snapshot.lkjscript",
+    "history-values.lkjscript",
+    "history-workload.lkjscript",
+    "main.lkjscript"
+  ],
+  "public": [
+    "history-snapshot.lkjscript",
+    "history-workload.lkjscript",
+    "main.lkjscript"
+  ],
+  "dependencies": [
+    {
+      "name": "polymorphic-history",
+      "path": "history",
+      "content_sha256": "f415e2bc817a9c9d7861c43c015c17d3ca86e53525188f3a7a738ae3c4311607"
+    }
+  ],
+  "capabilities": [],
+  "targets": [
+    {
+      "name": "history-snapshot",
+      "module": "history-snapshot.lkjscript"
+    },
+    {
+      "name": "history-workload",
+      "module": "history-workload.lkjscript"
+    },
+    {
+      "name": "main",
+      "module": "main.lkjscript"
+    }
+  ],
+  "resource_profile": null
+}

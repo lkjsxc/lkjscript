@@ -1,0 +1,12 @@
+{
+  "schema": "lkjscript.package",
+  "contract": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
+  "name": "polymorphic-history",
+  "source_root": ".",
+  "modules": ["history.lkjscript"],
+  "public": ["history.lkjscript"],
+  "dependencies": [],
+  "capabilities": [],
+  "targets": [],
+  "resource_profile": null
+}

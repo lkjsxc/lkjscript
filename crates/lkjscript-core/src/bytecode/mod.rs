@@ -1,6 +1,7 @@
 mod chunk;
 mod enum_metadata;
 mod structural;
+mod witness;
 
 pub use chunk::{
     runtime_product_contract_identity, Chunk, ConstId, Constant, FailureCleanupAction,
@@ -12,3 +13,4 @@ pub use enum_metadata::{
     EnumVariantMetadata, EnumVariantRef, RuntimeLayoutId, VariantFieldId, VariantId,
 };
 pub use structural::*;
+pub use witness::*;

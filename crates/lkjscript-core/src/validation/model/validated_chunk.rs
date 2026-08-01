@@ -65,6 +65,10 @@ impl ValidatedChunk {
         &self.chunk.enum_fields
     }
 
+    pub fn memory_witnesses(&self) -> &[crate::InstalledMemoryWitness] {
+        &self.chunk.memory_witnesses
+    }
+
     pub fn structural_types(&self) -> &[crate::StructuralTypeMetadata] {
         &self.chunk.structural_types
     }

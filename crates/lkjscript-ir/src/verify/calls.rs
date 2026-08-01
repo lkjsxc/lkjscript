@@ -11,6 +11,7 @@ pub(crate) fn verify_resolved_signature(
 ) -> crate::Result<()> {
     if !signature.type_parameters.is_empty()
         || !signature.bounds.is_empty()
+        || !signature.memory_witness_parameters.is_empty()
         || signature.parameters.len() != arguments.len()
         || signature.result.as_ref() != result
     {
@@ -79,6 +80,31 @@ pub(crate) fn verify_call_compatibility(
             return fail(
                 "SSA ownership/reference generic instantiation is unavailable in this slice",
             );
+        }
+    }
+    if instantiation.memory_witnesses.len() != declared.memory_witness_parameters.len() {
+        return fail("SSA generic call memory witness count does not match hidden parameters");
+    }
+    for (requirement, binding) in declared
+        .memory_witness_parameters
+        .iter()
+        .zip(&instantiation.memory_witnesses)
+    {
+        let expected_type = substitutions
+            .get(requirement.parameter.as_str())
+            .ok_or_else(|| IrError::new("SSA memory witness parameter was not inferred"))?;
+        let descriptor = program
+            .memory
+            .witness(binding.witness)
+            .ok_or_else(|| IrError::new("SSA generic call memory witness is not installed"))?;
+        if binding.parameter != requirement.parameter
+            || &descriptor.ty != expected_type
+            || requirement
+                .operations
+                .iter()
+                .any(|operation| !descriptor.supports(*operation))
+        {
+            return fail("SSA generic call memory witness does not match type or operations");
         }
     }
     if instantiation.witnesses.len() != declared.bounds.len() {

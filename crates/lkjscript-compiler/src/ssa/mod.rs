@@ -10,14 +10,15 @@ use lkjscript_ir::{
     EnumFieldMetadata, EnumLayoutFacts, EnumMetadata, EnumVariantMetadata, FailureBehavior,
     FailureCleanupAction, FailureCleanupId, FailureCleanupPlan, FrameLocal, FrameState, Function,
     FunctionId, GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind,
-    InstructionMetadata, LoanId as SsaLoanId, MemoryWitnessId, Origin, PlaceId as SsaPlaceId,
-    PlaceMetadata, ProductField, ProductId, ProductMetadata, Program, RegionProductMetadata,
-    RuntimeLayoutId, RuntimeOp, Signature, SourceMetadata, SsaType, StructuralDropGlueIdentity,
-    StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
-    StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
-    StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
-    StructuralVariantLayout, Terminator, TraitBound, TraitId, TraitMetadata, TraitRole,
-    TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VerifiedProgram,
+    InstructionMetadata, LoanId as SsaLoanId, MemoryWitnessBinding, MemoryWitnessId,
+    MemoryWitnessParameter, Origin, PlaceId as SsaPlaceId, PlaceMetadata, ProductField, ProductId,
+    ProductMetadata, Program, RegionProductMetadata, RuntimeLayoutId, RuntimeOp, Signature,
+    SourceMetadata, SsaType, StructuralDropGlueIdentity, StructuralLayoutId, StructuralLayoutKind,
+    StructuralLayoutMetadata, StructuralMemoryMetadata, StructuralRepresentationId,
+    StructuralRepresentationMetadata, StructuralStorage, StructuralTypeId, StructuralTypeMetadata,
+    StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout, Terminator, TraitBound,
+    TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
+    VerifiedProgram,
 };
 
 use crate::hir::{self, BindingId, BindingStorage, Expr, ExprKind, LocalDefinition, Operation};
@@ -121,6 +122,8 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) function_ids: &'a HashMap<BindingId, FunctionId>,
     pub(in crate::ssa) function_effects: &'a HashMap<FunctionId, EffectSet>,
     pub(in crate::ssa) function_parameter_consumption: &'a HashMap<FunctionId, Vec<bool>>,
+    pub(in crate::ssa) function_witness_parameters:
+        &'a HashMap<FunctionId, Vec<MemoryWitnessParameter>>,
     pub(in crate::ssa) structural: &'a StructuralMemoryMetadata,
     pub(in crate::ssa) id: FunctionId,
     pub(in crate::ssa) name: String,

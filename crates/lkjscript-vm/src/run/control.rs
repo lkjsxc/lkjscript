@@ -38,8 +38,13 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         }
         x if x == Op::MakeClosure as u8 => make_closure(vm),
         x if x == Op::Call as u8 => {
+            let call_offset = vm
+                .frames
+                .last()
+                .and_then(|frame| frame.ip.checked_sub(1))
+                .ok_or_else(|| Error::msg("call instruction offset is unavailable"))?;
             let argc = vm.read_u8()?;
-            call(vm, argc)
+            call(vm, argc, call_offset)
         }
         x if x == Op::Return as u8 => {
             let ret = vm.pop()?;

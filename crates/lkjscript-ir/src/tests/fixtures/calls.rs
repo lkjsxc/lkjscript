@@ -8,6 +8,7 @@ pub(crate) fn bounded_call_program() -> Program {
             parameter: "t".into(),
             trait_id: TraitId::new(0),
         }],
+        memory_witness_parameters: Vec::new(),
         parameters: vec![SsaType::TypeParameter("t".into())],
         result: Box::new(SsaType::TypeParameter("t".into())),
     };
@@ -77,6 +78,7 @@ pub(crate) fn bounded_call_program() -> Program {
                                         ty: SsaType::I64,
                                         kind: TraitWitnessKind::AutoTrait,
                                     }],
+                                    memory_witnesses: Vec::new(),
                                 }),
                             },
                             metadata: InstructionMetadata {

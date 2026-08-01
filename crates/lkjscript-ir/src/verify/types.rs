@@ -9,6 +9,33 @@ pub(crate) fn is_numeric(ty: &SsaType) -> bool {
     matches!(ty, SsaType::I64 | SsaType::F64)
 }
 
+pub(crate) fn verify_witness_parameters(
+    signature: &Signature,
+    type_parameters: &[&str],
+) -> crate::Result<()> {
+    if signature.memory_witness_parameters.len() > crate::MAX_MEMORY_WITNESS_PARAMETERS {
+        return fail("SSA function has too many hidden memory witness parameters");
+    }
+    let mut prior = None;
+    for requirement in &signature.memory_witness_parameters {
+        let position = type_parameters
+            .iter()
+            .position(|parameter| *parameter == requirement.parameter)
+            .ok_or_else(|| IrError::new("SSA memory witness names an undeclared type parameter"))?;
+        if prior.is_some_and(|prior| prior >= position)
+            || requirement.operations.is_empty()
+            || requirement
+                .operations
+                .windows(2)
+                .any(|pair| pair[0] >= pair[1])
+        {
+            return fail("SSA memory witness parameters are not canonical");
+        }
+        prior = Some(position);
+    }
+    Ok(())
+}
+
 pub(crate) fn verify_type(
     program: &Program,
     ty: &SsaType,
@@ -114,6 +141,7 @@ pub(crate) fn verify_type_at(
                     return fail("SSA function type uses an unavailable core trait bound");
                 }
             }
+            verify_witness_parameters(signature, &nested_parameters)?;
             for parameter in &signature.parameters {
                 verify_type_at(
                     program,

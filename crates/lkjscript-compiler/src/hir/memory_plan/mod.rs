@@ -11,6 +11,10 @@ pub use model::*;
 
 use encoding::compute_plan_id;
 
+pub(crate) fn memory_type_identity(ty: &MemoryType) -> Result<[u8; 32]> {
+    encoding::compute_type_id(ty)
+}
+
 pub const MAX_MEMORY_PLAN_FUNCTIONS: u64 = 4_096;
 pub const MAX_MEMORY_PLAN_EXPRESSIONS: u64 = 16_384;
 pub const MAX_MEMORY_PLAN_ENTRIES: u64 = 65_536;

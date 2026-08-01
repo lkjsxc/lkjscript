@@ -10,6 +10,8 @@ pub(crate) fn test_chunk() -> ValidatedChunk {
         arity: 0,
         locals: 0,
         memory_plan: None,
+        memory_witness_parameters: Vec::new(),
+        call_witnesses: Vec::new(),
         parameter_structurals: Vec::new(),
         parameter_structural_places: Vec::new(),
         parameter_type_variables: Vec::new(),

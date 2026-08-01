@@ -46,7 +46,7 @@ pub(super) fn root() -> PathBuf {
 
 pub(super) fn package() -> PackageContentId {
     let digest = lkjscript_contracts::ContractDigest::from_hex(
-        "5abaa965951efcfd87b27e57d776a8eddec68e25ae644cf167d62a7b04e47b80",
+        "5cff173468167e062d06f878ef72291ea2593386e344c5e77bf779902a24d330",
     )
     .expect("workspace package identity");
     PackageContentId::new(digest.as_bytes()).expect("package identity")

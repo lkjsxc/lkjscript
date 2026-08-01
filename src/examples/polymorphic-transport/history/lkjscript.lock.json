@@ -1,0 +1,24 @@
+{
+  "schema": "lkjscript.package-lock",
+  "contract": "aeeea1f5b78f016b3f5111bc403aa0ad3cab4ec8e86d1301b8e343d0a9844bcd",
+  "root": "f415e2bc817a9c9d7861c43c015c17d3ca86e53525188f3a7a738ae3c4311607",
+  "contracts": {
+    "lkjscript.language": "796f5e6f6173411fa774c28dd8d673522917f34f5c75783ccfee114581bf9981",
+    "lkjscript.module-interface": "fc8521911a5d4946e01b2e587fffb67811a929170b114b9202f9f48b97d3c63b",
+    "lkjscript.package": "1bcab2a487a01237673bd86625baa06e93b31d67ac15c671203062502519f68a",
+    "lkjscript.package-lock": "aeeea1f5b78f016b3f5111bc403aa0ad3cab4ec8e86d1301b8e343d0a9844bcd",
+    "lkjscript.source": "8946b34d1f0569c5dff74078026ecf0f9785407e7ce7d74d2d2c9350e81738dc"
+  },
+  "packages": [
+    {
+      "name": "polymorphic-history",
+      "origin": ".",
+      "manifest_sha256": "d07652e8ea2356a2f9ab5f713ddb2fef0fb951a5a18980988cd9f4a2e5a8f228",
+      "package_sha256": "f415e2bc817a9c9d7861c43c015c17d3ca86e53525188f3a7a738ae3c4311607",
+      "dependencies": [],
+      "modules": [
+        {"id":"history.lkjscript","source_sha256":"c03343508825fe4e86130f15f7ad35bcad3d3ca9f1c45b327ba808a161bf742d","interface_sha256":"79b062b10ad418714cc8e17e19d4c634f4ea8aa5349b925fc759f400ace7a193","module_sha256":"25847bc020b704b1e211ee773e6486f16f5dc907b79b8b85ea9b5ab535ad9bd3","exports":["keep-history"],"witness_requirements":[{"export":"keep-history","parameter":"t","operations":["transport"],"digest":"8e8475338a64ba411bf18b8ea0fffef404da2df4959c73bb71207eea9145fea4"}]}
+      ]
+    }
+  ]
+}

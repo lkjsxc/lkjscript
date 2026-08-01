@@ -31,6 +31,7 @@ pub(super) fn apply(
             }
             arguments.reverse();
             let result = if let Some(callee_proto) = callee_proto {
+                let callee_index = callee_proto;
                 let callee_proto = usize::try_from(callee_proto)
                     .ok()
                     .and_then(|index| chunk.protos.get(index))
@@ -50,6 +51,14 @@ pub(super) fn apply(
                         "statically known call arity mismatch",
                     ));
                 }
+                let memory_witnesses = validate_memory_witness_arguments(
+                    chunk,
+                    proto,
+                    callee_index,
+                    callee_proto,
+                    &arguments,
+                    instruction,
+                )?;
                 validate_resource_arguments(callee_proto, &arguments, proto, instruction)?;
                 consume_resource_arguments(state, callee_proto, &arguments);
                 validate_unique_arguments(callee_proto, &arguments, proto, instruction)?;
@@ -62,7 +71,13 @@ pub(super) fn apply(
                     proto,
                     instruction,
                 )?;
-                call_return_kind(callee_proto, instruction, &structural_variables)?
+                call_return_kind(
+                    chunk,
+                    callee_proto,
+                    instruction,
+                    &structural_variables,
+                    &memory_witnesses,
+                )?
             } else {
                 if arguments.iter().any(|kind| {
                     matches!(
@@ -136,6 +151,7 @@ pub(super) fn apply(
 }
 
 include!("arguments.rs");
+include!("witness_arguments.rs");
 include!("call_result.rs");
 include!("copy_arguments.rs");
 include!("region_products.rs");

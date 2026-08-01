@@ -17,6 +17,7 @@ impl Origin {
 pub struct Signature {
     pub type_parameters: Vec<String>,
     pub bounds: Vec<TraitBound>,
+    pub memory_witness_parameters: Vec<MemoryWitnessParameter>,
     pub parameters: Vec<SsaType>,
     pub result: Box<SsaType>,
 }
@@ -26,6 +27,7 @@ impl Signature {
         Self {
             type_parameters: Vec::new(),
             bounds: Vec::new(),
+            memory_witness_parameters: Vec::new(),
             parameters,
             result: Box::new(result),
         }
@@ -102,6 +104,18 @@ pub struct ImplMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MemoryWitnessParameter {
+    pub parameter: String,
+    pub operations: Vec<lkjscript_contracts::MemoryWitnessOperation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MemoryWitnessBinding {
+    pub parameter: String,
+    pub witness: MemoryWitnessId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeSubstitution {
     pub parameter: String,
     pub ty: SsaType,
@@ -124,4 +138,5 @@ pub struct TraitWitness {
 pub struct GenericInstantiation {
     pub substitutions: Vec<TypeSubstitution>,
     pub witnesses: Vec<TraitWitness>,
+    pub memory_witnesses: Vec<MemoryWitnessBinding>,
 }

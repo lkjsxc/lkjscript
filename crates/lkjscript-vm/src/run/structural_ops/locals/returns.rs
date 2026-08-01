@@ -16,10 +16,23 @@ pub(in crate::run) fn prepare_return<J: RuntimeTier>(
             .protos()
             .get(prototype as usize)
             .ok_or_else(|| Error::msg("return prototype metadata is missing"))?;
-        let variable_representation = vm
-            .frames
-            .last()
-            .and_then(|frame| frame.return_type_variable_representation);
+        let variable_representation = proto.return_type_variable.and_then(|variable| {
+            vm.frames
+                .last()
+                .and_then(|frame| {
+                    frame
+                        .memory_witnesses
+                        .iter()
+                        .find(|binding| binding.parameter == variable)
+                })
+                .and_then(|binding| vm.chunk.memory_witnesses().get(usize::from(binding.witness)))
+                .and_then(|witness| match witness.value_kind {
+                    lkjscript_core::MemoryWitnessValueKind::Structural(representation) => {
+                        Some(representation)
+                    }
+                    _ => None,
+                })
+        });
         (
             proto.return_structural,
             proto.return_type_variable,

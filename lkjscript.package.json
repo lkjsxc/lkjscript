@@ -33,6 +33,13 @@
     "src/examples/mandel/draw/cy-of.lkjscript", "src/examples/mandel/draw/grid.lkjscript",
     "src/examples/mandel/draw/nl.lkjscript", "src/examples/mandel/draw/row.lkjscript",
     "src/examples/mandel/draw/shade.lkjscript", "src/examples/mandel/main.lkjscript",
+    "src/examples/polymorphic-transport/history-blocks-large.lkjscript",
+    "src/examples/polymorphic-transport/history-blocks.lkjscript",
+    "src/examples/polymorphic-transport/history-snapshot.lkjscript",
+    "src/examples/polymorphic-transport/history-values.lkjscript",
+    "src/examples/polymorphic-transport/history-workload.lkjscript",
+    "src/examples/polymorphic-transport/history/history.lkjscript",
+    "src/examples/polymorphic-transport/main.lkjscript",
     "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript",
     "src/examples/sqlite/read-number.lkjscript", "src/lib/lkjedit/input.lkjscript",
     "src/lib/lkjedit/launch.lkjscript", "src/lib/lkjedit/session/command.lkjscript",
@@ -61,6 +68,9 @@
     "src/examples/jit-scalar/main.lkjscript", "src/examples/lkjedit/buffer-demo.lkjscript",
     "src/examples/lkjedit/edit-mem.lkjscript", "src/examples/lkjedit/hello.lkjscript",
     "src/examples/lkjedit/main.lkjscript", "src/examples/mandel/main.lkjscript",
+    "src/examples/polymorphic-transport/history-snapshot.lkjscript",
+    "src/examples/polymorphic-transport/history-workload.lkjscript",
+    "src/examples/polymorphic-transport/main.lkjscript",
     "src/examples/sha256/main.lkjscript", "src/examples/sqlite/main.lkjscript"
   ],
   "dependencies": [],
@@ -127,6 +137,18 @@
 {
       "name": "optimizing-loop",
       "module": "crates/lkjscript-app/tests/fixtures/optimizing-loop.lkjscript"
+    },
+{
+      "name": "polymorphic-history-snapshot",
+      "module": "src/examples/polymorphic-transport/history-snapshot.lkjscript"
+    },
+{
+      "name": "polymorphic-history-workload",
+      "module": "src/examples/polymorphic-transport/history-workload.lkjscript"
+    },
+{
+      "name": "polymorphic-transport-main",
+      "module": "src/examples/polymorphic-transport/main.lkjscript"
     },
 {
       "name": "pre-jit-workload-main",

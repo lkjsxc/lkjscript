@@ -21,6 +21,7 @@ pub(crate) fn verify_function(program: &Program, function: &Function) -> crate::
             function.name
         ));
     }
+    verify_witness_parameters(&function.signature, &type_parameters)?;
     let mut seen_bounds = HashSet::new();
     for bound in &function.signature.bounds {
         if !type_parameters.contains(&bound.parameter.as_str()) {

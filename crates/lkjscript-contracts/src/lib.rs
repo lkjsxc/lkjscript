@@ -28,7 +28,12 @@ pub use domains::{
     STRUCTURAL_OWNERSHIP_DOMAINS_DIGEST, TYPED_HIR, VERIFIED_SSA, VERIFIED_SSA_DIGEST,
 };
 pub use encoding::canonical_bytes;
-pub use memory::{memory_obligations, MemoryObligation};
+pub use memory::{
+    memory_obligations, ExecutableMemoryWitnessFacts, MemoryObligation, MemoryWitnessCodec,
+    MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
+    MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation,
+    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize,
+};
 pub use model::{
     ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,
     ContractItemKind, ContractName, FactOrdering, NameIdentity,

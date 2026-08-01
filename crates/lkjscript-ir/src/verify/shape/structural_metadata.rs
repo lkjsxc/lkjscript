@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
 use crate::verify::*;
+#[path = "function/witnesses.rs"]
+mod witnesses;
+
 use crate::{
     Program, SsaType, StructuralLayoutKind, StructuralStorage, StructuralValueCategory,
     MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
@@ -9,7 +12,11 @@ use crate::{
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
     let memory = &program.memory;
-    if memory.types.is_empty() && memory.layouts.is_empty() && memory.representations.is_empty() {
+    if memory.witnesses.is_empty()
+        && memory.types.is_empty()
+        && memory.layouts.is_empty()
+        && memory.representations.is_empty()
+    {
         if program.region_products.is_empty() {
             if memory.plan.is_resolved() {
                 return fail("SSA empty structural tables cannot carry a resolved MemoryPlanId");
@@ -22,6 +29,7 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
     if !memory.plan.is_resolved() {
         return fail("SSA structural tables require a resolved MemoryPlanId");
     }
+    witnesses::verify(program)?;
     if memory.types.len() > MAX_STRUCTURAL_TYPES
         || memory.layouts.len() > MAX_STRUCTURAL_LAYOUTS
         || memory.representations.len() > MAX_STRUCTURAL_REPRESENTATIONS

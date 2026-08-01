@@ -8,8 +8,15 @@ mod templates;
 mod templates_runtime;
 mod templates_scalar;
 mod templates_special;
+mod witness;
 
 pub use model::MemoryObligation;
+pub use witness::{
+    ExecutableMemoryWitnessFacts, MemoryWitnessCodec, MemoryWitnessContention, MemoryWitnessCopy,
+    MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
+    MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot,
+    MemoryWitnessSize,
+};
 
 use templates_special::resource;
 

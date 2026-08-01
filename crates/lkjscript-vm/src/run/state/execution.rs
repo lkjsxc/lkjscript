@@ -25,7 +25,7 @@ impl<'a, J: RuntimeTier> Vm<'a, J> {
                 usize::from(self.chunk.main().unique_places)
             ],
             borrowed_resources: Vec::new(),
-            return_type_variable_representation: None,
+            memory_witnesses: Vec::new(),
         });
         for kind in &self.inputs.capabilities {
             self.stack.push(Value::from_capability(*kind));

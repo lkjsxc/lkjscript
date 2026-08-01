@@ -31,6 +31,11 @@ fn function_metadata_bytes(chunk: &Chunk) -> Result<(usize, usize)> {
             .saturating_add(usize::from(chunk.main.return_region_product.is_some()) * 3),
         "metadata byte size",
     )?;
+    metadata_bytes = checked_add(
+        metadata_bytes,
+        witness_metadata_bytes(&chunk.main),
+        "metadata byte size",
+    )?;
     metadata_bytes = checked_add(metadata_bytes, 6, "metadata byte size")?;
     metadata_bytes = checked_add(
         metadata_bytes,
@@ -63,6 +68,11 @@ fn function_metadata_bytes(chunk: &Chunk) -> Result<(usize, usize)> {
                 .saturating_add(usize::from(proto.return_region_product.is_some()) * 3),
             "metadata byte size",
         )?;
+        metadata_bytes = checked_add(
+            metadata_bytes,
+            witness_metadata_bytes(proto),
+            "metadata byte size",
+        )?;
         metadata_bytes = checked_add(metadata_bytes, 6, "metadata byte size")?;
         metadata_bytes = checked_add(
             metadata_bytes,
@@ -72,4 +82,18 @@ fn function_metadata_bytes(chunk: &Chunk) -> Result<(usize, usize)> {
         encoded_bytes = checked_add(encoded_bytes, proto.code.len(), "encoded byte size")?;
     }
     Ok((metadata_bytes, encoded_bytes))
+}
+
+fn witness_metadata_bytes(proto: &FunctionProto) -> usize {
+    let requirements = proto
+        .memory_witness_parameters
+        .iter()
+        .map(|item| 3usize.saturating_add(item.operations.len()))
+        .fold(0usize, usize::saturating_add);
+    let calls = proto
+        .call_witnesses
+        .iter()
+        .map(|item| 8usize.saturating_add(item.bindings.len().saturating_mul(4)))
+        .fold(0usize, usize::saturating_add);
+    requirements.saturating_add(calls)
 }

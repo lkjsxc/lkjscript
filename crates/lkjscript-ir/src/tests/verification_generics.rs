@@ -9,6 +9,7 @@ fn verifier_rejects_generic_ownership_substitution() {
         signature: Signature {
             type_parameters: vec!["t".into()],
             bounds: Vec::new(),
+            memory_witness_parameters: Vec::new(),
             parameters: vec![SsaType::TypeParameter("t".into())],
             result: Box::new(SsaType::TypeParameter("t".into())),
         },
@@ -90,6 +91,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                                 ty: byte_vector_type(),
                             }],
                             witnesses: Vec::new(),
+                            memory_witnesses: Vec::new(),
                         }),
                     },
                     metadata: InstructionMetadata {
@@ -155,6 +157,7 @@ fn verifier_rejects_generic_ownership_substitution() {
                                 ty: reference.clone(),
                             }],
                             witnesses: Vec::new(),
+                            memory_witnesses: Vec::new(),
                         }),
                     },
                     metadata: InstructionMetadata {

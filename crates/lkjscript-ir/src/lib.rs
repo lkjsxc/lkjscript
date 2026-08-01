@@ -7,6 +7,7 @@ mod model;
 mod numeric_contract;
 mod optimize;
 pub mod prelude_contract;
+mod specialize;
 mod utf8_contract;
 mod verify;
 
@@ -29,17 +30,18 @@ pub use model::{
     GenericInstantiation, ImplId, ImplMetadata, Instruction, InstructionKind, InstructionMetadata,
     IrError, LoanId, MemoryAliasing, MemoryContention, MemoryDestruction, MemoryIdentity,
     MemoryLocality, MemoryMode, MemoryMultiplicity, MemoryObligationSubject, MemoryPlanId,
-    MemoryPortability, MemoryStorage, MemoryWitnessId, Origin, PlaceId, PlaceMetadata,
-    ProductField, ProductId, ProductMetadata, Program, RegionProductMetadata, Result,
-    RuntimeLayoutId, RuntimeOp, Signature, SourceMetadata, SsaMemoryInventory, SsaMemoryObligation,
-    SsaType, StructuralDropGlueIdentity, StructuralLayoutId, StructuralLayoutKind,
-    StructuralLayoutMetadata, StructuralMemoryMetadata, StructuralRepresentationId,
-    StructuralRepresentationMetadata, StructuralStorage, StructuralTypeId, StructuralTypeMetadata,
-    StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout, StructuredOutcome,
-    Terminator, TraitBound, TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind,
-    TypeSubstitution, ValueId, VariantFieldId, VariantId, MAX_REGION_PRODUCTS,
-    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
-    MAX_STRUCTURAL_TYPES,
+    MemoryPortability, MemoryStorage, MemoryWitnessBinding, MemoryWitnessDescriptor,
+    MemoryWitnessId, MemoryWitnessParameter, Origin, PlaceId, PlaceMetadata, ProductField,
+    ProductId, ProductMetadata, Program, RegionProductMetadata, Result, RuntimeLayoutId, RuntimeOp,
+    Signature, SourceMetadata, SsaMemoryInventory, SsaMemoryObligation, SsaType,
+    StructuralDropGlueIdentity, StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata,
+    StructuralMemoryMetadata, StructuralRepresentationId, StructuralRepresentationMetadata,
+    StructuralStorage, StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode,
+    StructuralValueCategory, StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound,
+    TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
+    VariantFieldId, VariantId, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
+    MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS, MAX_STRUCTURAL_LAYOUTS,
+    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 pub use optimize::{
     canonical_block_order, constant_fold_and_propagate, copy_propagate, direct_call_resolution,
@@ -48,6 +50,9 @@ pub use optimize::{
     OptimizationCertificate, OptimizationCertificateRecord, OptimizationEditKind,
     OptimizationError, OptimizationFailureCode, OptimizationLimits, OptimizationStats,
     ScheduledOptimizationReport, VerifiedOptimizedProgram,
+};
+pub use specialize::{
+    specialize_native_transport, NativeSpecializationStats, MAX_NATIVE_TRANSPORT_SPECIALIZATIONS,
 };
 pub use verify::{
     verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,

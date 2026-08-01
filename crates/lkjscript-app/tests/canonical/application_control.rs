@@ -4,6 +4,64 @@ use super::application_control_support::{cli, invoke, lifecycle, Daemon};
 
 #[cfg(target_os = "linux")]
 #[test]
+fn isolated_process_executes_locked_cross_package_transport_witness(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let state = std::env::temp_dir().join(format!(
+        "lkjscript-polymorphic-app-control-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&state);
+    std::fs::create_dir(&state)?;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../src/examples/polymorphic-transport")
+        .canonicalize()?;
+    let endpoint = state.join("control.sock").to_string_lossy().into_owned();
+    let mut daemon = Daemon::start(&state)?;
+    let install = cli(&[
+        "system".into(),
+        "app".into(),
+        "install".into(),
+        "--endpoint".into(),
+        endpoint.clone(),
+        "--name".into(),
+        "polymorphic-transport".into(),
+        "--package".into(),
+        "a8838a2de9a913bf27d0a19e5d31e2c7a5a4d34dba1babf41bba73c60b1b6680".into(),
+        "--root".into(),
+        root.to_string_lossy().into_owned(),
+        "--entry".into(),
+        "history-snapshot.lkjscript".into(),
+        "--capabilities".into(),
+        "none".into(),
+        "--concurrent".into(),
+        "1".into(),
+        "--total".into(),
+        "2".into(),
+    ])?;
+    assert!(
+        install.status.success(),
+        "{}",
+        String::from_utf8_lossy(&install.stderr)
+    );
+    assert!(lifecycle(&endpoint, "start")?.status.success());
+    let invoked = invoke(&endpoint)?;
+    assert!(
+        invoked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&invoked.stderr)
+    );
+    assert!(invoked.stdout.is_empty());
+    let outcome = String::from_utf8(invoked.stderr)?;
+    assert!(outcome.contains("Returned(#<owned-list:1>)"), "{outcome}");
+    assert!(lifecycle(&endpoint, "stop")?.status.success());
+    assert!(lifecycle(&endpoint, "remove")?.status.success());
+    daemon.stop()?;
+    std::fs::remove_dir_all(state)?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn daemon_persists_restarts_and_controls_runnable_application(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let state = std::env::temp_dir().join(format!("lkjscript-app-control-{}", std::process::id()));
@@ -23,7 +81,7 @@ fn daemon_persists_restarts_and_controls_runnable_application(
         "--name".into(),
         "persistent-hello".into(),
         "--package".into(),
-        "5abaa965951efcfd87b27e57d776a8eddec68e25ae644cf167d62a7b04e47b80".into(),
+        "5cff173468167e062d06f878ef72291ea2593386e344c5e77bf779902a24d330".into(),
         "--root".into(),
         root.to_string_lossy().into_owned(),
         "--entry".into(),

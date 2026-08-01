@@ -41,14 +41,17 @@ pub use runtime::RuntimeOp;
 pub use structural::{
     runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
     runtime_product_semantic_type, runtime_structural_semantic_type, runtime_structural_type,
-    RegionProductMetadata, StructuralDropGlueIdentity, StructuralLayoutKind,
-    StructuralLayoutMetadata, StructuralMemoryMetadata, StructuralRepresentationMetadata,
-    StructuralStorage, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
-    StructuralVariantLayout, MAX_REGION_PRODUCTS, MAX_STRUCTURAL_LAYOUTS,
-    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
+    MemoryWitnessDescriptor, RegionProductMetadata, StructuralDropGlueIdentity,
+    StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
+    StructuralRepresentationMetadata, StructuralStorage, StructuralTypeMetadata,
+    StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout, MAX_MEMORY_WITNESSES,
+    MAX_MEMORY_WITNESS_DEPENDENCIES, MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS,
+    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
+    MAX_STRUCTURAL_TYPES,
 };
 pub use terminator::{BlockMetadata, StructuredOutcome, Terminator};
 pub use types::{
-    GenericInstantiation, ImplMetadata, Origin, Signature, SsaType, TraitBound, TraitMetadata,
-    TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution,
+    GenericInstantiation, ImplMetadata, MemoryWitnessBinding, MemoryWitnessParameter, Origin,
+    Signature, SsaType, TraitBound, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind,
+    TypeSubstitution,
 };

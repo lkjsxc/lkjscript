@@ -13,6 +13,8 @@ fn tail_call_reuses_the_current_frame() {
         arity: 1,
         locals: 1,
         memory_plan: None,
+        memory_witness_parameters: Vec::new(),
+        call_witnesses: Vec::new(),
         parameter_structurals: Vec::new(),
         parameter_structural_places: Vec::new(),
         parameter_type_variables: Vec::new(),
@@ -38,6 +40,8 @@ fn tail_call_reuses_the_current_frame() {
         arity: 0,
         locals: 0,
         memory_plan: None,
+        memory_witness_parameters: Vec::new(),
+        call_witnesses: Vec::new(),
         parameter_structurals: Vec::new(),
         parameter_structural_places: Vec::new(),
         parameter_type_variables: Vec::new(),
@@ -73,13 +77,13 @@ fn tail_call_reuses_the_current_frame() {
         locals_base: 0,
         unique_places: Vec::new(),
         borrowed_resources: Vec::new(),
-        return_type_variable_representation: None,
+        memory_witnesses: Vec::new(),
     });
     let argument = Value::from_i64(42);
     vm.push(argument);
     vm.push(vm.chunk.function_value(0).expect("function value"));
 
-    call(&mut vm, 1).expect("tail call");
+    call(&mut vm, 1, 0).expect("tail call");
 
     assert_eq!(vm.frames.len(), 1);
     assert_eq!(vm.frames[0].proto, 0);
@@ -122,12 +126,12 @@ fn borrowed_resource_parameters_remain_nonconsuming_in_callee_locals() {
         locals_base: 0,
         unique_places: Vec::new(),
         borrowed_resources: Vec::new(),
-        return_type_variable_representation: None,
+        memory_witnesses: Vec::new(),
     });
     let resource = Value::from_resource(17);
     vm.push(resource);
     vm.push(vm.chunk.function_value(0).expect("function value"));
-    call(&mut vm, 1).expect("borrowed-resource call");
+    call(&mut vm, 1, 0).expect("borrowed-resource call");
 
     assert_eq!(vm.frames[1].borrowed_resources, vec![resource]);
     vm.push(resource);

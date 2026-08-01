@@ -1,5 +1,9 @@
 use crate::codegen::*;
 
+mod requirements;
+mod witnesses;
+use witnesses::install_memory_witnesses;
+
 include!("installation.rs");
 
 pub(in crate::codegen) fn structural_owner_representation(

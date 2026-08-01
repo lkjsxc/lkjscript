@@ -89,7 +89,7 @@ pub fn evaluate_observed(
         lists,
         region_products,
     };
-    let result = evaluator.call(program.program().main, arguments, 0);
+    let result = evaluator.call(program.program().main, arguments, Vec::new(), 0);
     let primary = match result {
         Ok(value) => evaluator.adapt_return(value),
         Err(flow) => Err(flow),
