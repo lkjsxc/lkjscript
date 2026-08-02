@@ -2,12 +2,13 @@
 
 ## Status
 
-**Experimental for residual transport, locked generic package interfaces,
-nested copy-list transport, selected structural-list execution in all four
-tiers, and the cross-package semantic snapshot.** The
-sealed-region scaling result extends the already-Current internal substrate but
-is not a language sealed-value claim. The complete polymorphic sealed-value
-plane remains Accepted Target and this partial slice is not Current.
+**Experimental for authenticated executable memory witnesses, validated-return
+sealed DAG import, residual transport, locked generic package interfaces, nested
+copy-list transport, selected structural-list execution in all four tiers, and
+the cross-package semantic snapshot.** The sealed-region scaling result extends
+the already-Current internal substrate but is not a language sealed-value claim.
+The complete polymorphic sealed-value plane remains Accepted Target and this
+partial slice is not Current.
 
 ## Evidence Identity
 
@@ -16,7 +17,8 @@ Evaluator/VM owner-list commit: `96653f9c0a9368464e5c00d49901a5f82823a1d1`.
 Revision-14 four-tier cutover commit: `941252e0f7ad5b4d91eb43f94cd8277101bbc3ae`.
 Exact native identity commit: `727f1207f4be31d53207a9661807ea4dd8d13d5c`.
 Iterative native aggregate-equality commit: `a6de268fcc992349c47c4bca336402e263ba8545`.
-Platform revision: `14`.
+Revision-15 authenticated witness commit: `715a13b93fd907660505254bfb8f3570a740d0e1`.
+Platform revision: `15`.
 Environment: Linux x86-64, locked Rust workspace.
 
 ## Experimental Residual Witness Slice
@@ -47,6 +49,36 @@ Environment: Linux x86-64, locked Rust workspace.
   most 16 parameters and arguments. Nested unresolved parameter uses, indirect
   calls, nonidentity bodies, identity mismatch, bound overflow, and unknown
   operations reject rather than falling back.
+
+## Revision-15 Authenticated Witness Slice
+
+A contracts-owned binary encoder now commits exact executable facts, closed
+operations, and ordered dependency identities with fixed tags and framing. HIR
+producer and independent verifier reconstruct permitted capabilities separately
+from the selected type-level route. SSA and bytecode preserve the projection and
+recompute every installed identity; malformed facts, operation routes,
+dependency records, and cycles reject. Move, exclusive-borrow, and external
+handle routes do not acquire clone authority.
+
+The only public sealed DAG import resolves the validated return representation
+and its compiler-installed witness. It requires exact witness identity, mode,
+structural root, sealed and codec capabilities, decode operation, and owner
+representation before validating DAG shape. The former public API accepting a
+caller-supplied root and type closure is private test machinery. Compiler-source
+product, path, option-string, result-path, and general-enum tests exercise this
+boundary; the product test crosses the key-free execution-outcome codec before
+import into a fresh runtime. Exact enum physical tags, active variants, field
+order, nested types, rollback, borrow/export, and final coarse-owner release are
+covered. Focused Miri, ASan, LSan, TSan, release scaling, canonical verification,
+and Docker verification pass on the commit.
+
+This is receiver-side capability-authorized import, not compiler-selected
+sealed placement of an executing source value. Product and enum witnesses do not
+yet commit a complete ordered child-witness closure, structural semantic/layout
+relinking remains incomplete, the HIR executable projection is still shared by
+producer and verifier, and package/lock authority does not yet bind the installed
+closure. The process codec test is same-process and is not daemon/process-cell
+receiver evidence. These boundaries prevent promotion to Current.
 
 ## Locked Package Interface
 
@@ -86,14 +118,15 @@ nested immutable structural owners, shared subgraphs, exact type/layout facts,
 full framing consumption, and forward, cycle, unreachable, type, and bound
 rejection. Construction remains private until complete validation.
 
-A source-invisible safe-core adapter checks one exact root and a bounded sorted
-type set before copying the DAG into one private sealed region. It atomically
-publishes one coarse owner, supports borrowed key-free export, returns the
-unchanged snapshot on failure, and rolls back its dropless builder without
-allocating cleanup. An 8-versus-2,048-node test keeps owner/dependency release
-planning at one region unit; chunk reclamation is not claimed invariant.
-Validated bytecode derives exact immutable product/copy shape, but no executable
-witness fact, execution tier, list, or ordinary-region path uses the adapter.
+Private core tests retain a direct root/type-closure adapter for malformed and
+scaling coverage. Production callers cannot use it. The public import derives
+its exact root and bounded type closure from validated bytecode and the installed
+compiler witness, then copies the DAG into one private sealed region. It
+atomically publishes one coarse owner, supports borrowed key-free export,
+returns the unchanged snapshot on failure, and rolls back its dropless builder
+without allocating cleanup. An 8-versus-2,048-node test keeps owner/dependency
+release planning at one region unit; chunk reclamation is not claimed invariant.
+No execution tier, list, or ordinary-region path yet selects this adapter.
 
 ## Four-Tier Workload And Snapshot
 
@@ -124,74 +157,20 @@ invariant with payload-node count. This proves the Current sealed-region
 substrate has no per-node reference-count traffic; it does not claim a source
 `sealed` type or language selection.
 
-## Commands Run On The Implementation
+## Command Evidence
 
-The following commands exited zero against implementation commit `9f82cc5c` or
-its evidence-and-gate descendant. Canonical `quiet verify` completed in 23
-seconds and its final rerun in 20 seconds; release build plus ten runtime smokes
-in 79 seconds, Docker verify in
-206 seconds, and the 12,000-level Miri stress in 1,321 seconds in the recorded
-environment. Nightly Miri emitted three atomic-method deprecation warnings and
-no errors:
-
-```text
-cargo test --locked --workspace --all-targets
-cargo test --locked -p lkjscript-compiler
-cargo test --locked -p lkjscript-core --all-targets
-cargo test --locked -p lkjscript-ir --lib
-cargo test --locked -p lkjscript-vm --lib
-cargo test --locked -p lkjscript-app --test jit_engines segmented_lists::
-cargo test --release --locked -p lkjscript-app --test jit_engines segmented_lists::structural_owners::
-cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-cargo test --locked -p lkjscript-app --test jit_engines generic_
-cargo test --locked -p lkjscript-app --test cli_contract application_control::
-cargo test --locked -p lkjscript-app --test numeric_contract
-cargo test --locked -p lkjscript-core --test sealed_scaling
-cargo run --locked -q -p lkjscript-xtask -- structure check
-cargo run --locked -q -p lkjscript-xtask -- structure audit
-cargo run --locked -q -p lkjscript-xtask -- check-sources
-cargo run --locked -p lkjscript-xtask -- quiet verify
-cargo run --locked -q -p lkjscript-app --bin lkjscript -- package check
-cargo build --workspace --release --locked
-./target/release/lkjscript run src/examples/jit-scalar/main.lkjscript
-./target/release/lkjscript run --engine vm src/examples/jit-scalar/main.lkjscript
-./target/release/lkjscript run --engine baseline-jit src/examples/jit-scalar/main.lkjscript
-./target/release/lkjscript run --engine optimizing-jit src/examples/jit-optimizing/main.lkjscript
-./target/release/lkjscript run --engine auto --auto-jit-threshold 2 src/examples/jit-scalar/main.lkjscript
-./target/release/lkjscript run --engine vm src/examples/hello/main.lkjscript
-./target/release/lkjscript run --engine vm src/examples/mandel/main.lkjscript
-./target/release/lkjscript run --engine vm src/examples/polymorphic-transport/history-snapshot.lkjscript
-./target/release/lkjscript run --engine baseline-jit src/examples/polymorphic-transport/history-workload.lkjscript
-./target/release/lkjscript run --engine optimizing-jit src/examples/polymorphic-transport/history-workload.lkjscript
-docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
-CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
-  -p lkjscript-core --test value_runtime \
-  tests::deep::deep_image_conversion_clone_export_and_release_are_iterative \
-  -- --exact --nocapture
-CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
-  -p lkjscript-core --test sealed_scaling -- --nocapture
-CARGO_TARGET_DIR=target/lkjscript/miri-structural-equality cargo +nightly miri test \
-  --locked -p lkjscript-jit \
-  island::structural::equality::tests::semantic_equality_is_iterative_and_exact_for_deep_products \
-  -- --exact --nocapture
-CARGO_TARGET_DIR=target/lkjscript/asan-structural-plane RUSTFLAGS='-Zsanitizer=address' \
-  cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu --locked \
-  -p lkjscript-app --test jit_engines segmented_lists:: -- --nocapture
-CARGO_TARGET_DIR=target/lkjscript/lsan-structural-plane RUSTFLAGS='-Zsanitizer=leak' \
-  cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu --locked \
-  -p lkjscript-app --test jit_engines segmented_lists:: -- --nocapture
-CARGO_TARGET_DIR=target/lkjscript/tsan-structural-plane RUSTFLAGS='-Zsanitizer=thread' \
-  cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu --locked \
-  -p lkjscript-app --test jit_engines segmented_lists:: -- --nocapture
-```
+Exact revision-15 and retained earlier commands are recorded in the
+[verification evidence](polymorphic-value-plane-verification.md).
 
 ## Explicitly Not Current
 
 - no source `sealed T` or `seal` operation;
 - no memory-plan selection of sealed storage for language values;
-- no path/result/general-enum matrix or product structural equality;
-- no compiler/evaluator/VM/native DAG export, installed-witness binding, or
-  execution-tier sealed DAG rehydration;
+- no product structural equality or authenticated structural-list import;
+- no evaluator/VM/native DAG export or execution-tier sealed DAG rehydration;
+- no complete product/enum child-witness closure, exact structural-layout
+  relinking, independent executable projection, or package-interface binding;
+- no daemon/process-cell receiver-side authenticated rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;
 - no indirect generic callable ABI or specialization of bodies beyond the exact
