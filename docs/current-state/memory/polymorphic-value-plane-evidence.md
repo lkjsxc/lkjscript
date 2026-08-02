@@ -92,8 +92,8 @@ publishes one coarse owner, supports borrowed key-free export, returns the
 unchanged snapshot on failure, and rolls back its dropless builder without
 allocating cleanup. An 8-versus-2,048-node test keeps owner/dependency release
 planning at one region unit; chunk reclamation is not claimed invariant.
-No compiler, execution tier, list/ordinary-region path, or installed witness
-table uses the adapter, so it remains prerequisite infrastructure.
+Validated bytecode derives exact immutable product/copy shape, but no executable
+witness fact, execution tier, list, or ordinary-region path uses the adapter.
 
 ## Four-Tier Workload And Snapshot
 
