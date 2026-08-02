@@ -41,10 +41,11 @@ impl JitIslandServices {
             .result_type()
             .reference_type()
             .ok_or(NativeServiceError::HostFailure)?;
-        if tail.reference_type() != result_type
-            || self.list_allocations >= self.max_list_allocations
-        {
-            return self.list_trap("structural list prepend type or allocation mismatch");
+        if tail.reference_type() != result_type {
+            return self.list_trap("structural list prepend type mismatch");
+        }
+        if self.list_allocations >= self.max_list_allocations {
+            return Err(NativeServiceError::ResourceLimitExceeded);
         }
         let tail_key = self.list_key(*tail)?;
         let projected = self
@@ -167,9 +168,11 @@ impl JitIslandServices {
 
     pub(super) fn map_list_error(error: lkjscript_core::SegmentedListError) -> NativeServiceError {
         match error {
-            lkjscript_core::SegmentedListError::Limit(_) => {
-                NativeServiceError::ResourceLimitExceeded
-            }
+            lkjscript_core::SegmentedListError::Limit(
+                lkjscript_core::SegmentedListLimit::HostAllocation
+                | lkjscript_core::SegmentedListLimit::Entries
+                | lkjscript_core::SegmentedListLimit::Segments,
+            ) => NativeServiceError::ResourceLimitExceeded,
             _ => NativeServiceError::Trap,
         }
     }

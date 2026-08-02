@@ -6,11 +6,15 @@ fn rejects_reused_interned_identity_for_distinct_structural_layouts(
     let reused = LayoutIdentity::new(70_000);
     let list = ValueType::Reference(ReferenceType::List(
         reused,
+        900,
         ValueType::I64.layout_identity(),
+        901,
     ));
     let list_f64 = ValueType::Reference(ReferenceType::List(
         reused,
+        900,
         ValueType::F64.layout_identity(),
+        902,
     ));
     let mut plan = MachinePlanBuilder::new();
     for (source, value_type) in [(1, list), (2, list_f64)] {

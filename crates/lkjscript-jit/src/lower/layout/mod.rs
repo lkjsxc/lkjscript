@@ -16,6 +16,7 @@ impl LayoutInterner {
     ) -> Result<Self, LoweringError> {
         let mut interner = Self {
             identities: HashMap::new(),
+            semantics: HashMap::new(),
             region_products: program
                 .region_products
                 .iter()
@@ -40,6 +41,7 @@ impl LayoutInterner {
                 }))
             {
                 interner.intern(ty)?;
+                interner.intern_semantics(program, ty)?;
             }
         }
         Ok(interner)
@@ -53,7 +55,7 @@ impl LayoutInterner {
                     self.intern(argument)?;
                 }
             }
-            SsaType::Str | SsaType::Path => {}
+            SsaType::Str | SsaType::Path | SsaType::Product(_) => {}
             _ => return Ok(()),
         }
         if !self.identities.contains_key(ty) {
@@ -70,6 +72,30 @@ impl LayoutInterner {
         Ok(())
     }
 
+    fn intern_semantics(
+        &mut self,
+        program: &lkjscript_ir::Program,
+        ty: &SsaType,
+    ) -> Result<(), LoweringError> {
+        match ty {
+            SsaType::List(inner) => self.intern_semantics(program, inner)?,
+            SsaType::Enum { arguments, .. } => {
+                for argument in arguments {
+                    self.intern_semantics(program, argument)?;
+                }
+            }
+            SsaType::Str | SsaType::Path | SsaType::Product(_) => {}
+            _ => return Ok(()),
+        }
+        if !self.semantics.contains_key(ty) {
+            let semantic = lkjscript_ir::runtime_structural_semantic_type(Some(program), ty)
+                .map_err(|error| invalid_structural(&error.to_string()))?
+                .get();
+            self.semantics.insert(ty.clone(), semantic);
+        }
+        Ok(())
+    }
+
     pub(super) fn region_product_identity(
         &self,
         product: lkjscript_ir::ProductId,
@@ -79,6 +105,13 @@ impl LayoutInterner {
 
     pub(super) const fn structural(&self) -> &StructuralCatalog {
         &self.structural
+    }
+
+    pub(super) fn semantic(&self, ty: &SsaType) -> Option<u64> {
+        self.structural
+            .value_type(ty)
+            .map(lkjscript_native::StructuralTypeIdentity::semantic_type)
+            .or_else(|| self.semantics.get(ty).copied())
     }
 
     pub(super) fn identity(&self, ty: &SsaType) -> Option<LayoutIdentity> {

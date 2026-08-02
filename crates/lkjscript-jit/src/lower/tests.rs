@@ -31,6 +31,7 @@ fn nested_layout_interner_is_injective_for_previous_result_tag_collision() {
     };
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),
+        semantics: std::collections::HashMap::new(),
         region_products: std::collections::HashMap::new(),
         structural: Default::default(),
         next: LayoutInterner::FIRST_NESTED_IDENTITY,
@@ -45,6 +46,7 @@ fn layout_identity_exhaustion_is_structured() {
     let ty = SsaType::List(Box::new(SsaType::Unit));
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),
+        semantics: std::collections::HashMap::new(),
         region_products: std::collections::HashMap::new(),
         structural: Default::default(),
         next: u32::MAX,
@@ -65,6 +67,7 @@ fn concrete_enum_layouts_are_injective_and_host_substitutions_reject() {
     };
     let mut layouts = LayoutInterner {
         identities: std::collections::HashMap::new(),
+        semantics: std::collections::HashMap::new(),
         region_products: std::collections::HashMap::new(),
         structural: Default::default(),
         next: LayoutInterner::FIRST_NESTED_IDENTITY,

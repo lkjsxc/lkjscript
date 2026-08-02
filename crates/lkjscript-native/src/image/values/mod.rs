@@ -81,7 +81,7 @@ pub enum NativeExecutionDomain {
 /// ```compile_fail
 /// use lkjscript_native::{LayoutIdentity, NativeReference, ReferenceType};
 /// let reference = NativeReference::new(
-///     ReferenceType::List(LayoutIdentity::new(0), LayoutIdentity::new(1)),
+///     ReferenceType::List(LayoutIdentity::new(0), 1, LayoutIdentity::new(2), 3),
 ///     7,
 /// );
 /// std::thread::spawn(move || reference.opaque_word());

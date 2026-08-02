@@ -31,7 +31,7 @@ impl InstallableImage {
             has_invocation_reference |= matches!(
                 value_type,
                 ValueType::Reference(
-                    ReferenceType::List(_, _) | ReferenceType::RegionProduct(_, _)
+                    ReferenceType::List(_, _, _, _) | ReferenceType::RegionProduct(_, _)
                 )
             );
             has_resource |= matches!(

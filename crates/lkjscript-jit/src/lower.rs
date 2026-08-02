@@ -122,6 +122,7 @@ pub(crate) struct LoweredGroup {
 #[derive(Default)]
 struct LayoutInterner {
     identities: HashMap<SsaType, LayoutIdentity>,
+    semantics: HashMap<SsaType, u64>,
     region_products: HashMap<lkjscript_ir::ProductId, [u8; 32]>,
     structural: StructuralCatalog,
     next: u32,

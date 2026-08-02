@@ -24,7 +24,7 @@ impl LayoutIdentity {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ReferenceType {
-    List(LayoutIdentity, LayoutIdentity),
+    List(LayoutIdentity, u64, LayoutIdentity, u64),
     RegionProduct(LayoutIdentity, [u8; 32]),
 }
 
@@ -117,7 +117,7 @@ impl ValueType {
             Self::Loan(LoanType::ByteSliceMut) => LayoutIdentity::new(30),
             Self::Unique(UniqueType::Bytes) => LayoutIdentity::new(31),
             Self::Reference(ReferenceType::RegionProduct(layout, _))
-            | Self::Reference(ReferenceType::List(layout, _)) => layout,
+            | Self::Reference(ReferenceType::List(layout, _, _, _)) => layout,
         }
     }
 }

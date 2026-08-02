@@ -105,7 +105,21 @@ pub(super) fn lower_type(
         }
         SsaType::List(element) => Ok(ValueType::Reference(ReferenceType::List(
             exact_layout_identity(function, layouts, ty)?,
+            layouts.semantic(ty).ok_or_else(|| {
+                LoweringError::new(
+                    LoweringFailureCode::UnsupportedType,
+                    Some(function),
+                    format!("type {ty:?} has no exact semantic identity"),
+                )
+            })?,
             exact_layout_identity(function, layouts, element)?,
+            layouts.semantic(element).ok_or_else(|| {
+                LoweringError::new(
+                    LoweringFailureCode::UnsupportedType,
+                    Some(function),
+                    format!("type {element:?} has no exact semantic identity"),
+                )
+            })?,
         ))),
         SsaType::Enum { .. } => Err(LoweringError::new(
             LoweringFailureCode::UnsupportedType,

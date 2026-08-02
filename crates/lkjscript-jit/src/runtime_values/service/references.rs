@@ -17,7 +17,7 @@ impl JitValueServices<'_> {
                 .map_err(|error| format!("region-product identity mismatch: {error:?}"))?;
             return Ok(Value::from_region_product(key));
         }
-        if matches!(reference_type, ReferenceType::List(_, _)) {
+        if matches!(reference_type, ReferenceType::List(_, _, _, _)) {
             let key = self
                 .lists
                 .key_from_word(reference.opaque_word())
@@ -52,7 +52,7 @@ impl JitValueServices<'_> {
                 lkjscript_native::NativeReference::new(reference_type, word),
             ));
         }
-        if matches!(reference_type, ReferenceType::List(_, _)) {
+        if matches!(reference_type, ReferenceType::List(_, _, _, _)) {
             let word = if value.is_empty_list() {
                 0
             } else {

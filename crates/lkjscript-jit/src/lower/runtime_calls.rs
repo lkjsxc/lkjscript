@@ -16,7 +16,7 @@ pub(super) fn lower_runtime(
     let reference_equality = operation == RuntimeOp::EqualValue
         && input_types
             .first()
-            .is_some_and(|ty| matches!(ty, ValueType::Reference(ReferenceType::List(_, _))));
+            .is_some_and(|ty| matches!(ty, ValueType::Reference(ReferenceType::List(_, _, _, _))));
     let heap = heap_operation(operation);
     let heap_dispatch = reference_equality || heap.is_some();
     let values = arguments

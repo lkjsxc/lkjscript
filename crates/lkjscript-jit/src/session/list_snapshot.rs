@@ -22,7 +22,7 @@ impl JitSession {
                 "invocation-region product cannot cross the process boundary",
             ));
         }
-        if !matches!(reference.reference_type(), ReferenceType::List(_, _)) {
+        if !matches!(reference.reference_type(), ReferenceType::List(_, _, _, _)) {
             return Err(invocation_failure(
                 function,
                 "non-list reference cannot cross the process boundary",

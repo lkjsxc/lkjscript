@@ -7,7 +7,7 @@ pub(super) enum LayoutShape {
     I64,
     F64,
     RegionProduct(u32, [u8; 32]),
-    List(crate::LayoutIdentity),
+    List(u64, crate::LayoutIdentity, u64),
 }
 
 pub(super) fn verify_layout_identities(
@@ -59,7 +59,17 @@ pub(super) fn verify_layout_identities(
                     }
                     (identity, LayoutShape::RegionProduct(product, digest))
                 }
-                ReferenceType::List(identity, element) => (identity, LayoutShape::List(element)),
+                ReferenceType::List(identity, semantic, element, element_semantic) => {
+                    if semantic == 0 || element_semantic == 0 {
+                        return Err(VerificationError::TypeMismatch(
+                            "structural semantic identity",
+                        ));
+                    }
+                    (
+                        identity,
+                        LayoutShape::List(semantic, element, element_semantic),
+                    )
+                }
             };
             if identities
                 .insert(identity, shape)
