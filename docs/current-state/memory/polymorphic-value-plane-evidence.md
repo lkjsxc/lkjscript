@@ -2,8 +2,9 @@
 
 ## Status
 
-**Experimental for authenticated executable memory witnesses, validated-return
-sealed DAG import, residual transport, locked generic package interfaces, nested
+**Experimental for canonical semantic witness closures, authenticated executable
+memory witnesses, validated-return sealed DAG import, residual transport, locked
+generic package interfaces, nested
 copy-list transport, selected structural-list execution in all four tiers, and
 the cross-package semantic snapshot.** The sealed-region scaling result extends
 the already-Current internal substrate but is not a language sealed-value claim.
@@ -18,7 +19,8 @@ Revision-14 four-tier cutover commit: `941252e0f7ad5b4d91eb43f94cd8277101bbc3ae`
 Exact native identity commit: `727f1207f4be31d53207a9661807ea4dd8d13d5c`.
 Iterative native aggregate-equality commit: `a6de268fcc992349c47c4bca336402e263ba8545`.
 Revision-15 authenticated witness commit: `715a13b93fd907660505254bfb8f3570a740d0e1`.
-Platform revision: `15`.
+Revision-16 semantic-closure commit: `187ec9bc8f68dd6a437e69d3781e81f7de6a6694`.
+Platform revision: `16`.
 Environment: Linux x86-64, locked Rust workspace.
 
 ## Experimental Residual Witness Slice
@@ -72,13 +74,24 @@ order, nested types, rollback, borrow/export, and final coarse-owner release are
 covered. Focused Miri, ASan, LSan, TSan, release scaling, canonical verification,
 and Docker verification pass on the commit.
 
-This is receiver-side capability-authorized import, not compiler-selected
-sealed placement of an executing source value. Product and enum witnesses do not
-yet commit a complete ordered child-witness closure, structural semantic/layout
-relinking remains incomplete, the HIR executable projection is still shared by
-producer and verifier, and package/lock authority does not yet bind the installed
-closure. The process codec test is same-process and is not daemon/process-cell
-receiver evidence. These boundaries prevent promotion to Current.
+## Revision-16 Canonical Semantic Closure Slice
+
+Products and ordered fields now have stable Semantic Source content identities.
+A contracts-owned target-neutral descriptor closes the exact reachable product,
+enum, argument, list, function, and recursive declaration graph without Rust
+`Debug`. Product-field, enum-variant-field, type-argument, and list-element roles
+target exact child witnesses or same-SCC local semantic identities, avoiding a
+witness self-hash. Separate producer and verifier traversals construct the data;
+SSA and bytecode retain it and independently recompute semantic-contract,
+semantic-type-closure, and executable-witness identities. Malformed roles,
+local targets, external semantic links and cycles, and duplicate bytecode owner
+representations reject. Unrelated declarations do not perturb a witness.
+
+This remains receiver-side capability-authorized import, not compiler-selected
+sealed placement. Revision 16 does not install atomic recursive executable
+witness groups or bind package/lock provenance. Structural layout relinking is
+still incomplete, and the same-process codec is not daemon receiver evidence.
+These boundaries prevent promotion to Current.
 
 ## Locked Package Interface
 
@@ -168,8 +181,8 @@ Exact revision-15 and retained earlier commands are recorded in the
 - no memory-plan selection of sealed storage for language values;
 - no product structural equality or authenticated structural-list import;
 - no evaluator/VM/native DAG export or execution-tier sealed DAG rehydration;
-- no complete product/enum child-witness closure, exact structural-layout
-  relinking, independent executable projection, or package-interface binding;
+- no atomic recursive executable witness groups, exact structural-layout
+  relinking, package memory-interface binding, or prepared artifact envelope;
 - no daemon/process-cell receiver-side authenticated rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;

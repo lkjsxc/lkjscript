@@ -30,6 +30,29 @@ RUSTFLAGS='-Zsanitizer=SANITIZER' cargo +nightly test -Zbuild-std \
 cargo test --release --locked -p lkjscript-core --test sealed_scaling -- --nocapture
 ```
 
+## Revision-16 Canonical Closure Commands
+
+The revision-16 semantic closure implementation passed the focused contract,
+compiler, IR, core, and authenticated application tests, strict focused Clippy,
+canonical verification, structure check/audit, and package check. The full
+runtime, Docker, Miri, sanitizer, cross-build, and performance campaigns were
+not rerun for this intermediate trust-layer cut.
+
+```text
+cargo test --locked -p lkjscript-contracts
+cargo test --locked -p lkjscript-compiler
+cargo test --locked -p lkjscript-ir
+cargo test --locked -p lkjscript-core
+cargo test --locked -p lkjscript-app authenticated_
+cargo clippy --locked -p lkjscript-contracts -p lkjscript-compiler \
+  -p lkjscript-ir -p lkjscript-core --all-targets --all-features -- -D warnings
+cargo run --locked -p lkjscript-xtask -- quiet verify
+cargo run --locked -p lkjscript-xtask -- structure check
+cargo run --locked -p lkjscript-xtask -- structure audit --json
+cargo run --locked -p lkjscript-app --bin lkjscript -- package check
+git diff --check
+```
+
 ## Earlier Slice Commands
 
 The following older commands exited zero against implementation commit
