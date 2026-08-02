@@ -17,6 +17,7 @@ use lkjscript_native::{
 mod access;
 mod conversion;
 mod destination;
+mod equality;
 mod lifecycle;
 mod lists;
 mod model;

@@ -47,27 +47,6 @@ impl JitStructuralRuntime {
     ) -> Result<bool, NativeServiceError> {
         let left = left.as_structural_root().ok_or(NativeServiceError::Trap)?;
         let right = right.as_structural_root().ok_or(NativeServiceError::Trap)?;
-        let left_type = self
-            .owners
-            .get(&left.get())
-            .copied()
-            .ok_or(NativeServiceError::Trap)?;
-        let right_type = self
-            .owners
-            .get(&right.get())
-            .copied()
-            .ok_or(NativeServiceError::Trap)?;
-        if left_type != right_type {
-            return Ok(false);
-        }
-        let expected = core_type(left_type)?;
-        let pair = match (
-            self.runtime.value_node(left, expected),
-            self.runtime.value_node(right, expected),
-        ) {
-            (Ok(left), Ok(right)) => (left, right),
-            (Err(error), _) | (_, Err(error)) => return Err(self.map_error(error)),
-        };
-        Ok(node_bytes(pair.0)? == node_bytes(pair.1)?)
+        self.semantic_owners_equal(left, right)
     }
 }
