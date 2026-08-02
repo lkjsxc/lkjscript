@@ -47,6 +47,17 @@ reclamation still frees every region chunk and is not claimed node-count
 invariant. No cell has an owner count, runtime key, dense witness slot, pointer,
 provider token, resource, or affine payload.
 
+## Rejected Witness-Fact Shortcut
+
+A post-`a77a3572` candidate that accepted hand-authored sealed witness flags was
+removed. Current compiler policy emits deterministic products as unique,
+worker-local, single-owner values with dynamic ownership, not sealed-share
+witnesses. Core bytecode validation also does not recompute a witness ID from
+executable facts or link their full semantic identities back to HIR authority.
+Accepting those flags would therefore authorize forged metadata rather than a
+compiler-produced proof. Exact witness authentication and a reachable producer
+must precede this binding.
+
 ## Focused Coverage
 
 The focused integration target has 11 passing tests, and four validated-return
