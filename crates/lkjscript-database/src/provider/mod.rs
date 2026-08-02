@@ -9,6 +9,7 @@ use lkjscript_host::{
 use crate::{Database, Key, ReadTransaction, TenantId, Value, WriteTransaction};
 
 const MAX_PROVIDER_TRANSACTIONS: usize = 4_096;
+const MAX_PROVIDER_RANGE_BYTES: usize = 8 * 1024 * 1024;
 static NEXT_PROVIDER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
@@ -28,13 +29,7 @@ impl DatabaseTenantFactory for DatabaseTenantService {
         if incarnation == 0 {
             return Err(HostError::InvalidName("zero database incarnation".into()));
         }
-        let provider = NEXT_PROVIDER.fetch_add(1, Ordering::Relaxed);
-        if provider == 0 {
-            return Err(HostError::Io {
-                operation: "attach database tenant".into(),
-                message: "provider identity exhausted".into(),
-            });
-        }
+        let provider = fresh_provider_identity(&NEXT_PROVIDER)?;
         Ok(Arc::new(TenantDatabaseProvider {
             database: self.database.clone(),
             tenant,
@@ -114,9 +109,23 @@ impl TenantDatabaseProvider {
 include!("operations.rs");
 include!("finish.rs");
 
+fn fresh_provider_identity(counter: &AtomicU64) -> HostResult<u64> {
+    counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            current.checked_add(1).filter(|_| current != 0)
+        })
+        .map_err(|_| HostError::Io {
+            operation: "attach database tenant".into(),
+            message: "provider identity exhausted".into(),
+        })
+}
+
 fn host_error(error: crate::DatabaseError) -> HostError {
     HostError::Io {
         operation: "database provider".into(),
         message: error.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests;

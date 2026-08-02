@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::database::Inner;
-use crate::read::collect_range;
+use crate::read::{collect_bounded_range, collect_range};
 use crate::types::{NamespacedKey, Operation};
 use crate::{DatabaseError, DatabaseLimits, DatabaseResult, Key, TenantId, TransactionId, Value};
 
@@ -101,6 +101,25 @@ impl WriteTransaction {
     ) -> DatabaseResult<Vec<(Key, Value)>> {
         self.ensure_active()?;
         collect_range(&self.working, tenant, start_inclusive, end_exclusive, limit)
+    }
+
+    pub(crate) fn bounded_range(
+        &self,
+        tenant: &TenantId,
+        start_inclusive: Option<&[u8]>,
+        end_exclusive: Option<&[u8]>,
+        limit: usize,
+        returned_byte_limit: usize,
+    ) -> DatabaseResult<Option<Vec<(Key, Value)>>> {
+        self.ensure_active()?;
+        collect_bounded_range(
+            &self.working,
+            tenant,
+            start_inclusive,
+            end_exclusive,
+            limit,
+            returned_byte_limit,
+        )
     }
 
     pub fn commit(mut self) -> DatabaseResult<()> {

@@ -65,15 +65,27 @@ impl DatabaseProvider for TenantDatabaseProvider {
         let end = (!end.is_empty()).then_some(end);
         let state = self.lock()?;
         let values = match state.active.get(&slot) {
-            Some(ActiveTransaction::Read(transaction)) => {
-                transaction.range(&self.tenant, start, end, limit)
-            }
-            Some(ActiveTransaction::Write(transaction)) => {
-                transaction.range(&self.tenant, start, end, limit)
-            }
+            Some(ActiveTransaction::Read(transaction)) => transaction.bounded_range(
+                &self.tenant,
+                start,
+                end,
+                limit,
+                MAX_PROVIDER_RANGE_BYTES,
+            ),
+            Some(ActiveTransaction::Write(transaction)) => transaction.bounded_range(
+                &self.tenant,
+                start,
+                end,
+                limit,
+                MAX_PROVIDER_RANGE_BYTES,
+            ),
             None => return Err(unknown_transaction()),
         }
-        .map_err(host_error)?;
+        .map_err(host_error)?
+        .ok_or_else(|| HostError::Io {
+            operation: "range database transaction".into(),
+            message: "provider returned byte bound reached".into(),
+        })?;
         Ok(values
             .into_iter()
             .map(|(key, value)| (key.as_bytes().to_vec(), value.as_bytes().to_vec()))

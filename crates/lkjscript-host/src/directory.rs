@@ -48,8 +48,36 @@ impl PortableDirectory {
         let name = candidate
             .file_name()
             .ok_or_else(|| HostError::InvalidName(path.as_str().to_string()))?;
-        Ok(canonical_parent.join(name))
+        let target = canonical_parent.join(name);
+        match fs::symlink_metadata(&target) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                Err(HostError::PermissionDenied(path.as_str().to_string()))
+            }
+            Ok(_) => Ok(target),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(target),
+            Err(error) => Err(HostError::from_io("inspect application path", error)),
+        }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn write_file(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    const O_NOFOLLOW: i32 = 0o400_000;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .custom_flags(O_NOFOLLOW)
+        .open(path)?;
+    file.write_all(bytes)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn write_file(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    fs::write(path, bytes)
 }
 
 impl DirectoryProvider for PortableDirectory {
@@ -59,12 +87,12 @@ impl DirectoryProvider for PortableDirectory {
     }
 
     fn write(&self, path: &ApplicationPath, bytes: &[u8]) -> HostResult<()> {
-        fs::write(self.writable(path)?, bytes)
+        write_file(&self.writable(path)?, bytes)
             .map_err(|error| HostError::from_io("write application file", error))
     }
 
     fn remove(&self, path: &ApplicationPath) -> HostResult<()> {
-        fs::remove_file(self.existing(path)?)
+        fs::remove_file(self.writable(path)?)
             .map_err(|error| HostError::from_io("remove application file", error))
     }
 
@@ -106,6 +134,54 @@ mod tests {
         );
         directory.remove(&path)?;
         fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_capability_rejects_final_symlink_write_and_remove(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "lkjscript-directory-symlink-{}",
+            std::process::id()
+        ));
+        let root = base.join("root");
+        let outside = base.join("outside.txt");
+        let _ignored = fs::remove_dir_all(&base);
+        fs::create_dir_all(&root)?;
+        fs::write(&outside, b"outside")?;
+        symlink(&outside, root.join("escape"))?;
+        let directory = PortableDirectory::open(&root)?;
+        let path = ApplicationPath::parse("escape")?;
+
+        assert!(matches!(
+            directory.write(&path, b"replaced"),
+            Err(HostError::PermissionDenied(name)) if name == "escape"
+        ));
+        assert!(matches!(
+            directory.remove(&path),
+            Err(HostError::PermissionDenied(name)) if name == "escape"
+        ));
+        assert_eq!(fs::read(&outside)?, b"outside");
+        assert!(fs::symlink_metadata(root.join("escape"))?
+            .file_type()
+            .is_symlink());
+
+        symlink(&base, root.join("parent-escape"))?;
+        let nested_escape = ApplicationPath::parse("parent-escape/outside.txt")?;
+        assert!(matches!(
+            directory.write(&nested_escape, b"replaced"),
+            Err(HostError::PermissionDenied(name)) if name == "parent-escape/outside.txt"
+        ));
+        assert!(matches!(
+            directory.remove(&nested_escape),
+            Err(HostError::PermissionDenied(name)) if name == "parent-escape/outside.txt"
+        ));
+        assert_eq!(fs::read(&outside)?, b"outside");
+
+        fs::remove_dir_all(base)?;
         Ok(())
     }
 }
