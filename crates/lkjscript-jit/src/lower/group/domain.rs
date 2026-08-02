@@ -11,7 +11,7 @@ pub(super) fn lowering_domain(
     let mut legacy_aggregate = false;
     for id in functions {
         let function = source_function(program, *id)?;
-        let types = function
+        let signature_and_block_types = function
             .signature
             .parameters
             .iter()
@@ -21,17 +21,19 @@ pub(super) fn lowering_domain(
                     .blocks
                     .iter()
                     .flat_map(|block| block.parameters.iter().map(|value| &value.ty)),
-            )
-            .chain(
-                function
-                    .blocks
-                    .iter()
-                    .flat_map(|block| block.instructions.iter().map(|value| &value.ty)),
             );
+        structural |= signature_and_block_types
+            .clone()
+            .any(|ty| program.memory.type_for(ty).is_some());
+        let types = signature_and_block_types.chain(
+            function
+                .blocks
+                .iter()
+                .flat_map(|block| block.instructions.iter().map(|value| &value.ty)),
+        );
         for ty in types {
             resource |= contains_capability_or_resource(ty);
             unique |= contains_unique(ty);
-            structural |= program.memory.type_for(ty).is_some();
             region_product |= matches!(ty, SsaType::Product(product)
                 if program.region_products.iter().any(|metadata| metadata.product == *product));
             legacy_aggregate |= matches!(ty, SsaType::Product(product)
@@ -39,6 +41,15 @@ pub(super) fn lowering_domain(
                     && program.memory.type_for(ty).is_none())
                 || matches!(ty, SsaType::Enum { .. }) && program.memory.type_for(ty).is_none();
         }
+        structural |= function.blocks.iter().any(|block| {
+            block.instructions.iter().any(|instruction| {
+                program.memory.type_for(&instruction.ty).is_some()
+                    && !matches!(
+                        instruction.kind,
+                        InstructionKind::Constant(Constant::Str(_))
+                    )
+            })
+        });
         resource |= function.blocks.iter().any(|block| {
             block.instructions.iter().any(|instruction| {
                 matches!(

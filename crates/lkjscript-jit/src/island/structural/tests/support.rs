@@ -109,7 +109,7 @@ pub(super) fn invoke(
         ),
         _ => None,
     };
-    let (_, unique, structural, _, _, empty) = services.finish();
+    let (_, unique, structural, _, _, empty, _) = services.finish();
     assert!(empty);
     assert_eq!(structural.live_roots, 0);
     assert_eq!(structural.live_loans, 0);

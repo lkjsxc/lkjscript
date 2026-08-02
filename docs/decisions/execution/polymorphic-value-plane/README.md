@@ -106,10 +106,15 @@ deduplication. A unique moved front may be reused.
 
 Prepend selects borrow, move/fuse, clone/embed, or coarse share from the element
 witness and use plan. First borrows when nonescaping and otherwise copies,
-transfers, clones, or acquires one coarse owner. Rest borrows a cursor, transfers
-a consumed owner, or acquires one segment/tail owner. Equality remains restricted
-to the existing statically eligible family and dispatches only through the exact
-element witness. Release is iterative.
+transfers, clones, or acquires one coarse owner. The Experimental revision-14
+string slice uses detached owner clones in one invocation side ledger. Native
+execution combines structural-island services with verified list heap sites;
+arguments and results cross only exact generated-frame homes, and owner-ledger
+cleanup precedes structural-runtime emptiness verification. Rest borrows a cursor, transfers
+a consumed owner, or acquires one segment/tail owner. Equality remains
+restricted to statically eligible elements, recursively admits eligible nested
+lists, and dispatches only through exact element and list
+identities. Release is iterative.
 
 ## Process Boundary
 

@@ -44,8 +44,7 @@ impl InstallableImage {
             );
             has_structural |= matches!(
                 value_type,
-                ValueType::StaticString(_)
-                    | ValueType::StructuralOwner(_)
+                ValueType::StructuralOwner(_)
                     | ValueType::StructuralView(_)
                     | ValueType::StructuralDestination(_)
             );
@@ -53,10 +52,8 @@ impl InstallableImage {
         let has_island_value = has_resource || has_unique || has_structural;
         match self.execution_domain {
             NativeExecutionDomain::CollectorFree
-                if has_reference
-                    || (has_resource && (has_unique || has_structural))
-                    || !self.heap_runtime_sites.is_empty()
-                    || runtime_calls.contains(&RuntimeCallSlot::HeapDispatch) =>
+                if (has_reference && !has_invocation_reference)
+                    || (has_resource && (has_unique || has_structural)) =>
             {
                 Err(ImageIntegrityError::ExecutionDomain)
             }

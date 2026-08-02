@@ -33,7 +33,7 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "execution-domain",
                     "execution-domain",
-                    "closed structural/unique or invocation-region dispatch table",
+                    "closed combined structural-list island or invocation-region dispatch table",
                 ))
                 .fact(fact(
                     "unique-values",
@@ -63,7 +63,7 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "runtime-value-sites",
                     "runtime-value-sites",
-                    "closed bounded fallible list and invocation-region operation descriptors",
+                    "closed list descriptors with exact layout and semantic identities over verified frame homes",
                 ))
                 .fact(fact(
                     "integrity",

@@ -52,7 +52,7 @@ fn explicit_equality_families_enforce_static_categories() {
     let nested = Type::List(Box::new(Type::List(Box::new(Type::I64))));
     assert!(Operation::ListEqual
         .resolve_types(&[nested.clone(), nested])
-        .is_err());
+        .is_ok());
     let owners = Type::List(Box::new(Type::Bytes));
     assert!(Operation::ListEqual
         .resolve_types(&[owners.clone(), owners])

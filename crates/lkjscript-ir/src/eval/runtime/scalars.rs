@@ -60,42 +60,59 @@ impl Evaluator<'_> {
     }
     fn segmented_list_equal(
         &mut self,
-        mut left: lkjscript_core::SegmentedListKey,
-        mut right: lkjscript_core::SegmentedListKey,
+        left: lkjscript_core::SegmentedListKey,
+        right: lkjscript_core::SegmentedListKey,
     ) -> std::result::Result<bool, Flow> {
+        let mut pending = vec![(left, right)];
         let mut steps = 0_usize;
-        loop {
-            let left_view = self
-                .lists
-                .view(left)
-                .map_err(|error| Flow::Trap(format!("left segmented list: {error:?}")))?;
-            let right_view = self
-                .lists
-                .view(right)
-                .map_err(|error| Flow::Trap(format!("right segmented list: {error:?}")))?;
-            let (Some((left_value, left_tail)), Some((right_value, right_tail))) =
-                (left_view, right_view)
-            else {
-                return Ok(left_view.is_none() && right_view.is_none());
-            };
-            if steps >= self.config.max_list_equal_steps {
-                return Err(Flow::Trap("list-equal step limit exceeded".into()));
+        while let Some((mut left, mut right)) = pending.pop() {
+            loop {
+                let left_view = self
+                    .lists
+                    .view(left)
+                    .map_err(|error| Flow::Trap(format!("left segmented list: {error:?}")))?;
+                let right_view = self
+                    .lists
+                    .view(right)
+                    .map_err(|error| Flow::Trap(format!("right segmented list: {error:?}")))?;
+                let (Some((left_value, left_tail)), Some((right_value, right_tail))) =
+                    (left_view, right_view)
+                else {
+                    if left_view.is_some() != right_view.is_some() {
+                        return Ok(false);
+                    }
+                    break;
+                };
+                if steps >= self.config.max_list_equal_steps {
+                    return Err(Flow::Trap("list-equal step limit exceeded".into()));
+                }
+                steps = steps
+                    .checked_add(1)
+                    .ok_or_else(|| Flow::Trap("list-equal step overflow".into()))?;
+                let left_value = observation_marker(left_value)?;
+                let right_value = observation_marker(right_value)?;
+                match (&left_value, &right_value) {
+                    (EvalValue::SegmentedList(left), EvalValue::SegmentedList(right)) => {
+                        pending
+                            .try_reserve(1)
+                            .map_err(|_| Flow::Trap("list-equal work allocation failed".into()))?;
+                        pending.push((*left, *right));
+                    }
+                    _ => {
+                        let equal = match self.structural_value_equal(&left_value, &right_value) {
+                            Some(result) => result?,
+                            None => value_equal(&left_value, &right_value)?,
+                        };
+                        if !equal {
+                            return Ok(false);
+                        }
+                    }
+                }
+                left = left_tail;
+                right = right_tail;
             }
-            let left_value = observation_marker(left_value)?;
-            let right_value = observation_marker(right_value)?;
-            let equal = match self.structural_value_equal(&left_value, &right_value) {
-                Some(result) => result?,
-                None => value_equal(&left_value, &right_value)?,
-            };
-            if !equal {
-                return Ok(false);
-            }
-            left = left_tail;
-            right = right_tail;
-            steps = steps
-                .checked_add(1)
-                .ok_or_else(|| Flow::Trap("list-equal step overflow".into()))?;
         }
+        Ok(true)
     }
 
     pub(crate) fn numeric(

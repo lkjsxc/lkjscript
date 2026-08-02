@@ -4,6 +4,7 @@ use super::*;
 pub(in crate::executable) struct NoopNativeIslandRuntimeServices;
 
 impl NativeStructuralRuntimeServices for NoopNativeIslandRuntimeServices {}
+impl NativeRuntimeServices for NoopNativeIslandRuntimeServices {}
 
 impl NativeIslandRuntimeServices for NoopNativeIslandRuntimeServices {
     fn borrow_standard_input(&mut self) -> Result<NativeResource, NativeServiceError> {

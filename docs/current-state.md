@@ -134,9 +134,9 @@ Git history. They do not provide aliases or acceptance fallbacks.
   Every executable program retains a platform-bound canonical HIR memory plan
   covering every result, place, loan, constant, and call without Rust formatting.
   Concrete SSA/bytecode witnesses reject zero or duplicate identities.
-  Experimental residual transport and structural-owner lists execute exact
-  witnesses and cleanup in evaluator/VM. Native owner lists remain blocked;
-  exact specializations are bounded at 32/declaration and 1,024/package, reverify
+  Experimental residual transport and exact string-owner lists execute verified
+  cleanup in all four tiers with zero fallback; other structural lists remain blocked.
+  Exact specializations are bounded at 32/declaration and 1,024/package, reverify
   rewritten SSA, and retain zero fallback on the locked 4,096-operation workload.
   Independent verification still precedes SSA; inventory remains derived.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,

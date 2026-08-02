@@ -138,6 +138,10 @@ Capacity 32 is fixed by
 Returns use a flat key-free codec-stable owned-list table. The pair heap family,
 its boundary adapter, and its wire encoding are removed.
 
+Revision 14 adds an Experimental exact-string prerequisite. All four tiers clone
+owners into one ledger, compare through structural services, and release before
+teardown. Native list sites cross exact frame homes; nodes gain no owner count.
+
 ## Current Invocation-Region Products
 
 Products transitively closed over copy-leaf lists, scalar leaves, and acyclic
@@ -161,7 +165,7 @@ the tail from the verified use plan. `list-first` returns a copy, nonescaping
 borrow, sealed share, or explicit clone as authorized by the witness.
 `list-rest` advances a borrowed cursor, transfers a consumed owner without a
 count change, or creates one coarse segment/domain owner for independent escape.
-`equal-list` preserves the existing static element-comparability contract and
+`equal-list` recursively accepts statically comparable nested lists under one
 global step bound. Segment layout and size are not source or wire semantics.
 
 A sealed segment/domain may retain a non-atomic region-level owner count. This
@@ -184,17 +188,13 @@ runs every already-registered exact cleanup action once and reports one stable
 failure. Process exit is not ordinary reclamation.
 
 ## Rejected
-
 Rejected designs are a renamed universal heap, process-lifetime arenas,
 universal or atomic per-node reference counting, raw pool indices, wrapping
 generations, hidden tracing, source lifetime names, manual retain/release,
 general free, and allocator selection in ordinary source.
 
 ## Related Contracts
-
-- [ordinary regions](ordinary-regions.md)
-- [sealed shared regions](sealed-shared-regions.md)
-- [typed generational pools](typed-generational-pools.md)
-- [aggregate affine values](aggregate-affine-values.md)
-- [collector-free destination](collector-free-deterministic-memory.md)
-- [semantic resource plane](../platform/semantic-resource-plane.md)
+[Ordinary regions](ordinary-regions.md), [sealed regions](sealed-shared-regions.md),
+and [pools](typed-generational-pools.md) compose with
+[affine aggregates](aggregate-affine-values.md), [deterministic memory](collector-free-deterministic-memory.md), and the
+[resource plane](../platform/semantic-resource-plane.md).

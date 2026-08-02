@@ -52,6 +52,7 @@
         "crates/mechanisms/lkjscript-executable/src/executable/runtime/island.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/runtime/island_unique.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/runtime/island_unique/cleanup.rs",
+        "crates/mechanisms/lkjscript-executable/src/executable/state/island_runtime_values.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/state/runtime_values.rs",
         "crates/mechanisms/lkjscript-executable/src/executable/state/runtime_values/arguments.rs"
       ]

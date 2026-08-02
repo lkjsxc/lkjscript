@@ -23,6 +23,7 @@ pub(super) fn verify_instruction(
                     if descriptor.operation().is_observation()
                         || matches!(descriptor.operation(), StructuralOperation::Borrow { .. })
             )
+            && !matches!(&instruction.operation, Operation::HeapCall(_, _))
         {
             return Err(VerificationError::TypeMismatch(
                 "observed structural local use",

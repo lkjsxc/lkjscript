@@ -144,10 +144,23 @@ fn execution_domain(functions: &[FunctionPlan]) -> NativeExecutionDomain {
             .chain(function.locals.iter().map(|local| local.value_type))
     });
     let mut has_reference = false;
+    let mut has_island = false;
     for value_type in values {
         has_reference |= matches!(value_type, ValueType::Reference(_));
+        has_island |= matches!(
+            value_type,
+            ValueType::Capability(_)
+                | ValueType::Resource(_)
+                | ValueType::StaticBytes
+                | ValueType::StaticString(_)
+                | ValueType::Unique(_)
+                | ValueType::Loan(_)
+                | ValueType::StructuralOwner(_)
+                | ValueType::StructuralView(_)
+                | ValueType::StructuralDestination(_)
+        );
     }
-    if has_reference {
+    if has_reference && !has_island {
         NativeExecutionDomain::InvocationRegion
     } else {
         NativeExecutionDomain::CollectorFree

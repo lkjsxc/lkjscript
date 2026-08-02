@@ -63,6 +63,26 @@ pub(crate) fn structural_ownership_domains(memory: ContractDigest) -> ContractDe
                 )),
         )
         .item(
+            ContractItem::new("segmented-list", ContractItemKind::Rule)
+                .fact(fact("storage", "bounded append-only invocation segments"))
+                .fact(fact("type", "exact list and element identities"))
+                .fact(fact(
+                    "owners",
+                    "one detached structural owner per retained entry",
+                ))
+                .fact(fact("counts", "no element or logical-node owner count"))
+                .fact(fact("first", "witness-authorized detached clone"))
+                .fact(fact(
+                    "equality",
+                    "recursive exact identities under one global step bound",
+                ))
+                .fact(fact(
+                    "native",
+                    "verified heap site and generated-frame homes",
+                ))
+                .fact(fact("release", "owner ledger before invocation reset")),
+        )
+        .item(
             ContractItem::new("sealed-region", ContractItemKind::Rule)
                 .fact(fact("build", "unique private build"))
                 .fact(fact("seal", "atomic verified immutable publication"))

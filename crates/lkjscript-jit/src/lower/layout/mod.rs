@@ -53,6 +53,7 @@ impl LayoutInterner {
                     self.intern(argument)?;
                 }
             }
+            SsaType::Str | SsaType::Path => {}
             _ => return Ok(()),
         }
         if !self.identities.contains_key(ty) {
@@ -81,13 +82,18 @@ impl LayoutInterner {
     }
 
     pub(super) fn identity(&self, ty: &SsaType) -> Option<LayoutIdentity> {
+        if let Some(value_type) = self.structural.owner_type(ty) {
+            return Some(value_type.layout_identity());
+        }
         match ty {
             SsaType::Unit => Some(ValueType::Unit.layout_identity()),
             SsaType::Bool => Some(ValueType::Bool.layout_identity()),
             SsaType::I64 => Some(ValueType::I64.layout_identity()),
             SsaType::F64 => Some(ValueType::F64.layout_identity()),
             SsaType::Product(product) => Some(LayoutIdentity::product(u32::from(product.raw()))),
-            SsaType::List(_) | SsaType::Enum { .. } => self.identities.get(ty).copied(),
+            SsaType::Str | SsaType::Path | SsaType::List(_) | SsaType::Enum { .. } => {
+                self.identities.get(ty).copied()
+            }
             _ => None,
         }
     }

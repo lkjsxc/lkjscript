@@ -1,4 +1,6 @@
-use crate::operation::instantiation::{both_numeric, instantiate_result, supports_value_equality};
+use crate::operation::instantiation::{
+    both_numeric, instantiate_result, supports_list_element_equality, supports_value_equality,
+};
 use crate::operation::*;
 
 impl Operation {
@@ -74,7 +76,7 @@ impl Operation {
                 let Type::List(item) = left else {
                     return Err(format!("equal-list: expected list, got {left}"));
                 };
-                if !supports_value_equality(item) {
+                if !supports_list_element_equality(item) {
                     return Err(format!(
                         "equal-list: element type {item} does not support value equality"
                     ));

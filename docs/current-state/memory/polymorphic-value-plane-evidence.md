@@ -13,7 +13,7 @@ plane remains Accepted Target and this partial slice is not Current.
 
 Residual implementation commit: `9f82cc5cf9836d07e16267b2387b007547ebeaef`.
 Structural-owner list prerequisite commit: `96653f9c0a9368464e5c00d49901a5f82823a1d1`.
-Platform revision: `13`.
+Platform revision: `14`.
 Environment: Linux x86-64, locked Rust workspace.
 
 ## Experimental Residual Witness Slice
@@ -66,9 +66,11 @@ The HIR producer and independent verifier select bounded segmented regions for
 exact immutable structural element witnesses. Each dynamic element is a
 detached owner in one list-region side ledger; `list-first` creates a separate
 owner, and teardown releases retained owners before runtime emptiness checks.
-Evaluator and validated VM tests execute dynamic string ownership, equality,
-`list-first`, exact cleanup, and stale bytecode metadata rejection. Forced native
-and process-boundary structural-owner lists remain blocked.
+Evaluator, validated VM, forced baseline, and forced proof tests execute dynamic
+string ownership, equality, `list-first`, exact cleanup, and zero fallback.
+Native structural islands accept exact verified list heap sites, clone detached
+owners into one list-region ledger, and release them before structural-runtime
+emptiness verification. Process-boundary structural-owner lists remain blocked.
 
 ## Experimental Core Semantic DAG Prerequisite
 
@@ -163,7 +165,7 @@ CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
 
 - no source `sealed T` or `seal` operation;
 - no memory-plan selection of sealed storage for language values;
-- no forced-native structural-owner list execution;
+- no path/product/enum/option/result or nested structural-owner list execution;
 - no compiler/evaluator/VM/native DAG export or runtime/sealed DAG rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;

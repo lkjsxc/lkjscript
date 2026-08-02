@@ -37,8 +37,18 @@ impl<'a> JitValueServices<'a> {
             NativeValue::Bool(value) => Ok(Value::from_bool(value)),
             NativeValue::I64(value) => Ok(Value::from_i64(value)),
             NativeValue::F64Bits(bits) => Ok(Value::from_f64_bits(bits)),
+            NativeValue::StaticString(value) => {
+                let index = value
+                    .opaque_word()
+                    .checked_sub(1)
+                    .and_then(|index| u16::try_from(index).ok())
+                    .ok_or_else(|| {
+                        self.last_trap = Some("static string identity exceeds list storage".into());
+                        NativeServiceError::Trap
+                    })?;
+                Ok(Value::from_static_string(index))
+            }
             NativeValue::StaticBytes(_)
-            | NativeValue::StaticString(_)
             | NativeValue::Capability(_)
             | NativeValue::Resource(_)
             | NativeValue::Unique(_)

@@ -37,7 +37,7 @@ pub(super) fn core_signature(
         RuntimeOp::ListEqual => {
             parameters.len() == 2
                 && parameters[0] == parameters[1]
-                && matches!(&parameters[0], SsaType::List(item) if supports_value_equality(item))
+                && matches!(&parameters[0], SsaType::List(item) if supports_list_element_equality(item))
                 && result == &SsaType::Bool
         }
         RuntimeOp::F64BitsEqual => exact(&[SsaType::F64, SsaType::F64], &SsaType::Bool),

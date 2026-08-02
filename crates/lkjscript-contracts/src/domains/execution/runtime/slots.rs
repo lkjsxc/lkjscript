@@ -165,7 +165,7 @@ pub(super) fn runtime_slots() -> ContractItem {
         (
             "heap-dispatch",
             "HeapDispatch",
-            "(state,operation,args)->status",
+            "(verified-domain-state,verified-heap-site,frame-homes)->typed-word/status",
         ),
         ("reserve-frame", "ReserveFrame", "(state,slots)->status"),
         ("register-frame", "RegisterFrame", "(state,frame)->status"),

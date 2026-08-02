@@ -1,3 +1,10 @@
+pub(crate) fn supports_list_element_equality(ty: &SsaType) -> bool {
+    match ty {
+        SsaType::List(item) => supports_list_element_equality(item),
+        other => supports_value_equality(other),
+    }
+}
+
 pub(crate) fn supports_value_equality(ty: &SsaType) -> bool {
     match ty {
         SsaType::Unit

@@ -55,7 +55,6 @@ pub(super) fn verify_heap_sites(
             .find(|frame| frame.function == site.function)
             .ok_or(ImageIntegrityError::HeapRuntimeSite)?;
         if site.id as usize != expected_id
-            || image.execution_domain != NativeExecutionDomain::InvocationRegion
             || site.arguments.len() != site.descriptor.input_types().len()
             || site
                 .arguments

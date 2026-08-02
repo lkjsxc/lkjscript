@@ -9,8 +9,6 @@ pub(super) fn lower_runtime(
 ) -> Result<lkjscript_native::ValueId, lkjscript_native::PlanError> {
     let block = context.block;
     let value_types = context.value_types;
-    let values = read_values(builder, block, context.locals, arguments, function.id)
-        .map_err(|_| lkjscript_native::PlanError::UnknownValue)?;
     let input_types = arguments
         .iter()
         .map(|argument| value_type(value_types, *argument))
@@ -20,7 +18,21 @@ pub(super) fn lower_runtime(
             .first()
             .is_some_and(|ty| matches!(ty, ValueType::Reference(ReferenceType::List(_, _))));
     let heap = heap_operation(operation);
-    if reference_equality || heap.is_some() {
+    let heap_dispatch = reference_equality || heap.is_some();
+    let values = arguments
+        .iter()
+        .zip(&input_types)
+        .map(|(argument, value_type)| {
+            let local = value_local(context.locals, *argument, function.id)
+                .map_err(|_| lkjscript_native::PlanError::UnknownValue)?;
+            if heap_dispatch && matches!(value_type, ValueType::StructuralOwner(_)) {
+                builder.observe_local(block, local)
+            } else {
+                builder.read_local(block, local)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if heap_dispatch {
         let operation = if reference_equality {
             HeapOperation::ListEqual
         } else {

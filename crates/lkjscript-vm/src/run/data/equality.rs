@@ -72,6 +72,22 @@ fn value_equal<J: RuntimeTier>(vm: &Vm<'_, J>, left: Value, right: Value) -> Res
                 _ => return Err(Error::msg("equal-value runtime type mismatch")),
             }
         }
+        let left_list = left.is_empty_list() || left.as_segmented_list().is_some();
+        let right_list = right.is_empty_list() || right.as_segmented_list().is_some();
+        if left_list || right_list {
+            if !(left_list && right_list) {
+                return Err(Error::msg("equal-value runtime type mismatch"));
+            }
+            match (vm.list_view(left)?, vm.list_view(right)?) {
+                (None, None) => continue,
+                (Some((left_head, left_tail)), Some((right_head, right_tail))) => {
+                    pending.push((left_tail, right_tail));
+                    pending.push((left_head, right_head));
+                    continue;
+                }
+                _ => return Ok(false),
+            }
+        }
         let left_structural = crate::run::structural_ops::semantic_snapshot(vm, left).ok();
         let right_structural = crate::run::structural_ops::semantic_snapshot(vm, right).ok();
         if left_structural.is_some() || right_structural.is_some() {

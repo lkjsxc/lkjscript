@@ -3,6 +3,7 @@ use super::*;
 mod frames;
 mod island;
 mod island_frames;
+mod island_runtime_values;
 mod island_stack;
 mod lifecycle;
 mod runtime_values;

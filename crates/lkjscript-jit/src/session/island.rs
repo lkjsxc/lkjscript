@@ -95,7 +95,9 @@ impl JitSession {
                 }
                 _ => None,
             });
-        let (resources, unique, structural, last_resource, last_trap, empty) = services.finish();
+        let (resources, unique, structural, last_resource, last_trap, empty, lists) =
+            services.finish();
+        self.lists = Some(lists);
         self.native_resources.add(resources);
         self.native_unique.add(unique);
         self.native_structural.add(structural);

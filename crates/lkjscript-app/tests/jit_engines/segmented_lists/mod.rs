@@ -4,6 +4,7 @@ use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
+mod aggregate_owners;
 mod structural_owners;
 
 #[test]

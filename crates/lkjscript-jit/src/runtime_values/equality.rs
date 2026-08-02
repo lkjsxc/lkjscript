@@ -91,5 +91,8 @@ fn scalar_value_equal(left: Value, right: Value) -> Option<bool> {
     if left.as_f64().is_some() || right.as_f64().is_some() {
         return Some(left.as_f64()? == right.as_f64()?);
     }
+    if left.as_static_string().is_some() || right.as_static_string().is_some() {
+        return Some(left.as_static_string()? == right.as_static_string()?);
+    }
     None
 }

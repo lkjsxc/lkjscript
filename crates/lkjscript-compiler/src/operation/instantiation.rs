@@ -96,6 +96,13 @@ pub(in crate::operation) fn bind_type_params(
     }
 }
 
+pub(in crate::operation) fn supports_list_element_equality(ty: &Type) -> bool {
+    match ty {
+        Type::List(item) => supports_list_element_equality(item),
+        other => supports_value_equality(other),
+    }
+}
+
 pub(in crate::operation) fn supports_value_equality(ty: &Type) -> bool {
     match ty {
         Type::Unit | Type::Bool | Type::I64 | Type::F64 | Type::Str | Type::Path | Type::Symbol => {

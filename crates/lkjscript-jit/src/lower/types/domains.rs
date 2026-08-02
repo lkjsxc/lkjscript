@@ -36,6 +36,7 @@ pub(in crate::lower) fn require_structural_island_type(
             | SsaType::F64
             | SsaType::StructuralDestination(_)
     ) || layouts.structural().selected(ty)
+        || matches!(ty, SsaType::List(element) if structural_list_element(element, layouts))
     {
         Ok(())
     } else {
@@ -45,6 +46,14 @@ pub(in crate::lower) fn require_structural_island_type(
             format!("type {ty:?} is unsupported without structural metadata in a structural group"),
         ))
     }
+}
+
+fn structural_list_element(ty: &SsaType, layouts: &LayoutInterner) -> bool {
+    matches!(
+        ty,
+        SsaType::Unit | SsaType::Bool | SsaType::I64 | SsaType::F64
+    ) || layouts.structural().selected(ty)
+        || matches!(ty, SsaType::List(element) if structural_list_element(element, layouts))
 }
 
 pub(in crate::lower) fn require_unique_island_type(

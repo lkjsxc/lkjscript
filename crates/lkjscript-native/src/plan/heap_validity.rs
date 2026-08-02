@@ -47,12 +47,12 @@ impl HeapCallDescriptor {
                                 || is_region_product_field(*field_type)))
             }
             Op::Cons => matches!(inputs, [payload, list]
-                if is_region_product_field(*payload)
+                if is_list_element(*payload)
                     && *list == result
                     && matches!(result, Ty::Reference(Ref::List(_, element))
                         if element == payload.layout_identity())),
             Op::Car => matches!(inputs, [Ty::Reference(Ref::List(_, element))]
-                if is_region_product_field(result) && *element == result.layout_identity()),
+                if is_list_element(result) && *element == result.layout_identity()),
             Op::Cdr => {
                 matches!(inputs, [list] if *list == result && matches!(result, Ty::Reference(Ref::List(_, _))))
             }
@@ -78,6 +78,14 @@ fn product_reference_matches(value_type: ValueType, product: u32) -> bool {
         ValueType::Reference(ReferenceType::RegionProduct(layout, _))
             if layout == LayoutIdentity::product(product)
     )
+}
+
+const fn is_list_element(value_type: ValueType) -> bool {
+    is_region_product_field(value_type)
+        || matches!(
+            value_type,
+            ValueType::StaticString(_) | ValueType::StructuralOwner(_)
+        )
 }
 
 const fn is_region_product_field(value_type: ValueType) -> bool {

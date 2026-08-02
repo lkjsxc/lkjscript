@@ -128,6 +128,10 @@ impl JitStructuralRuntime {
         self.last_trap.take()
     }
 
+    pub(in crate::island) fn record_trap(&mut self, message: impl Into<String>) {
+        self.last_trap = Some(message.into());
+    }
+
     pub(super) fn note_call(&mut self) {
         self.calls = self.calls.saturating_add(1);
     }
