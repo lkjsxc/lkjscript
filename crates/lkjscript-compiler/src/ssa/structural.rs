@@ -34,7 +34,7 @@ pub(in crate::ssa) fn lower_structural_memory(
             StructuralLayoutKind::Enum { runtime_layout, .. } => *runtime_layout,
             StructuralLayoutKind::String
             | StructuralLayoutKind::Path
-            | StructuralLayoutKind::Product { .. } => structural_layout_identity(plan, &fact.ty),
+            | StructuralLayoutKind::Product { .. } => structural_layout_identity(plan, &fact.ty)?,
         };
         memory.layouts.push(StructuralLayoutMetadata {
             id: layout_id,
@@ -164,11 +164,16 @@ pub(in crate::ssa) fn glue_type(
     })
 }
 
-fn structural_layout_identity(plan: &HirMemoryPlan, ty: &MemoryType) -> RuntimeLayoutId {
-    let mut bytes = b"lkjscript.ssa.structural-layout\0".to_vec();
-    bytes.extend_from_slice(&plan.id.as_bytes());
-    bytes.extend_from_slice(format!("{ty:?}").as_bytes());
-    RuntimeLayoutId::new(lkjscript_core::sha256(&bytes))
+fn structural_layout_identity(plan: &HirMemoryPlan, ty: &MemoryType) -> Result<RuntimeLayoutId> {
+    let mut bytes = b"lkjscript.ssa.structural-layout\0canonical-platform-contract".to_vec();
+    for field in [
+        plan.id.as_bytes(),
+        crate::memory_plan::memory_type_identity(ty)?,
+    ] {
+        bytes.extend_from_slice(&32_u64.to_be_bytes());
+        bytes.extend_from_slice(&field);
+    }
+    Ok(RuntimeLayoutId::new(lkjscript_contracts::sha256(&bytes)))
 }
 
 include!("structural_support.rs");

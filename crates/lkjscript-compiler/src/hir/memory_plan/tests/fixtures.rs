@@ -57,16 +57,26 @@ pub(super) fn program(
     }
 }
 
+#[allow(clippy::expect_used)]
 pub(super) fn product(id: u16, name: &str, fields: &[(&str, hir::Type)]) -> hir::ProductDefinition {
+    let identity = lkjscript_contracts::sha256(&id.to_be_bytes());
     hir::ProductDefinition {
         id: hir::ProductId::new(id),
+        identity,
         name: name.into(),
         origin: origin(),
         fields: fields
             .iter()
-            .map(|(name, ty)| hir::ProductField {
-                name: (*name).into(),
-                ty: ty.clone(),
+            .enumerate()
+            .map(|(index, (name, ty))| {
+                let source_order = u16::try_from(index).expect("fixture field order");
+                hir::ProductField {
+                    identity: crate::source::product_field_identity(identity, name, source_order)
+                        .expect("fixture product field identity"),
+                    source_order,
+                    name: (*name).into(),
+                    ty: ty.clone(),
+                }
             })
             .collect(),
     }

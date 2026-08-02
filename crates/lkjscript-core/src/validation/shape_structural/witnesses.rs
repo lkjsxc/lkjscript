@@ -7,6 +7,7 @@ fn validate_witnesses(chunk: &Chunk) -> Result<usize> {
     let mut bytes = 0usize;
     let mut incoming = vec![0usize; records.len()];
     let mut outgoing = vec![Vec::new(); records.len()];
+    let mut representations = HashSet::new();
     for (index, record) in records.iter().enumerate() {
         if !record.id.is_resolved() || prior.is_some_and(|id| id >= record.id) {
             return Err(Error::msg(
@@ -33,14 +34,36 @@ fn validate_witnesses(chunk: &Chunk) -> Result<usize> {
                 "bytecode memory witness capability and operation routes are incompatible",
             ));
         }
-        let dependency_ids: Vec<_> = record
-            .dependencies
-            .iter()
-            .map(|dependency| dependency.bytes())
-            .collect();
+        let semantic_contract = lkjscript_contracts::semantic_contract_hash(&record.facts.semantic)
+            .map_err(|error| Error::msg(error.to_string()))?;
+        if semantic_contract != record.facts.semantic_contract {
+            return Err(Error::msg("bytecode memory witness semantic contract is noncanonical"));
+        }
+        let semantic_type =
+            lkjscript_contracts::semantic_type_closure_hash(&record.facts.semantic)
+                .map_err(|error| Error::msg(error.to_string()))?;
+        if semantic_type != record.facts.semantic_type {
+            return Err(Error::msg(
+                "bytecode memory witness semantic type closure is noncanonical",
+            ));
+        }
+        lkjscript_contracts::validate_executable_dependencies(
+            &record.facts.semantic,
+            &record.dependencies,
+        )
+        .map_err(|error| Error::msg(error.to_string()))?;
+        let category = match record.value_kind {
+            crate::MemoryWitnessValueKind::Unit=>0, crate::MemoryWitnessValueKind::Bool=>1,
+            crate::MemoryWitnessValueKind::I64=>2, crate::MemoryWitnessValueKind::F64=>3,
+            crate::MemoryWitnessValueKind::List=>4, crate::MemoryWitnessValueKind::Structural(_)=>5,
+            crate::MemoryWitnessValueKind::Unsupported=>6,
+        };
+        if !representations.insert((record.facts.semantic_type, category)) {
+            return Err(Error::msg("duplicate bytecode semantic type and owner representation"));
+        }
         let encoded = lkjscript_contracts::canonical_executable_memory_witness(
             &record.facts,
-            &dependency_ids,
+            &record.dependencies,
         );
         if crate::MemoryWitnessId::new(crate::sha256(&encoded)) != record.id {
             return Err(Error::msg(
@@ -48,23 +71,37 @@ fn validate_witnesses(chunk: &Chunk) -> Result<usize> {
             ));
         }
         validate_witness_route(chunk, record)?;
-        let mut dependencies = HashSet::new();
-        for dependency in &record.dependencies {
-            if !dependencies.insert(*dependency) {
-                return Err(Error::msg("duplicate bytecode memory witness dependency"));
+        let requirements = lkjscript_contracts::semantic_dependency_requirements(
+            &record.facts.semantic,
+        )
+        .map_err(|error| Error::msg(error.to_string()))?;
+        let mut roles = HashSet::new();
+        for (dependency, (_, expected_ty)) in record.dependencies.iter().zip(requirements) {
+            if !roles.insert(dependency.role.clone()) {
+                return Err(Error::msg("duplicate bytecode complete witness dependency role"));
             }
             edges = add(edges, 1, "memory witness dependency work")?;
             if edges > crate::MAX_MEMORY_WITNESS_DEPENDENCIES {
                 return Err(Error::msg("memory witness dependency limit exceeded"));
             }
-            let child = witness_index(records, *dependency)?;
-            outgoing[index].push(child);
-            incoming[child] = add(incoming[child], 1, "memory witness indegree")?;
+            if let lkjscript_contracts::ExecutableMemoryWitnessTarget::ExternalWitness(bytes) = dependency.target {
+                let child = witness_index(records, crate::MemoryWitnessId::new(bytes))?;
+                if records[child].facts.semantic.root != expected_ty {
+                    return Err(Error::msg("bytecode external witness dependency has wrong semantic type"));
+                }
+                outgoing[index].push(child);
+                incoming[child] = add(incoming[child], 1, "memory witness indegree")?;
+            }
         }
         bytes = add(
             bytes,
             128usize
-                .saturating_add(record.dependencies.len().saturating_mul(32))
+                .saturating_add(record.dependencies.len().saturating_mul(160))
+                .saturating_add(
+                    lkjscript_contracts::canonical_semantic_descriptor(&record.facts.semantic)
+                        .map_err(|error| Error::msg(error.to_string()))?
+                        .len(),
+                )
                 .saturating_add(record.facts.operations.len()),
             "memory witness metadata bytes",
         )?;

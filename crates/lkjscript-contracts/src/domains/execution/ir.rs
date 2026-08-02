@@ -26,7 +26,7 @@ pub(crate) fn typed_hir(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "content-addressed concrete type facts and selected structural-owner list plans",
+                    "canonical reachable semantic closures and complete role-bearing executable dependencies",
                 ))
                 .fact(fact(
                     "capabilities",
@@ -65,7 +65,7 @@ pub(crate) fn verified_ssa(hir: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "resolved unique structural witness identities",
+                    "verified semantic descriptors and role-target authenticated witness identities",
                 ))
                 .fact(fact(
                     "frames",
@@ -100,7 +100,7 @@ pub(crate) fn bytecode(ssa: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "validated resolved unique structural witness identities",
+                    "recomputed semantic closures role targets and executable witness identities",
                 ))
                 .fact(fact(
                     "capabilities",

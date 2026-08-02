@@ -106,11 +106,12 @@ impl Analyzer {
                         error,
                         "error",
                         crate::types::utf8_error_type(),
+                        0,
                     )]
                 } else {
                     vec![
-                        derived_field(error, "code", crate::types::option_type(Type::I64)),
-                        derived_field(error, "detail", crate::types::option_type(Type::Str)),
+                        derived_field(error, "code", crate::types::option_type(Type::I64), 0),
+                        derived_field(error, "detail", crate::types::option_type(Type::Str), 1),
                     ]
                 };
                 variant(error.variant_id(), error.name(), fields, order)
@@ -153,9 +154,16 @@ fn variant(id: [u8; 32], name: &str, fields: Vec<EnumVariantField>, order: usize
     }
 }
 
-fn derived_field(kind: SystemErrorKind, name: &str, ty: Type) -> EnumVariantField {
+fn derived_field(
+    kind: SystemErrorKind,
+    name: &str,
+    ty: Type,
+    source_order: u16,
+) -> EnumVariantField {
     let id = crate::source::enum_member_identity(kind.variant_id(), "field", name);
-    field(id, name, ty, true)
+    let mut field = field(id, name, ty, true);
+    field.source_order = source_order;
+    field
 }
 
 fn field(id: [u8; 32], name: &str, ty: Type, indirect: bool) -> EnumVariantField {

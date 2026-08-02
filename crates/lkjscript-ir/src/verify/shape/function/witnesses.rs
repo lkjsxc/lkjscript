@@ -42,14 +42,24 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
         if !lkjscript_contracts::memory_witness_routes_are_compatible(&record.facts) {
             return fail("SSA memory witness capability and operation routes are incompatible");
         }
-        let dependency_ids: Vec<_> = record
-            .dependencies
-            .iter()
-            .map(|dependency| dependency.bytes())
-            .collect();
+        let semantic_contract = lkjscript_contracts::semantic_contract_hash(&record.facts.semantic)
+            .map_err(|error| crate::IrError::new(error.to_string()))?;
+        if semantic_contract != record.facts.semantic_contract {
+            return fail("SSA memory witness semantic contract is noncanonical");
+        }
+        let semantic_type = lkjscript_contracts::semantic_type_closure_hash(&record.facts.semantic)
+            .map_err(|error| crate::IrError::new(error.to_string()))?;
+        if semantic_type != record.facts.semantic_type {
+            return fail("SSA memory witness semantic type closure is noncanonical");
+        }
+        lkjscript_contracts::validate_executable_dependencies(
+            &record.facts.semantic,
+            &record.dependencies,
+        )
+        .map_err(|error| crate::IrError::new(error.to_string()))?;
         let encoded = lkjscript_contracts::canonical_executable_memory_witness(
             &record.facts,
-            &dependency_ids,
+            &record.dependencies,
         );
         let recomputed = MemoryWitnessId::new(lkjscript_core::sha256(&encoded));
         if recomputed != record.id {
@@ -89,10 +99,13 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
                 return fail("SSA memory witness structural type relinking failed");
             }
         }
-        let mut dependencies = HashSet::new();
-        for dependency in &record.dependencies {
-            if !dependencies.insert(*dependency) {
-                return fail("SSA memory witness has duplicate dependency edges");
+        let requirements =
+            lkjscript_contracts::semantic_dependency_requirements(&record.facts.semantic)
+                .map_err(|error| crate::IrError::new(error.to_string()))?;
+        let mut roles = HashSet::new();
+        for (dependency, (_, expected_ty)) in record.dependencies.iter().zip(requirements) {
+            if !roles.insert(dependency.role.clone()) {
+                return fail("SSA memory witness has duplicate complete dependency roles");
             }
             edges = edges
                 .checked_add(1)
@@ -100,11 +113,18 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
             if edges > MAX_MEMORY_WITNESS_DEPENDENCIES {
                 return fail("SSA memory witness dependency table exceeds bounded maximum");
             }
-            let child = witness_index(records, *dependency)?;
-            outgoing[index].push(child);
-            incoming[child] = incoming[child]
-                .checked_add(1)
-                .ok_or_else(|| crate::IrError::new("SSA witness indegree overflow"))?;
+            if let lkjscript_contracts::ExecutableMemoryWitnessTarget::ExternalWitness(bytes) =
+                dependency.target
+            {
+                let child = witness_index(records, MemoryWitnessId::new(bytes))?;
+                if records[child].facts.semantic.root != expected_ty {
+                    return fail("SSA external witness dependency has the wrong semantic type");
+                }
+                outgoing[index].push(child);
+                incoming[child] = incoming[child]
+                    .checked_add(1)
+                    .ok_or_else(|| crate::IrError::new("SSA witness indegree overflow"))?;
+            }
         }
     }
     let mut ready: BTreeSet<_> = incoming

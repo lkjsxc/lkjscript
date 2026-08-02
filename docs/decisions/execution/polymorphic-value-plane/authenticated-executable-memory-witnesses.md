@@ -2,11 +2,12 @@
 
 ## Status
 
-**Accepted Contract; not Current.** This record binds the executable witness
-cutover. Promotion requires independent HIR reconstruction, SSA preservation,
-bytecode identity recomputation, exact structural relinking, malformed-artifact
-coverage, and package provenance. Existing residual transport remains
-Experimental until those boundaries pass.
+**Accepted Contract; Experimental implementation; not Current.** This record
+binds the executable witness cutover. Revision 16 implements an authenticated,
+target-neutral semantic-closure and role-bearing dependency slice through HIR,
+SSA, and bytecode. It is an intermediate trust-chain layer, not a claim of
+sealed execution. Promotion still requires complete structural relinking,
+malformed-artifact coverage, package provenance, and all execution tiers.
 
 ## Problem
 
@@ -30,21 +31,32 @@ root may authorize a witness.
 
 ## Canonical Executable Identity
 
-One contracts-owned canonical encoder consumes:
+A contracts-owned semantic descriptor contains one root semantic type and only
+its transitively reachable nominal declarations. Primitive, capability,
+resource, product, enum, list, function, parameter, and `forall` forms have
+closed tags. Products and enums are referenced by stable 32-byte Semantic
+Source declaration identities; instantiated enum references retain exact type
+arguments. Canonical declarations sort by identity, while fields, variants,
+type parameters, and type arguments retain declaration order. Product fields
+and enum members carry stable identities and source indices. Recursive local
+references remain nominal identities, so mutually recursive declaration closure
+has no content-hash cycle. Checked type, declaration, edge, work, and byte bounds
+apply before hashing.
 
-- semantic type and semantic contract identities;
-- aggregate mode, permitted executable domain, and root projection;
-- copy/share, drop, equality, codec, and list-element routes;
-- checked size, alignment, borrow, and dynamic-owner facts;
-- portability and contention;
-- sorted closed executable operation identities; and
-- ordered child executable witness identities.
+The executable encoder consumes that descriptor's semantic contract hash plus
+aggregate mode, domain, root projection, routes, sizing, ownership, portability,
+contention, sorted operation identities, and ordered role-bearing dependencies.
+Closed dependency roles are list element, exact product field, exact enum
+variant field, and exact nominal constructor type argument. Each target is
+either an exact external child witness ID or a local semantic nominal/member
+identity that occurs at that exact role in the authenticated closure. Complete
+roles are unique; declaration order is never sorted away.
 
-The encoder uses an exact domain separator, fixed tags, big-endian fixed-width
-integers, explicit option and sequence lengths, and declaration-order fields.
-It never uses debug text, serde output, host enum layout, pointers, or implicit
-discriminants. Changing one executable fact, operation, or ordered dependency
-changes the witness ID.
+Both encoders use exact domain separators, fixed tags, big-endian fixed-width
+integers, explicit lengths, and exhaustive field order. They never use `Debug`,
+display, serde, host layout/discriminants, pointers, maps, or filesystem order.
+Changing any reachable semantic fact, role, target, operation, or executable
+fact changes the authenticated identity. Unreachable declarations do not.
 
 HIR-only derivation evidence remains committed by `MemoryPlanId`; it is not
 duplicated as runtime policy. The executable identity does not include
@@ -53,14 +65,18 @@ form an identity cycle.
 
 ## Producer Projection
 
-The HIR producer projects canonical executable facts before SSA and computes
-the witness ID from that projection. Child identities are resolved from the
-already-derived exact type dependency order. The independent HIR verifier
-reconstructs HIR facts, repeats the executable projection, recomputes the ID,
-and rejects any mismatch.
+The HIR producer independently constructs the contracts schema from resolved
+HIR, closes only declarations reachable from the root, and derives all direct
+roles. Nonrecursive targets resolve exact already-interned child witness IDs;
+same recursive declaration-SCC edges use local semantic targets and never a
+witness self-hash. The HIR verifier implements a separate traversal and
+construction. Producer and verifier share only the contracts schema, canonical
+encoders/hashes, closed tags, and limits; neither calls the other's traversal or
+compiler policy.
 
-SSA copies the verified projection. It does not derive additional operations or
-replace the identity.
+SSA copies only independently verified descriptors and role records. Bytecode
+retains the semantic descriptor so IR and core validators can recompute its
+contract hash and executable witness ID rather than trusting copied IDs.
 
 ## Installation Provenance
 
@@ -84,11 +100,12 @@ For every installed witness, SSA and bytecode validators require:
 
 1. canonical executable fact form;
 2. sorted unique nonzero table IDs;
-3. ordered, duplicate-free, complete dependency resolution;
-4. an acyclic dependency graph;
-5. exact executable ID recomputation;
-6. operation and physical-route compatibility;
-7. exact structural type, layout, mode, and representation relinking; and
+3. ordered, unique, complete role resolution and exact role/target legality;
+4. local targets present at the claimed authenticated declaration role;
+5. an acyclic external-witness graph (local semantic recursion is not a graph edge);
+6. semantic-contract and executable-ID recomputation;
+7. operation, physical-route, structural type/layout/mode, and unambiguous owner
+   representation compatibility; and
 8. exact plan and package provenance where the enclosing artifact provides it.
 
 Validation reserves bounded work before installation. Runtime receives only the
@@ -121,11 +138,16 @@ Rejected production authorities include:
 
 Malformed-record constructors remain test-only.
 
-## Promotion Boundary
+## Non-Claims And Promotion Boundary
 
-This contract becomes Current only after a reachable source producer and its
-independent HIR verifier feed the authenticated projection through verified SSA,
-validated bytecode, evaluator, VM, forced baseline, and forced proof execution.
-The selected sealed-value vertical additionally requires witness-derived DAG
-rehydration, fresh-runtime process import, exact owner cleanup, zero forced
-fallback, no-tracing verification, and retained no-per-node-RC evidence.
+Revision 16 does not implement recursive executable witness groups,
+compiler-selected sealed placement, package provenance, all-tier sealed
+operation execution, or process rehydration. It does not promote the broader
+Accepted Contract or Experimental vertical to Current.
+
+Promotion requires a reachable source producer and independent verifier through
+verified SSA, validated bytecode, evaluator, VM, forced baseline, and forced
+proof execution. The sealed-value vertical additionally requires
+witness-derived DAG rehydration, fresh-runtime process import, exact owner
+cleanup, zero forced fallback, no-tracing verification, and retained
+no-per-node-RC evidence.

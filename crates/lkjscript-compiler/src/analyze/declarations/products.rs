@@ -37,9 +37,22 @@ impl Analyzer {
                             format!("unknown product declaration {product_name}"),
                         )
                     })?;
+                let declaration = program
+                    .declarations()
+                    .iter()
+                    .find(|declaration| {
+                        declaration.kind() == crate::source::DeclarationKind::Product
+                            && declaration.name() == product_name
+                            && declaration.origin().logical_path() == file.origin.logical_path
+                    })
+                    .ok_or_else(|| self.error(source, "product declaration identity is missing"))?;
+                let identity = declaration.key().digest();
+                if identity == [0; 32] {
+                    return Err(self.error(source, "product declaration identity is unresolved"));
+                }
                 let mut names = HashSet::new();
                 let mut fields = Vec::with_capacity(field_forms.len());
-                for field_form in field_forms {
+                for (field_order, field_form) in field_forms.iter().enumerate() {
                     let (field_name, ty) = parse_product_field(field_form).map_err(|message| {
                         self.error(source, format!("product {product_name}: {message}"))
                     })?;
@@ -78,7 +91,21 @@ impl Analyzer {
                             ),
                         ));
                     }
+                    let source_order = u16::try_from(field_order)
+                        .map_err(|_| self.error(source, "product field order exceeds u16"))?;
+                    let field_identity =
+                        crate::source::product_field_identity(identity, &field_name, source_order)
+                            .map_err(|_| {
+                                self.error(source, "cannot encode stable product field identity")
+                            })?;
+                    if field_identity == [0; 32] {
+                        return Err(
+                            self.error(source, "stable product field identity is unresolved")
+                        );
+                    }
                     fields.push(ProductField {
+                        identity: field_identity,
+                        source_order,
                         name: field_name,
                         ty,
                     });
@@ -88,6 +115,7 @@ impl Analyzer {
                 }
                 self.products.push(ProductDefinition {
                     id: product,
+                    identity,
                     name: product_name,
                     origin: source,
                     fields,

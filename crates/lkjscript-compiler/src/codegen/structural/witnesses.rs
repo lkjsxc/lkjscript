@@ -26,11 +26,7 @@ pub(super) fn install_memory_witnesses(
             .push(lkjscript_core::InstalledMemoryWitness {
                 id: BytecodeMemoryWitnessId::new(descriptor.id.bytes()),
                 facts: descriptor.facts.clone(),
-                dependencies: descriptor
-                    .dependencies
-                    .iter()
-                    .map(|id| BytecodeMemoryWitnessId::new(id.bytes()))
-                    .collect(),
+                dependencies: descriptor.dependencies.clone(),
                 value_kind,
             });
     }

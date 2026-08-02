@@ -1,6 +1,5 @@
 # Authoritative Memory Plan
 ## Status
-
 <!-- LKJ-STATUS id=memory-plan status=current -->
 
 **Current for the complete HIR accepted by the Current compiler pipeline.** The
@@ -28,9 +27,9 @@ obligations, whole-place drop classes, and drop glue. The
 and dense order, never Rust formatting, maps, addresses, time, or process state.
 
 `ExecutableProgram` retains the ID and opaque verified authority through SSA.
-Each concrete structural type carries its exact witness identity through SSA and
-validated bytecode. Package and residual-ABI witness export remains follow-on work.
-
+Each concrete structural type carries its exact witness identity, canonical
+semantic descriptor, and complete role-bearing dependencies through SSA and
+validated bytecode. Package and residual-ABI export remains follow-on work.
 ## Value Axes
 
 Each value plan records:
@@ -81,23 +80,16 @@ function end.
 
 ## Current Aggregate Cutover
 
-The Current aggregate island extends each plan with separate domain and
-root-projection facts. Domain/storage is exactly inline, static, stack, caller
-destination, unique owner, ordinary region, sealed region, borrowed view,
-external resource, or an unsupported-runtime blocker. A compact structural root is
-a runtime projection of a typed domain root, never a storage class.
+The Current aggregate island records domain, root projection, mode, transitive
+closure, destination, copy/share, borrow, drop, origin, and failure cleanup.
+Domains are inline, static, stack, caller, unique, ordinary/sealed region,
+borrowed, external, or unsupported. Structural roots project typed domain roots;
+they are not storage classes. Destinations are private write-once state and
+publish only after complete initialization; construction and abort must execute.
 
-Each planned value additionally records aggregate mode, transitive deterministic
-closure, destination kind, copy/share strategy, root-projection need, borrow
-scope, exact drop path, source/HIR origin, and allocation-failure cleanup.
-Destinations are private write-once state. Stack, caller, unique, ordinary-region,
-and sealed-builder destinations are permitted only where construction and abort
-execute; complete initialization precedes publication.
-
-Aggregate mode comes from monomorphized fields. Copy products require copy fields and use flat `StructuralCopy` roots.
+Mode comes from monomorphized fields. Copy products require copy fields;
 `immutable-value` permits borrow, static identity, structural copy, or sealed
-sharing; `affine` follows a unique/external owner or drop obligation. Copy
-products execute structurally in all tiers and permit process codecs. A nonrecursive product containing a selected
+sharing; `affine` follows a unique/external owner or drop obligation. A nonrecursive product containing a selected
 copy-leaf list transitively and only `unit`, `bool`, `i64`, `f64`, or already
 selected acyclic region-product fields uses `OrdinaryRegion`, `RegionHandleCopy`,
 no root, and a Current destination. Invocation records support exact calls and
@@ -126,12 +118,17 @@ lists of independently owned structural roots. Ultimately every exact type has
 a content-addressed witness; residual polymorphism carries hidden static witness
 parameters. Missing or mismatched witnesses are compile errors, never tracing.
 
-A witness closes semantic type and runtime layout identity, aggregate mode,
-size/alignment, storage/domain class, move/borrow/share/clone behavior, drop and
-side-drop behavior, equality operation eligibility, process-codec eligibility,
-list-element storage, portability, contention, and checked sizing. Recursive
-witness cycles are static declaration metadata and never runtime ownership
-edges. Package interfaces export exact hidden witness requirements.
+A witness closes semantic/runtime-layout identity, mode, sizing, domain, routes,
+portability, and contention. Revision 16 also authenticates a target-neutral root
+and exact reachable product/enum closure. Nominal references use stable 32-byte
+Semantic Source identities; fields, variants, source indices, and exact enum
+arguments retain order. Unreachable declarations are excluded.
+
+Contracts-owned dependency roles cover list elements, product fields, enum
+variant fields, and nominal arguments. Targets are exact external witness IDs or
+same-recursive-SCC local semantic identities authenticated by the closure.
+Semantic recursion has no witness self-hash; the external graph is acyclic.
+Package interfaces will export exact hidden requirements.
 
 Product/enum declaration SCCs are recomputed after substitution. Their least
 stable mode is derived from nonrecursive fields and exact arguments while
@@ -147,12 +144,15 @@ mutable elements are rejected until a complete linear collection contract
 exists. HIR records segment construction, source/tail ownership, nonescaping
 borrow versus escaping owner, seal point, equality witness, and failure cleanup.
 
-The producer and independent verifier separately reconstruct witness identity,
-SCC fixed points, local-edge legality, dependency DAGs, list eligibility, and
-all ownership transitions before SSA. No accepted final plan contains
-`UnsupportedRuntime`, `Unsupported`, `CutoverRequired`,
-`ListElementWitnessRequired`, `RecursiveDeclarationScc`, or `UnknownTypeParameter`.
+Separate producer/verifier HIR traversals construct the contracts descriptor,
+identity, SCC facts, complete roles, local legality, external DAG, and ownership.
+Only schema, encoder/hash, tags, and limits are shared. IR/core recompute
+identities and reject malformed roles, targets, external cycles, or ambiguous
+representations. Accepted plans contain no unresolved blocker variants.
 
+This slice remains Experimental: it is not recursive executable witness groups,
+compiler-selected sealed placement, package provenance, all-tier sealed
+operation execution, or process rehydration.
 ## Unsupported Runtime Values
 
 `unsupported-runtime`, `unresolved-shared`, and `unsupported` destruction are
@@ -160,7 +160,6 @@ blocker evidence only and never executable storage modes. Unknown families,
 analysis failure, and stale plan contracts fail before effects.
 
 ## Budgets
-
 The Current pre-backend slice uses checked hard bounds for expression plans,
 use edges, loans, obligations, constants, calls, functions, and verifier work;
 all arithmetic is checked and exhaustion is a structured compile failure.

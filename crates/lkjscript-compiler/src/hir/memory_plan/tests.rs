@@ -8,6 +8,7 @@ mod fixtures;
 mod lists;
 mod moves;
 mod nested_lists;
+mod semantic_closure;
 mod signatures;
 mod transport_fixture;
 mod transport_witnesses;

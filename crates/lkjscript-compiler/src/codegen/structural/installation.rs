@@ -42,13 +42,13 @@ pub(in crate::codegen) fn install_structural_metadata(
                 ))
             }
         };
+        let runtime_type = runtime_structural_type(program, &item.ty)?
+            .ok_or_else(|| Error::msg("SSA structural type has no exact value-runtime identity"))?;
         chunk.structural_types.push(BytecodeStructuralTypeMetadata {
             id: BytecodeStructuralTypeId::new(item.id.raw()),
             witness: BytecodeMemoryWitnessId::new(item.witness.bytes()),
-            identity: field_identity(&item.ty),
-            runtime_type: runtime_structural_type(program, &item.ty)?.ok_or_else(|| {
-                Error::msg("SSA structural type has no exact value-runtime identity")
-            })?,
+            identity: field_identity(runtime_type.semantic_type),
+            runtime_type,
             kind,
             layout: BytecodeStructuralLayoutId::new(item.layout.raw()),
             mode: match item.mode {

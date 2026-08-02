@@ -59,6 +59,24 @@ pub(crate) fn declaration_key_bytes(
     Ok(exact)
 }
 
+pub(crate) fn product_field_identity(
+    parent: [u8; 32],
+    name: &str,
+    source_order: u16,
+) -> Result<[u8; 32], IdentityEncodingError> {
+    let mut exact = Vec::new();
+    let order = source_order.to_be_bytes();
+    for field in [
+        b"lkjscript.product-field\0canonical-platform-contract".as_slice(),
+        parent.as_slice(),
+        name.as_bytes(),
+        order.as_slice(),
+    ] {
+        super::append_framed(&mut exact, field)?;
+    }
+    Ok(lkjscript_core::sha256(&exact))
+}
+
 pub(crate) fn enum_member_identity(parent: [u8; 32], kind: &str, name: &str) -> [u8; 32] {
     let mut exact = [0_u8; 160];
     exact[..32].copy_from_slice(&lkjscript_contracts::SEMANTIC_SOURCE_DIGEST.as_bytes());

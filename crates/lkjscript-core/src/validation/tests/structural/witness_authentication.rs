@@ -1,20 +1,19 @@
 use lkjscript_contracts::{
-    ExecutableMemoryWitnessFacts, MemoryWitnessCapabilities, MemoryWitnessCodec,
-    MemoryWitnessContention,
-    MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality,
-    MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation,
-    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize,
+    ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessFacts, ExecutableMemoryWitnessRole,
+    ExecutableMemoryWitnessTarget, MemoryWitnessCapabilities, MemoryWitnessCodec,
+    MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
+    MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation,
+    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize, SemanticDescriptor,
+    SemanticPrimitiveKind, SemanticType,
 };
 
 fn scalar_witness(
-    facts: ExecutableMemoryWitnessFacts,
-    dependencies: Vec<crate::MemoryWitnessId>,
+    mut facts: ExecutableMemoryWitnessFacts,
+    dependencies: Vec<ExecutableMemoryWitnessDependency>,
 ) -> crate::InstalledMemoryWitness {
-    let dependency_bytes: Vec<_> = dependencies.iter().map(|item| item.bytes()).collect();
-    let encoded = lkjscript_contracts::canonical_executable_memory_witness(
-        &facts,
-        &dependency_bytes,
-    );
+    facts.semantic_type = lkjscript_contracts::semantic_type_closure_hash(&facts.semantic)
+        .expect("scalar semantic type closure");
+    let encoded = lkjscript_contracts::canonical_executable_memory_witness(&facts, &dependencies);
     crate::InstalledMemoryWitness {
         id: crate::MemoryWitnessId::new(crate::sha256(&encoded)),
         facts,
@@ -24,9 +23,16 @@ fn scalar_witness(
 }
 
 fn scalar_facts() -> ExecutableMemoryWitnessFacts {
+    let semantic = SemanticDescriptor {
+        root: SemanticType::Primitive(SemanticPrimitiveKind::I64),
+        declarations: Vec::new(),
+    };
     ExecutableMemoryWitnessFacts {
-        semantic_type: [1; 32],
-        semantic_contract: [2; 32],
+        semantic_type: lkjscript_contracts::semantic_type_closure_hash(&semantic)
+            .expect("scalar semantic type closure"),
+        semantic_contract: lkjscript_contracts::semantic_contract_hash(&semantic)
+            .expect("scalar semantic contract"),
+        semantic,
         mode: MemoryWitnessMode::Copy,
         capabilities: MemoryWitnessCapabilities {
             inline: true,
@@ -83,7 +89,7 @@ fn bytecode_recomputes_executable_witness_identity() {
 
     let mut changed = chunk.clone();
     changed.memory_witnesses[0].facts.semantic_contract = [3; 32];
-    assert!(error(changed).contains("identity is noncanonical"));
+    assert!(error(changed).contains("semantic contract is noncanonical"));
 
     let mut changed = chunk.clone();
     changed.memory_witnesses[0].facts.copy = MemoryWitnessCopy::SealedShare;
@@ -106,13 +112,23 @@ fn bytecode_recomputes_executable_witness_identity() {
 #[test]
 fn bytecode_witness_dependency_changes_are_identity_bearing() {
     let mut changed = witness_chunk();
-    changed.memory_witnesses[0]
-        .dependencies
-        .push(crate::MemoryWitnessId::new([9; 32]));
-    assert!(error(changed).contains("identity is noncanonical"));
+    changed.memory_witnesses[0].dependencies.push(ExecutableMemoryWitnessDependency {
+        role: ExecutableMemoryWitnessRole::ListElement,
+        target: ExecutableMemoryWitnessTarget::ExternalWitness([9; 32]),
+    });
+    assert!(error(changed).contains("role closure is incomplete"));
 
     let mut missing = witness_chunk();
-    let dependency = crate::MemoryWitnessId::new([9; 32]);
-    missing.memory_witnesses[0] = scalar_witness(scalar_facts(), vec![dependency]);
+    let mut facts = scalar_facts();
+    facts.semantic.root = SemanticType::List(Box::new(SemanticType::Primitive(
+        SemanticPrimitiveKind::I64,
+    )));
+    facts.semantic_contract = lkjscript_contracts::semantic_contract_hash(&facts.semantic)
+        .expect("list semantic contract");
+    let dependency = ExecutableMemoryWitnessDependency {
+        role: ExecutableMemoryWitnessRole::ListElement,
+        target: ExecutableMemoryWitnessTarget::ExternalWitness([9; 32]),
+    };
+    missing.memory_witnesses[0] = scalar_witness(facts, vec![dependency]);
     assert!(error(missing).contains("dependency is missing"));
 }

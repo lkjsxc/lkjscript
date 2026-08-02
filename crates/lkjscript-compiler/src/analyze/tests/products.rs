@@ -15,6 +15,13 @@ fn nominal_products_remain_resolved_and_state_threadable() {
     let program = analyze_one(&source).expect("analyze product state threading");
     assert_eq!(program.products.len(), 1);
     assert_eq!(program.products[0].name, "point");
+    assert_ne!(program.products[0].identity, [0; 32]);
+    assert_eq!(program.products[0].fields[0].source_order, 0);
+    assert_eq!(program.products[0].fields[1].source_order, 1);
+    assert_ne!(
+        program.products[0].fields[0].identity,
+        program.products[0].fields[1].identity
+    );
     assert!(!program.global_layout.iter().any(|binding| program
         .binding(*binding)
         .is_some_and(|binding| binding.name == "point")));

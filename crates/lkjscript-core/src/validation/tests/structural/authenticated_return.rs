@@ -6,13 +6,21 @@ fn install_authenticated_return_witness(
         ExecutableMemoryWitnessFacts, MemoryWitnessCapabilities, MemoryWitnessCodec,
         MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
         MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode,
-        MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize,
+        MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize, SemanticDescriptor,
+        SemanticPrimitiveKind, SemanticType,
     };
 
     let immutable = mode == crate::StructuralTypeMode::Immutable;
+    let semantic = SemanticDescriptor {
+        root: SemanticType::Primitive(SemanticPrimitiveKind::Unit),
+        declarations: Vec::new(),
+    };
     let mut facts = ExecutableMemoryWitnessFacts {
-        semantic_type: [11; 32],
-        semantic_contract: [12; 32],
+        semantic_type: lkjscript_contracts::semantic_type_closure_hash(&semantic)
+            .expect("authenticated return semantic type closure"),
+        semantic_contract: lkjscript_contracts::semantic_contract_hash(&semantic)
+            .expect("authenticated return semantic contract"),
+        semantic,
         mode: match mode {
             crate::StructuralTypeMode::Copy => MemoryWitnessMode::Copy,
             crate::StructuralTypeMode::Immutable => MemoryWitnessMode::ImmutableValue,

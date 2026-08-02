@@ -11,9 +11,17 @@ impl TypePlanner<'_> {
         if u64::try_from(self.witnesses.len()).unwrap_or(u64::MAX) >= MAX_MEMORY_PLAN_WITNESSES {
             return Err(Error::msg("HIR memory-plan witnesses exceed bounded maximum"));
         }
+        let semantic = self.producer_semantic_descriptor(ty)?;
+        let dependencies = self.producer_witness_dependencies(ty)?;
+        lkjscript_contracts::validate_executable_dependencies(&semantic, &dependencies)
+            .map_err(|error| Error::msg(error.to_string()))?;
+        let semantic_contract = lkjscript_contracts::semantic_contract_hash(&semantic)
+            .map_err(|error| Error::msg(error.to_string()))?;
         let facts = MemoryWitnessFacts {
             ty: memory_type(ty),
-            semantic_contract: self.witness_semantic_contract(ty),
+            semantic_contract,
+            semantic,
+            dependencies,
             requirement: witness_requirement(ty),
             mode: derived.mode,
             capabilities: witness_capabilities(ty, derived),
@@ -70,16 +78,6 @@ impl TypePlanner<'_> {
         }))
     }
 
-    fn witness_semantic_contract(&self, ty: &Type) -> [u8; 32] {
-        let mut bytes = b"lkjscript.memory-witness\0semantic-contract".to_vec();
-        let encoded = format!(
-            "type={ty:?};products={:?};enums={:?}",
-            self.program.products, self.program.enums
-        );
-        bytes.extend_from_slice(&u64::try_from(encoded.len()).unwrap_or(u64::MAX).to_be_bytes());
-        bytes.extend_from_slice(encoded.as_bytes());
-        lkjscript_core::sha256(&bytes)
-    }
 
     fn witness_glue(&self, id: MemoryDropGlueId) -> Result<MemoryDropGlueKind> {
         self.glues
@@ -105,3 +103,4 @@ impl TypePlanner<'_> {
 
 include!("witness_policy.rs");
 include!("witness_capabilities.rs");
+include!("semantic_witness.rs");

@@ -9,7 +9,7 @@ pub struct MemoryWitnessDescriptor {
     pub id: MemoryWitnessId,
     pub facts: lkjscript_contracts::ExecutableMemoryWitnessFacts,
     pub ty: SsaType,
-    pub dependencies: Vec<MemoryWitnessId>,
+    pub dependencies: Vec<lkjscript_contracts::ExecutableMemoryWitnessDependency>,
     pub representation: Option<StructuralRepresentationId>,
 }
 

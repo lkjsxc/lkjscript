@@ -45,9 +45,28 @@ canonical_struct!(lkjscript_contracts::MemoryWitnessCapabilities {
     list_element,
     equality,
 });
+impl Canonical for lkjscript_contracts::SemanticDescriptor {
+    fn encode(&self, output: &mut Encoder) -> Result<()> {
+        let bytes = lkjscript_contracts::canonical_semantic_descriptor(self)
+            .map_err(|error| Error::msg(error.to_string()))?;
+        output.bytes(&bytes)
+    }
+}
+
+impl Canonical for lkjscript_contracts::ExecutableMemoryWitnessDependency {
+    fn encode(&self, output: &mut Encoder) -> Result<()> {
+        let bytes = lkjscript_contracts::canonical_executable_memory_witness_dependencies(
+            std::slice::from_ref(self),
+        );
+        output.bytes(&bytes)
+    }
+}
+
 canonical_struct!(MemoryWitnessFacts {
     ty,
     semantic_contract,
+    semantic,
+    dependencies,
     requirement,
     mode,
     capabilities,

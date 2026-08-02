@@ -116,6 +116,7 @@ pub enum MemoryWitnessContention {
 pub struct ExecutableMemoryWitnessFacts {
     pub semantic_type: [u8; 32],
     pub semantic_contract: [u8; 32],
+    pub semantic: super::witness_encoding::SemanticDescriptor,
     pub mode: MemoryWitnessMode,
     pub capabilities: super::MemoryWitnessCapabilities,
     pub domain: MemoryWitnessDomain,

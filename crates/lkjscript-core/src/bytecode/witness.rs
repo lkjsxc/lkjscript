@@ -20,7 +20,7 @@ pub enum MemoryWitnessValueKind {
 pub struct InstalledMemoryWitness {
     pub id: MemoryWitnessId,
     pub facts: lkjscript_contracts::ExecutableMemoryWitnessFacts,
-    pub dependencies: Vec<MemoryWitnessId>,
+    pub dependencies: Vec<lkjscript_contracts::ExecutableMemoryWitnessDependency>,
     pub value_kind: MemoryWitnessValueKind,
 }
 

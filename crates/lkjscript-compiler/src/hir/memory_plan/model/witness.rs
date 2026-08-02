@@ -89,6 +89,8 @@ pub struct MemoryWitnessDropBranch {
 pub struct MemoryWitnessFacts {
     pub ty: MemoryType,
     pub semantic_contract: [u8; 32],
+    pub semantic: lkjscript_contracts::SemanticDescriptor,
+    pub dependencies: Vec<lkjscript_contracts::ExecutableMemoryWitnessDependency>,
     pub requirement: MemoryWitnessRequirement,
     pub mode: MemoryAggregateMode,
     pub capabilities: lkjscript_contracts::MemoryWitnessCapabilities,
@@ -125,10 +127,9 @@ pub(crate) fn memory_witness_id(
     facts: &MemoryWitnessFacts,
 ) -> lkjscript_core::Result<MemoryWitnessId> {
     let executable = super::executable_facts(facts)?;
-    let dependencies = super::executable_dependencies(facts);
     let bytes = lkjscript_contracts::canonical_executable_memory_witness(
         &executable,
-        &dependencies,
+        &facts.dependencies,
     );
     Ok(MemoryWitnessId::from_bytes(lkjscript_core::sha256(&bytes)))
 }

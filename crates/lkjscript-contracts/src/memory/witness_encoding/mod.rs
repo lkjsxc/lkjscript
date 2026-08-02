@@ -1,10 +1,37 @@
 use super::witness::*;
 
+mod dependency;
+mod dependency_validation;
+mod semantic;
+mod semantic_encoding;
+mod semantic_tags;
+mod semantic_validation;
+
+#[cfg(test)]
+mod semantic_tests;
+
+pub use dependency::*;
+pub use dependency_validation::*;
+pub use semantic::*;
+pub use semantic_encoding::*;
+pub use semantic_validation::*;
+
 const DOMAIN: &[u8] = b"lkjscript.executable-memory-witness\0canonical-platform-contract";
+
+pub fn canonical_executable_memory_witness_dependencies(
+    dependencies: &[ExecutableMemoryWitnessDependency],
+) -> Vec<u8> {
+    let mut output = Encoder::new();
+    output.sequence_len(dependencies.len());
+    for dependency in dependencies {
+        encode_dependency(&mut output, dependency);
+    }
+    output.finish()
+}
 
 pub fn canonical_executable_memory_witness(
     facts: &ExecutableMemoryWitnessFacts,
-    dependencies: &[[u8; 32]],
+    dependencies: &[ExecutableMemoryWitnessDependency],
 ) -> Vec<u8> {
     let mut output = Encoder::new();
     output.bytes(DOMAIN);
@@ -46,9 +73,58 @@ pub fn canonical_executable_memory_witness(
     }
     output.sequence_len(dependencies.len());
     for dependency in dependencies {
-        output.bytes(dependency);
+        encode_dependency(&mut output, dependency);
     }
     output.finish()
+}
+
+fn encode_dependency(output: &mut Encoder, dependency: &ExecutableMemoryWitnessDependency) {
+    encode_role(output, &dependency.role);
+    match dependency.target {
+        ExecutableMemoryWitnessTarget::ExternalWitness(identity) => {
+            output.byte(0);
+            output.bytes(&identity);
+        }
+        ExecutableMemoryWitnessTarget::LocalSemantic(identity) => {
+            output.byte(1);
+            output.bytes(&identity);
+        }
+    }
+}
+
+fn encode_role(output: &mut Encoder, role: &ExecutableMemoryWitnessRole) {
+    match role {
+        ExecutableMemoryWitnessRole::ListElement => output.byte(0),
+        ExecutableMemoryWitnessRole::ProductField {
+            product,
+            field,
+            source_order,
+        } => {
+            output.byte(1);
+            output.bytes(product);
+            output.bytes(field);
+            output.u16(*source_order);
+        }
+        ExecutableMemoryWitnessRole::EnumVariantField {
+            enumeration,
+            variant,
+            field,
+            variant_source_order,
+            field_source_order,
+        } => {
+            output.byte(2);
+            output.bytes(enumeration);
+            output.bytes(variant);
+            output.bytes(field);
+            output.u16(*variant_source_order);
+            output.u16(*field_source_order);
+        }
+        ExecutableMemoryWitnessRole::TypeArgument { constructor, index } => {
+            output.byte(3);
+            output.bytes(constructor);
+            output.u16(*index);
+        }
+    }
 }
 
 struct Encoder(Vec<u8>);

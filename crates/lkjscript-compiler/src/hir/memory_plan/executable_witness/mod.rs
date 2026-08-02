@@ -9,8 +9,10 @@ use super::{MemoryType, MemoryWitnessFacts};
 
 pub(crate) fn executable_facts(facts: &MemoryWitnessFacts) -> Result<ExecutableMemoryWitnessFacts> {
     let mut executable = ExecutableMemoryWitnessFacts {
-        semantic_type: super::memory_type_identity(&facts.ty)?,
+        semantic_type: lkjscript_contracts::semantic_type_closure_hash(&facts.semantic)
+            .map_err(|error| lkjscript_core::Error::msg(error.to_string()))?,
         semantic_contract: facts.semantic_contract,
+        semantic: facts.semantic.clone(),
         mode: map_mode(facts.mode),
         capabilities: facts.capabilities,
         domain: map_domain(facts.domain),
@@ -33,14 +35,6 @@ pub(crate) fn executable_facts(facts: &MemoryWitnessFacts) -> Result<ExecutableM
     };
     executable.operations = lkjscript_contracts::required_memory_witness_operations(&executable);
     Ok(executable)
-}
-
-pub(crate) fn executable_dependencies(facts: &MemoryWitnessFacts) -> Vec<[u8; 32]> {
-    facts
-        .list
-        .iter()
-        .map(|list| list.element.as_bytes())
-        .collect()
 }
 
 include!("mappings.rs");

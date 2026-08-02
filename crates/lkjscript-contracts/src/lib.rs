@@ -29,12 +29,20 @@ pub use domains::{
 };
 pub use encoding::canonical_bytes;
 pub use memory::{
-    canonical_executable_memory_witness, memory_obligations, memory_witness_routes_are_compatible,
-    required_memory_witness_operations, ExecutableMemoryWitnessFacts, MemoryObligation,
-    MemoryWitnessCapabilities, MemoryWitnessCodec, MemoryWitnessContention, MemoryWitnessCopy,
-    MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
-    MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot,
-    MemoryWitnessSize,
+    canonical_executable_memory_witness, canonical_executable_memory_witness_dependencies,
+    canonical_semantic_descriptor, direct_nominal, memory_obligations,
+    memory_witness_routes_are_compatible, required_memory_witness_operations,
+    semantic_contract_hash, semantic_dependency_requirements, semantic_type_closure_hash,
+    validate_executable_dependencies, validate_semantic_descriptor,
+    ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessFacts, ExecutableMemoryWitnessRole,
+    ExecutableMemoryWitnessTarget, MemoryObligation, MemoryWitnessCapabilities, MemoryWitnessCodec,
+    MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
+    MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation,
+    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize, SemanticContractError,
+    SemanticDeclaration, SemanticDescriptor, SemanticEnumDeclaration, SemanticEnumVariant,
+    SemanticEnumVariantField, SemanticPrimitiveKind, SemanticProductDeclaration,
+    SemanticProductField, SemanticType, MAX_SEMANTIC_DECLARATIONS, MAX_SEMANTIC_DESCRIPTOR_BYTES,
+    MAX_SEMANTIC_EDGES, MAX_SEMANTIC_TYPE_NODES,
 };
 pub use model::{
     ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,

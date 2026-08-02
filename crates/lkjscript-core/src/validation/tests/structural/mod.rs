@@ -135,3 +135,4 @@ include!("authenticated_return.rs");
 include!("authenticated_enum.rs");
 include!("semantic_dag.rs");
 include!("witness_authentication.rs");
+include!("witness_closure_rejection.rs");

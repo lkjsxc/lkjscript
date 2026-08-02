@@ -14,11 +14,7 @@ fn install_memory_witnesses(
         let representation = memory
             .type_for(&ty)
             .and_then(|item| memory.representation(&item.ty, StructuralValueCategory::Owner));
-        let dependencies = facts
-            .list
-            .iter()
-            .map(|list| MemoryWitnessId::new(list.element.as_bytes()))
-            .collect();
+        let dependencies = facts.dependencies.clone();
         memory.witnesses.push(lkjscript_ir::MemoryWitnessDescriptor {
             id: MemoryWitnessId::new(witness.id.as_bytes()),
             facts: crate::memory_plan::executable_facts(facts)?,

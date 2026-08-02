@@ -31,8 +31,10 @@ fn structural_field(
         | StructuralFieldRoute::Structural(_)
         | StructuralFieldRoute::Unique => runtime_structural_type(program, ty)?,
     };
+    let semantic = lkjscript_ir::runtime_structural_semantic_type(Some(program), ty)
+        .map_err(|error| Error::msg(error.to_string()))?;
     Ok(StructuralFieldMetadata {
-        identity: field_identity(ty),
+        identity: field_identity(semantic),
         runtime_type,
         route,
         resource: resource_kind(ty),
@@ -63,7 +65,7 @@ fn structural_field_from_chunk(chunk: &Chunk, ty: &SsaType) -> Result<Structural
         StructuralFieldRoute::Resource | StructuralFieldRoute::LegacyHeap => None,
     };
     Ok(StructuralFieldMetadata {
-        identity: field_identity(ty),
+        identity: field_identity(semantic),
         runtime_type,
         route,
         resource: resource_kind(ty),
@@ -114,10 +116,12 @@ fn field_route(ty: &SsaType) -> StructuralFieldRoute {
     }
 }
 
-fn field_identity(ty: &SsaType) -> BytecodeLayoutId {
-    let mut bytes = b"lkjscript.bytecode.structural-field\0".to_vec();
-    bytes.extend_from_slice(format!("{ty:?}").as_bytes());
-    BytecodeLayoutId::new(lkjscript_core::sha256(&bytes))
+fn field_identity(semantic: lkjscript_core::SemanticTypeIdentity) -> BytecodeLayoutId {
+    let mut bytes =
+        b"lkjscript.bytecode.structural-field\0canonical-platform-contract".to_vec();
+    bytes.extend_from_slice(&32_u64.to_be_bytes());
+    bytes.extend_from_slice(&semantic.get().to_be_bytes());
+    BytecodeLayoutId::new(lkjscript_contracts::sha256(&bytes))
 }
 
 fn runtime_structural_type(
