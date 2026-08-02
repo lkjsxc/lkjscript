@@ -101,7 +101,7 @@ fn unresolved_type_and_cell_limit_fail_before_builder_allocation() {
             StructuralError::LimitExceeded(StructuralLimit::Chunks,)
         )
     );
-    assert_eq!(runtime.metrics().typed_stores, 1);
+    assert_eq!(runtime.metrics().typed_stores, 0);
     assert_eq!(runtime.metrics().runtime.live_domains, 0);
     runtime.validate().expect("rolled-back builder");
 }

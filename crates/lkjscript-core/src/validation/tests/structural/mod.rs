@@ -131,3 +131,4 @@ include!("identity.rs");
 include!("ownership.rs");
 include!("cleanup.rs");
 include!("limits.rs");
+include!("semantic_dag.rs");

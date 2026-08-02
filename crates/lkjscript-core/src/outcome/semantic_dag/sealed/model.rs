@@ -11,8 +11,11 @@ pub enum SealedSemanticDagError {
     AllocationFailed,
     ArithmeticOverflow,
     InvalidTypeClosure,
+    MissingValidatedReturn,
     RootTypeMismatch,
     UnresolvedType(SemanticDagType),
+    UnsupportedValidatedType,
+    ValidatedShapeMismatch,
     CorruptRegion,
     Structural(StructuralError),
 }
@@ -31,12 +34,21 @@ impl fmt::Display for SealedSemanticDagError {
             Self::InvalidTypeClosure => {
                 output.write_str("invalid sealed semantic DAG type closure")
             }
+            Self::MissingValidatedReturn => {
+                output.write_str("validated bytecode has no exact structural return")
+            }
             Self::RootTypeMismatch => output.write_str("sealed semantic DAG root type mismatch"),
             Self::UnresolvedType(value_type) => {
                 write!(
                     output,
                     "unresolved sealed semantic DAG type: {value_type:?}"
                 )
+            }
+            Self::UnsupportedValidatedType => {
+                output.write_str("validated bytecode type is ineligible for sealed DAG import")
+            }
+            Self::ValidatedShapeMismatch => {
+                output.write_str("semantic DAG disagrees with validated bytecode shape")
             }
             Self::CorruptRegion => output.write_str("corrupt sealed semantic DAG region"),
             Self::Structural(error) => error.fmt(output),
@@ -50,6 +62,15 @@ impl std::error::Error for SealedSemanticDagError {}
 pub struct SealedSemanticDagFailure {
     pub error: SealedSemanticDagError,
     pub snapshot: Box<SemanticDagSnapshot>,
+}
+
+impl SealedSemanticDagFailure {
+    pub(super) fn new(error: SealedSemanticDagError, snapshot: SemanticDagSnapshot) -> Self {
+        Self {
+            error,
+            snapshot: Box::new(snapshot),
+        }
+    }
 }
 
 #[derive(Debug)]

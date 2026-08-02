@@ -5,6 +5,8 @@ mod model;
 mod ownership;
 mod planning;
 mod runtime;
+mod validated;
+mod validated_types;
 
 pub use model::{
     SealedSemanticDagBorrow, SealedSemanticDagBorrowFailure, SealedSemanticDagError,

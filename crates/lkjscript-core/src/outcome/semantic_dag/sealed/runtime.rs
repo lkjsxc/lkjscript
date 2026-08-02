@@ -1,9 +1,7 @@
 use super::super::SemanticDagType;
 use super::model::{SealedSemanticDagError, SealedSemanticDagMetrics};
-use super::{SealedDagCell, TypedSealedDagStore};
-use crate::structural::{
-    SealedRegionMetrics, SealedRegionStore, StructuralLimits, StructuralRuntime,
-};
+use super::TypedSealedDagStore;
+use crate::structural::{SealedRegionMetrics, StructuralLimits, StructuralRuntime};
 
 #[derive(Debug)]
 pub struct SealedSemanticDagRuntime {
@@ -40,37 +38,6 @@ impl SealedSemanticDagRuntime {
             typed.store.validate(&self.runtime)?;
         }
         Ok(())
-    }
-
-    pub(super) fn ensure_store(
-        &mut self,
-        value_type: SemanticDagType,
-    ) -> Result<u32, SealedSemanticDagError> {
-        if let Some(index) = self
-            .stores
-            .iter()
-            .position(|typed| typed.value_type == value_type)
-        {
-            return u32::try_from(index).map_err(|_| SealedSemanticDagError::ArithmeticOverflow);
-        }
-        if self.stores.len() >= self.limits.max_domains as usize {
-            return Err(
-                crate::StructuralError::LimitExceeded(crate::StructuralLimit::Domains).into(),
-            );
-        }
-        self.stores
-            .try_reserve(1)
-            .map_err(|_| SealedSemanticDagError::AllocationFailed)?;
-        let store = SealedRegionStore::<SealedDagCell, ()>::new(
-            self.runtime.identity(),
-            value_type.layout,
-            value_type.semantic_type,
-            self.limits,
-        )?;
-        let index = u32::try_from(self.stores.len())
-            .map_err(|_| SealedSemanticDagError::ArithmeticOverflow)?;
-        self.stores.push(TypedSealedDagStore { value_type, store });
-        Ok(index)
     }
 
     pub(super) fn store(
