@@ -6,6 +6,7 @@ mod codec;
 mod errors;
 mod execution;
 mod owned_value;
+mod semantic_dag;
 mod structural;
 
 pub use cleanup::{CleanupFailure, CleanupFailures, CleanupPhase, CleanupSubject};
@@ -19,6 +20,10 @@ pub use execution::ExecutionOutcome;
 #[cfg(test)]
 pub(crate) use owned_value::OwnedListNode;
 pub use owned_value::OwnedValue;
+pub use semantic_dag::{
+    SemanticDagKind, SemanticDagNode, SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot,
+    SemanticDagType,
+};
 pub use structural::{
     StructuralSnapshotLimits, StructuralSnapshotMetrics, MAX_STRUCTURAL_SNAPSHOT_BYTES,
     MAX_STRUCTURAL_SNAPSHOT_DEPTH, MAX_STRUCTURAL_SNAPSHOT_FIELDS, MAX_STRUCTURAL_SNAPSHOT_NODES,

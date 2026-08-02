@@ -33,6 +33,21 @@ impl OwnedValue {
     }
 
     fn structural_symbol_order(&self) -> Result<Vec<u32>> {
+        if let Some(snapshot) = self.semantic_dag.as_ref() {
+            let mut symbols = Vec::new();
+            symbols
+                .try_reserve_exact(snapshot.nodes().len())
+                .map_err(|_| Error::msg("owned semantic DAG symbol traversal allocation failed"))?;
+            for node in snapshot.nodes() {
+                if let crate::SemanticDagPayload::Static(
+                    crate::StaticStructuralLeaf::Symbol(symbol),
+                ) = &node.payload
+                {
+                    symbols.push(*symbol);
+                }
+            }
+            return Ok(symbols);
+        }
         let Some(structural) = self.structural.as_ref() else {
             return Ok(Vec::new());
         };
@@ -104,6 +119,16 @@ impl OwnedValue {
         }
         if let Some(structural) = self.structural.as_mut() {
             rewrite_structural_symbols(&mut structural.value, &mapping)?;
+        }
+        if let Some(snapshot) = self.semantic_dag.as_mut() {
+            for node in snapshot.nodes_mut() {
+                if let crate::SemanticDagPayload::Static(
+                    crate::StaticStructuralLeaf::Symbol(symbol),
+                ) = &mut node.payload
+                {
+                    *symbol = canonical_symbol(*symbol, &mapping)?;
+                }
+            }
         }
         let mut canonical = Vec::new();
         canonical

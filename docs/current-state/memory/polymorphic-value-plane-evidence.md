@@ -62,18 +62,26 @@ two package content identities and the dependency's public transport requirement
 
 ## Structural-Owner List Prerequisite Slice
 
-The HIR producer and independent verifier select the existing bounded segmented
-invocation region for exact immutable string, path, product, enum, option, and
-result element witnesses. Each stored dynamic element is a detached owner held
-by one list-region side ledger; `list-first` creates a separate owner, and
-teardown releases retained owners before structural-runtime emptiness checks.
-No list node or element uses a reference count.
+The HIR producer and independent verifier select bounded segmented regions for
+exact immutable structural element witnesses. Each dynamic element is a
+detached owner in one list-region side ledger; `list-first` creates a separate
+owner, and teardown releases retained owners before runtime emptiness checks.
+Evaluator and validated VM tests execute dynamic string ownership, equality,
+`list-first`, exact cleanup, and stale bytecode metadata rejection. Forced native
+and process-boundary structural-owner lists remain blocked.
 
-Evaluator and validated VM tests execute a dynamically constructed string inside
-a list, value equality, `list-first`, and exact cleanup. Bytecode `list-first`
-now binds the owner representation before effects and rejects stale metadata.
-Forced native structural-list execution and structural-list process snapshots
-remain blocked, so this is prerequisite progress rather than Current promotion.
+## Experimental Core Semantic DAG Prerequisite
+
+The core boundary model and execution-outcome codec accept one bounded,
+key-free, reverse-topological semantic DAG. Focused construction, malformed
+import, codec, and process-protocol tests cover product-list-product values,
+nested immutable structural owners, shared subgraphs, exact type/layout facts,
+full framing consumption, and forward, cycle, unreachable, type, and bound
+rejection. Construction remains private until complete validation.
+
+No compiler, evaluator, VM, native, segmented-list, ordinary-region, or sealed
+exporter or rehydrator uses this DAG yet; it is prerequisite infrastructure,
+not a complete polymorphic-value-plane promotion.
 
 ## Four-Tier Workload And Snapshot
 
@@ -155,8 +163,8 @@ CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
 
 - no source `sealed T` or `seal` operation;
 - no memory-plan selection of sealed storage for language values;
-- no forced-native or process-boundary structural-owner list execution;
-- no product-list-product boundary snapshot or sealed snapshot rehydration;
+- no forced-native structural-owner list execution;
+- no compiler/evaluator/VM/native DAG export or runtime/sealed DAG rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;
 - no indirect generic callable ABI or specialization of bodies beyond the exact

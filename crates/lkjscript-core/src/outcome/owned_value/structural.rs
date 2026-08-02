@@ -47,6 +47,7 @@ impl OwnedValue {
             unique_bytes: None,
             symbols: Vec::new(),
             structural: Some(Box::new(structural)),
+            semantic_dag: None,
         }
     }
 }

@@ -138,6 +138,8 @@ include!("messages.rs");
 include!("config.rs");
 
 #[cfg(test)]
+mod semantic_dag_tests;
+#[cfg(test)]
 mod structural_tests;
 #[cfg(test)]
 mod tests;

@@ -120,6 +120,24 @@ when required to validate the wire type. Decode validates all bounds, resolves a
 installed local witness, privately constructs domains, and publishes only after
 complete success.
 
+The prerequisite core snapshot is one closed reverse-topological table. Every
+node carries exact nonzero semantic-type and layout identity plus one matching
+closed payload kind. Child IDs are table-local `u32` values and must name earlier
+nodes; the sole root is the final node and every table node must be reachable
+from it. Lists use exact empty or nonempty nodes, and every nonempty tail has the
+same list type/layout identity. A self edge, forward edge, cycle, missing edge,
+unreachable node, kind disagreement, invalid text/path, trailing bytes, or any
+node, edge, depth, byte, or work bound rejects. Decode builds an unpublished
+private table; ordinary ownership of partial vectors provides deterministic
+cleanup on every failure, and an `OwnedValue` is created only after complete
+validation.
+
+This table and its process-outcome codec are an experimental prerequisite. They
+permit mixed product-list-product snapshots and shared immutable subgraphs in
+the core boundary model only. They do not select sealed language storage,
+promote structural list elements, resolve an installed witness, or import the
+snapshot into compiler, evaluator, VM, or native runtime ownership domains.
+
 ## Predeclared Selection Evidence
 
 Generic candidates are full specialization, residual dispatch, and hybrid.

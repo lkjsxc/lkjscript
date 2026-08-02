@@ -6,14 +6,26 @@ impl OwnedValue {
                 SemanticPayload::Inline(InlineStructuralValue::Unit)
             );
         }
+        if let Some(value) = self.as_semantic_dag() {
+            return matches!(
+                value.root_node().payload,
+                crate::SemanticDagPayload::Inline(InlineStructuralValue::Unit)
+            );
+        }
         self.unique_byte_vector.is_none() && self.unique_bytes.is_none() && self.root.is_unit()
     }
 
     pub fn is_empty_list(&self) -> bool {
+        if let Some(value) = self.as_semantic_dag() {
+            return matches!(value.root_node().payload, crate::SemanticDagPayload::EmptyList);
+        }
         self.structural.is_none() && self.root.is_empty_list()
     }
 
     pub fn list_len(&self) -> Option<usize> {
+        if let Some(value) = self.as_semantic_dag() {
+            return semantic_dag_list_len(value);
+        }
         if self.root.is_empty_list() {
             return Some(0);
         }
@@ -28,6 +40,9 @@ impl OwnedValue {
     }
 
     pub fn list_i64(&self, requested: usize) -> Option<i64> {
+        if let Some(value) = self.as_semantic_dag() {
+            return semantic_dag_list_i64(value, requested);
+        }
         let mut value = self.root;
         let mut index = 0_usize;
         while let Some(node_index) = value.as_owned_list().map(|value| value as usize) {
@@ -48,6 +63,14 @@ impl OwnedValue {
                 _ => None,
             };
         }
+        if let Some(value) = self.as_semantic_dag() {
+            return match &value.root_node().payload {
+                crate::SemanticDagPayload::Inline(InlineStructuralValue::Bool(value)) => {
+                    Some(*value)
+                }
+                _ => None,
+            };
+        }
         self.root.as_bool()
     }
 
@@ -55,6 +78,14 @@ impl OwnedValue {
         if let Some(value) = self.as_structural() {
             return match &value.payload {
                 SemanticPayload::Inline(InlineStructuralValue::I64(value)) => Some(*value),
+                _ => None,
+            };
+        }
+        if let Some(value) = self.as_semantic_dag() {
+            return match &value.root_node().payload {
+                crate::SemanticDagPayload::Inline(InlineStructuralValue::I64(value)) => {
+                    Some(*value)
+                }
                 _ => None,
             };
         }
@@ -72,6 +103,14 @@ impl OwnedValue {
                 _ => None,
             };
         }
+        if let Some(value) = self.as_semantic_dag() {
+            return match &value.root_node().payload {
+                crate::SemanticDagPayload::Inline(InlineStructuralValue::F64Bits(value)) => {
+                    Some(*value)
+                }
+                _ => None,
+            };
+        }
         self.root.as_f64_bits()
     }
 
@@ -85,6 +124,15 @@ impl OwnedValue {
                 _ => None,
             };
         }
+        if let Some(value) = self.as_semantic_dag() {
+            return match &value.root_node().payload {
+                crate::SemanticDagPayload::String(bytes) => std::str::from_utf8(bytes).ok(),
+                crate::SemanticDagPayload::Static(crate::StaticStructuralLeaf::Symbol(index)) => {
+                    self.symbols.get(*index as usize)?.as_deref()
+                }
+                _ => None,
+            };
+        }
         if let Some(index) = self.root.as_symbol() {
             return self.symbols.get(index as usize)?.as_deref();
         }
@@ -92,7 +140,13 @@ impl OwnedValue {
     }
 
     pub fn as_path_bytes(&self) -> Option<&[u8]> {
-        self.as_structural().and_then(SemanticValue::path_bytes)
+        if let Some(value) = self.as_structural() {
+            return value.path_bytes();
+        }
+        match &self.as_semantic_dag()?.root_node().payload {
+            crate::SemanticDagPayload::Path(bytes) => Some(bytes),
+            _ => None,
+        }
     }
 
     pub fn as_byte_vector(&self) -> Option<&[u8]> {
@@ -112,6 +166,12 @@ impl OwnedValue {
                 _ => None,
             };
         }
+        if let Some(value) = self.as_semantic_dag() {
+            return match &value.root_node().payload {
+                crate::SemanticDagPayload::Bytes(bytes) => Some(bytes),
+                _ => None,
+            };
+        }
         self.unique_bytes.as_deref()
     }
 
@@ -120,17 +180,5 @@ impl OwnedValue {
             .is_none()
             .then(|| self.root.as_resource())
             .flatten()
-    }
-
-    pub fn as_function(&self) -> Option<u32> {
-        if let Some(value) = self.as_structural() {
-            return match &value.payload {
-                SemanticPayload::Static(crate::StaticStructuralLeaf::Function(function)) => {
-                    Some(*function)
-                }
-                _ => None,
-            };
-        }
-        self.root.as_function()
     }
 }

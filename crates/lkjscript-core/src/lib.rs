@@ -53,11 +53,13 @@ pub use opcode::{ControlFlow, DecodedInstruction, Op, OpInfo, StackEffect};
 pub use outcome::{
     decode_execution_outcome, encode_execution_outcome, CleanupFailure, CleanupFailureLimits,
     CleanupFailures, CleanupPhase, CleanupSubject, ExecutionOutcome, ExecutionOutcomeCodecLimits,
-    HostError, OwnedValue, ResourceLimitKind, StructuralSnapshotLimits, StructuralSnapshotMetrics,
-    Trap, DEFAULT_MAX_CLEANUP_FAILURES, DEFAULT_MAX_CLEANUP_FAILURE_BYTES, MAX_CLEANUP_FAILURES,
-    MAX_CLEANUP_FAILURE_BYTES, MAX_STRUCTURAL_SNAPSHOT_BYTES, MAX_STRUCTURAL_SNAPSHOT_DEPTH,
-    MAX_STRUCTURAL_SNAPSHOT_FIELDS, MAX_STRUCTURAL_SNAPSHOT_NODES,
-    MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES, MAX_STRUCTURAL_SNAPSHOT_WORK,
+    HostError, OwnedValue, ResourceLimitKind, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
+    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, StructuralSnapshotLimits,
+    StructuralSnapshotMetrics, Trap, DEFAULT_MAX_CLEANUP_FAILURES,
+    DEFAULT_MAX_CLEANUP_FAILURE_BYTES, MAX_CLEANUP_FAILURES, MAX_CLEANUP_FAILURE_BYTES,
+    MAX_STRUCTURAL_SNAPSHOT_BYTES, MAX_STRUCTURAL_SNAPSHOT_DEPTH, MAX_STRUCTURAL_SNAPSHOT_FIELDS,
+    MAX_STRUCTURAL_SNAPSHOT_NODES, MAX_STRUCTURAL_SNAPSHOT_PATH_BYTES,
+    MAX_STRUCTURAL_SNAPSHOT_WORK,
 };
 pub use prelude::*;
 pub use profile::{

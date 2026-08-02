@@ -9,6 +9,11 @@ impl OwnedValue {
             encode_structural_snapshot(out, structural, limits)?;
             return encode_symbol_table(out, &self.symbols);
         }
+        if let Some(snapshot) = &self.semantic_dag {
+            out.u8(4)?;
+            encode_semantic_dag(out, snapshot, out.structural_limits())?;
+            return encode_symbol_table(out, &self.symbols);
+        }
         if let Some(bytes) = &self.unique_byte_vector {
             out.u8(1)?;
             return out.bytes(bytes);
@@ -53,6 +58,14 @@ impl OwnedValue {
                 let limits = input.structural_limits();
                 let structural = decode_structural_snapshot(input, limits)?;
                 let mut value = Self::from_owned_structural(structural);
+                value.symbols = decode_symbol_table(input)?;
+                value.validate_wire_symbols()?;
+                Ok(value)
+            }
+            4 => {
+                let limits = input.structural_limits();
+                let snapshot = decode_semantic_dag(input, limits)?;
+                let mut value = Self::from_owned_semantic_dag(snapshot);
                 value.symbols = decode_symbol_table(input)?;
                 value.validate_wire_symbols()?;
                 Ok(value)
@@ -174,3 +187,6 @@ include!("structural_wire.rs");
 include!("structural_encode.rs");
 include!("structural_decode_budget.rs");
 include!("structural_decode.rs");
+include!("semantic_dag/wire.rs");
+include!("semantic_dag/decode_budget.rs");
+include!("semantic_dag/decode.rs");

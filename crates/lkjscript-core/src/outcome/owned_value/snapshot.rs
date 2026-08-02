@@ -28,6 +28,7 @@ impl OwnedValue {
             unique_bytes: None,
             symbols: Vec::new(),
             structural: None,
+            semantic_dag: None,
         })
     }
 }

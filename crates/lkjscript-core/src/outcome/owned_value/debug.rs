@@ -33,6 +33,21 @@ impl fmt::Debug for OwnedValue {
         if let Some(prototype) = self.as_function() {
             return write!(formatter, "#<owned-fn:{prototype}>");
         }
+        if let Some(value) = self.as_semantic_dag() {
+            return match &value.root_node().payload {
+                crate::SemanticDagPayload::Product(fields) => {
+                    write!(formatter, "#<owned-semantic-product:{}>", fields.len())
+                }
+                crate::SemanticDagPayload::Enum { tag, fields } => {
+                    write!(formatter, "#<owned-semantic-enum:{tag}:{}>", fields.len())
+                }
+                crate::SemanticDagPayload::List { .. } => {
+                    write!(formatter, "#<owned-semantic-list:{}>", value.nodes().len())
+                }
+                crate::SemanticDagPayload::EmptyList => formatter.write_str("empty-list"),
+                _ => formatter.write_str("#<owned-semantic-value>"),
+            };
+        }
         if let Some(index) = self.root.as_owned_list() {
             return write!(formatter, "#<owned-list:{}>", index.saturating_add(1));
         }

@@ -70,7 +70,10 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                 .fact(fact(
                     "outcome",
                     "outcome",
-                    "lossless closed ExecutionOutcome",
+                    concat!(
+                        "lossless closed ExecutionOutcome with bounded key-free semantic DAG; ",
+                        "exact type/layout identity; backward local edges; final reachable root",
+                    ),
                 ))
                 .fact(fact(
                     "resource-hierarchy",
