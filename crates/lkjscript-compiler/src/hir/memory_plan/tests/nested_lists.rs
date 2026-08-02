@@ -50,12 +50,34 @@ fn nested_copy_lists_select_exact_witnesses() -> Result<()> {
 }
 
 #[test]
-fn nested_non_copy_lists_remain_rejected() -> Result<()> {
-    for leaf in [
-        hir::Type::Str,
-        hir::Type::Param("unknown".into()),
-        hir::Type::Bytes,
-    ] {
+fn nested_structural_owner_lists_select_exact_witnesses() -> Result<()> {
+    let inner = hir::Type::List(Box::new(hir::Type::Str));
+    let outer = hir::Type::List(Box::new(inner.clone()));
+    let plan = derive(&program(
+        outer.clone(),
+        fake(outer.clone()),
+        Vec::new(),
+        Vec::new(),
+    ))?;
+    for ty in [inner, outer] {
+        let fact = fact(&plan, &producer::memory_type(&ty))?;
+        assert_eq!(fact.closure.class, MemoryClosureClass::RegionClosed);
+        assert_eq!(fact.copy_share, MemoryCopySharePlan::RegionHandleCopy);
+        let list = witness(&plan, &producer::memory_type(&ty))?
+            .facts
+            .list
+            .as_ref()
+            .ok_or_else(|| {
+                lkjscript_core::Error::msg("selected structural-owner list witness is missing")
+            })?;
+        assert!(list.selected);
+    }
+    Ok(())
+}
+
+#[test]
+fn nested_affine_or_unresolved_lists_remain_rejected() -> Result<()> {
+    for leaf in [hir::Type::Param("unknown".into()), hir::Type::Bytes] {
         let inner = hir::Type::List(Box::new(leaf));
         let outer = hir::Type::List(Box::new(inner));
         let plan = derive(&program(

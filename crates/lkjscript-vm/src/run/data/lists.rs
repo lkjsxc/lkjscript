@@ -3,17 +3,24 @@ use super::super::*;
 impl<J: RuntimeTier> Vm<'_, J> {
     pub(crate) fn list_prepend(&mut self, head: Value, tail: Value) -> Result<Value> {
         let tail = self.list_key(tail)?;
+        let head = structural_ops::copy_into_list(self, head)?;
         let arena = self.list_arena_mut()?;
         let key = arena.prepend(head, tail).map_err(segmented_list_error)?;
         self.list_allocations = self.list_allocations.saturating_add(1);
         Ok(list_value(key))
     }
 
-    pub(crate) fn list_first(&mut self, value: Value) -> Result<Value> {
+    pub(crate) fn list_first(
+        &mut self,
+        value: Value,
+        representation: Option<lkjscript_core::StructuralRepresentationId>,
+    ) -> Result<Value> {
         let key = self.list_key(value)?;
-        self.list_arena_mut()?
+        let value = self
+            .list_arena_mut()?
             .first_cloned(key)
-            .map_err(segmented_list_error)
+            .map_err(segmented_list_error)?;
+        structural_ops::copy_from_list(self, value, representation)
     }
 
     pub(crate) fn list_rest(&mut self, value: Value) -> Result<Value> {

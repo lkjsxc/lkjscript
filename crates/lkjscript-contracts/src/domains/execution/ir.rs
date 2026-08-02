@@ -26,7 +26,7 @@ pub(crate) fn typed_hir(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "content-addressed concrete type facts and nested copy-list plans",
+                    "content-addressed concrete type facts and selected structural-owner list plans",
                 ))
                 .fact(fact(
                     "capabilities",
@@ -107,7 +107,11 @@ pub(crate) fn bytecode(ssa: ContractDigest) -> ContractDescriptor {
                     "capabilities",
                     "sorted exact main requirements and arity",
                 ))
-                .fact(fact("code", "code", "validated instruction bytes"))
+                .fact(fact(
+                    "code",
+                    "code",
+                    "validated instruction bytes with exact list-first element representations",
+                ))
                 .fact(fact("products", "products", "nominal product metadata"))
                 .fact(fact("enums", "enums", "nominal enum metadata"))
                 .fact(fact(

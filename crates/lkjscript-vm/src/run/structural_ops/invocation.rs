@@ -6,6 +6,21 @@ struct OwnerRecord {
 }
 
 #[derive(Clone, Copy, Debug)]
+enum ListOwnerRecord {
+    Typed(OwnerRecord),
+    Host(StructuralType),
+}
+
+impl ListOwnerRecord {
+    const fn value_type(self) -> StructuralType {
+        match self {
+            Self::Typed(record) => record.value_type,
+            Self::Host(value_type) => value_type,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 struct ViewRecord {
     representation: StructuralRepresentationId,
     utf8: bool,
@@ -21,6 +36,7 @@ struct DestinationRecord {
 pub(crate) struct StructuralInvocation {
     pub(super) runtime: StructuralValueRuntime,
     owners: BTreeMap<u64, OwnerRecord>,
+    list_owners: BTreeMap<u64, ListOwnerRecord>,
     host_owners: BTreeMap<u64, StructuralType>,
     views: BTreeMap<u64, ViewRecord>,
     destinations: BTreeMap<u64, DestinationRecord>,
@@ -34,6 +50,7 @@ impl StructuralInvocation {
         Ok(Self {
             runtime,
             owners: BTreeMap::new(),
+            list_owners: BTreeMap::new(),
             host_owners: BTreeMap::new(),
             views: BTreeMap::new(),
             destinations: BTreeMap::new(),
@@ -162,9 +179,12 @@ impl StructuralInvocation {
 
     fn is_empty(&self) -> bool {
         self.owners.is_empty()
+            && self.list_owners.is_empty()
             && self.host_owners.is_empty()
             && self.views.is_empty()
             && self.destinations.is_empty()
             && self.adapters.is_empty()
     }
 }
+
+include!("invocation/list_owners.rs");

@@ -42,6 +42,8 @@ fn bulk_byte_opcodes_reject_malformed_type_stacks() {
         Op::EmptyList as u8,
         Op::Cons as u8,
         Op::Car as u8,
+        u8::MAX,
+        u8::MAX,
         Op::SysFsync as u8,
         Op::Return as u8,
     ];
@@ -50,6 +52,13 @@ fn bulk_byte_opcodes_reject_malformed_type_stacks() {
         message.contains("typed resource kind mismatch: got any"),
         "{message}"
     );
+}
+
+#[test]
+fn list_first_rejects_stale_structural_element_metadata() {
+    let mut chunk = unit_chunk();
+    chunk.main.code = vec![Op::EmptyList as u8, Op::Car as u8, 0, 0, Op::Return as u8];
+    assert!(error(chunk).contains("list-first element representation is stale"));
 }
 
 #[test]

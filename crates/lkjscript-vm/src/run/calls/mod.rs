@@ -21,9 +21,12 @@ pub fn make_closure<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     Ok(())
 }
 
-pub fn car<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+pub fn car<J: RuntimeTier>(
+    vm: &mut Vm<'_, J>,
+    representation: Option<lkjscript_core::StructuralRepresentationId>,
+) -> Result<()> {
     let list = vm.pop()?;
-    let value = vm.list_first(list)?;
+    let value = vm.list_first(list, representation)?;
     vm.push(value);
     Ok(())
 }

@@ -4,6 +4,8 @@ use lkjscript_ir::{evaluate, EvalConfig};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
+mod structural_owners;
+
 #[test]
 fn list_only_execution_uses_segmented_invocation_storage() {
     let source = concat!(

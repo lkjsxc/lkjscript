@@ -24,7 +24,7 @@ mod scalar_semantics;
 mod scheduled_discovery;
 #[path = "jit_engines/scheduled_kernels.rs"]
 mod scheduled_kernels;
-#[path = "jit_engines/segmented_lists.rs"]
+#[path = "jit_engines/segmented_lists/mod.rs"]
 mod segmented_lists;
 #[path = "jit_engines/structural_products.rs"]
 mod structural_products;

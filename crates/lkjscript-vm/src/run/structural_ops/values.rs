@@ -50,11 +50,7 @@ pub(in crate::run) fn semantic_snapshot<J: RuntimeTier>(
         .as_structural_root()
         .ok_or_else(|| Error::msg("value is not a structural owner"))?;
     let structural = invocation(vm)?;
-    let value_type = structural
-        .owners
-        .get(&key.get())
-        .map(|record| record.value_type)
-        .or_else(|| structural.host_owners.get(&key.get()).copied())
+    let value_type = registered_owner_type(structural, key)
         .ok_or_else(|| Error::msg("structural owner is stale or unregistered"))?;
     structural
         .runtime
@@ -103,11 +99,7 @@ fn leaf_owner<J: RuntimeTier>(
         .as_structural_root()
         .ok_or_else(|| Error::msg("expected exact structural leaf owner"))?;
     let structural = invocation(vm)?;
-    let value_type = structural
-        .owners
-        .get(&key.get())
-        .map(|record| record.value_type)
-        .or_else(|| structural.host_owners.get(&key.get()).copied())
+    let value_type = registered_owner_type(structural, key)
         .ok_or_else(|| Error::msg("stale, forged, or unregistered structural leaf owner"))?;
     if value_type.kind != expected {
         return Err(Error::msg(

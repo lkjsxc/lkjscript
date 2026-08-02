@@ -87,6 +87,7 @@ pub fn evaluate_observed(
         unique,
         structural,
         lists,
+        list_owned: Vec::new(),
         region_products,
     };
     let result = evaluator.call(program.program().main, arguments, Vec::new(), 0);
@@ -95,6 +96,12 @@ pub fn evaluate_observed(
         Err(flow) => Err(flow),
     }
     .unwrap_or_else(Flow::outcome);
+    let list_owned = std::mem::take(&mut evaluator.list_owned);
+    for value in list_owned.into_iter().rev() {
+        if let Err(cleanup) = evaluator.cleanup_eval_value(value) {
+            evaluator.note_structural_cleanup_failure(cleanup.detail());
+        }
+    }
     if evaluator.unique.verify_empty().is_err() {
         if let Err(cleanup) = evaluator.unique.cleanup() {
             evaluator.note_structural_cleanup_failure(cleanup.detail());
@@ -128,6 +135,7 @@ pub(crate) struct Evaluator<'a> {
     pub(crate) unique: unique::EvalUniqueRuntime,
     pub(crate) structural: EvaluatorStructuralSession,
     pub(crate) lists: lkjscript_core::SegmentedListArena<EvalValue>,
+    pub(crate) list_owned: Vec<EvalValue>,
     pub(crate) region_products: lkjscript_core::RegionProductArena<EvalValue>,
 }
 

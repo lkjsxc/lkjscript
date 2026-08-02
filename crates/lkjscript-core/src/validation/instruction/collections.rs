@@ -16,7 +16,55 @@ pub(super) fn apply(
         }
         Op::Car => {
             expect_pop(state, Kind::List, proto, instruction)?;
-            state.stack.push(Kind::Any);
+            let representation = instruction.operand().ok_or_else(|| {
+                instruction_error(
+                    proto,
+                    op,
+                    instruction.offset(),
+                    "list-first element representation is missing",
+                )
+            })?;
+            if representation == u16::MAX {
+                state.stack.push(Kind::Any);
+            } else {
+                let representation = crate::StructuralRepresentationId::new(representation);
+                let metadata = _chunk
+                    .structural_representations
+                    .get(representation.index())
+                    .filter(|metadata| metadata.id == representation)
+                    .ok_or_else(|| {
+                        instruction_error(
+                            proto,
+                            op,
+                            instruction.offset(),
+                            "list-first element representation is stale",
+                        )
+                    })?;
+                if metadata.category != crate::StructuralValueCategory::Owner {
+                    return Err(instruction_error(
+                        proto,
+                        op,
+                        instruction.offset(),
+                        "list-first requires an owner element representation",
+                    ));
+                }
+                let owner = u32::try_from(instruction.offset())
+                    .ok()
+                    .and_then(|offset| offset.checked_add(1))
+                    .ok_or_else(|| {
+                        instruction_error(
+                            proto,
+                            op,
+                            instruction.offset(),
+                            "list-first owner identity overflow",
+                        )
+                    })?;
+                state.stack.push(Kind::StructuralOwner {
+                    representation,
+                    owner,
+                    active_variant: None,
+                });
+            }
         }
         Op::Cdr => {
             expect_pop(state, Kind::List, proto, instruction)?;

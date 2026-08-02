@@ -120,7 +120,14 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
             vm.push(value);
             Ok(())
         }
-        x if x == Op::Car as u8 => car(vm),
+        x if x == Op::Car as u8 => {
+            let representation = vm.read_u16()?;
+            car(
+                vm,
+                (representation != u16::MAX)
+                    .then(|| lkjscript_core::StructuralRepresentationId::new(representation)),
+            )
+        }
         x if x == Op::Cdr as u8 => cdr(vm),
         x if x == Op::IsEmptyList as u8 => {
             let value = vm.pop()?;

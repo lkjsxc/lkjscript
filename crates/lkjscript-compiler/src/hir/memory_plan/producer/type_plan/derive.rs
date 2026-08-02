@@ -41,7 +41,7 @@ impl TypePlanner<'_> {
             && fact.mode == MemoryAggregateMode::Copy
             && fact.closure.class == MemoryClosureClass::Deterministic
             && !fact.contains_borrow;
-        if scalar_element || self.selected_copy_list_element(inner, &fact) {
+        if scalar_element || self.selected_list_element(inner, &fact) {
             return Ok(DerivedType {
                 mode: MemoryAggregateMode::ImmutableValue,
                 closure: MemoryClosureFact {
@@ -60,21 +60,6 @@ impl TypePlanner<'_> {
         result.contains_borrow = fact.contains_borrow;
         result.contains_dynamic_owner = fact.contains_dynamic_owner;
         Ok(result)
-    }
-
-    fn selected_copy_list_element(&self, ty: &Type, fact: &MemoryTypeFact) -> bool {
-        matches!(ty, Type::List(_))
-            && fact.mode == MemoryAggregateMode::ImmutableValue
-            && fact.closure.class == MemoryClosureClass::RegionClosed
-            && !fact.contains_borrow
-            && !fact.contains_dynamic_owner
-            && self.witnesses.iter().find(|item| item.id == fact.witness)
-                .filter(|item| item.facts.requirement == MemoryWitnessRequirement::Concrete)
-                .and_then(|item| item.facts.list.as_ref())
-                .is_some_and(|list| list.selected
-                    && list.eligibility == MemoryListElementEligibility::Copy
-                    && list.storage == MemoryListStorageKind::SegmentedSessionRegion
-                    && list.segment_capacity == 32)
     }
 
     fn derive_product(&mut self, name: &str) -> Result<DerivedType> {
@@ -179,6 +164,8 @@ impl TypePlanner<'_> {
     }
 }
 
+include!("derive/lists.rs");
+
 fn list_region_element(ty: &Type) -> bool {
     matches!(
         ty,
@@ -188,7 +175,8 @@ fn list_region_element(ty: &Type) -> bool {
 
 fn region_product_field(ty: &Type, fact: &MemoryTypeFact) -> bool {
     matches!(ty, Type::Unit | Type::Bool | Type::I64 | Type::F64)
-        || matches!(ty, Type::List(element) if list_region_element(element))
+        || matches!(ty, Type::List(_))
+            && fact.closure.class == MemoryClosureClass::RegionClosed
         || matches!(ty, Type::Product(_))
             && fact.closure.class == MemoryClosureClass::RegionClosed
 }

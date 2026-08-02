@@ -47,6 +47,7 @@ const fn operand_width(op: Op) -> usize {
     match op {
         Op::LoadConst
         | Op::LoadGlobal
+        | Op::Car
         | Op::StoreGlobal
         | Op::Jump
         | Op::JumpIfFalse

@@ -98,7 +98,15 @@ impl Emitter<'_> {
                 for argument in arguments {
                     self.load_observed_structural(*argument)?;
                 }
-                self.proto.emit(runtime_opcode(*operation));
+                let opcode = runtime_opcode(*operation);
+                if *operation == RuntimeOp::Car {
+                    let representation =
+                        structural_owner_representation(self.chunk, &instruction.ty)
+                            .map_or(u16::MAX, |representation| representation.raw());
+                    self.proto.emit_op_u16(opcode, representation);
+                } else {
+                    self.proto.emit(opcode);
+                }
             }
             InstructionKind::F64FromI64Exact { value }
             | InstructionKind::F64FromI64Rounded { value }

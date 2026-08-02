@@ -172,8 +172,7 @@ fn recursive_scc_and_both_mixed_bridge_directions_are_exact() -> Result<()> {
     .map(|error| error.to_string())
     .unwrap_or_default();
     assert!(
-        error.contains("DeterministicContainsUnresolved")
-            && error.contains("ListElementWitnessRequired")
+        error.contains("DeterministicContainsUnresolved") && error.contains("RegionDomainBoundary")
     );
     Ok(())
 }

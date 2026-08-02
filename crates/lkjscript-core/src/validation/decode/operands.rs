@@ -175,8 +175,8 @@ pub(super) fn validate_instruction_operands(
                     return operand_error(proto, op, at, "structural payload index out of range");
                 }
             }
-            Op::Call => {
-                let _argc = operand_index(operand, proto, op, at)?;
+            Op::Car | Op::Call => {
+                operand_index(operand, proto, op, at)?;
             }
             _ => {
                 if operand.is_some() {

@@ -13,12 +13,20 @@ impl Evaluator<'_> {
                 let EvalValue::SegmentedList(tail) = tail else {
                     return Err(Flow::Trap("list-prepend tail is not a list".into()));
                 };
-                if contains_structural(head) {
-                    return Err(Flow::Trap(
-                        "segmented list cannot contain an unplanned structural owner".into(),
-                    ));
+                reject_affine_list_element(head)?;
+                let tracks_owner = list_owned_marker(head).is_some();
+                if tracks_owner {
+                    self.list_owned
+                        .try_reserve(1)
+                        .map_err(|_| Flow::Resource("segmented list owner ledger".into()))?;
                 }
-                let head = clone_plain_eval_value(head)?;
+                let head = self.copy_eval_value(head)?;
+                if tracks_owner {
+                    let owner = list_owned_marker(&head).ok_or_else(|| {
+                        Flow::Trap("segmented list owner changed runtime category".into())
+                    })?;
+                    self.list_owned.push(owner);
+                }
                 self.allocate()?;
                 self.lists
                     .prepend(head, *tail)
@@ -29,10 +37,15 @@ impl Evaluator<'_> {
                 let EvalValue::SegmentedList(key) = list else {
                     return Err(Flow::Trap("list-first expects a list".into()));
                 };
-                self.lists
-                    .first(*key)
-                    .map_err(segmented_list_flow)
-                    .and_then(clone_plain_eval_value)
+                let owner = {
+                    let element = self.lists.first(*key).map_err(segmented_list_flow)?;
+                    if let Some(owner) = list_owned_marker(element) {
+                        owner
+                    } else {
+                        return clone_plain_eval_value(element);
+                    }
+                };
+                self.copy_eval_value(&owner)
             }),
             Op::Cdr => unary(&arguments, |list| {
                 let EvalValue::SegmentedList(key) = list else {
@@ -76,18 +89,35 @@ impl Evaluator<'_> {
     }
 }
 
-fn contains_structural(value: &EvalValue) -> bool {
+fn list_owned_marker(value: &EvalValue) -> Option<EvalValue> {
     match value {
-        EvalValue::StructuralOwner(_)
-        | EvalValue::StructuralView(_)
-        | EvalValue::StructuralUtf8View(_)
-        | EvalValue::StructuralDestination(_) => true,
-        EvalValue::List(values) | EvalValue::Product(_, values) => {
-            values.iter().any(contains_structural)
-        }
-        EvalValue::SegmentedList(_) | EvalValue::RegionProduct(_) => false,
-        EvalValue::Enum { payload, .. } => payload.iter().any(contains_structural),
-        _ => false,
+        EvalValue::StructuralOwner(owner) => Some(EvalValue::StructuralOwner(*owner)),
+        EvalValue::StructuralView(view) => Some(EvalValue::StructuralView(*view)),
+        EvalValue::Path(word) => Some(EvalValue::Path(*word)),
+        _ => None,
+    }
+}
+
+fn reject_affine_list_element(value: &EvalValue) -> Result<(), Flow> {
+    if matches!(
+        value,
+        EvalValue::StructuralUtf8View(_)
+            | EvalValue::StructuralDestination(_)
+            | EvalValue::Bytes(_)
+            | EvalValue::BytesBorrow(_)
+            | EvalValue::ByteVector(_)
+            | EvalValue::ByteSlice(_)
+            | EvalValue::ByteSliceMut(_)
+            | EvalValue::Resource(_)
+            | EvalValue::ReturnedOwned(_)
+            | EvalValue::ReturnedByteVector(_)
+            | EvalValue::ReturnedBytes(_)
+    ) {
+        Err(Flow::Trap(
+            "segmented list cannot contain an affine, borrowed, or boundary value".into(),
+        ))
+    } else {
+        Ok(())
     }
 }
 

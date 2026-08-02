@@ -59,7 +59,7 @@ impl Evaluator<'_> {
         }
     }
     fn segmented_list_equal(
-        &self,
+        &mut self,
         mut left: lkjscript_core::SegmentedListKey,
         mut right: lkjscript_core::SegmentedListKey,
     ) -> std::result::Result<bool, Flow> {
@@ -81,7 +81,13 @@ impl Evaluator<'_> {
             if steps >= self.config.max_list_equal_steps {
                 return Err(Flow::Trap("list-equal step limit exceeded".into()));
             }
-            if !value_equal(left_value, right_value)? {
+            let left_value = observation_marker(left_value)?;
+            let right_value = observation_marker(right_value)?;
+            let equal = match self.structural_value_equal(&left_value, &right_value) {
+                Some(result) => result?,
+                None => value_equal(&left_value, &right_value)?,
+            };
+            if !equal {
                 return Ok(false);
             }
             left = left_tail;
@@ -148,5 +154,14 @@ impl Evaluator<'_> {
             compare_values(operation, as_i64(left)?, as_i64(right)?)?
         };
         Ok(EvalValue::Bool(result))
+    }
+}
+
+fn observation_marker(value: &EvalValue) -> Result<EvalValue, Flow> {
+    match value {
+        EvalValue::StructuralOwner(owner) => Ok(EvalValue::StructuralOwner(*owner)),
+        EvalValue::StructuralView(view) => Ok(EvalValue::StructuralView(*view)),
+        EvalValue::Path(word) => Ok(EvalValue::Path(*word)),
+        other => clone_plain_eval_value(other),
     }
 }

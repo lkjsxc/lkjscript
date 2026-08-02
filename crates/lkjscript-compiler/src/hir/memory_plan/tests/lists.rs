@@ -54,38 +54,40 @@ fn list_element_eligibility_and_copy_region_selection_are_exact() -> Result<()> 
     assert_eq!(storage.eligibility, MemoryListElementEligibility::Copy);
     assert_eq!(storage.segment_capacity, 32);
 
-    let product = product(0, "copy-element", &[("value", hir::Type::I64)]);
-    let list_ty = hir::Type::List(Box::new(hir::Type::Product(product.name.clone())));
-    let plan = derive(&program(
-        list_ty.clone(),
-        fake(list_ty.clone()),
-        vec![product],
-        Vec::new(),
-    ))?;
-    let fact = fact(&plan, &producer::memory_type(&list_ty))?;
-    assert_eq!(fact.closure.class, MemoryClosureClass::Unresolved);
-    assert_eq!(
-        fact.closure.blocker_reason,
-        Some(MemoryBlockerReason::ListElementWitnessRequired)
-    );
-    let witness = witness(&plan, &producer::memory_type(&list_ty))?;
-    assert_eq!(witness.facts.domain, MemoryDomain::UnsupportedRuntime);
-    assert_eq!(witness.facts.copy_share, MemoryCopySharePlan::Unsupported);
-    let entry = plan
-        .entries
-        .iter()
-        .find(|entry| entry.ty == witness.facts.ty)
-        .ok_or_else(|| lkjscript_core::Error::msg("unresolved list plan entry is missing"))?;
-    assert_eq!(entry.mode.domain, MemoryDomain::UnsupportedRuntime);
-    assert_eq!(entry.execution, MemoryExecution::CutoverRequired);
-    assert!(
-        !witness
-            .facts
-            .list
-            .as_ref()
-            .ok_or_else(|| lkjscript_core::Error::msg("unresolved list witness is missing"))?
-            .selected
-    );
+    for (element, products, eligibility) in [
+        (
+            hir::Type::Str,
+            Vec::new(),
+            MemoryListElementEligibility::ImmutableValue,
+        ),
+        {
+            let product = product(0, "copy-element", &[("value", hir::Type::I64)]);
+            (
+                hir::Type::Product(product.name.clone()),
+                vec![product],
+                MemoryListElementEligibility::Copy,
+            )
+        },
+    ] {
+        let list_ty = hir::Type::List(Box::new(element));
+        let plan = derive(&program(
+            list_ty.clone(),
+            fake(list_ty.clone()),
+            products,
+            Vec::new(),
+        ))?;
+        let fact = fact(&plan, &producer::memory_type(&list_ty))?;
+        assert_eq!(fact.closure.class, MemoryClosureClass::RegionClosed);
+        assert_eq!(fact.copy_share, MemoryCopySharePlan::RegionHandleCopy);
+        let witness = witness(&plan, &producer::memory_type(&list_ty))?;
+        assert_eq!(witness.facts.domain, MemoryDomain::OrdinaryRegion);
+        let list =
+            witness.facts.list.as_ref().ok_or_else(|| {
+                lkjscript_core::Error::msg("selected owner-list witness is missing")
+            })?;
+        assert!(list.selected);
+        assert_eq!(list.eligibility, eligibility);
+    }
     Ok(())
 }
 

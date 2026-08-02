@@ -1,4 +1,5 @@
 pub(in crate::run) fn teardown<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+    cleanup_list_owners(vm)?;
     cleanup_host_owners(vm)?;
     let Some(structural) = vm.structural.as_ref() else {
         return Ok(());
@@ -16,6 +17,25 @@ pub(in crate::run) fn teardown<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()>
         "structural invocation retained live state before emergency cleanup: {}",
         retained.map_or_else(|| "registry mismatch".to_owned(), |error| error.to_string())
     )))
+}
+
+fn cleanup_list_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+    let mut owners: Vec<_> = invocation(vm)?
+        .list_owners
+        .iter()
+        .map(|(word, record)| (*word, record.value_type()))
+        .collect();
+    owners.sort_unstable_by_key(|(word, _)| *word);
+    for (word, value_type) in owners {
+        let key = StructuralValueKey::from_word(word)
+            .ok_or_else(|| Error::msg("segmented-list owner key is malformed"))?;
+        invocation_mut(vm)?
+            .runtime
+            .drop_owned(key, value_type)
+            .map_err(map_value_error)?;
+        invocation_mut(vm)?.list_owners.remove(&word);
+    }
+    Ok(())
 }
 
 fn cleanup_host_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
@@ -69,6 +89,7 @@ fn cleanup_all<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             .map_err(map_value_error)?;
         invocation_mut(vm)?.destinations.remove(&word);
     }
+    cleanup_list_owners(vm)?;
     let mut owners: Vec<_> = invocation(vm)?
         .owners
         .iter()

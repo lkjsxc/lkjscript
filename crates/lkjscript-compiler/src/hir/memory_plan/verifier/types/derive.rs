@@ -43,7 +43,7 @@ impl VerifiedTypes<'_> {
             && fact.derived.mode == MemoryAggregateMode::Copy
             && fact.derived.closure.class == MemoryClosureClass::Deterministic
             && !fact.derived.contains_borrow;
-        if scalar_element || self.verified_selected_copy_list_element(inner, &fact) {
+        if scalar_element || self.verified_selected_list_element(inner, &fact) {
             return Ok(VerifiedDerived {
                 mode: MemoryAggregateMode::ImmutableValue,
                 closure: MemoryClosureFact {
@@ -62,16 +62,6 @@ impl VerifiedTypes<'_> {
         result.contains_borrow = fact.derived.contains_borrow;
         result.contains_dynamic_owner = fact.derived.contains_dynamic_owner;
         Ok(result)
-    }
-
-    fn verified_selected_copy_list_element(&self, ty: &Type, fact: &VerifiedExpectedType) -> bool {
-        matches!(ty, Type::List(_))
-            && fact.derived.mode == MemoryAggregateMode::ImmutableValue
-            && fact.derived.closure.class == MemoryClosureClass::RegionClosed
-            && !fact.derived.contains_borrow
-            && !fact.derived.contains_dynamic_owner
-            && super::witness::verified_witness_list_element(ty, &fact.derived)
-                == MemoryListElementEligibility::Copy
     }
 
     fn product(&mut self, name: &str) -> Result<VerifiedDerived> {
@@ -174,6 +164,8 @@ impl VerifiedTypes<'_> {
     }
 }
 
+include!("derive/lists.rs");
+
 fn verified_list_region_element(ty: &Type) -> bool {
     matches!(
         ty,
@@ -183,7 +175,7 @@ fn verified_list_region_element(ty: &Type) -> bool {
 
 fn verified_region_product_field(ty: &Type, derived: &VerifiedDerived) -> bool {
     matches!(ty, Type::Unit | Type::Bool | Type::I64 | Type::F64)
-        || matches!(ty, Type::List(element) if verified_list_region_element(element))
+        || matches!(ty, Type::List(_)) && derived.closure.class == MemoryClosureClass::RegionClosed
         || matches!(ty, Type::Product(_))
             && derived.closure.class == MemoryClosureClass::RegionClosed
 }
