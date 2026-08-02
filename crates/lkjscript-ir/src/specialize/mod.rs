@@ -1,12 +1,17 @@
+mod identity;
+mod instances;
+
 use std::collections::BTreeMap;
 
 use crate::{
-    verify, BlockId, CallTarget, Function, FunctionId, GenericInstantiation, InstructionKind,
-    IrError, SsaType, Terminator, VerifiedProgram,
+    verify, CallTarget, FunctionId, GenericInstantiation, InstructionKind, IrError, VerifiedProgram,
 };
-use lkjscript_contracts::MemoryWitnessOperation;
-
-pub const MAX_NATIVE_TRANSPORT_SPECIALIZATIONS: usize = 64;
+use identity::specialize_identity;
+use instances::{checked_instance_count, record_instance, NativeInstances};
+pub use instances::{
+    MAX_NATIVE_TRANSPORT_SPECIALIZATIONS, MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_DECLARATION,
+    MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_PACKAGE,
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NativeSpecializationStats {
@@ -17,7 +22,7 @@ pub struct NativeSpecializationStats {
 pub fn specialize_native_transport(
     input: &VerifiedProgram,
 ) -> crate::Result<(VerifiedProgram, NativeSpecializationStats)> {
-    let mut instances = BTreeMap::<FunctionId, GenericInstantiation>::new();
+    let mut instances = NativeInstances::new();
     let mut calls = 0u32;
     for function in &input.program().functions {
         for block in &function.blocks {
@@ -36,32 +41,57 @@ pub fn specialize_native_transport(
                 calls = calls
                     .checked_add(1)
                     .ok_or_else(|| IrError::new("native specialization call count overflow"))?;
-                if let Some(existing) = instances.get(target) {
-                    if existing != instantiation {
-                        return Err(IrError::new(
-                            "native transport specialization has multiple instances",
-                        ));
-                    }
-                } else {
-                    instances.insert(*target, instantiation.clone());
-                }
+                record_instance(&mut instances, *target, instantiation.clone())?;
             }
         }
     }
-    if instances.len() > MAX_NATIVE_TRANSPORT_SPECIALIZATIONS {
-        return Err(IrError::new(
-            "native transport specialization budget exceeded",
-        ));
-    }
+    let instance_count = checked_instance_count(&instances)?;
+
     let mut program = input.program().clone();
-    for (target, instantiation) in &instances {
-        let function = program
+    let mut replacements = BTreeMap::<(FunctionId, GenericInstantiation), FunctionId>::new();
+    let mut specialized_originals = Vec::with_capacity(instances.len());
+    let mut specialized_functions =
+        Vec::with_capacity(instance_count.saturating_sub(instances.len()));
+    for (target, target_instances) in &instances {
+        let original = program
             .functions
-            .get_mut(target.index().unwrap_or(usize::MAX))
+            .get(target.index().unwrap_or(usize::MAX))
             .filter(|function| function.id == *target)
+            .cloned()
             .ok_or_else(|| IrError::new("native specialization target is missing"))?;
-        specialize_identity(function, instantiation)?;
+        for (ordinal, instantiation) in target_instances.iter().enumerate() {
+            let mut function = original.clone();
+            let specialized_id = if ordinal == 0 {
+                *target
+            } else {
+                let next_index = program
+                    .functions
+                    .len()
+                    .checked_add(specialized_functions.len())
+                    .ok_or_else(|| {
+                        IrError::new("native specialization function identity overflow")
+                    })?;
+                let id = FunctionId::new(u32::try_from(next_index).map_err(|_| {
+                    IrError::new("native specialization function identity overflow")
+                })?);
+                function.id = id;
+                function.name = format!("{}$native-transport-{ordinal}", original.name);
+                id
+            };
+            specialize_identity(&mut function, instantiation, &program.memory)?;
+            replacements.insert((*target, instantiation.clone()), specialized_id);
+            if ordinal == 0 {
+                specialized_originals.push((target.index().unwrap_or(usize::MAX), function));
+            } else {
+                specialized_functions.push(function);
+            }
+        }
     }
+    for (index, function) in specialized_originals {
+        program.functions[index] = function;
+    }
+    program.functions.extend(specialized_functions);
+
     for function in &mut program.functions {
         for block in &mut function.blocks {
             for instruction in &mut block.instructions {
@@ -73,9 +103,20 @@ pub fn specialize_native_transport(
                 else {
                     continue;
                 };
-                if instances.contains_key(target) {
-                    *instantiation = None;
+                let Some(facts) = instantiation.as_ref() else {
+                    continue;
+                };
+                if facts.memory_witnesses.is_empty() {
+                    continue;
                 }
+                let specialized_target = replacements
+                    .get(&(*target, facts.clone()))
+                    .copied()
+                    .ok_or_else(|| {
+                        IrError::new("native transport specialization rewrite identity mismatch")
+                    })?;
+                *target = specialized_target;
+                *instantiation = None;
             }
         }
     }
@@ -83,84 +124,8 @@ pub fn specialize_native_transport(
     Ok((
         specialized,
         NativeSpecializationStats {
-            functions: u32::try_from(instances.len()).unwrap_or(u32::MAX),
+            functions: u32::try_from(instance_count).unwrap_or(u32::MAX),
             calls,
         },
     ))
-}
-
-fn specialize_identity(
-    function: &mut Function,
-    instantiation: &GenericInstantiation,
-) -> crate::Result<()> {
-    let [parameter] = function.signature.type_parameters.as_slice() else {
-        return Err(IrError::new(
-            "native transport specialization requires one type parameter",
-        ));
-    };
-    let [requirement] = function.signature.memory_witness_parameters.as_slice() else {
-        return Err(IrError::new(
-            "native transport specialization requires one hidden witness",
-        ));
-    };
-    let [declared_parameter] = function.signature.parameters.as_slice() else {
-        return Err(IrError::new(
-            "native transport specialization requires one value parameter",
-        ));
-    };
-    let place_matches = match function.places.as_slice() {
-        [] => true,
-        [place] => place.ty == *declared_parameter && place.drop_glue.is_none(),
-        _ => false,
-    };
-    if requirement.parameter != *parameter
-        || requirement.operations != [MemoryWitnessOperation::Transport]
-        || declared_parameter != &SsaType::TypeParameter(parameter.clone())
-        || function.signature.result.as_ref() != declared_parameter
-        || !place_matches
-        || function.blocks.len() != 1
-        || function.entry != BlockId::new(0)
-    {
-        return Err(IrError::new(
-            "native transport specialization target is not an exact identity body",
-        ));
-    }
-    let block = &mut function.blocks[0];
-    let [block_parameter] = block.parameters.as_mut_slice() else {
-        return Err(IrError::new("native identity block parameter is missing"));
-    };
-    if !block.instructions.is_empty()
-        || block_parameter.ty != *declared_parameter
-        || block_parameter.owner_place.is_some()
-        || block.terminator != Terminator::Return(block_parameter.id)
-    {
-        return Err(IrError::new(
-            "native transport specialization body is not identity",
-        ));
-    }
-    let substitution = instantiation
-        .substitutions
-        .iter()
-        .find(|item| item.parameter == *parameter)
-        .ok_or_else(|| IrError::new("native transport substitution is missing"))?;
-    if matches!(substitution.ty, SsaType::TypeParameter(_))
-        || !instantiation
-            .memory_witnesses
-            .iter()
-            .any(|binding| binding.parameter == *parameter)
-    {
-        return Err(IrError::new(
-            "native transport specialization lacks a concrete witness binding",
-        ));
-    }
-    function.signature.type_parameters.clear();
-    function.signature.bounds.clear();
-    function.signature.memory_witness_parameters.clear();
-    function.signature.parameters = vec![substitution.ty.clone()];
-    *function.signature.result = substitution.ty.clone();
-    if let Some(place) = function.places.first_mut() {
-        place.ty = substitution.ty.clone();
-    }
-    block_parameter.ty = substitution.ty.clone();
-    Ok(())
 }

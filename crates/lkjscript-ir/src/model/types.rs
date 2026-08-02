@@ -13,7 +13,7 @@ impl Origin {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Signature {
     pub type_parameters: Vec<String>,
     pub bounds: Vec<TraitBound>,
@@ -34,7 +34,7 @@ impl Signature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SsaType {
     Unit,
     Bool,
@@ -65,7 +65,7 @@ pub enum SsaType {
     TypeParameter(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TraitBound {
     pub parameter: String,
     pub trait_id: TraitId,
@@ -103,38 +103,38 @@ pub struct ImplMetadata {
     pub source: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MemoryWitnessParameter {
     pub parameter: String,
     pub operations: Vec<lkjscript_contracts::MemoryWitnessOperation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MemoryWitnessBinding {
     pub parameter: String,
     pub witness: MemoryWitnessId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeSubstitution {
     pub parameter: String,
     pub ty: SsaType,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TraitWitnessKind {
     AutoTrait,
     Explicit(ImplId),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TraitWitness {
     pub trait_id: TraitId,
     pub ty: SsaType,
     pub kind: TraitWitnessKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GenericInstantiation {
     pub substitutions: Vec<TypeSubstitution>,
     pub witnesses: Vec<TraitWitness>,

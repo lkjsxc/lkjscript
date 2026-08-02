@@ -32,15 +32,17 @@ Environment: Linux x86-64, locked Rust workspace.
 - Evaluator and VM execute the residual hidden binding. The VM stores bindings
   in frame metadata outside source locals and operand values and validates both
   call arguments and generic results.
-- Forced native tiers perform a verified exact identity specialization. The
+- Forced native tiers perform verified exact identity specialization. Each
   specialization accepts zero or one exact owner place, one type parameter, one
   transport requirement, one value argument, and an instruction-free identity
-  body. One concrete instance per target and at most 64 specialized targets are
-  admitted. Baseline and proof tests require nonzero native entry and zero VM
-  fallback.
+  body. Canonically ordered exact substitution, trait-witness, and memory-witness
+  identities deduplicate repeated calls and select distinct generated functions.
+  The bounds are 32 instances per declaration and 1,024 per package closure;
+  rewritten SSA is independently verified. Baseline and proof tests require
+  equal results, nonzero native entry, and zero VM fallback.
 - The experiment admits direct calls, naked type-parameter transport, and at
-  most 16 parameters and arguments. Nested unresolved parameter uses, indirect calls,
-  multiple concrete instances for one target, nonidentity bodies, and unknown
+  most 16 parameters and arguments. Nested unresolved parameter uses, indirect
+  calls, nonidentity bodies, identity mismatch, bound overflow, and unknown
   operations reject rather than falling back.
 
 ## Locked Package Interface
@@ -157,5 +159,6 @@ CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
 - no product-list-product boundary snapshot or sealed snapshot rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;
-- no indirect generic callable ABI or multiple specialization instances;
+- no indirect generic callable ABI or specialization of bodies beyond the exact
+  transport identity;
 - no claim that the complete promotion gate in the Accepted Target has passed.

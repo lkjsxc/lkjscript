@@ -53,6 +53,8 @@ pub use optimize::{
 };
 pub use specialize::{
     specialize_native_transport, NativeSpecializationStats, MAX_NATIVE_TRANSPORT_SPECIALIZATIONS,
+    MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_DECLARATION,
+    MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_PACKAGE,
 };
 pub use verify::{
     verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,

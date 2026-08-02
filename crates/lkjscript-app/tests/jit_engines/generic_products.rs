@@ -81,6 +81,33 @@ fn copy_product_hidden_witness_executes_in_all_four_tiers() {
 }
 
 #[test]
+fn native_transport_specialization_fails_closed_for_residual_body() {
+    let source = concat!(
+        "def/\nname/\nkeep\n/name\nfn/\nforall/\nt\n/forall\nsig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
+        "params/\nvalue\nt\n/params\nif/\ntrue\nvalue\nvalue\n/if\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nkeep/\n42\n/keep\n/main\n",
+    );
+    let program = compile(source, "residual-native-transport.lkjscript");
+    let error = lkjscript_ir::specialize_native_transport(program.ssa())
+        .expect_err("residual transport body must not enter native code");
+    assert!(error
+        .to_string()
+        .starts_with("native transport specialization"));
+    assert!(execute_forced(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .is_err());
+    assert!(execute_optimizing(
+        program.ssa(),
+        &ExecutionConfig::default(),
+        JitConfig::default(),
+    )
+    .is_err());
+}
+
+#[test]
 fn cross_package_transport_witness_executes_in_all_four_tiers() {
     let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../src/examples/polymorphic-transport/main.lkjscript");

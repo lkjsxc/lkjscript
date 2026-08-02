@@ -123,8 +123,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   Native images retain typed frame homes for call and cleanup validation but no
   liveness maps or collection services. Exact byte-vector and bytes groups use
   closed byte/u32 access, mutation, borrow, copy, clone, freeze, thaw,
-  end-borrow, and drop calls with zero final live owners, loans, or release
-  backlog.
+  end-borrow, and drop calls with zero final live owners, loans, or release backlog.
 - Native image compatibility is the exact tuple of language, verified-SSA,
   runtime-call, and native-layout contract digests; public metrics use stable unnumbered names.
 - Metrics use `lkjscript.metrics` and its full contract digest. `lkjscript
@@ -135,10 +134,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   Every executable program retains a platform-bound canonical HIR memory plan
   covering every result, place, loan, constant, and call without Rust formatting.
   Concrete SSA/bytecode witnesses reject zero or duplicate identities.
-  Experimental residual transport and independently selected structural-owner
-  lists execute exact witnesses, dynamic strings, `list-first`, and cleanup in
-  evaluator and VM. Native owner lists remain blocked; specialization has zero fallback.
-  A locked 4,096-operation nested-list workload passes all four tiers without promotion.
+  Experimental residual transport and structural-owner lists execute exact
+  witnesses and cleanup in evaluator/VM. Native owner lists remain blocked;
+  exact specializations are bounded at 32/declaration and 1,024/package, reverify
+  rewritten SSA, and retain zero fallback on the locked 4,096-operation workload.
   Independent verification still precedes SSA; inventory remains derived.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
   object families, services, liveness maps, configuration, and metrics across
