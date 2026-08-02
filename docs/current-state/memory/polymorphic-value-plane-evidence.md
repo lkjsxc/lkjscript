@@ -3,8 +3,8 @@
 ## Status
 
 **Experimental for residual transport, locked generic package interfaces,
-nested copy-list transport, selected structural-owner list planning and
-Evaluator/VM execution, and the cross-package semantic snapshot.** The
+nested copy-list transport, selected structural-list execution in all four
+tiers, and the cross-package semantic snapshot.** The
 sealed-region scaling result extends the already-Current internal substrate but
 is not a language sealed-value claim. The complete polymorphic sealed-value
 plane remains Accepted Target and this partial slice is not Current.
@@ -12,7 +12,10 @@ plane remains Accepted Target and this partial slice is not Current.
 ## Evidence Identity
 
 Residual implementation commit: `9f82cc5cf9836d07e16267b2387b007547ebeaef`.
-Structural-owner list prerequisite commit: `96653f9c0a9368464e5c00d49901a5f82823a1d1`.
+Evaluator/VM owner-list commit: `96653f9c0a9368464e5c00d49901a5f82823a1d1`.
+Revision-14 four-tier cutover commit: `941252e0f7ad5b4d91eb43f94cd8277101bbc3ae`.
+Exact native identity commit: `727f1207f4be31d53207a9661807ea4dd8d13d5c`.
+Iterative native aggregate-equality commit: `a6de268fcc992349c47c4bca336402e263ba8545`.
 Platform revision: `14`.
 Environment: Linux x86-64, locked Rust workspace.
 
@@ -67,10 +70,12 @@ exact immutable structural element witnesses. Each dynamic element is a
 detached owner in one list-region side ledger; `list-first` creates a separate
 owner, and teardown releases retained owners before runtime emptiness checks.
 Evaluator, validated VM, forced baseline, and forced proof tests execute dynamic
-string ownership, equality, `list-first`, exact cleanup, and zero fallback.
-Native structural islands accept exact verified list heap sites, clone detached
-owners into one list-region ledger, and release them before structural-runtime
-emptiness verification. Process-boundary structural-owner lists remain blocked.
+string and option ownership, product `list-first`, nested option lists, recursive
+nested-list equality, exact cleanup, and zero fallback. Native structural
+islands bind list and element layout plus semantic identities, accept only
+verified frame-home heap sites, clone detached owners into one list ledger, and
+release it before runtime emptiness verification. Product equality, paths, and
+process-boundary structural-owner lists remain blocked.
 
 ## Experimental Core Semantic DAG Prerequisite
 
@@ -131,7 +136,8 @@ cargo test --locked -p lkjscript-core --all-targets
 cargo test --locked -p lkjscript-ir --lib
 cargo test --locked -p lkjscript-vm --lib
 cargo test --locked -p lkjscript-app --test jit_engines segmented_lists::
-cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --release --locked -p lkjscript-app --test jit_engines segmented_lists::structural_owners::
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 cargo test --locked -p lkjscript-app --test jit_engines generic_
 cargo test --locked -p lkjscript-app --test cli_contract application_control::
 cargo test --locked -p lkjscript-app --test numeric_contract
@@ -159,13 +165,26 @@ CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
   -- --exact --nocapture
 CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
   -p lkjscript-core --test sealed_scaling -- --nocapture
+CARGO_TARGET_DIR=target/lkjscript/miri-structural-equality cargo +nightly miri test \
+  --locked -p lkjscript-jit \
+  island::structural::equality::tests::semantic_equality_is_iterative_and_exact_for_deep_products \
+  -- --exact --nocapture
+CARGO_TARGET_DIR=target/lkjscript/asan-structural-plane RUSTFLAGS='-Zsanitizer=address' \
+  cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu --locked \
+  -p lkjscript-app --test jit_engines segmented_lists:: -- --nocapture
+CARGO_TARGET_DIR=target/lkjscript/lsan-structural-plane RUSTFLAGS='-Zsanitizer=leak' \
+  cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu --locked \
+  -p lkjscript-app --test jit_engines segmented_lists:: -- --nocapture
+CARGO_TARGET_DIR=target/lkjscript/tsan-structural-plane RUSTFLAGS='-Zsanitizer=thread' \
+  cargo +nightly test -Zbuild-std --target x86_64-unknown-linux-gnu --locked \
+  -p lkjscript-app --test jit_engines segmented_lists:: -- --nocapture
 ```
 
 ## Explicitly Not Current
 
 - no source `sealed T` or `seal` operation;
 - no memory-plan selection of sealed storage for language values;
-- no path/product/enum/option/result or nested structural-owner list execution;
+- no path/result/general-enum matrix or product structural equality;
 - no compiler/evaluator/VM/native DAG export or runtime/sealed DAG rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;
