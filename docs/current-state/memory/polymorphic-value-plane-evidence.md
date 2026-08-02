@@ -77,7 +77,7 @@ verified frame-home heap sites, clone detached owners into one list ledger, and
 release it before runtime emptiness verification. Product equality, paths, and
 process-boundary structural-owner lists remain blocked.
 
-## Experimental Core Semantic DAG Prerequisite
+## Experimental Core Semantic DAG Prerequisite ([evidence](sealed-semantic-dag-evidence.md))
 
 The core boundary model and execution-outcome codec accept one bounded,
 key-free, reverse-topological semantic DAG. Focused construction, malformed
