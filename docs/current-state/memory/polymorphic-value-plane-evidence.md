@@ -3,14 +3,16 @@
 ## Status
 
 **Experimental for residual transport, locked generic package interfaces,
-nested copy-list transport, and the cross-package semantic snapshot.** The
+nested copy-list transport, selected structural-owner list planning and
+Evaluator/VM execution, and the cross-package semantic snapshot.** The
 sealed-region scaling result extends the already-Current internal substrate but
 is not a language sealed-value claim. The complete polymorphic sealed-value
 plane remains Accepted Target and this partial slice is not Current.
 
 ## Evidence Identity
 
-Implementation commit: `9f82cc5cf9836d07e16267b2387b007547ebeaef`.
+Residual implementation commit: `9f82cc5cf9836d07e16267b2387b007547ebeaef`.
+Structural-owner list prerequisite commit: `96653f9c0a9368464e5c00d49901a5f82823a1d1`.
 Platform revision: `13`.
 Environment: Linux x86-64, locked Rust workspace.
 
@@ -56,6 +58,21 @@ content identity. The package decoder accepts no older or alias layout.
 consumer modules import it through the dependency path. The package lock binds
 two package content identities and the dependency's public transport requirement.
 
+## Structural-Owner List Prerequisite Slice
+
+The HIR producer and independent verifier select the existing bounded segmented
+invocation region for exact immutable string, path, product, enum, option, and
+result element witnesses. Each stored dynamic element is a detached owner held
+by one list-region side ledger; `list-first` creates a separate owner, and
+teardown releases retained owners before structural-runtime emptiness checks.
+No list node or element uses a reference count.
+
+Evaluator and validated VM tests execute a dynamically constructed string inside
+a list, value equality, `list-first`, and exact cleanup. Bytecode `list-first`
+now binds the owner representation before effects and rejects stale metadata.
+Forced native structural-list execution and structural-list process snapshots
+remain blocked, so this is prerequisite progress rather than Current promotion.
+
 ## Four-Tier Workload And Snapshot
 
 The locked workload constructs and transports one nested `list<list<i64>>` per
@@ -97,6 +114,11 @@ no errors:
 
 ```text
 cargo test --locked --workspace --all-targets
+cargo test --locked -p lkjscript-compiler
+cargo test --locked -p lkjscript-core --all-targets
+cargo test --locked -p lkjscript-ir --lib
+cargo test --locked -p lkjscript-vm --lib
+cargo test --locked -p lkjscript-app --test jit_engines segmented_lists::
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked -p lkjscript-app --test jit_engines generic_
 cargo test --locked -p lkjscript-app --test cli_contract application_control::
@@ -131,7 +153,7 @@ CARGO_TARGET_DIR=target/lkjscript/miri cargo +nightly miri test --locked \
 
 - no source `sealed T` or `seal` operation;
 - no memory-plan selection of sealed storage for language values;
-- no structural product/enum/string/path owner as a segmented-list element;
+- no forced-native or process-boundary structural-owner list execution;
 - no product-list-product boundary snapshot or sealed snapshot rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;
