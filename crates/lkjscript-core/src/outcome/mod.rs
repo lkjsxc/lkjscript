@@ -21,6 +21,9 @@ pub use execution::ExecutionOutcome;
 pub(crate) use owned_value::OwnedListNode;
 pub use owned_value::OwnedValue;
 pub use semantic_dag::{
+    SealedSemanticDagBorrow, SealedSemanticDagBorrowFailure, SealedSemanticDagError,
+    SealedSemanticDagFailure, SealedSemanticDagMetrics, SealedSemanticDagOwner,
+    SealedSemanticDagReleaseFailure, SealedSemanticDagReleaseReport, SealedSemanticDagRuntime,
     SemanticDagKind, SemanticDagNode, SemanticDagNodeId, SemanticDagPayload, SemanticDagSnapshot,
     SemanticDagType,
 };

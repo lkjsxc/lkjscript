@@ -5,6 +5,7 @@ mod owner;
 mod owner_counts;
 mod preflight;
 mod release;
+mod rollback;
 mod seal;
 mod validation;
 mod weight;

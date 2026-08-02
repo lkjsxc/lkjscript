@@ -86,9 +86,14 @@ nested immutable structural owners, shared subgraphs, exact type/layout facts,
 full framing consumption, and forward, cycle, unreachable, type, and bound
 rejection. Construction remains private until complete validation.
 
-No compiler, evaluator, VM, native, segmented-list, ordinary-region, or sealed
-exporter or rehydrator uses this DAG yet; it is prerequisite infrastructure,
-not a complete polymorphic-value-plane promotion.
+A source-invisible safe-core adapter checks one exact root and a bounded sorted
+type set before copying the DAG into one private sealed region. It atomically
+publishes one coarse owner, supports borrowed key-free export, returns the
+unchanged snapshot on failure, and rolls back its dropless builder without
+allocating cleanup. An 8-versus-2,048-node test keeps owner/dependency release
+planning at one region unit; chunk reclamation is not claimed invariant.
+No compiler, execution tier, list/ordinary-region path, or installed witness
+table uses the adapter, so it remains prerequisite infrastructure.
 
 ## Four-Tier Workload And Snapshot
 
@@ -185,7 +190,8 @@ CARGO_TARGET_DIR=target/lkjscript/tsan-structural-plane RUSTFLAGS='-Zsanitizer=t
 - no source `sealed T` or `seal` operation;
 - no memory-plan selection of sealed storage for language values;
 - no path/result/general-enum matrix or product structural equality;
-- no compiler/evaluator/VM/native DAG export or runtime/sealed DAG rehydration;
+- no compiler/evaluator/VM/native DAG export, installed-witness binding, or
+  execution-tier sealed DAG rehydration;
 - no residual clone, drop, share, compare, encode, decode, list-import, or
   list-export operation body;
 - no indirect generic callable ABI or specialization of bodies beyond the exact

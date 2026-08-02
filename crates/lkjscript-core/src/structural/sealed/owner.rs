@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use super::model::ObjectLocation;
 use super::{
     SealedBorrow, SealedOwner, SealedRef, SealedRegionStore, SealedUpgrade, WeakSealedRef,
 };
@@ -91,12 +92,46 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         })
     }
 
-    pub fn end_borrow(&mut self, borrow: SealedBorrow<T>) -> Result<(), StructuralError> {
-        let record = self.record_mut(borrow.key.domain())?;
-        record.loans = record
-            .loans
-            .checked_sub(1)
-            .ok_or(StructuralError::LoanUnderflow)?;
+    pub fn borrowed_at(&self, borrow: &SealedBorrow<T>, slot: u32) -> Result<&T, StructuralError> {
+        self.borrowed(borrow)?;
+        let index = self.record_index(borrow.key.domain())?;
+        let record = &self.records[index].1;
+        if record.loans == 0 {
+            return Err(StructuralError::LiveLoan);
+        }
+        let root = record
+            .roots
+            .get(slot as usize)
+            .ok_or(StructuralError::StaleRoot(borrow.key))?;
+        if root.generation != borrow.key.generation() {
+            return Err(StructuralError::StaleRoot(borrow.key));
+        }
+        match root.location {
+            ObjectLocation::Chunk { chunk, offset } => record
+                .chunks
+                .get(chunk as usize)
+                .and_then(|values| values.get(offset as usize))
+                .ok_or(StructuralError::StaleRoot(borrow.key)),
+            ObjectLocation::Large { index } => record
+                .large
+                .get(index as usize)
+                .and_then(|values| values.first())
+                .ok_or(StructuralError::StaleRoot(borrow.key)),
+        }
+    }
+
+    pub fn end_borrow(
+        &mut self,
+        borrow: SealedBorrow<T>,
+    ) -> Result<(), (StructuralError, SealedBorrow<T>)> {
+        let record = match self.record_mut(borrow.key.domain()) {
+            Ok(record) => record,
+            Err(error) => return Err((error, borrow)),
+        };
+        let Some(loans) = record.loans.checked_sub(1) else {
+            return Err((StructuralError::LoanUnderflow, borrow));
+        };
+        record.loans = loans;
         Ok(())
     }
 }

@@ -1,0 +1,109 @@
+use std::fmt;
+
+use super::super::{SemanticDagSnapshot, SemanticDagType};
+use super::cells::SealedDagCell;
+use crate::structural::{
+    SealedBorrow, SealedOwner, SealedRegionMetrics, StructuralError, StructuralRuntimeMetrics,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SealedSemanticDagError {
+    AllocationFailed,
+    ArithmeticOverflow,
+    InvalidTypeClosure,
+    RootTypeMismatch,
+    UnresolvedType(SemanticDagType),
+    CorruptRegion,
+    Structural(StructuralError),
+}
+
+impl From<StructuralError> for SealedSemanticDagError {
+    fn from(error: StructuralError) -> Self {
+        Self::Structural(error)
+    }
+}
+
+impl fmt::Display for SealedSemanticDagError {
+    fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AllocationFailed => output.write_str("sealed semantic DAG allocation failed"),
+            Self::ArithmeticOverflow => output.write_str("sealed semantic DAG arithmetic overflow"),
+            Self::InvalidTypeClosure => {
+                output.write_str("invalid sealed semantic DAG type closure")
+            }
+            Self::RootTypeMismatch => output.write_str("sealed semantic DAG root type mismatch"),
+            Self::UnresolvedType(value_type) => {
+                write!(
+                    output,
+                    "unresolved sealed semantic DAG type: {value_type:?}"
+                )
+            }
+            Self::CorruptRegion => output.write_str("corrupt sealed semantic DAG region"),
+            Self::Structural(error) => error.fmt(output),
+        }
+    }
+}
+
+impl std::error::Error for SealedSemanticDagError {}
+
+#[derive(Debug)]
+pub struct SealedSemanticDagFailure {
+    pub error: SealedSemanticDagError,
+    pub snapshot: Box<SemanticDagSnapshot>,
+}
+
+#[derive(Debug)]
+pub struct SealedSemanticDagOwner {
+    pub(super) store: u32,
+    pub(super) root: u32,
+    pub(super) nodes: u32,
+    pub(super) cells: u32,
+    pub(super) value_type: SemanticDagType,
+    pub(super) owner: SealedOwner<SealedDagCell, ()>,
+}
+
+impl SealedSemanticDagOwner {
+    pub const fn value_type(&self) -> SemanticDagType {
+        self.value_type
+    }
+
+    pub const fn node_count(&self) -> u32 {
+        self.nodes
+    }
+}
+
+#[derive(Debug)]
+pub struct SealedSemanticDagBorrow {
+    pub(super) store: u32,
+    pub(super) root: u32,
+    pub(super) nodes: u32,
+    pub(super) cells: u32,
+    pub(super) value_type: SemanticDagType,
+    pub(super) borrow: SealedBorrow<SealedDagCell>,
+}
+
+#[derive(Debug)]
+pub struct SealedSemanticDagBorrowFailure {
+    pub error: SealedSemanticDagError,
+    pub borrow: Box<SealedSemanticDagBorrow>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SealedSemanticDagReleaseReport {
+    pub regions_released: u64,
+    pub cells_released: u64,
+    pub dependency_releases: u64,
+}
+
+#[derive(Debug)]
+pub struct SealedSemanticDagReleaseFailure {
+    pub error: SealedSemanticDagError,
+    pub owner: SealedSemanticDagOwner,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SealedSemanticDagMetrics {
+    pub typed_stores: u32,
+    pub runtime: StructuralRuntimeMetrics,
+    pub sealed: SealedRegionMetrics,
+}

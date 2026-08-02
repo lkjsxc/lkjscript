@@ -5,6 +5,13 @@ use crate::{
 
 use super::{StructuralSnapshotLimits, StructuralSnapshotMetrics};
 
+mod sealed;
+pub use sealed::{
+    SealedSemanticDagBorrow, SealedSemanticDagBorrowFailure, SealedSemanticDagError,
+    SealedSemanticDagFailure, SealedSemanticDagMetrics, SealedSemanticDagOwner,
+    SealedSemanticDagReleaseFailure, SealedSemanticDagReleaseReport, SealedSemanticDagRuntime,
+};
+
 /// One table-local semantic DAG node identity. It is not a runtime key.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SemanticDagNodeId(u32);
@@ -20,7 +27,7 @@ impl SemanticDagNodeId {
 }
 
 /// Closed wire shape for a key-free semantic DAG node.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum SemanticDagKind {
     Unit,
     Bool,
@@ -37,7 +44,7 @@ pub enum SemanticDagKind {
 }
 
 /// Exact semantic and runtime-layout identity required to interpret one node.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SemanticDagType {
     pub layout: LayoutIdentity,
     pub semantic_type: SemanticTypeIdentity,

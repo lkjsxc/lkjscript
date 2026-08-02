@@ -125,3 +125,7 @@ fn product_list_product_dag_round_trips_with_sharing_and_exact_identity() {
 mod bounds;
 #[path = "semantic_dag_snapshot/rejection.rs"]
 mod rejection;
+#[path = "semantic_dag_snapshot/sealed_rehydration.rs"]
+mod sealed_rehydration;
+#[path = "semantic_dag_snapshot/sealed_rehydration_bytes.rs"]
+mod sealed_rehydration_bytes;
