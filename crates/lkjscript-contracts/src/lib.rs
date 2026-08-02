@@ -29,10 +29,12 @@ pub use domains::{
 };
 pub use encoding::canonical_bytes;
 pub use memory::{
-    memory_obligations, ExecutableMemoryWitnessFacts, MemoryObligation, MemoryWitnessCodec,
-    MemoryWitnessContention, MemoryWitnessCopy, MemoryWitnessDomain, MemoryWitnessDrop,
-    MemoryWitnessEquality, MemoryWitnessListElement, MemoryWitnessMode, MemoryWitnessOperation,
-    MemoryWitnessPortability, MemoryWitnessRoot, MemoryWitnessSize,
+    canonical_executable_memory_witness, memory_obligations, memory_witness_routes_are_compatible,
+    required_memory_witness_operations, ExecutableMemoryWitnessFacts, MemoryObligation,
+    MemoryWitnessCapabilities, MemoryWitnessCodec, MemoryWitnessContention, MemoryWitnessCopy,
+    MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
+    MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot,
+    MemoryWitnessSize,
 };
 pub use model::{
     ContractDependency, ContractDescriptor, ContractError, ContractFact, ContractItem,

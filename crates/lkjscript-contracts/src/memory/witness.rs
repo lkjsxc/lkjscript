@@ -117,6 +117,7 @@ pub struct ExecutableMemoryWitnessFacts {
     pub semantic_type: [u8; 32],
     pub semantic_contract: [u8; 32],
     pub mode: MemoryWitnessMode,
+    pub capabilities: super::MemoryWitnessCapabilities,
     pub domain: MemoryWitnessDomain,
     pub root: MemoryWitnessRoot,
     pub copy: MemoryWitnessCopy,

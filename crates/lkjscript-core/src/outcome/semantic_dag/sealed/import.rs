@@ -7,7 +7,7 @@ use crate::structural::{
 };
 
 impl SealedSemanticDagRuntime {
-    pub fn rehydrate(
+    pub(super) fn rehydrate(
         &mut self,
         snapshot: SemanticDagSnapshot,
         expected_root: SemanticDagType,

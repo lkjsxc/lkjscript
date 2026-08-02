@@ -74,6 +74,7 @@ fn verified_witness_process_codec(
             derived.closure.class,
             MemoryClosureClass::Deterministic | MemoryClosureClass::RegionClosed
         )
+        || derived.mode == MemoryAggregateMode::Affine
         || derived.contains_borrow
         || !verified_witness_codec_type(ty)
     {
@@ -90,12 +91,7 @@ fn verified_witness_codec_type(ty: &Type) -> bool {
         | Type::Resource(_)
         | Type::Fn { .. }
         | Type::Forall { .. } => false,
-        Type::Enum { id, arguments, .. } => {
-            matches!(
-                id.bytes(),
-                lkjscript_core::OPTION_ID | lkjscript_core::RESULT_ID
-            ) && arguments.iter().all(verified_witness_codec_type)
-        }
+        Type::Enum { arguments, .. } => arguments.iter().all(verified_witness_codec_type),
         Type::List(inner) => verified_witness_codec_type(inner),
         _ => true,
     }

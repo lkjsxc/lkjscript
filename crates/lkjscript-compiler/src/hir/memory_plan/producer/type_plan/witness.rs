@@ -16,6 +16,7 @@ impl TypePlanner<'_> {
             semantic_contract: self.witness_semantic_contract(ty),
             requirement: witness_requirement(ty),
             mode: derived.mode,
+            capabilities: witness_capabilities(ty, derived),
             closure: derived.closure.clone(),
             root_projection,
             domain: witness_domain(ty, derived),
@@ -103,3 +104,4 @@ impl TypePlanner<'_> {
 }
 
 include!("witness_policy.rs");
+include!("witness_capabilities.rs");

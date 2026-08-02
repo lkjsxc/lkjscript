@@ -9,6 +9,9 @@ mod templates_runtime;
 mod templates_scalar;
 mod templates_special;
 mod witness;
+mod witness_capabilities;
+mod witness_encoding;
+mod witness_routes;
 
 pub use model::MemoryObligation;
 pub use witness::{
@@ -16,6 +19,11 @@ pub use witness::{
     MemoryWitnessDomain, MemoryWitnessDrop, MemoryWitnessEquality, MemoryWitnessListElement,
     MemoryWitnessMode, MemoryWitnessOperation, MemoryWitnessPortability, MemoryWitnessRoot,
     MemoryWitnessSize,
+};
+pub use witness_capabilities::MemoryWitnessCapabilities;
+pub use witness_encoding::canonical_executable_memory_witness;
+pub use witness_routes::{
+    memory_witness_routes_are_compatible, required_memory_witness_operations,
 };
 
 use templates_special::resource;
@@ -47,3 +55,5 @@ use crate::ResourceKind;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod witness_encoding_tests;

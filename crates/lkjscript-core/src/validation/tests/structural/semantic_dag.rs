@@ -13,6 +13,7 @@ fn returning_product_chunk_from(
     mode: crate::StructuralTypeMode,
 ) -> crate::ValidatedChunk {
     chunk.structural_types[0].mode = mode;
+    install_authenticated_return_witness(&mut chunk, mode);
     chunk.main.locals = 1;
     chunk.main.return_structural = Some(crate::StructuralRepresentationId::new(0));
     let value = chunk.add_const(crate::Constant::I64(41));
@@ -89,8 +90,8 @@ fn validated_structural_return_derives_exact_sealed_dag_shape() {
     let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
         .expect("sealed runtime");
     let owner = runtime
-        .rehydrate_validated_return(&chunk, snapshot)
-        .expect("validated rehydration");
+        .rehydrate_authenticated_return(&chunk, snapshot)
+        .expect("authenticated rehydration");
     let borrow = runtime.begin_borrow(&owner).expect("borrow");
     assert_eq!(runtime.export_snapshot(&borrow).expect("export"), expected);
     runtime.end_borrow(borrow).expect("end borrow");
@@ -114,7 +115,7 @@ fn validated_structural_return_requires_exact_return_metadata() {
     let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
         .expect("sealed runtime");
     let failure = runtime
-        .rehydrate_validated_return(&chunk, snapshot)
+        .rehydrate_authenticated_return(&chunk, snapshot)
         .expect_err("missing structural return rejected");
     assert_eq!(failure.error, crate::SealedSemanticDagError::MissingValidatedReturn);
     assert_eq!(runtime.metrics().runtime.live_domains, 0);
@@ -128,9 +129,12 @@ fn validated_structural_return_rejects_affine_and_resource_metadata() {
     let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
         .expect("sealed runtime");
     let failure = runtime
-        .rehydrate_validated_return(&affine, snapshot)
+        .rehydrate_authenticated_return(&affine, snapshot)
         .expect_err("affine root rejected");
-    assert_eq!(failure.error, crate::SealedSemanticDagError::UnsupportedValidatedType);
+    assert_eq!(
+        failure.error,
+        crate::SealedSemanticDagError::UnauthenticatedValidatedType
+    );
 
     let mut marked = product_chunk();
     if let crate::StructuralLayoutKind::Product { fields, .. } =
@@ -143,7 +147,7 @@ fn validated_structural_return_rejects_affine_and_resource_metadata() {
     let marked = returning_product_chunk_from(marked, crate::StructuralTypeMode::Immutable);
     let snapshot = returned_product_snapshot(&marked, field_type, 1);
     let failure = runtime
-        .rehydrate_validated_return(&marked, snapshot)
+        .rehydrate_authenticated_return(&marked, snapshot)
         .expect_err("resource-marked field rejected");
     assert_eq!(failure.error, crate::SealedSemanticDagError::UnsupportedValidatedType);
     assert_eq!(runtime.metrics().runtime.live_domains, 0);
@@ -157,7 +161,7 @@ fn validated_structural_return_rejects_forged_type_and_shape_before_allocation()
     let mut runtime = crate::SealedSemanticDagRuntime::new(crate::StructuralLimits::default())
         .expect("sealed runtime");
     let failure = runtime
-        .rehydrate_validated_return(&chunk, snapshot)
+        .rehydrate_authenticated_return(&chunk, snapshot)
         .expect_err("forged type rejected");
     assert_eq!(failure.error, crate::SealedSemanticDagError::ValidatedShapeMismatch);
     assert_eq!(runtime.metrics().runtime.live_domains, 0);
@@ -173,7 +177,7 @@ fn validated_structural_return_rejects_forged_type_and_shape_before_allocation()
     )
     .expect("empty product snapshot");
     let failure = runtime
-        .rehydrate_validated_return(&chunk, snapshot)
+        .rehydrate_authenticated_return(&chunk, snapshot)
         .expect_err("field shape rejected");
     assert_eq!(failure.error, crate::SealedSemanticDagError::ValidatedShapeMismatch);
     assert_eq!(runtime.metrics().runtime.live_domains, 0);

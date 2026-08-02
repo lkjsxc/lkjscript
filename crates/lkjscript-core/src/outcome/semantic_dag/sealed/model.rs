@@ -12,6 +12,8 @@ pub enum SealedSemanticDagError {
     ArithmeticOverflow,
     InvalidTypeClosure,
     MissingValidatedReturn,
+    MissingAuthenticatedWitness,
+    UnauthenticatedValidatedType,
     RootTypeMismatch,
     UnresolvedType(SemanticDagType),
     UnsupportedValidatedType,
@@ -36,6 +38,12 @@ impl fmt::Display for SealedSemanticDagError {
             }
             Self::MissingValidatedReturn => {
                 output.write_str("validated bytecode has no exact structural return")
+            }
+            Self::MissingAuthenticatedWitness => {
+                output.write_str("validated return has no installed authenticated witness")
+            }
+            Self::UnauthenticatedValidatedType => {
+                output.write_str("validated return witness does not permit sealed decoding")
             }
             Self::RootTypeMismatch => output.write_str("sealed semantic DAG root type mismatch"),
             Self::UnresolvedType(value_type) => {

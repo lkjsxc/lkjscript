@@ -28,6 +28,25 @@ fn validate_witnesses(chunk: &Chunk) -> Result<usize> {
         {
             return Err(Error::msg("bytecode memory witness facts are invalid"));
         }
+        if !lkjscript_contracts::memory_witness_routes_are_compatible(&record.facts) {
+            return Err(Error::msg(
+                "bytecode memory witness capability and operation routes are incompatible",
+            ));
+        }
+        let dependency_ids: Vec<_> = record
+            .dependencies
+            .iter()
+            .map(|dependency| dependency.bytes())
+            .collect();
+        let encoded = lkjscript_contracts::canonical_executable_memory_witness(
+            &record.facts,
+            &dependency_ids,
+        );
+        if crate::MemoryWitnessId::new(crate::sha256(&encoded)) != record.id {
+            return Err(Error::msg(
+                "bytecode executable memory witness identity is noncanonical",
+            ));
+        }
         validate_witness_route(chunk, record)?;
         let mut dependencies = HashSet::new();
         for dependency in &record.dependencies {
@@ -81,10 +100,21 @@ fn validate_witness_route(chunk: &Chunk, witness: &crate::InstalledMemoryWitness
         .filter(|item| {
             item.id == representation && item.category == StructuralValueCategory::Owner
         })
-        .and_then(|item| chunk.structural_types.get(item.type_id.index()));
-    if ty.is_none_or(|item| item.witness != witness.id) {
+        .and_then(|item| chunk.structural_types.get(item.type_id.index()))
+        .ok_or_else(|| Error::msg("bytecode memory witness structural route is stale"))?;
+    let expected_mode = match ty.mode {
+        crate::StructuralTypeMode::Copy => lkjscript_contracts::MemoryWitnessMode::Copy,
+        crate::StructuralTypeMode::Immutable => {
+            lkjscript_contracts::MemoryWitnessMode::ImmutableValue
+        }
+        crate::StructuralTypeMode::Affine => lkjscript_contracts::MemoryWitnessMode::Affine,
+    };
+    if ty.witness != witness.id
+        || witness.facts.mode != expected_mode
+        || witness.facts.root != lkjscript_contracts::MemoryWitnessRoot::Structural
+    {
         return Err(Error::msg(
-            "bytecode memory witness structural route is stale",
+            "bytecode memory witness structural type relinking failed",
         ));
     }
     Ok(())

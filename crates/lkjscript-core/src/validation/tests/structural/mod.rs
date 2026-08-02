@@ -131,4 +131,7 @@ include!("identity.rs");
 include!("ownership.rs");
 include!("cleanup.rs");
 include!("limits.rs");
+include!("authenticated_return.rs");
+include!("authenticated_enum.rs");
 include!("semantic_dag.rs");
+include!("witness_authentication.rs");

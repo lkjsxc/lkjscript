@@ -15,6 +15,7 @@ impl VerifiedTypes<'_> {
             semantic_contract: self.verified_witness_semantic_contract(ty),
             requirement: verified_witness_requirement(ty),
             mode: derived.mode,
+            capabilities: verified_witness_capabilities(ty, derived),
             closure: derived.closure.clone(),
             root_projection,
             domain: verified_witness_domain(ty, derived),
@@ -129,3 +130,4 @@ impl VerifiedTypes<'_> {
 }
 
 include!("witness_policy.rs");
+include!("witness_capabilities.rs");

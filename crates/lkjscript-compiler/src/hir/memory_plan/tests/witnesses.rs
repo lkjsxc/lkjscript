@@ -23,15 +23,23 @@ fn exact_witnesses_are_deterministic_one_to_one_and_identity_bearing() -> Result
     let second = derive(&hir)?;
     assert_eq!(
         first.id.to_hex(),
-        "2be92ee05113aee8db2c117c3f8a3acff56a4acd8f9f5e8ed139e7936146d1b6"
+        "934f6110101c73d891e9515da19cba6136ee8455edb32535831be62651e9c737"
     );
     assert_eq!(
         witness(&first, &MemoryType::Product("record".into()))?
             .id
             .to_hex(),
-        "a75b8d527d1e05abaf705f8cc632f063aeeda81449c75b975ed2ca9e9488faa8"
+        "4bfdc263598d12baf8b6f2a5f80e9b4783c205f4f63c01478a9e4d152d573e53"
     );
     assert_eq!(first.witnesses, second.witnesses);
+    let product_witness = witness(&first, &MemoryType::Product("record".into()))?;
+    assert!(product_witness.facts.capabilities.sealed_region);
+    assert!(product_witness.facts.capabilities.unique);
+    assert_eq!(product_witness.facts.domain, MemoryDomain::UniqueStructural);
+    assert_eq!(
+        product_witness.facts.copy_share,
+        MemoryCopySharePlan::StructuralCopy
+    );
     let mut changed = hir.clone();
     changed.products[0].fields[0].ty = hir::Type::Bool;
     let changed = derive(&changed)?;
@@ -70,6 +78,10 @@ fn independent_verifier_rejects_forged_missing_duplicate_and_mismatched_witnesse
 
     let mut forged = plan.clone();
     forged.witnesses[0].facts.equality = MemoryEqualitySupport::Unsupported;
+    assert!(verify_forged(&hir, &mut forged).is_err());
+
+    let mut forged = plan.clone();
+    forged.witnesses[0].facts.capabilities.inline = false;
     assert!(verify_forged(&hir, &mut forged).is_err());
 
     let mut forged = plan.clone();

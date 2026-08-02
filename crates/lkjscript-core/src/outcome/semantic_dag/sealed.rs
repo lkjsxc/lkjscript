@@ -5,6 +5,8 @@ mod model;
 mod ownership;
 mod planning;
 mod runtime;
+#[cfg(test)]
+mod tests;
 mod validated;
 mod validated_types;
 

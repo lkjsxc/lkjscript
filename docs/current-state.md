@@ -129,17 +129,17 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - Metrics use `lkjscript.metrics` and its full contract digest. `lkjscript
   memory inventory` exposes sorted memory-obligation records under
   `lkjscript.memory-obligations`. It reports deterministic structural, region,
-  unique, resource, artifact, and host ownership; it is derived evidence, not
-  semantic authority.
+  unique, resource, artifact, and host ownership; it is derived evidence, not semantic authority.
   Every executable program retains a platform-bound canonical HIR memory plan
   covering every result, place, loan, constant, and call without Rust formatting.
-  Concrete SSA/bytecode witnesses reject zero or duplicate identities.
-  Experimental residual transport plus string, option, product, and nested-list
-  elements execute in all four tiers with exact identities and zero fallback.
-  Path/result/general-enum snapshots remain blocked. Exact specializations are
-  bounded at 32/declaration and 1,024/package, reverify
-  rewritten SSA, and retain zero fallback on the locked 4,096-operation workload.
-  Independent verification still precedes SSA; inventory remains derived.
+  SSA and bytecode recompute witness identities from exact facts, operations, and ordered
+  dependencies; malformed routes or graphs reject. An Experimental adapter resolves only
+  compiler-installed witnesses and imports key-free product, path, option, result, and
+  general-enum process snapshots into one sealed owner; the caller type-closure path is removed.
+  Residual transport has exact four-tier identities and zero fallback. Compiler-selected
+  sealed placement and all-tier operations remain blocked. Exact specializations are bounded
+  at 32/declaration and 1,024/package, reverify SSA, and retain zero fallback at 4,096 operations;
+  independent verification precedes SSA and inventory remains derived.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
   object families, services, liveness maps, configuration, and metrics across
   all crate sources. No tracing-family registry or `memory traced` command

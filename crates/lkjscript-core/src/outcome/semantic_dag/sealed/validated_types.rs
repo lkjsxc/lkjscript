@@ -86,11 +86,8 @@ fn eligible_structural_type(
     id: StructuralTypeId,
 ) -> Result<&StructuralTypeMetadata, SealedSemanticDagError> {
     let metadata = structural_type(chunk, id)?;
-    if metadata.mode != StructuralTypeMode::Immutable
-        || matches!(
-            metadata.runtime_type.kind,
-            StructuralKind::Enum | StructuralKind::ByteVector
-        )
+    if metadata.mode == StructuralTypeMode::Affine
+        || metadata.runtime_type.kind == StructuralKind::ByteVector
     {
         return Err(SealedSemanticDagError::UnsupportedValidatedType);
     }
@@ -108,8 +105,9 @@ pub(super) fn dag_type(
         StructuralKind::String => SemanticDagKind::String,
         StructuralKind::Path => SemanticDagKind::Path,
         StructuralKind::Product => SemanticDagKind::Product,
+        StructuralKind::Enum => SemanticDagKind::Enum,
         StructuralKind::Static => SemanticDagKind::Static,
-        StructuralKind::Bytes | StructuralKind::ByteVector | StructuralKind::Enum => {
+        StructuralKind::Bytes | StructuralKind::ByteVector => {
             return Err(SealedSemanticDagError::UnsupportedValidatedType)
         }
     };

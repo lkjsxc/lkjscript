@@ -33,9 +33,12 @@ semantic IR rather than reinterpret syntax.
 Immediately after typed HIR, effects, and ownership, separate exhaustive
 producer and verifier traversals establish a dense content-addressed memory
 plan. An opaque memory-verified HIR wrapper is the only SSA-construction input,
-and `ExecutableProgram` retains the complete plan. Exact concrete structural
-witness identities reach SSA and validated bytecode; both reject unresolved or
-duplicate identities. The independently recomputed direct-affine SSA inventory
+and `ExecutableProgram` retains the complete plan. HIR producer and verifier
+independently reconstruct type capabilities and canonical executable witness
+identities. SSA and validated bytecode preserve the closed facts, operations,
+and ordered dependencies and independently recompute each identity; malformed,
+unresolved, duplicate, cyclic, or route-incompatible records fail closed. The
+independently recomputed direct-affine SSA inventory
 remains derived evidence. The public sorted memory
 inventory reports deterministic structural, region, unique, artifact, resource,
 and host ownership.

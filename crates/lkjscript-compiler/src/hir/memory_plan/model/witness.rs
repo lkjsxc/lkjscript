@@ -91,6 +91,7 @@ pub struct MemoryWitnessFacts {
     pub semantic_contract: [u8; 32],
     pub requirement: MemoryWitnessRequirement,
     pub mode: MemoryAggregateMode,
+    pub capabilities: lkjscript_contracts::MemoryWitnessCapabilities,
     pub closure: MemoryClosureFact,
     pub root_projection: MemoryRootProjection,
     pub domain: MemoryDomain,
@@ -123,5 +124,11 @@ impl MemoryWitness {
 pub(crate) fn memory_witness_id(
     facts: &MemoryWitnessFacts,
 ) -> lkjscript_core::Result<MemoryWitnessId> {
-    super::encoding::compute_witness_id(facts)
+    let executable = super::executable_facts(facts)?;
+    let dependencies = super::executable_dependencies(facts);
+    let bytes = lkjscript_contracts::canonical_executable_memory_witness(
+        &executable,
+        &dependencies,
+    );
+    Ok(MemoryWitnessId::from_bytes(lkjscript_core::sha256(&bytes)))
 }

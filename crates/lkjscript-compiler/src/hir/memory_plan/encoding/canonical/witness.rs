@@ -34,11 +34,23 @@ canonical_struct!(MemoryWitnessDropBranch {
     active_variant,
     actions
 });
+canonical_struct!(lkjscript_contracts::MemoryWitnessCapabilities {
+    inline,
+    static_value,
+    unique,
+    ordinary_region,
+    sealed_region,
+    borrow,
+    process_codec,
+    list_element,
+    equality,
+});
 canonical_struct!(MemoryWitnessFacts {
     ty,
     semantic_contract,
     requirement,
     mode,
+    capabilities,
     closure,
     root_projection,
     domain,

@@ -8,6 +8,10 @@ use lkjscript_vm::run_chunk;
 
 #[path = "enum_execution/adversarial.rs"]
 mod adversarial;
+#[path = "enum_execution/authenticated_option_result.rs"]
+mod authenticated_option_result;
+#[path = "enum_execution/authenticated_rehydration.rs"]
+mod authenticated_rehydration;
 #[path = "enum_execution/enum_source_variants.rs"]
 mod enum_source_variants;
 #[path = "enum_execution/native_ssa.rs"]

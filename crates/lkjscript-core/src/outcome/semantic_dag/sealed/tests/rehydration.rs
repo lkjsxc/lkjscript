@@ -1,5 +1,5 @@
 use super::*;
-use lkjscript_core::{
+use crate::{
     SealedSemanticDagError, SealedSemanticDagRuntime, StructuralError, StructuralLimit,
     StructuralLimits,
 };

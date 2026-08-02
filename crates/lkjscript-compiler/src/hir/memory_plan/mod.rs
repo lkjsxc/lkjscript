@@ -3,6 +3,7 @@ use lkjscript_core::Result;
 use crate::hir;
 
 mod encoding;
+mod executable_witness;
 mod model;
 mod producer;
 mod verifier;
@@ -10,6 +11,7 @@ mod verifier;
 pub use model::*;
 
 use encoding::compute_plan_id;
+pub(crate) use executable_witness::{executable_dependencies, executable_facts};
 
 pub(crate) fn memory_type_identity(ty: &MemoryType) -> Result<[u8; 32]> {
     encoding::compute_type_id(ty)

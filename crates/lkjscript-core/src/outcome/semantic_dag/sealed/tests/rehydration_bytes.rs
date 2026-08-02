@@ -1,5 +1,5 @@
 use super::*;
-use lkjscript_core::{SealedSemanticDagRuntime, StructuralLimits};
+use crate::{SealedSemanticDagRuntime, StructuralLimits};
 
 #[test]
 fn string_path_and_bytes_rehydrate_with_canonical_chunk_export() {

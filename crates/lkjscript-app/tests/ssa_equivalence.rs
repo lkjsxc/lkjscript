@@ -1,5 +1,7 @@
 #![allow(clippy::expect_used)]
 
+#[path = "ssa_equivalence/authenticated_path.rs"]
+mod authenticated_path;
 #[path = "ssa_equivalence/bytes.rs"]
 mod bytes;
 #[path = "ssa_equivalence/conditional_cleanup.rs"]

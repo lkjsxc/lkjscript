@@ -5,22 +5,66 @@ use super::validated_types::{
 };
 use super::SealedSemanticDagRuntime;
 use crate::{
-    InlineStructuralValue, StructuralFieldMetadata, StructuralKind, StructuralLayoutKind,
-    StructuralType, StructuralTypeMetadata, ValidatedChunk,
+    InlineStructuralValue, MemoryWitnessValueKind, StructuralFieldMetadata, StructuralKind,
+    StructuralLayoutKind, StructuralType, StructuralTypeMetadata, StructuralTypeMode,
+    ValidatedChunk,
 };
 
 impl SealedSemanticDagRuntime {
-    pub fn rehydrate_validated_return(
+    pub fn rehydrate_authenticated_return(
         &mut self,
         chunk: &ValidatedChunk,
         snapshot: SemanticDagSnapshot,
     ) -> Result<SealedSemanticDagOwner, SealedSemanticDagFailure> {
+        if let Err(error) = authenticate_return_witness(chunk) {
+            return Err(SealedSemanticDagFailure::new(error, snapshot));
+        }
         let (root, closure) = match validated_shape(chunk, &snapshot) {
             Ok(plan) => plan,
             Err(error) => return Err(SealedSemanticDagFailure::new(error, snapshot)),
         };
         self.rehydrate(snapshot, root, &closure)
     }
+}
+
+fn authenticate_return_witness(chunk: &ValidatedChunk) -> Result<(), SealedSemanticDagError> {
+    let representation_id = chunk
+        .main()
+        .return_structural
+        .ok_or(SealedSemanticDagError::MissingValidatedReturn)?;
+    let representation = chunk
+        .structural_representations()
+        .get(representation_id.index())
+        .filter(|item| item.id == representation_id)
+        .ok_or(SealedSemanticDagError::MissingValidatedReturn)?;
+    let value_type = structural_type(chunk, representation.type_id)?;
+    let witness = chunk
+        .memory_witnesses()
+        .binary_search_by_key(&value_type.witness, |item| item.id)
+        .ok()
+        .and_then(|index| chunk.memory_witnesses().get(index))
+        .ok_or(SealedSemanticDagError::MissingAuthenticatedWitness)?;
+    let expected_mode = match value_type.mode {
+        StructuralTypeMode::Copy => lkjscript_contracts::MemoryWitnessMode::Copy,
+        StructuralTypeMode::Immutable => lkjscript_contracts::MemoryWitnessMode::ImmutableValue,
+        StructuralTypeMode::Affine => lkjscript_contracts::MemoryWitnessMode::Affine,
+    };
+    let authenticated = witness.facts.mode == expected_mode
+        && witness.facts.capabilities.sealed_region
+        && witness.facts.capabilities.process_codec
+        && !witness.facts.contains_borrow
+        && witness.facts.root == lkjscript_contracts::MemoryWitnessRoot::Structural
+        && witness.facts.codec == lkjscript_contracts::MemoryWitnessCodec::Eligible
+        && witness
+            .facts
+            .operations
+            .binary_search(&lkjscript_contracts::MemoryWitnessOperation::Decode)
+            .is_ok()
+        && witness.value_kind == MemoryWitnessValueKind::Structural(representation_id);
+    if !authenticated {
+        return Err(SealedSemanticDagError::UnauthenticatedValidatedType);
+    }
+    Ok(())
 }
 
 fn validated_shape(
@@ -103,6 +147,20 @@ fn validate_node(
                 return Err(SealedSemanticDagError::ValidatedShapeMismatch);
             };
             push_fields(chunk, children, fields, pending)
+        }
+        (StructuralKind::Enum, SemanticDagPayload::Enum { tag, fields }) => {
+            let ExpectedType::Structural(id) = authority else {
+                return Err(SealedSemanticDagError::ValidatedShapeMismatch);
+            };
+            let metadata = structural_type(chunk, id)?;
+            let StructuralLayoutKind::Enum { variants, .. } = layout(chunk, metadata)? else {
+                return Err(SealedSemanticDagError::ValidatedShapeMismatch);
+            };
+            let active = variants
+                .iter()
+                .find(|variant| variant.physical_tag == *tag)
+                .ok_or(SealedSemanticDagError::ValidatedShapeMismatch)?;
+            push_fields(chunk, fields, &active.fields, pending)
         }
         _ => Err(SealedSemanticDagError::ValidatedShapeMismatch),
     }

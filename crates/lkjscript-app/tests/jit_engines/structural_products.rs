@@ -1,7 +1,9 @@
 use crate::canonical::compile;
 use lkjscript_core::{
     decode_execution_outcome, encode_execution_outcome, ExecutionConfig, ExecutionOutcome,
-    SemanticPayload,
+    OwnedValue, SealedSemanticDagRuntime, SemanticDagKind, SemanticDagNode, SemanticDagNodeId,
+    SemanticDagPayload, SemanticDagSnapshot, SemanticDagType, SemanticPayload, StructuralKind,
+    StructuralLimits, StructuralSnapshotLimits, StructuralType,
 };
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
@@ -81,4 +83,97 @@ fn copy_product_returns_are_flat_key_free_and_codec_stable() {
         decode_execution_outcome(&encoded, 64 * 1024).expect("decode copy product"),
         expected
     );
+}
+
+#[test]
+fn compiler_witness_authenticates_sealed_product_rehydration() {
+    let source = concat!(
+        "product/\nname/\nbox\n/name\nfields/\nfield/\nname/\nvalue\n/name\ntype/\n",
+        "string\n/type\n/field\n/fields\n/product\nmain/\nsig/\ninputs/\n/inputs\n",
+        "output/\nproduct/\nbox\n/product\n/output\n/sig\nproduct-value/\nbox\n",
+        "field/\nvalue\nstring-literal/\nauthenticated\n/string-literal\n/field\n",
+        "/product-value\n/main\n",
+    );
+    let program = compile(source, "authenticated-product-return.lkjscript");
+    let chunk = program.bytecode();
+    let product = chunk
+        .structural_types()
+        .iter()
+        .find(|item| matches!(item.runtime_type.kind, StructuralKind::Product))
+        .expect("product structural type");
+    let witness = chunk
+        .memory_witnesses()
+        .iter()
+        .find(|item| item.id == product.witness)
+        .expect("installed product witness");
+    assert!(witness.facts.capabilities.sealed_region);
+    assert_eq!(
+        witness.facts.domain,
+        lkjscript_contracts::MemoryWitnessDomain::UniqueStructural
+    );
+    assert_eq!(
+        witness.facts.copy,
+        lkjscript_contracts::MemoryWitnessCopy::Structural
+    );
+
+    let string = chunk
+        .structural_types()
+        .iter()
+        .find(|item| matches!(item.runtime_type.kind, StructuralKind::String))
+        .expect("string structural type");
+    let nodes = vec![
+        SemanticDagNode::new(
+            dag_type(string.runtime_type).expect("string DAG type"),
+            SemanticDagPayload::String(b"authenticated".to_vec()),
+        ),
+        SemanticDagNode::new(
+            dag_type(product.runtime_type).expect("product DAG type"),
+            SemanticDagPayload::Product(vec![SemanticDagNodeId::new(0)]),
+        ),
+    ];
+    let snapshot = SemanticDagSnapshot::new(
+        nodes,
+        SemanticDagNodeId::new(1),
+        StructuralSnapshotLimits::DEFAULT,
+    )
+    .expect("product semantic DAG");
+    let expected = snapshot.clone();
+    let wire = encode_execution_outcome(
+        &ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot)),
+        64 * 1024,
+    )
+    .expect("encode key-free process outcome");
+    let decoded = decode_execution_outcome(&wire, 64 * 1024).expect("decode process outcome");
+    let snapshot = decoded
+        .returned()
+        .and_then(OwnedValue::as_semantic_dag)
+        .cloned()
+        .expect("decoded key-free semantic DAG");
+    let mut runtime =
+        SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("fresh sealed runtime");
+    let owner = runtime
+        .rehydrate_authenticated_return(chunk, snapshot)
+        .expect("authenticated compiler return rehydrates");
+    let borrowed = runtime.begin_borrow(&owner).expect("borrow sealed owner");
+    assert_eq!(
+        runtime.export_snapshot(&borrowed).expect("export"),
+        expected
+    );
+    runtime.end_borrow(borrowed).expect("end borrow");
+    let release = runtime.release(owner).expect("release sealed owner");
+    assert_eq!(release.regions_released, 1);
+    assert_eq!(runtime.metrics().runtime.live_domains, 0);
+}
+
+fn dag_type(value: StructuralType) -> Option<SemanticDagType> {
+    let kind = match value.kind {
+        StructuralKind::String => SemanticDagKind::String,
+        StructuralKind::Product => SemanticDagKind::Product,
+        _ => return None,
+    };
+    Some(SemanticDagType::new(
+        value.layout,
+        value.semantic_type,
+        kind,
+    ))
 }

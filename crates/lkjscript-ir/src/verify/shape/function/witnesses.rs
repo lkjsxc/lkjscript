@@ -39,6 +39,22 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
         {
             return fail("SSA memory witness descriptor has invalid closed facts");
         }
+        if !lkjscript_contracts::memory_witness_routes_are_compatible(&record.facts) {
+            return fail("SSA memory witness capability and operation routes are incompatible");
+        }
+        let dependency_ids: Vec<_> = record
+            .dependencies
+            .iter()
+            .map(|dependency| dependency.bytes())
+            .collect();
+        let encoded = lkjscript_contracts::canonical_executable_memory_witness(
+            &record.facts,
+            &dependency_ids,
+        );
+        let recomputed = MemoryWitnessId::new(lkjscript_core::sha256(&encoded));
+        if recomputed != record.id {
+            return fail("SSA executable memory witness identity is noncanonical");
+        }
         if let Some(representation) = record.representation {
             let exact = program
                 .memory
@@ -53,8 +69,24 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
                         .types
                         .get(item.type_id.index().unwrap_or(usize::MAX))
                 });
-            if exact.is_none_or(|item| item.ty != record.ty || item.witness != record.id) {
-                return fail("SSA memory witness has a stale executable representation route");
+            let exact = exact.ok_or_else(|| {
+                crate::IrError::new(
+                    "SSA memory witness has a stale executable representation route",
+                )
+            })?;
+            let expected_mode = match exact.mode {
+                crate::StructuralTypeMode::Copy => lkjscript_contracts::MemoryWitnessMode::Copy,
+                crate::StructuralTypeMode::Immutable => {
+                    lkjscript_contracts::MemoryWitnessMode::ImmutableValue
+                }
+                crate::StructuralTypeMode::Affine => lkjscript_contracts::MemoryWitnessMode::Affine,
+            };
+            if exact.ty != record.ty
+                || exact.witness != record.id
+                || record.facts.mode != expected_mode
+                || record.facts.root != lkjscript_contracts::MemoryWitnessRoot::Structural
+            {
+                return fail("SSA memory witness structural type relinking failed");
             }
         }
         let mut dependencies = HashSet::new();
