@@ -17,8 +17,8 @@ Iterative native aggregate-equality commit: `a6de268fcc992349c47c4bca336402e263b
 Revision-15 authenticated witness commit: `715a13b93fd907660505254bfb8f3570a740d0e1`.
 Revision-16 semantic-closure commit: `187ec9bc8f68dd6a437e69d3781e81f7de6a6694`.
 Revision-17 prepared vertical commit: `5102f06a0c4c37a8c51677fa025000361300317e`.
-Historical predecessor revision: `17`; Current recorded platform revision: `18`.
-Environment: Linux x86-64, locked Rust workspace.
+Revision-18 residual compare commit: `4e176e7f858778e066ab607f9dda5d6155077a37`.
+Historical predecessor: revision 17; Current platform: revision 18; environment: locked Linux x86-64 workspace.
 
 ## Experimental Residual Witness Slice
 

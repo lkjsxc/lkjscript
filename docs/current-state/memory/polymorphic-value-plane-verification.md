@@ -108,6 +108,7 @@ unchanged retry completed with `result=ok`.
 
 ## Revision-18 Residual Compare Commands
 
+Implementation evidence commit: `4e176e7f858778e066ab607f9dda5d6155077a37`.
 The bounded compare vertical passed exact all-tier execution, malformed SSA
 rejection, strict Clippy, all 63 workspace all-target test binaries, canonical
 verification, release build and smokes, package and structure checks, retained
