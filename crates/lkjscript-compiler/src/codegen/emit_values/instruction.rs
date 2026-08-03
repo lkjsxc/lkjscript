@@ -16,6 +16,7 @@ impl Emitter<'_> {
             InstructionKind::Constant(constant) => self.emit_constant(constant)?,
             InstructionKind::Copy(value) => self.load(*value)?,
             InstructionKind::MemoryWitnessIndependentOwner { .. }
+            | InstructionKind::MemoryWitnessCompare { .. }
             | InstructionKind::MemoryWitnessDispose { .. } => {
                 self.emit_witness_instruction(&instruction.kind)?;
             }

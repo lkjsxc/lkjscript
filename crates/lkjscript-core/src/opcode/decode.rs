@@ -90,6 +90,7 @@ impl Op {
         Self::SysTtyGuardClear,
         Self::False,
         Self::True,
+        Self::MemoryWitnessCompare,
         Self::SysTtySet,
         Self::Unit,
         Self::EmptyList,

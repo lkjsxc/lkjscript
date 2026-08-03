@@ -18,6 +18,7 @@ pub fn normalize_baseline(program: &VerifiedProgram) -> crate::Result<VerifiedPr
                         | crate::InstructionKind::StringUtf8View { .. }
                         | crate::InstructionKind::StructuralCopy { .. }
                         | crate::InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | crate::InstructionKind::MemoryWitnessCompare { .. }
                         | crate::InstructionKind::MemoryWitnessDispose { .. }
                 )
             })

@@ -43,7 +43,7 @@ python3 meta/results/ai-authoring/validate.py \
 9. workspace unit tests with the locked Cargo graph.
 
 Workspace tests independently require exact structural parse/format/parse and
-byte roundtrip for all 93 tracked `.lkjscript` sources, revision/key/node/path
+byte roundtrip for all 102 tracked `.lkjscript` sources, revision/key/node/path
 invariants, iterative deep import/tree behavior, source safety maxima, and
 malformed source/descriptor containment boundaries. The Python command validates
 retained benchmark schemas and verdict consistency; it does not invoke a model

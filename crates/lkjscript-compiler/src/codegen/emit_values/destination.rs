@@ -35,6 +35,7 @@ impl Emitter<'_> {
             | InstructionKind::StringUtf8View { .. }
             | InstructionKind::StructuralCopy { .. }
             | InstructionKind::MemoryWitnessIndependentOwner { .. }
+            | InstructionKind::MemoryWitnessCompare { .. }
             | InstructionKind::MemoryWitnessDispose { .. }
             | InstructionKind::FunctionRef(_)
             | InstructionKind::Runtime { .. }

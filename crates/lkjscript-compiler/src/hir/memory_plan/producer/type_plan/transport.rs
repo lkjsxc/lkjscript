@@ -44,7 +44,15 @@ fn memory_witness_parameters(
                 .filter(|ty| matches!(ty, Type::Param(name) if name == variable))
                 .count();
             let mut operations = vec![MemoryWitnessOperation::Transport];
-            if occurrences >= 2 && function_body.is_some_and(nontrivial_owner_body) {
+            let compare =
+                function_body.is_some_and(|body| body_demands_compare(body, variable));
+            if compare {
+                operations.push(MemoryWitnessOperation::Compare);
+            }
+            if occurrences >= 2
+                && !(compare
+                    && function_body.is_some_and(|body| body_is_compare_only(body, variable)))
+            {
                 operations.extend([
                     MemoryWitnessOperation::IndependentOwner,
                     MemoryWitnessOperation::Dispose,
@@ -60,13 +68,6 @@ fn memory_witness_parameters(
         return Err(Error::msg("HIR memory witness parameters exceed 16"));
     }
     Ok(output)
-}
-
-fn nontrivial_owner_body(body: &Expr) -> bool {
-    !matches!(
-        body.kind,
-        ExprKind::Load(_) | ExprKind::Move { .. } | ExprKind::LitUnit
-    )
 }
 
 fn memory_witness_arguments(

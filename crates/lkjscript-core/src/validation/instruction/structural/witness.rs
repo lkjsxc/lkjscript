@@ -1,3 +1,38 @@
+fn witness_compare(
+    proto: &FunctionProto,
+    instruction: DecodedInstruction,
+    state: &mut State,
+) -> Result<()> {
+    let parameter = u16::try_from(instruction_operand(proto, instruction)?)
+        .map_err(|_| crate::Error::msg("memory witness parameter exceeds u16"))?;
+    let requirement = proto
+        .memory_witness_parameters
+        .iter()
+        .find(|requirement| requirement.parameter == parameter)
+        .ok_or_else(|| instruction_error(
+            proto,
+            instruction.op(),
+            instruction.offset(),
+            "memory compare parameter is missing",
+        ))?;
+    if !requirement
+        .operations
+        .contains(&lkjscript_contracts::MemoryWitnessOperation::Compare)
+    {
+        return fail(proto, instruction, "memory witness does not authorize compare");
+    }
+    for _ in 0..2 {
+        match pop(state, proto, instruction)? {
+            Kind::StructuralOwner { .. }
+            | Kind::StructuralOwnerRef { .. }
+            | Kind::Any => {}
+            _ => return fail(proto, instruction, "memory compare expects witness values"),
+        }
+    }
+    state.stack.push(Kind::Bool);
+    Ok(())
+}
+
 fn witness_dispose(
     proto: &FunctionProto,
     instruction: DecodedInstruction,

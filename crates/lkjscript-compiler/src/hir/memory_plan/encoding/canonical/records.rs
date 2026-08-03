@@ -9,8 +9,9 @@ unit_enum!(MemoryUseKind {
 });
 unit_enum!(MemoryWitnessOperation {
     Transport = 0,
-    IndependentOwner = 1,
-    Dispose = 2,
+    Compare = 1,
+    IndependentOwner = 2,
+    Dispose = 3,
 });
 canonical_struct!(MemoryWitnessParameter {
     parameter,

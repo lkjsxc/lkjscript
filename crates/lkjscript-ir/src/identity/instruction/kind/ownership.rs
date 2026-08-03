@@ -153,6 +153,16 @@ pub(super) fn encode(out: &mut Encoder, value: &InstructionKind) {
             out.string(parameter);
             out.u32(value.raw());
         }
+        InstructionKind::MemoryWitnessCompare {
+            parameter,
+            left,
+            right,
+        } => {
+            out.tag(20);
+            out.string(parameter);
+            out.u32(left.raw());
+            out.u32(right.raw());
+        }
         _ => out.fail("verified SSA identity ownership instruction partition failed"),
     }
 }

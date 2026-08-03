@@ -58,6 +58,7 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::SameObject
         | Op::ListEqual
         | Op::F64BitsEqual
+        | Op::MemoryWitnessCompare
         | Op::StrRef
         | Op::StrAppend
         | Op::SysWriteByte

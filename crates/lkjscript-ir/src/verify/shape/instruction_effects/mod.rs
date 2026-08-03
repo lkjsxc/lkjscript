@@ -39,6 +39,7 @@ pub(crate) fn expected_instruction_effects(
             super::memory_instruction::verify(program, function, instruction, types)?
         }
         InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessCompare { .. }
         | InstructionKind::MemoryWitnessDispose { .. } => {
             super::structural_instruction::verify_witness(program, function, instruction, types)?
         }

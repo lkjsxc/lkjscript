@@ -66,6 +66,7 @@ pub(super) fn preflight_function(
                 }
                 InstructionKind::Copy(_)
                 | InstructionKind::MemoryWitnessIndependentOwner { .. }
+                | InstructionKind::MemoryWitnessCompare { .. }
                 | InstructionKind::MemoryWitnessDispose { .. } => {}
                 InstructionKind::ProductField { value, .. }
                     if domain == LoweringDomain::StructuralIsland

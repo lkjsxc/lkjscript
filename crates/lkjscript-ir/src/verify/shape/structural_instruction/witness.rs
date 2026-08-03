@@ -7,15 +7,17 @@ pub(crate) fn verify(
     instruction: &Instruction,
     types: &[SsaType],
 ) -> crate::Result<EffectSet> {
-    let (parameter, value, operation) = match &instruction.kind {
-        InstructionKind::MemoryWitnessIndependentOwner { parameter, value } => (
+    let (parameter, operation) = match &instruction.kind {
+        InstructionKind::MemoryWitnessIndependentOwner { parameter, .. } => (
             parameter,
-            value,
             lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
         ),
-        InstructionKind::MemoryWitnessDispose { parameter, value } => (
+        InstructionKind::MemoryWitnessCompare { parameter, .. } => (
             parameter,
-            value,
+            lkjscript_contracts::MemoryWitnessOperation::Compare,
+        ),
+        InstructionKind::MemoryWitnessDispose { parameter, .. } => (
+            parameter,
             lkjscript_contracts::MemoryWitnessOperation::Dispose,
         ),
         _ => return fail("non-witness instruction reached memory witness verifier"),
@@ -28,20 +30,28 @@ pub(crate) fn verify(
         .ok_or_else(|| {
             crate::IrError::new("SSA memory witness operation names no hidden parameter")
         })?;
-    if !requirement.operations.contains(&operation)
-        || value_type(types, *value)? != &SsaType::TypeParameter(parameter.clone())
-    {
-        return fail("SSA memory witness operation has wrong parameter or operand type");
+    if !requirement.operations.contains(&operation) {
+        return fail("SSA memory witness operation is not authorized");
     }
-    match instruction.kind {
-        InstructionKind::MemoryWitnessIndependentOwner { .. }
-            if instruction.ty == SsaType::TypeParameter(parameter.clone()) =>
+    let expected = SsaType::TypeParameter(parameter.clone());
+    match &instruction.kind {
+        InstructionKind::MemoryWitnessIndependentOwner { value, .. }
+            if value_type(types, *value)? == &expected && instruction.ty == expected =>
         {
             Ok(EffectSet::ALLOCATES)
         }
-        InstructionKind::MemoryWitnessDispose { .. } if instruction.ty == SsaType::Unit => {
+        InstructionKind::MemoryWitnessCompare { left, right, .. }
+            if value_type(types, *left)? == &expected
+                && value_type(types, *right)? == &expected
+                && instruction.ty == SsaType::Bool =>
+        {
+            Ok(EffectSet::READS_MEMORY)
+        }
+        InstructionKind::MemoryWitnessDispose { value, .. }
+            if value_type(types, *value)? == &expected && instruction.ty == SsaType::Unit =>
+        {
             Ok(EffectSet::PURE)
         }
-        _ => fail("SSA memory witness operation has wrong result type"),
+        _ => fail("SSA memory witness operation has wrong operand or result type"),
     }
 }

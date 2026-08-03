@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) fn collect_value_types(
+    program: &lkjscript_ir::Program,
     function: &Function,
     layouts: &LayoutInterner,
     modes: &BytesModes,
@@ -23,9 +24,17 @@ pub(super) fn collect_value_types(
                 } else if matches!(
                     instruction.kind,
                     InstructionKind::Call {
+                        target: CallTarget::Direct(callee),
                         instantiation: Some(ref instantiation),
                         ..
                     } if !instantiation.memory_witnesses.is_empty()
+                        && program.functions
+                            .get(callee.index().unwrap_or(usize::MAX))
+                            .filter(|function| function.id == callee)
+                            .is_some_and(|function| matches!(
+                                function.signature.result.as_ref(),
+                                SsaType::TypeParameter(_)
+                            ))
                 ) {
                     ValueType::StructuralKey
                 } else if matches!(

@@ -65,6 +65,7 @@ impl Emitter<'_> {
                 | InstructionKind::DestinationAbort { .. }
                 | InstructionKind::AggregateTag { .. }
                 | InstructionKind::StringUtf8View { .. }
+                | InstructionKind::MemoryWitnessCompare { .. }
                 | InstructionKind::MemoryWitnessDispose { .. }
                 | InstructionKind::FunctionRef(_)
                 | InstructionKind::F64FromI64Rounded { .. }

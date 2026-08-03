@@ -12,7 +12,7 @@ pub(super) fn lower_signature(
             .iter()
             .any(|requirement| requirement.parameter == *parameter)
     });
-    let residual_owner = !function.signature.type_parameters.is_empty()
+    let residual_witness = !function.signature.type_parameters.is_empty()
         && authenticated
         && function
             .signature
@@ -21,16 +21,19 @@ pub(super) fn lower_signature(
             .any(|requirement| {
                 requirement
                     .operations
-                    .contains(&lkjscript_core::MemoryWitnessOperation::IndependentOwner)
-                    && requirement
+                    .contains(&lkjscript_core::MemoryWitnessOperation::Compare)
+                    || (requirement
                         .operations
-                        .contains(&lkjscript_core::MemoryWitnessOperation::Dispose)
+                        .contains(&lkjscript_core::MemoryWitnessOperation::IndependentOwner)
+                        && requirement
+                            .operations
+                            .contains(&lkjscript_core::MemoryWitnessOperation::Dispose))
             });
-    if !function.signature.type_parameters.is_empty() && !residual_owner {
+    if !function.signature.type_parameters.is_empty() && !residual_witness {
         return Err(LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
             Some(function.id),
-            "polymorphic native signature lacks authenticated owner witnesses",
+            "polymorphic native signature lacks authenticated residual witnesses",
         ));
     }
     let entry = function
@@ -182,18 +185,4 @@ pub(super) fn lower_type(
             format!("type {ty:?} contains a reference or unsupported native representation"),
         )),
     }
-}
-
-pub(super) fn exact_layout_identity(
-    function: FunctionId,
-    layouts: &LayoutInterner,
-    ty: &SsaType,
-) -> Result<LayoutIdentity, LoweringError> {
-    layouts.identity(ty).ok_or_else(|| {
-        LoweringError::new(
-            LoweringFailureCode::UnsupportedType,
-            Some(function),
-            format!("type {ty:?} has no supported structural layout identity"),
-        )
-    })
 }

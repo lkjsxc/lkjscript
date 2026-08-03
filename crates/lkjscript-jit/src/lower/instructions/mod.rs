@@ -15,7 +15,6 @@ pub(super) fn lower_instruction(
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
     if structural_dispatch::lower_instruction(
-        program,
         function,
         instruction,
         block,
@@ -27,14 +26,14 @@ pub(super) fn lower_instruction(
     )? {
         return Ok(());
     }
-    if let InstructionKind::MemoryWitnessIndependentOwner { parameter, value }
-    | InstructionKind::MemoryWitnessDispose { parameter, value } = &instruction.kind
+    if let InstructionKind::MemoryWitnessIndependentOwner { parameter, .. }
+    | InstructionKind::MemoryWitnessCompare { parameter, .. }
+    | InstructionKind::MemoryWitnessDispose { parameter, .. } = &instruction.kind
     {
         let output = structural::lower_witness_operation(
             function,
             instruction,
             parameter,
-            *value,
             block,
             locals,
             builder,
@@ -158,9 +157,9 @@ pub(super) fn lower_instruction(
         | InstructionKind::StringUtf8View { .. }
         | InstructionKind::StructuralCopy { .. }
         | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessCompare { .. }
         | InstructionKind::MemoryWitnessDispose { .. } => {
             let lowered = structural_dispatch::lower_instruction(
-                program,
                 function,
                 instruction,
                 block,

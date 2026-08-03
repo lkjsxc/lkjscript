@@ -47,7 +47,15 @@ pub(super) fn verified_witness_parameters(
                 .filter(|ty| matches!(ty, Type::Param(name) if name == variable))
                 .count();
             let mut operations = vec![MemoryWitnessOperation::Transport];
-            if occurrences >= 2 && function_body.is_some_and(verified_nontrivial_owner_body) {
+            let compare =
+                function_body.is_some_and(|body| verifier_demands_compare(body, variable));
+            if compare {
+                operations.push(MemoryWitnessOperation::Compare);
+            }
+            if occurrences >= 2
+                && !(compare
+                    && function_body.is_some_and(|body| verifier_compare_only(body, variable)))
+            {
                 operations.extend([
                     MemoryWitnessOperation::IndependentOwner,
                     MemoryWitnessOperation::Dispose,
@@ -63,13 +71,6 @@ pub(super) fn verified_witness_parameters(
         return Err(Error::msg("memory verifier witness parameters exceed 16"));
     }
     Ok(output)
-}
-
-fn verified_nontrivial_owner_body(body: &hir::Expr) -> bool {
-    !matches!(
-        body.kind,
-        hir::ExprKind::Load(_) | hir::ExprKind::Move { .. } | hir::ExprKind::LitUnit
-    )
 }
 
 pub(super) fn verified_witness_arguments(

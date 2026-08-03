@@ -5,6 +5,7 @@
 <!-- LKJ-STATUS id=byte-text-ownership status=accepted-contract -->
 <!-- LKJ-STATUS id=canonical-lowercase-vocabulary status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
+<!-- LKJ-STATUS id=compiler-selected-sealed-value-vertical status=current -->
 <!-- LKJ-STATUS id=enum-declarations status=current -->
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=jit-auto-promotion status=accepted-selection -->
@@ -22,6 +23,7 @@
 <!-- LKJ-STATUS id=os-resident-runtime-foundation status=current -->
 <!-- LKJ-STATUS id=repository-graph-context status=current -->
 <!-- LKJ-STATUS id=repository-topology status=current -->
+<!-- LKJ-STATUS id=residual-generic-compare-vertical status=current -->
 <!-- LKJ-STATUS id=resource-profile-compiler status=current -->
 <!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
@@ -34,11 +36,10 @@
 <!-- LKJ-STATUS id=typed-capabilities status=current -->
 <!-- LKJ-STATUS id=typed-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=typed-vm-scalars status=current -->
-This file is the concise Current authority. Historical source generations,
-protocol experiments, candidate resource profiles, rejected performance
-results, and immutable AI-authorability records live only under
-`docs/history/`, `docs/vision/experiments/`, retained benchmark result trees, or
-Git history. They do not provide aliases or acceptance fallbacks.
+This concise Current authority excludes historical source generations, protocol
+experiments, candidate profiles, rejected results, and immutable AI records.
+Those remain under `docs/history/`, `docs/vision/experiments/`, retained results,
+or Git history and provide no aliases or acceptance fallbacks.
 ## Language and source
 - `.lkjscript` is the only accepted suffix. Source is marker-free with one exact
   contract digest; unknown or removed marker forms are ordinary syntax errors.
@@ -136,8 +137,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
   dependencies; malformed routes reject. The Current prepared sealed-value vertical binds
   typed package provenance, independently verified placement, semantic/native SSA, bytecode,
   contracts, and resource profile in one immutable identity. Exact routes select unique fusion,
-  bounded clone, or coarse sealed sharing. Residual generic independent-owner and dispose
-  execute in evaluator, VM, forced baseline, and forced proof with zero fallback.
+  bounded clone, or coarse sealed sharing. Residual generic independent-owner, dispose, and the
+  bounded authenticated compare vertical execute in all four tiers with zero fallback.
   Specializations reverify SSA and are bounded at 32/declaration, 1,024/package, and 4,096 operations.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
   object families, services, liveness maps, configuration, and metrics across
@@ -151,9 +152,7 @@ Git history. They do not provide aliases or acceptance fallbacks.
   processes. Bounded key-free semantic DAG outcomes bind exact prepared/package/entry/
   return/root provenance; a fresh parent authenticates, rehydrates, canonically exports,
   and tears them down with zero live obligations.
-- Resource categories and profiles use full category/profile/maxima/ceiling
-  digests. The selected compiler-phase ledger is Current; one request-owned
-  compiler/runtime ledger remains an accepted target.
+- Resource categories and profiles use exact digest-bound ceilings; the compiler-phase ledger is Current.
 - The measured semantic resource runtime, Linux observation, owner homes,
   scheduled optimizer/native integrations, and selected defaults are Current.
   See [exact evidence](current-state/semantic-resource-plane-evidence.md).

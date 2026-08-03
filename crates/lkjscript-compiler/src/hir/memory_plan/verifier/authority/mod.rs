@@ -8,6 +8,7 @@ mod escapes;
 mod loans;
 mod modes;
 mod obligations;
+mod witness_demand;
 mod witnesses;
 
 use call_signatures::*;
@@ -18,6 +19,7 @@ use escapes::*;
 use loans::*;
 use modes::*;
 use obligations::*;
+use witness_demand::*;
 use witnesses::*;
 
 pub(super) fn verify_authority(

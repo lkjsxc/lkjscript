@@ -1,5 +1,19 @@
 use super::*;
 
+pub(super) fn exact_layout_identity(
+    function: FunctionId,
+    layouts: &LayoutInterner,
+    ty: &SsaType,
+) -> Result<LayoutIdentity, LoweringError> {
+    layouts.identity(ty).ok_or_else(|| {
+        LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            format!("type {ty:?} has no supported structural layout identity"),
+        )
+    })
+}
+
 pub(in crate::lower) fn require_resource_island_type(
     function: FunctionId,
     ty: &SsaType,

@@ -38,6 +38,15 @@ macro_rules! lifecycle_services {
             self.dispose_witness_owner(witness, key)
         }
 
+        fn compare_structural_values(
+            &mut self,
+            witness: u16,
+            left: u64,
+            right: u64,
+        ) -> Result<bool, NativeServiceError> {
+            self.compare_witness_values(witness, left, right)
+        }
+
         fn drop_structural(
             &mut self,
             owner: NativeStructuralOwner,

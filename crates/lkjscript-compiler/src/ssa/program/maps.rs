@@ -44,6 +44,9 @@ fn witness_parameters(
                                 crate::memory_plan::MemoryWitnessOperation::Transport => {
                                     lkjscript_contracts::MemoryWitnessOperation::Transport
                                 }
+                                crate::memory_plan::MemoryWitnessOperation::Compare => {
+                                    lkjscript_contracts::MemoryWitnessOperation::Compare
+                                }
                                 crate::memory_plan::MemoryWitnessOperation::IndependentOwner => {
                                     lkjscript_contracts::MemoryWitnessOperation::IndependentOwner
                                 }

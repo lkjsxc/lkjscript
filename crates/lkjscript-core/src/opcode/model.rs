@@ -50,6 +50,7 @@ pub enum Op {
     SysTtyGuardClear = 79,
     False = 80,
     True = 81,
+    MemoryWitnessCompare = 82,
     SysTtySet = 83,
     Unit = 84,
     EmptyList = 86,

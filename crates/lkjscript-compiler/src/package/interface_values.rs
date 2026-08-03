@@ -45,6 +45,7 @@ pub(super) fn requirement(
         .iter()
         .map(|operation| match operation {
             crate::memory_plan::MemoryWitnessOperation::Transport => "transport".into(),
+            crate::memory_plan::MemoryWitnessOperation::Compare => "compare".into(),
             crate::memory_plan::MemoryWitnessOperation::IndependentOwner => {
                 "independent-owner".into()
             }

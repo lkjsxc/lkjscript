@@ -62,6 +62,7 @@ fn must_retain_instruction(instruction: &Instruction) -> bool {
                 | InstructionKind::Move { .. }
                 | InstructionKind::Borrow { .. }
                 | InstructionKind::MemoryWitnessIndependentOwner { .. }
+                | InstructionKind::MemoryWitnessCompare { .. }
                 | InstructionKind::MemoryWitnessDispose { .. }
         )
 }

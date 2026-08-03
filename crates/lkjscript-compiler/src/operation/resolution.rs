@@ -43,7 +43,7 @@ impl Operation {
                         "equal-value: operands must have the same type, got {left} and {right}"
                     ));
                 }
-                if !supports_value_equality(left) {
+                if !supports_value_equality(left) && !matches!(left, Type::Param(_)) {
                     return Err(format!(
                         "equal-value: type {left} does not support value equality"
                     ));

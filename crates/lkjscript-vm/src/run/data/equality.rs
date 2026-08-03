@@ -1,6 +1,10 @@
 use super::*;
 
-fn value_equal<J: RuntimeTier>(vm: &Vm<'_, J>, left: Value, right: Value) -> Result<bool> {
+pub(crate) fn value_equal<J: RuntimeTier>(
+    vm: &Vm<'_, J>,
+    left: Value,
+    right: Value,
+) -> Result<bool> {
     let mut pending = vec![(left, right)];
     let mut steps = 0_usize;
     while let Some((left, right)) = pending.pop() {

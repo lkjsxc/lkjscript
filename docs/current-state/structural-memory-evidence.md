@@ -29,8 +29,9 @@ this file retains earlier substrate commands as historical evidence.
 - Every interned HIR type has a platform-bound canonical exact-facts witness independently
   reconstructed by the verifier over the resolved type and declaration set.
   Concrete regular recursive enums derive SCC closure; transformed, wrapped, or
-  affine recursion fails. Deterministic products permit process codecs; residual
-  witness/package export is not Current; see [experimental evidence](memory/polymorphic-value-plane-evidence.md).
+  affine recursion fails. The narrow prepared vertical now binds residual
+  witnesses and package provenance; broader operations remain Experimental in
+  the [polymorphic evidence](memory/polymorphic-value-plane-evidence.md).
 - Acyclic products closed over copy lists, scalar leaves, and selected region
   products use bounded records under canonical plan/name identities. All four tiers
   construct, project, update, call, and bulk-reset them. Native dispatch is
@@ -185,16 +186,15 @@ Miri passed the focused table tests. Rust nightly does not provide an undefined
 sanitizer, `cargo-fuzz` and repository fuzz harnesses are absent, and the WASI
 probe built but could not execute because `wasmtime` is unavailable.
 ## Explicit Limits
-
 - The structural contract digest is
   `9ba894d9d214c84ec286ecfb11df5da52b570c5d5d650ad2151559d582300d38`.
 - Pool borrowing is currently bounded by Rust references inside the safe core;
   cross-call runtime loan slots remain a backend integration target.
-- No sealed compact image is implemented.
+- No general sealed compact-image representation exists beyond the narrow
+  prepared sealed-region route.
 - No per-node precise reference count is implemented or selected.
-- The no-RC candidate comparison, real region/pool HIR and backend selection,
-  retained migration measurements for the three remaining families, undefined
-  sanitizer, and fuzzing remain untested. Current Miri plus address, leak, and
-  thread sanitizer gates pass; `cargo-fuzz` and `wasmtime` are unavailable.
+- At this substrate checkpoint the no-RC comparison was untested; revision 17
+  later selected coarse sealed ownership and retained the comparison. General
+  region/pool selection, undefined sanitizer, and fuzzing remain untested.
 - This substrate checkpoint alone did not establish the later whole-runtime
   no-tracing claim; the final zero-family evidence does.

@@ -35,6 +35,7 @@ struct Producer<'a> {
 
 include!("producer/type_graph.rs");
 include!("producer/type_plan/mod.rs");
+include!("producer/type_plan/demand.rs");
 include!("producer/type_plan/transport.rs");
 include!("producer/type_plan/transport_calls.rs");
 include!("producer/type_helpers.rs");

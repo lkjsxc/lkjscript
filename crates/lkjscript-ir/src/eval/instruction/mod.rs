@@ -14,6 +14,15 @@ impl Evaluator<'_> {
             InstructionKind::MemoryWitnessIndependentOwner { value: source, .. } => {
                 self.copy_eval_value(value(values, *source)?)
             }
+            InstructionKind::MemoryWitnessCompare { left, right, .. } => {
+                let left = value(values, *left)?;
+                let right = value(values, *right)?;
+                let equal = match self.structural_value_equal(left, right) {
+                    Some(result) => result?,
+                    None => value_equal(left, right)?,
+                };
+                Ok(EvalValue::Bool(equal))
+            }
             InstructionKind::MemoryWitnessDispose { value: source, .. } => {
                 let owner = take_value(values, *source)?;
                 self.cleanup_eval_value(owner)?;

@@ -25,6 +25,7 @@ pub(super) fn kind_value(out: &mut Encoder, value: &InstructionKind) {
         | InstructionKind::StringUtf8View { .. }
         | InstructionKind::StructuralCopy { .. }
         | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessCompare { .. }
         | InstructionKind::MemoryWitnessDispose { .. } => ownership::encode(out, value),
         InstructionKind::FunctionRef(_)
         | InstructionKind::Runtime { .. }

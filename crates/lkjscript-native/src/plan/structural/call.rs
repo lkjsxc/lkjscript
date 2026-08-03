@@ -71,6 +71,14 @@ fn operation_signature(operation: &StructuralOperation) -> Result<Signature, Pla
             vec![ValueType::MemoryWitnessLocator, ValueType::StructuralKey],
             ValueType::StructuralKey,
         )?,
+        StructuralOperation::WitnessCompare => Signature::new(
+            vec![
+                ValueType::MemoryWitnessLocator,
+                ValueType::StructuralKey,
+                ValueType::StructuralKey,
+            ],
+            ValueType::Bool,
+        )?,
         StructuralOperation::WitnessDispose => Signature::new(
             vec![ValueType::MemoryWitnessLocator, ValueType::StructuralKey],
             ValueType::Unit,

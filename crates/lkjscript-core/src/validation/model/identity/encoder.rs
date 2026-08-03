@@ -74,6 +74,12 @@ impl Encoder {
             Err(_) => self.fail("validated bytecode identity length overflow"),
         }
     }
+    pub(super) fn offset(&mut self, value: usize) {
+        match u64::try_from(value) {
+            Ok(value) => self.u64(value),
+            Err(_) => self.fail("decoded bytecode offset overflow"),
+        }
+    }
     pub(super) fn bytes(&mut self, value: &[u8]) {
         self.len(value.len());
         self.append(value);

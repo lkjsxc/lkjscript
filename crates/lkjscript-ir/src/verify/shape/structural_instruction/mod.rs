@@ -176,6 +176,7 @@ pub(super) fn verify(
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
         | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessCompare { .. }
         | InstructionKind::MemoryWitnessDispose { .. }
         | InstructionKind::FunctionRef(_)
         | InstructionKind::Runtime { .. }

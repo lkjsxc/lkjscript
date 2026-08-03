@@ -3,17 +3,11 @@ use crate::{DecodedInstruction, Op};
 
 pub(super) fn instructions(out: &mut Encoder, values: &[DecodedInstruction]) {
     out.sequence(values, |out, value| {
-        usize_value(out, value.offset());
-        usize_value(out, value.next_offset());
+        out.offset(value.offset());
+        out.offset(value.next_offset());
         op(out, value.op());
         out.option(value.operand().as_ref(), |out, value| out.u16(*value));
     });
-}
-fn usize_value(out: &mut Encoder, value: usize) {
-    match u64::try_from(value) {
-        Ok(value) => out.u64(value),
-        Err(_) => out.fail("decoded bytecode offset overflow"),
-    }
 }
 fn op(out: &mut Encoder, value: Op) {
     use Op::*;
@@ -196,5 +190,6 @@ fn op(out: &mut Encoder, value: Op) {
         StructuralAggregateFieldCopy => 175,
         MemoryWitnessIndependentOwner => 176,
         MemoryWitnessDispose => 177,
+        MemoryWitnessCompare => 178,
     });
 }

@@ -40,6 +40,7 @@ pub(super) fn apply(
         Op::StructuralStringUtf8View => string_utf8_view(chunk, proto, instruction, state),
         Op::StructuralCopy => structural_copy(chunk, proto, instruction, state),
         Op::MemoryWitnessIndependentOwner => witness_independent_owner(proto, instruction, state),
+        Op::MemoryWitnessCompare => witness_compare(proto, instruction, state),
         Op::MemoryWitnessDispose => witness_dispose(proto, instruction, state),
         _ => unreachable!("structural opcode family checked"),
     }

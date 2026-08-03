@@ -16,12 +16,14 @@ fn explicit_equality_families_enforce_static_categories() {
             .resolve_types(&[ty.clone(), ty])
             .is_ok());
     }
+    assert!(Operation::EqualValue
+        .resolve_types(&[Type::Param("t".into()), Type::Param("t".into())])
+        .is_ok());
     for ty in [
         Type::Bytes,
         Type::ByteVector,
         Type::Resource(lkjscript_core::ResourceKind::FileReader),
         Type::List(Box::new(Type::I64)),
-        Type::Param("t".into()),
         Type::Fn {
             params: Vec::new(),
             ret: Box::new(Type::Unit),

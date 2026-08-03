@@ -50,13 +50,11 @@ provider token, resource, or affine payload.
 ## Rejected Witness-Fact Shortcut
 
 A post-`a77a3572` candidate that accepted hand-authored sealed witness flags was
-removed. Current compiler policy emits deterministic products as unique,
-worker-local, single-owner values with dynamic ownership, not sealed-share
-witnesses. Core bytecode validation also does not recompute a witness ID from
-executable facts or link their full semantic identities back to HIR authority.
-Accepting those flags would therefore authorize forged metadata rather than a
-compiler-produced proof. Exact witness authentication and a reachable producer
-must precede this binding.
+removed. At these prerequisite commits, compiler policy emitted unique
+single-owner products and bytecode lacked complete executable authentication.
+Revision 17 later added the narrow authenticated producer, verifier, placement,
+and prepared route without restoring caller-selected flags. The rejected
+shortcut remains negative evidence.
 
 ## Focused Coverage
 
@@ -115,7 +113,7 @@ pre-existing atomic `fetch_update` deprecation warnings and no error occurred.
 Both reproducible Miri target directories were removed after recording compact
 evidence.
 
-## Explicitly Untested
+## Untested At These Prerequisite Commits
 
 - release-workspace and Docker gates after this prerequisite;
 - ASan, LSan, and TSan after this prerequisite;

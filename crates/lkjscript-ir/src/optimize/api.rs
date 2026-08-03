@@ -62,6 +62,7 @@ fn has_explicit_structural_operations(program: &Program) -> bool {
                         | crate::InstructionKind::StringUtf8View { .. }
                         | crate::InstructionKind::StructuralCopy { .. }
                         | crate::InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | crate::InstructionKind::MemoryWitnessCompare { .. }
                         | crate::InstructionKind::MemoryWitnessDispose { .. }
                 )
             })

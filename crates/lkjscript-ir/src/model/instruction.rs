@@ -99,6 +99,11 @@ pub enum InstructionKind {
         parameter: String,
         value: ValueId,
     },
+    MemoryWitnessCompare {
+        parameter: String,
+        left: ValueId,
+        right: ValueId,
+    },
     MemoryWitnessDispose {
         parameter: String,
         value: ValueId,

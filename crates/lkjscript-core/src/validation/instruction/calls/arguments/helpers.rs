@@ -12,6 +12,18 @@ fn independent_owner_parameter(callee: &FunctionProto, variable: u16) -> bool {
         })
 }
 
+fn witness_observer_parameter(callee: &FunctionProto, variable: u16) -> bool {
+    callee
+        .memory_witness_parameters
+        .iter()
+        .find(|requirement| requirement.parameter == variable)
+        .is_some_and(|requirement| {
+            requirement
+                .operations
+                .contains(&lkjscript_contracts::MemoryWitnessOperation::Compare)
+        })
+}
+
 fn bind_structural_variable(
     variables: &mut Vec<(u16, crate::StructuralRepresentationId)>,
     variable: u16,

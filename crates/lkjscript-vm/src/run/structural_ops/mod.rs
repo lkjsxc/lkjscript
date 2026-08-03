@@ -66,6 +66,7 @@ pub(super) fn handles(op: u8) -> bool {
                 | lkjscript_core::Op::StructuralStringUtf8View
                 | lkjscript_core::Op::StructuralCopy
                 | lkjscript_core::Op::MemoryWitnessIndependentOwner
+                | lkjscript_core::Op::MemoryWitnessCompare
                 | lkjscript_core::Op::MemoryWitnessDispose
         )
     )
@@ -89,6 +90,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         | lkjscript_core::Op::StructuralPublish
         | lkjscript_core::Op::StructuralCopy
         | lkjscript_core::Op::MemoryWitnessIndependentOwner
+        | lkjscript_core::Op::MemoryWitnessCompare
         | lkjscript_core::Op::MemoryWitnessDispose => publish::dispatch(vm, op),
         lkjscript_core::Op::StructuralDestinationCreate
         | lkjscript_core::Op::StructuralDestinationFieldInit

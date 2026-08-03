@@ -20,6 +20,7 @@ pub fn copy_propagate(verified: &VerifiedProgram) -> crate::Result<VerifiedProgr
                         | InstructionKind::StringUtf8View { .. }
                         | InstructionKind::StructuralCopy { .. }
                         | InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | InstructionKind::MemoryWitnessCompare { .. }
                         | InstructionKind::MemoryWitnessDispose { .. }
                 )
             })

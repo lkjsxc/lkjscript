@@ -125,7 +125,8 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> Result<u64, O
         | InstructionKind::ProductField { .. }
         | InstructionKind::EnumIsVariant { .. }
         | InstructionKind::EnumField { .. } => 1,
-        InstructionKind::DestinationFieldInit { .. } => 2,
+        InstructionKind::DestinationFieldInit { .. }
+        | InstructionKind::MemoryWitnessCompare { .. } => 2,
         InstructionKind::Runtime { arguments, .. }
         | InstructionKind::Call {
             target: crate::CallTarget::Direct(_),

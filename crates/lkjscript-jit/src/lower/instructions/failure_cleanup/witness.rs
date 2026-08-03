@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn call_result_witness_slot(
+pub(in crate::lower::instructions) fn call_result_witness_slot(
     function: &Function,
     value: ValueId,
     layouts: &LayoutInterner,

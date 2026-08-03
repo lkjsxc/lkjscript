@@ -4,7 +4,7 @@ fn process_aggregate_payload(
     place: &Option<PlaceId>,
     value: &crate::ValueId,
     state: &mut OwnershipState,
-    live_loans: &BTreeMap<PlaceId, Vec<LiveLoan>>,
+    live_loans: &std::collections::BTreeMap<PlaceId, Vec<LiveLoan>>,
     types: &[SsaType],
 ) -> crate::Result<()> {
     let value_ty = types

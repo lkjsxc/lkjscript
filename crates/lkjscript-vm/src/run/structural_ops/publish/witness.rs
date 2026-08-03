@@ -1,5 +1,37 @@
 use super::*;
 
+pub(super) fn compare<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
+    let parameter = u16::from(vm.read_u8()?);
+    let binding = vm
+        .frames
+        .last()
+        .and_then(|frame| {
+            frame
+                .memory_witnesses
+                .iter()
+                .find(|binding| binding.parameter == parameter)
+        })
+        .ok_or_else(|| Error::msg("memory compare witness is missing"))?;
+    let witness = vm
+        .chunk
+        .memory_witnesses()
+        .get(usize::from(binding.witness))
+        .ok_or_else(|| Error::msg("memory compare witness slot is stale"))?;
+    if witness
+        .facts
+        .operations
+        .binary_search(&lkjscript_core::MemoryWitnessOperation::Compare)
+        .is_err()
+    {
+        return Err(Error::msg("memory witness rejects compare"));
+    }
+    let right = vm.pop()?;
+    let left = vm.pop()?;
+    let equal = crate::run::data::value_equal(vm, left, right)?;
+    vm.push(Value::from_bool(equal));
+    Ok(())
+}
+
 pub(super) fn dispose_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let parameter = u16::from(vm.read_u8()?);
     let binding = vm

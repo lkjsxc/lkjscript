@@ -71,9 +71,18 @@ fn validate_structural_arguments(
                 None,
                 Some(variable),
                 false,
+                Kind::StructuralOwner { representation, .. },
+            ) if witness_observer_parameter(callee, variable) => {
+                bind_structural_variable(&mut variables, variable, representation)
+            }
+            (
+                None,
+                Some(variable),
+                false,
                 Kind::StructuralOwnerRef { representation, .. },
             ) if copy_structural_representation(chunk, representation)
-                || independent_owner_parameter(callee, variable) => {
+                || independent_owner_parameter(callee, variable)
+                || witness_observer_parameter(callee, variable) => {
                 bind_structural_variable(&mut variables, variable, representation)
             }
             (

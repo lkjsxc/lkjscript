@@ -10,6 +10,7 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=agent-work-state status=current -->
 <!-- LKJ-STATUS id=repository-graph-context status=current -->
 <!-- LKJ-STATUS id=repository-topology status=current -->
+<!-- LKJ-STATUS id=residual-generic-compare-vertical status=current -->
 <!-- LKJ-STATUS id=resource-profile-compiler status=current -->
 <!-- LKJ-STATUS id=resource-profile-preallocation status=current -->
 <!-- LKJ-STATUS id=resource-profile-shared-ledger status=accepted-target -->
@@ -29,6 +30,7 @@ verification discipline for autonomous continuation.
 <!-- LKJ-STATUS id=generation-safe-resources status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-value-island status=accepted-contract -->
 <!-- LKJ-STATUS id=collector-free-deterministic-memory status=accepted-contract -->
+<!-- LKJ-STATUS id=compiler-selected-sealed-value-vertical status=current -->
 <!-- LKJ-STATUS id=typed-vm-scalars status=current -->
 
 Repository topology and graph/context, bounded task state, exact modules and
@@ -70,12 +72,17 @@ are Current for process apps. Authenticated ephemeral session-broker presence is
 Current on Linux. File, terminal, network, SQLite, stream-resource, database
 process/VM operations, interactive cells, GUI, and SQLite replacement remain absent.
 
-The authoritative pre-backend HIR memory plan is Current. A narrow ordinary-region
-route is selected for acyclic products closed over copy lists and scalar leaves; broader regions,
-sealed sharing, pools, and owner homes remain substrate only. Exact bytes,
-functions, symbols, copy products, enums, errors, options, results, selected
-region products, lists, strings, and paths execute through deterministic
-storage. The zero-family no-tracing runtime is Current.
+The authoritative pre-backend HIR memory plan is Current. One ordinary-region
+route serves acyclic products closed over copy lists and scalar leaves. The
+Current prepared sealed-value vertical additionally binds typed package
+provenance, atomic witness groups, exact structural relinking, independently
+verified per-value placement, semantic/native SSA, bytecode, contracts, and
+process identity. Evaluator, VM, forced baseline, and forced proof execute
+residual `independent-owner`, `dispose`, and the bounded direct generic compare
+vertical with exact hidden witnesses and zero fallback. Isolated cells return
+key-free DAGs that a fresh authenticated parent rehydrates and releases.
+Persistent structural lists, residual codecs, indirect generics, pools, and
+general owner-home selection remain incomplete. The no-tracing runtime is Current.
 
 ## Product Intent
 
@@ -148,24 +155,22 @@ resources remain absent.
 - Forced native claims require synchronous generated entry with zero fallback.
 - Native frames retain typed homes, bounds, cleanup obligations, and structured
   outcome state; no liveness root map or collector publication remains.
-- Broader region/pool selection, cross-call pool loans, and sealed compact
-  images remain later work; the zero-family cutover and no-per-node-RC evidence
-  are Current.
+- General region/pool selection and cross-call pool loans remain later work;
+  the narrow prepared sealed route, zero-family cutover, and no-per-node-RC
+  evidence are Current.
 
 ## Accepted Next Sequence
 
-1. Retain adversarial ownership, borrowing, destination, failure-cleanup,
-   resource-adapter, recursive-call, and limit evidence for every Current
-   structural group.
-2. Expand the Current concrete structural witness propagation into package and
-   residual generic ABIs, then admit structural-owner list elements without
-   accepting unknown substitutions.
-3. Infer ownership, borrowing, regions, sealed sharing, and pools without
-   exposing lifetime syntax or retaining atomic/shared counts or tracing.
-4. Measure complete alternatives and remove rejected implementations before
-   selecting additional language storage domains.
-5. Execute VM/node conformance on native non-Linux and non-x86 hosts; the Current
-   WASI database probe is not platform acceptance.
+1. Separate minimal semantic generic requirements from independently verified
+   physical routes and complete residual compare, codec, and list operations.
+2. Replace invocation-only structural-owner lists with compiler-selected
+   persistent sealed segments for the exact immutable element matrix.
+3. Carry static capture-free indirect generic callables with exact hidden
+   witness signatures through evaluator, VM, baseline, and proof tiers.
+4. Authenticate persistent-list process snapshots, rehydrate them into a fresh
+   runtime, retain no per-node ownership candidate, and promote only passed cuts.
+5. Keep affine aggregates, captures, services, provider IPC, broader storage
+   domains, and non-Linux native acceptance outside this boundary.
 
 This order is an implementation contract, not a Current capability claim.
 

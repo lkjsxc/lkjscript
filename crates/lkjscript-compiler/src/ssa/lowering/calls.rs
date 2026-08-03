@@ -120,39 +120,38 @@ impl FunctionBuilder<'_> {
         let Some(arguments) = self.lower_arguments(args)? else {
             return Ok(None);
         };
-        let runtime = runtime_operation(operation)?;
-        let signature = signature_from_type(resolved_signature, self.product_ids)?;
-        let consumed_resource = arguments.first().copied();
-        let result_ty = ty.clone();
-        let result = self.append(
-            ty,
-            InstructionKind::Runtime {
-                operation: runtime,
-                arguments,
-                signature,
-            },
-            effects(operation.effects()),
-            expression.origin,
-        )?;
-        self.forget_consumed_ref_mut_arguments(args);
-        if matches!(
-            operation,
-            Operation::DropResource | Operation::SysSqliteClose | Operation::SysSqliteFinalize
-        ) {
-            let [Expr {
-                kind: ExprKind::Load(reference),
+        if operation == Operation::EqualValue {
+            if let [Expr {
+                ty: Type::Param(left),
+                ..
+            }, Expr {
+                ty: Type::Param(right),
                 ..
             }] = args
-            else {
-                return Err(Error::msg(
-                    "resource close lowering requires one direct typed resource local",
-                ));
-            };
-            let value = consumed_resource
-                .ok_or_else(|| Error::msg("resource close lost its SSA operand"))?;
-            self.record_explicit_close(reference.binding, value, expression.origin)?;
+            {
+                if left == right {
+                    return self
+                        .append(
+                            SsaType::Bool,
+                            InstructionKind::MemoryWitnessCompare {
+                                parameter: left.clone(),
+                                left: arguments[0],
+                                right: arguments[1],
+                            },
+                            EffectSet::READS_MEMORY,
+                            expression.origin,
+                        )
+                        .map(Some);
+                }
+            }
         }
-        self.publish_structural_source(result_ty, result, expression.origin)
-            .map(Some)
+        self.lower_concrete_operation(
+            operation,
+            resolved_signature,
+            args,
+            arguments,
+            ty,
+            expression,
+        )
     }
 }

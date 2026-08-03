@@ -1,7 +1,7 @@
 use super::*;
 
 mod witness;
-use witness::call_result_witness_slot;
+pub(super) use witness::call_result_witness_slot;
 
 pub(super) fn lower_failure_cleanup(
     function: &Function,

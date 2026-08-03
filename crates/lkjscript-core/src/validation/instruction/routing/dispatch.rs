@@ -189,6 +189,7 @@ pub(super) fn apply_instruction(
         | Op::StructuralStringUtf8View
         | Op::StructuralCopy
         | Op::MemoryWitnessIndependentOwner
+        | Op::MemoryWitnessCompare
         | Op::MemoryWitnessDispose => {
             structural::apply(chunk, proto, instruction, state)
         }

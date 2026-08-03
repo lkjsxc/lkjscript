@@ -84,6 +84,14 @@ pub trait NativeStructuralRuntimeServices {
     ) -> Result<(), NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
+    fn compare_structural_values(
+        &mut self,
+        _witness: u16,
+        _left: u64,
+        _right: u64,
+    ) -> Result<bool, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
     fn copy_structural_view(
         &mut self,
         _view: NativeStructuralView,

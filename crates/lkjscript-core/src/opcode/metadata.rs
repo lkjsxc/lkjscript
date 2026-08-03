@@ -98,6 +98,7 @@ const fn operand_width(op: Op) -> usize {
         | Op::LoadStructuralOwnerLocal
         | Op::StructuralPlaceEnd
         | Op::MemoryWitnessIndependentOwner
+        | Op::MemoryWitnessCompare
         | Op::MemoryWitnessDispose
         | Op::ByteVectorPlaceEnd
         | Op::BytesPlaceEnd => 1,

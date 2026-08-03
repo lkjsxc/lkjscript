@@ -112,6 +112,7 @@ fn has_explicit_structural_operations(program: &Program) -> bool {
                     InstructionKind::StructuralPublish { .. }
                         | InstructionKind::StructuralCopy { .. }
                         | InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | InstructionKind::MemoryWitnessCompare { .. }
                         | InstructionKind::MemoryWitnessDispose { .. }
                         | InstructionKind::DestinationCreate { .. }
                         | InstructionKind::DestinationFieldInit { .. }

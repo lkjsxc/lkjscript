@@ -4,6 +4,7 @@ use lkjscript_ir::{evaluate, EvalConfig, InstructionKind};
 use lkjscript_jit::{execute_forced, execute_optimizing, JitConfig};
 use lkjscript_vm::run_chunk;
 
+mod compare;
 mod residual;
 
 #[test]

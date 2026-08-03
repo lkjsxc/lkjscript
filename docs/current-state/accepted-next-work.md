@@ -26,9 +26,13 @@ forced proof tiers. [Concrete structural witness IDs](../decisions/memory/eviden
 reach SSA and bytecode. A narrow
 ordinary-region product route is also Current for nonrecursive products with
 selected copy lists, scalar leaves, and acyclic region products; keys remain
-invocation-local. Other ordinary and sealed regions, typed pools, and owner
-homes remain internal substrate rather than selected language storage. Lists
-return through flat key-free owned-list snapshots. No traced object family,
+invocation-local. The narrow prepared sealed-value vertical is Current for
+compiler-selected placement, atomic witnesses, package/prepared provenance,
+all-tier residual owner/dispose execution, and fresh-runtime process rehydration.
+The bounded direct generic compare vertical is also Current with minimal hidden
+requirements and all-tier zero-fallback execution. Persistent structural lists,
+residual codecs and list operations, indirect generics, typed pools, and general
+owner homes remain incomplete. No traced object family,
 collector, liveness map, collection service, configuration, or metric remains.
 
 The Linux runtime has an authenticated foreground coordinator, durable process
@@ -38,18 +42,14 @@ operations, broker-launched interactive cells, and GUI remain absent.
 
 The accepted immediate sequence remains deterministic structural memory only:
 
-1. retain adversarial exact cleanup, stale-key, destination, borrowing,
-   resource-adapter, recursive-call, and execution-limit evidence for the
-   Current structural groups;
-2. extend concrete structural witnesses into package/residual ABIs and admit
-   structural-owner list elements without unknown generic substitutions;
-3. infer ownership, borrowing, regions, sealed sharing, and pools without
-   exposing lifetime syntax or an atomic/shared-count fallback; and
-4. measure complete alternatives and remove rejected implementations before
-   selecting additional language storage domains.
+1. complete residual codec and list operations through all four tiers;
+2. select persistent sealed segments for the exact immutable list matrix;
+3. add capture-free static indirect generics with exact witness signatures; and
+4. authenticate and rehydrate the complete selected list process matrix before
+   any complete-plane promotion.
 
-The zero-family cutover is Current. It does not imply that every accepted
-ownership, sealed-sharing, pool, or generic-witness target is implemented.
+The zero-family and narrow prepared sealed cutovers are Current. They do not
+imply that every accepted list, codec, callable, pool, or generic target exists.
 
 The previously selected synchronous automatic baseline-to-proof promotion
 remains an **Accepted Implementation Selection** for a later cycle. OSR,

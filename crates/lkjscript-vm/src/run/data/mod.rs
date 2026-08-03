@@ -6,7 +6,7 @@ mod lists;
 mod stack;
 #[cfg(test)]
 pub(crate) use equality::list_values_equal;
-pub(crate) use equality::{equal_value, f64_bits_equal, list_equal, same_object};
+pub(crate) use equality::{equal_value, f64_bits_equal, list_equal, same_object, value_equal};
 
 pub(super) fn handles(op: u8) -> bool {
     op == Op::Nop as u8

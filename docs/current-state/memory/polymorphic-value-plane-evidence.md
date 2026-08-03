@@ -1,15 +1,11 @@
 # Bounded Polymorphic Value Plane Evidence
-
 ## Status
 
-**Experimental for canonical semantic witness closures, authenticated executable
-memory witnesses, validated-return sealed DAG import, residual transport, locked
-generic package interfaces, nested
-copy-list transport, selected structural-list execution in all four tiers, and
-the cross-package semantic snapshot.** The sealed-region scaling result extends
-the already-Current internal substrate but is not a language sealed-value claim.
-The complete polymorphic sealed-value plane remains Accepted Target and this
-partial slice is not Current.
+**Current at revision 18 for the prepared compiler-selected sealed-value and
+bounded residual generic compare verticals.** Revisions 14 through 17 retain
+predecessor evidence. The complete polymorphic value plane remains an Accepted
+Target; persistent structural lists, residual codecs, and indirect generic
+callables are not Current.
 
 ## Evidence Identity
 
@@ -20,7 +16,8 @@ Exact native identity commit: `727f1207f4be31d53207a9661807ea4dd8d13d5c`.
 Iterative native aggregate-equality commit: `a6de268fcc992349c47c4bca336402e263ba8545`.
 Revision-15 authenticated witness commit: `715a13b93fd907660505254bfb8f3570a740d0e1`.
 Revision-16 semantic-closure commit: `187ec9bc8f68dd6a437e69d3781e81f7de6a6694`.
-Platform revision: `16`.
+Revision-17 prepared vertical commit: `5102f06a0c4c37a8c51677fa025000361300317e`.
+Historical predecessor revision: `17`; Current recorded platform revision: `18`.
 Environment: Linux x86-64, locked Rust workspace.
 
 ## Experimental Residual Witness Slice
@@ -87,11 +84,29 @@ semantic-type-closure, and executable-witness identities. Malformed roles,
 local targets, external semantic links and cycles, and duplicate bytecode owner
 representations reject. Unrelated declarations do not perturb a witness.
 
-This remains receiver-side capability-authorized import, not compiler-selected
-sealed placement. Revision 16 does not install atomic recursive executable
-witness groups or bind package/lock provenance. Structural layout relinking is
-still incomplete, and the same-process codec is not daemon receiver evidence.
-These boundaries prevent promotion to Current.
+At revision 16 this remained receiver-side import without compiler-selected
+placement, atomic recursive groups, package provenance, complete relinking, or
+daemon receiver evidence. Revision 17 closed only the narrow vertical below.
+
+## Revision-18 Current Prepared Sealed And Compare Verticals
+Producer and independent verifier reconstruct semantic closure, atomic witness
+groups, exact representations, value placement, and prepared authority. Typed
+package interfaces and locks bind plan, witness closure, SSA, bytecode,
+specialization, codec, and one immutable `PreparedProgram` identity.
+Resolved HIR selects sealed storage for one ordinary independently shared value
+while borrow, move, unique fusion, clone, and single-owner routes remain exact.
+Evaluator, VM, forced baseline, and forced proof execute publication, borrow,
+coarse owner acquisition, release, and failure cleanup. One nonidentity residual
+body dispatches hidden `independent-owner` and `dispose` in every tier with
+nonzero native entries and zero fallback. The bounded direct compare body derives
+only `transport` and `compare`; authenticated evaluator, VM, baseline, and proof
+dispatch produce equal output, nonzero native entries, and zero fallback.
+An isolated child returns a provenance-bound key-free semantic DAG. A fresh
+parent authenticates the prepared identity and witness closure, rehydrates,
+canonically re-exports, and releases every owner with zero live obligations.
+The retained strategy comparison selects unique fusion or coarse sealed sharing
+and rejects production per-node ownership. Source sealing, persistent structural
+lists, residual codecs, and complete-plane promotion do not follow.
 
 ## Locked Package Interface
 
@@ -172,20 +187,14 @@ substrate has no per-node reference-count traffic; it does not claim a source
 
 ## Command Evidence
 
-Exact revision-15 and retained earlier commands are recorded in the
-[verification evidence](polymorphic-value-plane-verification.md).
+Exact revision-18, revision-17, and retained earlier commands are
+recorded in the [verification evidence](polymorphic-value-plane-verification.md).
 
 ## Explicitly Not Current
 
 - no source `sealed T` or `seal` operation;
-- no memory-plan selection of sealed storage for language values;
-- no product structural equality or authenticated structural-list import;
-- no evaluator/VM/native DAG export or execution-tier sealed DAG rehydration;
-- no atomic recursive executable witness groups, exact structural-layout
-  relinking, package memory-interface binding, or prepared artifact envelope;
-- no daemon/process-cell receiver-side authenticated rehydration;
-- no residual clone, drop, share, compare, encode, decode, list-import, or
-  list-export operation body;
-- no indirect generic callable ABI or specialization of bodies beyond the exact
-  transport identity;
-- no claim that the complete promotion gate in the Accepted Target has passed.
+- no residual encode, decode, list-store, or list-load body;
+- no persistent structural-owner list or authenticated structural-list import;
+- no general product or enum equality;
+- no repeated compare or capture-free indirect generic callable ABI;
+- no complete selected list/process matrix or complete-plane promotion claim.

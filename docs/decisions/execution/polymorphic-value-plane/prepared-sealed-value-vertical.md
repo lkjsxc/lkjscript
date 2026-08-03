@@ -1,7 +1,7 @@
 # Prepared Compiler-Selected Sealed-Value Vertical
 
 ## Status
-
+<!-- LKJ-STATUS id=compiler-selected-sealed-value-vertical status=current -->
 **Current for the first narrow executable vertical.** Revision 17 implements this
 record over the revision-16 canonical semantic closure. The complete polymorphic
 value plane remains Experimental under its Accepted Target until its broader
@@ -191,9 +191,9 @@ RC fallback or correctness claim for sealed cyclic graphs.
 
 ## Promotion Boundary
 
-Promote only `compiler-selected-sealed-value-vertical` after atomic groups,
-package/prepared provenance, independent placement verification, exact
-relinking, four-tier direct and residual execution, isolated fresh-runtime
+Revision 17 promoted only `compiler-selected-sealed-value-vertical` after atomic
+witness groups, package/prepared provenance, independent placement verification,
+exact relinking, four-tier direct and residual execution, isolated fresh-runtime
 rehydration, complete cleanup, no-tracing verification, and the predeclared
-comparison pass together. Until then every implemented subset remains
-Experimental and source-selected sealing stays unreachable.
+comparison all passed together. The complete plane remains Experimental, and
+source-selected sealing remains unreachable.

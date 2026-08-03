@@ -2,7 +2,6 @@ use super::*;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
-    program: &lkjscript_ir::Program,
     function: &Function,
     instruction: &Instruction,
     block: lkjscript_native::BlockId,
@@ -35,7 +34,7 @@ pub(super) fn lower_instruction(
             ..
         } if value_type(value_types, *value)? == ValueType::StructuralKey => {
             structural::lower_call_result_dispose(
-                program, function, *value, block, locals, builder,
+                function, *value, block, locals, layouts, builder,
             )?
         }
         InstructionKind::Drop {

@@ -150,11 +150,14 @@ fn residual_native_witness_function(program: &crate::Program, function: Function
                     .memory_witness_parameters
                     .iter()
                     .any(|requirement| {
-                        requirement.operations.contains(
-                            &lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
-                        ) && requirement
+                        requirement
                             .operations
-                            .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose)
+                            .contains(&lkjscript_contracts::MemoryWitnessOperation::Compare)
+                            || (requirement.operations.contains(
+                                &lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
+                            ) && requirement
+                                .operations
+                                .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose))
                     })
         })
 }

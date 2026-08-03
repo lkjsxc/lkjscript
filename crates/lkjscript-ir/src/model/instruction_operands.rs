@@ -30,6 +30,7 @@ impl InstructionKind {
             Self::DestinationFieldInit {
                 destination, value, ..
             } => vec![*destination, *value],
+            Self::MemoryWitnessCompare { left, right, .. } => vec![*left, *right],
             Self::Runtime { arguments, .. }
             | Self::Call {
                 target: CallTarget::Direct(_),

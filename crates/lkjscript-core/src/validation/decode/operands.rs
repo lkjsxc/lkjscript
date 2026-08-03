@@ -178,6 +178,7 @@ pub(super) fn validate_instruction_operands(
             Op::Car
             | Op::Call
             | Op::MemoryWitnessIndependentOwner
+            | Op::MemoryWitnessCompare
             | Op::MemoryWitnessDispose => {
                 operand_index(operand, proto, op, at)?;
             }

@@ -8,7 +8,7 @@ use super::*;
 mod borrow;
 mod witness;
 use borrow::borrow;
-use witness::{dispose_owner, independent_owner};
+use witness::{compare, dispose_owner, independent_owner};
 
 pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::Op) -> Result<()> {
     match op {
@@ -18,6 +18,7 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: lkjscript_core::O
         lkjscript_core::Op::StructuralPublish => publish(vm),
         lkjscript_core::Op::StructuralCopy => copy_owner(vm),
         lkjscript_core::Op::MemoryWitnessIndependentOwner => independent_owner(vm),
+        lkjscript_core::Op::MemoryWitnessCompare => compare(vm),
         lkjscript_core::Op::MemoryWitnessDispose => dispose_owner(vm),
         _ => Err(Error::msg("structural publish opcode dispatch mismatch")),
     }

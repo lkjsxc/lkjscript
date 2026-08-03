@@ -31,6 +31,7 @@ pub enum StructuralOperation {
     PublishFormattedI64(StructuralTypeIdentity),
     Copy(StructuralTypeIdentity),
     WitnessIndependentOwner,
+    WitnessCompare,
     WitnessDispose,
     WitnessDisposeStatic(u16),
     CopyView(StructuralViewType),
@@ -110,6 +111,7 @@ impl StructuralOperation {
                 value_type.is_valid() && value_type.kind() == StructuralKind::String
             }
             Self::WitnessIndependentOwner
+            | Self::WitnessCompare
             | Self::WitnessDispose
             | Self::WitnessDisposeStatic(_) => true,
             Self::Copy(value_type)

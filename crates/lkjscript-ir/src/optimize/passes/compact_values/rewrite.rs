@@ -50,6 +50,10 @@ pub(crate) fn rewrite_function_values(
                     *destination = rewrite(*destination);
                     *value = rewrite(*value);
                 }
+                InstructionKind::MemoryWitnessCompare { left, right, .. } => {
+                    *left = rewrite(*left);
+                    *right = rewrite(*right);
+                }
                 InstructionKind::Runtime { arguments, .. }
                 | InstructionKind::Call { arguments, .. } => {
                     for argument in arguments {

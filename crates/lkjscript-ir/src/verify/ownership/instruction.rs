@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use crate::verify::*;
 use crate::{Function, Instruction, InstructionKind, IrError, PlaceId, Program, SsaType};
 pub(crate) fn process_ownership_instruction(
@@ -7,7 +5,7 @@ pub(crate) fn process_ownership_instruction(
     function: &Function,
     instruction: &Instruction,
     state: &mut OwnershipState,
-    live_loans: &mut BTreeMap<PlaceId, Vec<LiveLoan>>,
+    live_loans: &mut std::collections::BTreeMap<PlaceId, Vec<LiveLoan>>,
     types: &[SsaType],
     nonowned_affine: &std::collections::HashSet<crate::ValueId>,
 ) -> crate::Result<()> {
@@ -175,6 +173,7 @@ pub(crate) fn process_ownership_instruction(
         | InstructionKind::StringUtf8View { .. }
         | InstructionKind::StructuralCopy { .. }
         | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessCompare { .. }
         | InstructionKind::MemoryWitnessDispose { .. }
         | InstructionKind::Constant(_)
         | InstructionKind::Copy(_)

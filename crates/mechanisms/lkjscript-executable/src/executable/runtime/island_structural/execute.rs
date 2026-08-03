@@ -59,6 +59,9 @@ pub(super) fn execute(
         StructuralOperation::WitnessIndependentOwner => services
             .independent_structural_owner(witness_locator(first)?, second)
             .map(NativeValue::StructuralKey),
+        StructuralOperation::WitnessCompare => services
+            .compare_structural_values(witness_locator(first)?, second, third)
+            .map(NativeValue::Bool),
         StructuralOperation::WitnessDispose => services
             .dispose_structural_owner(witness_locator(first)?, second)
             .map(|()| NativeValue::Unit),

@@ -106,6 +106,37 @@ more-than-two-argument ABI signatures; default Mandelbrot then passed again. A
 later build attempt hit `EMFILE` in concurrent compiler tests; the immediate
 unchanged retry completed with `result=ok`.
 
+## Revision-18 Residual Compare Commands
+
+The bounded compare vertical passed exact all-tier execution, malformed SSA
+rejection, strict Clippy, all 63 workspace all-target test binaries, canonical
+verification, release build and smokes, package and structure checks, retained
+result validation, Miri evaluator/VM execution, address/leak/thread sanitizer
+all-tier execution, WASI cross-build and Node execution, and Docker verification.
+The first Docker run hit the known daemon-control `EAGAIN`; its unchanged retry
+passed 234 compiler tests, 169 core tests, all other workspace tests, and wrote
+`result=ok`.
+
+```text
+cargo test --locked -p lkjscript-app --test jit_engines \
+  generic_products::compare::residual_compare_executes_in_all_four_tiers -- --exact
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo test --locked --workspace --all-targets -- --test-threads=1
+cargo run --locked -p lkjscript-xtask -- quiet verify
+cargo run --locked -p lkjscript-xtask -- structure check
+cargo build --locked --workspace --release
+cargo run --locked -p lkjscript-app --bin lkjscript -- package check
+# The exact compare test was repeated under Miri and address, leak, and thread sanitizers.
+cargo build --locked -p lkjscript-host -p lkjscript-database \
+  --target wasm32-wasip1 --example wasi-kernel
+node <WASI preview1 runner for target/.../examples/wasi-kernel.wasm>
+docker compose -f meta/docker-compose.yml --profile verify run --build --rm verify
+```
+
+The repository has no fuzz harness, undefined-behavior sanitizer, or non-Linux
+native executor. The retained bounded Brainfuck campaign was not rerun; its
+inherited `structural limit exceeded: Domains` result remains negative evidence.
+
 ## Earlier Slice Commands
 
 The following older commands exited zero against implementation commit
