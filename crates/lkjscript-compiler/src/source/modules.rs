@@ -3,8 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::source::{DeclarationSummary, Expr, SourceDiagnostic, SourceFile, SourceResult};
 
 mod rewrite;
-mod witnesses;
-pub(crate) use witnesses::{public_memory_witness_requirements, PublicMemoryWitnessRequirement};
 
 #[derive(Default)]
 struct Interface {

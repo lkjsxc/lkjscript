@@ -61,6 +61,8 @@ fn has_explicit_structural_operations(program: &Program) -> bool {
                         | crate::InstructionKind::AggregateConsumePayload { .. }
                         | crate::InstructionKind::StringUtf8View { .. }
                         | crate::InstructionKind::StructuralCopy { .. }
+                        | crate::InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | crate::InstructionKind::MemoryWitnessDispose { .. }
                 )
             })
         })

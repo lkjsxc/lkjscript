@@ -6,6 +6,8 @@ mod entry;
 mod entry_capabilities;
 mod enum_shape;
 mod failure_cleanup;
+#[path = "model/identity/mod.rs"]
+mod identity;
 mod instruction;
 #[path = "model/merge.rs"]
 mod merge;
@@ -22,7 +24,8 @@ use crate::{
 include!("model/validated_chunk.rs");
 include!("model/state.rs");
 
-pub use entry::validate_chunk;
+pub use entry::{bind_prepared_identity, validate_chunk};
+pub use identity::{validated_bytecode_identity, ValidatedBytecodeIdentity};
 
 #[cfg(test)]
 mod tests;

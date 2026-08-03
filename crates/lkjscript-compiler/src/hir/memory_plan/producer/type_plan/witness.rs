@@ -41,11 +41,18 @@ impl TypePlanner<'_> {
             portability: witness_portability(ty),
             contention: witness_contention(ty, derived),
         };
-        let id = memory_witness_id(&facts)?;
+        let semantic_identity = lkjscript_contracts::semantic_type_closure_hash(&facts.semantic)
+            .map_err(|error| Error::msg(error.to_string()))?;
+        let id = MemoryWitnessId::from_bytes(semantic_identity);
         if self.witnesses.iter().any(|item| item.id == id) {
-            return Err(Error::msg("HIR memory-plan produced a duplicate witness identity"));
+            return Err(Error::msg("HIR memory-plan produced a duplicate semantic witness"));
         }
-        self.witnesses.push(MemoryWitness { id, facts });
+        self.witnesses.push(MemoryWitness {
+            id,
+            group: MemoryWitnessGroupId::from_bytes([0; 32]),
+            ordinal: u16::MAX,
+            facts,
+        });
         Ok(id)
     }
 
@@ -103,4 +110,4 @@ impl TypePlanner<'_> {
 
 include!("witness_policy.rs");
 include!("witness_capabilities.rs");
-include!("semantic_witness.rs");
+include!("semantic_witness/mod.rs");

@@ -3,9 +3,11 @@ use super::*;
 mod aggregate;
 mod catalog;
 mod identity;
+mod witness_slots;
 
 pub(in crate::lower) use catalog::StructuralCatalog;
 pub(in crate::lower) use identity::*;
+use witness_slots::native_witness_slots;
 
 impl LayoutInterner {
     pub(super) const FIRST_NESTED_IDENTITY: u32 = 32 + u16::MAX as u32 + 1;
@@ -23,6 +25,7 @@ impl LayoutInterner {
                 .map(|metadata| (metadata.product, metadata.identity.bytes()))
                 .collect(),
             structural: StructuralCatalog::build(program)?,
+            witness_slots: native_witness_slots(program)?,
             next: Self::FIRST_NESTED_IDENTITY,
         };
         for function in functions {
@@ -105,6 +108,14 @@ impl LayoutInterner {
 
     pub(super) const fn structural(&self) -> &StructuralCatalog {
         &self.structural
+    }
+
+    pub(super) fn witness_slot(
+        &self,
+        witness: lkjscript_ir::MemoryWitnessId,
+        storage: lkjscript_native::StructuralStorageRoute,
+    ) -> Option<u16> {
+        self.witness_slots.get(&(witness, storage)).copied()
     }
 
     pub(super) fn semantic(&self, ty: &SsaType) -> Option<u64> {

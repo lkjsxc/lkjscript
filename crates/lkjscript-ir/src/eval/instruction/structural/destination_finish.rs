@@ -51,7 +51,13 @@ impl Evaluator<'_> {
             )?;
             return Err(Flow::Trap("destination finish type mismatch".into()));
         }
-        match self.structural.runtime.finish_destination(destination.key) {
+        let result = if destination.storage == crate::StructuralStorage::SealedRegion {
+            self.structural.runtime.finish_destination_sealed(destination.key)
+                .map(|sealed| sealed.owner)
+        } else {
+            self.structural.runtime.finish_destination(destination.key)
+        };
+        match result {
             Ok(key) => Ok(EvalValue::StructuralOwner(EvalStructuralOwner {
                 key,
                 value_type: expected,

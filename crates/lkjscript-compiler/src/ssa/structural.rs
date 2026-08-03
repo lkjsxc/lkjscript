@@ -52,29 +52,8 @@ pub(in crate::ssa) fn lower_structural_memory(
                 MemoryAggregateMode::Affine => StructuralTypeMode::Affine,
             },
         });
-        for (category, storage) in [
-            (StructuralValueCategory::Owner, StructuralStorage::Unique),
-            (StructuralValueCategory::View, StructuralStorage::Stack),
-            (
-                StructuralValueCategory::Destination,
-                StructuralStorage::CallerDestination,
-            ),
-        ] {
-            let id = StructuralRepresentationId::new(
-                u16::try_from(memory.representations.len())
-                    .map_err(|_| Error::msg("structural representation table exceeds u16"))?,
-            );
-            memory
-                .representations
-                .push(StructuralRepresentationMetadata {
-                    id,
-                    type_id,
-                    layout: layout_id,
-                    category,
-                    storage,
-                });
-        }
     }
+    install_value_representations(&mut memory, plan, products)?;
     install_memory_witnesses(&mut memory, plan, products)?;
     if !memory.types.is_empty() || !memory.witnesses.is_empty() {
         memory.plan = lkjscript_ir::MemoryPlanId::new(plan.id.as_bytes());

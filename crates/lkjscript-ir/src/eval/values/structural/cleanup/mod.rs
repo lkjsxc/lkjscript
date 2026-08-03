@@ -10,7 +10,7 @@ impl Evaluator<'_> {
             EvalValue::StructuralOwner(owner) => self
                 .structural
                 .runtime
-                .move_owned(owner.key, owner.value_type)
+                .move_owner(owner.key, owner.value_type)
                 .map(|key| {
                     EvalValue::StructuralOwner(EvalStructuralOwner {
                         key,
@@ -83,7 +83,8 @@ impl Evaluator<'_> {
             EvalValue::StructuralOwner(owner) => self
                 .structural
                 .runtime
-                .drop_owned(owner.key, owner.value_type)
+                .dispose_owner(owner.key, owner.value_type)
+                .map(|_| ())
                 .map_err(map_structural_error),
             EvalValue::StructuralView(view) | EvalValue::StructuralUtf8View(view) => self
                 .structural

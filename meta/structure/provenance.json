@@ -5,7 +5,7 @@
     {
       "path": "Cargo.lock",
       "class": "generated-mutable",
-      "sha256": "e3a02535963452580becbcc1e69bfcf3d609f1321c5ad371e4ee6877a2d72a18",
+      "sha256": "2baf1b6ea41953cdfcf754d016d09ee83e5bf8d5c3bcd02e9fd840cfe78cdd5b",
       "generator": "cargo 1.96.0 lockfile v4; Cargo.toml workspace dependency resolution"
     },
     {
@@ -17,7 +17,7 @@
     {
       "path": "lkjscript.lock.json",
       "class": "generated-mutable",
-      "sha256": "f3f970afc0565e6aabaa6dfcc095879568111c055ad4f05a4166705106d0b82a",
+      "sha256": "ac12be50c3085a46f34c99b6600c50634597c4e7f95d19c5fe5a0f9824db2545",
       "generator": "lkjscript package lock; canonical local package graph and current contract registry"
     },
     {
@@ -155,13 +155,13 @@
     {
       "path": "src/examples/polymorphic-transport/history/lkjscript.lock.json",
       "class": "generated-mutable",
-      "sha256": "23fbc6f4b6f0eaccb7a17c0846a3db4c034e272774b901ac0bf3b1d0faec4bb5",
+      "sha256": "b30aac17cd4aece9477901c132ab48d66c96e6595d604b698be7c4440802cb2a",
       "generator": "lkjscript package lock; canonical polymorphic-history dependency graph"
     },
     {
       "path": "src/examples/polymorphic-transport/lkjscript.lock.json",
       "class": "generated-mutable",
-      "sha256": "539f6b768bcd2f60ddba1024729c77dcd4a15ccce4f2122c6f061b4ff02af219",
+      "sha256": "edc53310123d927f84b3e3e866e78e43ccfc01854eb2749c55839a4550f35cc4",
       "generator": "lkjscript package lock; canonical polymorphic-history consumer graph"
     }
   ]

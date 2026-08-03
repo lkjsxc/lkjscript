@@ -147,6 +147,7 @@ pub struct MemoryMode {
 
 include!("model/types.rs");
 include!("model/authority.rs");
+include!("model/placement.rs");
 include!("model/records.rs");
 include!("model/obligations.rs");
 include!("model/witness.rs");

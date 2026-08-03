@@ -132,6 +132,7 @@ pub(crate) fn owned_scalar(value: NativeValue) -> lkjscript_core::Result<OwnedVa
         | NativeValue::Resource(_)
         | NativeValue::Unique(_)
         | NativeValue::Loan(_)
+        | NativeValue::StructuralKey(_)
         | NativeValue::StructuralOwner(_)
         | NativeValue::StructuralView(_)
         | NativeValue::StructuralDestination(_)

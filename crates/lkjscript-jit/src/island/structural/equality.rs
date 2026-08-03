@@ -18,11 +18,11 @@ impl JitStructuralRuntime {
             .get(&right.get())
             .copied()
             .ok_or(NativeServiceError::Trap)?;
-        if left_type != right_type {
+        if left_type.value_type != right_type.value_type {
             return Ok(false);
         }
-        let left = self.export_comparison_copy(left, left_type)?;
-        let right = self.export_comparison_copy(right, right_type)?;
+        let left = self.export_comparison_copy(left, left_type.value_type)?;
+        let right = self.export_comparison_copy(right, right_type.value_type)?;
         semantic_equal(&left, &right)
     }
 

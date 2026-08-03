@@ -72,10 +72,15 @@ pub enum StructuralValueCategory {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StructuralStorage {
+    Inline,
     Static,
-    Unique,
     Stack,
     CallerDestination,
+    UniqueStructural,
+    OrdinaryRegion,
+    SealedRegion,
+    BorrowedView,
+    ExternalResource,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -154,9 +159,13 @@ pub struct StructuralLayoutMetadata {
 pub struct StructuralRepresentationMetadata {
     pub id: StructuralRepresentationId,
     pub type_id: StructuralTypeId,
+    pub witness: MemoryWitnessId,
+    pub witness_group: super::MemoryWitnessGroupId,
+    pub witness_member: u16,
     pub layout: StructuralLayoutId,
     pub category: StructuralValueCategory,
     pub storage: StructuralStorage,
+    pub route: [u8; 32],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -168,23 +177,4 @@ pub struct StructuralDestinationMetadata {
     pub fields: Vec<StructuralFieldMetadata>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StructuralDestinationFieldRef {
-    pub destination: StructuralDestinationId,
-    pub field: u16,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StructuralAggregateFieldRef {
-    pub representation: StructuralRepresentationId,
-    pub active_variant: Option<VariantId>,
-    pub field: u16,
-    pub result: StructuralFieldMetadata,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StructuralPayloadRef {
-    pub representation: StructuralRepresentationId,
-    pub variant: VariantId,
-    pub result: StructuralFieldMetadata,
-}
+include!("structural/references.rs");

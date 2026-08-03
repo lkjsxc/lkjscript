@@ -1,5 +1,6 @@
 mod install;
 mod lifecycle;
+pub(crate) mod preparation;
 mod stop;
 
 use std::num::NonZeroUsize;

@@ -34,7 +34,11 @@ fn deterministic_copy_product_executes_as_structural_bytecode() {
         .ssa()
         .program()
         .memory
-        .representation(&product.ty, StructuralValueCategory::Owner)
+        .representation(
+            &product.ty,
+            StructuralValueCategory::Owner,
+            lkjscript_ir::StructuralStorage::UniqueStructural,
+        )
         .is_some());
     assert!(compiled.bytecode().main().memory_plan.is_some());
     assert!(compiled.bytecode().has_structural_execution());

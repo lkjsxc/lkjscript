@@ -61,16 +61,32 @@ fn install_authenticated_return_witness(
         operations: Vec::new(),
     };
     facts.operations = lkjscript_contracts::required_memory_witness_operations(&facts);
-    let encoded = lkjscript_contracts::canonical_executable_memory_witness(&facts, &[]);
-    let id = crate::MemoryWitnessId::new(crate::sha256(&encoded));
+    let semantic_identity = facts.semantic_type;
+    let member = lkjscript_contracts::ExecutableMemoryWitnessGroupMember {
+        id: [0; 32], ordinal: 0, semantic_identity,
+        facts: facts.clone(), dependencies: Vec::new(),
+    };
+    let group = lkjscript_contracts::executable_memory_witness_group_id(false, &[member]);
+    let group = crate::MemoryWitnessGroupId::new(group);
+    let id = crate::MemoryWitnessId::new(
+        lkjscript_contracts::executable_memory_witness_member_id(
+            group.bytes(), 0, semantic_identity));
     chunk.structural_types[0].witness = id;
+    for representation in &mut chunk.structural_representations {
+        representation.witness = id;
+        representation.witness_group = group;
+        representation.witness_member = 0;
+    }
     chunk.memory_witnesses = vec![crate::InstalledMemoryWitness {
-        id,
-        facts,
-        dependencies: Vec::new(),
+        id, group, ordinal: 0, facts, dependencies: Vec::new(),
         value_kind: crate::MemoryWitnessValueKind::Structural(
-            crate::StructuralRepresentationId::new(0),
-        ),
+            crate::StructuralRepresentationId::new(0)),
+    }];
+    chunk.memory_witness_groups = vec![crate::InstalledMemoryWitnessGroup {
+        id: group, recursive: false,
+        members: vec![crate::InstalledMemoryWitnessGroupMember {
+            witness: id, ordinal: 0, semantic_identity,
+        }],
     }];
 }
 

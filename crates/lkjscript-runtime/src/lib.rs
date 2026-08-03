@@ -26,6 +26,7 @@ pub use control_store::{ControlStore, ControlStoreError, RecoveryReport};
 pub use coordinator::{CoordinatorError, CoordinatorLease, CoordinatorStatus, MachineCoordinator};
 pub use error::{QuotaKind, RuntimeError};
 pub use execution::protocol as process_cell_protocol;
+pub use execution::rehydration::{rehydrate_process_outcome, RehydrationReport};
 pub use ids::{
     ApplicationId, ApplicationIncarnationId, CoordinatorIdentity, ExecutionCellId, PackageContentId,
 };

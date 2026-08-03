@@ -14,10 +14,11 @@ fn bytecode_rejects_forged_local_semantic_target() {
         facts,
         vec![Dependency {
             role: Role::ListElement,
-            target: Target::LocalSemantic([99; 32]),
+            target: Target::LocalMember(9),
         }],
     );
-    assert!(error(chunk).contains("local semantic dependency target is forged"));
+    install_group(&mut chunk);
+    assert!(error(chunk).contains("recursive group classification is invalid"));
 }
 
 #[test]
@@ -29,6 +30,7 @@ fn bytecode_rejects_duplicate_semantic_type_owner_representation() {
     let second = scalar_witness(second_facts, Vec::new());
     chunk.memory_witnesses = vec![first, second];
     chunk.memory_witnesses.sort_by_key(|item| item.id);
+    install_group(&mut chunk);
     assert!(error(chunk).contains("duplicate bytecode semantic type and owner representation"));
 }
 
@@ -54,8 +56,11 @@ fn bytecode_rejects_swapped_complete_product_roles() {
     let requirements = lkjscript_contracts::semantic_dependency_requirements(&facts.semantic)
         .expect("product roles");
     chunk.memory_witnesses[0] = scalar_witness(facts, vec![
-        Dependency { role: requirements[1].0.clone(), target: Target::ExternalWitness([2; 32]) },
-        Dependency { role: requirements[0].0.clone(), target: Target::ExternalWitness([3; 32]) },
+        Dependency { role: requirements[1].0.clone(), target: Target::ExternalMember {
+            group: [4; 32], member: [2; 32] } },
+        Dependency { role: requirements[0].0.clone(), target: Target::ExternalMember {
+            group: [5; 32], member: [3; 32] } },
     ]);
-    assert!(error(chunk).contains("missing, swapped, or duplicated"));
+    install_group(&mut chunk);
+    assert!(error(chunk).contains("dependency closure is invalid"));
 }

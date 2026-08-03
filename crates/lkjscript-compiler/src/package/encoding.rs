@@ -43,6 +43,12 @@ fn package_lines(package: &LockedPackage, more: bool, lines: &mut Vec<String>) -
     )?);
     lines.push(field_at(
         6,
+        "package_memory_interface_sha256",
+        &package.package_memory_interface_sha256,
+        true,
+    )?);
+    lines.push(field_at(
+        6,
         "package_sha256",
         &package.package_sha256,
         true,
@@ -60,7 +66,12 @@ fn package_lines(package: &LockedPackage, more: bool, lines: &mut Vec<String>) -
             comma(index + 1 < package.modules.len())
         ));
     }
-    lines.push("      ]".into());
+    lines.push("      ],".into());
+    lines.push(format!(
+        "      \"targets\": {}",
+        serde_json::to_string(&package.targets)
+            .map_err(|error| Error::msg(format!("encode lock targets: {error}")))?
+    ));
     lines.push(format!("    }}{}", comma(more)));
     Ok(())
 }

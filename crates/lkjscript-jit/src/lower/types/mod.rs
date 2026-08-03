@@ -1,18 +1,36 @@
-use super::*;
-
-mod domains;
-pub(super) use domains::*;
+include!("modules.rs");
 
 pub(super) fn lower_signature(
     function: &Function,
     modes: &BytesModes,
     layouts: &LayoutInterner,
 ) -> Result<Signature, LoweringError> {
-    if !function.signature.type_parameters.is_empty() {
+    let authenticated = function.signature.type_parameters.iter().all(|parameter| {
+        function
+            .signature
+            .memory_witness_parameters
+            .iter()
+            .any(|requirement| requirement.parameter == *parameter)
+    });
+    let residual_owner = !function.signature.type_parameters.is_empty()
+        && authenticated
+        && function
+            .signature
+            .memory_witness_parameters
+            .iter()
+            .any(|requirement| {
+                requirement
+                    .operations
+                    .contains(&lkjscript_core::MemoryWitnessOperation::IndependentOwner)
+                    && requirement
+                        .operations
+                        .contains(&lkjscript_core::MemoryWitnessOperation::Dispose)
+            });
+    if !function.signature.type_parameters.is_empty() && !residual_owner {
         return Err(LoweringError::new(
             LoweringFailureCode::UnsupportedSignature,
             Some(function.id),
-            "polymorphic native signatures are unsupported",
+            "polymorphic native signature lacks authenticated owner witnesses",
         ));
     }
     let entry = function
@@ -24,13 +42,20 @@ pub(super) fn lower_signature(
                 .ok_or_else(|| mode_signature_error(function.id))?,
         )
         .ok_or_else(|| mode_signature_error(function.id))?;
-    let parameters = function
+    let mut parameters = function
         .signature
         .parameters
         .iter()
         .zip(&entry.parameters)
         .map(|(ty, parameter)| lower_value_type(function.id, parameter.id, ty, modes, layouts))
         .collect::<Result<Vec<_>, _>>()?;
+    parameters.extend(
+        function
+            .signature
+            .memory_witness_parameters
+            .iter()
+            .map(|_| ValueType::MemoryWitnessLocator),
+    );
     let result = if function.signature.result.as_ref() == &SsaType::Bytes {
         lower_bytes_mode(modes.result(function.id)?)
     } else {
@@ -150,13 +175,12 @@ pub(super) fn lower_type(
                 ty,
             ),
         )),
-        SsaType::Symbol | SsaType::Function(_) | SsaType::TypeParameter(_) => {
-            Err(LoweringError::new(
-                LoweringFailureCode::UnsupportedType,
-                Some(function),
-                format!("type {ty:?} contains a reference or unsupported native representation"),
-            ))
-        }
+        SsaType::TypeParameter(_) => Ok(ValueType::StructuralKey),
+        SsaType::Symbol | SsaType::Function(_) => Err(LoweringError::new(
+            LoweringFailureCode::UnsupportedType,
+            Some(function),
+            format!("type {ty:?} contains a reference or unsupported native representation"),
+        )),
     }
 }
 

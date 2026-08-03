@@ -38,8 +38,9 @@ impl StructuralValueRuntime {
         }
         let root = self.resolve_root(key, root_type)?;
         let object = self.objects.get(root)?;
-        let StructuralObject::Owned { image, .. } = object else {
-            return Err(StructuralValueError::WrongPayloadKind);
+        let image = match object {
+            StructuralObject::Owned { image, .. } | StructuralObject::Sealed { image, .. } => image,
+            StructuralObject::Static(_) => return Err(StructuralValueError::WrongPayloadKind),
         };
         self.require_type(image.root().value_type(), root_type)?;
         let selected = image.selected_node(projection.path())?;

@@ -31,7 +31,8 @@ fn cleanup_list_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             .ok_or_else(|| Error::msg("segmented-list owner key is malformed"))?;
         invocation_mut(vm)?
             .runtime
-            .drop_owned(key, value_type)
+            .dispose_owner(key, value_type)
+            .map(|_| ())
             .map_err(map_value_error)?;
         invocation_mut(vm)?.list_owners.remove(&word);
     }
@@ -49,7 +50,8 @@ fn cleanup_host_owners<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             .ok_or_else(|| Error::msg("host structural owner key is malformed"))?;
         invocation_mut(vm)?
             .runtime
-            .drop_owned(key, value_type)
+            .dispose_owner(key, value_type)
+            .map(|_| ())
             .map_err(map_value_error)?;
         invocation_mut(vm)?.host_owners.remove(&word);
     }
@@ -101,7 +103,8 @@ fn cleanup_all<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             .ok_or_else(|| Error::msg("structural cleanup owner key is malformed"))?;
         invocation_mut(vm)?
             .runtime
-            .drop_owned(key, value_type)
+            .dispose_owner(key, value_type)
+            .map(|_| ())
             .map_err(map_value_error)?;
         invocation_mut(vm)?.owners.remove(&word);
     }

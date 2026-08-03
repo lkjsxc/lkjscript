@@ -14,6 +14,7 @@ pub(crate) fn optimizable_checked_program() -> Program {
         metadata: metadata(effects),
     };
     Program {
+        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

@@ -28,7 +28,7 @@ impl<'a> NativeCallState<'a> {
             status,
             trap: 0,
             payload: -1,
-            _scratch_integer_arguments: [0; 2],
+            _scratch_integer_arguments: [0; 5],
             _scratch_float_arguments: [0; 2],
             poll_fuel_remaining: config.poll_fuel,
             deadline_ms,

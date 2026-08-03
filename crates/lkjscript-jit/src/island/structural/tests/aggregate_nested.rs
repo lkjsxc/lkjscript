@@ -3,6 +3,7 @@ use lkjscript_core::SemanticPayload;
 use lkjscript_native::*;
 
 pub(super) fn result_error_tree() -> Result<(), Box<dyn std::error::Error>> {
+    let storage = StructuralStorageRoute::Unique;
     let code = ty(24, StructuralKind::I64);
     let error = ty(25, StructuralKind::Product);
     let result = ty(26, StructuralKind::Enum);
@@ -29,7 +30,10 @@ pub(super) fn result_error_tree() -> Result<(), Box<dyn std::error::Error>> {
     let error_destination = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationCreate(error_aggregate.clone()),
+        StructuralOperation::DestinationCreate {
+            aggregate: error_aggregate.clone(),
+            storage,
+        },
         vec![],
     )?;
     let error_destination = sc(
@@ -37,6 +41,7 @@ pub(super) fn result_error_tree() -> Result<(), Box<dyn std::error::Error>> {
         block,
         StructuralOperation::DestinationInitialize {
             aggregate: error_aggregate.clone(),
+            storage,
             field: 0,
         },
         vec![error_destination, raw],
@@ -44,13 +49,19 @@ pub(super) fn result_error_tree() -> Result<(), Box<dyn std::error::Error>> {
     let error_owner = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationFinish(error_aggregate),
+        StructuralOperation::DestinationFinish {
+            aggregate: error_aggregate,
+            storage,
+        },
         vec![error_destination],
     )?;
     let result_destination = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationCreate(result_aggregate.clone()),
+        StructuralOperation::DestinationCreate {
+            aggregate: result_aggregate.clone(),
+            storage,
+        },
         vec![],
     )?;
     let result_destination = sc(
@@ -58,6 +69,7 @@ pub(super) fn result_error_tree() -> Result<(), Box<dyn std::error::Error>> {
         block,
         StructuralOperation::DestinationInitialize {
             aggregate: result_aggregate.clone(),
+            storage,
             field: 0,
         },
         vec![result_destination, error_owner],
@@ -65,7 +77,10 @@ pub(super) fn result_error_tree() -> Result<(), Box<dyn std::error::Error>> {
     let owner = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationFinish(result_aggregate),
+        StructuralOperation::DestinationFinish {
+            aggregate: result_aggregate,
+            storage,
+        },
         vec![result_destination],
     )?;
     let enum_view = StructuralViewType::new(205, result, result, false);

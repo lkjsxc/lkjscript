@@ -69,9 +69,10 @@ impl<'a> TypePlanner<'a> {
 
 }
 
-include!("type_plan/derive.rs");
-include!("type_plan/recursive.rs");
-include!("type_plan/witness.rs");
+include!("derive.rs");
+include!("recursive.rs");
+include!("witness.rs");
+include!("group.rs");
 fn closed(class: MemoryClosureClass) -> MemoryClosureFact {
     MemoryClosureFact { class, blocker_path: Vec::new(), blocker_type: None,
         blocker_reason: None, mixed_direction: None }

@@ -99,6 +99,7 @@ fn nested_deterministic_aggregate() -> SemanticValue {
 
 fn assert_process_round_trip(value: SemanticValue) {
     let response = ProcessResponse::Outcome {
+        provenance: super::tests::provenance(),
         cell: 77,
         outcome: ExecutionOutcome::Returned(
             OwnedValue::from_structural(value, StructuralSnapshotLimits::DEFAULT)

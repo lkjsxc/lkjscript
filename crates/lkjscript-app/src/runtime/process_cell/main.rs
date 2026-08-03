@@ -5,6 +5,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use lkjscript_core::{CapabilityKind, Limits, ResourceProfileName};
+
+mod provenance;
 use lkjscript_runtime::process_cell_protocol::{
     read_bootstrap, read_request, runtime_control_digest, write_response, ProcessBootstrap,
     ProcessRequest, ProcessResponse, MAX_APPLICATION_OUTPUT_BYTES, MAX_DIAGNOSTIC_BYTES,
@@ -37,16 +39,33 @@ fn run() -> Result<(), String> {
             return Err(error);
         }
     };
+    let provenance = match provenance::authenticated(&bootstrap, &program) {
+        Ok(provenance) => provenance,
+        Err(error) => {
+            write_response(
+                &mut output,
+                &ProcessResponse::ReadyFailure {
+                    diagnostic: bounded(&error),
+                },
+            )
+            .map_err(|write| write.to_string())?;
+            return Err(error);
+        }
+    };
     write_response(
         &mut output,
         &ProcessResponse::Ready {
             process: std::process::id(),
+            provenance: provenance.clone(),
         },
     )
     .map_err(|error| error.to_string())?;
     loop {
         match read_request(&mut input).map_err(|error| error.to_string())? {
             ProcessRequest::Invoke { cell, arguments } => {
+                let malformed_provenance = test_worker()
+                    && arguments.len() == 1
+                    && arguments.first().map(String::as_str) == Some("malformed-provenance");
                 let stdio = lkjscript_host::BufferedStdio::default();
                 let host = lkjscript_host::HostEnvironment {
                     stdio: Some(Arc::new(stdio.clone())),
@@ -65,9 +84,14 @@ fn run() -> Result<(), String> {
                     lkjscript_vm::run_chunk(program.bytecode(), &inputs, &bootstrap.execution);
                 let application_output = stdio.output().map_err(|error| error.to_string())?;
                 let flushes = stdio.flushes().map_err(|error| error.to_string())?;
+                let mut outcome_provenance = provenance.clone();
+                if malformed_provenance {
+                    outcome_provenance.root_witness_member = [0x5a; 32];
+                }
                 write_response(
                     &mut output,
                     &ProcessResponse::Outcome {
+                        provenance: outcome_provenance,
                         cell,
                         outcome,
                         output: application_output,
@@ -138,12 +162,13 @@ fn validate_grants(
         if granted.binary_search(capability).is_err() {
             return Err(format!("worker lacks {} grant", capability.as_str()));
         }
-        if package
+    }
+    if granted.iter().any(|capability| {
+        package
             .binary_search_by_key(&capability.as_str(), String::as_str)
             .is_err()
-        {
-            return Err(format!("package lacks {} grant", capability.as_str()));
-        }
+    }) {
+        return Err("package lacks an isolated worker grant".into());
     }
     if granted.iter().any(|capability| {
         !matches!(
@@ -154,6 +179,14 @@ fn validate_grants(
         return Err("worker received an unsupported capability grant".into());
     }
     Ok(())
+}
+
+fn test_worker() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.file_stem().map(|name| name.to_owned()))
+        .and_then(|name| name.to_str().map(str::to_owned))
+        .is_some_and(|name| name.starts_with("lkjscript-cell-test-worker"))
 }
 
 fn bounded(message: &str) -> String {

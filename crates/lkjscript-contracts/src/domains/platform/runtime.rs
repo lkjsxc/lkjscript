@@ -65,14 +65,21 @@ pub(crate) fn runtime_control() -> ContractDescriptor {
                 .fact(fact(
                     "identity",
                     "identity",
-                    "coordinator application incarnation execution-cell",
+                    "coordinator application incarnation execution-cell package entry and prepared program",
+                ))
+                .fact(fact(
+                    "prepared-bootstrap",
+                    "prepared bootstrap",
+                    "parent and child independently prepare exact entry return semantic and root witness group/member",
                 ))
                 .fact(fact(
                     "outcome",
                     "outcome",
                     concat!(
                         "lossless closed ExecutionOutcome with bounded key-free semantic DAG; ",
-                        "exact type/layout identity; backward local edges; final reachable root",
+                        "exact prepared/type/layout/group/member provenance; backward local \
+                         edges; final reachable root; ",
+                        "fresh-parent-runtime authenticated import canonical export and zero teardown",
                     ),
                 ))
                 .fact(fact(

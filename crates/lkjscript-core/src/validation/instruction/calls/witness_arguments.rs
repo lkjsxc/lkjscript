@@ -74,7 +74,9 @@ fn validate_memory_witness_arguments(
             if *variable == Some(requirement.parameter)
                 && arguments
                     .get(index)
-                    .is_none_or(|actual| !witness_argument_matches(witness.value_kind, *actual))
+                    .is_none_or(|actual| {
+                        !witness_argument_matches(chunk, witness.value_kind, *actual)
+                    })
             {
                 return Err(instruction_error(
                     caller,
@@ -88,19 +90,41 @@ fn validate_memory_witness_arguments(
     Ok(site.bindings.clone())
 }
 
-fn witness_argument_matches(kind: crate::MemoryWitnessValueKind, actual: Kind) -> bool {
+fn witness_argument_matches(
+    chunk: &Chunk,
+    kind: crate::MemoryWitnessValueKind,
+    actual: Kind,
+) -> bool {
     match kind {
         crate::MemoryWitnessValueKind::Unit => actual == Kind::Unit,
         crate::MemoryWitnessValueKind::Bool => actual == Kind::Bool,
         crate::MemoryWitnessValueKind::I64 => actual == Kind::I64,
         crate::MemoryWitnessValueKind::F64 => actual == Kind::F64,
         crate::MemoryWitnessValueKind::List => actual == Kind::List,
-        crate::MemoryWitnessValueKind::Structural(expected) => matches!(
-            actual,
-            Kind::StructuralOwner { representation, .. }
-                | Kind::StructuralOwnerRef { representation, .. }
-                if representation == expected
-        ),
+        crate::MemoryWitnessValueKind::Structural(expected) => {
+            let actual = match actual {
+                Kind::StructuralOwner { representation, .. }
+                | Kind::StructuralOwnerRef { representation, .. } => representation,
+                _ => return false,
+            };
+            same_witness_representation(chunk, expected, actual)
+        },
         crate::MemoryWitnessValueKind::Unsupported => false,
     }
+}
+
+fn same_witness_representation(
+    chunk: &Chunk,
+    left: crate::StructuralRepresentationId,
+    right: crate::StructuralRepresentationId,
+) -> bool {
+    let Some(left) = chunk.structural_representations.get(left.index()) else { return false };
+    let Some(right) = chunk.structural_representations.get(right.index()) else { return false };
+    left.type_id == right.type_id
+        && left.witness == right.witness
+        && left.witness_group == right.witness_group
+        && left.witness_member == right.witness_member
+        && left.layout == right.layout
+        && left.category == crate::StructuralValueCategory::Owner
+        && right.category == crate::StructuralValueCategory::Owner
 }

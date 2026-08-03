@@ -11,6 +11,7 @@ mod check;
 mod drop_class;
 mod expression_kind;
 mod modes;
+mod placement;
 mod records;
 mod support;
 mod types;
@@ -22,6 +23,7 @@ use check::*;
 use drop_class::*;
 use expression_kind::*;
 use modes::*;
+use placement::*;
 use records::*;
 use support::*;
 use types::*;
@@ -41,6 +43,7 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
     verify_expressions(plan, &facts)?;
     verify_uses_and_constants(plan, &facts)?;
     verify_entries(plan)?;
+    let placement_steps = verify_value_placements(program, plan, &facts)?;
     verify_drop_glues(plan)?;
     verify_drop_classes(program, plan)?;
     let authority_steps = verify_authority(program, plan, &facts)?;
@@ -49,6 +52,7 @@ pub(super) fn verify(program: &hir::Program, plan: &HirMemoryPlan) -> Result<u64
         .checked_add(plan.work.entries)
         .and_then(|value| value.checked_add(plan.work.uses))
         .and_then(|value| value.checked_add(plan.work.obligations))
+        .and_then(|value| value.checked_add(placement_steps))
         .and_then(|value| value.checked_add(authority_steps))
         .ok_or_else(|| Error::msg("independent HIR memory-plan verifier work overflow"))?;
     if steps > MAX_MEMORY_PLAN_VERIFIER_STEPS {

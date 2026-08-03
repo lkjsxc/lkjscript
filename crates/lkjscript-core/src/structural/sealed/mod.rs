@@ -56,6 +56,21 @@ impl<T: Copy, D: Copy> SealedRegionStore<T, D> {
         self.metrics
     }
 
+    pub(crate) fn exact_live_state(&self) -> (u64, u64, u64, u64, u64) {
+        self.records.iter().fold(
+            (0, 0, 0, 0, 0),
+            |(regions, owners, loans, dependencies, backlog), (_, record)| {
+                (
+                    regions + 1,
+                    owners + u64::from(record.owners),
+                    loans + u64::from(record.loans),
+                    dependencies + record.dependencies.as_slice().len() as u64,
+                    backlog + u64::from(record.release_work),
+                )
+            },
+        )
+    }
+
     pub fn begin(
         &mut self,
         runtime: &mut StructuralRuntime,

@@ -11,6 +11,7 @@ pub(in crate::lower) struct StructuralCatalog {
         (
             lkjscript_ir::StructuralTypeId,
             lkjscript_ir::StructuralValueCategory,
+            lkjscript_ir::StructuralStorage,
         ),
     >,
 }
@@ -81,7 +82,11 @@ impl StructuralCatalog {
                     .representations
                     .insert(
                         representation.id,
-                        (representation.type_id, representation.category),
+                        (
+                            representation.type_id,
+                            representation.category,
+                            representation.storage,
+                        ),
                     )
                     .is_some()
             {
@@ -139,7 +144,7 @@ impl StructuralCatalog {
         representation: lkjscript_ir::StructuralRepresentationId,
         category: lkjscript_ir::StructuralValueCategory,
     ) -> Result<(lkjscript_ir::StructuralTypeId, SsaType), LoweringError> {
-        let (type_id, actual) = self
+        let (type_id, actual, _) = self
             .representations
             .get(&representation)
             .copied()
@@ -155,5 +160,33 @@ impl StructuralCatalog {
             .cloned()
             .ok_or_else(|| invalid_structural("structural representation type is absent"))?;
         Ok((type_id, ty))
+    }
+
+    pub(in crate::lower) fn representation_storage(
+        &self,
+        representation: lkjscript_ir::StructuralRepresentationId,
+        category: lkjscript_ir::StructuralValueCategory,
+    ) -> Result<lkjscript_native::StructuralStorageRoute, LoweringError> {
+        let (_, actual, storage) = self
+            .representations
+            .get(&representation)
+            .copied()
+            .ok_or_else(|| invalid_structural("structural representation is absent"))?;
+        if actual != category {
+            return Err(invalid_structural(
+                "structural representation has the wrong value category",
+            ));
+        }
+        match storage {
+            lkjscript_ir::StructuralStorage::UniqueStructural => {
+                Ok(lkjscript_native::StructuralStorageRoute::Unique)
+            }
+            lkjscript_ir::StructuralStorage::SealedRegion => {
+                Ok(lkjscript_native::StructuralStorageRoute::Sealed)
+            }
+            _ => Err(invalid_structural(
+                "native structural representation storage is unsupported",
+            )),
+        }
     }
 }

@@ -12,7 +12,7 @@ fn valid_minimal_chunk_is_opaque_and_decoded() {
 #[test]
 fn all_bytes_are_decoded_even_when_unreachable() {
     let mut chunk = unit_chunk();
-    chunk.main.code = vec![Op::Unit as u8, Op::Return as u8, 255];
+    chunk.main.code = vec![Op::Unit as u8, Op::Return as u8, 145];
     assert!(error(chunk).contains("unknown or retired opcode"));
 
     let mut truncated = unit_chunk();

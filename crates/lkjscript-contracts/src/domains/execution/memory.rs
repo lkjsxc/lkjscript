@@ -43,7 +43,10 @@ pub(crate) fn memory_obligations(language: ContractDigest) -> ContractDescriptor
                     "structural child and invocation-key requirements",
                 ))
                 .fact(fact("object-identity", "observable identity facts"))
-                .fact(fact("placement", "Current and candidate placements"))
+                .fact(fact(
+                    "placement",
+                    "type capability separated from per-value borrow move fusion clone or sealed route",
+                ))
                 .fact(fact(
                     "reclamation",
                     "candidate deterministic reclamation plan",

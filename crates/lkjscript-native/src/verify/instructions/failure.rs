@@ -51,6 +51,7 @@ fn verify_cleanup_calls(
                     descriptor.operation(),
                     StructuralOperation::EndView(_)
                         | StructuralOperation::Drop(_)
+                        | StructuralOperation::WitnessDisposeStatic(_)
                         | StructuralOperation::DestinationAbort { .. }
                 ) {
                     return Err(VerificationError::TypeMismatch(

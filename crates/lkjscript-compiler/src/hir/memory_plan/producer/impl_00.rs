@@ -1,42 +1,4 @@
 impl<'a> Producer<'a> {
-    fn new(program: &'a hir::Program) -> Result<Self> {
-        let mut function_ids = HashMap::with_capacity(program.functions.len());
-        for (index, function) in program.functions.iter().enumerate() {
-            let raw = u32::try_from(index)
-                .map_err(|_| Error::msg("HIR memory-plan function count exceeds u32"))?;
-            if function_ids
-                .insert(function.binding, MemoryFunctionId::new(raw))
-                .is_some()
-            {
-                return Err(Error::msg(
-                    "HIR memory-plan producer found duplicate function binding",
-                ));
-            }
-        }
-        let type_planner = TypePlanner::new(program)?;
-        let mut producer = Self {
-            program,
-            type_planner,
-            function_ids,
-            signatures: Vec::new(),
-            functions: Vec::new(),
-            entries: Vec::new(),
-            uses: Vec::new(),
-            loans: Vec::new(),
-            constants: Vec::new(),
-            calls: Vec::new(),
-            obligations: Vec::new(),
-            destinations: Vec::new(),
-            borrow_scopes: Vec::new(),
-            current_function: MemoryFunctionId::new(0),
-            next_expression: 0,
-            next_place: 0,
-            expression_parents: BTreeMap::new(),
-            work: MemoryPlanWork::default(),
-        };
-        producer.build_signatures()?;
-        Ok(producer)
-    }
     fn run(mut self) -> Result<HirMemoryPlan> {
         self.charge_functions(self.program.functions.len().saturating_add(1))?;
         for (index, function) in self.program.functions.iter().enumerate() {
@@ -53,9 +15,19 @@ impl<'a> Producer<'a> {
         self.build_main(main_id)?;
         self.finish_loans()?;
         self.finish_drop_classes()?;
-        self.finish_type_work()?;
+        let witness_groups = self.finalize_witness_groups()?;
         let type_facts = std::mem::take(&mut self.type_planner.facts);
         let witnesses = std::mem::take(&mut self.type_planner.witnesses);
+        let (value_placements, placement_work) = derive_value_placements(
+            self.program,
+            &self.entries,
+            &type_facts,
+            &witnesses,
+            &self.uses,
+        )?;
+        self.work.value_placements = u64::try_from(value_placements.len())
+            .map_err(|_| Error::msg("HIR value placement count exceeds u64"))?;
+        self.work.placement_work = placement_work;
         let drop_paths = std::mem::take(&mut self.type_planner.drop_paths);
         let drop_glues = std::mem::take(&mut self.type_planner.glues);
         let mut plan = HirMemoryPlan {
@@ -69,8 +41,10 @@ impl<'a> Producer<'a> {
             calls: self.calls,
             obligations: self.obligations,
             type_facts,
+            witness_groups,
             witnesses,
             destinations: self.destinations,
+            value_placements,
             borrow_scopes: self.borrow_scopes,
             drop_paths,
             drop_glues,
@@ -89,6 +63,10 @@ impl<'a> Producer<'a> {
                 Error::msg("HIR memory signature references unknown function binding")
             })?;
             let result_ty = function_result_type(&binding.ty)?.clone();
+            let witness_parameters = memory_witness_parameters(
+                &binding.ty,
+                Some(&function.body),
+            )?;
             let mut parameters = Vec::with_capacity(function.params.len());
             for parameter in &function.params {
                 let parameter_ty = &self
@@ -99,15 +77,28 @@ impl<'a> Producer<'a> {
                     })?
                     .ty;
                 let parameter_ty = parameter_ty.clone();
-                parameters.push(self.planned_parameter_mode(
-                    &parameter_ty,
-                    resource_parameter_consumed(&function.body, *parameter),
-                )?);
+                let dispose_parameter = match &parameter_ty {
+                    Type::Param(name) => witness_parameters.iter().any(|requirement| {
+                        requirement.parameter == *name
+                            && requirement.operations.contains(
+                                &MemoryWitnessOperation::Dispose,
+                            )
+                    }),
+                    _ => false,
+                };
+                parameters.push(if dispose_parameter {
+                    MemoryParameterMode::Consume
+                } else {
+                    self.planned_parameter_mode(
+                        &parameter_ty,
+                        resource_parameter_consumed(&function.body, *parameter),
+                    )?
+                });
             }
             let result = self.planned_result_mode(&result_ty)?;
             self.signatures.push(FunctionMemorySignature {
                 function: function_id,
-                witness_parameters: memory_witness_parameters(&binding.ty)?,
+                witness_parameters,
                 parameters,
                 result,
             });

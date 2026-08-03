@@ -118,7 +118,24 @@ impl StructuralValueRuntime {
             StructuralObject::Owned { image, .. } => {
                 self.require_type(image.root().value_type(), expected)
             }
-            StructuralObject::Static(_) => Err(StructuralValueError::WrongPayloadKind),
+            StructuralObject::Sealed { .. } | StructuralObject::Static(_) => {
+                Err(StructuralValueError::WrongOwnership)
+            }
+        }
+    }
+
+    pub(super) fn require_sealed_root(
+        &self,
+        root: super::super::RootKey,
+        expected: StructuralType,
+    ) -> Result<(), StructuralValueError> {
+        match self.objects.get(root)? {
+            StructuralObject::Sealed { image, .. } => {
+                self.require_type(image.root().value_type(), expected)
+            }
+            StructuralObject::Owned { .. } | StructuralObject::Static(_) => {
+                Err(StructuralValueError::WrongOwnership)
+            }
         }
     }
 

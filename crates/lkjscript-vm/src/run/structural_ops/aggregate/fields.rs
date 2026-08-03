@@ -2,9 +2,11 @@ fn field_borrow<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let (reference, owner, root_type, expected) = field_projection_input(vm)?;
     let representation = match reference.result.route {
         StructuralFieldRoute::Copy => None,
-        StructuralFieldRoute::Structural(type_id) => {
-            Some(view_representation_for_type(vm.chunk, type_id)?)
-        }
+        StructuralFieldRoute::Structural(_) => Some(
+            reference
+                .result_representation
+                .ok_or_else(|| Error::msg("structural field view representation is missing"))?,
+        ),
         StructuralFieldRoute::Unique
         | StructuralFieldRoute::Resource
         | StructuralFieldRoute::LegacyHeap => {
@@ -50,8 +52,10 @@ fn field_copy<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
                 (Ok(_), Err(cleanup)) => return Err(cleanup),
             }
         }
-        StructuralFieldRoute::Structural(type_id) => {
-            let representation = owner_representation_for_type(vm.chunk, type_id)?;
+        StructuralFieldRoute::Structural(_) => {
+            let representation = reference
+                .result_representation
+                .ok_or_else(|| Error::msg("structural field owner representation is missing"))?;
             let view = borrow_field(vm, owner, root_type, reference.field, expected)?;
             let result = invocation(vm)?
                 .runtime

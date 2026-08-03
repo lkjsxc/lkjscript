@@ -17,6 +17,19 @@ impl FunctionBuilder {
         self.append(block, ValueType::Unit, Operation::Unit, None)
     }
 
+    pub fn memory_witness_locator(
+        &mut self,
+        block: BlockId,
+        locator: u16,
+    ) -> Result<ValueId, PlanError> {
+        self.append(
+            block,
+            ValueType::MemoryWitnessLocator,
+            Operation::MemoryWitnessLocator(locator),
+            None,
+        )
+    }
+
     pub fn static_bytes_const(
         &mut self,
         block: BlockId,

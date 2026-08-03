@@ -11,6 +11,14 @@ impl Evaluator<'_> {
         match &instruction.kind {
             InstructionKind::Constant(constant) => self.constant(constant),
             InstructionKind::Copy(source) => self.copy_eval_value(value(values, *source)?),
+            InstructionKind::MemoryWitnessIndependentOwner { value: source, .. } => {
+                self.copy_eval_value(value(values, *source)?)
+            }
+            InstructionKind::MemoryWitnessDispose { value: source, .. } => {
+                let owner = take_value(values, *source)?;
+                self.cleanup_eval_value(owner)?;
+                Ok(EvalValue::Unit)
+            }
             InstructionKind::Move { value: source, .. } => {
                 let moved = take_value(values, *source)?;
                 self.move_eval_value(moved)

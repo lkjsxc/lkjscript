@@ -22,14 +22,20 @@ pub use witness::{
 };
 pub use witness_capabilities::MemoryWitnessCapabilities;
 pub use witness_encoding::{
-    canonical_executable_memory_witness, canonical_executable_memory_witness_dependencies,
-    canonical_semantic_descriptor, direct_nominal, semantic_contract_hash,
-    semantic_dependency_requirements, semantic_type_closure_hash, validate_executable_dependencies,
-    validate_semantic_descriptor, ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessRole,
-    ExecutableMemoryWitnessTarget, SemanticContractError, SemanticDeclaration, SemanticDescriptor,
-    SemanticEnumDeclaration, SemanticEnumVariant, SemanticEnumVariantField, SemanticPrimitiveKind,
-    SemanticProductDeclaration, SemanticProductField, SemanticType, MAX_SEMANTIC_DECLARATIONS,
-    MAX_SEMANTIC_DESCRIPTOR_BYTES, MAX_SEMANTIC_EDGES, MAX_SEMANTIC_TYPE_NODES,
+    canonical_executable_memory_witness_dependencies,
+    canonical_executable_memory_witness_group_descriptor, canonical_semantic_descriptor,
+    direct_nominal, executable_memory_witness_group_id, executable_memory_witness_member_id,
+    semantic_contract_hash, semantic_dependency_requirements, semantic_type_closure_hash,
+    validate_executable_dependencies, validate_executable_memory_witness_groups,
+    validate_semantic_descriptor, ExecutableMemoryWitnessDependency, ExecutableMemoryWitnessGroup,
+    ExecutableMemoryWitnessGroupError, ExecutableMemoryWitnessGroupMember,
+    ExecutableMemoryWitnessRole, ExecutableMemoryWitnessTarget, SemanticContractError,
+    SemanticDeclaration, SemanticDescriptor, SemanticEnumDeclaration, SemanticEnumVariant,
+    SemanticEnumVariantField, SemanticPrimitiveKind, SemanticProductDeclaration,
+    SemanticProductField, SemanticType, MAX_EXECUTABLE_MEMORY_WITNESS_GROUPS,
+    MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_EDGES, MAX_EXECUTABLE_MEMORY_WITNESS_GROUP_MEMBERS,
+    MAX_SEMANTIC_DECLARATIONS, MAX_SEMANTIC_DESCRIPTOR_BYTES, MAX_SEMANTIC_EDGES,
+    MAX_SEMANTIC_TYPE_NODES,
 };
 pub use witness_routes::{
     memory_witness_routes_are_compatible, required_memory_witness_operations,

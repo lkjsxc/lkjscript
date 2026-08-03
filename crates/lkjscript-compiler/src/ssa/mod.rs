@@ -91,7 +91,9 @@ mod operations;
 mod program;
 mod region_products;
 mod structural;
+mod structural_representations;
 use region_products::lower_region_products;
+use structural_representations::{fallback_route, install_value_representations};
 
 use enums::*;
 use facts::*;
@@ -140,6 +142,7 @@ pub(in crate::ssa) struct FunctionBuilder<'a> {
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) failure_cleanups: Vec<FailureCleanupPlan>,
     pub(in crate::ssa) cleanup: CleanupPlan,
+    pub(in crate::ssa) current_placement: Option<ActiveValuePlacement>,
     pub(in crate::ssa) active_place_bindings: Vec<BindingId>,
     pub(in crate::ssa) active_loans: BTreeMap<SsaLoanId, ActiveLoan>,
     pub(in crate::ssa) unplaced_owners: Vec<ValueId>,

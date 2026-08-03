@@ -13,8 +13,12 @@ pub fn required_memory_witness_operations(
             | MemoryWitnessCopy::SealedShare
             | MemoryWitnessCopy::RegionHandle
     ) {
-        operations.push(MemoryWitnessOperation::Clone);
+        operations.extend([
+            MemoryWitnessOperation::Clone,
+            MemoryWitnessOperation::IndependentOwner,
+        ]);
     }
+    operations.push(MemoryWitnessOperation::Dispose);
     if !matches!(
         facts.drop,
         MemoryWitnessDrop::Trivial | MemoryWitnessDrop::Unsupported

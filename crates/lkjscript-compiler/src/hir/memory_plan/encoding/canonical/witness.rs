@@ -86,4 +86,19 @@ canonical_struct!(MemoryWitnessFacts {
     portability,
     contention,
 });
-canonical_struct!(MemoryWitness { id, facts });
+canonical_struct!(MemoryWitnessGroupMember {
+    witness,
+    ordinal,
+    semantic_identity
+});
+canonical_struct!(MemoryWitnessGroup {
+    id,
+    recursive,
+    members
+});
+canonical_struct!(MemoryWitness {
+    id,
+    group,
+    ordinal,
+    facts
+});

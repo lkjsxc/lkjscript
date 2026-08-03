@@ -81,6 +81,12 @@ impl RuntimeSystem {
                 "package entry is not UTF-8".into(),
             ));
         }
+        let (parent_chunk, prepared) = crate::system::preparation::prepare_isolated(
+            &entry,
+            &package_root,
+            package,
+            &manifest,
+        )?;
         let worker = worker
             .canonicalize()
             .map_err(|error| RuntimeError::ProcessCell(format!("worker executable: {error}")))?;
@@ -91,13 +97,18 @@ impl RuntimeSystem {
         }
         let mut state = self.lock_state()?;
         let application = ApplicationId::from_nonzero(state.allocate()?);
+        let lease = state.cache.lease(package, parent_chunk)?;
         state.apps.insert(
             application,
             AppRecord {
                 manifest,
                 package,
-                chunk: None,
-                process_spec: Some(IsolatedProcessSpec { worker, entry }),
+                chunk: Some(lease),
+                process_spec: Some(IsolatedProcessSpec {
+                    worker,
+                    entry,
+                    prepared,
+                }),
                 host,
                 lifecycle: Lifecycle::Installed,
                 incarnation_counter: 0,

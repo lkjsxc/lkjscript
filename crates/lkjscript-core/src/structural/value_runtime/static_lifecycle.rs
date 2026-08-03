@@ -51,6 +51,7 @@ impl StructuralValueRuntime {
         };
         self.require_type(artifact.value_type, expected)?;
         self.runtime.preflight_release(&[root.domain()])?;
+        self.objects.preflight_take(root)?;
         let root = self.roots.unregister_static(key)?;
         let StructuralObject::Static(_) = self.objects.take(root)? else {
             return Err(StructuralValueError::InvariantViolation);

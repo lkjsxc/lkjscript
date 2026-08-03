@@ -27,7 +27,14 @@ fn rejects_type_mismatch_unsupported_signature_and_code_limit(
     let function = plan.declare_function(
         SourceFunctionId::new(4),
         Signature::new(
-            vec![ValueType::I64, ValueType::I64, ValueType::I64],
+            vec![
+                ValueType::I64,
+                ValueType::I64,
+                ValueType::I64,
+                ValueType::I64,
+                ValueType::I64,
+                ValueType::I64,
+            ],
             ValueType::I64,
         )?,
     )?;

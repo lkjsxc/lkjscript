@@ -10,6 +10,7 @@ autobins = false
 lkjscript-contracts = { path = "../lkjscript-contracts" }
 lkjscript-core = { path = "../lkjscript-core" }
 lkjscript-host = { path = "../lkjscript-host" }
+lkjscript-compiler = { path = "../lkjscript-compiler" }
 lkjscript-vm = { path = "../lkjscript-vm" }
 
 [lints.clippy]

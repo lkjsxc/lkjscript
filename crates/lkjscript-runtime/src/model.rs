@@ -1,7 +1,6 @@
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 
 use lkjscript_core::{CapabilityKind, ExecutionConfig, ExecutionOutcome};
-use lkjscript_vm::ExecutionInputs;
 
 use crate::{
     ApplicationId, ApplicationIncarnationId, ExecutionCellId, PackageContentId, RuntimeError,
@@ -185,16 +184,5 @@ pub struct InvocationOutcome {
     pub execution_cell: ExecutionCellId,
     pub incarnation: ApplicationIncarnationId,
     pub outcome: ExecutionOutcome,
-}
-
-pub(crate) fn private_inputs(
-    arguments: Vec<String>,
-    capabilities: Vec<CapabilityKind>,
-    host: lkjscript_host::HostEnvironment,
-) -> ExecutionInputs {
-    ExecutionInputs {
-        arguments,
-        capabilities,
-        host,
-    }
+    pub rehydration: Option<crate::RehydrationReport>,
 }

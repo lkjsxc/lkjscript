@@ -16,6 +16,8 @@ pub(super) fn exact_ownership_instruction_kind_equal(
             | InstructionKind::AggregateConsumePayload { .. }
             | InstructionKind::StringUtf8View { .. }
             | InstructionKind::StructuralCopy { .. }
+            | InstructionKind::MemoryWitnessIndependentOwner { .. }
+            | InstructionKind::MemoryWitnessDispose { .. }
     ) {
         return left == right;
     }

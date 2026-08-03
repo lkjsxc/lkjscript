@@ -36,6 +36,8 @@ pub(crate) fn rewrite_function_values(
                 | InstructionKind::AggregateConsumePayload { value, .. }
                 | InstructionKind::StringUtf8View { value, .. }
                 | InstructionKind::StructuralCopy { value, .. }
+                | InstructionKind::MemoryWitnessIndependentOwner { value, .. }
+                | InstructionKind::MemoryWitnessDispose { value, .. }
                 | InstructionKind::F64FromI64Exact { value }
                 | InstructionKind::F64FromI64Rounded { value }
                 | InstructionKind::I64FromF64Exact { value }

@@ -53,6 +53,8 @@ pub(crate) fn instruction_operand_count(kind: &InstructionKind) -> usize {
         | InstructionKind::AggregateConsumePayload { .. }
         | InstructionKind::StringUtf8View { .. }
         | InstructionKind::StructuralCopy { .. }
+        | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessDispose { .. }
         | InstructionKind::F64FromI64Exact { .. }
         | InstructionKind::F64FromI64Rounded { .. }
         | InstructionKind::I64FromF64Exact { .. }

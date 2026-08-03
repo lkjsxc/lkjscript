@@ -7,23 +7,54 @@ fn validate_representation(
         .get(representation.type_id.index())
         .filter(|ty| ty.id == representation.type_id)
         .ok_or_else(|| Error::msg("bytecode structural representation has a missing type"))?;
-    if ty.layout != representation.layout {
+    if ty.layout != representation.layout || ty.witness != representation.witness {
         return Err(Error::msg(
-            "bytecode structural representation has a stale layout",
+            "bytecode structural representation has stale type/witness metadata",
         ));
+    }
+    if let Some(witness) = chunk.memory_witnesses.iter()
+        .find(|item| item.id == representation.witness)
+    {
+        if witness.group != representation.witness_group
+            || witness.ordinal != representation.witness_member
+        {
+            return Err(Error::msg(
+                "bytecode structural representation group/member is stale",
+            ));
+        }
+    } else if !chunk.memory_witnesses.is_empty() {
+        return Err(Error::msg(
+            "bytecode structural representation witness is missing",
+        ));
+    }
+    if chunk.structural_representations.iter().any(|item| {
+        item.id != representation.id
+            && item.type_id == representation.type_id
+            && item.witness == representation.witness
+            && item.witness_group == representation.witness_group
+            && item.witness_member == representation.witness_member
+            && item.layout == representation.layout
+            && item.category == representation.category
+            && item.storage == representation.storage
+            && item.route == representation.route
+    }) {
+        return Err(Error::msg("bytecode structural representation tuple is duplicated"));
     }
     let valid_storage = matches!(
         (representation.category, representation.storage),
-        (
-            StructuralValueCategory::Owner,
-            crate::StructuralStorage::Static | crate::StructuralStorage::Unique
-        ) | (
-            StructuralValueCategory::View,
-            crate::StructuralStorage::Stack
-        ) | (
-            StructuralValueCategory::Destination,
+        (StructuralValueCategory::Owner,
+            crate::StructuralStorage::Static
+                | crate::StructuralStorage::UniqueStructural
+                | crate::StructuralStorage::OrdinaryRegion
+                | crate::StructuralStorage::SealedRegion
+                | crate::StructuralStorage::ExternalResource)
+        | (StructuralValueCategory::View,
+            crate::StructuralStorage::Stack | crate::StructuralStorage::BorrowedView)
+        | (StructuralValueCategory::Destination,
             crate::StructuralStorage::CallerDestination
-        )
+                | crate::StructuralStorage::UniqueStructural
+                | crate::StructuralStorage::OrdinaryRegion
+                | crate::StructuralStorage::SealedRegion)
     );
     if !valid_storage {
         return Err(Error::msg(
@@ -39,7 +70,12 @@ fn validate_destination(chunk: &Chunk, destination: &StructuralDestinationMetada
     if representation.category != StructuralValueCategory::Destination
         || owner.category != StructuralValueCategory::Owner
         || representation.type_id != owner.type_id
+        || representation.witness != owner.witness
+        || representation.witness_group != owner.witness_group
+        || representation.witness_member != owner.witness_member
         || representation.layout != owner.layout
+        || representation.storage != owner.storage
+        || representation.route != owner.route
     {
         return Err(Error::msg(
             "bytecode structural destination owner metadata is inconsistent",
@@ -117,69 +153,4 @@ fn validate_field(chunk: &Chunk, field: &StructuralFieldMetadata) -> Result<()> 
     Ok(())
 }
 
-fn lookup_representation(
-    chunk: &Chunk,
-    id: crate::StructuralRepresentationId,
-) -> Result<&StructuralRepresentationMetadata> {
-    chunk
-        .structural_representations
-        .get(id.index())
-        .filter(|item| item.id == id)
-        .ok_or_else(|| Error::msg("bytecode structural representation reference is stale"))
-}
-
-fn lookup_destination(
-    chunk: &Chunk,
-    id: crate::StructuralDestinationId,
-) -> Result<&StructuralDestinationMetadata> {
-    chunk
-        .structural_destinations
-        .get(id.index())
-        .filter(|item| item.id == id)
-        .ok_or_else(|| Error::msg("bytecode structural destination reference is stale"))
-}
-
-fn layout_fields(
-    chunk: &Chunk,
-    id: crate::StructuralLayoutId,
-    active_variant: Option<crate::VariantId>,
-) -> Result<Vec<StructuralFieldMetadata>> {
-    let layout = chunk
-        .structural_layouts
-        .get(id.index())
-        .filter(|item| item.id == id)
-        .ok_or_else(|| Error::msg("bytecode structural layout reference is stale"))?;
-    match &layout.kind {
-        StructuralLayoutKind::String | StructuralLayoutKind::Path => {
-            if active_variant.is_some() {
-                return Err(Error::msg(
-                    "bytecode structural leaf destination has an active variant",
-                ));
-            }
-            Ok(Vec::new())
-        }
-        StructuralLayoutKind::Product { fields, .. } => {
-            if active_variant.is_some() {
-                return Err(Error::msg(
-                    "bytecode structural product destination has an active variant",
-                ));
-            }
-            Ok(fields.clone())
-        }
-        StructuralLayoutKind::Enum { variants, .. } => {
-            let active = active_variant.ok_or_else(|| {
-                Error::msg("bytecode structural enum destination has no active variant")
-            })?;
-            variants
-                .iter()
-                .find(|variant| variant.variant == active)
-                .map(|variant| variant.fields.clone())
-                .ok_or_else(|| Error::msg("bytecode structural enum active variant is missing"))
-        }
-    }
-}
-
-fn add(left: usize, right: usize, category: &str) -> Result<usize> {
-    left.checked_add(right)
-        .ok_or_else(|| Error::msg(format!("bytecode {category} overflow")))
-}
+include!("metadata/lookups.rs");

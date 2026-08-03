@@ -102,7 +102,9 @@ pub(in crate::codegen) fn allocate_locals(
                 instruction.metadata.failure_cleanup,
             )?);
             add_interference(&mut interference, instruction.id, &live)?;
-            if let InstructionKind::StructuralCopy { value, .. } = instruction.kind {
+            if let InstructionKind::StructuralCopy { value, .. }
+            | InstructionKind::MemoryWitnessIndependentOwner { value, .. } = instruction.kind
+            {
                 add_edge(&mut interference, instruction.id, value)?;
             }
             live.remove(&instruction.id);

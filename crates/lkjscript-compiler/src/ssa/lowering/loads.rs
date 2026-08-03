@@ -7,17 +7,44 @@ impl FunctionBuilder<'_> {
         expression: &Expr,
     ) -> Result<Option<ValueId>> {
         match binding.storage {
-            BindingStorage::Local(_) => self
-                .env
-                .get(&binding.binding)
-                .copied()
-                .map(Some)
-                .ok_or_else(|| {
+            BindingStorage::Local(_) => {
+                let source = self.env.get(&binding.binding).copied().ok_or_else(|| {
                     Error::msg(format!(
                         "HIR binding {} is not in SSA environment",
                         binding.binding.raw()
                     ))
-                }),
+                })?;
+                let ty = lower_type(&expression.ty, self.product_ids)?;
+                let Some(placement) = self.current_placement else {
+                    return Ok(Some(source));
+                };
+                if !self.structural.is_owned(&ty)
+                    || placement.storage == StructuralStorage::BorrowedView
+                {
+                    return Ok(Some(source));
+                }
+                let representation = self
+                    .structural
+                    .representation_by_route(
+                        &ty,
+                        placement.route,
+                        StructuralValueCategory::Owner,
+                        placement.storage,
+                    )
+                    .ok_or_else(|| {
+                        Error::msg("structural load placement has no exact owner representation")
+                    })?;
+                self.append(
+                    ty,
+                    InstructionKind::StructuralCopy {
+                        representation,
+                        value: source,
+                    },
+                    EffectSet::ALLOCATES,
+                    expression.origin,
+                )
+                .map(Some)
+            }
             BindingStorage::Function => {
                 let target = self
                     .function_ids
@@ -119,9 +146,28 @@ impl FunctionBuilder<'_> {
     ) -> Result<Option<Vec<ValueId>>> {
         let mut values = Vec::with_capacity(arguments.len());
         for argument in arguments {
+            let incoming_unplaced = self.unplaced_owners.clone();
             let Some(value) = self.lower_expr(argument)? else {
                 return Ok(None);
             };
+            let successor_unplaced = self.unplaced_owners.clone();
+            for (previous_index, previous) in values.iter_mut().enumerate() {
+                let expression = &arguments[previous_index];
+                let loaded_successor = match &expression.kind {
+                    ExprKind::Load(reference) => self.env.get(&reference.binding),
+                    _ => None,
+                };
+                let needs_relink = incoming_unplaced.contains(previous)
+                    || loaded_successor.is_some_and(|successor| successor != previous);
+                if needs_relink && is_owned_value(self.structural, &self.value_type(*previous)?) {
+                    *previous = self.structural_successor_value(
+                        expression,
+                        *previous,
+                        &incoming_unplaced,
+                        &successor_unplaced,
+                    )?;
+                }
+            }
             values.push(value);
         }
         Ok(Some(values))

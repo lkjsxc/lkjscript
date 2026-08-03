@@ -1,4 +1,4 @@
-pub(super) fn internal_name(module: &str, name: &str) -> String {
+pub(crate) fn internal_name(module: &str, name: &str) -> String {
     let digest = lkjscript_contracts::ContractDigest::from_bytes(lkjscript_contracts::sha256(
         module.as_bytes(),
     ));

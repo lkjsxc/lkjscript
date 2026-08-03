@@ -50,9 +50,23 @@ pub(in crate::ssa) fn signature_from_type(
                         params.iter().any(|ty| naked_parameter(ty, variable))
                             || naked_parameter(ret, variable)
                     })
-                    .map(|parameter| MemoryWitnessParameter {
-                        parameter: parameter.clone(),
-                        operations: vec![lkjscript_contracts::MemoryWitnessOperation::Transport],
+                    .map(|parameter| {
+                        let occurrences = params
+                            .iter()
+                            .filter(|ty| naked_parameter(ty, parameter))
+                            .count();
+                        let mut operations =
+                            vec![lkjscript_contracts::MemoryWitnessOperation::Transport];
+                        if occurrences >= 2 {
+                            operations.extend([
+                                lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
+                                lkjscript_contracts::MemoryWitnessOperation::Dispose,
+                            ]);
+                        }
+                        MemoryWitnessParameter {
+                            parameter: parameter.clone(),
+                            operations,
+                        }
                     })
                     .collect(),
                 parameters: params
@@ -121,9 +135,16 @@ pub(in crate::ssa) fn is_owned_value(structural: &StructuralMemoryMetadata, ty: 
 
 pub(in crate::ssa) struct CleanupPlan {
     pub(in crate::ssa) next_expression: u32,
+    pub(in crate::ssa) placement_routes: BTreeMap<u32, ActiveValuePlacement>,
     pub(in crate::ssa) loan_ends: BTreeMap<u32, Vec<SsaLoanId>>,
     pub(in crate::ssa) places: Vec<PlaceMetadata>,
     pub(in crate::ssa) place_drop_classes: BTreeMap<SsaPlaceId, MemoryDropClass>,
+}
+
+#[derive(Clone, Copy)]
+pub(in crate::ssa) struct ActiveValuePlacement {
+    pub(in crate::ssa) route: [u8; 32],
+    pub(in crate::ssa) storage: StructuralStorage,
 }
 
 #[derive(Clone, Copy)]

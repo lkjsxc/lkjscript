@@ -36,6 +36,11 @@ pub(super) fn verify_instruction(
         Operation::F64Const(_) => require_output(instruction, ValueType::F64, "F64 constant"),
         Operation::BoolConst(_) => require_output(instruction, ValueType::Bool, "Bool constant"),
         Operation::Unit => require_output(instruction, ValueType::Unit, "Unit constant"),
+        Operation::MemoryWitnessLocator(_) => require_output(
+            instruction,
+            ValueType::MemoryWitnessLocator,
+            "memory witness locator",
+        ),
         Operation::StaticBytesConst(_) => {
             require_output(instruction, ValueType::StaticBytes, "static bytes constant")
         }
@@ -93,13 +98,13 @@ pub(super) fn verify_instruction(
             }
             let value_type = function.locals[index].value_type;
             let observable = match value_type {
-                ValueType::StructuralOwner(_) => true,
+                ValueType::StructuralOwner(_) | ValueType::StructuralKey => true,
                 ValueType::StructuralView(view) => !view.exclusive(),
                 _ => false,
             };
             if matches!(instruction.operation, Operation::ObserveLocal(_)) && !observable {
                 return Err(VerificationError::TypeMismatch(
-                    "observed local is not a structural owner or shared view",
+                    "observed local is not a structural owner, key, or shared view",
                 ));
             }
             require_output(instruction, value_type, "local read")

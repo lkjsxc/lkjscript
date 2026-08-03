@@ -113,6 +113,7 @@ dependencies = [
 name = "lkjscript-runtime"
 version = "0.0.0"
 dependencies = [
+ "lkjscript-compiler",
  "lkjscript-contracts",
  "lkjscript-core",
  "lkjscript-host",

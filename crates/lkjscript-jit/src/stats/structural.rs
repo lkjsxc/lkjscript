@@ -16,6 +16,16 @@ pub struct NativeStructuralStats {
     pub events_overwritten: u64,
     pub releases: u64,
     pub release_work: u64,
+    pub sealed_publications: u64,
+    pub zero_copy_adoptions: u64,
+    pub copied_publication_bytes: u64,
+    pub sealed_acquisitions: u64,
+    pub sealed_releases: u64,
+    pub sealed_release_work: u64,
+    pub sealed_nodes_reclaimed: u64,
+    pub live_objects: u32,
+    pub live_sealed_domains: u32,
+    pub live_sealed_owners: u32,
     pub live_roots: u32,
     pub live_loans: u32,
     pub live_views: u32,
@@ -51,6 +61,28 @@ impl NativeStructuralStats {
             .saturating_add(other.events_overwritten);
         self.releases = self.releases.saturating_add(other.releases);
         self.release_work = self.release_work.saturating_add(other.release_work);
+        self.sealed_publications = self
+            .sealed_publications
+            .saturating_add(other.sealed_publications);
+        self.zero_copy_adoptions = self
+            .zero_copy_adoptions
+            .saturating_add(other.zero_copy_adoptions);
+        self.copied_publication_bytes = self
+            .copied_publication_bytes
+            .saturating_add(other.copied_publication_bytes);
+        self.sealed_acquisitions = self
+            .sealed_acquisitions
+            .saturating_add(other.sealed_acquisitions);
+        self.sealed_releases = self.sealed_releases.saturating_add(other.sealed_releases);
+        self.sealed_release_work = self
+            .sealed_release_work
+            .saturating_add(other.sealed_release_work);
+        self.sealed_nodes_reclaimed = self
+            .sealed_nodes_reclaimed
+            .saturating_add(other.sealed_nodes_reclaimed);
+        self.live_objects = other.live_objects;
+        self.live_sealed_domains = other.live_sealed_domains;
+        self.live_sealed_owners = other.live_sealed_owners;
         self.live_roots = other.live_roots;
         self.live_loans = other.live_loans;
         self.live_views = other.live_views;

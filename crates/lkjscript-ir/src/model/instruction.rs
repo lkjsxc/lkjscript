@@ -95,6 +95,14 @@ pub enum InstructionKind {
         representation: StructuralRepresentationId,
         value: ValueId,
     },
+    MemoryWitnessIndependentOwner {
+        parameter: String,
+        value: ValueId,
+    },
+    MemoryWitnessDispose {
+        parameter: String,
+        value: ValueId,
+    },
     FunctionRef(FunctionId),
     Runtime {
         operation: RuntimeOp,

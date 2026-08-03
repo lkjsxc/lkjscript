@@ -38,6 +38,10 @@ pub(crate) fn expected_instruction_effects(
         | InstructionKind::Borrow { .. } => {
             super::memory_instruction::verify(program, function, instruction, types)?
         }
+        InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessDispose { .. } => {
+            super::structural_instruction::verify_witness(program, function, instruction, types)?
+        }
         InstructionKind::StructuralPublish { .. }
         | InstructionKind::DestinationCreate { .. }
         | InstructionKind::DestinationFieldInit { .. }

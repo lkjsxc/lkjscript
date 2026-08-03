@@ -70,8 +70,11 @@ impl Emitter<'_> {
         if target_block.parameters.len() != arguments.len() {
             return Err(Error::msg("SSA bytecode edge argument count mismatch"));
         }
-        for argument in arguments {
+        for (index, argument) in arguments.iter().enumerate() {
             self.load(*argument)?;
+            if arguments[index.saturating_add(1)..].contains(argument) {
+                self.emit_independent_owner(*argument)?;
+            }
         }
         for (parameter, argument) in target_block.parameters.iter().zip(arguments).rev() {
             let slot = self.slot(parameter.id)?;
@@ -92,6 +95,37 @@ impl Emitter<'_> {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn emit_independent_owner(&mut self, value: ValueId) -> Result<()> {
+        let SsaType::TypeParameter(parameter) = self.value_type(value)? else {
+            return Ok(());
+        };
+        let Some(requirement) = self
+            .function
+            .signature
+            .memory_witness_parameters
+            .iter()
+            .find(|requirement| requirement.parameter == *parameter)
+            .filter(|requirement| {
+                requirement
+                    .operations
+                    .contains(&lkjscript_contracts::MemoryWitnessOperation::IndependentOwner)
+            })
+        else {
+            return Ok(());
+        };
+        let ordinal = self
+            .function
+            .signature
+            .type_parameters
+            .iter()
+            .position(|candidate| candidate == &requirement.parameter)
+            .and_then(|index| u8::try_from(index).ok())
+            .ok_or_else(|| Error::msg("memory witness parameter ordinal exceeds u8"))?;
+        self.proto
+            .emit_op_u8(Op::MemoryWitnessIndependentOwner, ordinal);
         Ok(())
     }
 

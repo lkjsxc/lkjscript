@@ -12,15 +12,27 @@ pub enum StructuralOperation {
     PublishStatic {
         value_type: StructuralTypeIdentity,
         payload: StructuralPayloadKind,
+        storage: StructuralStorageRoute,
     },
     PublishUnique {
         value_type: StructuralTypeIdentity,
         payload: StructuralPayloadKind,
         unique: UniqueType,
+        storage: StructuralStorageRoute,
     },
-    PublishI64(StructuralTypeIdentity),
+    PublishI64 {
+        value_type: StructuralTypeIdentity,
+        storage: StructuralStorageRoute,
+    },
+    PublishOwner {
+        value_type: StructuralTypeIdentity,
+        storage: StructuralStorageRoute,
+    },
     PublishFormattedI64(StructuralTypeIdentity),
     Copy(StructuralTypeIdentity),
+    WitnessIndependentOwner,
+    WitnessDispose,
+    WitnessDisposeStatic(u16),
     CopyView(StructuralViewType),
     Move(StructuralTypeIdentity),
     Borrow {
@@ -31,14 +43,22 @@ pub enum StructuralOperation {
     },
     EndView(StructuralViewType),
     Drop(StructuralTypeIdentity),
-    DestinationCreate(StructuralAggregateDescriptor),
+    DestinationCreate {
+        aggregate: StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
+    },
     DestinationInitialize {
         aggregate: StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
         field: u16,
     },
-    DestinationFinish(StructuralAggregateDescriptor),
+    DestinationFinish {
+        aggregate: StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
+    },
     DestinationAbort {
         aggregate: StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
         initialized: u16,
     },
     ObserveTag(StructuralViewType),
@@ -66,22 +86,32 @@ impl StructuralOperation {
             Self::PublishStatic {
                 value_type,
                 payload,
+                storage: _,
             } => value_type.is_valid() && payload_matches(*value_type, *payload),
             Self::PublishUnique {
                 value_type,
                 payload,
                 unique,
+                storage: _,
             } => {
                 value_type.is_valid()
                     && payload_matches(*value_type, *payload)
                     && matches!(unique, UniqueType::Bytes | UniqueType::ByteVector)
             }
-            Self::PublishI64(value_type) => {
-                value_type.is_valid() && value_type.kind() == StructuralKind::I64
-            }
+            Self::PublishI64 {
+                value_type,
+                storage: _,
+            } => value_type.is_valid() && value_type.kind() == StructuralKind::I64,
+            Self::PublishOwner {
+                value_type,
+                storage: _,
+            } => value_type.is_valid(),
             Self::PublishFormattedI64(value_type) => {
                 value_type.is_valid() && value_type.kind() == StructuralKind::String
             }
+            Self::WitnessIndependentOwner
+            | Self::WitnessDispose
+            | Self::WitnessDisposeStatic(_) => true,
             Self::Copy(value_type)
             | Self::Move(value_type)
             | Self::Drop(value_type)
@@ -111,19 +141,27 @@ impl StructuralOperation {
             | Self::ObserveTag(view)
             | Self::ObserveI64(view)
             | Self::PayloadUtf8Valid(view) => view.is_valid(),
-            Self::DestinationCreate(aggregate) | Self::DestinationFinish(aggregate) => {
-                aggregate.canonical()
+            Self::DestinationCreate {
+                aggregate,
+                storage: _,
             }
+            | Self::DestinationFinish {
+                aggregate,
+                storage: _,
+            } => aggregate.canonical(),
             Self::ConsumePayload(aggregate) => {
                 aggregate.canonical()
                     && matches!(aggregate.kind(), StructuralAggregateKind::Enum(_))
                     && aggregate.fields().len() == 1
             }
-            Self::DestinationInitialize { aggregate, field } => {
-                aggregate.canonical() && usize::from(*field) < aggregate.fields().len()
-            }
+            Self::DestinationInitialize {
+                aggregate,
+                storage: _,
+                field,
+            } => aggregate.canonical() && usize::from(*field) < aggregate.fields().len(),
             Self::DestinationAbort {
                 aggregate,
+                storage: _,
                 initialized,
             } => aggregate.canonical() && usize::from(*initialized) <= aggregate.fields().len(),
             Self::PayloadBytesEqual { left, right } => {
@@ -140,6 +178,7 @@ impl StructuralOperation {
         matches!(
             self,
             Self::Copy(_)
+                | Self::WitnessIndependentOwner
                 | Self::CopyView(_)
                 | Self::StringUtf8View { .. }
                 | Self::ObserveTag(_)

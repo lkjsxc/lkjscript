@@ -49,16 +49,24 @@ pub(in crate::run) fn copy_into_list<J: RuntimeTier>(
             record.representation,
             StructuralValueCategory::View,
         )?;
-        let owner_representation = vm
+        let mut candidates = vm
             .chunk
             .structural_representations()
             .iter()
-            .find(|item| {
+            .filter(|item| {
                 item.type_id == view_metadata.type_id
                     && item.category == StructuralValueCategory::Owner
-            })
+                    && item.storage == lkjscript_core::StructuralStorage::UniqueStructural
+            });
+        let owner_representation = candidates
+            .next()
             .map(|item| item.id)
             .ok_or_else(|| Error::msg("segmented list owner representation is missing"))?;
+        if candidates.next().is_some() {
+            return Err(Error::msg(
+                "segmented list owner representation is ambiguous",
+            ));
+        }
         let semantic = invocation(vm)?
             .runtime
             .projected(view)

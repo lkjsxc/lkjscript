@@ -34,7 +34,7 @@ impl StructuralValueRuntime {
             .roots
             .root(key, expected.layout, expected.semantic_type)?;
         match self.objects.get(root)? {
-            StructuralObject::Owned { image, .. } => {
+            StructuralObject::Owned { image, .. } | StructuralObject::Sealed { image, .. } => {
                 self.require_type(image.root().value_type(), expected)?;
                 Ok(image)
             }
@@ -55,14 +55,17 @@ impl StructuralValueRuntime {
                 self.require_type(artifact.value_type, expected)?;
                 Ok(*artifact)
             }
-            StructuralObject::Owned { .. } => Err(StructuralValueError::WrongPayloadKind),
+            StructuralObject::Owned { .. } | StructuralObject::Sealed { .. } => {
+                Err(StructuralValueError::WrongPayloadKind)
+            }
         }
     }
 
     pub fn projected(&self, key: StructuralViewKey) -> Result<SemanticValue, StructuralValueError> {
         let record = self.view(key)?;
-        let StructuralObject::Owned { image, .. } = self.objects.get(record.root)? else {
-            return Err(StructuralValueError::WrongPayloadKind);
+        let image = match self.objects.get(record.root)? {
+            StructuralObject::Owned { image, .. } | StructuralObject::Sealed { image, .. } => image,
+            StructuralObject::Static(_) => return Err(StructuralValueError::WrongPayloadKind),
         };
         image.to_semantic_at(record.node)
     }
@@ -72,8 +75,9 @@ impl StructuralValueRuntime {
         key: StructuralViewKey,
     ) -> Result<StructuralNode<'_>, StructuralValueError> {
         let record = self.view(key)?;
-        let StructuralObject::Owned { image, .. } = self.objects.get(record.root)? else {
-            return Err(StructuralValueError::WrongPayloadKind);
+        let image = match self.objects.get(record.root)? {
+            StructuralObject::Owned { image, .. } | StructuralObject::Sealed { image, .. } => image,
+            StructuralObject::Static(_) => return Err(StructuralValueError::WrongPayloadKind),
         };
         image
             .node(record.node)
@@ -85,8 +89,9 @@ impl StructuralValueRuntime {
         let StructuralProjection::Utf8 { start, end, .. } = record.projection else {
             return Err(StructuralValueError::WrongPayloadKind);
         };
-        let StructuralObject::Owned { image, .. } = self.objects.get(record.root)? else {
-            return Err(StructuralValueError::WrongPayloadKind);
+        let image = match self.objects.get(record.root)? {
+            StructuralObject::Owned { image, .. } | StructuralObject::Sealed { image, .. } => image,
+            StructuralObject::Static(_) => return Err(StructuralValueError::WrongPayloadKind),
         };
         let bytes = image.bytes(record.node, super::StructuralKind::String)?;
         let text = std::str::from_utf8(bytes).map_err(|_| StructuralValueError::InvalidUtf8)?;
@@ -111,10 +116,14 @@ impl StructuralValueRuntime {
         }
         let root = record.root;
         let node = record.node;
-        let StructuralObject::Owned { image, .. } = self.objects.get_mut(root)? else {
-            return Err(StructuralValueError::WrongPayloadKind);
-        };
-        image.bytes_mut(node, super::StructuralKind::ByteVector)
+        match self.objects.get_mut(root)? {
+            StructuralObject::Owned { image, .. } => {
+                image.bytes_mut(node, super::StructuralKind::ByteVector)
+            }
+            StructuralObject::Sealed { .. } | StructuralObject::Static(_) => {
+                Err(StructuralValueError::WrongOwnership)
+            }
+        }
     }
 
     pub fn path_equals(

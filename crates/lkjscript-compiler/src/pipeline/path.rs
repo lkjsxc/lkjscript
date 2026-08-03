@@ -56,7 +56,16 @@ pub fn compile_path_with_metrics_and_ledger(
     let total_started = Instant::now();
     let result = (|| {
         crate::ensure_source_path(path)?;
+        let package = crate::package::verify_for_compilation(path)?;
         let (program, loading) = load_with_metrics_and_budget(path, limits, ledger)?;
+        if let Some(root) = &package {
+            crate::package::verify_loaded_sources(root, path, &program)?;
+        }
+        let development_source = program
+            .files()
+            .first()
+            .ok_or_else(|| lkjscript_core::Error::msg("compiled source closure is empty"))?
+            .exact_source_sha256;
         let source_files = program.files().len();
         let projection = program
             .module_scoped_projection()
@@ -78,7 +87,28 @@ pub fn compile_path_with_metrics_and_ledger(
         let bytecode = validate_chunk(chunk, &limits.validation)?;
         let bytecode_validation = validation_started.elapsed();
         let identity = ledger.profile().identity();
+        let provenance = match package {
+            Some(root) => crate::package::program::locked(crate::package::prepared_facts(
+                &root,
+                path,
+                &memory_plan,
+            )?),
+            None => crate::package::program::development(
+                development_source,
+                &path.to_string_lossy(),
+                &memory_plan,
+            ),
+        };
+        let (prepared, ssa, bytecode) = crate::package::program::bind(
+            ssa,
+            bytecode,
+            &memory_plan,
+            identity,
+            provenance,
+            &limits.validation,
+        )?;
         let executable = ExecutableProgram {
+            prepared,
             bytecode,
             ssa,
             memory_plan,
@@ -131,7 +161,16 @@ pub fn compile_path_with_sources_and_ledger(
 ) -> Result<(ExecutableProgram, Vec<PathBuf>)> {
     let result = (|| {
         crate::ensure_source_path(path)?;
+        let package = crate::package::verify_for_compilation(path)?;
         let program = load_for_compiler_with_budget(path, limits, ledger)?;
+        if let Some(root) = &package {
+            crate::package::verify_loaded_sources(root, path, &program)?;
+        }
+        let development_source = program
+            .files()
+            .first()
+            .ok_or_else(|| lkjscript_core::Error::msg("compiled source closure is empty"))?
+            .exact_source_sha256;
         let sources = program
             .files()
             .iter()
@@ -141,7 +180,18 @@ pub fn compile_path_with_sources_and_ledger(
             .module_scoped_projection()
             .map_err(crate::source::SourceDiagnostic::into_core)?;
         let analyzed = analyze_program_with_budget(&projection, ledger)?;
-        let executable = compile_analyzed(&analyzed, limits, ledger)?;
+        let executable = compile_analyzed(&analyzed, limits, ledger, |plan| {
+            Ok(match package {
+                Some(root) => crate::package::program::locked(crate::package::prepared_facts(
+                    &root, path, plan,
+                )?),
+                None => crate::package::program::development(
+                    development_source,
+                    &path.to_string_lossy(),
+                    plan,
+                ),
+            })
+        })?;
         Ok((executable, sources))
     })();
     finish(result, ledger)

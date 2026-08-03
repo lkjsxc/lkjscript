@@ -1,5 +1,8 @@
 use super::*;
 
+mod witness;
+use witness::call_result_witness_slot;
+
 pub(super) fn lower_failure_cleanup(
     function: &Function,
     instruction: &Instruction,
@@ -106,11 +109,17 @@ pub(in crate::lower) fn lower_failure_cleanup_id(
                         ValueType::StructuralOwner(value_type) => {
                             lkjscript_native::StructuralOperation::Drop(value_type)
                         }
+                        ValueType::StructuralKey => {
+                            lkjscript_native::StructuralOperation::WitnessDisposeStatic(
+                                call_result_witness_slot(function, *value, layouts)?,
+                            )
+                        }
                         ValueType::StructuralDestination(_) => {
-                            let (aggregate, initialized) =
+                            let (aggregate, storage, initialized) =
                                 layouts.structural().destination(function, *value)?;
                             lkjscript_native::StructuralOperation::DestinationAbort {
                                 aggregate,
+                                storage,
                                 initialized,
                             }
                         }
@@ -139,8 +148,14 @@ pub(in crate::lower) fn lower_failure_cleanup_id(
                     "SSA failure cleanup operation is absent",
                 )
             })?;
-            let descriptor = lkjscript_native::StructuralCallDescriptor::new(operation)
-                .map_err(LoweringError::backend)?;
+            let descriptor = lkjscript_native::StructuralCallDescriptor::new(operation.clone())
+                .map_err(|error| {
+                    LoweringError::new(
+                        LoweringFailureCode::Backend,
+                        Some(function.id),
+                        format!("failure cleanup {operation:?}: {error}"),
+                    )
+                })?;
             Ok(lkjscript_native::FailureCleanupCall::structural(
                 descriptor, local,
             ))

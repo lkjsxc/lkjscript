@@ -123,20 +123,17 @@ fn field_role_swap_and_forged_local_target_reject() {
     let requirements = semantic_dependency_requirements(&descriptor).expect("requirements");
     let dependency = |index: usize| ExecutableMemoryWitnessDependency {
         role: requirements[index].0.clone(),
-        target: ExecutableMemoryWitnessTarget::ExternalWitness([20 + index as u8; 32]),
+        target: ExecutableMemoryWitnessTarget::ExternalMember {
+            group: [10 + index as u8; 32],
+            member: [20 + index as u8; 32],
+        },
     };
     let valid = vec![dependency(0), dependency(1)];
     validate_executable_dependencies(&descriptor, &valid).expect("complete roles");
     let swapped = vec![dependency(1), dependency(0)];
     assert!(validate_executable_dependencies(&descriptor, &swapped).is_err());
-    let forged = vec![
-        ExecutableMemoryWitnessDependency {
-            role: requirements[0].0.clone(),
-            target: ExecutableMemoryWitnessTarget::LocalSemantic([99; 32]),
-        },
-        dependency(1),
-    ];
-    assert!(validate_executable_dependencies(&descriptor, &forged).is_err());
+    let duplicate = vec![dependency(0), dependency(0)];
+    assert!(validate_executable_dependencies(&descriptor, &duplicate).is_err());
 }
 
 #[test]
@@ -190,7 +187,7 @@ fn recursive_self_and_mutual_product_enum_closure_is_cycle_free() {
         &mutual,
         &[ExecutableMemoryWitnessDependency {
             role: requirement.0,
-            target: ExecutableMemoryWitnessTarget::LocalSemantic([2; 32]),
+            target: ExecutableMemoryWitnessTarget::LocalMember(0),
         }],
     )
     .expect("mutual local edge");

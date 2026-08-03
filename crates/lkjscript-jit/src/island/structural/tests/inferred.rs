@@ -56,6 +56,7 @@ fn generated_inferred_call_like_shared_borrow_returns_exact_owner(
         StructuralOperation::PublishStatic {
             value_type: string,
             payload: StructuralPayloadKind::String,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![artifact],
     )?;

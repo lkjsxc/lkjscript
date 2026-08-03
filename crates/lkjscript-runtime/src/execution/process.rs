@@ -1,15 +1,16 @@
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use lkjscript_core::ExecutionOutcome;
+use lkjscript_contracts::PreparedProgramIdentity;
+use lkjscript_core::ValidatedChunk;
 
 use super::protocol::{
-    read_response, write_bootstrap, write_request, ProcessBootstrap, ProcessRequest,
-    ProcessResponse,
+    expected_process_provenance, read_response, write_bootstrap, write_request, ProcessBootstrap,
+    ProcessProgramProvenance, ProcessRequest, ProcessResponse,
 };
 use crate::state::IsolatedProcessSpec;
 
-const START_TIMEOUT: Duration = Duration::from_secs(2);
+const START_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(crate) struct ProcessCell {
@@ -17,12 +18,17 @@ pub(crate) struct ProcessCell {
     input: ChildStdin,
     output: Option<ChildStdout>,
     process: u32,
+    provenance: ProcessProgramProvenance,
+    parent_chunk: std::sync::Arc<ValidatedChunk>,
+    prepared: PreparedProgramIdentity,
+    last_rehydration: Option<crate::RehydrationReport>,
 }
 
 impl ProcessCell {
     pub(crate) fn start(
         spec: &IsolatedProcessSpec,
         bootstrap: &ProcessBootstrap,
+        parent_chunk: std::sync::Arc<ValidatedChunk>,
     ) -> Result<Self, String> {
         let mut child = Command::new(&spec.worker)
             .env_clear()
@@ -56,8 +62,13 @@ impl ProcessCell {
                 return Err(error);
             }
         };
-        let process = match response {
-            ProcessResponse::Ready { process } if process == child.id() => process,
+        let (process, provenance) = match response {
+            ProcessResponse::Ready {
+                process,
+                provenance,
+            } if process == child.id() && provenance == expected_process_provenance(bootstrap) => {
+                (process, provenance)
+            }
             ProcessResponse::Ready { .. } => {
                 terminate(&mut child);
                 return Err("process cell ready identity mismatch".into());
@@ -76,34 +87,15 @@ impl ProcessCell {
             input,
             output: Some(output),
             process,
+            provenance,
+            parent_chunk,
+            prepared: bootstrap.expected_prepared,
+            last_rehydration: None,
         })
     }
 
     pub(crate) const fn process(&self) -> u32 {
         self.process
-    }
-
-    pub(crate) fn invoke(
-        &mut self,
-        cell: u64,
-        arguments: Vec<String>,
-    ) -> Result<(ExecutionOutcome, Vec<u8>, u64), String> {
-        self.ensure_running()?;
-        write_request(&mut self.input, &ProcessRequest::Invoke { cell, arguments })
-            .map_err(|error| self.fail(format!("write process invocation: {error}")))?;
-        let response = self.read().map_err(|error| self.fail(error))?;
-        match response {
-            ProcessResponse::Outcome {
-                cell: received,
-                outcome,
-                output,
-                flushes,
-            } if received == cell => Ok((outcome, output, flushes)),
-            ProcessResponse::Outcome { .. } => {
-                Err(self.fail("process outcome identity mismatch".into()))
-            }
-            _ => Err(self.fail("unexpected process invocation response".into())),
-        }
     }
 
     pub(crate) fn stop(&mut self) -> Result<(), String> {
@@ -160,4 +152,5 @@ impl Drop for ProcessCell {
     }
 }
 
+include!("process/invoke.rs");
 include!("process/wait.rs");

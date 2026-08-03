@@ -1,22 +1,30 @@
 impl FunctionBuilder<'_> {
-    fn structural_successor_value(
+    pub(in crate::ssa) fn structural_successor_value(
         &self,
         expression: &Expr,
         value: ValueId,
         incoming_unplaced: &[ValueId],
         successor_unplaced: &[ValueId],
     ) -> Result<ValueId> {
+        if let Some(successor) = incoming_unplaced
+            .iter()
+            .position(|candidate| *candidate == value)
+            .and_then(|index| successor_unplaced.get(index))
+        {
+            return Ok(*successor);
+        }
         if let ExprKind::Load(reference) = expression.kind {
             return self.env.get(&reference.binding).copied().ok_or_else(|| {
                 Error::msg("structural successor state lost its exact loaded owner")
             });
         }
-        incoming_unplaced
-            .iter()
-            .position(|candidate| *candidate == value)
-            .and_then(|index| successor_unplaced.get(index))
-            .copied()
-            .ok_or_else(|| Error::msg("structural successor state lost its exact temporary owner"))
+        Err(Error::msg(format!(
+            concat!(
+                "structural successor state lost temporary owner {:?}; ",
+                "incoming={:?}; successor={:?}"
+            ),
+            value, incoming_unplaced, successor_unplaced,
+        )))
     }
 
     fn synthetic_structural_owner_place(

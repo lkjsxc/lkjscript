@@ -69,11 +69,14 @@ fn compile_failure_action(
         } => Ok(BytecodeFailureCleanupAction::DropStructural {
             local: local(*value)?,
             place: owner.map(place).transpose()?,
-            representation: structural_owner_representation(
-                chunk,
-                ssa_value_type(function, *value)?,
-            )
-            .ok_or_else(|| Error::msg("failure cleanup structural owner has no representation"))?,
+            representation: structural_owner_representation_for_value(function, chunk, *value)
+                .or_else(|| structural_owner_representation(
+                    chunk,
+                    ssa_value_type(function, *value).ok()?,
+                ))
+                .ok_or_else(|| Error::msg(
+                    "failure cleanup structural owner has no exact representation",
+                ))?,
         }),
     }
 }
@@ -113,6 +116,8 @@ fn structural_destination_for_value(
         | InstructionKind::AggregateConsumePayload { .. }
         | InstructionKind::StringUtf8View { .. }
         | InstructionKind::StructuralCopy { .. }
+        | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessDispose { .. }
         | InstructionKind::FunctionRef(_)
         | InstructionKind::Runtime { .. }
         | InstructionKind::F64FromI64Exact { .. }

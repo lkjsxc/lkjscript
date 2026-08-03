@@ -88,7 +88,7 @@ pub(super) fn verify_signature(
     function: FunctionId,
     signature: &Signature,
 ) -> Result<(), VerificationError> {
-    if signature.machine_parameter_count() > 2 {
+    if signature.machine_parameter_count() > 5 {
         return Err(VerificationError::UnsupportedSignature(function));
     }
     for value_type in signature

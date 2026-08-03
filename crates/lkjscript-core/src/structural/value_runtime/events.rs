@@ -23,6 +23,9 @@ pub enum StructuralEventKind {
     StaticRegister,
     StaticUnregister,
     Export,
+    Seal,
+    SealedAcquire,
+    SealedRelease,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -119,5 +122,14 @@ pub struct StructuralValueRuntimeMetrics {
     pub clone_nodes: u64,
     pub release_work: u64,
     pub release_backlog: u32,
+    pub sealed_publications: u64,
+    pub zero_copy_adoptions: u64,
+    pub sealed_acquisitions: u64,
+    pub sealed_releases: u64,
+    pub live_sealed_domains: u32,
+    pub live_sealed_owners: u32,
+    pub sealed_release_work: u64,
+    pub sealed_nodes_reclaimed: u64,
+    pub copied_publication_bytes: u64,
     pub events_overwritten: u64,
 }

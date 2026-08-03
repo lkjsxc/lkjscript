@@ -22,12 +22,48 @@ impl Evaluator<'_> {
             | InstructionKind::StringUtf8View { .. } => {
                 self.projection_instruction(instruction, values)
             }
-            InstructionKind::StructuralCopy { value: source, .. } => {
-                self.copy_eval_value(value(values, source)?)
-            }
+            InstructionKind::StructuralCopy {
+                representation,
+                value: source,
+            } => self.copy_structural_instruction(representation, source, values),
             _ => Err(Flow::Trap(
                 "structural instruction dispatch mismatch".into(),
             )),
+        }
+    }
+}
+
+impl Evaluator<'_> {
+    fn copy_structural_instruction(
+        &mut self,
+        representation: crate::StructuralRepresentationId,
+        source: ValueId,
+        values: &[Option<EvalValue>],
+    ) -> Result<EvalValue, Flow> {
+        let facts =
+            self.representation_facts(representation, crate::StructuralValueCategory::Owner)?;
+        let expected = self.structural_type(&facts.ty)?;
+        let EvalValue::StructuralOwner(owner) = value(values, source)? else {
+            return self.copy_eval_value(value(values, source)?);
+        };
+        if owner.value_type != expected {
+            return Err(Flow::Trap(
+                "structural copy representation type mismatch".into(),
+            ));
+        }
+        if facts.storage == crate::StructuralStorage::SealedRegion {
+            self.structural
+                .runtime
+                .acquire_sealed(owner.key, expected)
+                .map(|key| {
+                    EvalValue::StructuralOwner(EvalStructuralOwner {
+                        key,
+                        value_type: expected,
+                    })
+                })
+                .map_err(map_structural_error)
+        } else {
+            self.copy_eval_value(value(values, source)?)
         }
     }
 }

@@ -78,12 +78,14 @@ impl JitSession {
                 code_object: None,
                 epoch: config.epoch,
                 native_entries: 0,
-                auto_entry_eligible: function
-                    .signature
-                    .parameters
-                    .iter()
-                    .chain(std::iter::once(function.signature.result.as_ref()))
-                    .all(|ty| native_type(ty).is_some()),
+                auto_entry_eligible: function.signature.memory_witness_parameters.is_empty()
+                    && function.signature.parameters.len() <= 2
+                    && function
+                        .signature
+                        .parameters
+                        .iter()
+                        .chain(std::iter::once(function.signature.result.as_ref()))
+                        .all(|ty| native_type(ty).is_some()),
             })
             .collect();
         Self {

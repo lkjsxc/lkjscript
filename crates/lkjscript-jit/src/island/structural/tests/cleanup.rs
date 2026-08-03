@@ -4,6 +4,8 @@ use lkjscript_core::{ExecutionConfig, SemanticPayload};
 use lkjscript_executable::{InvocationOutcome, NativeServiceError};
 use lkjscript_native::*;
 
+mod sealed;
+
 #[test]
 fn conditional_abort_and_unique_backing_transfer_leave_exact_empty_state(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -40,6 +42,7 @@ fn conditional_abort_and_unique_backing_transfer_leave_exact_empty_state(
             value_type: bytes,
             payload: StructuralPayloadKind::ByteVector,
             unique: UniqueType::ByteVector,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![unique],
     )?;
@@ -58,7 +61,12 @@ fn stale_owner_and_destination_words_are_stably_trapped() -> Result<(), Box<dyn 
     let value_type = ty(34, StructuralKind::String);
     let mut runtime = JitStructuralRuntime::new(&ExecutionConfig::default())?;
     let owner = runtime
-        .publish_static(b"stale", value_type, StructuralPayloadKind::String)
+        .publish_static(
+            b"stale",
+            value_type,
+            StructuralPayloadKind::String,
+            StructuralStorageRoute::Unique,
+        )
         .map_err(|error| std::io::Error::other(format!("publish: {error:?}")))?;
     let moved = runtime
         .move_owner(owner)
@@ -75,7 +83,7 @@ fn stale_owner_and_destination_words_are_stably_trapped() -> Result<(), Box<dyn 
         Vec::new(),
     );
     let destination = runtime
-        .create_destination(&aggregate)
+        .create_destination(&aggregate, StructuralStorageRoute::Unique)
         .map_err(|error| std::io::Error::other(format!("destination: {error:?}")))?;
     runtime
         .abort_destination(destination)
@@ -90,6 +98,7 @@ fn stale_owner_and_destination_words_are_stably_trapped() -> Result<(), Box<dyn 
 }
 
 fn abort_plan() -> Result<(MachinePlanBuilder, FunctionId), Box<dyn std::error::Error>> {
+    let storage = StructuralStorageRoute::Unique;
     let scalar = ty(30, StructuralKind::I64);
     let product = ty(31, StructuralKind::Product);
     let aggregate = StructuralAggregateDescriptor::new(
@@ -113,7 +122,10 @@ fn abort_plan() -> Result<(MachinePlanBuilder, FunctionId), Box<dyn std::error::
     let destination = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationCreate(aggregate.clone()),
+        StructuralOperation::DestinationCreate {
+            aggregate: aggregate.clone(),
+            storage,
+        },
         vec![],
     )?;
     let destination = sc(
@@ -121,6 +133,7 @@ fn abort_plan() -> Result<(MachinePlanBuilder, FunctionId), Box<dyn std::error::
         block,
         StructuralOperation::DestinationInitialize {
             aggregate: aggregate.clone(),
+            storage,
             field: 0,
         },
         vec![destination, first],
@@ -131,6 +144,7 @@ fn abort_plan() -> Result<(MachinePlanBuilder, FunctionId), Box<dyn std::error::
         abort,
         StructuralOperation::DestinationAbort {
             aggregate: aggregate.clone(),
+            storage,
             initialized: 1,
         },
         vec![destination],
@@ -143,6 +157,7 @@ fn abort_plan() -> Result<(MachinePlanBuilder, FunctionId), Box<dyn std::error::
         finish,
         StructuralOperation::DestinationInitialize {
             aggregate: aggregate.clone(),
+            storage,
             field: 1,
         },
         vec![destination, second],
@@ -150,7 +165,7 @@ fn abort_plan() -> Result<(MachinePlanBuilder, FunctionId), Box<dyn std::error::
     let owner = sc(
         &mut builder,
         finish,
-        StructuralOperation::DestinationFinish(aggregate),
+        StructuralOperation::DestinationFinish { aggregate, storage },
         vec![destination],
     )?;
     sc(

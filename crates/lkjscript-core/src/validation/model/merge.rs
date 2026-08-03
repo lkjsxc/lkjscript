@@ -112,13 +112,13 @@ fn merge_kind(left: Kind, right: Kind) -> Option<Kind> {
         Some(Kind::Any)
     } else {
         match (left, right) {
-            (Kind::ByteVector(_), Kind::ByteVector(_)) => Some(Kind::ByteVector(u32::MAX)),
-            (Kind::Bytes(_), Kind::Bytes(_)) => Some(Kind::Bytes(u32::MAX)),
+            (Kind::ByteVector(owner), Kind::ByteVector(_)) => Some(Kind::ByteVector(owner)),
+            (Kind::Bytes(owner), Kind::Bytes(_)) => Some(Kind::Bytes(owner)),
             (
                 Kind::StructuralOwner {
                     representation: left_representation,
+                    owner,
                     active_variant: left_variant,
-                    ..
                 },
                 Kind::StructuralOwner {
                     representation: right_representation,
@@ -127,7 +127,7 @@ fn merge_kind(left: Kind, right: Kind) -> Option<Kind> {
                 },
             ) if left_representation == right_representation => Some(Kind::StructuralOwner {
                 representation: left_representation,
-                owner: u32::MAX,
+                owner,
                 active_variant: (left_variant == right_variant)
                     .then_some(left_variant)
                     .flatten(),
@@ -180,7 +180,7 @@ fn merge_place(left: UniquePlaceState, right: UniquePlaceState) -> Option<Unique
 fn merge_identity(left: Option<u32>, right: Option<u32>) -> Option<Option<u32>> {
     match (left, right) {
         (None, None) => Some(None),
-        (Some(left), Some(right)) => Some(Some(if left == right { left } else { u32::MAX })),
+        (Some(left), Some(_)) => Some(Some(left)),
         _ => None,
     }
 }

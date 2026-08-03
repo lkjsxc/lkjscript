@@ -51,6 +51,7 @@ fn terminal_program(terminator: Terminator, effects: EffectSet) -> lkjscript_ir:
         Vec::new()
     };
     verify(Program {
+        prepared_identity: lkjscript_ir::PreparedProgramIdentity::UNBOUND,
         memory: lkjscript_ir::StructuralMemoryMetadata::default(),
         sources: vec![SourceMetadata {
             id: 0,

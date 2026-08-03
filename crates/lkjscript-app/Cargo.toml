@@ -18,6 +18,10 @@ name = "lkjscript-cell"
 path = "src/runtime/process_cell/main.rs"
 
 [[bin]]
+name = "lkjscript-cell-test-worker"
+path = "src/runtime/process_cell/test_worker.rs"
+
+[[bin]]
 name = "lkjscriptd"
 path = "../lkjscript-runtime/src/bin/lkjscriptd.rs"
 

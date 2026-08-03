@@ -96,11 +96,15 @@ pub struct MemoryPlanWork {
     pub obligations: u64,
     pub type_nodes: u64,
     pub witnesses: u64,
+    pub witness_groups: u64,
+    pub witness_group_edges: u64,
     pub type_edges: u64,
     pub scc_work: u64,
     pub aggregate_fields: u64,
     pub aggregate_variants: u64,
     pub destinations: u64,
+    pub value_placements: u64,
+    pub placement_work: u64,
     pub borrow_scopes: u64,
     pub drop_paths: u64,
     pub verifier_steps: u64,
@@ -118,8 +122,10 @@ pub struct HirMemoryPlan {
     pub calls: Vec<MemoryCallPlan>,
     pub obligations: Vec<MemoryObligation>,
     pub type_facts: Vec<MemoryTypeFact>,
+    pub witness_groups: Vec<MemoryWitnessGroup>,
     pub witnesses: Vec<MemoryWitness>,
     pub destinations: Vec<MemoryDestinationPlan>,
+    pub value_placements: Vec<MemoryValuePlacement>,
     pub borrow_scopes: Vec<MemoryBorrowScopePlan>,
     pub drop_paths: Vec<MemoryDropPathPlan>,
     pub drop_glues: Vec<MemoryDropGluePlan>,
@@ -145,5 +151,15 @@ impl HirMemoryPlan {
 
     pub fn destination(&self, id: MemoryDestinationId) -> Option<&MemoryDestinationPlan> {
         id.index().and_then(|index| self.destinations.get(index))
+    }
+
+    pub fn value_placement(
+        &self,
+        expression: MemoryExpressionId,
+    ) -> Option<&MemoryValuePlacement> {
+        self.value_placements
+            .binary_search_by_key(&expression, |placement| placement.expression)
+            .ok()
+            .and_then(|index| self.value_placements.get(index))
     }
 }

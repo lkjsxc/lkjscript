@@ -60,7 +60,12 @@ pub(crate) fn module_interface(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "ownership",
                     "ownership",
-                    "public mode and borrow facts",
+                    "public parameter modes result mode equality and process-codec constraints",
+                ))
+                .fact(fact(
+                    "memory-interface",
+                    "memory interface",
+                    "HIR-derived declaration identity ordered type and trait parameters and minimal hidden operations",
                 ))
                 .fact(fact("errors", "errors", "closed public error identities")),
         )
@@ -84,6 +89,19 @@ pub(crate) fn package_lock(manifest: ContractDigest, module: ContractDigest) -> 
                     "contracts",
                     "contracts",
                     "full current contract digests",
+                ))
+                .fact(fact(
+                    "module-memory",
+                    "module memory",
+                    "exact HIR-derived public memory-interface digests and source closure",
+                ))
+                .fact(fact(
+                    "target-memory",
+                    "target memory",
+                    concat!(
+                        "MemoryPlanId atomic witness groups members role-bearing external ",
+                        "closure and specialization support",
+                    ),
                 )),
         )
 }

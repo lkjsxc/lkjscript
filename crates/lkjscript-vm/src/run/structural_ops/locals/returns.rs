@@ -93,17 +93,26 @@ fn structural_value_matches_copy_representation<J: RuntimeTier>(
     expected: StructuralRepresentationId,
 ) -> Result<bool> {
     let (_, record) = invocation(vm)?.owner(value)?;
-    let copy = vm
-        .chunk
-        .structural_representations()
+    let mode = vm.chunk.structural_representations()
         .get(record.representation.index())
         .and_then(|representation| {
-            vm.chunk
-                .structural_types()
-                .get(representation.type_id.index())
+            vm.chunk.structural_types().get(representation.type_id.index())
         })
-        .is_some_and(|ty| ty.mode == lkjscript_core::StructuralTypeMode::Copy);
-    Ok(copy
+        .map(|ty| ty.mode);
+    let dynamic_owner = mode == Some(lkjscript_core::StructuralTypeMode::Immutable)
+        && vm.frames.last().is_some_and(|frame| {
+            frame.memory_witnesses.iter().any(|binding| {
+                vm.chunk.memory_witnesses().get(usize::from(binding.witness))
+                    .is_some_and(|witness| {
+                        witness.facts.operations.contains(
+                            &lkjscript_core::MemoryWitnessOperation::IndependentOwner,
+                        ) && witness.facts.operations.contains(
+                            &lkjscript_core::MemoryWitnessOperation::Dispose,
+                        )
+                    })
+            })
+        });
+    Ok((mode == Some(lkjscript_core::StructuralTypeMode::Copy) || dynamic_owner)
         && same_representation_type(vm.chunk, record.representation, expected)?
         && record.value_type
             == representation_type(vm.chunk, expected, StructuralValueCategory::Owner)?)

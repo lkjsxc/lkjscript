@@ -2,12 +2,11 @@
 
 ## Status
 
-**Accepted Contract; Experimental implementation; not Current.** This record
-binds the executable witness cutover. Revision 16 implements an authenticated,
-target-neutral semantic-closure and role-bearing dependency slice through HIR,
-SSA, and bytecode. It is an intermediate trust-chain layer, not a claim of
-sealed execution. Promotion still requires complete structural relinking,
-malformed-artifact coverage, package provenance, and all execution tiers.
+**Current for the prepared sealed-value vertical.** Revision 16 established the
+target-neutral semantic closure; revision 17 adds atomic groups, exact structural
+relinking, malformed-artifact coverage, typed package provenance, prepared
+identity, and evaluator/VM/baseline/proof execution. Witness use outside this
+narrow vertical remains Experimental with the complete polymorphic value plane.
 
 ## Problem
 
@@ -77,6 +76,17 @@ compiler policy.
 SSA copies only independently verified descriptors and role records. Bytecode
 retains the semantic descriptor so IR and core validators can recompute its
 contract hash and executable witness ID rather than trusting copied IDs.
+
+## Accepted Atomic Group Cutover
+
+The [prepared sealed-value vertical](prepared-sealed-value-vertical.md) replaces
+individual installation with one singleton or recursive-SCC group. Canonical
+members use stable semantic order and provisional local ordinals; external
+edges name exact group/member identities. The group hashes complete member
+facts and edges, and the sole `MemoryWitnessId` hashes group, ordinal, and
+semantic member identity. Validation publishes no dense member slot until the
+whole group and external group DAG pass. Producer and verifier independently
+reconstruct group policy.
 
 ## Installation Provenance
 

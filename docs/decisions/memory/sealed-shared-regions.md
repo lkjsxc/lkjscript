@@ -4,9 +4,10 @@
 
 <!-- LKJ-STATUS id=sealed-shared-regions status=current -->
 
-**Current as a typed safe-core internal runtime domain.** Execution-tier use
-remains an Accepted Target. Sealed regions do not justify per-node reference
-counting or whole-runtime collector-free status.
+**Current as a typed safe-core domain and in the prepared sealed-value vertical.**
+Broader execution-tier and source-visible use remain Accepted Targets. Sealed
+regions reject per-node reference counting and do not alone prove whole-runtime
+collector-free status.
 
 ## Build And Seal
 
@@ -53,6 +54,15 @@ A deterministic compact image may order objects, validate relative offsets,
 and retain root, dependency, and drop tables. Compaction is optional until it
 has same-commit semantic and performance evidence. It does not reopen a
 persistent native-image cache.
+
+## Prepared Execution Integration
+
+The accepted [prepared sealed-value vertical](../execution/polymorphic-value-plane/prepared-sealed-value-vertical.md)
+reuses this domain and the application structural runtime. It publishes one
+exact witness group/member and representation, borrows without owner traffic,
+acquires one checked worker-local coarse owner for lifetime divergence, and
+releases through this iterative dependency ledger. A copied runtime key never
+creates ownership.
 
 ## Acceptance
 

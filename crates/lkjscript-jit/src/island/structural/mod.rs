@@ -11,8 +11,14 @@ use lkjscript_native::{
     NativeStructuralDestination, NativeStructuralOwner, NativeStructuralView, NativeValue,
     StructuralAggregateDescriptor, StructuralAggregateKind, StructuralNumericConversion,
     StructuralPayloadKind, StructuralProjectionDescriptor, StructuralProjectionKind,
-    StructuralTypeIdentity,
+    StructuralStorageRoute, StructuralTypeIdentity,
 };
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NativeOwnerRecord {
+    value_type: StructuralTypeIdentity,
+    storage: StructuralStorageRoute,
+}
 
 mod access;
 mod conversion;
@@ -26,6 +32,7 @@ mod payload;
 mod services;
 #[cfg(test)]
 mod tests;
+mod witness_services;
 
 use conversion::*;
 pub(in crate::island) use model::JitStructuralRuntime;

@@ -1,3 +1,5 @@
+use lkjscript_core::StructuralStorage;
+
 fn finish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     let expected = StructuralDestinationId::new(vm.read_u16()?);
     let destination_value = vm.pop()?;
@@ -19,10 +21,14 @@ fn finish<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
             "structural destination finish owner type mismatch",
         ));
     }
-    let owner = invocation_mut(vm)?
-        .runtime
-        .finish_destination(destination)
-        .map_err(map_value_error)?;
+    let storage = representation(vm.chunk, owner_representation)?.storage;
+    let owner = if storage == StructuralStorage::SealedRegion {
+        invocation_mut(vm)?.runtime.finish_destination_sealed(destination)
+            .map(|sealed| sealed.owner)
+    } else {
+        invocation_mut(vm)?.runtime.finish_destination(destination)
+    }
+    .map_err(map_value_error)?;
     invocation_mut(vm)?.destinations.remove(&destination.get());
     let value = invocation_mut(vm)?.register_owner(owner, owner_representation, owner_type)?;
     vm.push(value);

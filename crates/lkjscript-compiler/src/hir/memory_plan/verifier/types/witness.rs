@@ -10,8 +10,34 @@ impl VerifiedTypes<'_> {
         drop_glue: Option<MemoryDropGlueId>,
         drop_path: Option<MemoryDropPathId>,
     ) -> Result<MemoryWitnessId> {
-        let semantic = self.producer_semantic_descriptor(ty)?;
-        let dependencies = self.producer_witness_dependencies(ty)?;
+        let index = MemoryTypeFactId::new(index_u32(self.expected.len())?);
+        let actual = self
+            .plan
+            .witnesses
+            .get(index.index().unwrap_or(usize::MAX))
+            .ok_or_else(|| Error::msg("HIR memory plan omitted a reconstructed witness"))?;
+        let semantic = self.verified_semantic_descriptor(ty)?;
+        let expected_dependencies = self.verified_witness_dependencies(ty)?;
+        if expected_dependencies.len() != actual.facts.dependencies.len()
+            || expected_dependencies
+                .iter()
+                .zip(&actual.facts.dependencies)
+                .any(|(left, right)| {
+                    left.role != right.role
+                        || matches!(
+                            left.target,
+                            lkjscript_contracts::ExecutableMemoryWitnessTarget::LocalMember(_)
+                        ) != matches!(
+                            right.target,
+                            lkjscript_contracts::ExecutableMemoryWitnessTarget::LocalMember(_)
+                        )
+                })
+        {
+            return Err(Error::msg(
+                "independent HIR memory verifier rejected witness edge roles",
+            ));
+        }
+        let dependencies = actual.facts.dependencies.clone();
         lkjscript_contracts::validate_executable_dependencies(&semantic, &dependencies)
             .map_err(|error| Error::msg(error.to_string()))?;
         let semantic_contract = lkjscript_contracts::semantic_contract_hash(&semantic)
@@ -44,22 +70,12 @@ impl VerifiedTypes<'_> {
             portability: verified_witness_portability(ty),
             contention: verified_witness_contention(ty, derived),
         };
-        let expected = MemoryWitness {
-            id: memory_witness_id(&facts)?,
-            facts,
-        };
-        let index = MemoryTypeFactId::new(index_u32(self.expected.len())?);
-        let actual = self
-            .plan
-            .witnesses
-            .get(index.index().unwrap_or(usize::MAX))
-            .ok_or_else(|| Error::msg("HIR memory plan omitted a reconstructed witness"))?;
-        if actual != &expected || actual.recompute_id()? != actual.id {
+        if actual.facts != facts {
             return Err(Error::msg(
-                "independent HIR memory verifier rejected exact memory witness",
+                "independent HIR memory verifier rejected exact memory witness facts",
             ));
         }
-        Ok(expected.id)
+        Ok(actual.id)
     }
 
     fn verified_witness_list(
@@ -124,4 +140,4 @@ impl VerifiedTypes<'_> {
 
 include!("witness_policy.rs");
 include!("witness_capabilities.rs");
-include!("semantic_witness.rs");
+include!("semantic_witness/mod.rs");

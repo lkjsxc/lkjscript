@@ -22,7 +22,13 @@ fn validate_operation_references(chunk: &Chunk, mut bytes: usize) -> Result<usiz
             ));
         }
         validate_field(chunk, &reference.result)?;
-        bytes = add(bytes, 65, "structural metadata byte size")?;
+        validate_result_representation(
+            chunk,
+            &reference.result,
+            reference.result_representation,
+            None,
+        )?;
+        bytes = add(bytes, 68, "structural metadata byte size")?;
     }
     for proto in std::iter::once(&chunk.main).chain(&chunk.protos) {
         if proto.memory_plan != chunk.memory_plan {
@@ -75,7 +81,41 @@ fn validate_operation_references(chunk: &Chunk, mut bytes: usize) -> Result<usiz
             ));
         }
         validate_field(chunk, &reference.result)?;
-        bytes = add(bytes, 96, "structural metadata byte size")?;
+        validate_result_representation(
+            chunk,
+            &reference.result,
+            reference.result_representation,
+            Some(StructuralValueCategory::Owner),
+        )?;
+        bytes = add(bytes, 99, "structural metadata byte size")?;
     }
     Ok(bytes)
+}
+
+fn validate_result_representation(
+    chunk: &Chunk,
+    field: &StructuralFieldMetadata,
+    result: Option<crate::StructuralRepresentationId>,
+    category: Option<StructuralValueCategory>,
+) -> Result<()> {
+    match (field.route, result) {
+        (StructuralFieldRoute::Structural(type_id), Some(result)) => {
+            let representation = lookup_representation(chunk, result)?;
+            if representation.type_id != type_id
+                || category.is_some_and(|expected| representation.category != expected)
+            {
+                return Err(Error::msg(
+                    "bytecode structural result representation is not exact",
+                ));
+            }
+            Ok(())
+        }
+        (StructuralFieldRoute::Structural(_), None) => Err(Error::msg(
+            "bytecode structural result representation is missing",
+        )),
+        (_, None) => Ok(()),
+        (_, Some(_)) => Err(Error::msg(
+            "bytecode non-structural result carries a representation",
+        )),
+    }
 }

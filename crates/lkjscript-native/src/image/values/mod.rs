@@ -154,6 +154,7 @@ pub enum NativeValue {
     Resource(NativeResource),
     Unique(NativeUnique),
     Loan(NativeLoan),
+    StructuralKey(u64),
     StructuralOwner(NativeStructuralOwner),
     StructuralView(NativeStructuralView),
     StructuralDestination(NativeStructuralDestination),
@@ -179,6 +180,7 @@ impl NativeValue {
             Self::Resource(resource) => ValueType::Resource(resource.resource_kind()),
             Self::Unique(unique) => ValueType::Unique(unique.unique_type()),
             Self::Loan(loan) => ValueType::Loan(loan.loan_type()),
+            Self::StructuralKey(_) => ValueType::StructuralKey,
             Self::StructuralOwner(owner) => ValueType::StructuralOwner(owner.structural_type()),
             Self::StructuralView(view) => ValueType::StructuralView(view.view_type()),
             Self::StructuralDestination(destination) => {

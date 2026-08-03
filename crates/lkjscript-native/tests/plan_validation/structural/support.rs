@@ -25,6 +25,7 @@ pub(super) fn owner_plan(
         StructuralOperation::PublishStatic {
             value_type,
             payload: StructuralPayloadKind::String,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![artifact],
     )?;
@@ -49,13 +50,19 @@ pub(super) fn destination_plan(
     let field_owner = sc(
         &mut builder,
         block,
-        StructuralOperation::PublishI64(aggregate.fields()[0]),
+        StructuralOperation::PublishI64 {
+            value_type: aggregate.fields()[0],
+            storage: StructuralStorageRoute::Unique,
+        },
         vec![raw],
     )?;
     let destination = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationCreate(aggregate.clone()),
+        StructuralOperation::DestinationCreate {
+            aggregate: aggregate.clone(),
+            storage: StructuralStorageRoute::Unique,
+        },
         vec![],
     )?;
     body(&mut builder, block, destination, field_owner)?;

@@ -166,30 +166,3 @@ fn register_view_or_end<J: RuntimeTier>(
         }
     }
 }
-
-fn view_representation_for_type(
-    chunk: &ValidatedChunk,
-    type_id: lkjscript_core::StructuralTypeId,
-) -> Result<StructuralRepresentationId> {
-    representation_for_type(chunk, type_id, StructuralValueCategory::View)
-}
-
-fn owner_representation_for_type(
-    chunk: &ValidatedChunk,
-    type_id: lkjscript_core::StructuralTypeId,
-) -> Result<StructuralRepresentationId> {
-    representation_for_type(chunk, type_id, StructuralValueCategory::Owner)
-}
-
-fn representation_for_type(
-    chunk: &ValidatedChunk,
-    type_id: lkjscript_core::StructuralTypeId,
-    category: StructuralValueCategory,
-) -> Result<StructuralRepresentationId> {
-    chunk
-        .structural_representations()
-        .iter()
-        .find(|item| item.type_id == type_id && item.category == category)
-        .map(|item| item.id)
-        .ok_or_else(|| Error::msg("structural field representation metadata is missing"))
-}

@@ -48,7 +48,7 @@ pub(super) struct NativeCallState<'a> {
     pub(super) status: u32,
     pub(super) trap: u32,
     pub(super) payload: i64,
-    pub(super) _scratch_integer_arguments: [u64; 2],
+    pub(super) _scratch_integer_arguments: [u64; 5],
     pub(super) _scratch_float_arguments: [u64; 2],
     pub(super) poll_fuel_remaining: u64,
     pub(super) deadline_ms: i64,

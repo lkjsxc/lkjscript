@@ -56,6 +56,7 @@ fn process_protocol_round_trips_product_list_product_semantic_dag() {
     )
     .expect("product-list-product DAG");
     let response = ProcessResponse::Outcome {
+        provenance: super::tests::provenance(),
         cell: 78,
         outcome: ExecutionOutcome::Returned(OwnedValue::from_semantic_dag(snapshot)),
         output: b"semantic DAG output".to_vec(),

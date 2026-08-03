@@ -54,9 +54,9 @@ pub use unique::{
 pub use value_runtime::{
     DestinationCleanupReport, InlineStructuralValue, SemanticPayload, SemanticValue,
     StaticArtifactPayload, StaticStructuralArtifact, StaticStructuralLeaf,
-    StructuralDestinationKey, StructuralEvent, StructuralEventKind, StructuralEventLog,
-    StructuralFieldPath, StructuralInitializationFailure, StructuralKind, StructuralProjection,
-    StructuralPublishFailure, StructuralType, StructuralValueError, StructuralValueLimit,
-    StructuralValueRuntime, StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics,
-    StructuralViewKey,
+    StructuralDestinationKey, StructuralDisposeReport, StructuralEvent, StructuralEventKind,
+    StructuralEventLog, StructuralFieldPath, StructuralInitializationFailure, StructuralKind,
+    StructuralOwnerKind, StructuralProjection, StructuralPublishFailure, StructuralSealResult,
+    StructuralType, StructuralValueError, StructuralValueLimit, StructuralValueRuntime,
+    StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics, StructuralViewKey,
 };

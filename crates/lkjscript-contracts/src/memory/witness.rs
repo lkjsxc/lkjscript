@@ -10,6 +10,8 @@ pub enum MemoryWitnessOperation {
     Decode,
     ListImport,
     ListExport,
+    IndependentOwner,
+    Dispose,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

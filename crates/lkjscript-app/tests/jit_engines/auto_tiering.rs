@@ -29,6 +29,57 @@ fn auto_group_structural_string_helper_remains_vm_entry_ineligible() {
 }
 
 #[test]
+fn residual_witness_function_is_direct_call_only_in_auto_mode() {
+    let source = include_str!("../fixtures/sealed-placement.lkjscript");
+    let program = compile(source, "sealed-placement.lkjscript");
+    let mut config = JitConfig::default();
+    config.auto_threshold = 1;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(42)));
+    let generic = stats
+        .functions
+        .iter()
+        .find(|function| function.name() == "select-owner")
+        .expect("residual generic tier record");
+    assert!(!generic.auto_entry_eligible());
+    assert_eq!(generic.native_entries(), 0);
+}
+
+#[test]
+fn scalar_function_beyond_entry_abi_arity_remains_vm_only() {
+    let source = concat!(
+        "def/\nname/\nadd-four\n/name\nfn/\nsig/\ninputs/\ni64\ni64\ni64\ni64\n/inputs\n",
+        "output/\ni64\n/output\n/sig\nparams/\na\ni64\nb\ni64\nc\ni64\nd\ni64\n/params\n",
+        "add/\na\nadd/\nb\nadd/\nc\nd\n/add\n/add\n/add\n/fn\n/def\n",
+        "main/\nsig/\ninputs/\n/inputs\noutput/\ni64\n/output\n/sig\nadd-four/\n1\n2\n3\n4\n/add-four\n/main\n",
+    );
+    let program = compile(source, "auto-arity.lkjscript");
+    let mut config = JitConfig::default();
+    config.auto_threshold = 1;
+    let session = JitSession::new_auto(program.ssa(), program.bytecode_links(), config);
+    let (outcome, stats) = run_chunk_auto(
+        program.bytecode(),
+        &lkjscript_vm::ExecutionInputs::default(),
+        &ExecutionConfig::default(),
+        session,
+    );
+    assert!(matches!(outcome, ExecutionOutcome::Returned(value) if value.as_i64() == Some(10)));
+    let function = stats
+        .functions
+        .iter()
+        .find(|function| function.name() == "add-four")
+        .expect("four-argument tier record");
+    assert!(!function.auto_entry_eligible());
+    assert_eq!(function.native_entries(), 0);
+}
+
+#[test]
 fn auto_path_helper_remains_vm_only() {
     let source = concat!(
         "def/\nname/\nmake-path\n/name\nfn/\nsig/\ninputs/\n/inputs\noutput/\npath\n/output\n/sig\nparams/\n/params\n",

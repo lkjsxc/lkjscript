@@ -7,7 +7,8 @@ use lkjscript_native::{
     RuntimeCallSlot, Signature, SourceFunctionId, StoreClass, StructuralAggregateDescriptor,
     StructuralAggregateKind, StructuralCallDescriptor, StructuralKind, StructuralOperation,
     StructuralPayloadKind, StructuralProjectionDescriptor, StructuralProjectionKind,
-    StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType, ValueType, VerificationError,
+    StructuralStorageRoute, StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType,
+    ValueType, VerificationError,
 };
 
 mod control;

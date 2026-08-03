@@ -9,6 +9,9 @@ pub(super) fn compile_analyzed(
     analyzed: &crate::hir::Program,
     limits: &Limits,
     ledger: &mut BudgetLedger,
+    provenance: impl FnOnce(
+        &crate::HirMemoryPlan,
+    ) -> Result<crate::package::program::PreparationProvenance>,
 ) -> Result<ExecutableProgram> {
     let memory_verified = crate::memory_plan::verify_hir_memory(analyzed)?;
     let ssa = lower_program_with_budget(&memory_verified, ledger)?;
@@ -16,7 +19,17 @@ pub(super) fn compile_analyzed(
     let memory_inventory = checked_memory_inventory(&ssa)?;
     let (chunk, bytecode_links) = compile_program(&ssa)?;
     let bytecode = validate_chunk(chunk, &limits.validation)?;
+    let provenance = provenance(&memory_plan)?;
+    let (prepared, ssa, bytecode) = crate::package::program::bind(
+        ssa,
+        bytecode,
+        &memory_plan,
+        ledger.profile().identity(),
+        provenance,
+        &limits.validation,
+    )?;
     Ok(ExecutableProgram {
+        prepared,
         bytecode,
         ssa,
         memory_plan,

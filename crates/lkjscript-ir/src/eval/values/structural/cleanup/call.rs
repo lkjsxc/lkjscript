@@ -37,8 +37,12 @@ impl Evaluator<'_> {
         output
             .try_reserve_exact(ids.len())
             .map_err(|_| Flow::Resource("evaluator edge arguments".into()))?;
-        for id in ids {
+        for (index, id) in ids.iter().enumerate() {
+            let repeated = ids[index.saturating_add(1)..].contains(id);
             let next = match value(values, *id) {
+                Ok(EvalValue::StructuralOwner(_) | EvalValue::StructuralView(_)) if repeated => {
+                    self.copy_eval_value(value(values, *id)?)
+                }
                 Ok(
                     EvalValue::StructuralOwner(_)
                     | EvalValue::StructuralView(_)

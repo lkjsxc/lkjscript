@@ -30,7 +30,7 @@ impl Daemon {
             child: Some(child),
             endpoint,
         };
-        for _ in 0..400 {
+        for _ in 0..6_000 {
             if daemon.endpoint.exists() {
                 return Ok(daemon);
             }

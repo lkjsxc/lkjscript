@@ -67,23 +67,32 @@ fn verify_authority_signatures(
             .function(MemoryFunctionId::new(index_u32(index)?))
             .ok_or_else(|| Error::msg("memory authority lost function"))?
             .signature;
+        let binding = program
+            .binding(function.binding)
+            .ok_or_else(|| Error::msg("memory authority lost callable"))?;
+        let witness_parameters = verified_witness_parameters(&binding.ty, Some(&function.body))?;
         let mut parameters = Vec::new();
         for parameter in &function.params {
             let ty = &program
                 .binding(*parameter)
                 .ok_or_else(|| Error::msg("memory authority lost parameter"))?
                 .ty;
-            parameters.push(verified_parameter_mode(
-                types,
-                ty,
-                resource_consumed(&function.body, *parameter),
-            )?);
+            let dispose_parameter = match ty {
+                Type::Param(name) => witness_parameters.iter().any(|requirement| {
+                    requirement.parameter == *name
+                        && requirement
+                            .operations
+                            .contains(&MemoryWitnessOperation::Dispose)
+                }),
+                _ => false,
+            };
+            parameters.push(if dispose_parameter {
+                MemoryParameterMode::Consume
+            } else {
+                verified_parameter_mode(types, ty, resource_consumed(&function.body, *parameter))?
+            });
         }
-        let binding = program
-            .binding(function.binding)
-            .ok_or_else(|| Error::msg("memory authority lost callable"))?;
         let result = verified_result_mode(types, callable_result(&binding.ty)?)?;
-        let witness_parameters = verified_witness_parameters(&binding.ty)?;
         if u64::try_from(actual.witness_parameters.len()).unwrap_or(u64::MAX)
             > MAX_MEMORY_WITNESS_PARAMETERS
             || actual.witness_parameters != witness_parameters

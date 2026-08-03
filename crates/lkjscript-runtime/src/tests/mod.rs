@@ -23,8 +23,12 @@ fn chunk(trap: bool) -> Result<Arc<lkjscript_core::ValidatedChunk>, Box<dyn Erro
         chunk.main.emit(Op::Unit);
         chunk.main.emit(Op::Return);
     }
-    Ok(Arc::new(validate_chunk(
-        chunk,
+    let validated = validate_chunk(chunk, &ValidationLimits::default())?;
+    let prepared =
+        lkjscript_contracts::PreparedProgramIdentity::new([if trap { 2 } else { 1 }; 32])?;
+    Ok(Arc::new(lkjscript_core::bind_prepared_identity(
+        validated,
+        prepared,
         &ValidationLimits::default(),
     )?))
 }

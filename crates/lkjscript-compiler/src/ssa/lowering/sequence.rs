@@ -12,6 +12,31 @@ impl FunctionBuilder<'_> {
             let Some(value) = result else {
                 return Ok(None);
             };
+            if index.saturating_add(1) < expressions.len() {
+                if let hir::Type::Param(parameter) = &expression.ty {
+                    if self
+                        .signature
+                        .memory_witness_parameters
+                        .iter()
+                        .any(|requirement| {
+                            requirement.parameter == *parameter
+                                && requirement
+                                    .operations
+                                    .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose)
+                        })
+                    {
+                        let _disposed = self.append(
+                            SsaType::Unit,
+                            InstructionKind::MemoryWitnessDispose {
+                                parameter: parameter.clone(),
+                                value,
+                            },
+                            EffectSet::PURE,
+                            expression.origin,
+                        )?;
+                    }
+                }
+            }
             if index.saturating_add(1) < expressions.len() && expression.ty == hir::Type::ByteVector
             {
                 let place = discarded_move_place(expression).ok_or_else(|| {

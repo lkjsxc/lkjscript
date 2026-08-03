@@ -150,4 +150,26 @@ impl<'a> Producer<'a> {
         }
         Ok(expression_id)
     }
+
+    fn new(program: &'a hir::Program) -> Result<Self> {
+        let mut function_ids = HashMap::with_capacity(program.functions.len());
+        for (index, function) in program.functions.iter().enumerate() {
+            let raw = u32::try_from(index)
+                .map_err(|_| Error::msg("HIR memory-plan function count exceeds u32"))?;
+            if function_ids.insert(function.binding, MemoryFunctionId::new(raw)).is_some() {
+                return Err(Error::msg(
+                    "HIR memory-plan producer found duplicate function binding"));
+            }
+        }
+        let mut producer = Self {
+            program, type_planner: TypePlanner::new(program)?, function_ids,
+            signatures: Vec::new(), functions: Vec::new(), entries: Vec::new(),
+            uses: Vec::new(), loans: Vec::new(), constants: Vec::new(), calls: Vec::new(),
+            obligations: Vec::new(), destinations: Vec::new(), borrow_scopes: Vec::new(),
+            current_function: MemoryFunctionId::new(0), next_expression: 0, next_place: 0,
+            expression_parents: BTreeMap::new(), work: MemoryPlanWork::default(),
+        };
+        producer.build_signatures()?;
+        Ok(producer)
+    }
 }

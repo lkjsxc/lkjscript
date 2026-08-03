@@ -6,6 +6,18 @@ fn encode_bootstrap(output: &mut Writer, value: &ProcessBootstrap) -> io::Result
     output.u64(nonzero(value.incarnation, "incarnation")?)?;
     output.extend(&value.package)?;
     output.text(&value.entry, MAX_ENTRY_BYTES)?;
+    for digest in [
+        value.expected_entry,
+        value.expected_prepared.bytes(),
+        value.expected_return_semantic,
+        value.expected_root_witness_group,
+        value.expected_root_witness_member,
+    ] {
+        if digest == [0; 32] {
+            return Err(invalid("expected process identity must be nonzero"));
+        }
+        output.extend(&digest)?;
+    }
     encode_capabilities(output, &value.capabilities)?;
     encode_config(output, &value.execution)
 }
@@ -34,6 +46,12 @@ fn decode_bootstrap(input: &mut Reader<'_>) -> io::Result<ProcessBootstrap> {
         incarnation,
         package,
         entry: input.text(MAX_ENTRY_BYTES)?,
+        expected_entry: digest(input)?,
+        expected_prepared: PreparedProgramIdentity::new(digest(input)?)
+            .map_err(|error| invalid(error.to_string()))?,
+        expected_return_semantic: digest(input)?,
+        expected_root_witness_group: digest(input)?,
+        expected_root_witness_member: digest(input)?,
         capabilities: decode_capabilities(input)?,
         execution: decode_config(input)?,
     })

@@ -34,10 +34,13 @@ struct Producer<'a> {
 }
 
 include!("producer/type_graph.rs");
-include!("producer/type_plan.rs");
+include!("producer/type_plan/mod.rs");
 include!("producer/type_plan/transport.rs");
 include!("producer/type_plan/transport_calls.rs");
 include!("producer/type_helpers.rs");
+#[path = "producer/placement/mod.rs"]
+mod placement;
+use placement::derive_value_placements;
 include!("producer/recursive.rs");
 include!("producer/impl_00.rs");
 include!("producer/impl_01.rs");

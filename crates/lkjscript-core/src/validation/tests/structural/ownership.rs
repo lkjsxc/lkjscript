@@ -75,9 +75,13 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
         crate::StructuralRepresentationMetadata {
             id: crate::StructuralRepresentationId::new(3),
             type_id: target_id,
+            witness: witness(2),
+            witness_group: crate::MemoryWitnessGroupId::new([0; 32]),
+            witness_member: 0,
             layout: crate::StructuralLayoutId::new(1),
             category: crate::StructuralValueCategory::Owner,
-            storage: crate::StructuralStorage::Unique,
+            storage: crate::StructuralStorage::UniqueStructural,
+            route: [4; 32],
         },
     );
     chunk.structural_aggregate_fields = vec![crate::StructuralAggregateFieldRef {
@@ -85,6 +89,7 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
         active_variant: None,
         field: 0,
         result: field,
+        result_representation: Some(crate::StructuralRepresentationId::new(3)),
     }];
     let mut proto = Chunk::new().main;
     proto.name = "malicious-field-copy".into();
@@ -106,6 +111,9 @@ fn aggregate_field_copy_rejects_noncopy_structural_targets() {
     chunk.protos.push(proto);
     chunk.main.emit(Op::Unit);
     chunk.main.emit(Op::Return);
+    let mut missing = chunk.clone();
+    missing.structural_aggregate_fields[0].result_representation = None;
+    assert!(error(missing).contains("result representation is missing"));
     let message = error(chunk);
     assert!(
         message.contains("copy field target is not copy-mode"),
@@ -152,6 +160,7 @@ fn inactive_enum_payload_is_rejected() {
         representation: crate::StructuralRepresentationId::new(0),
         variant: second,
         result: copy_field(),
+        result_representation: None,
     }];
     emit_finished_product(&mut chunk);
     chunk.main.emit_op_u16(Op::StructuralMove, 1);

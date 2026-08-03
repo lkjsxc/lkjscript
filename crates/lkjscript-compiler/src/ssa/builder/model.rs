@@ -45,6 +45,7 @@ impl<'a> FunctionBuilder<'a> {
             places,
             failure_cleanups: Vec::new(),
             cleanup,
+            current_placement: None,
             active_place_bindings: Vec::new(),
             active_loans: BTreeMap::new(),
             unplaced_owners: Vec::new(),

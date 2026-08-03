@@ -138,10 +138,10 @@ fn require_field_value(
 }
 
 fn field_result_kind(
-    chunk: &Chunk,
+    _chunk: &Chunk,
     field: StructuralFieldMetadata,
-    owner: u32,
-    mutable: bool,
+    _owner: u32,
+    _mutable: bool,
     proto: &FunctionProto,
     instruction: DecodedInstruction,
 ) -> Result<Kind> {
@@ -157,12 +157,11 @@ fn field_result_kind(
                     "structural copy field has invalid exact runtime type",
                 )
             }),
-        StructuralFieldRoute::Structural(type_id) => Ok(Kind::StructuralView {
-            representation: view_representation_for_type(chunk, type_id, proto, instruction)?,
-            owner,
-            mutable,
-            used: false,
-        }),
+        StructuralFieldRoute::Structural(_) => fail(
+            proto,
+            instruction,
+            "structural field result requires an operation-bound representation",
+        ),
         StructuralFieldRoute::Unique
         | StructuralFieldRoute::Resource
         | StructuralFieldRoute::LegacyHeap => fail(
@@ -173,6 +172,5 @@ fn field_result_kind(
     }
 }
 
-include!("checks/representations.rs");
 
 include!("checks/results.rs");

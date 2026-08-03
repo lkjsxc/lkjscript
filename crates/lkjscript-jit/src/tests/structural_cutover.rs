@@ -21,6 +21,7 @@ fn forced_source_string_entry_fails_closed_in_both_tiers_until_producer_exists()
 
 fn source_string_entry_program() -> lkjscript_ir::VerifiedProgram {
     verify(Program {
+        prepared_identity: lkjscript_ir::PreparedProgramIdentity::UNBOUND,
         memory: lkjscript_ir::StructuralMemoryMetadata::default(),
         sources: vec![SourceMetadata {
             id: 0,

@@ -25,7 +25,8 @@ pub use bytecode::{
     runtime_product_contract_identity, CallWitnessSite, Chunk, ConstId, Constant,
     EnumConstructionRef, EnumFieldMetadata, EnumFieldRef, EnumId, EnumMetadata,
     EnumVariantMetadata, EnumVariantRef, FailureCleanupAction, FailureCleanupPlan,
-    FailureCleanupRange, FunctionProto, InstalledMemoryWitness, MemoryPlanId, MemoryWitnessBinding,
+    FailureCleanupRange, FunctionProto, InstalledMemoryWitness, InstalledMemoryWitnessGroup,
+    InstalledMemoryWitnessGroupMember, MemoryPlanId, MemoryWitnessBinding, MemoryWitnessGroupId,
     MemoryWitnessId, MemoryWitnessParameter, MemoryWitnessValueKind, ProductFieldRef, ProductId,
     ProductMetadata, RegionProductFieldKind, ResourceReturnKind, RuntimeLayoutId,
     StructuralAggregateFieldRef, StructuralDestinationFieldRef, StructuralDestinationId,
@@ -35,9 +36,9 @@ pub use bytecode::{
     StructuralTypeId, StructuralTypeKind, StructuralTypeMetadata, StructuralTypeMode,
     StructuralValueCategory, StructuralVariantLayout, UniqueValueKind, VariantFieldId, VariantId,
     MAX_CALL_WITNESS_SITES, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
-    MAX_MEMORY_WITNESS_PARAMETERS, MAX_STRUCTURAL_DESTINATIONS, MAX_STRUCTURAL_LAYOUTS,
-    MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_OPERATION_REFS, MAX_STRUCTURAL_REPRESENTATIONS,
-    MAX_STRUCTURAL_TYPES,
+    MAX_MEMORY_WITNESS_GROUPS, MAX_MEMORY_WITNESS_PARAMETERS, MAX_STRUCTURAL_DESTINATIONS,
+    MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_OPERATION_REFS,
+    MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
 pub use error::{Error, ErrorClass, Result};
 pub use limits::{
@@ -46,6 +47,7 @@ pub use limits::{
     MAX_CONSTANT_DATA_BYTES, MAX_DIR_CHILDREN, MAX_FUNCTION_CODE_BYTES, MAX_LIST_EQUAL_STEPS,
     MAX_NEST_DEPTH, MAX_PRODUCT_FIELDS, MAX_TOKENS_PER_FILE, MAX_TOPLEVEL_FORMS,
 };
+pub use lkjscript_contracts::MemoryWitnessOperation;
 pub use numeric_conversion::{
     f64_from_i64_exact, f64_from_i64_rounded, i64_from_f64_exact, i64_from_f64_trunc, NumericError,
 };
@@ -88,18 +90,21 @@ pub use structural::{
     SegmentedListError, SegmentedListKey, SegmentedListLimit, SegmentedListMetrics,
     SemanticChildren, SemanticPayload, SemanticTypeIdentity, SemanticValue, StaticArtifactPayload,
     StaticBytes, StaticStructuralArtifact, StaticStructuralLeaf, StructuralBorrow,
-    StructuralBorrowKey, StructuralDestinationKey, StructuralError, StructuralEvent,
-    StructuralEventKind, StructuralEventLog, StructuralFieldPath, StructuralImage,
+    StructuralBorrowKey, StructuralDestinationKey, StructuralDisposeReport, StructuralError,
+    StructuralEvent, StructuralEventKind, StructuralEventLog, StructuralFieldPath, StructuralImage,
     StructuralImageConversionFailure, StructuralInitializationFailure, StructuralKind,
     StructuralLimit, StructuralLimits, StructuralNode, StructuralNodePayload, StructuralNodeRecord,
-    StructuralNodeView, StructuralProjection, StructuralPublishFailure, StructuralRootOwnership,
-    StructuralRootState, StructuralRootTable, StructuralRootTableError, StructuralRootTableLimit,
-    StructuralRootTableLimits, StructuralRootTableStats, StructuralRuntime, StructuralRuntimeId,
-    StructuralRuntimeMetrics, StructuralType, StructuralValueError, StructuralValueKey,
-    StructuralValueLimit, StructuralValueRuntime, StructuralValueRuntimeLimits,
-    StructuralValueRuntimeMetrics, StructuralViewKey, TypedPool, UniqueKeyWord, UniqueLayout,
-    UniqueStore, UniqueStoreError, UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits,
-    UniqueStoreStats, WeakSealedRef,
+    StructuralNodeView, StructuralOwnerKind, StructuralProjection, StructuralPublishFailure,
+    StructuralRootOwnership, StructuralRootState, StructuralRootTable, StructuralRootTableError,
+    StructuralRootTableLimit, StructuralRootTableLimits, StructuralRootTableStats,
+    StructuralRuntime, StructuralRuntimeId, StructuralRuntimeMetrics, StructuralSealResult,
+    StructuralType, StructuralValueError, StructuralValueKey, StructuralValueLimit,
+    StructuralValueRuntime, StructuralValueRuntimeLimits, StructuralValueRuntimeMetrics,
+    StructuralViewKey, TypedPool, UniqueKeyWord, UniqueLayout, UniqueStore, UniqueStoreError,
+    UniqueStoreId, UniqueStoreLeak, UniqueStoreLimits, UniqueStoreStats, WeakSealedRef,
 };
-pub use validation::{validate_chunk, ValidatedChunk};
+pub use validation::{
+    bind_prepared_identity, validate_chunk, validated_bytecode_identity, ValidatedBytecodeIdentity,
+    ValidatedChunk,
+};
 pub use value::{CapabilityKind, ResourceKind, Value};

@@ -9,10 +9,18 @@ pub(super) fn lower_structural_instruction(
 ) -> NativeResult {
     let catalog = layouts.structural();
     let operation = match &instruction.kind {
-        InstructionKind::StructuralPublish { value, .. } => {
+        InstructionKind::StructuralPublish {
+            representation,
+            value,
+        } => {
             let value_type = structural_type(catalog, &instruction.ty)?;
+            let storage = catalog.representation_storage(
+                *representation,
+                lkjscript_ir::StructuralValueCategory::Owner,
+            )?;
             let input = read_value(builder, block, locals, *value, function.id)?;
-            let operation = publish_operation(function, *value, value_type, value_types)?;
+            let operation =
+                publish_operation(function, *value, value_type, storage, value_types)?;
             return structural_call(builder, block, operation, vec![input]);
         }
         InstructionKind::StructuralCopy { value, .. } => {
@@ -26,18 +34,20 @@ pub(super) fn lower_structural_instruction(
             );
         }
         InstructionKind::DestinationCreate { .. } => {
-            let (aggregate, initialized) = catalog.destination(function, instruction.id)?;
+            let (aggregate, storage, initialized) =
+                catalog.destination(function, instruction.id)?;
             if initialized != 0 {
                 return Err(invalid_structural("new destination is already initialized"));
             }
-            lkjscript_native::StructuralOperation::DestinationCreate(aggregate)
+            lkjscript_native::StructuralOperation::DestinationCreate { aggregate, storage }
         }
         InstructionKind::DestinationFieldInit {
             destination,
             field,
             value,
         } => {
-            let (aggregate, initialized) = catalog.destination(function, *destination)?;
+            let (aggregate, storage, initialized) =
+                catalog.destination(function, *destination)?;
             if initialized != *field {
                 return Err(invalid_structural(
                     "destination field initialization is out of order",
@@ -50,13 +60,15 @@ pub(super) fn lower_structural_instruction(
                 block,
                 lkjscript_native::StructuralOperation::DestinationInitialize {
                     aggregate,
+                    storage,
                     field: *field,
                 },
                 arguments,
             );
         }
         InstructionKind::DestinationFinish { destination } => {
-            let (aggregate, initialized) = catalog.destination(function, *destination)?;
+            let (aggregate, storage, initialized) =
+                catalog.destination(function, *destination)?;
             if usize::from(initialized) != aggregate.fields().len() {
                 return Err(invalid_structural("destination finish is incomplete"));
             }
@@ -64,18 +76,23 @@ pub(super) fn lower_structural_instruction(
             return structural_call(
                 builder,
                 block,
-                lkjscript_native::StructuralOperation::DestinationFinish(aggregate),
+                lkjscript_native::StructuralOperation::DestinationFinish {
+                    aggregate,
+                    storage,
+                },
                 vec![input],
             );
         }
         InstructionKind::DestinationAbort { destination } => {
-            let (aggregate, initialized) = catalog.destination(function, *destination)?;
+            let (aggregate, storage, initialized) =
+                catalog.destination(function, *destination)?;
             let input = read_value(builder, block, locals, *destination, function.id)?;
             return structural_call(
                 builder,
                 block,
                 lkjscript_native::StructuralOperation::DestinationAbort {
                     aggregate,
+                    storage,
                     initialized,
                 },
                 vec![input],

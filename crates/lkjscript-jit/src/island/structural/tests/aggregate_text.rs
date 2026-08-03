@@ -3,6 +3,7 @@ use lkjscript_core::SemanticPayload;
 use lkjscript_native::*;
 
 pub(super) fn option_string() -> Result<(), Box<dyn std::error::Error>> {
+    let storage = StructuralStorageRoute::Unique;
     let string = ty(20, StructuralKind::String);
     let option = ty(21, StructuralKind::Enum);
     let aggregate = StructuralAggregateDescriptor::new(
@@ -24,13 +25,17 @@ pub(super) fn option_string() -> Result<(), Box<dyn std::error::Error>> {
         StructuralOperation::PublishStatic {
             value_type: string,
             payload: StructuralPayloadKind::String,
+            storage,
         },
         vec![artifact],
     )?;
     let destination = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationCreate(aggregate.clone()),
+        StructuralOperation::DestinationCreate {
+            aggregate: aggregate.clone(),
+            storage,
+        },
         vec![],
     )?;
     let destination = sc(
@@ -38,6 +43,7 @@ pub(super) fn option_string() -> Result<(), Box<dyn std::error::Error>> {
         block,
         StructuralOperation::DestinationInitialize {
             aggregate: aggregate.clone(),
+            storage,
             field: 0,
         },
         vec![destination, string_owner],
@@ -45,7 +51,7 @@ pub(super) fn option_string() -> Result<(), Box<dyn std::error::Error>> {
     let owner = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationFinish(aggregate),
+        StructuralOperation::DestinationFinish { aggregate, storage },
         vec![destination],
     )?;
     builder.return_value(block, owner)?;
@@ -66,6 +72,7 @@ pub(super) fn option_string() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub(super) fn result_path() -> Result<(), Box<dyn std::error::Error>> {
+    let storage = StructuralStorageRoute::Unique;
     let path = ty(22, StructuralKind::Path);
     let result = ty(23, StructuralKind::Enum);
     let aggregate = StructuralAggregateDescriptor::new(
@@ -87,13 +94,17 @@ pub(super) fn result_path() -> Result<(), Box<dyn std::error::Error>> {
         StructuralOperation::PublishStatic {
             value_type: path,
             payload: StructuralPayloadKind::Path,
+            storage,
         },
         vec![artifact],
     )?;
     let destination = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationCreate(aggregate.clone()),
+        StructuralOperation::DestinationCreate {
+            aggregate: aggregate.clone(),
+            storage,
+        },
         vec![],
     )?;
     let destination = sc(
@@ -101,6 +112,7 @@ pub(super) fn result_path() -> Result<(), Box<dyn std::error::Error>> {
         block,
         StructuralOperation::DestinationInitialize {
             aggregate: aggregate.clone(),
+            storage,
             field: 0,
         },
         vec![destination, path_owner],
@@ -108,7 +120,7 @@ pub(super) fn result_path() -> Result<(), Box<dyn std::error::Error>> {
     let owner = sc(
         &mut builder,
         block,
-        StructuralOperation::DestinationFinish(aggregate),
+        StructuralOperation::DestinationFinish { aggregate, storage },
         vec![destination],
     )?;
     builder.return_value(block, owner)?;

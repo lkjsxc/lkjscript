@@ -29,7 +29,9 @@ code emission, disassembly, SSA scaffolding, or observation alone is
 insufficient. The canonical accepted extension is `.lkjscript`; `.lkjml` is
 rejected and no language edition or compatibility mode exists. Linux x86-64 is the
 current acceptance platform. Portability is a design constraint, not a current
-support claim.
+support claim. The next accepted memory cutover is one prepared,
+compiler-selected sealed-value vertical; it does not promote the complete
+polymorphic value plane.
 
 ## Enforcement Labels
 

@@ -34,6 +34,7 @@ pub(in crate::lower) fn require_structural_island_type(
             | SsaType::Bool
             | SsaType::I64
             | SsaType::F64
+            | SsaType::TypeParameter(_)
             | SsaType::StructuralDestination(_)
     ) || layouts.structural().selected(ty)
         || matches!(ty, SsaType::List(element) if structural_list_element(element, layouts))

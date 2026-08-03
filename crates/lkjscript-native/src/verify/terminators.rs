@@ -10,7 +10,11 @@ pub(super) fn verify_arguments(
         return Err(VerificationError::TypeMismatch(context));
     }
     for (argument, expected) in arguments.iter().zip(signature.parameters()) {
-        if value_type(function, *argument)? != *expected {
+        let actual = value_type(function, *argument)?;
+        let compatible = actual == *expected
+            || (*expected == ValueType::StructuralKey
+                && matches!(actual, ValueType::StructuralOwner(_)));
+        if !compatible {
             return Err(VerificationError::TypeMismatch(context));
         }
     }

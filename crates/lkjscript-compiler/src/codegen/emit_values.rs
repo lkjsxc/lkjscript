@@ -74,6 +74,16 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    pub(in crate::codegen) fn witness_parameter_ordinal(&self, parameter: &str) -> Result<u8> {
+        self.function
+            .signature
+            .type_parameters
+            .iter()
+            .position(|candidate| candidate == parameter)
+            .and_then(|index| u8::try_from(index).ok())
+            .ok_or_else(|| Error::msg("memory witness parameter ordinal exceeds u8"))
+    }
+
     pub(in crate::codegen) fn value_type(&self, value: ValueId) -> Result<&SsaType> {
         self.function
             .blocks
@@ -176,7 +186,9 @@ impl Emitter<'_> {
     }
 }
 
+include!("emit_values/call.rs");
 include!("emit_values/slots.rs");
+include!("emit_values/witness.rs");
 include!("emit_values/destination.rs");
 include!("emit_values/instruction.rs");
 include!("emit_values/aggregate_instruction.rs");

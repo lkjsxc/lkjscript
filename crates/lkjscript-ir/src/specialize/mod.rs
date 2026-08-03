@@ -35,7 +35,9 @@ pub fn specialize_native_transport(
                 else {
                     continue;
                 };
-                if instantiation.memory_witnesses.is_empty() {
+                if instantiation.memory_witnesses.is_empty()
+                    || residual_native_witness_function(input.program(), *target)
+                {
                     continue;
                 }
                 calls = calls
@@ -92,6 +94,12 @@ pub fn specialize_native_transport(
     }
     program.functions.extend(specialized_functions);
 
+    let residual_functions = program
+        .functions
+        .iter()
+        .filter(|function| residual_native_witness_function(&program, function.id))
+        .map(|function| function.id)
+        .collect::<std::collections::BTreeSet<_>>();
     for function in &mut program.functions {
         for block in &mut function.blocks {
             for instruction in &mut block.instructions {
@@ -106,7 +114,7 @@ pub fn specialize_native_transport(
                 let Some(facts) = instantiation.as_ref() else {
                     continue;
                 };
-                if facts.memory_witnesses.is_empty() {
+                if facts.memory_witnesses.is_empty() || residual_functions.contains(target) {
                     continue;
                 }
                 let specialized_target = replacements
@@ -128,4 +136,25 @@ pub fn specialize_native_transport(
             calls,
         },
     ))
+}
+
+fn residual_native_witness_function(program: &crate::Program, function: FunctionId) -> bool {
+    program
+        .functions
+        .get(function.index().unwrap_or(usize::MAX))
+        .filter(|item| item.id == function)
+        .is_some_and(|item| {
+            !item.signature.memory_witness_parameters.is_empty()
+                && item
+                    .signature
+                    .memory_witness_parameters
+                    .iter()
+                    .any(|requirement| {
+                        requirement.operations.contains(
+                            &lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
+                        ) && requirement
+                            .operations
+                            .contains(&lkjscript_contracts::MemoryWitnessOperation::Dispose)
+                    })
+        })
 }

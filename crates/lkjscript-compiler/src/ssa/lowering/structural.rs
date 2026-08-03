@@ -8,8 +8,7 @@ impl FunctionBuilder<'_> {
         expression_origin: hir::SourceId,
     ) -> Result<ValueId> {
         let Some(representation) = self
-            .structural
-            .representation(&ty, StructuralValueCategory::Owner)
+            .selected_structural_representation(&ty, StructuralValueCategory::Owner)
             .filter(|_| self.structural.is_owned(&ty))
         else {
             return Ok(source);
@@ -36,10 +35,9 @@ impl FunctionBuilder<'_> {
             return Ok(None);
         };
         let representation = self
-            .structural
-            .representation(&ty, StructuralValueCategory::Destination)
+            .selected_structural_representation(&ty, StructuralValueCategory::Destination)
             .ok_or_else(|| {
-                Error::msg("selected structural aggregate has no destination representation")
+                Error::msg("selected structural aggregate has no exact destination representation")
             })?;
         let destination_ty = SsaType::StructuralDestination(type_fact.id);
         let mut destination = self.append(
@@ -79,11 +77,46 @@ impl FunctionBuilder<'_> {
         ty: &SsaType,
         category: StructuralValueCategory,
     ) -> Result<StructuralRepresentationId> {
-        self.structural.representation(ty, category).ok_or_else(|| {
-            Error::msg(format!(
-                "selected structural type {ty:?} has no {category:?} representation"
-            ))
-        })
+        self.selected_structural_representation(ty, category)
+            .ok_or_else(|| {
+                Error::msg(format!(
+                    "selected structural type {ty:?} has no exact {category:?} representation"
+                ))
+            })
+    }
+
+    fn selected_structural_representation(
+        &self,
+        ty: &SsaType,
+        category: StructuralValueCategory,
+    ) -> Option<StructuralRepresentationId> {
+        if let Some(placement) = self.current_placement {
+            if let Some(id) = self.structural.representation_by_route(
+                ty,
+                placement.route,
+                category,
+                placement.storage,
+            ) {
+                return Some(id);
+            }
+        }
+        let type_fact = self.structural.type_for(ty)?;
+        let (storage, route_tag, value_category) = match category {
+            StructuralValueCategory::Owner | StructuralValueCategory::Destination => (
+                StructuralStorage::UniqueStructural,
+                2,
+                crate::memory_plan::MemoryValueCategory::Owner,
+            ),
+            StructuralValueCategory::View => (
+                StructuralStorage::BorrowedView,
+                0,
+                crate::memory_plan::MemoryValueCategory::View,
+            ),
+        };
+        let route =
+            canonical_structural_route(type_fact.witness, value_category, storage, route_tag);
+        self.structural
+            .representation_by_route(ty, route, category, storage)
     }
 
     pub(in crate::ssa) fn structural_variant_tag(
@@ -109,4 +142,33 @@ impl FunctionBuilder<'_> {
             .map(|candidate| i64::from(candidate.physical_tag))
             .ok_or_else(|| Error::msg("structural enum test has unknown active variant"))
     }
+}
+
+fn canonical_structural_route(
+    witness: MemoryWitnessId,
+    category: crate::memory_plan::MemoryValueCategory,
+    storage: StructuralStorage,
+    route: u8,
+) -> [u8; 32] {
+    let mut bytes = b"lkjscript.memory-value-representation\0canonical-platform-contract".to_vec();
+    bytes.extend_from_slice(&witness.bytes());
+    let category = match category {
+        crate::memory_plan::MemoryValueCategory::Owner => 0,
+        crate::memory_plan::MemoryValueCategory::View => 1,
+        crate::memory_plan::MemoryValueCategory::Destination => 2,
+    };
+    let storage = match storage {
+        StructuralStorage::Inline => 0,
+        StructuralStorage::Static => 1,
+        StructuralStorage::Stack => 2,
+        StructuralStorage::CallerDestination => 3,
+        StructuralStorage::UniqueStructural => 4,
+        StructuralStorage::OrdinaryRegion => 5,
+        StructuralStorage::SealedRegion => 6,
+        StructuralStorage::BorrowedView => 7,
+        StructuralStorage::ExternalResource => 8,
+    };
+    let _ = route;
+    bytes.extend_from_slice(&[category, storage]);
+    lkjscript_core::sha256(&bytes)
 }

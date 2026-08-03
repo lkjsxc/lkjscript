@@ -1,4 +1,7 @@
-fn memory_witness_parameters(ty: &Type) -> Result<Vec<MemoryWitnessParameter>> {
+fn memory_witness_parameters(
+    ty: &Type,
+    function_body: Option<&Expr>,
+) -> Result<Vec<MemoryWitnessParameter>> {
     let Type::Forall { vars, body } = ty else {
         return Ok(Vec::new());
     };
@@ -37,9 +40,19 @@ fn memory_witness_parameters(ty: &Type) -> Result<Vec<MemoryWitnessParameter>> {
             .any(|ty| matches!(ty, Type::Param(name) if name == variable))
             || matches!(ret.as_ref(), Type::Param(name) if name == variable);
         if naked {
+            let occurrences = params.iter()
+                .filter(|ty| matches!(ty, Type::Param(name) if name == variable))
+                .count();
+            let mut operations = vec![MemoryWitnessOperation::Transport];
+            if occurrences >= 2 && function_body.is_some_and(nontrivial_owner_body) {
+                operations.extend([
+                    MemoryWitnessOperation::IndependentOwner,
+                    MemoryWitnessOperation::Dispose,
+                ]);
+            }
             output.push(MemoryWitnessParameter {
                 parameter: variable.clone(),
-                operations: vec![MemoryWitnessOperation::Transport],
+                operations,
             });
         }
     }
@@ -47,6 +60,13 @@ fn memory_witness_parameters(ty: &Type) -> Result<Vec<MemoryWitnessParameter>> {
         return Err(Error::msg("HIR memory witness parameters exceed 16"));
     }
     Ok(output)
+}
+
+fn nontrivial_owner_body(body: &Expr) -> bool {
+    !matches!(
+        body.kind,
+        ExprKind::Load(_) | ExprKind::Move { .. } | ExprKind::LitUnit
+    )
 }
 
 fn memory_witness_arguments(

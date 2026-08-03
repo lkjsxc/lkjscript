@@ -57,6 +57,7 @@ fn publish_path(
         StructuralOperation::PublishStatic {
             value_type: path,
             payload: StructuralPayloadKind::Path,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![artifact],
     )
@@ -75,6 +76,7 @@ fn publish_unique_path(
             value_type: path,
             payload: StructuralPayloadKind::Path,
             unique: UniqueType::Bytes,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![owner],
     )

@@ -112,18 +112,31 @@ impl StructuralViewType {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum StructuralStorageRoute {
+    Unique,
+    Sealed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct StructuralDestinationType {
     aggregate: u64,
     value_type: StructuralTypeIdentity,
+    storage: StructuralStorageRoute,
     initialized: u16,
 }
 
 impl StructuralDestinationType {
     #[must_use]
-    pub const fn new(aggregate: u64, value_type: StructuralTypeIdentity, initialized: u16) -> Self {
+    pub const fn new(
+        aggregate: u64,
+        value_type: StructuralTypeIdentity,
+        storage: StructuralStorageRoute,
+        initialized: u16,
+    ) -> Self {
         Self {
             aggregate,
             value_type,
+            storage,
             initialized,
         }
     }
@@ -136,6 +149,11 @@ impl StructuralDestinationType {
     #[must_use]
     pub const fn value_type(self) -> StructuralTypeIdentity {
         self.value_type
+    }
+
+    #[must_use]
+    pub const fn storage(self) -> StructuralStorageRoute {
+        self.storage
     }
 
     #[must_use]

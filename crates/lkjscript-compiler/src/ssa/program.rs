@@ -113,6 +113,7 @@ pub(in crate::ssa) fn construct_program(
                 u16::try_from(index).map_err(|_| Error::msg("SSA parameter slot exceeds u16"))?;
             builder.slots.insert(binding_id, slot);
         }
+        builder.install_dynamic_owner_parameters(&function.params, function.origin)?;
         let body = builder.lower_expr(&function.body)?;
         if let Some(result) = body {
             builder.drop_abandoned_structural_owners(result, function.origin)?;
@@ -139,6 +140,7 @@ pub(in crate::ssa) fn construct_program(
 
     let enums = lower_enums(&program.enums, &product_ids)?;
     Ok(Program {
+        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: structural,
         region_products,
         sources: program

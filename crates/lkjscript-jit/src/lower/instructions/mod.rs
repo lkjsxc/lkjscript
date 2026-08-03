@@ -1,18 +1,9 @@
 use super::*;
-mod calls;
-mod constants;
-mod failure_cleanup;
-mod output;
-mod products;
-mod runtime_bytes;
-mod structural;
-mod structural_dispatch;
-mod unique;
+include!("modules.rs");
 include!("imports.rs");
-
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_instruction(
-    _program: &lkjscript_ir::Program,
+    program: &lkjscript_ir::Program,
     function: &Function,
     instruction: &Instruction,
     block: lkjscript_native::BlockId,
@@ -24,6 +15,7 @@ pub(super) fn lower_instruction(
     builder: &mut FunctionBuilder,
 ) -> Result<(), LoweringError> {
     if structural_dispatch::lower_instruction(
+        program,
         function,
         instruction,
         block,
@@ -34,6 +26,29 @@ pub(super) fn lower_instruction(
         builder,
     )? {
         return Ok(());
+    }
+    if let InstructionKind::MemoryWitnessIndependentOwner { parameter, value }
+    | InstructionKind::MemoryWitnessDispose { parameter, value } = &instruction.kind
+    {
+        let output = structural::lower_witness_operation(
+            function,
+            instruction,
+            parameter,
+            *value,
+            block,
+            locals,
+            builder,
+        )?;
+        return write_instruction_output(
+            function,
+            instruction,
+            block,
+            locals,
+            value_types,
+            layouts,
+            output,
+            builder,
+        );
     }
     let output = match &instruction.kind {
         InstructionKind::Constant(constant) => lower_constant(
@@ -92,6 +107,7 @@ pub(super) fn lower_instruction(
             arguments,
             ..
         } => lower_direct_call(
+            program,
             function,
             instruction,
             *callee,
@@ -140,8 +156,11 @@ pub(super) fn lower_instruction(
         | InstructionKind::AggregateTag { .. }
         | InstructionKind::AggregateConsumePayload { .. }
         | InstructionKind::StringUtf8View { .. }
-        | InstructionKind::StructuralCopy { .. } => {
+        | InstructionKind::StructuralCopy { .. }
+        | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessDispose { .. } => {
             let lowered = structural_dispatch::lower_instruction(
+                program,
                 function,
                 instruction,
                 block,

@@ -15,5 +15,6 @@ pub use descriptors::{
 };
 pub use operations::{StructuralNumericConversion, StructuralOperation};
 pub use types::{
-    StructuralDestinationType, StructuralKind, StructuralTypeIdentity, StructuralViewType,
+    StructuralDestinationType, StructuralKind, StructuralStorageRoute, StructuralTypeIdentity,
+    StructuralViewType,
 };

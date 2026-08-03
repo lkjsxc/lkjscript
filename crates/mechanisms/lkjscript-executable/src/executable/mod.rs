@@ -9,7 +9,8 @@ use lkjscript_native::{
     NativeStructuralView, NativeUnique, NativeValue, RelocationTarget, ResourceKind,
     RuntimeCallSlot, Signature, StructuralAggregateDescriptor, StructuralCallDescriptor,
     StructuralNumericConversion, StructuralOperation, StructuralPayloadKind,
-    StructuralProjectionDescriptor, StructuralTypeIdentity, TrapCode, UniqueType, ValueType,
+    StructuralProjectionDescriptor, StructuralStorageRoute, StructuralTypeIdentity, TrapCode,
+    UniqueType, ValueType,
 };
 
 mod accounting;

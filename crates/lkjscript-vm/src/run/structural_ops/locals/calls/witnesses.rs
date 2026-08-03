@@ -69,7 +69,11 @@ fn runtime_witness_matches<J: RuntimeTier>(
         lkjscript_core::MemoryWitnessValueKind::List => value.as_segmented_list().is_some(),
         lkjscript_core::MemoryWitnessValueKind::Structural(expected) => {
             value.as_structural_root().is_some()
-                && invocation(vm)?.owner(value)?.1.representation == expected
+                && same_representation_type(
+                    vm.chunk,
+                    invocation(vm)?.owner(value)?.1.representation,
+                    expected,
+                )?
         }
         lkjscript_core::MemoryWitnessValueKind::Unsupported => false,
     })

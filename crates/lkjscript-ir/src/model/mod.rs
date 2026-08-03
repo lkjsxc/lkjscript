@@ -16,7 +16,7 @@ pub use constant::Constant;
 pub use error::{IrError, Result};
 pub use ids::{
     BindingId, BlockId, EnumId, FailureCleanupId, FunctionId, ImplId, LoanId, MemoryPlanId,
-    MemoryWitnessId, PlaceId, ProductId, RuntimeLayoutId, StructuralLayoutId,
+    MemoryWitnessGroupId, MemoryWitnessId, PlaceId, ProductId, RuntimeLayoutId, StructuralLayoutId,
     StructuralRepresentationId, StructuralTypeId, TraitId, ValueId, VariantFieldId, VariantId,
 };
 pub use instruction::{BlockParameter, BorrowKind, CallTarget, Instruction, InstructionKind};
@@ -41,11 +41,12 @@ pub use runtime::RuntimeOp;
 pub use structural::{
     runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
     runtime_product_semantic_type, runtime_structural_semantic_type, runtime_structural_type,
-    MemoryWitnessDescriptor, RegionProductMetadata, StructuralDropGlueIdentity,
-    StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
-    StructuralRepresentationMetadata, StructuralStorage, StructuralTypeMetadata,
-    StructuralTypeMode, StructuralValueCategory, StructuralVariantLayout, MAX_MEMORY_WITNESSES,
-    MAX_MEMORY_WITNESS_DEPENDENCIES, MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS,
+    MemoryWitnessDescriptor, MemoryWitnessGroupDescriptor, MemoryWitnessGroupMember,
+    RegionProductMetadata, StructuralDropGlueIdentity, StructuralLayoutKind,
+    StructuralLayoutMetadata, StructuralMemoryMetadata, StructuralRepresentationMetadata,
+    StructuralStorage, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
+    StructuralVariantLayout, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
+    MAX_MEMORY_WITNESS_GROUPS, MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS,
     MAX_STRUCTURAL_LAYOUTS, MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS,
     MAX_STRUCTURAL_TYPES,
 };

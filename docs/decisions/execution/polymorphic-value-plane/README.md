@@ -2,11 +2,11 @@
 
 ## Status
 
-**Accepted Target; not Current.** Concrete structural witness identities and
-copy-list regions remain Current. This record binds the next integrated public
-cutover; no residual witness, package witness, sealed language value, or
-structural-owner list claim follows until every named verifier and execution
-boundary passes.
+**Accepted Target; not Current as a complete plane.** Concrete structural
+witness identities, copy-list regions, and the first narrow
+[prepared sealed-value vertical](prepared-sealed-value-vertical.md) are Current.
+No source-visible sealed value, structural-owner list, indirect-generic, or
+complete-plane claim follows until its remaining boundaries pass.
 
 ## Decision
 
@@ -21,6 +21,11 @@ use; reuse or fuse a unique private builder; clone a small independently owned
 value; otherwise seal and share one immutable domain. Failure never selects a
 dynamic box, tracing, collector fallback, unchecked operation table, or universal
 reference count.
+
+The prepared vertical binds package, lock, plan, atomic witness groups, SSA,
+bytecode, representations, process identity, and one per-value sealed route.
+That narrow capability can become Current without promoting this complete
+plane.
 
 ## Executable Witnesses
 

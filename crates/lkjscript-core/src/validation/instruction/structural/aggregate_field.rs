@@ -5,7 +5,21 @@ fn aggregate_field_borrow(
     state: &mut State,
 ) -> Result<()> {
     let (reference, owner) = aggregate_field_input(chunk, proto, instruction, state, "borrow")?;
-    let result = field_result_kind(chunk, reference.result, owner, false, proto, instruction)?;
+    let result = match reference.result.route {
+        StructuralFieldRoute::Structural(_) => Kind::StructuralView {
+            representation: result_representation(
+                chunk,
+                reference,
+                StructuralValueCategory::View,
+                proto,
+                instruction,
+            )?,
+            owner,
+            mutable: false,
+            used: false,
+        },
+        _ => field_result_kind(chunk, reference.result, owner, false, proto, instruction)?,
+    };
     state.stack.push(result);
     Ok(())
 }
@@ -38,9 +52,10 @@ fn aggregate_field_copy(
                 );
             }
             Kind::StructuralOwner {
-                representation: owner_representation_for_type(
+                representation: result_representation(
                     chunk,
-                    type_id,
+                    reference,
+                    StructuralValueCategory::Owner,
                     proto,
                     instruction,
                 )?,
@@ -110,4 +125,41 @@ fn aggregate_field_input(
         );
     }
     Ok((reference, owner))
+}
+
+fn result_representation(
+    chunk: &Chunk,
+    reference: crate::StructuralAggregateFieldRef,
+    category: StructuralValueCategory,
+    proto: &FunctionProto,
+    instruction: DecodedInstruction,
+) -> Result<StructuralRepresentationId> {
+    let id = reference.result_representation.ok_or_else(|| {
+        instruction_error(
+            proto,
+            instruction.op(),
+            instruction.offset(),
+            "structural field result representation is missing",
+        )
+    })?;
+    let item = chunk
+        .structural_representations
+        .get(id.index())
+        .filter(|item| item.id == id)
+        .ok_or_else(|| {
+            instruction_error(
+                proto,
+                instruction.op(),
+                instruction.offset(),
+                "structural field result representation is stale",
+            )
+        })?;
+    if item.category != category {
+        return fail(
+            proto,
+            instruction,
+            "structural field result representation has the wrong category",
+        );
+    }
+    Ok(id)
 }

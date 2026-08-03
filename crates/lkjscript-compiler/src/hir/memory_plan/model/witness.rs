@@ -1,4 +1,21 @@
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MemoryWitnessGroupId([u8; 32]);
+
+impl MemoryWitnessGroupId {
+    pub(crate) const fn from_bytes(bytes: [u8; 32]) -> Self { Self(bytes) }
+    pub const fn as_bytes(self) -> [u8; 32] { self.0 }
+    pub fn to_hex(self) -> String {
+        lkjscript_contracts::ContractDigest::from_bytes(self.0).to_hex()
+    }
+}
+
+impl fmt::Display for MemoryWitnessGroupId {
+    fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+        output.write_str(&self.to_hex())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MemoryWitnessId([u8; 32]);
 
 impl MemoryWitnessId {
@@ -112,24 +129,41 @@ pub struct MemoryWitnessFacts {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryWitnessGroupMember {
+    pub witness: MemoryWitnessId,
+    pub ordinal: u16,
+    pub semantic_identity: [u8; 32],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MemoryWitnessGroup {
+    pub id: MemoryWitnessGroupId,
+    pub recursive: bool,
+    pub members: Vec<MemoryWitnessGroupMember>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MemoryWitness {
     pub id: MemoryWitnessId,
+    pub group: MemoryWitnessGroupId,
+    pub ordinal: u16,
     pub facts: MemoryWitnessFacts,
 }
 
 impl MemoryWitness {
     pub fn recompute_id(&self) -> lkjscript_core::Result<MemoryWitnessId> {
-        memory_witness_id(&self.facts)
+        let semantic = lkjscript_contracts::semantic_type_closure_hash(&self.facts.semantic)
+            .map_err(|error| lkjscript_core::Error::msg(error.to_string()))?;
+        Ok(memory_witness_id(self.group, self.ordinal, semantic))
     }
 }
 
 pub(crate) fn memory_witness_id(
-    facts: &MemoryWitnessFacts,
-) -> lkjscript_core::Result<MemoryWitnessId> {
-    let executable = super::executable_facts(facts)?;
-    let bytes = lkjscript_contracts::canonical_executable_memory_witness(
-        &executable,
-        &facts.dependencies,
-    );
-    Ok(MemoryWitnessId::from_bytes(lkjscript_core::sha256(&bytes)))
+    group: MemoryWitnessGroupId,
+    ordinal: u16,
+    semantic_identity: [u8; 32],
+) -> MemoryWitnessId {
+    MemoryWitnessId::from_bytes(lkjscript_contracts::executable_memory_witness_member_id(
+        group.as_bytes(), ordinal, semantic_identity,
+    ))
 }

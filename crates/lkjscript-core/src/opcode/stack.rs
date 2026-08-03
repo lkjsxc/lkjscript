@@ -157,7 +157,9 @@ pub(super) const fn stack_effect(op: Op) -> StackEffect {
         | Op::StructuralAggregateTag
         | Op::StructuralAggregateConsumePayload
         | Op::StructuralStringUtf8View
-        | Op::StructuralCopy => fixed(1, 1, 1),
+        | Op::StructuralCopy
+        | Op::MemoryWitnessIndependentOwner
+        | Op::MemoryWitnessDispose => fixed(1, 1, 1),
         Op::Jump => fixed(0, 0, 0),
         Op::JumpIfFalse | Op::Exit | Op::Trap | Op::Pop | Op::Return => fixed(1, 1, 0),
         Op::MakeClosure => fixed(1, 1, 1),

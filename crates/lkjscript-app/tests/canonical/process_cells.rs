@@ -9,6 +9,8 @@ use lkjscript_runtime::{
 #[path = "process_cells/support.rs"]
 mod support;
 use support::{host, manifest, package, root};
+#[path = "process_cells/structural.rs"]
+mod structural;
 
 #[test]
 fn isolated_cell_executes_restarts_and_relays_private_stdio() {
@@ -77,23 +79,17 @@ fn isolated_cell_rejects_mismatched_package_content_before_ready() {
         NonZeroUsize::new(2).expect("cache"),
     );
     let stdio = lkjscript_host::BufferedStdio::default();
-    let app = system
-        .install_isolated(
+    assert!(matches!(
+        system.install_isolated(
             manifest("wrong-package"),
             PackageContentId::new([99; 32]).expect("wrong package identity"),
             &root(),
             Path::new(env!("CARGO_BIN_EXE_lkjscript-cell")),
             host(&stdio),
-        )
-        .expect("install mismatched package");
-    assert!(matches!(
-        system.start(app),
+        ),
         Err(RuntimeError::ProcessCell(_))
     ));
-    assert_eq!(
-        system.status(app).expect("failed app").lifecycle,
-        Lifecycle::Failed
-    );
+    assert!(system.list().expect("application list").is_empty());
     assert!(stdio.output().expect("no output").is_empty());
 }
 

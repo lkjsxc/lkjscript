@@ -61,6 +61,51 @@ fn compiler_authenticates_general_enum_rehydration() {
     )
     .expect("general enum snapshot");
     let expected = snapshot.clone();
+    let prepared = program.prepared_identity();
+    let mut malformed_nodes = expected.nodes().to_vec();
+    if let Some(root) = malformed_nodes.last_mut() {
+        root.payload = SemanticDagPayload::Enum {
+            tag: u16::MAX,
+            fields: vec![SemanticDagNodeId::new(0)],
+        };
+    }
+    let malformed = SemanticDagSnapshot::new(
+        malformed_nodes,
+        expected.root(),
+        StructuralSnapshotLimits::DEFAULT,
+    )
+    .expect("bounded malformed semantic DAG");
+    assert!(lkjscript_runtime::rehydrate_process_outcome(
+        lkjscript_core::ExecutionOutcome::Returned(lkjscript_core::OwnedValue::from_semantic_dag(
+            malformed
+        ),),
+        chunk,
+        prepared,
+    )
+    .is_err());
+    let (rehydrated, report) = lkjscript_runtime::rehydrate_process_outcome(
+        lkjscript_core::ExecutionOutcome::Returned(lkjscript_core::OwnedValue::from_semantic_dag(
+            snapshot.clone(),
+        )),
+        chunk,
+        prepared,
+    )
+    .expect("fresh authenticated process rehydration");
+    let report = report.expect("structural rehydration report");
+    assert_eq!(
+        report.input_canonical_dag_hash,
+        report.output_canonical_dag_hash
+    );
+    assert_eq!(report.final_domains, 0);
+    assert_eq!(report.final_owners, 0);
+    assert_eq!(report.final_loans, 0);
+    assert_eq!(report.final_dependencies, 0);
+    assert_eq!(report.release_backlog, 0);
+    assert!(report.bounded_release_work);
+    let lkjscript_core::ExecutionOutcome::Returned(value) = rehydrated else {
+        panic!("rehydrated structural return required")
+    };
+    assert_eq!(value.as_semantic_dag(), Some(&expected));
     let mut runtime =
         SealedSemanticDagRuntime::new(StructuralLimits::default()).expect("sealed runtime");
     let owner = runtime

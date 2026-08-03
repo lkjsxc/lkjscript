@@ -26,6 +26,7 @@ fn generated_string_and_path_payload_operations_are_collector_free(
         StructuralOperation::PublishStatic {
             value_type: string,
             payload: StructuralPayloadKind::String,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![artifact],
     )?;
@@ -44,6 +45,7 @@ fn generated_string_and_path_payload_operations_are_collector_free(
             value_type: string,
             payload: StructuralPayloadKind::String,
             unique: UniqueType::Bytes,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![dynamic_bytes],
     )?;

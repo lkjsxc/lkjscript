@@ -26,7 +26,7 @@ fn isolated_process_executes_locked_cross_package_transport_witness(
         "--name".into(),
         "polymorphic-transport".into(),
         "--package".into(),
-        "a8838a2de9a913bf27d0a19e5d31e2c7a5a4d34dba1babf41bba73c60b1b6680".into(),
+        "aae11ed5536a06a3ea4cab203b8fe9566fbc7df24890cb002b8680c0c501130d".into(),
         "--root".into(),
         root.to_string_lossy().into_owned(),
         "--entry".into(),
@@ -81,7 +81,7 @@ fn daemon_persists_restarts_and_controls_runnable_application(
         "--name".into(),
         "persistent-hello".into(),
         "--package".into(),
-        "5cff173468167e062d06f878ef72291ea2593386e344c5e77bf779902a24d330".into(),
+        "595208ea5b4e470735c1417d7745fd61d1f701c9098ccf847caec153202e92b3".into(),
         "--root".into(),
         root.to_string_lossy().into_owned(),
         "--entry".into(),
@@ -99,8 +99,18 @@ fn daemon_persists_restarts_and_controls_runnable_application(
         String::from_utf8_lossy(&install.stderr)
     );
     assert!(String::from_utf8(install.stdout)?.contains("application: 1"));
-    assert!(lifecycle(&endpoint, "start")?.status.success());
-    assert!(lifecycle(&endpoint, "restart")?.status.success());
+    let started = lifecycle(&endpoint, "start")?;
+    assert!(
+        started.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started.stderr)
+    );
+    let restarted = lifecycle(&endpoint, "restart")?;
+    assert!(
+        restarted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&restarted.stderr)
+    );
     let invoked = invoke(&endpoint)?;
     assert!(invoked.status.success());
     let invoked_stderr = String::from_utf8(invoked.stderr)?;

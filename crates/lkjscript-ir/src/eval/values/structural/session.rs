@@ -88,10 +88,16 @@ pub(crate) fn aggregate_mode(
 pub(crate) fn structural_eligible(program: &Program, ty: &SsaType) -> bool {
     use crate::StructuralValueCategory::{Destination, Owner, View};
 
-    program.memory.type_for(ty).is_some()
-        && [Owner, View, Destination]
-            .into_iter()
-            .all(|category| program.memory.representation(ty, category).is_some())
+    let Some(type_id) = program.memory.type_for(ty).map(|item| item.id) else {
+        return false;
+    };
+    [Owner, View, Destination].into_iter().all(|category| {
+        program
+            .memory
+            .representations
+            .iter()
+            .any(|item| item.type_id == type_id && item.category == category)
+    })
 }
 
 fn preflight(program: &Program, limits: StructuralValueRuntimeLimits) -> Result<(), String> {

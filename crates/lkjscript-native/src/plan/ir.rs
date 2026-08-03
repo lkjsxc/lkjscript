@@ -6,6 +6,7 @@ pub(crate) enum Operation {
     F64Const(u64),
     BoolConst(bool),
     Unit,
+    MemoryWitnessLocator(u16),
     StaticBytesConst(StaticBytesIdentity),
     StaticStringConst(StaticBytesIdentity, StructuralTypeIdentity),
     I64Add(ValueId, ValueId),
@@ -41,6 +42,7 @@ impl Operation {
             | Self::F64Const(_)
             | Self::BoolConst(_)
             | Self::Unit
+            | Self::MemoryWitnessLocator(_)
             | Self::StaticBytesConst(_)
             | Self::StaticStringConst(_, _)
             | Self::ReadLocal(_)

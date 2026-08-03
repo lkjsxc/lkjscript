@@ -51,29 +51,46 @@ fn dependency(byte: u8, source_order: u16) -> ExecutableMemoryWitnessDependency 
             field: [byte; 32],
             source_order,
         },
-        target: ExecutableMemoryWitnessTarget::ExternalWitness([byte; 32]),
+        target: ExecutableMemoryWitnessTarget::ExternalMember {
+            group: [byte.saturating_add(1); 32],
+            member: [byte; 32],
+        },
     }
 }
 
+fn group_descriptor(
+    facts: ExecutableMemoryWitnessFacts,
+    dependencies: Vec<ExecutableMemoryWitnessDependency>,
+) -> Vec<u8> {
+    let semantic_identity = facts.semantic_type;
+    canonical_executable_memory_witness_group_descriptor(
+        false,
+        &[ExecutableMemoryWitnessGroupMember {
+            id: [0; 32],
+            ordinal: 0,
+            semantic_identity,
+            facts,
+            dependencies,
+        }],
+    )
+}
+
 #[test]
-fn executable_witness_encoding_is_deterministic_and_dependency_ordered() {
-    let dependencies = [dependency(3, 0), dependency(4, 1)];
-    let first = canonical_executable_memory_witness(&facts(), &dependencies);
-    let second = canonical_executable_memory_witness(&facts(), &dependencies);
+fn executable_witness_group_encoding_is_deterministic_and_dependency_ordered() {
+    let dependencies = vec![dependency(3, 0), dependency(4, 1)];
+    let first = group_descriptor(facts(), dependencies.clone());
+    let second = group_descriptor(facts(), dependencies);
     assert_eq!(first, second);
     assert_ne!(
         first,
-        canonical_executable_memory_witness(&facts(), &[dependency(4, 1), dependency(3, 0)])
+        group_descriptor(facts(), vec![dependency(4, 1), dependency(3, 0)])
     );
-    assert_ne!(
-        first,
-        canonical_executable_memory_witness(&facts(), &[dependency(3, 0)])
-    );
+    assert_ne!(first, group_descriptor(facts(), vec![dependency(3, 0)]));
 }
 
 #[test]
 fn every_executable_fact_changes_the_canonical_encoding() {
-    let baseline = canonical_executable_memory_witness(&facts(), &[dependency(3, 0)]);
+    let baseline = group_descriptor(facts(), vec![dependency(3, 0)]);
     let mut candidates = Vec::new();
 
     let mut item = facts();
@@ -174,9 +191,10 @@ fn every_executable_fact_changes_the_canonical_encoding() {
     for candidate in candidates {
         assert_ne!(
             baseline,
-            canonical_executable_memory_witness(&candidate, &[dependency(3, 0)])
+            group_descriptor(candidate, vec![dependency(3, 0)])
         );
     }
 }
 
+include!("witness_encoding/group_tests.rs");
 include!("witness_encoding/route_tests.rs");

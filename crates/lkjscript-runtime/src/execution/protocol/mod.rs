@@ -1,5 +1,6 @@
 use std::io::{self, Read, Write};
 
+use lkjscript_contracts::PreparedProgramIdentity;
 use lkjscript_core::{
     CapabilityKind, ExecutionConfig, ExecutionOutcome, ExecutionOutcomeCodecLimits,
     StructuralSnapshotLimits,
@@ -34,6 +35,11 @@ pub struct ProcessBootstrap {
     pub incarnation: u64,
     pub package: [u8; 32],
     pub entry: String,
+    pub expected_entry: [u8; 32],
+    pub expected_prepared: PreparedProgramIdentity,
+    pub expected_return_semantic: [u8; 32],
+    pub expected_root_witness_group: [u8; 32],
+    pub expected_root_witness_member: [u8; 32],
     pub capabilities: Vec<CapabilityKind>,
     pub execution: ExecutionConfig,
 }
@@ -44,21 +50,63 @@ pub enum ProcessRequest {
     Stop,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProcessProgramProvenance {
+    pub platform_revision: u64,
+    pub contract: [u8; 32],
+    pub application: u64,
+    pub incarnation: u64,
+    pub package: [u8; 32],
+    pub entry: [u8; 32],
+    pub prepared: PreparedProgramIdentity,
+    pub return_semantic: [u8; 32],
+    pub root_witness_group: [u8; 32],
+    pub root_witness_member: [u8; 32],
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcessResponse {
     Ready {
         process: u32,
+        provenance: ProcessProgramProvenance,
     },
     ReadyFailure {
         diagnostic: String,
     },
     Outcome {
+        provenance: ProcessProgramProvenance,
         cell: u64,
         outcome: ExecutionOutcome,
         output: Vec<u8>,
         flushes: u64,
     },
     Stopped,
+}
+
+pub fn expected_process_provenance(value: &ProcessBootstrap) -> ProcessProgramProvenance {
+    ProcessProgramProvenance {
+        platform_revision: value.platform_revision,
+        contract: value.contract,
+        application: value.application,
+        incarnation: value.incarnation,
+        package: value.package,
+        entry: value.expected_entry,
+        prepared: value.expected_prepared,
+        return_semantic: value.expected_return_semantic,
+        root_witness_group: value.expected_root_witness_group,
+        root_witness_member: value.expected_root_witness_member,
+    }
+}
+
+pub fn validate_process_provenance(
+    expected: &ProcessProgramProvenance,
+    actual: &ProcessProgramProvenance,
+) -> io::Result<()> {
+    if expected == actual {
+        Ok(())
+    } else {
+        Err(invalid("process outcome provenance mismatch"))
+    }
 }
 
 pub fn write_bootstrap(output: &mut impl Write, value: &ProcessBootstrap) -> io::Result<()> {
@@ -137,6 +185,8 @@ include!("io.rs");
 include!("messages.rs");
 include!("config.rs");
 
+#[cfg(test)]
+mod bootstrap_tests;
 #[cfg(test)]
 mod semantic_dag_tests;
 #[cfg(test)]

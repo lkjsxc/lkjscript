@@ -53,7 +53,18 @@ pub(crate) fn native_layout(ssa: ContractDigest, runtime: ContractDigest) -> Con
                 .fact(fact(
                     "structural-service",
                     "structural-service",
-                    "verified direct sites and bounded invocation-owned StructuralValueRuntime",
+                    concat!(
+                        "verified direct sites and bounded invocation-owned ",
+                        "StructuralValueRuntime with exact unique or sealed routes",
+                    ),
+                ))
+                .fact(fact(
+                    "memory-witness-abi",
+                    "memory witness ABI",
+                    concat!(
+                        "ordered hidden validated group/member locators with synchronous ",
+                        "native independent-owner and dispose",
+                    ),
                 ))
                 .fact(fact(
                     "static-data",
@@ -116,7 +127,10 @@ pub(crate) fn metrics() -> ContractDescriptor {
             .fact(fact(
                 "structural",
                 "structural",
-                "calls roots views destinations events release work empty completion and teardown failures",
+                concat!(
+                    "calls roots views destinations sealed publication acquisition release ",
+                    "copied bytes release work live domains owners and zero teardown",
+                ),
             )),
     )
 }

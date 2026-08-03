@@ -34,6 +34,7 @@ fn structural_destinations_reject_incomplete_and_double_initialization(
             block,
             StructuralOperation::DestinationInitialize {
                 aggregate: aggregate.clone(),
+                storage: StructuralStorageRoute::Unique,
                 field: 0,
             },
             vec![destination, field_owner],
@@ -42,7 +43,10 @@ fn structural_destinations_reject_incomplete_and_double_initialization(
         let second = sc(
             builder,
             block,
-            StructuralOperation::PublishI64(aggregate.fields()[0]),
+            StructuralOperation::PublishI64 {
+                value_type: aggregate.fields()[0],
+                storage: StructuralStorageRoute::Unique,
+            },
             vec![raw],
         )?;
         sc(
@@ -50,6 +54,7 @@ fn structural_destinations_reject_incomplete_and_double_initialization(
             block,
             StructuralOperation::DestinationInitialize {
                 aggregate: aggregate.clone(),
+                storage: StructuralStorageRoute::Unique,
                 field: 0,
             },
             vec![initialized, second],

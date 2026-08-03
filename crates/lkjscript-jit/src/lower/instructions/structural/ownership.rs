@@ -84,7 +84,7 @@ pub(in crate::lower) fn lower_terminal_cleanup(
                     let _ = lower_drop(function, *value, block, locals, value_types, builder)?;
                 }
                 ValueType::StructuralDestination(_) => {
-                    let (aggregate, initialized) =
+                    let (aggregate, storage, initialized) =
                         layouts.structural().destination(function, *value)?;
                     let input = read_value(builder, block, locals, *value, function.id)?;
                     let _ = structural_call(
@@ -92,6 +92,7 @@ pub(in crate::lower) fn lower_terminal_cleanup(
                         block,
                         lkjscript_native::StructuralOperation::DestinationAbort {
                             aggregate,
+                            storage,
                             initialized,
                         },
                         vec![input],

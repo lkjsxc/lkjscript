@@ -20,10 +20,10 @@ impl JitStructuralRuntime {
             .get(&key.get())
             .copied()
             .ok_or(NativeServiceError::Trap)?;
-        if expected != lkjscript_native::ValueType::StructuralOwner(value_type) {
+        if expected != lkjscript_native::ValueType::StructuralOwner(value_type.value_type) {
             return Err(NativeServiceError::Trap);
         }
-        self.copy_owner(NativeStructuralOwner::new(value_type, key.get()))
+        self.copy_owner(NativeStructuralOwner::new(value_type.value_type, key.get()))
             .map(NativeValue::StructuralOwner)
     }
 
@@ -37,7 +37,7 @@ impl JitStructuralRuntime {
             .get(&key.get())
             .copied()
             .ok_or(NativeServiceError::Trap)?;
-        self.drop_owner(NativeStructuralOwner::new(value_type, key.get()))
+        self.drop_owner(NativeStructuralOwner::new(value_type.value_type, key.get()))
     }
 
     pub(in crate::island) fn list_owners_equal(

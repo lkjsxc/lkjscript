@@ -3,32 +3,39 @@ use crate::island::JitIslandServices;
 use lkjscript_executable::NativeStructuralRuntimeServices;
 use lkjscript_native::NativeUnique;
 
+mod lifecycle;
+use lifecycle::lifecycle_services;
+
 impl NativeStructuralRuntimeServices for JitIslandServices {
     fn publish_structural_static(
         &mut self,
         bytes: &[u8],
         value_type: StructuralTypeIdentity,
         payload: StructuralPayloadKind,
+        storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
-        self.structural.publish_static(bytes, value_type, payload)
+        self.structural
+            .publish_static(bytes, value_type, payload, storage)
     }
-
     fn publish_structural_unique(
         &mut self,
         owner: NativeUnique,
         value_type: StructuralTypeIdentity,
         payload: StructuralPayloadKind,
+        storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         let bytes = self.unique.export_owner(owner)?;
-        self.structural.publish_unique(bytes, value_type, payload)
+        self.structural
+            .publish_unique(bytes, value_type, payload, storage)
     }
 
     fn publish_structural_i64(
         &mut self,
         value: i64,
         value_type: StructuralTypeIdentity,
+        storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
-        self.structural.publish_i64(value, value_type)
+        self.structural.publish_i64(value, value_type, storage)
     }
 
     fn publish_structural_formatted_i64(
@@ -58,19 +65,7 @@ impl NativeStructuralRuntimeServices for JitIslandServices {
             .convert_numeric(input, kind, success, failure, errors)
     }
 
-    fn copy_structural(
-        &mut self,
-        owner: NativeStructuralOwner,
-    ) -> Result<NativeStructuralOwner, NativeServiceError> {
-        self.structural.copy_owner(owner)
-    }
-
-    fn move_structural(
-        &mut self,
-        owner: NativeStructuralOwner,
-    ) -> Result<NativeStructuralOwner, NativeServiceError> {
-        self.structural.move_owner(owner)
-    }
+    lifecycle_services!();
 
     fn copy_structural_view(
         &mut self,
@@ -104,15 +99,12 @@ impl NativeStructuralRuntimeServices for JitIslandServices {
         self.structural.end_view(view)
     }
 
-    fn drop_structural(&mut self, owner: NativeStructuralOwner) -> Result<(), NativeServiceError> {
-        self.structural.drop_owner(owner)
-    }
-
     fn create_structural_destination(
         &mut self,
         aggregate: &StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
-        self.structural.create_destination(aggregate)
+        self.structural.create_destination(aggregate, storage)
     }
 
     fn initialize_structural_destination(
@@ -120,18 +112,21 @@ impl NativeStructuralRuntimeServices for JitIslandServices {
         destination: NativeStructuralDestination,
         value: NativeValue,
         aggregate: &StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
         field: u16,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
         self.structural
-            .initialize_destination(destination, value, aggregate, field)
+            .initialize_destination(destination, value, aggregate, storage, field)
     }
 
     fn finish_structural_destination(
         &mut self,
         destination: NativeStructuralDestination,
         aggregate: &StructuralAggregateDescriptor,
+        storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
-        self.structural.finish_destination(destination, aggregate)
+        self.structural
+            .finish_destination(destination, aggregate, storage)
     }
 
     fn abort_structural_destination(

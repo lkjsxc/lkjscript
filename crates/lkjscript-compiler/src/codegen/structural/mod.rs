@@ -5,19 +5,30 @@ mod witnesses;
 use witnesses::install_memory_witnesses;
 
 include!("installation.rs");
+include!("installation/destinations.rs");
 
 pub(in crate::codegen) fn structural_owner_representation(
     chunk: &Chunk,
     ty: &SsaType,
 ) -> Option<BytecodeStructuralRepresentationId> {
-    structural_representation(chunk, ty, BytecodeStructuralValueCategory::Owner)
+    structural_representation(
+        chunk,
+        ty,
+        BytecodeStructuralValueCategory::Owner,
+        BytecodeStructuralStorage::UniqueStructural,
+    )
 }
 
 pub(in crate::codegen) fn structural_view_representation(
     chunk: &Chunk,
     ty: &SsaType,
 ) -> Option<BytecodeStructuralRepresentationId> {
-    structural_representation(chunk, ty, BytecodeStructuralValueCategory::View)
+    structural_representation(
+        chunk,
+        ty,
+        BytecodeStructuralValueCategory::View,
+        BytecodeStructuralStorage::BorrowedView,
+    )
 }
 
 pub(in crate::codegen) fn structural_destination(
@@ -60,12 +71,14 @@ pub(in crate::codegen) fn intern_aggregate_field(
     representation: lkjscript_ir::StructuralRepresentationId,
     field: u16,
     result: &SsaType,
+    result_representation: Option<BytecodeStructuralRepresentationId>,
 ) -> Result<u16> {
     intern_aggregate_field_for_representation(
         chunk,
         BytecodeStructuralRepresentationId::new(representation.raw()),
         field,
         result,
+        result_representation,
     )
 }
 
@@ -74,6 +87,7 @@ pub(in crate::codegen) fn intern_aggregate_field_for_representation(
     representation: BytecodeStructuralRepresentationId,
     field: u16,
     result: &SsaType,
+    result_representation: Option<BytecodeStructuralRepresentationId>,
 ) -> Result<u16> {
     let metadata = chunk
         .structural_representations
@@ -101,6 +115,7 @@ pub(in crate::codegen) fn intern_aggregate_field_for_representation(
         active_variant,
         field,
         result: structural_field_from_chunk(chunk, result)?,
+        result_representation,
     };
     if let Some(index) = chunk
         .structural_aggregate_fields
@@ -121,11 +136,13 @@ pub(in crate::codegen) fn intern_payload(
     representation: BytecodeStructuralRepresentationId,
     variant: lkjscript_ir::VariantId,
     result: &SsaType,
+    result_representation: Option<BytecodeStructuralRepresentationId>,
 ) -> Result<u16> {
     let reference = StructuralPayloadRef {
         representation,
         variant: BytecodeVariantId::new(variant.bytes()),
         result: structural_field_from_chunk(chunk, result)?,
+        result_representation,
     };
     if let Some(index) = chunk
         .structural_payloads

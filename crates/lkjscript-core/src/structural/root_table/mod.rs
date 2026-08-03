@@ -6,6 +6,7 @@ mod loans;
 mod metrics;
 mod model;
 mod publish;
+mod sealed;
 mod validation;
 
 pub use config::StructuralRootTableLimits;

@@ -1,5 +1,7 @@
 use super::*;
 
+mod owner_storage;
+
 impl StructuralCatalog {
     pub(in crate::lower) fn aggregate(
         &self,
@@ -78,7 +80,14 @@ impl StructuralCatalog {
         &self,
         function: &Function,
         value: ValueId,
-    ) -> Result<(lkjscript_native::StructuralAggregateDescriptor, u16), LoweringError> {
+    ) -> Result<
+        (
+            lkjscript_native::StructuralAggregateDescriptor,
+            lkjscript_native::StructuralStorageRoute,
+            u16,
+        ),
+        LoweringError,
+    > {
         let instruction = function
             .blocks
             .iter()
@@ -94,12 +103,16 @@ impl StructuralCatalog {
                     representation,
                     lkjscript_ir::StructuralValueCategory::Destination,
                 )?;
-                Ok((self.aggregate(type_id, active_variant)?, 0))
+                let storage = self.representation_storage(
+                    representation,
+                    lkjscript_ir::StructuralValueCategory::Destination,
+                )?;
+                Ok((self.aggregate(type_id, active_variant)?, storage, 0))
             }
             InstructionKind::DestinationFieldInit {
                 destination, field, ..
             } => {
-                let (aggregate, initialized) = self.destination(function, destination)?;
+                let (aggregate, storage, initialized) = self.destination(function, destination)?;
                 if field != initialized {
                     return Err(invalid_structural(
                         "structural destination fields are not initialized in order",
@@ -108,7 +121,7 @@ impl StructuralCatalog {
                 let next = initialized.checked_add(1).ok_or_else(|| {
                     invalid_structural("structural destination initialization overflow")
                 })?;
-                Ok((aggregate, next))
+                Ok((aggregate, storage, next))
             }
             _ => Err(invalid_structural(
                 "structural destination value has the wrong definition",

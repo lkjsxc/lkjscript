@@ -1,8 +1,11 @@
 use crate::verify::*;
+
+mod witness;
 use crate::{
     EffectSet, Function, Instruction, InstructionKind, Program, SsaType, StructuralLayoutKind,
     StructuralValueCategory,
 };
+pub(super) use witness::verify as verify_witness;
 
 pub(super) fn verify(
     program: &Program,
@@ -172,6 +175,8 @@ pub(super) fn verify(
         | InstructionKind::Drop { .. }
         | InstructionKind::Move { .. }
         | InstructionKind::Borrow { .. }
+        | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessDispose { .. }
         | InstructionKind::FunctionRef(_)
         | InstructionKind::Runtime { .. }
         | InstructionKind::F64FromI64Exact { .. }
@@ -190,4 +195,4 @@ pub(super) fn verify(
     }
 }
 
-include!("structural_instruction_support.rs");
+include!("support.rs");

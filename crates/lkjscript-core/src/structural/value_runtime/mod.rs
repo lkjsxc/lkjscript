@@ -14,6 +14,17 @@ mod release;
 mod static_lifecycle;
 mod validation;
 
+#[path = "../sealed/value_runtime/destination.rs"]
+mod sealed_destination;
+#[path = "../sealed/value_runtime/lifecycle.rs"]
+mod sealed_lifecycle;
+#[path = "../sealed/value_runtime/model.rs"]
+mod sealed_model;
+#[path = "../sealed/value_runtime/object_slab.rs"]
+mod sealed_object_slab;
+#[path = "../sealed/value_runtime/release.rs"]
+mod sealed_release;
+
 use std::collections::VecDeque;
 
 pub use error::{
@@ -30,6 +41,7 @@ pub use model::{
     StructuralKind, StructuralProjection, StructuralType, StructuralViewKey,
 };
 pub use release::DestinationCleanupReport;
+pub use sealed_model::{StructuralDisposeReport, StructuralOwnerKind, StructuralSealResult};
 
 use super::image::{
     LocalNodeId, StructuralImage, StructuralNode, StructuralNodePayload, TreeFacts,

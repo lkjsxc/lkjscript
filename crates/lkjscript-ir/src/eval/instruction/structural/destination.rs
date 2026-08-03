@@ -70,6 +70,8 @@ impl Evaluator<'_> {
                 key,
                 value_type,
                 type_id: facts.type_id,
+                storage: facts.storage,
+                route: facts.route,
                 active_variant,
             },
         ))

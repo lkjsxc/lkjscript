@@ -40,13 +40,16 @@ impl JitStructuralRuntime {
         aggregate: &StructuralAggregateDescriptor,
         payload: Option<NativeValue>,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
-        let destination = self.create_destination(aggregate)?;
+        let storage = StructuralStorageRoute::Unique;
+        let destination = self.create_destination(aggregate, storage)?;
         let destination = match payload {
-            Some(value) => self.initialize_destination(destination, value, aggregate, 0)?,
+            Some(value) => {
+                self.initialize_destination(destination, value, aggregate, storage, 0)?
+            }
             None if aggregate.fields().is_empty() => destination,
             None => return Err(NativeServiceError::HostFailure),
         };
-        self.finish_destination(destination, aggregate)
+        self.finish_destination(destination, aggregate, storage)
     }
 }
 

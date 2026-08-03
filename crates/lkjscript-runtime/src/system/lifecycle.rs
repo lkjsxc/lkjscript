@@ -3,8 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::execution::process::ProcessCell;
 use crate::execution::protocol::{runtime_control_digest, ProcessBootstrap};
-use crate::model::private_inputs;
-use crate::state::InstanceRuntime;
+use crate::state::{private_inputs, InstanceRuntime};
 use crate::{ApplicationId, ApplicationIncarnationId, Lifecycle, RuntimeError, RuntimeSystem};
 
 impl RuntimeSystem {
@@ -52,10 +51,18 @@ impl RuntimeSystem {
                     incarnation: incarnation.incarnation(),
                     package: package.bytes(),
                     entry: entry.to_owned(),
+                    expected_entry: spec.prepared.entry,
+                    expected_prepared: spec.prepared.prepared,
+                    expected_return_semantic: spec.prepared.return_semantic,
+                    expected_root_witness_group: spec.prepared.root_witness_group,
+                    expected_root_witness_member: spec.prepared.root_witness_member,
                     capabilities,
                     execution: config,
                 };
-                match ProcessCell::start(&spec, &bootstrap) {
+                let parent_chunk = chunk.clone().ok_or_else(|| {
+                    RuntimeError::ProcessCell("isolated parent prepared chunk is absent".into())
+                })?;
+                match ProcessCell::start(&spec, &bootstrap, parent_chunk) {
                     Ok(process) => Some(process),
                     Err(error) => {
                         self.record_start_failure(incarnation, inputs, &error)?;

@@ -111,6 +111,7 @@ fn success_ownership(
         InstructionKind::PlaceInit { value, .. }
         | InstructionKind::Drop { value, .. }
         | InstructionKind::Move { value, .. }
+        | InstructionKind::MemoryWitnessDispose { value, .. }
         | InstructionKind::StructuralPublish { value, .. }
         | InstructionKind::DestinationFinish { destination: value }
         | InstructionKind::DestinationAbort { destination: value }

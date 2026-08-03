@@ -50,6 +50,8 @@ pub(super) fn convert_to_f64(
         | ValueType::Resource(_)
         | ValueType::Unique(_)
         | ValueType::Loan(_)
+        | ValueType::StructuralKey
+        | ValueType::MemoryWitnessLocator
         | ValueType::StructuralOwner(_)
         | ValueType::StructuralView(_)
         | ValueType::StructuralDestination(_)

@@ -125,6 +125,7 @@ impl FunctionBuilder<'_> {
             self.clear_noncyclic_header(&target)?;
             return self.close_loop(target, exit_env, slots);
         };
+        self.drop_abandoned_structural_owners(condition_value, condition.origin)?;
         let condition_env = self.env.clone();
         let body_block =
             self.new_block(origin(expression.origin.raw(), self.next_position), false)?;

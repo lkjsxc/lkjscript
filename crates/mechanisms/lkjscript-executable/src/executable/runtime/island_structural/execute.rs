@@ -1,5 +1,8 @@
 use super::*;
 
+mod values;
+use values::{native_value, witness_locator};
+
 pub(super) fn execute(
     state: &mut IslandCallState<'_>,
     descriptor: &StructuralCallDescriptor,
@@ -12,24 +15,40 @@ pub(super) fn execute(
         StructuralOperation::PublishStatic {
             value_type,
             payload,
+            storage,
         } => {
             let bytes = state
                 .image
                 .resolve_static_bytes(NativeStaticBytes::new(first))
                 .ok_or(NativeServiceError::Trap)?;
             services
-                .publish_structural_static(bytes, *value_type, *payload)
+                .publish_structural_static(bytes, *value_type, *payload, *storage)
                 .map(NativeValue::StructuralOwner)
         }
         StructuralOperation::PublishUnique {
             value_type,
             payload,
             unique,
+            storage,
         } => services
-            .publish_structural_unique(NativeUnique::new(*unique, first), *value_type, *payload)
+            .publish_structural_unique(
+                NativeUnique::new(*unique, first),
+                *value_type,
+                *payload,
+                *storage,
+            )
             .map(NativeValue::StructuralOwner),
-        StructuralOperation::PublishI64(value_type) => services
-            .publish_structural_i64(first as i64, *value_type)
+        StructuralOperation::PublishI64 {
+            value_type,
+            storage,
+        } => services
+            .publish_structural_i64(first as i64, *value_type, *storage)
+            .map(NativeValue::StructuralOwner),
+        StructuralOperation::PublishOwner {
+            value_type,
+            storage,
+        } => services
+            .publish_structural_owner(NativeStructuralOwner::new(*value_type, first), *storage)
             .map(NativeValue::StructuralOwner),
         StructuralOperation::PublishFormattedI64(value_type) => services
             .publish_structural_formatted_i64(first as i64, *value_type)
@@ -37,6 +56,15 @@ pub(super) fn execute(
         StructuralOperation::Copy(value_type) => services
             .copy_structural(NativeStructuralOwner::new(*value_type, first))
             .map(NativeValue::StructuralOwner),
+        StructuralOperation::WitnessIndependentOwner => services
+            .independent_structural_owner(witness_locator(first)?, second)
+            .map(NativeValue::StructuralKey),
+        StructuralOperation::WitnessDispose => services
+            .dispose_structural_owner(witness_locator(first)?, second)
+            .map(|()| NativeValue::Unit),
+        StructuralOperation::WitnessDisposeStatic(witness) => services
+            .dispose_structural_owner(*witness, first)
+            .map(|()| NativeValue::Unit),
         StructuralOperation::Move(value_type) => services
             .move_structural(NativeStructuralOwner::new(*value_type, first))
             .map(NativeValue::StructuralOwner),
@@ -81,10 +109,14 @@ pub(super) fn execute(
                 .convert_structural_numeric(input, *kind, success, failure, errors)
                 .map(NativeValue::StructuralOwner)
         }
-        StructuralOperation::DestinationCreate(aggregate) => services
-            .create_structural_destination(aggregate)
+        StructuralOperation::DestinationCreate { aggregate, storage } => services
+            .create_structural_destination(aggregate, *storage)
             .map(NativeValue::StructuralDestination),
-        StructuralOperation::DestinationInitialize { aggregate, field } => {
+        StructuralOperation::DestinationInitialize {
+            aggregate,
+            storage,
+            field,
+        } => {
             let value_type = descriptor
                 .signature()
                 .parameters()
@@ -93,29 +125,38 @@ pub(super) fn execute(
                 .ok_or(NativeServiceError::HostFailure)?;
             services
                 .initialize_structural_destination(
-                    NativeStructuralDestination::new(aggregate.destination(*field), first),
+                    NativeStructuralDestination::new(
+                        aggregate.destination(*storage, *field),
+                        first,
+                    ),
                     native_value(second, value_type)?,
                     aggregate,
+                    *storage,
                     *field,
                 )
                 .map(NativeValue::StructuralDestination)
         }
-        StructuralOperation::DestinationFinish(aggregate) => {
+        StructuralOperation::DestinationFinish { aggregate, storage } => {
             let initialized = u16::try_from(aggregate.fields().len())
                 .map_err(|_| NativeServiceError::HostFailure)?;
             services
                 .finish_structural_destination(
-                    NativeStructuralDestination::new(aggregate.destination(initialized), first),
+                    NativeStructuralDestination::new(
+                        aggregate.destination(*storage, initialized),
+                        first,
+                    ),
                     aggregate,
+                    *storage,
                 )
                 .map(NativeValue::StructuralOwner)
         }
         StructuralOperation::DestinationAbort {
             aggregate,
+            storage,
             initialized,
         } => services
             .abort_structural_destination(NativeStructuralDestination::new(
-                aggregate.destination(*initialized),
+                aggregate.destination(*storage, *initialized),
                 first,
             ))
             .map(|()| NativeValue::Unit),
@@ -144,18 +185,5 @@ pub(super) fn execute(
         StructuralOperation::PayloadUtf8Valid(view) => services
             .structural_payload_utf8_valid(NativeStructuralView::new(*view, first))
             .map(NativeValue::Bool),
-    }
-}
-
-fn native_value(word: u64, value_type: ValueType) -> Result<NativeValue, NativeServiceError> {
-    match value_type {
-        ValueType::Unit if word == 0 => Ok(NativeValue::Unit),
-        ValueType::Bool if word <= 1 => Ok(NativeValue::Bool(word == 1)),
-        ValueType::I64 => Ok(NativeValue::I64(word as i64)),
-        ValueType::F64 => Ok(NativeValue::F64Bits(word)),
-        ValueType::StructuralOwner(value_type) if word != 0 => Ok(NativeValue::StructuralOwner(
-            NativeStructuralOwner::new(value_type, word),
-        )),
-        _ => Err(NativeServiceError::Trap),
     }
 }

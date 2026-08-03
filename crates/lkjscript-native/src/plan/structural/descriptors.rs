@@ -106,8 +106,12 @@ impl StructuralAggregateDescriptor {
     }
 
     #[doc(hidden)]
-    pub fn destination(&self, initialized: u16) -> StructuralDestinationType {
-        StructuralDestinationType::new(self.identity, self.value_type, initialized)
+    pub fn destination(
+        &self,
+        storage: StructuralStorageRoute,
+        initialized: u16,
+    ) -> StructuralDestinationType {
+        StructuralDestinationType::new(self.identity, self.value_type, storage, initialized)
     }
 
     pub(crate) fn canonical(&self) -> bool {

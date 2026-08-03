@@ -15,38 +15,7 @@ impl StructuralValueRuntime {
         &mut self,
         key: StructuralDestinationKey,
     ) -> Result<StructuralValueKey, StructuralValueError> {
-        let (image, facts) = {
-            let record = self.destination(key)?;
-            if record.values.iter().any(Option::is_none) {
-                return Err(StructuralValueError::IncompleteDestination);
-            }
-            let facts = TreeFacts {
-                nodes: 1,
-                ..TreeFacts::default()
-            }
-            .checked_add(record.total)
-            .ok_or(StructuralValueError::ArithmeticOverflow)?;
-            let mut children = Vec::new();
-            children.try_reserve_exact(record.values.len())?;
-            for value in &record.values {
-                children.push(
-                    value
-                        .as_ref()
-                        .ok_or(StructuralValueError::InvariantViolation)?,
-                );
-            }
-            let image = StructuralImage::merge(
-                record.value_type,
-                match record.shape {
-                    DestinationShape::Product => None,
-                    DestinationShape::Enum(tag) => Some(tag),
-                },
-                &children,
-                facts,
-                self.limits,
-            )?;
-            (image, facts)
-        };
+        let (image, facts) = self.complete_destination_image(key)?;
         match self.publish_image(image, facts) {
             Ok(root) => {
                 self.retire_destination(key)?;
@@ -66,6 +35,42 @@ impl StructuralValueRuntime {
     ) -> Result<Value, StructuralValueError> {
         self.finish_destination(key)
             .map(Value::from_structural_root)
+    }
+
+    pub(super) fn complete_destination_image(
+        &self,
+        key: StructuralDestinationKey,
+    ) -> Result<(StructuralImage, TreeFacts), StructuralValueError> {
+        let record = self.destination(key)?;
+        if record.values.iter().any(Option::is_none) {
+            return Err(StructuralValueError::IncompleteDestination);
+        }
+        let facts = TreeFacts {
+            nodes: 1,
+            ..TreeFacts::default()
+        }
+        .checked_add(record.total)
+        .ok_or(StructuralValueError::ArithmeticOverflow)?;
+        let mut children = Vec::new();
+        children.try_reserve_exact(record.values.len())?;
+        for value in &record.values {
+            children.push(
+                value
+                    .as_ref()
+                    .ok_or(StructuralValueError::InvariantViolation)?,
+            );
+        }
+        let image = StructuralImage::merge(
+            record.value_type,
+            match record.shape {
+                DestinationShape::Product => None,
+                DestinationShape::Enum(tag) => Some(tag),
+            },
+            &children,
+            facts,
+            self.limits,
+        )?;
+        Ok((image, facts))
     }
 
     pub fn abort_destination(
@@ -155,12 +160,12 @@ impl StructuralValueRuntime {
     ) -> Result<(), StructuralValueError> {
         let root = self.resolve_root(root_key, expected)?;
         let StructuralObject::Owned { image, facts } = self.objects.get(root)? else {
-            return Err(StructuralValueError::WrongPayloadKind);
+            return Err(StructuralValueError::WrongOwnership);
         };
         self.preflight_field(key, field, image.root().value_type(), *facts)
     }
 
-    fn retire_destination(
+    pub(super) fn retire_destination(
         &mut self,
         key: StructuralDestinationKey,
     ) -> Result<DestinationRecord, StructuralValueError> {

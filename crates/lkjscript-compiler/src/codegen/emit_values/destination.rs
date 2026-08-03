@@ -34,6 +34,8 @@ impl Emitter<'_> {
             | InstructionKind::AggregateConsumePayload { .. }
             | InstructionKind::StringUtf8View { .. }
             | InstructionKind::StructuralCopy { .. }
+            | InstructionKind::MemoryWitnessIndependentOwner { .. }
+            | InstructionKind::MemoryWitnessDispose { .. }
             | InstructionKind::FunctionRef(_)
             | InstructionKind::Runtime { .. }
             | InstructionKind::F64FromI64Exact { .. }

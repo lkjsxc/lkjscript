@@ -50,7 +50,7 @@ fn place_init<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         }
         let copied = invocation_mut(vm)?
             .runtime
-            .clone_owned(key, record.value_type)
+            .independent_owner(key, record.value_type)
             .map_err(map_value_error)?;
         let copied_value =
             invocation_mut(vm)?.register_owner(copied, record.representation, record.value_type)?;
@@ -84,7 +84,7 @@ fn move_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     require_place(vm, place, key.get())?;
     let next = invocation_mut(vm)?
         .runtime
-        .move_owned(key, record.value_type)
+        .move_owner(key, record.value_type)
         .map_err(map_value_error)?;
     locals::clear_local(vm, slot)?;
     let removed = invocation_mut(vm)?
@@ -120,7 +120,8 @@ fn drop_owner<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
     }
     invocation_mut(vm)?
         .runtime
-        .drop_owned(key, record.value_type)
+        .dispose_owner(key, record.value_type)
+        .map(|_| ())
         .map_err(map_value_error)?;
     invocation_mut(vm)?.owners.remove(&key.get());
     locals::clear_local(vm, slot)?;

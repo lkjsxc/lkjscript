@@ -68,6 +68,7 @@ pub(crate) fn runtime(
 
 pub(crate) fn one_block_program() -> Program {
     Program {
+        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

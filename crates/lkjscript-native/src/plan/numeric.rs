@@ -157,7 +157,7 @@ impl FunctionBuilder {
     pub fn observe_local(&mut self, block: BlockId, local: LocalId) -> Result<ValueId, PlanError> {
         let value_type = self.local_type(local)?;
         let observable = match value_type {
-            ValueType::StructuralOwner(_) => true,
+            ValueType::StructuralOwner(_) | ValueType::StructuralKey => true,
             ValueType::StructuralView(view) => !view.exclusive(),
             _ => false,
         };

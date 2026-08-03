@@ -15,6 +15,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
         metadata: metadata(checked),
     };
     let dominating = Program {
+        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),
@@ -62,6 +63,7 @@ fn dominator_ordered_checked_gvn_accepts_dominance_and_rejects_siblings() {
     );
 
     let siblings = Program {
+        prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
         memory: StructuralMemoryMetadata::default(),
         region_products: Vec::new(),
         sources: Vec::new(),

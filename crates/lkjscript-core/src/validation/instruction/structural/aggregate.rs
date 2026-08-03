@@ -98,8 +98,15 @@ fn aggregate_consume_payload(
             proto,
             instruction,
         )?,
-        StructuralFieldRoute::Structural(type_id) => Kind::StructuralOwner {
-            representation: owner_representation_for_type(chunk, type_id, proto, instruction)?,
+        StructuralFieldRoute::Structural(_) => Kind::StructuralOwner {
+            representation: reference.result_representation.ok_or_else(|| {
+                instruction_error(
+                    proto,
+                    instruction.op(),
+                    instruction.offset(),
+                    "structural payload result representation is missing",
+                )
+            })?,
             owner: fresh_identity(proto, instruction, 2)?,
             active_variant: None,
         },

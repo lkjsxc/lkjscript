@@ -59,6 +59,9 @@ impl RawReturn {
                 Ok(NativeValue::Loan(NativeLoan::new(kind, value)))
             }
             (Self::Integer(_), ValueType::Loan(_)) => Err(InvocationError::UnsupportedSignature),
+            (Self::Integer(value), ValueType::StructuralKey) if value != 0 => {
+                Ok(NativeValue::StructuralKey(value))
+            }
             (Self::Integer(value), ValueType::StructuralOwner(value_type)) if value != 0 => Ok(
                 NativeValue::StructuralOwner(NativeStructuralOwner::new(value_type, value)),
             ),
@@ -74,7 +77,8 @@ impl RawReturn {
             }
             (
                 Self::Integer(_),
-                ValueType::StructuralOwner(_)
+                ValueType::StructuralKey
+                | ValueType::StructuralOwner(_)
                 | ValueType::StructuralView(_)
                 | ValueType::StructuralDestination(_),
             ) => Err(InvocationError::UnsupportedSignature),
@@ -101,6 +105,7 @@ pub(super) fn native_value_word(value: NativeValue, expected: ValueType) -> Opti
         NativeValue::Resource(resource) => resource.opaque_word(),
         NativeValue::Unique(unique) => unique.opaque_word(),
         NativeValue::Loan(loan) => loan.opaque_word(),
+        NativeValue::StructuralKey(key) => key,
         NativeValue::StructuralOwner(owner) => owner.opaque_word(),
         NativeValue::StructuralView(view) => view.opaque_word(),
         NativeValue::StructuralDestination(destination) => destination.opaque_word(),
@@ -156,6 +161,7 @@ pub(super) fn machine_arguments(arguments: &[NativeValue]) -> Vec<MachineArgumen
             }
             NativeValue::Unique(unique) => Some(MachineArgument::Integer(unique.opaque_word())),
             NativeValue::Loan(loan) => Some(MachineArgument::Integer(loan.opaque_word())),
+            NativeValue::StructuralKey(key) => Some(MachineArgument::Integer(*key)),
             NativeValue::StructuralOwner(owner) => {
                 Some(MachineArgument::Integer(owner.opaque_word()))
             }

@@ -113,5 +113,7 @@ pub(super) const fn operation_tag(value: MemoryWitnessOperation) -> u8 {
         MemoryWitnessOperation::Decode => 6,
         MemoryWitnessOperation::ListImport => 7,
         MemoryWitnessOperation::ListExport => 8,
+        MemoryWitnessOperation::IndependentOwner => 9,
+        MemoryWitnessOperation::Dispose => 10,
     }
 }

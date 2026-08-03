@@ -8,7 +8,12 @@ use crate::{
 
 pub(super) fn validate(chunk: &Chunk, limits: &ValidationLimits) -> Result<usize> {
     validate_table_limits(chunk, limits)?;
-    let mut bytes = validate_witnesses(chunk)?;
+    let mut bytes = validate_witness_groups(chunk)?;
+    bytes = add(
+        bytes,
+        validate_witnesses(chunk)?,
+        "structural metadata bytes",
+    )?;
     bytes = add(
         bytes,
         validate_layouts_and_types(chunk)?,
@@ -40,6 +45,7 @@ pub(super) fn validate(chunk: &Chunk, limits: &ValidationLimits) -> Result<usize
 }
 
 include!("tables.rs");
+include!("witness_groups.rs");
 include!("witnesses.rs");
 include!("layouts.rs");
 include!("references.rs");

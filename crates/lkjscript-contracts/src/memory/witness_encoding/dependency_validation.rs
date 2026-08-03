@@ -94,13 +94,7 @@ pub fn validate_executable_dependencies(
                 "executable dependency roles are missing, swapped, or duplicated",
             ));
         }
-        if let ExecutableMemoryWitnessTarget::LocalSemantic(target) = actual.target {
-            if direct_nominal(expected_ty) != Some(target) {
-                return Err(SemanticContractError(
-                    "local semantic dependency target is forged",
-                ));
-            }
-        }
+        let _ = expected_ty;
     }
     Ok(())
 }

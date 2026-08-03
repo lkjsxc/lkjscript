@@ -163,6 +163,11 @@ pub(super) fn runtime_slots() -> ContractItem {
             "(island-state,verified-structural-site,up-to-three-words)->typed-word",
         ),
         (
+            "structural-witness-dispatch",
+            "StructuralWitnessDispatch",
+            "validated group/member locator dispatches independent-owner and dispose on exact storage",
+        ),
+        (
             "heap-dispatch",
             "HeapDispatch",
             "(verified-domain-state,verified-heap-site,frame-homes)->typed-word/status",

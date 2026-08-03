@@ -42,7 +42,7 @@ impl Evaluator<'_> {
     ) -> Result<EvalValue, Flow> {
         self.structural
             .runtime
-            .clone_owned(key, value_type)
+            .independent_owner(key, value_type)
             .map(|key| EvalValue::StructuralOwner(EvalStructuralOwner { key, value_type }))
             .map_err(map_structural_error)
     }
@@ -99,7 +99,7 @@ impl Evaluator<'_> {
                 let clone = self
                     .structural
                     .runtime
-                    .clone_owned(key, expected)
+                    .independent_owner(key, expected)
                     .map_err(map_structural_error)?;
                 self.structural
                     .runtime

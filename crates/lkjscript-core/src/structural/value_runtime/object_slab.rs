@@ -12,20 +12,25 @@ pub(super) enum StructuralObject {
         image: StructuralImage,
         facts: TreeFacts,
     },
+    Sealed {
+        image: StructuralImage,
+        facts: TreeFacts,
+        owners: u32,
+    },
     Static(StaticStructuralArtifact),
 }
 
 impl StructuralObject {
     pub(super) fn value_type(&self) -> super::StructuralType {
         match self {
-            Self::Owned { image, .. } => image.root().value_type(),
+            Self::Owned { image, .. } | Self::Sealed { image, .. } => image.root().value_type(),
             Self::Static(artifact) => artifact.value_type,
         }
     }
 }
 
 #[derive(Debug)]
-enum ObjectSlot {
+pub(super) enum ObjectSlot {
     Vacant(NonZeroU32),
     Live {
         generation: NonZeroU32,
@@ -37,10 +42,10 @@ enum ObjectSlot {
 
 #[derive(Debug)]
 pub(super) struct ObjectSlab {
-    slots: Vec<ObjectSlot>,
-    free: Vec<u32>,
+    pub(super) slots: Vec<ObjectSlot>,
+    pub(super) free: Vec<u32>,
     max_objects: u32,
-    max_generation: u32,
+    pub(super) max_generation: u32,
     pub live: u32,
 }
 
@@ -163,26 +168,6 @@ impl ObjectSlab {
         }
         self.live -= 1;
         object
-    }
-
-    pub(super) fn take(&mut self, root: RootKey) -> Result<StructuralObject, StructuralValueError> {
-        self.get(root)?;
-        let index = root.slot() as usize;
-        let replacement = if root.generation().get() >= self.max_generation {
-            ObjectSlot::Retired
-        } else {
-            let generation = NonZeroU32::new(root.generation().get() + 1)
-                .ok_or(StructuralValueError::InvariantViolation)?;
-            self.free.push(root.slot());
-            ObjectSlot::Vacant(generation)
-        };
-        let ObjectSlot::Live { object, .. } =
-            std::mem::replace(&mut self.slots[index], replacement)
-        else {
-            return Err(StructuralValueError::InvariantViolation);
-        };
-        self.live -= 1;
-        Ok(object)
     }
 }
 

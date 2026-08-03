@@ -111,6 +111,8 @@ fn has_explicit_structural_operations(program: &Program) -> bool {
                     instruction.kind,
                     InstructionKind::StructuralPublish { .. }
                         | InstructionKind::StructuralCopy { .. }
+                        | InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | InstructionKind::MemoryWitnessDispose { .. }
                         | InstructionKind::DestinationCreate { .. }
                         | InstructionKind::DestinationFieldInit { .. }
                         | InstructionKind::DestinationFinish { .. }

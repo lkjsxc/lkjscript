@@ -73,6 +73,9 @@ impl FunctionEncoder<'_> {
         self.emit(&[0x48, 0x89, 0xe5])?;
         self.emit(&[0x48, 0x89, 0x77, SCRATCH_INTEGER_ARGUMENT_0])?;
         self.emit(&[0x48, 0x89, 0x57, SCRATCH_INTEGER_ARGUMENT_1])?;
+        self.emit(&[0x48, 0x89, 0x4f, SCRATCH_INTEGER_ARGUMENT_2])?;
+        self.emit(&[0x4c, 0x89, 0x47, SCRATCH_INTEGER_ARGUMENT_3])?;
+        self.emit(&[0x4c, 0x89, 0x4f, SCRATCH_INTEGER_ARGUMENT_4])?;
         self.emit(&[0xf2, 0x0f, 0x11, 0x47, SCRATCH_FLOAT_ARGUMENT_0])?;
         self.emit(&[0xf2, 0x0f, 0x11, 0x4f, SCRATCH_FLOAT_ARGUMENT_1])?;
         self.emit_reserve_frame()?;
@@ -120,14 +123,22 @@ impl FunctionEncoder<'_> {
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)
+                | ValueType::StructuralKey
+                | ValueType::MemoryWitnessLocator
                 | ValueType::StructuralOwner(_)
                 | ValueType::StructuralView(_)
                 | ValueType::StructuralDestination(_)
                 | ValueType::Reference(_) => {
-                    let scratch = [SCRATCH_INTEGER_ARGUMENT_0, SCRATCH_INTEGER_ARGUMENT_1]
-                        .get(integer_index)
-                        .copied()
-                        .ok_or(NativeError::Encode(EncodeError::UnsupportedSignature))?;
+                    let scratch = [
+                        SCRATCH_INTEGER_ARGUMENT_0,
+                        SCRATCH_INTEGER_ARGUMENT_1,
+                        SCRATCH_INTEGER_ARGUMENT_2,
+                        SCRATCH_INTEGER_ARGUMENT_3,
+                        SCRATCH_INTEGER_ARGUMENT_4,
+                    ]
+                    .get(integer_index)
+                    .copied()
+                    .ok_or(NativeError::Encode(EncodeError::UnsupportedSignature))?;
                     self.load_rax_from_context(scratch)?;
                     self.store_rax(offset)?;
                     integer_index += 1;

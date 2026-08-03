@@ -17,6 +17,8 @@ pub fn normalize_baseline(program: &VerifiedProgram) -> crate::Result<VerifiedPr
                         | crate::InstructionKind::AggregateConsumePayload { .. }
                         | crate::InstructionKind::StringUtf8View { .. }
                         | crate::InstructionKind::StructuralCopy { .. }
+                        | crate::InstructionKind::MemoryWitnessIndependentOwner { .. }
+                        | crate::InstructionKind::MemoryWitnessDispose { .. }
                 )
             })
         })

@@ -69,7 +69,8 @@ fn cleanup_owner<J: RuntimeTier>(
     }
     invocation_mut(vm)?
         .runtime
-        .drop_owned(key, record.value_type)
+        .dispose_owner(key, record.value_type)
+        .map(|_| ())
         .map_err(map_value_error)?;
     invocation_mut(vm)?.owners.remove(&key.get());
     vm.stack[index] = Value::INVALID;
@@ -165,7 +166,8 @@ pub(in crate::run) fn cleanup_failure_roots<J: RuntimeTier>(vm: &mut Vm<'_, J>) 
             .ok_or_else(|| Error::msg("failure structural owner key is malformed"))?;
         invocation_mut(vm)?
             .runtime
-            .drop_owned(key, value_type)
+            .dispose_owner(key, value_type)
+            .map(|_| ())
             .map_err(map_value_error)?;
         invocation_mut(vm)?.owners.remove(&word);
         for slot in &mut vm.stack {

@@ -7,6 +7,7 @@ pub trait NativeStructuralRuntimeServices {
         _bytes: &[u8],
         _value_type: StructuralTypeIdentity,
         _payload: StructuralPayloadKind,
+        _storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
@@ -15,6 +16,7 @@ pub trait NativeStructuralRuntimeServices {
         _owner: NativeUnique,
         _value_type: StructuralTypeIdentity,
         _payload: StructuralPayloadKind,
+        _storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
@@ -22,6 +24,7 @@ pub trait NativeStructuralRuntimeServices {
         &mut self,
         _value: i64,
         _value_type: StructuralTypeIdentity,
+        _storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
@@ -48,6 +51,13 @@ pub trait NativeStructuralRuntimeServices {
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
+    fn publish_structural_owner(
+        &mut self,
+        _owner: NativeStructuralOwner,
+        _storage: StructuralStorageRoute,
+    ) -> Result<NativeStructuralOwner, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
     fn copy_structural(
         &mut self,
         _owner: NativeStructuralOwner,
@@ -58,6 +68,20 @@ pub trait NativeStructuralRuntimeServices {
         &mut self,
         _owner: NativeStructuralOwner,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+    fn independent_structural_owner(
+        &mut self,
+        _witness: u16,
+        _key: u64,
+    ) -> Result<u64, NativeServiceError> {
+        Err(NativeServiceError::HostFailure)
+    }
+    fn dispose_structural_owner(
+        &mut self,
+        _witness: u16,
+        _key: u64,
+    ) -> Result<(), NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
     fn copy_structural_view(
@@ -94,6 +118,7 @@ pub trait NativeStructuralRuntimeServices {
     fn create_structural_destination(
         &mut self,
         _aggregate: &StructuralAggregateDescriptor,
+        _storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }
@@ -102,6 +127,7 @@ pub trait NativeStructuralRuntimeServices {
         _destination: NativeStructuralDestination,
         _value: NativeValue,
         _aggregate: &StructuralAggregateDescriptor,
+        _storage: StructuralStorageRoute,
         _field: u16,
     ) -> Result<NativeStructuralDestination, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
@@ -110,6 +136,7 @@ pub trait NativeStructuralRuntimeServices {
         &mut self,
         _destination: NativeStructuralDestination,
         _aggregate: &StructuralAggregateDescriptor,
+        _storage: StructuralStorageRoute,
     ) -> Result<NativeStructuralOwner, NativeServiceError> {
         Err(NativeServiceError::HostFailure)
     }

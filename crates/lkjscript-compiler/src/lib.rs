@@ -23,7 +23,11 @@ use std::time::Duration;
 use lkjscript_core::ValidatedChunk;
 use lkjscript_ir::{BytecodeLinkMetadata, SsaMemoryInventory, VerifiedProgram};
 
-pub use memory_plan::HirMemoryPlan;
+pub use memory_plan::{
+    HirMemoryPlan, MemoryDomain, MemoryValueCategory, MemoryValueFailureCleanup,
+    MemoryValuePlacement, MemoryValueRepresentationId, MemoryValueRoute,
+};
+pub use package::program::PreparedProgram;
 
 pub use lkjscript_core::{
     BudgetAuthority, BudgetCause, BudgetError, BudgetErrorKind, BudgetLedger, BudgetPath,
@@ -86,6 +90,7 @@ impl Default for CompileMetrics {
 /// One compiled semantic program shared by the reference VM and later backends.
 #[derive(Debug, Clone)]
 pub struct ExecutableProgram {
+    prepared: PreparedProgram,
     bytecode: ValidatedChunk,
     ssa: VerifiedProgram,
     memory_plan: HirMemoryPlan,
@@ -95,6 +100,14 @@ pub struct ExecutableProgram {
 }
 
 impl ExecutableProgram {
+    pub const fn prepared(&self) -> PreparedProgram {
+        self.prepared
+    }
+
+    pub const fn prepared_identity(&self) -> lkjscript_contracts::PreparedProgramIdentity {
+        self.prepared.identity()
+    }
+
     pub fn bytecode(&self) -> &ValidatedChunk {
         &self.bytecode
     }

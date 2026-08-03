@@ -53,6 +53,8 @@ pub enum ValueType {
     Resource(lkjscript_contracts::ResourceKind),
     Unique(UniqueType),
     Loan(LoanType),
+    StructuralKey,
+    MemoryWitnessLocator,
     StructuralOwner(StructuralTypeIdentity),
     StructuralView(StructuralViewType),
     StructuralDestination(StructuralDestinationType),
@@ -74,6 +76,8 @@ impl ValueType {
             | Self::Resource(_)
             | Self::Unique(_)
             | Self::Loan(_)
+            | Self::StructuralKey
+            | Self::MemoryWitnessLocator
             | Self::StructuralOwner(_)
             | Self::StructuralView(_)
             | Self::StructuralDestination(_) => None,
@@ -89,7 +93,8 @@ impl ValueType {
     pub const fn is_affine(self) -> bool {
         match self {
             Self::StructuralOwner(value_type) => !value_type.copyable(),
-            Self::StructuralView(_) | Self::StructuralDestination(_) => true,
+            Self::StructuralKey | Self::StructuralView(_) | Self::StructuralDestination(_) => true,
+            Self::MemoryWitnessLocator => false,
             _ => false,
         }
     }
@@ -101,7 +106,9 @@ impl ValueType {
             Self::Bool => LayoutIdentity::new(2),
             Self::I64 => LayoutIdentity::new(3),
             Self::F64 => LayoutIdentity::new(4),
+            Self::StructuralKey => LayoutIdentity::new(5),
             Self::StaticBytes => LayoutIdentity::new(6),
+            Self::MemoryWitnessLocator => LayoutIdentity::new(7),
             Self::StaticString(value_type) | Self::StructuralOwner(value_type) => {
                 LayoutIdentity::new(value_type.layout() as u32)
             }

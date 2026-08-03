@@ -85,6 +85,7 @@ impl StructuralValueRuntime {
         let root = self.resolve_root(key, expected)?;
         self.require_owned_root(root, expected)?;
         self.runtime.preflight_release(&[root.domain()])?;
+        self.objects.preflight_take(root)?;
         let root = self.roots.drop_owned(key)?;
         let StructuralObject::Owned { image, facts } = self.objects.take(root)? else {
             return Err(StructuralValueError::InvariantViolation);
@@ -102,6 +103,7 @@ impl StructuralValueRuntime {
         let root = self.resolve_root(key, expected)?;
         self.require_owned_root(root, expected)?;
         self.runtime.preflight_release(&[root.domain()])?;
+        self.objects.preflight_take(root)?;
         let root = self.roots.take_owned(key)?;
         let StructuralObject::Owned { image, facts } = self.objects.take(root)? else {
             return Err(StructuralValueError::InvariantViolation);

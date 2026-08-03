@@ -101,8 +101,17 @@ impl CleanupPlan {
                 "HIR memory plan has non-dense SSA place metadata",
             ));
         }
+        let placement_routes = plan.value_placements.iter()
+            .map(|placement| {
+                Ok((placement.expression.raw(), ActiveValuePlacement {
+                    route: placement.representation.as_bytes(),
+                    storage: placement_storage(placement.storage)?,
+                }))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
         Ok(Self {
             next_expression: function_plan.body.raw(),
+            placement_routes,
             loan_ends,
             places,
             place_drop_classes,
@@ -116,4 +125,28 @@ impl CleanupPlan {
             .ok_or_else(|| Error::msg("SSA HIR memory expression identity overflow"))?;
         Ok(id)
     }
+
+    pub(in crate::ssa) fn placement(
+        &self,
+        expression: MemoryExpressionId,
+    ) -> Option<ActiveValuePlacement> {
+        self.placement_routes.get(&expression.raw()).copied()
+    }
+}
+
+fn placement_storage(value: crate::memory_plan::MemoryDomain) -> Result<StructuralStorage> {
+    Ok(match value {
+        crate::memory_plan::MemoryDomain::Inline => StructuralStorage::Inline,
+        crate::memory_plan::MemoryDomain::Static => StructuralStorage::Static,
+        crate::memory_plan::MemoryDomain::Stack => StructuralStorage::Stack,
+        crate::memory_plan::MemoryDomain::CallerDestination => StructuralStorage::CallerDestination,
+        crate::memory_plan::MemoryDomain::UniqueStructural => StructuralStorage::UniqueStructural,
+        crate::memory_plan::MemoryDomain::OrdinaryRegion => StructuralStorage::OrdinaryRegion,
+        crate::memory_plan::MemoryDomain::SealedRegion => StructuralStorage::SealedRegion,
+        crate::memory_plan::MemoryDomain::BorrowedView => StructuralStorage::BorrowedView,
+        crate::memory_plan::MemoryDomain::ExternalResource => StructuralStorage::ExternalResource,
+        crate::memory_plan::MemoryDomain::UnsupportedRuntime => {
+            return Err(Error::msg("unsupported value placement reached SSA cleanup"));
+        }
+    })
 }

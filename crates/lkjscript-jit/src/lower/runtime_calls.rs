@@ -149,6 +149,8 @@ pub(super) fn lower_runtime(
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)
+                | ValueType::StructuralKey
+                | ValueType::MemoryWitnessLocator
                 | ValueType::StructuralOwner(_)
                 | ValueType::StructuralView(_)
                 | ValueType::StructuralDestination(_)

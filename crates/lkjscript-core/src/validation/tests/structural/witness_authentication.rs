@@ -13,13 +13,31 @@ fn scalar_witness(
 ) -> crate::InstalledMemoryWitness {
     facts.semantic_type = lkjscript_contracts::semantic_type_closure_hash(&facts.semantic)
         .expect("scalar semantic type closure");
-    let encoded = lkjscript_contracts::canonical_executable_memory_witness(&facts, &dependencies);
+    let member = lkjscript_contracts::ExecutableMemoryWitnessGroupMember {
+        id: [0; 32], ordinal: 0, semantic_identity: facts.semantic_type,
+        facts: facts.clone(), dependencies: dependencies.clone(),
+    };
+    let group = lkjscript_contracts::executable_memory_witness_group_id(false, &[member]);
     crate::InstalledMemoryWitness {
-        id: crate::MemoryWitnessId::new(crate::sha256(&encoded)),
-        facts,
-        dependencies,
+        id: crate::MemoryWitnessId::new(
+            lkjscript_contracts::executable_memory_witness_member_id(
+                group, 0, facts.semantic_type)),
+        group: crate::MemoryWitnessGroupId::new(group),
+        ordinal: 0, facts, dependencies,
         value_kind: crate::MemoryWitnessValueKind::I64,
     }
+}
+
+fn install_group(chunk: &mut Chunk) {
+    chunk.memory_witness_groups = chunk.memory_witnesses.iter().map(|witness|
+        crate::InstalledMemoryWitnessGroup {
+            id: witness.group, recursive: false,
+            members: vec![crate::InstalledMemoryWitnessGroupMember {
+                witness: witness.id, ordinal: 0,
+                semantic_identity: witness.facts.semantic_type,
+            }],
+        }).collect();
+    chunk.memory_witness_groups.sort_by_key(|group| group.id);
 }
 
 fn scalar_facts() -> ExecutableMemoryWitnessFacts {
@@ -66,6 +84,8 @@ fn scalar_facts() -> ExecutableMemoryWitnessFacts {
             MemoryWitnessOperation::Decode,
             MemoryWitnessOperation::ListImport,
             MemoryWitnessOperation::ListExport,
+            MemoryWitnessOperation::IndependentOwner,
+            MemoryWitnessOperation::Dispose,
         ],
     }
 }
@@ -76,6 +96,7 @@ fn witness_chunk() -> Chunk {
     chunk.memory_plan = Some(plan);
     chunk.main.memory_plan = Some(plan);
     chunk.memory_witnesses = vec![scalar_witness(scalar_facts(), Vec::new())];
+    install_group(&mut chunk);
     chunk.main.emit(Op::Unit);
     chunk.main.emit(Op::Return);
     chunk
@@ -89,23 +110,24 @@ fn bytecode_recomputes_executable_witness_identity() {
 
     let mut changed = chunk.clone();
     changed.memory_witnesses[0].facts.semantic_contract = [3; 32];
-    assert!(error(changed).contains("semantic contract is noncanonical"));
+    assert!(error(changed).contains("group identity is noncanonical"));
 
     let mut changed = chunk.clone();
     changed.memory_witnesses[0].facts.copy = MemoryWitnessCopy::SealedShare;
-    assert!(error(changed).contains("capability and operation routes are incompatible"));
+    assert!(error(changed).contains("group identity is noncanonical"));
 
     let mut changed = chunk.clone();
     changed.memory_witnesses[0]
         .facts
         .operations
         .insert(2, MemoryWitnessOperation::Share);
-    assert!(error(changed).contains("operation routes are incompatible"));
+    assert!(error(changed).contains("group identity is noncanonical"));
 
     let mut recomputed = chunk;
     let mut facts = scalar_facts();
     facts.operations.insert(2, MemoryWitnessOperation::Share);
     recomputed.memory_witnesses[0] = scalar_witness(facts, Vec::new());
+    install_group(&mut recomputed);
     assert!(error(recomputed).contains("operation routes are incompatible"));
 }
 
@@ -114,9 +136,11 @@ fn bytecode_witness_dependency_changes_are_identity_bearing() {
     let mut changed = witness_chunk();
     changed.memory_witnesses[0].dependencies.push(ExecutableMemoryWitnessDependency {
         role: ExecutableMemoryWitnessRole::ListElement,
-        target: ExecutableMemoryWitnessTarget::ExternalWitness([9; 32]),
+        target: ExecutableMemoryWitnessTarget::ExternalMember {
+            group: [8; 32], member: [9; 32],
+        },
     });
-    assert!(error(changed).contains("role closure is incomplete"));
+    assert!(error(changed).contains("dependency closure is invalid"));
 
     let mut missing = witness_chunk();
     let mut facts = scalar_facts();
@@ -127,8 +151,11 @@ fn bytecode_witness_dependency_changes_are_identity_bearing() {
         .expect("list semantic contract");
     let dependency = ExecutableMemoryWitnessDependency {
         role: ExecutableMemoryWitnessRole::ListElement,
-        target: ExecutableMemoryWitnessTarget::ExternalWitness([9; 32]),
+        target: ExecutableMemoryWitnessTarget::ExternalMember {
+            group: [8; 32], member: [9; 32],
+        },
     };
     missing.memory_witnesses[0] = scalar_witness(facts, vec![dependency]);
-    assert!(error(missing).contains("dependency is missing"));
+    install_group(&mut missing);
+    assert!(error(missing).contains("external memory witness group is missing"));
 }

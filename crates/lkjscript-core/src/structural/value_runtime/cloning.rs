@@ -16,6 +16,7 @@ impl StructuralValueRuntime {
             Ok(StructuralObject::Owned { image, facts }) => {
                 image.try_clone_flat().map(|copy| (copy, *facts))
             }
+            Ok(StructuralObject::Sealed { .. }) => Err(StructuralValueError::WrongOwnership),
             Ok(StructuralObject::Static(_)) => Err(StructuralValueError::WrongPayloadKind),
             Err(error) => Err(error),
         };

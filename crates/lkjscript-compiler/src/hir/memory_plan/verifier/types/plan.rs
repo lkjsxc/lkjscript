@@ -106,7 +106,9 @@ impl<'a> VerifiedTypes<'a> {
             .ok_or_else(|| Error::msg("memory verifier expected type is missing"))
     }
 
-    pub(crate) fn verify_totals(&self) -> Result<()> {
+    pub(crate) fn verify_totals(&mut self) -> Result<()> {
+        self.close_recursive_members()?;
+        verify_witness_groups(self.plan)?;
         let type_nodes = u64::try_from(self.expected.len()).unwrap_or(u64::MAX);
         let drop_paths = u64::try_from(
             self.expected
@@ -118,6 +120,14 @@ impl<'a> VerifiedTypes<'a> {
         let witnesses = u64::try_from(self.plan.witnesses.len()).unwrap_or(u64::MAX);
         let unique_witnesses: BTreeSet<_> =
             self.plan.witnesses.iter().map(|item| item.id).collect();
+        let group_edges = self
+            .plan
+            .witnesses
+            .iter()
+            .try_fold(0u64, |sum, witness| {
+                sum.checked_add(u64::try_from(witness.facts.dependencies.len()).ok()?)
+            })
+            .unwrap_or(u64::MAX);
         if type_nodes > MAX_MEMORY_PLAN_TYPE_NODES
             || witnesses > MAX_MEMORY_PLAN_WITNESSES
             || witnesses != type_nodes
@@ -132,6 +142,9 @@ impl<'a> VerifiedTypes<'a> {
                     .saturating_add(usize::try_from(drop_paths).unwrap_or(usize::MAX))
             || self.plan.work.type_nodes != type_nodes
             || self.plan.work.witnesses != witnesses
+            || self.plan.work.witness_groups
+                != u64::try_from(self.plan.witness_groups.len()).unwrap_or(u64::MAX)
+            || self.plan.work.witness_group_edges != group_edges
             || self.plan.work.type_edges != self.graph.edges
             || self.plan.work.scc_work != self.graph.scc_work
             || self.plan.work.aggregate_fields != self.fields

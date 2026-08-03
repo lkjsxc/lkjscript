@@ -53,6 +53,59 @@ cargo run --locked -p lkjscript-app --bin lkjscript -- package check
 git diff --check
 ```
 
+## Revision-17 Prepared Sealed Vertical
+
+The revision-17 vertical passed strict local gates, 234 compiler tests, complete
+workspace tests, release build and smokes, package checks, all-tier sealed
+execution, daemon/process rehydration, the no-per-node-RC comparison, Miri,
+ASan/LSan/TSan, and the Docker verified target. Nightly emitted only the
+pre-existing atomic-method deprecation warnings.
+
+```text
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo test --locked --workspace
+cargo run --locked -p lkjscript-xtask -- structure check
+cargo run --locked -p lkjscript-xtask -- quiet verify
+cargo build --workspace --release --locked
+cargo run --locked -p lkjscript-app --bin lkjscript -- package check
+cargo test --locked -p lkjscript-app --test jit_engines \
+  generic_products::residual::sealed_residual_generic_executes_in_all_four_tiers
+cargo test --locked -p lkjscript-app --test cli_contract process_cells::structural::
+cargo test --release --locked -p lkjscript-core \
+  --test sealed_strategy_comparison -- --nocapture
+CARGO_TARGET_DIR=target/miri-prepared-sealed cargo +nightly miri test --locked \
+  -p lkjscript-core --test value_runtime tests::sealed -- --nocapture
+CARGO_TARGET_DIR=target/miri-prepared-sealed-dag cargo +nightly miri test --locked \
+  -p lkjscript-core --lib outcome::semantic_dag::sealed::tests:: -- --nocapture
+CARGO_TARGET_DIR=target/miri-prepared-sealed-jit cargo +nightly miri test --locked \
+  -p lkjscript-jit \
+  island::structural::tests::cleanup::sealed::registry_failures_dispose_new_runtime_owners \
+  -- --exact --nocapture
+RUSTFLAGS='-Zsanitizer=SANITIZER' cargo +nightly test -Zbuild-std \
+  --target x86_64-unknown-linux-gnu --locked -p lkjscript-app \
+  --test jit_engines \
+  generic_products::residual::sealed_residual_generic_executes_in_all_four_tiers \
+  -- --exact --nocapture
+RUSTFLAGS='-Zsanitizer=address' cargo +nightly test -Zbuild-std \
+  --target x86_64-unknown-linux-gnu --locked -p lkjscript-app \
+  --test cli_contract process_cells::structural:: -- --nocapture
+docker buildx build --load --build-context repository-git=<checkout-git-dir> \
+  -f meta/Dockerfile --target verified -t lkjscript-prepared-sealed-verify .
+docker run --rm --entrypoint cat lkjscript-prepared-sealed-verify \
+  /tmp/lkjscript-verification-result
+```
+
+`SANITIZER` was run separately as `address`, `leak`, and `thread`; each exact
+sealed residual test passed 1/1, and the ASan process suite passed 2/2. The
+linked-worktree Compose launcher cannot mount a `.git` indirection file as an
+additional directory context, so the equivalent explicit `buildx` command used
+the checkout Git directory and returned `result=ok`. The first Docker attempt
+also exposed and led to the focused auto-entry rejection for hidden-witness or
+more-than-two-argument ABI signatures; default Mandelbrot then passed again. A
+later build attempt hit `EMFILE` in concurrent compiler tests; the immediate
+unchanged retry completed with `result=ok`.
+
 ## Earlier Slice Commands
 
 The following older commands exited zero against implementation commit

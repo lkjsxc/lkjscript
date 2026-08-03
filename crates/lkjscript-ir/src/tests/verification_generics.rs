@@ -2,7 +2,7 @@ use super::fixtures::*;
 use crate::*;
 
 #[test]
-fn verifier_rejects_generic_ownership_substitution() {
+fn verifier_accepts_owned_and_rejects_reference_generic_substitution() {
     let generic = Function {
         id: FunctionId::new(1),
         name: "generic-id".into(),
@@ -114,13 +114,7 @@ fn verifier_rejects_generic_ownership_substitution() {
     };
     let mut program = one_block_program();
     program.functions.extend([generic.clone(), caller]);
-    let error = verify(program).expect_err("generic ownership substitution must fail");
-    assert!(
-        error
-            .to_string()
-            .contains("ownership/reference generic instantiation is unavailable"),
-        "wrong generic ownership diagnostic: {error}"
-    );
+    verify(program).expect("generic owned substitution with exact transfer must verify");
 
     let reference = SsaType::ByteSlice;
     let reference_caller = Function {

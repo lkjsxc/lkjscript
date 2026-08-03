@@ -7,7 +7,11 @@ unit_enum!(MemoryUseKind {
     DirectCallTarget = 3,
     IndirectCallTarget = 4,
 });
-unit_enum!(MemoryWitnessOperation { Transport = 0 });
+unit_enum!(MemoryWitnessOperation {
+    Transport = 0,
+    IndependentOwner = 1,
+    Dispose = 2,
+});
 canonical_struct!(MemoryWitnessParameter {
     parameter,
     operations

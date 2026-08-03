@@ -12,6 +12,39 @@ impl VerifiedProgram {
     pub fn into_program(self) -> Program {
         self.0
     }
+
+    pub const fn prepared_identity(&self) -> lkjscript_contracts::PreparedProgramIdentity {
+        self.0.prepared_identity
+    }
+
+    pub fn require_prepared_identity(
+        &self,
+        expected: lkjscript_contracts::PreparedProgramIdentity,
+    ) -> crate::Result<()> {
+        if !expected.is_bound() || self.0.prepared_identity != expected {
+            return Err(crate::IrError::new(
+                "SSA prepared program identity mismatch",
+            ));
+        }
+        Ok(())
+    }
+}
+
+pub fn bind_prepared_identity(
+    verified: VerifiedProgram,
+    identity: lkjscript_contracts::PreparedProgramIdentity,
+) -> crate::Result<VerifiedProgram> {
+    if !identity.is_bound()
+        || (verified.0.prepared_identity.is_bound() && verified.0.prepared_identity != identity)
+    {
+        return Err(crate::IrError::new(
+            "SSA prepared program identity is zero or stale",
+        ));
+    }
+    let mut program = verified.into_program();
+    program.prepared_identity = identity;
+    verify_program(&program)?;
+    Ok(VerifiedProgram(program))
 }
 
 pub fn verify(program: Program) -> crate::Result<VerifiedProgram> {

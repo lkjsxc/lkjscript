@@ -21,8 +21,8 @@ pub enum ExecutableMemoryWitnessRole {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExecutableMemoryWitnessTarget {
-    ExternalWitness([u8; 32]),
-    LocalSemantic([u8; 32]),
+    LocalMember(u16),
+    ExternalMember { group: [u8; 32], member: [u8; 32] },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

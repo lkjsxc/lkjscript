@@ -126,11 +126,14 @@ fn value_trap_is_exact_in_all_engines() {
         baseline.outcome,
         optimized.outcome,
     ];
-    for outcome in outcomes {
-        assert!(matches!(
-            outcome,
-            ExecutionOutcome::Trapped(trap) if trap.as_str() == "7"
-        ));
+    for (index, outcome) in outcomes.into_iter().enumerate() {
+        assert!(
+            matches!(
+                &outcome,
+                ExecutionOutcome::Trapped(trap) if trap.as_str() == "7"
+            ),
+            "engine {index}: {outcome:?}"
+        );
     }
 }
 

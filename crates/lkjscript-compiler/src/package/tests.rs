@@ -94,6 +94,8 @@ fn public_enum_identity_includes_its_variants() {
         serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
     manifest.modules.push("color.lkjscript".into());
     manifest.modules.sort();
+    manifest.public.push("color.lkjscript".into());
+    manifest.public.sort();
     fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
     let lock = graph::build(&root).unwrap();
     let module = lock.packages[0]
@@ -112,6 +114,7 @@ fn public_generic_interface_binds_hidden_transport_witness() {
         root.join("history.lkjscript"),
         concat!(
             "def/\nname/\nkeep\n/name\npublic\nfn/\nforall/\nt\n/forall\n",
+            "bounds/\nbound/\nt\ncopy\n/bound\n/bounds\n",
             "sig/\ninputs/\nt\n/inputs\noutput/\nt\n/output\n/sig\n",
             "params/\nvalue\nt\n/params\nvalue\n/fn\n/def\n"
         ),
@@ -122,6 +125,8 @@ fn public_generic_interface_binds_hidden_transport_witness() {
         serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
     manifest.modules.push("history.lkjscript".into());
     manifest.modules.sort();
+    manifest.public.push("history.lkjscript".into());
+    manifest.public.sort();
     fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
     let lock = graph::build(&root).unwrap();
     let module = lock.packages[0]
@@ -130,13 +135,30 @@ fn public_generic_interface_binds_hidden_transport_witness() {
         .find(|module| module.id == "history.lkjscript")
         .unwrap();
     assert_eq!(module.exports, ["keep"]);
-    assert_eq!(module.witness_requirements.len(), 1);
-    let requirement = &module.witness_requirements[0];
-    assert_eq!(requirement.export, "keep");
-    assert_eq!(requirement.parameter, "t");
-    assert_eq!(requirement.operations, ["transport"]);
-    assert_eq!(requirement.digest.len(), 64);
-    assert_eq!(module.interface_sha256.len(), 64);
+    assert_eq!(module.memory_interfaces.len(), 1);
+    let interface = &module.memory_interfaces[0];
+    assert_eq!(interface.name, "keep");
+    assert_eq!(interface.type_parameters, ["t"]);
+    assert_eq!(interface.trait_parameters.len(), 1);
+    assert_eq!(interface.trait_parameters[0].parameter, "t");
+    assert_eq!(interface.trait_parameters[0].trait_name, "copy");
+    assert_eq!(interface.trait_parameters[0].trait_identity.len(), 64);
+    assert_eq!(interface.memory_requirements.len(), 1);
+    assert_eq!(interface.memory_requirements[0].parameter, "t");
+    assert_eq!(interface.memory_requirements[0].operations, ["transport"]);
+    assert_eq!(interface.parameter_modes, [LockedMemoryParameterMode::Copy]);
+    assert_eq!(interface.result_mode, LockedMemoryResultMode::Trivial);
+    assert_eq!(
+        interface.equality_constraints[0].support,
+        LockedConstraintSupport::CallerWitnessRequired
+    );
+    assert_eq!(
+        interface.process_codec_constraints[0].support,
+        LockedConstraintSupport::CallerWitnessRequired
+    );
+    assert_eq!(interface.package_memory_interface_sha256.len(), 64);
+    assert_eq!(module.module_interface_sha256.len(), 64);
+    assert_eq!(module.module_memory_interface_sha256.len(), 64);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -167,11 +189,5 @@ fn lock_decoder_rejects_noncanonical_bytes() {
     fs::remove_dir_all(root).unwrap();
 }
 
-#[test]
-fn exact_contract_map_is_sorted() {
-    let contracts = contracts::all().unwrap();
-    let keys: Vec<_> = contracts.keys().cloned().collect();
-    let mut expected = keys.clone();
-    expected.sort();
-    assert_eq!(keys, expected);
-}
+mod forgery;
+mod library;

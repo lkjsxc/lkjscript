@@ -7,7 +7,24 @@ impl Emitter<'_> {
         if matches!(ty, SsaType::StructuralDestination(_)) {
             return Ok(Some(StructuralLocalKind::Destination));
         }
-        if structural_owner_representation(self.chunk, ty).is_none() {
+        let dynamic_owner = match ty {
+            SsaType::TypeParameter(parameter) => self
+                .function
+                .signature
+                .memory_witness_parameters
+                .iter()
+                .any(|requirement| {
+                    requirement.parameter == *parameter
+                        && requirement.operations.contains(
+                            &lkjscript_contracts::MemoryWitnessOperation::IndependentOwner,
+                        )
+                        && requirement.operations.contains(
+                            &lkjscript_contracts::MemoryWitnessOperation::Dispose,
+                        )
+                }),
+            _ => false,
+        };
+        if !dynamic_owner && structural_owner_representation(self.chunk, ty).is_none() {
             return Ok(None);
         }
         let producer = self.function.blocks.iter().find_map(|block| {
@@ -19,6 +36,7 @@ impl Emitter<'_> {
         let kind = match producer.map(|instruction| &instruction.kind) {
             Some(InstructionKind::StructuralPublish { .. })
             | Some(InstructionKind::StructuralCopy { .. })
+            | Some(InstructionKind::MemoryWitnessIndependentOwner { .. })
             | Some(InstructionKind::DestinationFinish { .. })
             | Some(InstructionKind::AggregateConsumePayload { .. })
             | Some(InstructionKind::ProductField { .. }) => {
@@ -47,6 +65,7 @@ impl Emitter<'_> {
                 | InstructionKind::DestinationAbort { .. }
                 | InstructionKind::AggregateTag { .. }
                 | InstructionKind::StringUtf8View { .. }
+                | InstructionKind::MemoryWitnessDispose { .. }
                 | InstructionKind::FunctionRef(_)
                 | InstructionKind::F64FromI64Rounded { .. }
                 | InstructionKind::ProductValue { .. }

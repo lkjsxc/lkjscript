@@ -132,14 +132,13 @@ Git history. They do not provide aliases or acceptance fallbacks.
   unique, resource, artifact, and host ownership; it is derived evidence, not semantic authority.
   Every executable program retains a platform-bound canonical HIR memory plan
   covering every result, place, loan, constant, and call without Rust formatting.
-  SSA and bytecode recompute witness identities from exact facts, operations, and ordered
-  dependencies; malformed routes or graphs reject. An Experimental adapter resolves only
-  compiler-installed witnesses and imports key-free product, path, option, result, and
-  general-enum process snapshots into one sealed owner; the caller type-closure path is removed.
-  Residual transport has exact four-tier identities and zero fallback. Compiler-selected
-  sealed placement and all-tier operations remain blocked. Exact specializations are bounded
-  at 32/declaration and 1,024/package, reverify SSA, and retain zero fallback at 4,096 operations;
-  independent verification precedes SSA and inventory remains derived.
+  SSA and bytecode recompute atomic witness groups, members, facts, operations, and
+  dependencies; malformed routes reject. The Current prepared sealed-value vertical binds
+  typed package provenance, independently verified placement, semantic/native SSA, bytecode,
+  contracts, and resource profile in one immutable identity. Exact routes select unique fusion,
+  bounded clone, or coarse sealed sharing. Residual generic independent-owner and dispose
+  execute in evaluator, VM, forced baseline, and forced proof with zero fallback.
+  Specializations reverify SSA and are bounded at 32/declaration, 1,024/package, and 4,096 operations.
 - `LKJ-RUNTIME-NO-TRACING-COLLECTOR` rejects collector directories, APIs,
   object families, services, liveness maps, configuration, and metrics across
   all crate sources. No tracing-family registry or `memory traced` command
@@ -148,9 +147,10 @@ Git history. They do not provide aliases or acceptance fallbacks.
   [substrate](current-state/structural-memory-evidence.md) include compact
   stale-safe structural roots, destinations, views, and direct evaluator, VM,
   baseline, and proof services. HIR/SSA rejects aggregates outside structural
-  or invocation-region storage. Runtime keys and witness slots cannot cross
-  processes; an experimental nested copy-list crosses an isolated process only
-  as a semantic [snapshot](current-state/memory/polymorphic-value-plane-evidence.md).
+  or invocation-region storage. Runtime keys and witness slots never cross
+  processes. Bounded key-free semantic DAG outcomes bind exact prepared/package/entry/
+  return/root provenance; a fresh parent authenticates, rehydrates, canonically exports,
+  and tears them down with zero live obligations.
 - Resource categories and profiles use full category/profile/maxima/ceiling
   digests. The selected compiler-phase ledger is Current; one request-owned
   compiler/runtime ledger remains an accepted target.
@@ -179,8 +179,8 @@ Git history. They do not provide aliases or acceptance fallbacks.
 - evaluator dispatch beyond the fake-provider slice and native owned resources beyond borrowed `standard-input`;
 - ranged lexical byte-slice source syntax and borrowed `str`;
 - complete region/borrow/drop semantics for resource-bearing aggregates;
-- structural domains, regions, and typed pools are Current and sealed owner traffic is node-count invariant.
-  Language `sealed`, recursive products, indirect generics, structural lists, and full no-node-RC remain targets;
+- language `sealed`, source recursive products, indirect generics, and structural lists;
+  Current coarse owner traffic is node-count invariant and rejects universal per-node RC;
 - a portable path policy beyond the Current Linux absolute-byte contract;
 - a replacement persistent verified artifact cache after the first complete
   candidate failed its measured adoption gate and was removed;

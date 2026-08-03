@@ -16,19 +16,26 @@ pub(super) fn install_structural_type(
         identity: RuntimeLayoutId::new([index.saturating_add(1) as u8; 32]),
         kind,
     });
+    let witness = MemoryWitnessId::new([index.saturating_add(1) as u8; 32]);
     program.memory.types.push(StructuralTypeMetadata {
         id: type_id,
-        witness: MemoryWitnessId::new([index.saturating_add(1) as u8; 32]),
+        witness,
         ty,
         layout,
         mode: StructuralTypeMode::Immutable,
     });
     for (category, storage) in [
-        (StructuralValueCategory::Owner, StructuralStorage::Unique),
-        (StructuralValueCategory::View, StructuralStorage::Stack),
+        (
+            StructuralValueCategory::Owner,
+            StructuralStorage::UniqueStructural,
+        ),
+        (
+            StructuralValueCategory::View,
+            StructuralStorage::BorrowedView,
+        ),
         (
             StructuralValueCategory::Destination,
-            StructuralStorage::CallerDestination,
+            StructuralStorage::UniqueStructural,
         ),
     ] {
         let id = u16::try_from(program.memory.representations.len()).unwrap_or(u16::MAX);
@@ -38,9 +45,17 @@ pub(super) fn install_structural_type(
             .push(StructuralRepresentationMetadata {
                 id: StructuralRepresentationId::new(id),
                 type_id,
+                witness,
+                witness_group: MemoryWitnessGroupId::new([0; 32]),
+                witness_member: 0,
                 layout,
                 category,
                 storage,
+                route: if category == StructuralValueCategory::View {
+                    [2; 32]
+                } else {
+                    [1; 32]
+                },
             });
     }
 }

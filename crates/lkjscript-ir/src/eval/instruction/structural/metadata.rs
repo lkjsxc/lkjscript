@@ -5,6 +5,8 @@ pub(super) struct RepresentationFacts {
     pub(super) type_id: crate::StructuralTypeId,
     pub(super) ty: crate::SsaType,
     pub(super) layout: crate::StructuralLayoutKind,
+    pub(super) storage: crate::StructuralStorage,
+    pub(super) route: [u8; 32],
 }
 
 impl Evaluator<'_> {
@@ -36,6 +38,8 @@ impl Evaluator<'_> {
             type_id: value_type.id,
             ty: value_type.ty.clone(),
             layout: layout.kind.clone(),
+            storage: representation.storage,
+            route: representation.route,
         })
     }
 }

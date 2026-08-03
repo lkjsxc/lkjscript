@@ -8,7 +8,7 @@ mod allocation;
 mod auto_tiering;
 #[path = "jit_engines/collector_free_scalar.rs"]
 mod collector_free_scalar;
-#[path = "jit_engines/generic_history.rs"]
+#[path = "jit_engines/generic_products/history.rs"]
 mod generic_history;
 #[path = "jit_engines/generic_products.rs"]
 mod generic_products;

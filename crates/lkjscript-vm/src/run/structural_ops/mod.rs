@@ -11,6 +11,7 @@ use super::{unique, RuntimeTier, Vm};
 
 mod adapter;
 mod aggregate;
+#[path = "aggregate/bytes.rs"]
 mod bytes;
 mod cleanup;
 mod destination;
@@ -64,6 +65,8 @@ pub(super) fn handles(op: u8) -> bool {
                 | lkjscript_core::Op::StructuralAggregateConsumePayload
                 | lkjscript_core::Op::StructuralStringUtf8View
                 | lkjscript_core::Op::StructuralCopy
+                | lkjscript_core::Op::MemoryWitnessIndependentOwner
+                | lkjscript_core::Op::MemoryWitnessDispose
         )
     )
 }
@@ -84,7 +87,9 @@ pub(super) fn dispatch<J: RuntimeTier>(vm: &mut Vm<'_, J>, op: u8) -> Result<()>
         lkjscript_core::Op::StructuralBorrow
         | lkjscript_core::Op::StructuralBorrowMut
         | lkjscript_core::Op::StructuralPublish
-        | lkjscript_core::Op::StructuralCopy => publish::dispatch(vm, op),
+        | lkjscript_core::Op::StructuralCopy
+        | lkjscript_core::Op::MemoryWitnessIndependentOwner
+        | lkjscript_core::Op::MemoryWitnessDispose => publish::dispatch(vm, op),
         lkjscript_core::Op::StructuralDestinationCreate
         | lkjscript_core::Op::StructuralDestinationFieldInit
         | lkjscript_core::Op::StructuralDestinationFinish
@@ -149,7 +154,11 @@ fn same_representation_type(
 ) -> Result<bool> {
     let left = representation(chunk, left)?;
     let right = representation(chunk, right)?;
-    Ok(left.type_id == right.type_id && left.layout == right.layout)
+    Ok(left.type_id == right.type_id
+        && left.witness == right.witness
+        && left.witness_group == right.witness_group
+        && left.witness_member == right.witness_member
+        && left.layout == right.layout)
 }
 
 fn map_value_error(error: StructuralValueError) -> Error {

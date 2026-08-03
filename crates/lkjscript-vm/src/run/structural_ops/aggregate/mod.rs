@@ -61,8 +61,10 @@ fn consume_payload<J: RuntimeTier>(vm: &mut Vm<'_, J>) -> Result<()> {
         .ok_or_else(|| Error::msg("structural payload export is empty"))?;
     let result = match reference.result.route {
         StructuralFieldRoute::Copy => semantic_to_value(vm.chunk, &payload)?,
-        StructuralFieldRoute::Structural(type_id) => {
-            let representation = owner_representation_for_type(vm.chunk, type_id)?;
+        StructuralFieldRoute::Structural(_) => {
+            let representation = reference
+                .result_representation
+                .ok_or_else(|| Error::msg("structural payload owner representation is missing"))?;
             let expected = reference
                 .result
                 .runtime_type

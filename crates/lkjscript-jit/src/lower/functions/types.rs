@@ -22,12 +22,20 @@ pub(super) fn collect_value_types(
                     ValueType::Unit
                 } else if matches!(
                     instruction.kind,
+                    InstructionKind::Call {
+                        instantiation: Some(ref instantiation),
+                        ..
+                    } if !instantiation.memory_witnesses.is_empty()
+                ) {
+                    ValueType::StructuralKey
+                } else if matches!(
+                    instruction.kind,
                     InstructionKind::DestinationCreate { .. }
                         | InstructionKind::DestinationFieldInit { .. }
                 ) {
-                    let (aggregate, initialized) =
+                    let (aggregate, storage, initialized) =
                         layouts.structural().destination(function, instruction.id)?;
-                    ValueType::StructuralDestination(aggregate.destination(initialized))
+                    ValueType::StructuralDestination(aggregate.destination(storage, initialized))
                 } else {
                     lower_value_type(function.id, instruction.id, &instruction.ty, modes, layouts)?
                 };

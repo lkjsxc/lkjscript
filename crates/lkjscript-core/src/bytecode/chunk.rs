@@ -52,10 +52,12 @@ pub struct FunctionProto {
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
+    pub prepared_identity: lkjscript_contracts::PreparedProgramIdentity,
     pub constants: Vec<Constant>,
     pub protos: Vec<FunctionProto>,
     pub main: FunctionProto,
     pub memory_plan: Option<crate::MemoryPlanId>,
+    pub memory_witness_groups: Vec<crate::InstalledMemoryWitnessGroup>,
     pub memory_witnesses: Vec<crate::InstalledMemoryWitness>,
     pub structural_types: Vec<crate::StructuralTypeMetadata>,
     pub structural_layouts: Vec<crate::StructuralLayoutMetadata>,
@@ -84,6 +86,7 @@ impl Default for Chunk {
 impl Chunk {
     pub fn new() -> Self {
         Self {
+            prepared_identity: lkjscript_contracts::PreparedProgramIdentity::UNBOUND,
             constants: Vec::new(),
             protos: Vec::new(),
             main: FunctionProto {
@@ -114,6 +117,7 @@ impl Chunk {
                 code: Vec::new(),
             },
             memory_plan: None,
+            memory_witness_groups: Vec::new(),
             memory_witnesses: Vec::new(),
             structural_types: Vec::new(),
             structural_layouts: Vec::new(),

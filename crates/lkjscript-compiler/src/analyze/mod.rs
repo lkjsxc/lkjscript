@@ -116,7 +116,10 @@ struct Analyzer {
 
 mod declarations;
 mod diagnostics;
+mod interface;
 mod resolution;
+
+pub(crate) use interface::analyze_interface_program;
 
 use declarations::*;
 use diagnostics::{AnalysisDiagnostic, NameUse};

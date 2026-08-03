@@ -63,7 +63,11 @@ fn exact_owner_representation(
     let mut matches = chunk
         .structural_representations()
         .iter()
-        .filter(|item| item.type_id == type_id && item.category == StructuralValueCategory::Owner)
+        .filter(|item| {
+            item.type_id == type_id
+                && item.category == StructuralValueCategory::Owner
+                && item.storage == lkjscript_core::StructuralStorage::UniqueStructural
+        })
         .map(|item| item.id);
     let selected = matches
         .next()

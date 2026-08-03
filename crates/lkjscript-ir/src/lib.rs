@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod eval;
+mod identity;
 mod memory;
 mod model;
 mod numeric_contract;
@@ -18,6 +19,8 @@ pub use eval::{
     evaluate, evaluate_observed, EvalConfig, EvalOutcome, EvalResourcePolicy,
     EvalStructuralObservation, EvalValue,
 };
+pub use identity::{verified_program_identity, VerifiedProgramIdentity};
+pub use lkjscript_contracts::PreparedProgramIdentity;
 pub use memory::{derive_memory_inventory, verify_memory_inventory};
 pub use model::{
     runtime_product_contract_identity, runtime_product_identity, runtime_product_layout_identity,
@@ -31,15 +34,16 @@ pub use model::{
     IrError, LoanId, MemoryAliasing, MemoryContention, MemoryDestruction, MemoryIdentity,
     MemoryLocality, MemoryMode, MemoryMultiplicity, MemoryObligationSubject, MemoryPlanId,
     MemoryPortability, MemoryStorage, MemoryWitnessBinding, MemoryWitnessDescriptor,
-    MemoryWitnessId, MemoryWitnessParameter, Origin, PlaceId, PlaceMetadata, ProductField,
-    ProductId, ProductMetadata, Program, RegionProductMetadata, Result, RuntimeLayoutId, RuntimeOp,
-    Signature, SourceMetadata, SsaMemoryInventory, SsaMemoryObligation, SsaType,
-    StructuralDropGlueIdentity, StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata,
-    StructuralMemoryMetadata, StructuralRepresentationId, StructuralRepresentationMetadata,
-    StructuralStorage, StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode,
-    StructuralValueCategory, StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound,
-    TraitId, TraitMetadata, TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId,
-    VariantFieldId, VariantId, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES,
+    MemoryWitnessGroupDescriptor, MemoryWitnessGroupId, MemoryWitnessGroupMember, MemoryWitnessId,
+    MemoryWitnessParameter, Origin, PlaceId, PlaceMetadata, ProductField, ProductId,
+    ProductMetadata, Program, RegionProductMetadata, Result, RuntimeLayoutId, RuntimeOp, Signature,
+    SourceMetadata, SsaMemoryInventory, SsaMemoryObligation, SsaType, StructuralDropGlueIdentity,
+    StructuralLayoutId, StructuralLayoutKind, StructuralLayoutMetadata, StructuralMemoryMetadata,
+    StructuralRepresentationId, StructuralRepresentationMetadata, StructuralStorage,
+    StructuralTypeId, StructuralTypeMetadata, StructuralTypeMode, StructuralValueCategory,
+    StructuralVariantLayout, StructuredOutcome, Terminator, TraitBound, TraitId, TraitMetadata,
+    TraitRole, TraitWitness, TraitWitnessKind, TypeSubstitution, ValueId, VariantFieldId,
+    VariantId, MAX_MEMORY_WITNESSES, MAX_MEMORY_WITNESS_DEPENDENCIES, MAX_MEMORY_WITNESS_GROUPS,
     MAX_MEMORY_WITNESS_PARAMETERS, MAX_REGION_PRODUCTS, MAX_STRUCTURAL_LAYOUTS,
     MAX_STRUCTURAL_LAYOUT_FIELDS, MAX_STRUCTURAL_REPRESENTATIONS, MAX_STRUCTURAL_TYPES,
 };
@@ -57,6 +61,6 @@ pub use specialize::{
     MAX_NATIVE_TRANSPORT_SPECIALIZATIONS_PER_PACKAGE,
 };
 pub use verify::{
-    verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,
-    SSA_VERIFY_MAX_CFG_WORK,
+    bind_prepared_identity, verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK,
+    SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION, SSA_VERIFY_MAX_CFG_WORK,
 };

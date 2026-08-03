@@ -135,4 +135,9 @@ pub struct SealedSemanticDagMetrics {
     pub typed_stores: u32,
     pub runtime: StructuralRuntimeMetrics,
     pub sealed: SealedRegionMetrics,
+    pub live_regions: u64,
+    pub live_owners: u64,
+    pub live_loans: u64,
+    pub live_dependencies: u64,
+    pub release_backlog: u64,
 }

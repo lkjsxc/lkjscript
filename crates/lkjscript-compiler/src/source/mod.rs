@@ -11,10 +11,7 @@ mod load;
 mod model;
 pub(crate) mod module_names;
 mod modules;
-pub(crate) use modules::{
-    public_memory_witness_requirements as module_memory_witness_requirements,
-    public_names as module_public_names, PublicMemoryWitnessRequirement,
-};
+pub(crate) use modules::public_names as module_public_names;
 mod parse;
 mod validate;
 

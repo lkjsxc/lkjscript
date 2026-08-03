@@ -111,12 +111,12 @@ lists. Lists with structural owners remain `ListElementWitnessRequired`-blocked.
 
 ## Accepted Final Structural Extension
 
-The Current first vertical extension carries each concrete structural witness
-into verified SSA and validated bytecode and selects recursively nested lists of
-already selected copy-list values. It does not claim a residual generic ABI or
-lists of independently owned structural roots. Ultimately every exact type has
-a content-addressed witness; residual polymorphism carries hidden static witness
-parameters. Missing or mismatched witnesses are compile errors, never tracing.
+The Current prepared vertical carries atomic structural witness groups through
+verified SSA, validated bytecode, typed package provenance, and immutable
+prepared authority. Residual polymorphism uses authenticated hidden static
+witness locators for independent ownership and disposal. Lists of independently
+owned structural roots remain a target. Missing or mismatched witnesses are
+compile errors, never tracing.
 
 A witness closes semantic/runtime-layout identity, mode, sizing, domain, routes,
 portability, and contention. Revision 16 also authenticates a target-neutral root
@@ -125,10 +125,9 @@ Semantic Source identities; fields, variants, source indices, and exact enum
 arguments retain order. Unreachable declarations are excluded.
 
 Contracts-owned dependency roles cover list elements, product fields, enum
-variant fields, and nominal arguments. Targets are exact external witness IDs or
-same-recursive-SCC local semantic identities authenticated by the closure.
-Semantic recursion has no witness self-hash; the external graph is acyclic.
-Package interfaces will export exact hidden requirements.
+variant fields, and nominal arguments. Atomic groups use member ordinals for
+same-SCC edges and exact group/member identities for external edges. The external
+group graph is acyclic. Typed package interfaces export exact hidden requirements.
 
 Product/enum declaration SCCs are recomputed after substitution. Their least
 stable mode is derived from nonrecursive fields and exact arguments while
@@ -150,9 +149,10 @@ Only schema, encoder/hash, tags, and limits are shared. IR/core recompute
 identities and reject malformed roles, targets, external cycles, or ambiguous
 representations. Accepted plans contain no unresolved blocker variants.
 
-This slice remains Experimental: it is not recursive executable witness groups,
-compiler-selected sealed placement, package provenance, all-tier sealed
-operation execution, or process rehydration.
+The broader list/container slice remains Experimental. The narrow
+[prepared sealed-value vertical](../execution/polymorphic-value-plane/prepared-sealed-value-vertical.md)
+is Current with atomic groups, package provenance, per-value placement, all-tier
+operations, and fresh-process rehydration.
 ## Unsupported Runtime Values
 
 `unsupported-runtime`, `unresolved-shared`, and `unsupported` destruction are

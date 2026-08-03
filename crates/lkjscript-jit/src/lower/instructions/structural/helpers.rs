@@ -60,6 +60,7 @@ fn publish_operation(
     function: &Function,
     value: ValueId,
     root_type: lkjscript_native::StructuralTypeIdentity,
+    storage: lkjscript_native::StructuralStorageRoute,
     value_types: &[ValueType],
 ) -> Result<lkjscript_native::StructuralOperation, LoweringError> {
     let source = value_type(value_types, value)?;
@@ -67,12 +68,17 @@ fn publish_operation(
         ValueType::StaticString(_) => lkjscript_native::StructuralOperation::PublishStatic {
             value_type: root_type,
             payload: lkjscript_native::StructuralPayloadKind::String,
+            storage,
         },
         ValueType::StaticBytes => lkjscript_native::StructuralOperation::PublishStatic {
             value_type: root_type,
             payload: lkjscript_native::StructuralPayloadKind::Bytes,
+            storage,
         },
-        ValueType::I64 => lkjscript_native::StructuralOperation::PublishI64(root_type),
+        ValueType::I64 => lkjscript_native::StructuralOperation::PublishI64 {
+            value_type: root_type,
+            storage,
+        },
         ValueType::Unique(unique) => lkjscript_native::StructuralOperation::PublishUnique {
             value_type: root_type,
             payload: match root_type.kind() {
@@ -89,9 +95,13 @@ fn publish_operation(
                 }
             },
             unique,
+            storage,
         },
         ValueType::StructuralOwner(actual) if actual == root_type => {
-            lkjscript_native::StructuralOperation::Move(root_type)
+            lkjscript_native::StructuralOperation::PublishOwner {
+                value_type: root_type,
+                storage,
+            }
         }
         _ => {
             return Err(LoweringError::new(

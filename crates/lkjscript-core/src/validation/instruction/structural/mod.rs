@@ -39,6 +39,8 @@ pub(super) fn apply(
         }
         Op::StructuralStringUtf8View => string_utf8_view(chunk, proto, instruction, state),
         Op::StructuralCopy => structural_copy(chunk, proto, instruction, state),
+        Op::MemoryWitnessIndependentOwner => witness_independent_owner(proto, instruction, state),
+        Op::MemoryWitnessDispose => witness_dispose(proto, instruction, state),
         _ => unreachable!("structural opcode family checked"),
     }
 }
@@ -51,5 +53,6 @@ include!("destination.rs");
 include!("aggregate.rs");
 include!("aggregate_field.rs");
 include!("copy.rs");
+include!("witness.rs");
 include!("lookup.rs");
 include!("checks.rs");

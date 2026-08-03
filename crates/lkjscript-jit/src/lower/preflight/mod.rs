@@ -1,10 +1,5 @@
 use super::*;
-mod bytes;
-mod bytes_edges;
-mod bytes_graph;
-mod failure_cleanup;
-mod runtime;
-mod structural;
+include!("modules.rs");
 use bytes::{bytes_mode_error, preflight_bytes_runtime};
 pub(in crate::lower) use bytes::{BytesMode, BytesModes};
 use bytes_edges::*;
@@ -69,7 +64,9 @@ pub(super) fn preflight_function(
                 {
                     return unsupported_operation(function.id, "copy of affine value");
                 }
-                InstructionKind::Copy(_) => {}
+                InstructionKind::Copy(_)
+                | InstructionKind::MemoryWitnessIndependentOwner { .. }
+                | InstructionKind::MemoryWitnessDispose { .. } => {}
                 InstructionKind::ProductField { value, .. }
                     if domain == LoweringDomain::StructuralIsland
                         && structural::selected_structural_source(function, *value, layouts)? => {}
@@ -188,10 +185,13 @@ pub(super) fn preflight_function(
                 }
             }
         }
-        if let Terminator::Outcome {
-            detail: Some(_), ..
-        } = block.terminator
-        {
+        if matches!(
+            block.terminator,
+            Terminator::Outcome {
+                detail: Some(_),
+                ..
+            }
+        ) {
             return unsupported_operation(function.id, "structured outcome reference detail");
         }
     }

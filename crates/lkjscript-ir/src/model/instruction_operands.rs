@@ -21,6 +21,8 @@ impl InstructionKind {
             | Self::AggregateConsumePayload { value, .. }
             | Self::StringUtf8View { value, .. }
             | Self::StructuralCopy { value, .. }
+            | Self::MemoryWitnessIndependentOwner { value, .. }
+            | Self::MemoryWitnessDispose { value, .. }
             | Self::F64FromI64Exact { value }
             | Self::F64FromI64Rounded { value }
             | Self::I64FromF64Exact { value }

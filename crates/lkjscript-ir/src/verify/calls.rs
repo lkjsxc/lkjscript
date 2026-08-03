@@ -54,14 +54,6 @@ pub(crate) fn verify_call_compatibility(
         }
         return Ok(());
     }
-    if signature_contains_ownership(program, declared)
-        || signature_contains_ownership(program, resolved)
-        || substitutions
-            .values()
-            .any(|ty| contains_ownership_type(program, ty))
-    {
-        return fail("SSA ownership/reference generic instantiation is unavailable in this slice");
-    }
     let instantiation = instantiation
         .ok_or_else(|| IrError::new("SSA generic call is missing instantiation facts"))?;
     if instantiation.substitutions.len() != declared.type_parameters.len() {
@@ -76,11 +68,6 @@ pub(crate) fn verify_call_compatibility(
             return fail("SSA generic call substitution identity does not match inference");
         }
         verify_type(program, &fact.ty, caller_type_parameters)?;
-        if contains_ownership_type(program, &fact.ty) {
-            return fail(
-                "SSA ownership/reference generic instantiation is unavailable in this slice",
-            );
-        }
     }
     if instantiation.memory_witnesses.len() != declared.memory_witness_parameters.len() {
         return fail("SSA generic call memory witness count does not match hidden parameters");
@@ -97,8 +84,45 @@ pub(crate) fn verify_call_compatibility(
             .memory
             .witness(binding.witness)
             .ok_or_else(|| IrError::new("SSA generic call memory witness is not installed"))?;
+        let representation = descriptor
+            .representation
+            .map(|id| {
+                program
+                    .memory
+                    .representations
+                    .get(id.index().unwrap_or(usize::MAX))
+                    .filter(|item| item.id == id)
+                    .ok_or_else(|| IrError::new("SSA generic call witness representation is stale"))
+            })
+            .transpose()?;
+        let owner_required = requirement.operations.iter().any(|operation| {
+            matches!(
+                operation,
+                lkjscript_contracts::MemoryWitnessOperation::IndependentOwner
+                    | lkjscript_contracts::MemoryWitnessOperation::Dispose
+            )
+        });
+        if owner_required && representation.is_none() {
+            return fail("SSA generic call owner witness lacks representation");
+        }
+        let member = program
+            .memory
+            .witness_groups
+            .iter()
+            .find(|group| group.id == descriptor.group)
+            .and_then(|group| group.members.get(usize::from(descriptor.ordinal)))
+            .filter(|member| {
+                member.witness == descriptor.id && member.ordinal == descriptor.ordinal
+            })
+            .ok_or_else(|| IrError::new("SSA generic call witness group/member is stale"))?;
         if binding.parameter != requirement.parameter
             || &descriptor.ty != expected_type
+            || representation.is_some_and(|representation| {
+                representation.witness != descriptor.id
+                    || representation.witness_group != descriptor.group
+                    || representation.witness_member != descriptor.ordinal
+            })
+            || member.semantic_identity != descriptor.facts.semantic_type
             || requirement
                 .operations
                 .iter()

@@ -66,7 +66,8 @@ impl JitSession {
                 "native resource scope exhausted",
             )
         })?;
-        let mut services = JitIslandServices::new(scope, execution)?;
+        let witnesses = NativeWitnessCatalog::build(self.program.program())?;
+        let mut services = JitIslandServices::with_witnesses(scope, execution, witnesses)?;
         let report = self.objects[object_index]
             .installed
             .invoke_island_with_services(native, arguments, config, &mut services);

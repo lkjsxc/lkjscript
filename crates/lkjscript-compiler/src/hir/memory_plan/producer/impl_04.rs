@@ -67,9 +67,14 @@ impl<'a> Producer<'a> {
         if instantiation.is_some()
             && matches!(resolved.target, MemoryCallTarget::Direct(_))
         {
-            resolved.parameters = args
-                .iter()
-                .map(|argument| self.planned_parameter_mode(&argument.ty, false))
+            resolved.parameters = resolved.parameters.iter().copied().zip(args)
+                .map(|(declared, argument)| {
+                    if declared == MemoryParameterMode::Consume {
+                        Ok(declared)
+                    } else {
+                        self.planned_parameter_mode(&argument.ty, false)
+                    }
+                })
                 .collect::<Result<Vec<_>>>()?;
             resolved.result = self.planned_result_mode(&hir_expression.ty)?;
         }

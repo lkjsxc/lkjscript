@@ -40,6 +40,7 @@ fn operation_signature(operation: &StructuralOperation) -> Result<Signature, Pla
         StructuralOperation::PublishStatic {
             value_type,
             payload,
+            storage: _,
         } => {
             let input = if *payload == StructuralPayloadKind::String {
                 ValueType::StaticString(*value_type)
@@ -51,12 +52,31 @@ fn operation_signature(operation: &StructuralOperation) -> Result<Signature, Pla
         StructuralOperation::PublishUnique {
             value_type, unique, ..
         } => Signature::new(vec![ValueType::Unique(*unique)], owner(*value_type))?,
-        StructuralOperation::PublishI64(value_type)
+        StructuralOperation::PublishI64 {
+            value_type,
+            storage: _,
+        }
         | StructuralOperation::PublishFormattedI64(value_type) => {
             Signature::new(vec![ValueType::I64], owner(*value_type))?
         }
-        StructuralOperation::Copy(value_type) | StructuralOperation::Move(value_type) => {
+        StructuralOperation::PublishOwner {
+            value_type,
+            storage: _,
+        }
+        | StructuralOperation::Copy(value_type)
+        | StructuralOperation::Move(value_type) => {
             Signature::new(vec![owner(*value_type)], owner(*value_type))?
+        }
+        StructuralOperation::WitnessIndependentOwner => Signature::new(
+            vec![ValueType::MemoryWitnessLocator, ValueType::StructuralKey],
+            ValueType::StructuralKey,
+        )?,
+        StructuralOperation::WitnessDispose => Signature::new(
+            vec![ValueType::MemoryWitnessLocator, ValueType::StructuralKey],
+            ValueType::Unit,
+        )?,
+        StructuralOperation::WitnessDisposeStatic(_) => {
+            Signature::new(vec![ValueType::StructuralKey], ValueType::Unit)?
         }
         StructuralOperation::CopyView(view) => Signature::new(
             vec![ValueType::StructuralView(*view)],
@@ -80,38 +100,43 @@ fn operation_signature(operation: &StructuralOperation) -> Result<Signature, Pla
         StructuralOperation::Drop(value_type) | StructuralOperation::CaptureTrap(value_type) => {
             Signature::new(vec![owner(*value_type)], ValueType::Unit)?
         }
-        StructuralOperation::DestinationCreate(aggregate) => Signature::new(
+        StructuralOperation::DestinationCreate { aggregate, storage } => Signature::new(
             Vec::new(),
-            ValueType::StructuralDestination(aggregate.destination(0)),
+            ValueType::StructuralDestination(aggregate.destination(*storage, 0)),
         )?,
-        StructuralOperation::DestinationInitialize { aggregate, field } => {
+        StructuralOperation::DestinationInitialize {
+            aggregate,
+            storage,
+            field,
+        } => {
             let next = field
                 .checked_add(1)
                 .ok_or(PlanError::InvalidStructuralCall)?;
             Signature::new(
                 vec![
-                    ValueType::StructuralDestination(aggregate.destination(*field)),
+                    ValueType::StructuralDestination(aggregate.destination(*storage, *field)),
                     structural_value_type(aggregate.fields()[usize::from(*field)]),
                 ],
-                ValueType::StructuralDestination(aggregate.destination(next)),
+                ValueType::StructuralDestination(aggregate.destination(*storage, next)),
             )?
         }
-        StructuralOperation::DestinationFinish(aggregate) => {
+        StructuralOperation::DestinationFinish { aggregate, storage } => {
             let initialized = u16::try_from(aggregate.fields().len())
                 .map_err(|_| PlanError::InvalidStructuralCall)?;
             Signature::new(
                 vec![ValueType::StructuralDestination(
-                    aggregate.destination(initialized),
+                    aggregate.destination(*storage, initialized),
                 )],
                 owner(aggregate.value_type()),
             )?
         }
         StructuralOperation::DestinationAbort {
             aggregate,
+            storage,
             initialized,
         } => Signature::new(
             vec![ValueType::StructuralDestination(
-                aggregate.destination(*initialized),
+                aggregate.destination(*storage, *initialized),
             )],
             ValueType::Unit,
         )?,

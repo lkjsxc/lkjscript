@@ -122,6 +122,7 @@ impl StructuralValueRuntime {
         let root = self.resolve_root(key, expected)?;
         self.require_owned_root(root, expected)?;
         self.runtime.preflight_release(&[root.domain()])?;
+        self.objects.preflight_take(root)?;
         let root = self.roots.take_owned(key)?;
         match self.roots.publish(root, StructuralRootOwnership::Owned) {
             Ok(next) => {
@@ -183,6 +184,8 @@ impl StructuralValueRuntime {
 fn owned_image(object: StructuralObject) -> StructuralImage {
     match object {
         StructuralObject::Owned { image, .. } => image,
-        StructuralObject::Static(_) => unreachable!("owned publication object"),
+        StructuralObject::Sealed { .. } | StructuralObject::Static(_) => {
+            unreachable!("owned publication object")
+        }
     }
 }

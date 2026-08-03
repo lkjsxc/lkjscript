@@ -12,6 +12,7 @@ fn store_local(
             | Kind::StructuralOwnerRef { .. }
             | Kind::StructuralView { used: false, .. }
             | Kind::StructuralDestination { .. }
+            | Kind::Any
     ) {
         return fail(
             proto,
@@ -57,7 +58,7 @@ fn take_local(
     })?;
     match value {
         Kind::StructuralOwner { owner, .. } => reject_live_view(state, owner, proto, instruction)?,
-        Kind::StructuralDestination { .. } | Kind::StructuralOwnerRef { .. } => {}
+        Kind::StructuralDestination { .. } | Kind::StructuralOwnerRef { .. } | Kind::Any => {}
         Kind::StructuralView { .. } => {
             return fail(
                 proto,
@@ -155,43 +156,4 @@ fn end_view(
     Ok(())
 }
 
-fn load_owner_ref(
-    proto: &FunctionProto,
-    instruction: DecodedInstruction,
-    state: &mut State,
-) -> Result<()> {
-    let slot = instruction_operand(proto, instruction)?;
-    let value = state.locals.get(slot).copied().flatten().ok_or_else(|| {
-        instruction_error(
-            proto,
-            instruction.op(),
-            instruction.offset(),
-            "structural owner local is empty",
-        )
-    })?;
-    let (representation, owner, active_variant) = match value {
-        Kind::StructuralOwner {
-            representation,
-            owner,
-            active_variant,
-        }
-        | Kind::StructuralOwnerRef {
-            representation,
-            owner,
-            active_variant,
-        } => (representation, owner, active_variant),
-        _ => {
-            return fail(
-                proto,
-                instruction,
-                "structural owner reference expects an owner",
-            )
-        }
-    };
-    state.stack.push(Kind::StructuralOwnerRef {
-        representation,
-        owner,
-        active_variant,
-    });
-    Ok(())
-}
+include!("locals/owner_ref.rs");

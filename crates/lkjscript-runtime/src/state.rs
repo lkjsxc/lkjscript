@@ -123,6 +123,7 @@ impl AppRecord {
 pub(crate) struct IsolatedProcessSpec {
     pub(crate) worker: PathBuf,
     pub(crate) entry: PathBuf,
+    pub(crate) prepared: crate::system::preparation::PreparedProcessIdentity,
 }
 
 pub(crate) struct InstanceRuntime {
@@ -137,6 +138,18 @@ pub(crate) struct InstanceRuntime {
     pub(crate) serving_ticket: u64,
     pub(crate) active: usize,
     pub(crate) total: u64,
+}
+
+pub(crate) fn private_inputs(
+    arguments: Vec<String>,
+    capabilities: Vec<lkjscript_core::CapabilityKind>,
+    host: lkjscript_host::HostEnvironment,
+) -> ExecutionInputs {
+    ExecutionInputs {
+        arguments,
+        capabilities,
+        host,
+    }
 }
 
 impl InstanceRuntime {

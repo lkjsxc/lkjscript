@@ -26,7 +26,15 @@ pub(crate) fn typed_hir(language: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "canonical reachable semantic closures and complete role-bearing executable dependencies",
+                    concat!(
+                        "canonical singleton or recursive-SCC groups with ordered members ",
+                        "local ordinals and exact external group/member dependencies",
+                    ),
+                ))
+                .fact(fact(
+                    "value-placement",
+                    "value placement",
+                    "independently verified use escape size cost storage route and cleanup facts",
                 ))
                 .fact(fact(
                     "capabilities",
@@ -65,7 +73,17 @@ pub(crate) fn verified_ssa(hir: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "verified semantic descriptors and role-target authenticated witness identities",
+                    "atomic group tables group-derived members and authenticated hidden operation locators",
+                ))
+                .fact(fact(
+                    "prepared-program",
+                    "prepared program",
+                    "mandatory nonzero immutable prepared identity excluded from SSA content identity",
+                ))
+                .fact(fact(
+                    "representations",
+                    "representations",
+                    "exact witness group member layout category storage and route tuple",
                 ))
                 .fact(fact(
                     "frames",
@@ -100,7 +118,20 @@ pub(crate) fn bytecode(ssa: ContractDigest) -> ContractDescriptor {
                 .fact(fact(
                     "memory-witnesses",
                     "memory witnesses",
-                    "recomputed semantic closures role targets and executable witness identities",
+                    "atomically validated group tables local ordinals external DAG and group-derived member identities",
+                ))
+                .fact(fact(
+                    "prepared-program",
+                    "prepared program",
+                    "mandatory nonzero prepared identity excluded from bytecode content identity",
+                ))
+                .fact(fact(
+                    "representations",
+                    "representations",
+                    concat!(
+                        "exact owner view destination and operation-bound nested-result ",
+                        "storage routes with no type-first lookup",
+                    ),
                 ))
                 .fact(fact(
                     "capabilities",

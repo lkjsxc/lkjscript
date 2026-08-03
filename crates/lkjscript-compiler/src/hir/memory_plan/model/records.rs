@@ -64,6 +64,8 @@ pub struct MemoryPlanEntry {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MemoryWitnessOperation {
     Transport,
+    IndependentOwner,
+    Dispose,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

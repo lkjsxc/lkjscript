@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
 use crate::verify::*;
+#[path = "function/witness_groups.rs"]
+mod witness_groups;
 #[path = "function/witnesses.rs"]
 mod witnesses;
 
@@ -12,7 +14,8 @@ use crate::{
 
 pub(super) fn verify(program: &Program) -> crate::Result<()> {
     let memory = &program.memory;
-    if memory.witnesses.is_empty()
+    if memory.witness_groups.is_empty()
+        && memory.witnesses.is_empty()
         && memory.types.is_empty()
         && memory.layouts.is_empty()
         && memory.representations.is_empty()
@@ -29,6 +32,7 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
     if !memory.plan.is_resolved() {
         return fail("SSA structural tables require a resolved MemoryPlanId");
     }
+    witness_groups::verify(program)?;
     witnesses::verify(program)?;
     if memory.types.len() > MAX_STRUCTURAL_TYPES
         || memory.layouts.len() > MAX_STRUCTURAL_LAYOUTS
@@ -116,21 +120,42 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
         verify_type_layout(program, &item.ty, item.layout)?;
     }
     let mut exact = HashSet::new();
+    let mut categories = HashSet::new();
     for (index, representation) in memory.representations.iter().enumerate() {
+        categories.insert((representation.type_id, representation.category));
         if representation.id.index() != Some(index)
-            || !exact.insert((representation.type_id, representation.category))
+            || !exact.insert((
+                representation.type_id,
+                representation.witness,
+                representation.witness_group,
+                representation.witness_member,
+                representation.layout,
+                representation.category,
+                representation.storage,
+                representation.route,
+            ))
         {
-            return fail("SSA structural representations must be dense and unique by category");
+            return fail("SSA structural representations must be dense and unique by full tuple");
         }
         let ty = memory
             .types
             .get(representation.type_id.index().unwrap_or(usize::MAX))
             .filter(|item| item.id == representation.type_id)
             .ok_or_else(|| crate::IrError::new("SSA representation has stale type metadata"))?;
+        let witness_matches = match memory.witness(representation.witness) {
+            Some(witness) => {
+                witness.group == representation.witness_group
+                    && witness.ordinal == representation.witness_member
+            }
+            None => memory.witnesses.is_empty(),
+        };
         if ty.layout != representation.layout
+            || ty.witness != representation.witness
+            || !witness_matches
+            || representation.route == [0; 32]
             || !storage_matches(representation.category, representation.storage)
         {
-            return fail("SSA structural representation has stale layout or storage category");
+            return fail("SSA structural representation has stale exact tuple metadata");
         }
     }
     for item in &memory.types {
@@ -139,7 +164,7 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
             StructuralValueCategory::View,
             StructuralValueCategory::Destination,
         ] {
-            if !exact.contains(&(item.id, category)) {
+            if !categories.contains(&(item.id, category)) {
                 return fail("SSA structural type lacks a closed representation category");
             }
         }
@@ -147,38 +172,4 @@ pub(super) fn verify(program: &Program) -> crate::Result<()> {
     Ok(())
 }
 
-fn verify_type_layout(
-    program: &Program,
-    ty: &SsaType,
-    layout: crate::StructuralLayoutId,
-) -> crate::Result<()> {
-    let kind = &program.memory.layouts[layout.index().unwrap_or(usize::MAX)].kind;
-    let matches = match (ty, kind) {
-        (SsaType::Str, StructuralLayoutKind::String)
-        | (SsaType::Path, StructuralLayoutKind::Path) => true,
-        (SsaType::Product(left), StructuralLayoutKind::Product { product: right, .. }) => {
-            left == right
-        }
-        (SsaType::Enum { id: left, .. }, StructuralLayoutKind::Enum { enum_id: right, .. }) => {
-            left == right
-        }
-        _ => false,
-    };
-    if matches {
-        Ok(())
-    } else {
-        fail("SSA structural type and layout kind do not match")
-    }
-}
-
-fn storage_matches(category: StructuralValueCategory, storage: StructuralStorage) -> bool {
-    matches!(
-        (category, storage),
-        (StructuralValueCategory::Owner, StructuralStorage::Unique)
-            | (StructuralValueCategory::View, StructuralStorage::Stack)
-            | (
-                StructuralValueCategory::Destination,
-                StructuralStorage::CallerDestination
-            )
-    )
-}
+include!("structural_metadata/types.rs");

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
+use lkjscript_contracts::PreparedProgramIdentity;
 use lkjscript_core::ValidatedChunk;
 
 use crate::{PackageContentId, RuntimeError};
@@ -12,7 +13,7 @@ struct CacheEntry {
 }
 
 pub(crate) struct CodeCache {
-    entries: BTreeMap<PackageContentId, CacheEntry>,
+    entries: BTreeMap<(PackageContentId, PreparedProgramIdentity), CacheEntry>,
     max_entries: NonZeroUsize,
     clock: u64,
 }
@@ -31,8 +32,15 @@ impl CodeCache {
         package: PackageContentId,
         chunk: Arc<ValidatedChunk>,
     ) -> Result<Arc<ValidatedChunk>, RuntimeError> {
+        let prepared = chunk.prepared_identity();
+        if !prepared.is_bound() {
+            return Err(RuntimeError::InvalidManifest(
+                "installed bytecode has no prepared program authority",
+            ));
+        }
         self.clock = self.clock.saturating_add(1);
-        if let Some(entry) = self.entries.get_mut(&package) {
+        let key = (package, prepared);
+        if let Some(entry) = self.entries.get_mut(&key) {
             entry.last_use = self.clock;
             return Ok(Arc::clone(&entry.chunk));
         }
@@ -51,7 +59,7 @@ impl CodeCache {
             }
         }
         self.entries.insert(
-            package,
+            key,
             CacheEntry {
                 chunk: Arc::clone(&chunk),
                 last_use: self.clock,
@@ -61,7 +69,9 @@ impl CodeCache {
     }
 
     pub(crate) fn contains(&self, package: PackageContentId) -> bool {
-        self.entries.contains_key(&package)
+        self.entries
+            .keys()
+            .any(|(candidate, _)| *candidate == package)
     }
 
     pub(crate) fn len(&self) -> usize {

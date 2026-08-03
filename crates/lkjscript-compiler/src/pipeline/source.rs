@@ -31,11 +31,22 @@ pub fn compile_source_with_ledger(
     let result = (|| {
         crate::ensure_source_path(Path::new(path))?;
         let program = validate_for_compiler_with_budget(source, path, limits, ledger)?;
+        let source_identity = program
+            .files()
+            .first()
+            .ok_or_else(|| lkjscript_core::Error::msg("development source closure is empty"))?
+            .exact_source_sha256;
         let projection = program
             .module_scoped_projection()
             .map_err(crate::source::SourceDiagnostic::into_core)?;
         let analyzed = analyze_program_with_budget(&projection, ledger)?;
-        compile_analyzed(&analyzed, limits, ledger)
+        compile_analyzed(&analyzed, limits, ledger, |plan| {
+            Ok(crate::package::program::development(
+                source_identity,
+                path,
+                plan,
+            ))
+        })
     })();
     finish(result, ledger)
 }

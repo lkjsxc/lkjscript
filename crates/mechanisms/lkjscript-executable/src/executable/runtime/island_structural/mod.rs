@@ -24,6 +24,7 @@ pub(super) fn dispatch_structural(
             descriptor.operation(),
             StructuralOperation::EndView(_)
                 | StructuralOperation::Drop(_)
+                | StructuralOperation::WitnessDisposeStatic(_)
                 | StructuralOperation::DestinationAbort { .. }
         )
     {

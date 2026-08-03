@@ -120,6 +120,11 @@ pub(in crate::codegen) fn install_structural_metadata(
             .push(BytecodeStructuralRepresentationMetadata {
                 id: BytecodeStructuralRepresentationId::new(representation.id.raw()),
                 type_id: BytecodeStructuralTypeId::new(representation.type_id.raw()),
+                witness: BytecodeMemoryWitnessId::new(representation.witness.bytes()),
+                witness_group: lkjscript_core::MemoryWitnessGroupId::new(
+                    representation.witness_group.bytes(),
+                ),
+                witness_member: representation.witness_member,
                 layout: BytecodeStructuralLayoutId::new(representation.layout.raw()),
                 category: match representation.category {
                     StructuralValueCategory::Owner => BytecodeStructuralValueCategory::Owner,
@@ -129,61 +134,18 @@ pub(in crate::codegen) fn install_structural_metadata(
                     }
                 },
                 storage: match representation.storage {
+                    lkjscript_ir::StructuralStorage::Inline => BytecodeStructuralStorage::Inline,
                     lkjscript_ir::StructuralStorage::Static => BytecodeStructuralStorage::Static,
-                    lkjscript_ir::StructuralStorage::Unique => BytecodeStructuralStorage::Unique,
                     lkjscript_ir::StructuralStorage::Stack => BytecodeStructuralStorage::Stack,
-                    lkjscript_ir::StructuralStorage::CallerDestination => {
-                        BytecodeStructuralStorage::CallerDestination
-                    }
+                    lkjscript_ir::StructuralStorage::CallerDestination => BytecodeStructuralStorage::CallerDestination,
+                    lkjscript_ir::StructuralStorage::UniqueStructural => BytecodeStructuralStorage::UniqueStructural,
+                    lkjscript_ir::StructuralStorage::OrdinaryRegion => BytecodeStructuralStorage::OrdinaryRegion,
+                    lkjscript_ir::StructuralStorage::SealedRegion => BytecodeStructuralStorage::SealedRegion,
+                    lkjscript_ir::StructuralStorage::BorrowedView => BytecodeStructuralStorage::BorrowedView,
+                    lkjscript_ir::StructuralStorage::ExternalResource => BytecodeStructuralStorage::ExternalResource,
                 },
+                route: representation.route,
             });
     }
-    let destination_representations: Vec<_> = chunk
-        .structural_representations
-        .iter()
-        .filter(|item| item.category == BytecodeStructuralValueCategory::Destination)
-        .copied()
-        .collect();
-    for representation in destination_representations {
-        let owner_representation = chunk
-            .structural_representations
-            .iter()
-            .find(|item| {
-                item.type_id == representation.type_id
-                    && item.category == BytecodeStructuralValueCategory::Owner
-            })
-            .map(|item| item.id)
-            .ok_or_else(|| Error::msg("structural destination has no owner representation"))?;
-        let layout = chunk
-            .structural_layouts
-            .get(representation.layout.index())
-            .ok_or_else(|| Error::msg("structural destination layout is missing"))?;
-        let candidates: Vec<(Option<BytecodeVariantId>, Vec<StructuralFieldMetadata>)> =
-            match &layout.kind {
-                BytecodeStructuralLayoutKind::String | BytecodeStructuralLayoutKind::Path => {
-                    vec![(None, Vec::new())]
-                }
-                BytecodeStructuralLayoutKind::Product { fields, .. } => {
-                    vec![(None, fields.clone())]
-                }
-                BytecodeStructuralLayoutKind::Enum { variants, .. } => variants
-                    .iter()
-                    .map(|variant| (Some(variant.variant), variant.fields.clone()))
-                    .collect(),
-            };
-        for (active_variant, fields) in candidates {
-            let raw = u16::try_from(chunk.structural_destinations.len())
-                .map_err(|_| Error::msg("bytecode structural destinations exceed u16"))?;
-            chunk
-                .structural_destinations
-                .push(StructuralDestinationMetadata {
-                    id: StructuralDestinationId::new(raw),
-                    representation: representation.id,
-                    owner_representation,
-                    active_variant,
-                    fields,
-                });
-        }
-    }
-    Ok(())
+    install_structural_destinations(chunk)
 }

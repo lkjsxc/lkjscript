@@ -22,13 +22,25 @@ impl SealedSemanticDagRuntime {
 
     pub fn metrics(&self) -> SealedSemanticDagMetrics {
         let mut sealed = SealedRegionMetrics::default();
+        let mut live = (0_u64, 0_u64, 0_u64, 0_u64, 0_u64);
         for typed in &self.stores {
             add_metrics(&mut sealed, typed.store.metrics());
+            let next = typed.store.exact_live_state();
+            live.0 = live.0.saturating_add(next.0);
+            live.1 = live.1.saturating_add(next.1);
+            live.2 = live.2.saturating_add(next.2);
+            live.3 = live.3.saturating_add(next.3);
+            live.4 = live.4.saturating_add(next.4);
         }
         SealedSemanticDagMetrics {
             typed_stores: u32::try_from(self.stores.len()).unwrap_or(u32::MAX),
             runtime: self.runtime.metrics(),
             sealed,
+            live_regions: live.0,
+            live_owners: live.1,
+            live_loans: live.2,
+            live_dependencies: live.3,
+            release_backlog: live.4,
         }
     }
 

@@ -23,6 +23,7 @@ fn structural_and_owned_resource_mix_fails_before_image_installation(
         StructuralOperation::PublishStatic {
             value_type,
             payload: StructuralPayloadKind::String,
+            storage: StructuralStorageRoute::Unique,
         },
         vec![artifact],
     )?;

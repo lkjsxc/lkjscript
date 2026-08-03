@@ -179,4 +179,6 @@ pub enum Op {
     StructuralCopy = 251,
     ResourceDrop = 252,
     StructuralAggregateFieldCopy = 253,
+    MemoryWitnessIndependentOwner = 254,
+    MemoryWitnessDispose = 255,
 }

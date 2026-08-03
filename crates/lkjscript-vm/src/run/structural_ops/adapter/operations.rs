@@ -100,7 +100,8 @@ pub(in crate::run) fn drop_registered_owner<J: RuntimeTier>(
     let (key, record) = invocation(vm)?.owner(value)?;
     invocation_mut(vm)?
         .runtime
-        .drop_owned(key, record.value_type)
+        .dispose_owner(key, record.value_type)
+        .map(|_| ())
         .map_err(map_value_error)?;
     invocation_mut(vm)?.owners.remove(&key.get());
     Ok(())

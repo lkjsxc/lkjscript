@@ -65,7 +65,8 @@ impl JitStructuralRuntime {
         value: SemanticValue,
         expected: StructuralTypeIdentity,
     ) -> Result<NativeValue, NativeServiceError> {
-        if value.value_type != core_type(expected)? {
+        let expected_type = core_type(expected)?;
+        if value.value_type != expected_type {
             return Err(NativeServiceError::HostFailure);
         }
         match value.payload {
@@ -80,12 +81,17 @@ impl JitStructuralRuntime {
                 Ok(NativeValue::F64Bits(bits))
             }
             payload => {
-                let value = SemanticValue::new(core_type(expected)?, payload);
+                let value = SemanticValue::new(expected_type, payload);
                 let key = self
                     .runtime
                     .publish_owned(value)
                     .map_err(|failure| self.map_error(failure.error))?;
-                self.owners.insert(key.get(), expected);
+                self.register_runtime_owner(
+                    key,
+                    expected_type,
+                    expected,
+                    StructuralStorageRoute::Unique,
+                )?;
                 Ok(NativeValue::StructuralOwner(NativeStructuralOwner::new(
                     expected,
                     key.get(),

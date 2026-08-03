@@ -49,6 +49,10 @@ fn corrupted_mode_closure_destination_and_glue_are_independently_rejected() -> R
         .kind = MemoryDestinationKind::Stack;
     assert!(rejected(&program, destination)?);
 
+    let mut group = plan.clone();
+    group.witness_groups[0].members[0].ordinal = 1;
+    assert!(rejected(&program, group)?);
+
     let mut glue = plan.clone();
     let structural = glue
         .drop_glues

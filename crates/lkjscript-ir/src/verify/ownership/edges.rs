@@ -17,7 +17,7 @@ pub(crate) fn consume_affine_arguments(
         let ty = value_type(types, *argument)?;
         if !is_affine(program, ty)
             || nonowned_affine.contains(argument)
-            || program.memory.is_immutable(ty)
+            || (!user_call && program.memory.is_immutable(ty))
         {
             continue;
         }

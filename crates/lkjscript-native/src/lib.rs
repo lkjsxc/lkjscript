@@ -31,7 +31,8 @@ pub use plan::{
     StructuralAggregateDescriptor, StructuralAggregateKind, StructuralCallDescriptor,
     StructuralDestinationType, StructuralKind, StructuralNumericConversion, StructuralOperation,
     StructuralPayloadKind, StructuralProjectionDescriptor, StructuralProjectionKind,
-    StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType, ValueId, ValueType,
+    StructuralStorageRoute, StructuralTypeIdentity, StructuralViewType, TrapCode, UniqueType,
+    ValueId, ValueType,
 };
 pub use verify::{VerificationError, VerifiedMachinePlan};
 

@@ -6,7 +6,7 @@ pub(in crate::island) struct JitStructuralRuntime {
     pub(super) last_resource: Option<ResourceLimitKind>,
     pub(super) logical_constructions: u64,
     pub(super) max_logical_constructions: u64,
-    pub(super) owners: std::collections::BTreeMap<u64, StructuralTypeIdentity>,
+    pub(super) owners: std::collections::BTreeMap<u64, NativeOwnerRecord>,
     pub(super) last_trap: Option<String>,
 }
 
@@ -66,7 +66,7 @@ impl JitStructuralRuntime {
     pub(in crate::island) fn finish(
         mut self,
     ) -> (NativeStructuralStats, Option<ResourceLimitKind>) {
-        self.cleanup_copy_owners();
+        self.cleanup_owners();
         let empty = self.owners.is_empty() && self.runtime.verify_empty().is_ok();
         let roots = self.runtime.root_stats();
         let metrics = self.runtime.metrics();
@@ -87,6 +87,16 @@ impl JitStructuralRuntime {
             events_overwritten: metrics.events_overwritten,
             releases: metrics.releases,
             release_work: metrics.release_work,
+            sealed_publications: metrics.sealed_publications,
+            zero_copy_adoptions: metrics.zero_copy_adoptions,
+            copied_publication_bytes: metrics.copied_publication_bytes,
+            sealed_acquisitions: metrics.sealed_acquisitions,
+            sealed_releases: metrics.sealed_releases,
+            sealed_release_work: metrics.sealed_release_work,
+            sealed_nodes_reclaimed: metrics.sealed_nodes_reclaimed,
+            live_objects: metrics.live_objects,
+            live_sealed_domains: metrics.live_sealed_domains,
+            live_sealed_owners: metrics.live_sealed_owners,
             live_roots: roots.live_roots,
             live_loans: roots.live_loans,
             live_views: metrics.live_views,
@@ -98,12 +108,8 @@ impl JitStructuralRuntime {
         (stats, self.last_resource)
     }
 
-    fn cleanup_copy_owners(&mut self) {
-        let count = self
-            .owners
-            .values()
-            .filter(|value_type| value_type.copyable())
-            .count();
+    fn cleanup_owners(&mut self) {
+        let count = self.owners.len();
         let mut owners = Vec::new();
         if owners.try_reserve_exact(count).is_err() {
             self.last_resource = Some(ResourceLimitKind::Allocations);
@@ -113,13 +119,12 @@ impl JitStructuralRuntime {
         owners.extend(
             self.owners
                 .iter()
-                .filter(|(_, value_type)| value_type.copyable())
-                .map(|(key, value_type)| (*key, *value_type)),
+                .map(|(key, record)| (*key, record.value_type)),
         );
         for (key, value_type) in owners {
             let owner = NativeStructuralOwner::new(value_type, key);
             if self.drop_owner(owner).is_err() {
-                return;
+                self.owners.remove(&key);
             }
         }
     }
@@ -179,6 +184,8 @@ impl JitStructuralRuntime {
             | Error::FieldOutOfRange
             | Error::IncompleteDestination
             | Error::WrongDestinationKind
+            | Error::WrongOwnership
+            | Error::OwnerOverflow
             | Error::LiveDestination
             | Error::LiveView
             | Error::LiveObject

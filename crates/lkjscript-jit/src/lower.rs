@@ -125,6 +125,13 @@ struct LayoutInterner {
     semantics: HashMap<SsaType, u64>,
     region_products: HashMap<lkjscript_ir::ProductId, [u8; 32]>,
     structural: StructuralCatalog,
+    witness_slots: HashMap<
+        (
+            lkjscript_ir::MemoryWitnessId,
+            lkjscript_native::StructuralStorageRoute,
+        ),
+        u16,
+    >,
     next: u32,
 }
 

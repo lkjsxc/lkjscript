@@ -53,6 +53,7 @@ impl<'a> JitValueServices<'a> {
             | NativeValue::Resource(_)
             | NativeValue::Unique(_)
             | NativeValue::Loan(_)
+            | NativeValue::StructuralKey(_)
             | NativeValue::StructuralOwner(_)
             | NativeValue::StructuralView(_)
             | NativeValue::StructuralDestination(_) => {

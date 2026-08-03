@@ -187,6 +187,10 @@ pub(super) fn apply_instruction(
         | Op::StructuralAggregateTag
         | Op::StructuralAggregateConsumePayload
         | Op::StructuralStringUtf8View
-        | Op::StructuralCopy => structural::apply(chunk, proto, instruction, state),
+        | Op::StructuralCopy
+        | Op::MemoryWitnessIndependentOwner
+        | Op::MemoryWitnessDispose => {
+            structural::apply(chunk, proto, instruction, state)
+        }
     }
 }

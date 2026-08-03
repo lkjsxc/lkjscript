@@ -104,6 +104,12 @@ impl Canonical for MemoryPlanId {
     }
 }
 
+impl Canonical for MemoryWitnessGroupId {
+    fn encode(&self, output: &mut Encoder) -> Result<()> {
+        output.bytes(&self.as_bytes())
+    }
+}
+
 impl Canonical for MemoryWitnessId {
     fn encode(&self, output: &mut Encoder) -> Result<()> {
         output.bytes(&self.as_bytes())
@@ -188,6 +194,7 @@ impl Canonical for bool {
 mod authority;
 mod modes;
 mod obligations;
+mod placement;
 mod records;
 mod types;
 mod witness;

@@ -20,6 +20,8 @@ fn native_from_value(ty: ValueType, value: Value) -> Result<NativeValue> {
         | ValueType::Resource(_)
         | ValueType::Unique(_)
         | ValueType::Loan(_)
+        | ValueType::StructuralKey
+        | ValueType::MemoryWitnessLocator
         | ValueType::StructuralOwner(_)
         | ValueType::StructuralView(_)
         | ValueType::StructuralDestination(_)
@@ -41,6 +43,7 @@ fn value_from_native(value: NativeValue) -> Result<Value> {
         | NativeValue::Resource(_)
         | NativeValue::Unique(_)
         | NativeValue::Loan(_)
+        | NativeValue::StructuralKey(_)
         | NativeValue::StructuralOwner(_)
         | NativeValue::StructuralView(_)
         | NativeValue::StructuralDestination(_)

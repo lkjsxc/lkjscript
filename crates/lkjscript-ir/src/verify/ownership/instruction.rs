@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use crate::verify::*;
 use crate::{Function, Instruction, InstructionKind, IrError, PlaceId, Program, SsaType};
-
 pub(crate) fn process_ownership_instruction(
     program: &Program,
     function: &Function,
@@ -175,6 +174,8 @@ pub(crate) fn process_ownership_instruction(
         | InstructionKind::AggregateTag { .. }
         | InstructionKind::StringUtf8View { .. }
         | InstructionKind::StructuralCopy { .. }
+        | InstructionKind::MemoryWitnessIndependentOwner { .. }
+        | InstructionKind::MemoryWitnessDispose { .. }
         | InstructionKind::Constant(_)
         | InstructionKind::Copy(_)
         | InstructionKind::FunctionRef(_)

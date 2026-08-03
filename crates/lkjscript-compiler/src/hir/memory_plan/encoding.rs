@@ -19,8 +19,10 @@ pub(super) fn compute_plan_id(plan: &HirMemoryPlan) -> Result<MemoryPlanId> {
     output.value(&plan.calls)?;
     output.value(&plan.obligations)?;
     output.value(&plan.type_facts)?;
+    output.value(&plan.witness_groups)?;
     output.value(&plan.witnesses)?;
     output.value(&plan.destinations)?;
+    output.value(&plan.value_placements)?;
     output.value(&plan.borrow_scopes)?;
     output.value(&plan.drop_paths)?;
     output.value(&plan.drop_glues)?;

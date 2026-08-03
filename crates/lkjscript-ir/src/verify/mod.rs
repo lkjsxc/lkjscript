@@ -14,8 +14,8 @@ mod traits;
 mod types;
 
 pub use api::{
-    verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK, SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION,
-    SSA_VERIFY_MAX_CFG_WORK,
+    bind_prepared_identity, verify, VerifiedProgram, OWNERSHIP_VERIFY_MAX_WORK,
+    SSA_VERIFY_MAX_BLOCKS_PER_FUNCTION, SSA_VERIFY_MAX_CFG_WORK,
 };
 pub(crate) use api::{
     OWNERSHIP_VERIFY_MAX_RETAINED_STATE_CELLS, TRAIT_VERIFY_MAX_DEPTH, TRAIT_VERIFY_MAX_WORK,

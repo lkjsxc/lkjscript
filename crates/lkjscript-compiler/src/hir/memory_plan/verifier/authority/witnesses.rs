@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn verified_witness_parameters(ty: &Type) -> Result<Vec<MemoryWitnessParameter>> {
+pub(super) fn verified_witness_parameters(
+    ty: &Type,
+    function_body: Option<&hir::Expr>,
+) -> Result<Vec<MemoryWitnessParameter>> {
     let Type::Forall { vars, body } = ty else {
         return Ok(Vec::new());
     };
@@ -39,9 +42,20 @@ pub(super) fn verified_witness_parameters(ty: &Type) -> Result<Vec<MemoryWitness
             .any(|ty| matches!(ty, Type::Param(name) if name == variable))
             || matches!(ret.as_ref(), Type::Param(name) if name == variable);
         if naked {
+            let occurrences = params
+                .iter()
+                .filter(|ty| matches!(ty, Type::Param(name) if name == variable))
+                .count();
+            let mut operations = vec![MemoryWitnessOperation::Transport];
+            if occurrences >= 2 && function_body.is_some_and(verified_nontrivial_owner_body) {
+                operations.extend([
+                    MemoryWitnessOperation::IndependentOwner,
+                    MemoryWitnessOperation::Dispose,
+                ]);
+            }
             output.push(MemoryWitnessParameter {
                 parameter: variable.clone(),
-                operations: vec![MemoryWitnessOperation::Transport],
+                operations,
             });
         }
     }
@@ -49,6 +63,13 @@ pub(super) fn verified_witness_parameters(ty: &Type) -> Result<Vec<MemoryWitness
         return Err(Error::msg("memory verifier witness parameters exceed 16"));
     }
     Ok(output)
+}
+
+fn verified_nontrivial_owner_body(body: &hir::Expr) -> bool {
+    !matches!(
+        body.kind,
+        hir::ExprKind::Load(_) | hir::ExprKind::Move { .. } | hir::ExprKind::LitUnit
+    )
 }
 
 pub(super) fn verified_witness_arguments(

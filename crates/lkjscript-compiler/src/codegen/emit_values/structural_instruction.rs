@@ -47,9 +47,7 @@ impl Emitter<'_> {
                     representation.raw(),
                 );
             }
-            InstructionKind::StructuralPublish { value, .. } => {
-                let representation = structural_owner_representation(self.chunk, &instruction.ty)
-                    .ok_or_else(|| Error::msg("structural publish representation is missing"))?;
+            InstructionKind::StructuralPublish { representation, value } => {
                 self.load(*value)?;
                 self.proto
                     .emit_op_u16(Op::StructuralPublish, representation.raw());
@@ -95,11 +93,14 @@ impl Emitter<'_> {
                             Error::msg("structural product-field representation is missing")
                         })?;
                 self.load_observed_structural(*value)?;
+                let result_representation =
+                    structural_owner_representation(self.chunk, &instruction.ty);
                 let reference = intern_aggregate_field_for_representation(
                     self.chunk,
                     representation,
                     u16::from(*field),
                     &instruction.ty,
+                    result_representation,
                 )?;
                 self.proto
                     .emit_op_u16(Op::StructuralAggregateFieldCopy, reference);
@@ -111,8 +112,15 @@ impl Emitter<'_> {
                 ..
             } => {
                 self.proto.emit_op_u8(Op::LoadStructuralOwnerLocal, self.slot(*value)?);
-                let reference =
-                    intern_aggregate_field(self.chunk, *representation, *field, &instruction.ty)?;
+                let result_representation =
+                    structural_view_representation(self.chunk, &instruction.ty);
+                let reference = intern_aggregate_field(
+                    self.chunk,
+                    *representation,
+                    *field,
+                    &instruction.ty,
+                    result_representation,
+                )?;
                 self.proto
                     .emit_op_u16(Op::StructuralAggregateFieldBorrow, reference);
             }
@@ -124,13 +132,23 @@ impl Emitter<'_> {
                 self.proto
                     .emit_op_u16(Op::StructuralAggregateTag, representation.raw());
             }
-            InstructionKind::AggregateConsumePayload { variant, value, .. } => {
-                let representation =
-                    structural_owner_representation(self.chunk, self.value_type(*value)?)
-                        .ok_or_else(|| Error::msg("structural payload representation is missing"))?;
+            InstructionKind::AggregateConsumePayload {
+                representation,
+                variant,
+                value,
+                ..
+            } => {
+                let representation = BytecodeStructuralRepresentationId::new(representation.raw());
+                let result_representation =
+                    structural_owner_representation(self.chunk, &instruction.ty);
                 self.load(*value)?;
-                let reference =
-                    intern_payload(self.chunk, representation, *variant, &instruction.ty)?;
+                let reference = intern_payload(
+                    self.chunk,
+                    representation,
+                    *variant,
+                    &instruction.ty,
+                    result_representation,
+                )?;
                 self.proto
                     .emit_op_u16(Op::StructuralAggregateConsumePayload, reference);
             }
@@ -143,9 +161,7 @@ impl Emitter<'_> {
                 self.proto
                     .emit_op_u16(Op::StructuralStringUtf8View, representation.raw());
             }
-            InstructionKind::StructuralCopy { value, .. } => {
-                let representation = structural_owner_representation(self.chunk, &instruction.ty)
-                    .ok_or_else(|| Error::msg("structural copy representation is missing"))?;
+            InstructionKind::StructuralCopy { representation, value } => {
                 self.load_observed_structural(*value)?;
                 self.proto
                     .emit_op_u16(Op::StructuralCopy, representation.raw());

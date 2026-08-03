@@ -6,6 +6,24 @@ use super::{
 };
 use crate::{Chunk, Error, Result, ValidationLimits};
 
+pub fn bind_prepared_identity(
+    validated: ValidatedChunk,
+    identity: lkjscript_contracts::PreparedProgramIdentity,
+    limits: &ValidationLimits,
+) -> Result<ValidatedChunk> {
+    if !identity.is_bound()
+        || (validated.chunk.prepared_identity.is_bound()
+            && validated.chunk.prepared_identity != identity)
+    {
+        return Err(Error::msg(
+            "bytecode prepared program identity is zero or stale",
+        ));
+    }
+    let mut chunk = validated.chunk;
+    chunk.prepared_identity = identity;
+    validate_chunk(chunk, limits)
+}
+
 pub fn validate_chunk(chunk: Chunk, limits: &ValidationLimits) -> Result<ValidatedChunk> {
     validate_tables(&chunk, limits)?;
     let main_instructions = decode_function(&chunk.main, limits)?;

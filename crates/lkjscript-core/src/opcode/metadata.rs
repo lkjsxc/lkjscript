@@ -97,6 +97,8 @@ const fn operand_width(op: Op) -> usize {
         | Op::EndStructuralBorrowLocal
         | Op::LoadStructuralOwnerLocal
         | Op::StructuralPlaceEnd
+        | Op::MemoryWitnessIndependentOwner
+        | Op::MemoryWitnessDispose
         | Op::ByteVectorPlaceEnd
         | Op::BytesPlaceEnd => 1,
         _ => 0,

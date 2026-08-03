@@ -2,6 +2,7 @@ fn structural_representation(
     chunk: &Chunk,
     ty: &SsaType,
     category: BytecodeStructuralValueCategory,
+    storage: BytecodeStructuralStorage,
 ) -> Option<BytecodeStructuralRepresentationId> {
     let semantic = structural_semantic_type_from_chunk(chunk, ty)?;
     let ty = chunk
@@ -9,11 +10,52 @@ fn structural_representation(
         .iter()
         .find(|item| item.runtime_type.semantic_type == semantic)?;
     let type_id = ty.id;
-    chunk
-        .structural_representations
-        .iter()
-        .find(|item| item.type_id == type_id && item.category == category)
-        .map(|item| item.id)
+    let mut candidates = chunk.structural_representations.iter().filter(|item| {
+        item.type_id == type_id && item.category == category && item.storage == storage
+    });
+    let selected = candidates.next()?;
+    candidates.next().is_none().then_some(selected.id)
+}
+
+pub(in crate::codegen) fn structural_owner_representation_for_value(
+    function: &Function,
+    chunk: &Chunk,
+    value: ValueId,
+) -> Option<BytecodeStructuralRepresentationId> {
+    let instruction = function.blocks.iter().flat_map(|block| &block.instructions)
+        .find(|instruction| instruction.id == value)?;
+    match instruction.kind {
+        InstructionKind::StructuralPublish { representation, .. }
+        | InstructionKind::StructuralCopy { representation, .. } => {
+            Some(BytecodeStructuralRepresentationId::new(representation.raw()))
+        }
+        InstructionKind::DestinationFinish { destination } => {
+            let (representation, active_variant) =
+                destination_creation(function, destination)?;
+            let destination = structural_destination(chunk, representation, active_variant).ok()?;
+            chunk.structural_destinations.iter()
+                .find(|item| item.id == destination)
+                .map(|item| item.owner_representation)
+        }
+        _ => None,
+    }
+}
+
+fn destination_creation(
+    function: &Function,
+    value: ValueId,
+) -> Option<(lkjscript_ir::StructuralRepresentationId, Option<lkjscript_ir::VariantId>)> {
+    let instruction = function.blocks.iter().flat_map(|block| &block.instructions)
+        .find(|instruction| instruction.id == value)?;
+    match instruction.kind {
+        InstructionKind::DestinationCreate { representation, active_variant } => {
+            Some((representation, active_variant))
+        }
+        InstructionKind::DestinationFieldInit { destination, .. } => {
+            destination_creation(function, destination)
+        }
+        _ => None,
+    }
 }
 
 fn structural_field(

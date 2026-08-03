@@ -29,8 +29,11 @@ use relocations::*;
 
 const SCRATCH_INTEGER_ARGUMENT_0: u8 = 16;
 const SCRATCH_INTEGER_ARGUMENT_1: u8 = 24;
-const SCRATCH_FLOAT_ARGUMENT_0: u8 = 32;
-const SCRATCH_FLOAT_ARGUMENT_1: u8 = 40;
+const SCRATCH_INTEGER_ARGUMENT_2: u8 = 32;
+const SCRATCH_INTEGER_ARGUMENT_3: u8 = 40;
+const SCRATCH_INTEGER_ARGUMENT_4: u8 = 48;
+const SCRATCH_FLOAT_ARGUMENT_0: u8 = 56;
+const SCRATCH_FLOAT_ARGUMENT_1: u8 = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EncodingConfig {

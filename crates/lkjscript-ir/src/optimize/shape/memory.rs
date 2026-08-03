@@ -9,6 +9,12 @@ pub(super) fn preflight(
         ShapeField::StringAndMetadataBytes,
         u64::try_from(program.memory.plan.bytes().len()).map_err(|_| budget_error())?,
     )?;
+    for group in &program.memory.witness_groups {
+        counter.add_metadata()?;
+        for _ in &group.members {
+            counter.add_metadata()?;
+        }
+    }
     for witness in &program.memory.witnesses {
         counter.add_metadata()?;
         counter.add_type(&witness.ty)?;

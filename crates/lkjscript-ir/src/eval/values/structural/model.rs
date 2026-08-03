@@ -21,6 +21,8 @@ pub struct EvalStructuralDestination {
     pub key: StructuralDestinationKey,
     pub value_type: StructuralType,
     pub type_id: crate::StructuralTypeId,
+    pub storage: crate::StructuralStorage,
+    pub route: [u8; 32],
     pub active_variant: Option<crate::VariantId>,
 }
 

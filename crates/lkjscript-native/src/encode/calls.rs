@@ -23,6 +23,8 @@ impl FunctionEncoder<'_> {
                 | ValueType::Resource(_)
                 | ValueType::Unique(_)
                 | ValueType::Loan(_)
+                | ValueType::StructuralKey
+                | ValueType::MemoryWitnessLocator
                 | ValueType::StructuralOwner(_)
                 | ValueType::StructuralView(_)
                 | ValueType::StructuralDestination(_)
@@ -55,6 +57,8 @@ impl FunctionEncoder<'_> {
             | ValueType::Resource(_)
             | ValueType::Unique(_)
             | ValueType::Loan(_)
+            | ValueType::StructuralKey
+            | ValueType::MemoryWitnessLocator
             | ValueType::StructuralOwner(_)
             | ValueType::StructuralView(_)
             | ValueType::StructuralDestination(_)

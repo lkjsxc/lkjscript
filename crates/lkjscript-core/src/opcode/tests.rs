@@ -14,7 +14,6 @@ fn every_known_opcode_has_truthful_metadata_and_round_trips() {
     assert_eq!(Op::from_byte(21), None);
     assert_eq!(Op::from_byte(82), None);
     assert_eq!(Op::from_byte(145), None);
-    assert_eq!(Op::from_byte(255), None);
     assert_eq!(Op::Jump.info().control, ControlFlow::Jump);
     assert_eq!(Op::Return.info().control, ControlFlow::Return);
     assert_eq!(Op::Call.info().stack, StackEffect::Call);

@@ -11,8 +11,10 @@ mod lists;
 mod services;
 mod structural;
 mod unique;
+mod witness;
 use structural::JitStructuralRuntime;
 use unique::JitUniqueRuntime;
+pub(crate) use witness::NativeWitnessCatalog;
 
 struct BorrowedStandardInput;
 
@@ -24,6 +26,7 @@ pub(crate) struct JitIslandServices {
     stats: NativeResourceStats,
     unique: JitUniqueRuntime,
     structural: JitStructuralRuntime,
+    witnesses: NativeWitnessCatalog,
     lists: lkjscript_core::SegmentedListArena<lkjscript_core::Value>,
     list_owners: Vec<lkjscript_core::Value>,
     list_allocations: u64,
@@ -32,7 +35,16 @@ pub(crate) struct JitIslandServices {
 }
 
 impl JitIslandServices {
+    #[cfg(test)]
     pub(crate) fn new(scope: ScopeId, config: &ExecutionConfig) -> Result<Self, EngineError> {
+        Self::with_witnesses(scope, config, NativeWitnessCatalog::default())
+    }
+
+    pub(crate) fn with_witnesses(
+        scope: ScopeId,
+        config: &ExecutionConfig,
+        witnesses: NativeWitnessCatalog,
+    ) -> Result<Self, EngineError> {
         let max_handles = config.max_handles.min(u32::MAX as usize);
         let limits = ResourceTableLimits::new(
             max_handles.max(1),
@@ -51,6 +63,7 @@ impl JitIslandServices {
             stats: NativeResourceStats::default(),
             unique: JitUniqueRuntime::new(config)?,
             structural: JitStructuralRuntime::new(config)?,
+            witnesses,
             lists: lkjscript_core::SegmentedListArena::new(
                 lkjscript_core::SegmentedListArenaLimits::default(),
             )

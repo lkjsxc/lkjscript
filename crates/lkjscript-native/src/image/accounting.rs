@@ -29,8 +29,8 @@ pub(super) fn metadata_bytes(parts: MetadataSlices<'_>) -> Option<u64> {
             Op::Borrow { projection } => {
                 bytes = add_records(bytes, projection.path().len(), 2)?;
             }
-            Op::DestinationCreate(aggregate)
-            | Op::DestinationFinish(aggregate)
+            Op::DestinationCreate { aggregate, .. }
+            | Op::DestinationFinish { aggregate, .. }
             | Op::DestinationInitialize { aggregate, .. }
             | Op::DestinationAbort { aggregate, .. } => {
                 bytes = add_records(bytes, aggregate.fields().len(), 24)?;
